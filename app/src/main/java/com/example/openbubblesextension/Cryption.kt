@@ -108,6 +108,7 @@ class Cryption {
 
         return json
     }
+    //TODO add reverse function ^^
 
     companion object {
         private const val PREFIX: String = "data:?ver=52&data="
