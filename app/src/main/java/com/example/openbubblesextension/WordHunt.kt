@@ -68,4 +68,12 @@ class WordHunt() {
     }
 
     fun getCurrentState(): GameState = state
+
+    fun generateLetters(): String {
+        var output = ""
+        for (i in 0 until 15) {
+            output += ('A'..'Z').random()
+        }
+        return output
+    }
 } 
