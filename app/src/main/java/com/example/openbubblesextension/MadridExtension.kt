@@ -18,6 +18,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
 
     companion object {
         var currentKeyboardHandle: IKeyboardHandle? = null
+        val cryption = Cryption();
     }
 
     private var callback: IViewUpdateCallback? = null;
@@ -35,19 +36,24 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
         val wordHuntIntentWithData = Intent(
             context,
             KeyboardClickReceiver::class.java
-        )
+        ).apply {
+            putExtra("game_name", "hunt")
+        }
+
         val basketballIntentWithData = Intent(
             context,
             KeyboardClickReceiver::class.java
-        )
+        ).apply {
+            putExtra("game_name", "basketball")
+        }
 
         val wordHuntPendingIntent = PendingIntent.getBroadcast(context, 7, wordHuntIntentWithData,
             PendingIntent.FLAG_IMMUTABLE)
-        val basketballPendingIntent = PendingIntent.getBroadcast(context, 7, wordHuntIntentWithData,
+        val basketballPendingIntent = PendingIntent.getBroadcast(context, 8, basketballIntentWithData,
             PendingIntent.FLAG_IMMUTABLE)
 
         view.setOnClickPendingIntent(R.id.wordHuntButton, wordHuntPendingIntent)
-        view.setOnClickPendingIntent(R.id.basketballButton, wordHuntPendingIntent)
+        view.setOnClickPendingIntent(R.id.basketballButton, basketballPendingIntent)
 
         return view
     }

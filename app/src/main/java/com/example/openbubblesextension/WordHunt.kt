@@ -2,24 +2,24 @@ package com.example.openbubblesextension
 
 import org.json.JSONObject
 
-class WordHunt {
+class WordHunt(gamePigeonData: JSONObject) {
     data class GameState(
-        val words: List<String>,
+        val letters: List<String>,
         val foundWords: Set<String> = emptySet(),
         val score: Int = 0,
         val timeRemaining: Int = 60
     )
 
     private var state = GameState(
-        words = listOf(
-            "hello", "world", "android", "kotlin", "game",
+        letters = listOf(
+            gamePigeonData.getString("letters"), "world", "android", "kotlin", "game",
             "play", "fun", "word", "hunt", "test"
         )
     )
 
     fun getInitialState(): JSONObject {
         return JSONObject().apply {
-            put("words", state.words)
+            put("words", state.letters)
             put("foundWords", state.foundWords)
             put("score", state.score)
             put("timeRemaining", state.timeRemaining)
@@ -27,7 +27,7 @@ class WordHunt {
     }
 
     fun checkWord(word: String): Boolean {
-        return state.words.contains(word.lowercase())
+        return state.letters.contains(word.lowercase())
     }
 
     fun addFoundWord(word: String) {
