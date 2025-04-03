@@ -1,12 +1,10 @@
 package com.example.openbubblesextension
 
-import android.net.Uri
+import androidx.core.net.toUri
 import org.json.JSONObject
 import java.net.URLDecoder
 import java.net.URLEncoder
 import kotlin.math.floor
-import androidx.core.net.toUri
-import java.net.URI
 
 class Cryption {
     class Rand48(seed: Long) {
@@ -64,7 +62,7 @@ class Cryption {
     }
 
     fun decryptUrl(url: String): String {
-        var slicedUrl: String = "";
+        var slicedUrl = ""
         if (url.startsWith(PREFIX)) {
             slicedUrl = url.substring(PREFIX.length)
         } else {
@@ -108,7 +106,15 @@ class Cryption {
 
         return json
     }
-    //TODO add reverse function ^^
+
+    fun jsonToDataUrl(json: JSONObject): String {
+        val queryParams = json.keys().asSequence()
+            .joinToString("&") { key ->
+                val value = URLEncoder.encode(json.getString(key), "UTF-8")
+                "$key=$value"
+            }
+        return encryptUrl("?$queryParams")
+    }
 
     companion object {
         private const val PREFIX: String = "data:?ver=52&data="
