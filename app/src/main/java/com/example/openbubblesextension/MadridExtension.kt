@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.media.Image
 import android.util.Log
 import android.widget.RemoteViews
 import com.bluebubbles.messaging.IKeyboardHandle
@@ -18,10 +19,10 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
 
     companion object {
         var currentKeyboardHandle: IKeyboardHandle? = null
-        val cryption = Cryption();
+        val cryption = Cryption()
     }
 
-    private var callback: IViewUpdateCallback? = null;
+    private var callback: IViewUpdateCallback? = null
 
     override fun keyboardClosed() {
         currentKeyboardHandle = null
@@ -80,7 +81,22 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
     ): RemoteViews {
         Log.i("live view", "init")
         var view = RemoteViews(context.packageName, R.layout.livemsg)
+//        val gamePigeon = message?.url?.let { GamePigeon(it) }
+//        val gameImage: Int
+//        val gameName: String? = gamePigeon?.data?.getString("game_name")
 
+//        when (message?.url?.let { GamePigeon(it).data.getString("game") }) {
+//            "hunt" -> {
+//                gameImage = R.drawable.wordhunt
+//            }
+//            "basketball" -> {
+//                gameImage = R.drawable.basketball
+//            }
+//            else -> {
+//                gameImage = R.drawable.my_image
+//            }
+//        }
+//        Causes openbubbles to crash ^^
         val bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.my_image)
         view.setImageViewBitmap(R.id.imageView, bitmap)
 
@@ -92,8 +108,6 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
         val session = message?.session
         val ldText = message?.ldText
         val isLive = message?.isLive
-        val gamePigeon = url?.let { GamePigeon(it) }
-        gamePigeon?.data()?.let { Log.i("Message JSON", it.toString(4)) }
         Log.i("update", "message")
     }
 
