@@ -3,7 +3,7 @@ package com.example.openbubblesextension
 import org.json.JSONObject
 
 class WordHunt() {
-    val jsonString: String = """{
+    private val jsonString: String = """{
         "sender" : "F9C3BCE3-3BD9-4051-95D9-57C1263FA5A1nf4vkU",
         "tver":"5",
         "ios":"18.3.2",
@@ -69,11 +69,28 @@ class WordHunt() {
 
     fun getCurrentState(): GameState = state
 
-    fun generateLetters(): String {
-        var output = ""
-        for (i in 0 until 15) {
-            output += ('A'..'Z').random()
+    val letterFrequencies = listOf( "E", "T", "A", "O", "I", "N", "S", "H", "R", "D", "L", "U", "C", "M", "W", "F", "G", "Y", "P", "B", "V", "K", "J", "X", "Q", "Z" )
+    private fun generateLetters(): String {
+        val vowels = listOf('A', 'E', 'I', 'O', 'U')
+        val consonants = letterFrequencies.map { it[0] }.filter { it !in vowels }
+
+        val selectedLetters = mutableListOf<Char>()
+
+        repeat(5) { selectedLetters.add(vowels.random()) }
+        repeat(11) { selectedLetters.add(consonants.random()) }
+
+        selectedLetters.shuffle()
+        return selectedLetters.toString().replace(", ", "").removeSurrounding("[", "]").uppercase()
+    }
+
+    fun generateGrid(letters: String): Array<CharArray> {
+        val grid = Array(4) { CharArray(4) }
+        var index = 0
+        for (i in 0 until 4) {
+            for (j in 0 until 4) {
+                grid[i][j] = letters[index++]
+            }
         }
-        return output
+        return grid
     }
 } 
