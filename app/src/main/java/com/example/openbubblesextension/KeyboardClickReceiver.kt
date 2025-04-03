@@ -36,6 +36,7 @@ class KeyboardClickReceiver : BroadcastReceiver() {
             else -> {
                 gameName = "Invalid game_name"
                 gameImage = R.drawable.my_image
+                baseGameData = JSONObject()
             }
         }
 
@@ -49,7 +50,7 @@ class KeyboardClickReceiver : BroadcastReceiver() {
         val message = MadridMessage().apply {
             messageGuid = UUID.randomUUID().toString()
             ldText = gameName
-            url = cryption.encryptUrl("slkajsdfljaldskjflkaj")
+            url = cryption.encryptUrl(cryption.jsonToDataUrl(baseGameData))
             session = UUID.randomUUID().toString()
 
             imageBase64 = imageEncoded
