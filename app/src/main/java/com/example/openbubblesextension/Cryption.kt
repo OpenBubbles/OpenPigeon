@@ -1,10 +1,17 @@
 package com.example.openbubblesextension
 
+import android.util.Log
 import androidx.core.net.toUri
+import com.bluebubbles.messaging.MadridMessage
 import org.json.JSONObject
 import java.net.URLDecoder
 import java.net.URLEncoder
 import kotlin.math.floor
+
+enum class GAME {
+    WORDHUNT,
+    BASKETBALL,
+}
 
 class Cryption {
     class Rand48(seed: Long) {
@@ -114,6 +121,18 @@ class Cryption {
                 "$key=$value"
             }
         return encryptUrl("?$queryParams")
+    }
+
+    fun whichGame(message: MadridMessage?): GAME {
+        val game = message?.ldText
+        return when (game) {
+            "Word Hunt" -> GAME.WORDHUNT
+            "Basketball" -> GAME.BASKETBALL
+            else -> {
+                Log.e("Error", "game not present in Game enum")
+                return GAME.WORDHUNT
+            }
+        }
     }
 
     companion object {
