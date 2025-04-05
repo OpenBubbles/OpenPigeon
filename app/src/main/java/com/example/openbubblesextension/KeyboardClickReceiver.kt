@@ -5,9 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.media.Image
 import android.util.Base64
 import com.bluebubbles.messaging.MadridMessage
+import com.example.openbubblesextension.wordhunt.WordHuntData
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.UUID
@@ -17,7 +17,7 @@ class KeyboardClickReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         // This method is called when the BroadcastReceiver is receiving an Intent broadcast.
-        val wordHunt = WordHunt()
+        val wordHunt = WordHuntData()
 
         val gameName: String
         val gameImage: Int

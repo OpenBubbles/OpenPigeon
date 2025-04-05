@@ -4,7 +4,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
-import android.media.Image
 import android.util.Log
 import android.widget.RemoteViews
 import com.bluebubbles.messaging.IKeyboardHandle
@@ -13,6 +12,7 @@ import com.bluebubbles.messaging.IMessageViewHandle
 import com.bluebubbles.messaging.ITaskCompleteCallback
 import com.bluebubbles.messaging.IViewUpdateCallback
 import com.bluebubbles.messaging.MadridMessage
+import com.example.openbubblesextension.wordhunt.WordHuntActivity
 
 
 class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
@@ -30,7 +30,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
 
     override fun keyboardOpened(callback: IViewUpdateCallback?, handle: IKeyboardHandle?): RemoteViews {
         this.callback = callback
-        var view = RemoteViews(context.packageName, R.layout.keyboard_test)
+        var view = RemoteViews(context.packageName, R.layout.keyboard)
 
         currentKeyboardHandle = handle
 
@@ -53,16 +53,21 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
         val basketballPendingIntent = PendingIntent.getBroadcast(context, 8, basketballIntentWithData,
             PendingIntent.FLAG_IMMUTABLE)
 
-        view.setOnClickPendingIntent(R.id.wordHuntButton, wordHuntPendingIntent)
-        view.setOnClickPendingIntent(R.id.basketballButton, basketballPendingIntent)
+        view.setOnClickPendingIntent(R.id.btn_wordhunt, wordHuntPendingIntent)
+        view.setOnClickPendingIntent(R.id.btn_basketball, basketballPendingIntent)
 
         return view
     }
 
     override fun didTapTemplate(message: MadridMessage?, handle: IMessageViewHandle?) {
-        var intent = Intent(context, MessageActivity::class.java)
+        val game = cryption.whichGame(message)
+        val gameClass = when (game) {
+            GAME.WORDHUNT -> WordHuntActivity::class.java
+            GAME.BASKETBALL -> WordHuntActivity::class.java
+        }
+        var intent = Intent(context, gameClass)
             .apply {
-            putExtra("GAME_ENUM", cryption.whichGame(message))
+            putExtra("GAME_ENUM", game)
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
@@ -93,21 +98,21 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
             GAME.BASKETBALL -> {
                 gameImage = R.drawable.basketball
             }
-            else -> {
-                gameImage = R.drawable.my_image
-            }
         }
         val bitmap = BitmapFactory.decodeResource(context.resources, gameImage)
-        view.setImageViewBitmap(R.id.imageView, bitmap)
+        view.setImageViewBitmap(R.id.gameImage, bitmap)
         view.setTextViewText(R.id.gameNameTextView, message?.ldText)
+
+        var intent = Intent(context, WordHuntActivity::class.java)
+            .apply {
+                putExtra("GAME_ENUM", cryption.whichGame(message))
+            }
+        var pendingIntent = PendingIntent.getBroadcast(context, 9, intent, PendingIntent.FLAG_IMMUTABLE)
+        view.setOnClickPendingIntent(R.id.gameImage, pendingIntent)
         return view
     }
 
     override fun messageUpdated(message: MadridMessage?) {
-        val url = message?.url
-        val session = message?.session
-        val ldText = message?.ldText
-        val isLive = message?.isLive
         Log.i("update", "message")
     }
 

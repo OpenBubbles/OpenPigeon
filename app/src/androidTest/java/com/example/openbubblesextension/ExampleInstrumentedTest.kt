@@ -2,6 +2,7 @@ package com.example.openbubblesextension
 
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.openbubblesextension.wordhunt.WordHuntData
 
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,8 +30,11 @@ class ExampleInstrumentedTest {
         println(cryption.decryptUrl(basketballDataUrl))
         println(cryption.decryptUrl(wordHuntDataUrl))
         println(cryption.parseDataUrlToJson(wordHuntDataUrl))
-        val wordhunt = WordHunt()
+        val wordhunt = WordHuntData()
         println(wordhunt.baseData)
         println(wordhunt.newGameData())
+        println(cryption.jsonToDataUrl(wordhunt.baseData))
+        println(wordhunt.baseData)
+        println(cryption.decryptUrl(cryption.jsonToDataUrl(wordhunt.baseData)))
     }
 }

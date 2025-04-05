@@ -1,8 +1,8 @@
-package com.example.openbubblesextension
+package com.example.openbubblesextension.wordhunt
 
 import org.json.JSONObject
 
-class WordHunt() {
+class WordHuntData() {
     private val jsonString: String = """{
         "sender" : "F9C3BCE3-3BD9-4051-95D9-57C1263FA5A1nf4vkU",
         "tver":"5",
