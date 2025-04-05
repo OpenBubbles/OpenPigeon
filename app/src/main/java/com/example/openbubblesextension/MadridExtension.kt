@@ -30,7 +30,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
 
     override fun keyboardOpened(callback: IViewUpdateCallback?, handle: IKeyboardHandle?): RemoteViews {
         this.callback = callback
-        var view = RemoteViews(context.packageName, R.layout.keyboard)
+        var view = RemoteViews(context.packageName, R.layout.keyboard_test)
 
         currentKeyboardHandle = handle
 
@@ -60,9 +60,12 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
     }
 
     override fun didTapTemplate(message: MadridMessage?, handle: IMessageViewHandle?) {
-//        val intent = Intent(context, MessageActivity::class.java)
-//        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-//        context.startActivity(intent)
+        var intent = Intent(context, MessageActivity::class.java)
+            .apply {
+            putExtra("GAME_ENUM", cryption.whichGame(message))
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
         handle?.lock()
         Log.i("here", message!!.caption)
         message.caption = "no way jose"
@@ -81,25 +84,22 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
     ): RemoteViews {
         Log.i("live view", "init")
         var view = RemoteViews(context.packageName, R.layout.livemsg)
-//        val gamePigeon = message?.url?.let { GamePigeon(it) }
-//        val gameImage: Int
-//        val gameName: String? = gamePigeon?.data?.getString("game_name")
+        val gameImage: Int
 
-//        when (message?.url?.let { GamePigeon(it).data.getString("game") }) {
-//            "hunt" -> {
-//                gameImage = R.drawable.wordhunt
-//            }
-//            "basketball" -> {
-//                gameImage = R.drawable.basketball
-//            }
-//            else -> {
-//                gameImage = R.drawable.my_image
-//            }
-//        }
-//        Causes openbubbles to crash ^^
-        val bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.my_image)
+        when (cryption.whichGame(message)) {
+            GAME.WORDHUNT -> {
+                gameImage = R.drawable.wordhunt
+            }
+            GAME.BASKETBALL -> {
+                gameImage = R.drawable.basketball
+            }
+            else -> {
+                gameImage = R.drawable.my_image
+            }
+        }
+        val bitmap = BitmapFactory.decodeResource(context.resources, gameImage)
         view.setImageViewBitmap(R.id.imageView, bitmap)
-
+        view.setTextViewText(R.id.gameNameTextView, message?.ldText)
         return view
     }
 
