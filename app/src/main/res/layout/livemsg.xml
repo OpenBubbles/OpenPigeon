@@ -9,16 +9,16 @@
     <ImageView
         android:id="@+id/gameImage"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="211dp"
         app:srcCompat="@drawable/basketball" />
 
     <TextView
         android:id="@+id/gameNameTextView"
         android:layout_width="match_parent"
         android:layout_height="74dp"
+        android:gravity="center_vertical"
         android:text="TextView"
         android:textAlignment="center"
-        android:textSize="34sp" />
+        android:textSize="24sp" />
 
 </LinearLayout>

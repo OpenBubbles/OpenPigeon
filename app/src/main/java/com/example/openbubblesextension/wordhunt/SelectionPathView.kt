@@ -35,7 +35,6 @@ class SelectionPathView @JvmOverloads constructor(
         super.onDraw(canvas)
         if (!path.isEmpty) {
             canvas.drawPath(path, drawPaint)
-            Log.i("SelectionPathView", "path drawn")
         }
     }
 

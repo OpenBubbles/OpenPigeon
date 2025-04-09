@@ -1,17 +1,15 @@
 package com.example.openbubblesextension
 
+import android.util.Base64
 import android.util.Log
 import androidx.core.net.toUri
 import com.bluebubbles.messaging.MadridMessage
 import org.json.JSONObject
 import java.net.URLDecoder
 import java.net.URLEncoder
+import java.nio.charset.Charset
 import kotlin.math.floor
-
-enum class GAME {
-    WORDHUNT,
-    BASKETBALL,
-}
+import kotlin.random.Random
 
 class Cryption {
     class Rand48(seed: Long) {
@@ -70,8 +68,10 @@ class Cryption {
 
     fun decryptUrl(url: String): String {
         var slicedUrl = ""
-        if (url.startsWith(PREFIX)) {
-            slicedUrl = url.substring(PREFIX.length)
+        val regex = Regex("^data:\\?ver=\\d+&data=")
+        val matchResult = regex.find(url)
+        if (matchResult != null) {
+            slicedUrl = url.substring(matchResult.value.length)
         } else {
             assert(false)
         }
@@ -123,11 +123,11 @@ class Cryption {
         return encryptUrl("?$queryParams")
     }
 
-    fun whichGame(message: MadridMessage?): GAME {
-        val game = message?.ldText
+    fun whichGame(message: MadridMessage): GAME {
+        val game = parseDataUrlToJson(message.url).getString("game")
         return when (game) {
-            "Word Hunt" -> GAME.WORDHUNT
-            "Basketball" -> GAME.BASKETBALL
+            "hunt" -> GAME.WORDHUNT
+            "basketball" -> GAME.BASKETBALL
             else -> {
                 Log.e("Error", "game not present in Game enum")
                 return GAME.WORDHUNT
@@ -135,7 +135,18 @@ class Cryption {
         }
     }
 
+    fun getId(): String {
+        val randBytes = ByteArray(12)
+        Random.nextBytes(randBytes)
+        val id = Base64.encode(randBytes, Base64.DEFAULT)
+        return "$id"
+    }
+
     companion object {
+        enum class GAME {
+            WORDHUNT,
+            BASKETBALL,
+        }
         private const val PREFIX: String = "data:?ver=52&data="
     }
 }

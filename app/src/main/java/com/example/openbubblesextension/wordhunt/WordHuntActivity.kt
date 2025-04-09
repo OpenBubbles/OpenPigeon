@@ -1,6 +1,7 @@
 package com.example.openbubblesextension.wordhunt
 
-import android.graphics.Canvas
+import android.app.Activity
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
@@ -12,6 +13,7 @@ import android.view.View
 import android.widget.GridLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.res.ResourcesCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -19,6 +21,9 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.openbubblesextension.R
 import kotlin.random.Random
 import androidx.core.graphics.toColorInt
+import com.bluebubbles.messaging.MadridMessage
+import com.example.openbubblesextension.MadridExtension.Companion.cryption
+import org.json.JSONObject
 
 class WordHuntActivity : AppCompatActivity(), View.OnTouchListener {
 
@@ -27,7 +32,21 @@ class WordHuntActivity : AppCompatActivity(), View.OnTouchListener {
         const val GRID_SIZE = 4
         const val GAME_DURATION = 60000L // 60 seconds
         const val MIN_WORD_LENGTH = 3
+
+        // Generates a pool of letters for the board.
+        fun generateLetterPool(): List<Char> {
+            val totalLetters = GRID_SIZE * GRID_SIZE
+            val letterPool = mutableListOf<Char>()
+
+            repeat(totalLetters) {
+                letterPool.add(('A'..'Z').random())
+            }
+
+            return letterPool
+        }
     }
+
+    private lateinit var gameData: JSONObject
 
     // UI components
     private lateinit var scoreLabel: TextView
@@ -95,8 +114,14 @@ class WordHuntActivity : AppCompatActivity(), View.OnTouchListener {
     }
 
     private fun setupGame() {
-        // Generate random letters for the board
-        generateRandomBoard()
+        // Generate and populate the board
+        val gameDataString = intent.getStringExtra("GAME_DATA")!!
+        if (gameDataString.isNotEmpty()) {
+            gameData = JSONObject(gameDataString)
+            populateBoard(gameData.getString("letters"))
+        } else {
+            populateBoard(generateLetterPool().joinToString(""))
+        }
 
         // Create the letter grid UI
         createLetterGrid()
@@ -117,46 +142,12 @@ class WordHuntActivity : AppCompatActivity(), View.OnTouchListener {
         gameActive = true
     }
 
-    private fun generateRandomBoard() {
-        val vowels = "AEIOU"
-        val consonants = "BCDFGHJKLMNPQRSTVWXYZ"
-
-        // Ensure a good mix of vowels and consonants
-        for (i in 0 until GRID_SIZE) {
+    // Populates the board using the generated letter pool
+    private fun populateBoard(letterPool: String) {
+        var poolIndex = 0
+        for (i in GRID_SIZE - 1 downTo  0) {
             for (j in 0 until GRID_SIZE) {
-                board[i][j] = if (Random.nextFloat() < 0.4f) { // 40% chance of vowel
-                    vowels.random()
-                } else {
-                    consonants.random()
-                }
-            }
-        }
-
-        // Add common letter combinations that make finding words easier
-        addCommonCombinations()
-    }
-
-    private fun addCommonCombinations() {
-        // Common letter combinations to make the game more fun
-        val combinations = arrayOf("TH", "ER", "ON", "AN", "RE", "IN", "ND")
-
-        // Place 2-3 combinations randomly on the board
-        val numCombinations = Random.nextInt(2, 4)
-        for (i in 0 until numCombinations) {
-            val combination = combinations.random()
-            val row = Random.nextInt(GRID_SIZE)
-            val col = Random.nextInt(GRID_SIZE - 1) // Ensure room for 2 letters
-
-            if (Random.nextBoolean()) {
-                // Horizontal placement
-                board[row][col] = combination[0]
-                board[row][col + 1] = combination[1]
-            } else {
-                // Vertical placement, if there's room
-                if (row < GRID_SIZE - 1) {
-                    board[row][col] = combination[0]
-                    board[row + 1][col] = combination[1]
-                }
+                board[i][j] = letterPool[poolIndex++]
             }
         }
     }

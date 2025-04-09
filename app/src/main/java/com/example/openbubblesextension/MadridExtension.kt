@@ -13,6 +13,7 @@ import com.bluebubbles.messaging.ITaskCompleteCallback
 import com.bluebubbles.messaging.IViewUpdateCallback
 import com.bluebubbles.messaging.MadridMessage
 import com.example.openbubblesextension.wordhunt.WordHuntActivity
+import com.example.openbubblesextension.Cryption.Companion.GAME
 
 
 class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
@@ -60,19 +61,28 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
     }
 
     override fun didTapTemplate(message: MadridMessage?, handle: IMessageViewHandle?) {
+        if (message == null) {
+            return
+        }
+        Log.i("Message", message.url)
+        Log.i("Tapped Message", cryption.decryptUrl(message.url))
+
+        val gameData = cryption.parseDataUrlToJson(message.url)
         val game = cryption.whichGame(message)
-        val gameClass = when (game) {
+        val gameClass: Class<*> = when (game) {
             GAME.WORDHUNT -> WordHuntActivity::class.java
             GAME.BASKETBALL -> WordHuntActivity::class.java
         }
         var intent = Intent(context, gameClass)
             .apply {
-            putExtra("GAME_ENUM", game)
-        }
+                putExtra("GAME_ENUM", game)
+                putExtra("GAME_DATA", gameData.toString())
+            }
+
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
         handle?.lock()
-        Log.i("here", message!!.caption)
+        Log.i("here", message.caption)
         message.caption = "no way jose"
         handle!!.updateMessage(message, object : ITaskCompleteCallback.Stub() {
             override fun complete() {
@@ -87,6 +97,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
         message: MadridMessage?,
         handle: IMessageViewHandle?
     ): RemoteViews {
+        if (message == null) { return RemoteViews(context.packageName, R.layout.livemsg) }
         Log.i("live view", "init")
         var view = RemoteViews(context.packageName, R.layout.livemsg)
         val gameImage: Int
@@ -101,7 +112,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
         }
         val bitmap = BitmapFactory.decodeResource(context.resources, gameImage)
         view.setImageViewBitmap(R.id.gameImage, bitmap)
-        view.setTextViewText(R.id.gameNameTextView, message?.ldText)
+        view.setTextViewText(R.id.gameNameTextView, message.ldText)
 
         var intent = Intent(context, WordHuntActivity::class.java)
             .apply {

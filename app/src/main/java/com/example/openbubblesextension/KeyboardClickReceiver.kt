@@ -50,13 +50,13 @@ class KeyboardClickReceiver : BroadcastReceiver() {
         val message = MadridMessage().apply {
             messageGuid = UUID.randomUUID().toString()
             ldText = gameName
-            url = cryption.encryptUrl(cryption.jsonToDataUrl(baseGameData))
+            url = cryption.jsonToDataUrl(baseGameData)
             session = UUID.randomUUID().toString()
 
             imageBase64 = imageEncoded
             caption = "Let's Play $gameName!"
 
-            isLive = false
+            isLive = true
         }
 
         MadridExtension.currentKeyboardHandle?.addMessage(message)
