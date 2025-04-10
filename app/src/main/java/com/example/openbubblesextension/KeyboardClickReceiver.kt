@@ -56,7 +56,7 @@ class KeyboardClickReceiver : BroadcastReceiver() {
             imageBase64 = imageEncoded
             caption = "Let's Play $gameName!"
 
-            isLive = true
+            isLive = false
         }
 
         MadridExtension.currentKeyboardHandle?.addMessage(message)

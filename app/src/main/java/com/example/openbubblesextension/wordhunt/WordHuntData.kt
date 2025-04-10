@@ -28,8 +28,8 @@ class WordHuntData() {
 
     fun newGameData(): JSONObject {
         val gameData = baseData
-//        gameData.put("sender", "placeholder-sender") // TODO: figure out how to get the sender
-//        gameData.put("player2", "placeholder-sender") // TODO: ^^
+        gameData.put("sender", "A1B2C3D4-E5F6-7890-ABCD-EF1234567890XZ7Q1R") // TODO: figure out how to get the sender
+        gameData.put("player2", "A1B2C3D4-E5F6-7890-ABCD-EF1234567890XZ7Q1R") // TODO: ^^
         gameData.put("letters", WordHuntActivity.generateLetterPool().joinToString(""))
         gameData.put("id", cryption.getId())
         return gameData

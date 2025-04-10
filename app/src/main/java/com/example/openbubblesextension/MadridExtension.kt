@@ -1,11 +1,15 @@
 package com.example.openbubblesextension
 
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.BitmapFactory
 import android.util.Log
 import android.widget.RemoteViews
+import androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+import androidx.core.content.ContextCompat.registerReceiver
 import com.bluebubbles.messaging.IKeyboardHandle
 import com.bluebubbles.messaging.IMadridExtension
 import com.bluebubbles.messaging.IMessageViewHandle
@@ -14,12 +18,14 @@ import com.bluebubbles.messaging.IViewUpdateCallback
 import com.bluebubbles.messaging.MadridMessage
 import com.example.openbubblesextension.wordhunt.WordHuntActivity
 import com.example.openbubblesextension.Cryption.Companion.GAME
+import org.json.JSONObject
 
 
 class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
 
     companion object {
         var currentKeyboardHandle: IKeyboardHandle? = null
+        var broadcastReceiver: BroadcastReceiver? = null
         val cryption = Cryption()
     }
 
@@ -82,14 +88,28 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
         handle?.lock()
-        Log.i("here", message.caption)
-        message.caption = "no way jose"
-        handle!!.updateMessage(message, object : ITaskCompleteCallback.Stub() {
-            override fun complete() {
-                Log.i("sent!", "done")
-                handle.unlock()
+
+        broadcastReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val newGameData = JSONObject(intent.getStringExtra("GAME_DATA")!!)
+                val newCaption = intent.getStringExtra("CAPTION")
+                val newUrl = cryption.jsonToDataUrl(newGameData)
+
+                message.url = newUrl
+                message.caption = newCaption
+
+                handle!!.updateMessage(message, object : ITaskCompleteCallback.Stub() {
+                    override fun complete() {
+                        Log.i("sent!", "done")
+                        context.unregisterReceiver(broadcastReceiver)
+                        handle.unlock()
+                    }
+                })
             }
-        })
+        }
+
+        val filter = IntentFilter("com.example.openbubblesextension.GAME_DATA")
+        registerReceiver(context, broadcastReceiver, filter, RECEIVER_EXPORTED)
     }
 
     override fun getLiveView(

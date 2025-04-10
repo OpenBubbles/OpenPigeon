@@ -231,11 +231,34 @@ class WordHuntActivity : AppCompatActivity(), View.OnTouchListener {
         gameActive = false
         Toast.makeText(this, "Game Over! Final Score: $currentScore", Toast.LENGTH_LONG).show()
 
-        // Here you would typically show a game over dialog with options to restart
-        // or return to menu. For simplicity, we'll just enable a restart after a delay.
-        selectionPathView.postDelayed({
-            setupGame()
-        }, 3000)
+        val player = if (gameData.isNull("player")) 1 else gameData.getString("player")
+        Log.i("player", player.toString())
+        gameData.remove("player")
+        val sortedWordList = foundWordsList.sortedWith(compareByDescending<String> { it.length }
+            .thenBy { it.lowercase() })
+
+        gameData.put("score$player", currentScore)
+        Log.i("game data", "foundWordsList: $foundWordsList")
+        gameData.put("words$player", foundWordsList.size)
+        gameData.put("words_list$player", sortedWordList.joinToString("|"))
+
+        // Return game data
+        val intent = Intent("com.example.openbubblesextension.GAME_DATA")
+        intent.putExtra("GAME_DATA", gameData.toString())
+
+        var caption = "Your turn."
+        if (!gameData.isNull("score1") && !gameData.isNull("score2")) {
+            val score1 = gameData.getString("score1")
+            val score2 = gameData.getString("score2")
+            val winner = if (score1 > score2) 1 else 2
+            if (player == 2) {
+                caption = if (winner == 2) "You Lost!" else "You Win!"
+            }
+        }
+        intent.putExtra("CAPTION", caption)
+        sendBroadcast(intent)
+        Log.i("message","new game data sent")
+        finish()
     }
 
     override fun onTouch(view: View, event: MotionEvent): Boolean {
