@@ -79,7 +79,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
             GAME.WORDHUNT -> WordHuntActivity::class.java
             GAME.BASKETBALL -> WordHuntActivity::class.java
         }
-        var intent = Intent(context, gameClass)
+        val intent = Intent(context, gameClass)
             .apply {
                 putExtra("GAME_ENUM", game)
                 putExtra("GAME_DATA", gameData.toString())

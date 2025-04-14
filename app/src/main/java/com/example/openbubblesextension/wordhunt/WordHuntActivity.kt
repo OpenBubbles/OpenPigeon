@@ -30,7 +30,7 @@ class WordHuntActivity : AppCompatActivity(), View.OnTouchListener {
     // Game constants
     companion object {
         const val GRID_SIZE = 4
-        const val GAME_DURATION = 60000L // 60 seconds
+        const val GAME_DURATION = 80000L // 60 seconds
         const val MIN_WORD_LENGTH = 3
 
         // Generates a pool of letters for the board.
@@ -165,7 +165,8 @@ class WordHuntActivity : AppCompatActivity(), View.OnTouchListener {
             for (j in 0 until GRID_SIZE) {
                 val cell = TextView(this).apply {
                     text = board[i][j].toString()
-                    textSize = 24f
+                    textSize = 38f
+                    typeface = resources.getFont(R.font.lexend_medium)
                     setTextColor(Color.BLACK)
                     background = ResourcesCompat.getDrawable(context.resources, R.drawable.letter_cell_background, theme)
                     gravity = android.view.Gravity.CENTER
@@ -231,12 +232,14 @@ class WordHuntActivity : AppCompatActivity(), View.OnTouchListener {
         gameActive = false
         Toast.makeText(this, "Game Over! Final Score: $currentScore", Toast.LENGTH_LONG).show()
 
-        val player = if (gameData.isNull("player")) 1 else gameData.getString("player")
+        val player: Int = if (gameData.isNull("score2")) 2 else 1
         Log.i("player", player.toString())
         gameData.remove("player")
         val sortedWordList = foundWordsList.sortedWith(compareByDescending<String> { it.length }
             .thenBy { it.lowercase() })
 
+        gameData.put("sender", "A1B2C3D4-E5F6-7890-ABCD-EF1234567890XZ7Q1R")
+        gameData.put("player$player", "A1B2C3D4-E5F6-7890-ABCD-EF1234567890XZ7Q1R")
         gameData.put("score$player", currentScore)
         Log.i("game data", "foundWordsList: $foundWordsList")
         gameData.put("words$player", foundWordsList.size)
@@ -253,6 +256,8 @@ class WordHuntActivity : AppCompatActivity(), View.OnTouchListener {
             val winner = if (score1 > score2) 1 else 2
             if (player == 2) {
                 caption = if (winner == 2) "You Lost!" else "You Win!"
+            } else {
+                caption = if (winner == 2) "You Win!" else "You Lost!"
             }
         }
         intent.putExtra("CAPTION", caption)

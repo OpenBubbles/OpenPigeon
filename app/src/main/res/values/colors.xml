@@ -7,4 +7,7 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="wordhunt_green">#6aaa6480</color>
+    <color name="wordhunt_yellow">#c9b45880</color>
+    <color name="wordhunt_grey">#787c7e00</color>
 </resources>

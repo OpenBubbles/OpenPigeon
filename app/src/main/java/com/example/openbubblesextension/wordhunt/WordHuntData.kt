@@ -14,7 +14,6 @@ class WordHuntData() {
         "version":"47",
         "id":"YFxftsOVoQyiYnq7",
         "player":"2",
-        "player2":"F9C3BCE3-3BD9-4051-95D9-57C1263FA5A1nf4vkU",
         "letters":"ELEOHAHCIACTSNIT",
         "lang":"en",
         "mode":"1",
