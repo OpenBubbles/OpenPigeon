@@ -22,7 +22,6 @@ import com.example.openbubblesextension.R
 import kotlin.random.Random
 import androidx.core.graphics.toColorInt
 import com.bluebubbles.messaging.MadridMessage
-import com.example.openbubblesextension.MadridExtension.Companion.cryption
 import org.json.JSONObject
 
 class WordHuntActivity : AppCompatActivity(), View.OnTouchListener {

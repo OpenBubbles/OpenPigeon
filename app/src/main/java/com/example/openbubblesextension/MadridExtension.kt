@@ -17,7 +17,7 @@ import com.bluebubbles.messaging.ITaskCompleteCallback
 import com.bluebubbles.messaging.IViewUpdateCallback
 import com.bluebubbles.messaging.MadridMessage
 import com.example.openbubblesextension.wordhunt.WordHuntActivity
-import com.example.openbubblesextension.Cryption.Companion.GAME
+import com.example.openbubblesextension.wordhunt.WordHuntGame
 import org.json.JSONObject
 
 
@@ -26,7 +26,18 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
     companion object {
         var currentKeyboardHandle: IKeyboardHandle? = null
         var broadcastReceiver: BroadcastReceiver? = null
-        val cryption = Cryption()
+
+        val games: List<Game> = listOf(
+            WordHuntGame()
+        )
+
+        fun whichGame(game: JSONObject): Game? {
+            return findByName(game.getString("game"))
+        }
+
+        fun findByName(name: String): Game? {
+            return games.find { it.getName() == name }
+        }
     }
 
     private var callback: IViewUpdateCallback? = null
@@ -41,27 +52,18 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
 
         currentKeyboardHandle = handle
 
-        val wordHuntIntentWithData = Intent(
-            context,
-            KeyboardClickReceiver::class.java
-        ).apply {
-            putExtra("game_name", "hunt")
+        for (game in games) {
+            val intentWithData = Intent(
+                context,
+                KeyboardClickReceiver::class.java
+            ).apply {
+                putExtra("game_name", game.getName())
+            }
+
+            val pendingIntent = PendingIntent.getBroadcast(context, game.getName().hashCode(), intentWithData,
+                PendingIntent.FLAG_IMMUTABLE)
+            view.setOnClickPendingIntent(game.buttonId(), pendingIntent)
         }
-
-        val basketballIntentWithData = Intent(
-            context,
-            KeyboardClickReceiver::class.java
-        ).apply {
-            putExtra("game_name", "basketball")
-        }
-
-        val wordHuntPendingIntent = PendingIntent.getBroadcast(context, 7, wordHuntIntentWithData,
-            PendingIntent.FLAG_IMMUTABLE)
-        val basketballPendingIntent = PendingIntent.getBroadcast(context, 8, basketballIntentWithData,
-            PendingIntent.FLAG_IMMUTABLE)
-
-        view.setOnClickPendingIntent(R.id.btn_wordhunt, wordHuntPendingIntent)
-        view.setOnClickPendingIntent(R.id.btn_basketball, basketballPendingIntent)
 
         return view
     }
@@ -71,17 +73,13 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
             return
         }
         Log.i("Message", message.url)
-        Log.i("Tapped Message", cryption.decryptUrl(message.url))
+        Log.i("Tapped Message", Cryption.decryptUrl(message.url))
 
-        val gameData = cryption.parseDataUrlToJson(message.url)
-        val game = cryption.whichGame(message)
-        val gameClass: Class<*> = when (game) {
-            GAME.WORDHUNT -> WordHuntActivity::class.java
-            GAME.BASKETBALL -> WordHuntActivity::class.java
-        }
-        val intent = Intent(context, gameClass)
+        val gameData = Cryption.parseDataUrlToJson(message.url)
+
+        val game = whichGame(gameData) ?: return
+        val intent = Intent(context, game.gameClass())
             .apply {
-                putExtra("GAME_ENUM", game)
                 putExtra("GAME_DATA", gameData.toString())
             }
 
@@ -93,7 +91,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
             override fun onReceive(context: Context, intent: Intent) {
                 val newGameData = JSONObject(intent.getStringExtra("GAME_DATA")!!)
                 val newCaption = intent.getStringExtra("CAPTION")
-                val newUrl = cryption.jsonToDataUrl(newGameData)
+                val newUrl = Cryption.jsonToDataUrl(newGameData)
 
                 message.url = newUrl
                 message.caption = newCaption
@@ -120,26 +118,22 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
         if (message == null) { return RemoteViews(context.packageName, R.layout.livemsg) }
         Log.i("live view", "init")
         var view = RemoteViews(context.packageName, R.layout.livemsg)
-        val gameImage: Int
 
-        when (cryption.whichGame(message)) {
-            GAME.WORDHUNT -> {
-                gameImage = R.drawable.wordhunt
-            }
-            GAME.BASKETBALL -> {
-                gameImage = R.drawable.basketball
-            }
-        }
-        val bitmap = BitmapFactory.decodeResource(context.resources, gameImage)
+        val gameData = Cryption.parseDataUrlToJson(message.url)
+        val game = whichGame(gameData)
+
+        val bitmap = BitmapFactory.decodeResource(context.resources, game?.gamePoster() ?: R.drawable.empty)
         view.setImageViewBitmap(R.id.gameImage, bitmap)
         view.setTextViewText(R.id.gameNameTextView, message.ldText)
 
-        var intent = Intent(context, WordHuntActivity::class.java)
-            .apply {
-                putExtra("GAME_ENUM", cryption.whichGame(message))
-            }
-        var pendingIntent = PendingIntent.getBroadcast(context, 9, intent, PendingIntent.FLAG_IMMUTABLE)
-        view.setOnClickPendingIntent(R.id.gameImage, pendingIntent)
+        if (game != null) {
+            var intent = Intent(context, game.gameClass())
+                .apply {
+                    putExtra("GAME_DATA", gameData.toString())
+                }
+            var pendingIntent = PendingIntent.getBroadcast(context, 9, intent, PendingIntent.FLAG_IMMUTABLE)
+            view.setOnClickPendingIntent(R.id.gameImage, pendingIntent)
+        }
         return view
     }
 

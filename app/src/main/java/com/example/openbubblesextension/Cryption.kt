@@ -11,7 +11,7 @@ import java.nio.charset.Charset
 import kotlin.math.floor
 import kotlin.random.Random
 
-class Cryption {
+object Cryption {
     class Rand48(seed: Long) {
         private var n: Long = seed
 
@@ -123,18 +123,6 @@ class Cryption {
         return encryptUrl("?$queryParams")
     }
 
-    fun whichGame(message: MadridMessage): GAME {
-        val game = parseDataUrlToJson(message.url).getString("game")
-        return when (game) {
-            "hunt" -> GAME.WORDHUNT
-            "basketball" -> GAME.BASKETBALL
-            else -> {
-                Log.e("Error", "game not present in Game enum")
-                return GAME.WORDHUNT
-            }
-        }
-    }
-
     fun getId(): String {
         val randBytes = ByteArray(12)
         Random.nextBytes(randBytes)
@@ -142,11 +130,5 @@ class Cryption {
         return "$id"
     }
 
-    companion object {
-        enum class GAME {
-            WORDHUNT,
-            BASKETBALL,
-        }
-        private const val PREFIX: String = "data:?ver=52&data="
-    }
+    private const val PREFIX: String = "data:?ver=52&data="
 }

@@ -73,7 +73,7 @@
             android:src="@drawable/basketball" />
 
         <ImageView
-            android:id="@+id/btn_game_3"
+            android:id="@+id/checkers"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
