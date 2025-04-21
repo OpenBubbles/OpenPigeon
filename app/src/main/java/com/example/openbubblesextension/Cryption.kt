@@ -45,7 +45,7 @@ object Cryption {
         }
     }
 
-    private fun decrypt(string: String): String {
+    fun decrypt(string: String): String {
         val rand = Rand48(0)
         rand.srand(string.length * 0xef)
 
@@ -66,20 +66,7 @@ object Cryption {
         return output
     }
 
-    fun decryptUrl(url: String): String {
-        var slicedUrl = ""
-        val regex = Regex("^data:\\?ver=\\d+&data=")
-        val matchResult = regex.find(url)
-        if (matchResult != null) {
-            slicedUrl = url.substring(matchResult.value.length)
-        } else {
-            assert(false)
-        }
-        val decodedUrl = URLDecoder.decode(slicedUrl, "UTF-8")
-        return decrypt(decodedUrl)
-    }
-
-    private fun encrypt(string: String): String {
+    fun encrypt(string: String): String {
         val rand = Rand48(0)
         rand.srand(string.length * 0xef)
 
@@ -95,33 +82,6 @@ object Cryption {
         return result
     }
 
-    fun encryptUrl(url: String): String {
-        val encryptedUrl = encrypt(url)
-        val encodedUrl = URLEncoder.encode(encryptedUrl, "UTF-8")
-        return PREFIX.plus(encodedUrl)
-    }
-
-
-    fun parseDataUrlToJson(url: String): JSONObject {
-        val uri = decryptUrl(url).toUri() // Use KTX extension function
-        val json = JSONObject()
-
-        for (param in uri.queryParameterNames) {
-            val value = uri.getQueryParameter(param)?.let { URLDecoder.decode(it, "UTF-8") } ?: ""
-            json.put(param, value)
-        }
-
-        return json
-    }
-
-    fun jsonToDataUrl(json: JSONObject): String {
-        val queryParams = json.keys().asSequence()
-            .joinToString("&") { key ->
-                val value = URLEncoder.encode(json.getString(key), "UTF-8")
-                "$key=$value"
-            }
-        return encryptUrl("?$queryParams")
-    }
 
     fun getId(): String {
         val randBytes = ByteArray(12)

@@ -19,23 +19,7 @@ class KeyboardClickReceiver : BroadcastReceiver() {
 
         val game = intent.getStringExtra("game_name")?.let { MadridExtension.findByName(it) } ?: return
 
-        val bm = BitmapFactory.decodeResource(context.resources, game.gamePoster())
-        val baos = ByteArrayOutputStream()
-        bm.compress(Bitmap.CompressFormat.JPEG, 70, baos)
-        val b = baos.toByteArray()
-        val imageEncoded: String = Base64.encodeToString(b, Base64.NO_WRAP)
-
-        val message = MadridMessage().apply {
-            messageGuid = UUID.randomUUID().toString()
-            ldText = game.displayName()
-            url = Cryption.jsonToDataUrl(game.getNewGameData())
-            session = UUID.randomUUID().toString()
-
-            imageBase64 = imageEncoded
-            caption = "Let's Play ${game.displayName()}!"
-
-            isLive = false
-        }
+        val message = game.buildGameMessage(context, game.getNewGameData(), null)
 
         MadridExtension.currentKeyboardHandle?.addMessage(message)
     }

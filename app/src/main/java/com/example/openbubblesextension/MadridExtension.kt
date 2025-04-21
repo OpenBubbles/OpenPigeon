@@ -27,9 +27,20 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
         var currentKeyboardHandle: IKeyboardHandle? = null
         var broadcastReceiver: BroadcastReceiver? = null
 
+        val activeSessions: MutableMap<String, GameSession> = mutableMapOf()
+
         val games: List<Game> = listOf(
             WordHuntGame()
         )
+
+        fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {
+            if (activeSessions.containsKey(id)) {
+                activeSessions[id]!!.updateHandle(handle)
+            } else {
+                activeSessions[id] = GameSession(handle)
+            }
+            return activeSessions[id]!!
+        }
 
         fun whichGame(game: JSONObject): Game? {
             return findByName(game.getString("game"))
@@ -69,45 +80,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
     }
 
     override fun didTapTemplate(message: MadridMessage?, handle: IMessageViewHandle?) {
-        if (message == null) {
-            return
-        }
-        Log.i("Message", message.url)
-        Log.i("Tapped Message", Cryption.decryptUrl(message.url))
-
-        val gameData = Cryption.parseDataUrlToJson(message.url)
-
-        val game = whichGame(gameData) ?: return
-        val intent = Intent(context, game.gameClass())
-            .apply {
-                putExtra("GAME_DATA", gameData.toString())
-            }
-
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
-        handle?.lock()
-
-        broadcastReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                val newGameData = JSONObject(intent.getStringExtra("GAME_DATA")!!)
-                val newCaption = intent.getStringExtra("CAPTION")
-                val newUrl = Cryption.jsonToDataUrl(newGameData)
-
-                message.url = newUrl
-                message.caption = newCaption
-
-                handle!!.updateMessage(message, object : ITaskCompleteCallback.Stub() {
-                    override fun complete() {
-                        Log.i("sent!", "done")
-                        context.unregisterReceiver(broadcastReceiver)
-                        handle.unlock()
-                    }
-                })
-            }
-        }
-
-        val filter = IntentFilter("com.example.openbubblesextension.GAME_DATA")
-        registerReceiver(context, broadcastReceiver, filter, RECEIVER_EXPORTED)
+        // no need to handle, we only have live messages
     }
 
     override fun getLiveView(
@@ -119,8 +92,10 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
         Log.i("live view", "init")
         var view = RemoteViews(context.packageName, R.layout.livemsg)
 
-        val gameData = Cryption.parseDataUrlToJson(message.url)
-        val game = whichGame(gameData)
+        val session = getSessionFor(message.session, handle!!)
+        session.handleNewMessage(message)
+
+        val game = session.getGame()
 
         val bitmap = BitmapFactory.decodeResource(context.resources, game?.gamePoster() ?: R.drawable.empty)
         view.setImageViewBitmap(R.id.gameImage, bitmap)
@@ -129,7 +104,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
         if (game != null) {
             var intent = Intent(context, game.gameClass())
                 .apply {
-                    putExtra("GAME_DATA", gameData.toString())
+                    putExtra("SESSION", message.session)
                 }
             var pendingIntent = PendingIntent.getBroadcast(context, 9, intent, PendingIntent.FLAG_IMMUTABLE)
             view.setOnClickPendingIntent(R.id.gameImage, pendingIntent)
@@ -138,6 +113,8 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
     }
 
     override fun messageUpdated(message: MadridMessage?) {
+        if (message == null) return
+        activeSessions[message.session]?.handleNewMessage(message)
         Log.i("update", "message")
     }
 
