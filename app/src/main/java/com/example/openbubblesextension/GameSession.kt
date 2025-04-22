@@ -13,13 +13,11 @@ class GameSession(var handle: IMessageViewHandle) {
     var messageUpdated: (new: MutableMap<String, String>) -> Unit = {}
     var currentMessage: MutableMap<String, String> = mutableMapOf()
 
-
-
     fun handleNewMessage(message: MadridMessage) {
-        val url = message.url.toUri()
+        val url = message.url.replace("data:", "data://").toUri()
         val data = url.getQueryParameter("data")!!
         val decrypted = Cryption.decrypt(data)
-        val parsed = decrypted.toUri()
+        val parsed = "data://$decrypted".toUri()
         val newMessage: MutableMap<String, String> = mutableMapOf()
         for (key in parsed.queryParameterNames) {
             newMessage[key] = parsed.getQueryParameter(key)!!

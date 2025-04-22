@@ -1,0 +1,119 @@
+[gd_scene load_steps=11 format=3 uid="uid://cnrr1hwlmd565"]
+
+[ext_resource type="Texture2D" uid="uid://d37tvmulfubj4" path="res://checkersboard_plain.png" id="1_ys403"]
+[ext_resource type="Script" uid="uid://ci8p3eom1mxpq" path="res://checkers_board_top.gd" id="2_3slu2"]
+[ext_resource type="Texture2D" uid="uid://duoyebvdp2m53" path="res://checker_black.png" id="2_nlcs0"]
+[ext_resource type="Texture2D" uid="uid://c8rkim5ojkkq8" path="res://checker_red.png" id="2_t0jlu"]
+[ext_resource type="Script" uid="uid://bcrbt7cq7jsjn" path="res://board_highlight.gd" id="5_1kvqq"]
+[ext_resource type="Script" uid="uid://cxttbx02xnll5" path="res://highlight_child.gd" id="6_srtqa"]
+[ext_resource type="Script" uid="uid://tmxho5e68hf7" path="res://button_click.gd" id="9_14sfn"]
+
+[sub_resource type="Gradient" id="Gradient_q1lfo"]
+interpolation_mode = 2
+offsets = PackedFloat32Array(0.461039, 1)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_2v7vs"]
+gradient = SubResource("Gradient_q1lfo")
+fill_from = Vector2(0.490826, 0.527523)
+fill_to = Vector2(0, 0)
+repeat = 2
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_xghwu"]
+gradient = SubResource("Gradient_q1lfo")
+fill_from = Vector2(0.495413, 0.522936)
+repeat = 2
+
+[node name="Node2D" type="Node2D"]
+
+[node name="CheckersBoardTop" type="Sprite2D" parent="."]
+position = Vector2(324, 565)
+scale = Vector2(0.6, 0.6)
+texture = ExtResource("1_ys403")
+script = ExtResource("2_3slu2")
+
+[node name="CheckerPieceRed" type="Sprite2D" parent="CheckersBoardTop"]
+visible = false
+position = Vector2(-472.312, -472.312)
+scale = Vector2(0.05, 0.05)
+texture = ExtResource("2_t0jlu")
+
+[node name="CheckerPieceBlack" type="Sprite2D" parent="CheckersBoardTop"]
+visible = false
+position = Vector2(-472.312, -472.312)
+scale = Vector2(0.05, 0.05)
+texture = ExtResource("2_nlcs0")
+
+[node name="BoardHighlight" type="Node" parent="CheckersBoardTop"]
+script = ExtResource("5_1kvqq")
+metadata/Energy = 16.0
+metadata/Position = Vector2(40.5, 281.5)
+metadata/Visible = false
+
+[node name="HighlightX" type="PointLight2D" parent="CheckersBoardTop/BoardHighlight"]
+z_as_relative = false
+position = Vector2(40.5, 281.5)
+scale = Vector2(0.872845, 0.872845)
+energy = 5.0
+texture = SubResource("GradientTexture2D_2v7vs")
+texture_scale = 1.45
+height = 1000.0
+script = ExtResource("6_srtqa")
+
+[node name="HighlightY" type="PointLight2D" parent="CheckersBoardTop/BoardHighlight"]
+z_as_relative = false
+position = Vector2(40.5, 281.5)
+scale = Vector2(0.873, 0.873)
+energy = 5.0
+range_z_min = 0
+range_z_max = 0
+texture = SubResource("GradientTexture2D_xghwu")
+texture_scale = 1.45
+height = 1000.0
+script = ExtResource("6_srtqa")
+
+[node name="P1Label" type="RichTextLabel" parent="CheckersBoardTop"]
+offset_left = -369.0
+offset_top = -720.0
+offset_right = -277.0
+offset_bottom = -640.0
+theme_override_font_sizes/normal_font_size = 50
+text = "P1"
+horizontal_alignment = 1
+
+[node name="PlayerCheckerRed" type="Sprite2D" parent="CheckersBoardTop"]
+position = Vector2(-323.333, -778.333)
+scale = Vector2(0.0531675, 0.0531675)
+texture = ExtResource("2_t0jlu")
+
+[node name="P2Label" type="RichTextLabel" parent="CheckersBoardTop"]
+offset_left = 265.0
+offset_top = -718.333
+offset_right = 357.0
+offset_bottom = -638.333
+theme_override_font_sizes/normal_font_size = 50
+text = "P2"
+horizontal_alignment = 1
+
+[node name="PlayerCheckerBlack" type="Sprite2D" parent="CheckersBoardTop"]
+position = Vector2(310, -778.333)
+scale = Vector2(0.0531675, 0.0531675)
+texture = ExtResource("2_nlcs0")
+
+[node name="SendButton" type="Button" parent="."]
+offset_left = 171.0
+offset_top = 985.0
+offset_right = 274.0
+offset_bottom = 1027.0
+disabled = true
+text = "Send
+"
+script = ExtResource("9_14sfn")
+
+[node name="UndoButton" type="Button" parent="."]
+offset_left = 385.0
+offset_top = 985.0
+offset_right = 488.0
+offset_bottom = 1027.0
+disabled = true
+text = "Undo"
+script = ExtResource("9_14sfn")

@@ -29,7 +29,7 @@ class WordHuntGame : Game {
         return "47"
     }
 
-    override fun getNewGameData(): JSONObject {
+    override fun getNewGameData(): MutableMap<String, String> {
         return super.getNewGameData().apply {
             put("letters", WordHuntActivity.generateLetterPool().joinToString(""))
             put("lang", "en")

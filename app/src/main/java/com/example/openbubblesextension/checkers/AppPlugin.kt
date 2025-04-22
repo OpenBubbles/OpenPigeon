@@ -26,39 +26,30 @@ class AppPlugin(godot: Godot, val intent: Intent, val _activity: Activity) : God
     override fun getPluginSignals() = setOf(SET_REPLAY_SIGNAL)
 
     override fun onGodotMainLoopStarted() {
-        Log.i("gamepigeon", "IM READY IM READY");
         emitSignal(SET_REPLAY_SIGNAL.name, replay)
         super.onGodotMainLoopStarted()
     }
 
     @UsedByGodot
     fun sendReplay(replay: String) {
-        Log.d("gamepigeon", "sendReplay: $replay")
+        Log.d("openpigeon-checkers", "sendReplay: $replay")
 
-        runOnUiThread {
-            val gameData = MadridExtension.currentGameData
-            val message = MadridExtension.currentMessage
-            val handle = MadridExtension.currentMessageHandle
-            if (gameData == null || handle == null || message == null) {
-                Log.e("gamepigeon", "Data required does not exist!")
-                _activity.finish()
-            } else {
-                gameData.setReplay(replay)
-                val newUrl = gameData.nextTurnUrl()
-
-                Log.d("gamepigeon", "New GP Data URL: $newUrl")
-
-                message.url = newUrl
-
-                handle.updateMessage(message, object : ITaskCompleteCallback.Stub() {
-                    override fun complete() {
-                        Log.i("gamepigeon", "Sent updated game message.")
-                        handle.unlock()
-                        _activity.finish()
-                    }
-                })
-            }
-        }
+//        runOnUiThread {
+//            gameData.setReplay(replay)
+//            val newUrl = gameData.nextTurnUrl()
+//
+//            Log.d("checkers", "New GP Data URL: $newUrl")
+//
+//            message.url = newUrl
+//
+//            handle.updateMessage(message, object : ITaskCompleteCallback.Stub() {
+//                override fun complete() {
+//                    Log.i("checkers", "Sent updated game message.")
+//                    handle.unlock()
+//                    _activity.finish()
+//                }
+//            })
+//        }
     }
 
     /**

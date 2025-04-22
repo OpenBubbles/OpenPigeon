@@ -16,6 +16,8 @@ import com.bluebubbles.messaging.IMessageViewHandle
 import com.bluebubbles.messaging.ITaskCompleteCallback
 import com.bluebubbles.messaging.IViewUpdateCallback
 import com.bluebubbles.messaging.MadridMessage
+import com.example.openbubblesextension.checkers.CheckersActivity
+import com.example.openbubblesextension.checkers.CheckersGame
 import com.example.openbubblesextension.wordhunt.WordHuntActivity
 import com.example.openbubblesextension.wordhunt.WordHuntGame
 import org.json.JSONObject
@@ -30,6 +32,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
         val activeSessions: MutableMap<String, GameSession> = mutableMapOf()
 
         val games: List<Game> = listOf(
+            CheckersGame(),
             WordHuntGame()
         )
 
@@ -106,7 +109,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
                 .apply {
                     putExtra("SESSION", message.session)
                 }
-            var pendingIntent = PendingIntent.getBroadcast(context, 9, intent, PendingIntent.FLAG_IMMUTABLE)
+            var pendingIntent = PendingIntent.getActivity(context, 9, intent, PendingIntent.FLAG_IMMUTABLE)
             view.setOnClickPendingIntent(R.id.gameImage, pendingIntent)
         }
         return view

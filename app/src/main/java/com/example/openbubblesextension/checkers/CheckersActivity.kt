@@ -1,9 +1,12 @@
 package com.example.openbubblesextension.checkers
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.example.openbubblesextension.GameSession
+import com.example.openbubblesextension.MadridExtension
 import com.example.openbubblesextension.R
 import org.godotengine.godot.Godot
 import org.godotengine.godot.GodotActivity
@@ -23,7 +26,9 @@ class CheckersActivity : GodotActivity() {
             insets
         }
 
-        setReplay(intent.getIntExtra("player", 0), intent.getStringExtra("replay")!!)
+        val sessionId: String = intent.getStringExtra("SESSION")!!
+        val currentMessage = MadridExtension.activeSessions[sessionId]!!.currentMessage
+        setReplay(currentMessage["player"]!!.toInt(), currentMessage["replay"]!!)
     }
 
     private fun getOrCreateAppPlugin() {
@@ -44,7 +49,6 @@ class CheckersActivity : GodotActivity() {
 
     override fun onGodotForceQuit(instance: Godot) {
         runOnUiThread {
-            MadridExtension.currentMessageHandle?.unlock()
             activity!!.finish()
         }
         super.onGodotForceQuit(instance)

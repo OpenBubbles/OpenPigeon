@@ -2,6 +2,7 @@ package com.example.openbubblesextension.checkers
 
 import com.example.openbubblesextension.Game
 import com.example.openbubblesextension.R
+import com.example.openbubblesextension.wordhunt.WordHuntActivity
 import org.json.JSONObject
 
 class CheckersGame : Game {
@@ -22,14 +23,14 @@ class CheckersGame : Game {
     }
 
     override fun gameClass(): Class<*> {
-        TODO("Not yet implemented")
+        return CheckersActivity::class.java
     }
 
     override fun gamePoster(): Int {
         return R.drawable.empty
     }
 
-    override fun getNewGameData(): JSONObject {
+    override fun getNewGameData(): MutableMap<String, String> {
         return super.getNewGameData().apply {
             put("mode", "n")
         }
