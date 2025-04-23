@@ -39,12 +39,18 @@ class CheckersActivity : GodotActivity() {
             if (currentMessage.isNotEmpty()) {
                 Log.i("openpigeon-checkers", "player: ${currentMessage["player"]!!.toInt()}, replay: ${currentMessage["replay"]!!}")
                 setReplay(currentMessage["player"]!!.toInt(), currentMessage["replay"]!!)
+
+                gameSessionIPC.onMessageUpdated(sessionId!!) { new: Map<String, String> ->
+                    if(new["player"]!!.toInt() == currentMessage["player"]!!.toInt()) {
+                        Log.i(
+                            "openpigeon-checkers",
+                            "onMessageUpdated -> player: ${new["player"]!!.toInt()}, replay: ${new["replay"]!!}"
+                        )
+                        setReplay(new["player"]!!.toInt(), new["replay"]!!)
+                    }
+                }
             }
         }
-
-//        gameSession!!.messageUpdated = { new: MutableMap<String, String> ->
-//            setReplay(new["player"]!!.toInt(), new["replay"]!!)
-//        }
     }
 
     private fun getOrCreateAppPlugin() {

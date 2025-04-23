@@ -9,6 +9,7 @@ import android.os.IBinder
 import com.example.openbubblesextension.Game
 import com.example.openbubblesextension.GameSession
 import com.example.openbubblesextension.IGameSession
+import com.example.openbubblesextension.IMessageUpdatedCallback
 import com.example.openbubblesextension.IUpdateGameSessionCallback
 
 class GameSessionIPC(val context: Context, private val onBind: (GameSessionIPC) -> Unit) {
@@ -47,6 +48,15 @@ class GameSessionIPC(val context: Context, private val onBind: (GameSessionIPC) 
             }
         }
         gameSession!!.updateSession(updatesBundle, mySession, ipcCallback)
+    }
+
+    fun onMessageUpdated(id: String, callback: (Map<String, String>) -> Unit) {
+        val ipcCallback = object : IMessageUpdatedCallback.Stub() {
+            override fun onMessageUpdated(data: Bundle?) {
+                callback(data!!.toStringMap())
+            }
+        }
+        gameSession!!.registerCallback(id, ipcCallback)
     }
 
     private fun Bundle.toStringMap(): Map<String, String> {

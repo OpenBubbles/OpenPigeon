@@ -20,6 +20,7 @@ var prev_moves: Array[Vector2]
 var prev_jumps: Array[Sprite2D]
 
 var has_connected = false
+var waitingForOpponent = false
 
 var player = null
 
@@ -62,22 +63,25 @@ func _ready() -> void:
 	if len(replayMoves) == 0 && prevBoard != nextBoard:
 		prevBoard = nextBoard
 	
-	for y in range(0, 8):
-		for x in range(0, 8):
-			var val = prevBoard[(7 - y) * 8 + x];
-			var newPiece: Sprite2D = null;
-			if val == "2":
-				newPiece = blackPiece.duplicate()
-			elif val == "1":
-				newPiece = redPiece.duplicate();
-				
-			if newPiece != null:
-				newPiece.position = Vector2(redPiece.position.x + (135 * x), redPiece.position.y + (135 * y));
-				newPiece.name = str(x) + "," + str(7-y)
-				newPiece.visible = true
-				add_child(newPiece)
-				print(newPiece.name, " : ", newPiece.position)
-				
+	if waitingForOpponent == false:
+		for y in range(0, 8):
+			for x in range(0, 8):
+				var val = prevBoard[(7 - y) * 8 + x];
+				var newPiece: Sprite2D = null;
+				if val == "2":
+					newPiece = blackPiece.duplicate()
+				elif val == "1":
+					newPiece = redPiece.duplicate();
+					
+				if newPiece != null:
+					newPiece.position = Vector2(redPiece.position.x + (135 * x), redPiece.position.y + (135 * y));
+					newPiece.name = str(x) + "," + str(7-y)
+					newPiece.visible = true
+					add_child(newPiece)
+					print(newPiece.name, " : ", newPiece.position)
+	
+	print("New replay: " + str(replayMoves))
+	
 	if len(replayMoves) > 0:
 		var firstMovePos = replayMoves[0].split(':')[1].split(',')
 		var movedPiece = get_node_or_null(firstMovePos[0] + ',' + firstMovePos[1])
@@ -94,6 +98,8 @@ func _ready() -> void:
 					tween.tween_callback(set_checker_king.bind(movedPiece, color))
 				if moveType == "attack":
 					jump_piece(int(movePos[0]), int(movePos[1]), int(movePos[2]), int(movePos[3]), i*0.5)
+					
+	waitingForOpponent = false
 
 func _set_replay(new_replay: String):
 	player = int(new_replay.substr(7, 1))
@@ -133,6 +139,15 @@ func export_replay() -> String:
 		if abs(prev_moves[i].x - prev_moves[i+1].x) > 1:
 			moveType = "attack"
 		move_str += moveType + ":" + str(prev_moves[i].x) + "," + str(prev_moves[i].y) + "," + str(prev_moves[i+1].x) + "," + str(prev_moves[i+1].y) + "|"
+	
+	clear_highlights()
+	clicked_piece = null
+	has_moved = false
+	prev_jumps.clear()
+	prev_moves.clear()
+	(get_node("../UndoButton") as Button).disabled = true
+	(get_node("../SendButton") as Button).disabled = true
+	waitingForOpponent = true
 	
 	return replay.split('|')[-1] + move_str + "board:" + boardStr.substr(0, boardStr.length()-1)
 	

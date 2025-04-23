@@ -3,11 +3,15 @@ package com.example.openbubblesextension
 import android.app.Service
 import android.content.Intent
 import android.os.Bundle
+import android.os.DeadObjectException
 import android.os.IBinder
+import android.util.Log
 import com.example.openbubblesextension.IGameSession
 import com.example.openbubblesextension.IUpdateGameSessionCallback
+import com.example.openbubblesextension.IMessageUpdatedCallback
 
 class GameSessionService : Service() {
+    private var onMessageUpdatedCB: IMessageUpdatedCallback? = null
 
     private val binder = object : IGameSession.Stub() {
         override fun getCurrentMessage(id: String?): Bundle {
@@ -25,6 +29,24 @@ class GameSessionService : Service() {
             val updateMap = updates.toStringMap()
             gameSession.updateSession(applicationContext, updateMap, mySession) {
                 callback?.onFinished()
+            }
+        }
+
+        override fun registerCallback(id: String, callback: IMessageUpdatedCallback?) {
+            val gameSession: GameSession = MadridExtension.activeSessions[id] ?: return
+            onMessageUpdatedCB = callback
+
+            gameSession.messageUpdated = { new: MutableMap<String, String> ->
+                try {
+                    callback?.onMessageUpdated(Bundle().apply {
+                        for ((key, value) in new) {
+                            putString(key, value)
+                        }
+                    })
+                } catch (e: DeadObjectException) {
+                    Log.e("openpigeon-checkers", "Callback object is dead!")
+                    gameSession.messageUpdated = {}
+                }
             }
         }
     }

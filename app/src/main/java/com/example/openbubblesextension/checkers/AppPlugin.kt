@@ -18,6 +18,7 @@ import org.godotengine.godot.plugin.UsedByGodot
  */
 class AppPlugin(godot: Godot, private val _activity: CheckersActivity) : GodotPlugin(godot) {
     private var replay = "";
+    private var mainLoopStarted = false;
 
     companion object {
         val SET_REPLAY_SIGNAL = SignalInfo("set_replay", String::class.java)
@@ -28,6 +29,7 @@ class AppPlugin(godot: Godot, private val _activity: CheckersActivity) : GodotPl
     override fun getPluginSignals() = setOf(SET_REPLAY_SIGNAL)
 
     override fun onGodotMainLoopStarted() {
+        mainLoopStarted = true
         emitSignal(SET_REPLAY_SIGNAL.name, replay)
         super.onGodotMainLoopStarted()
     }
@@ -56,6 +58,8 @@ class AppPlugin(godot: Godot, private val _activity: CheckersActivity) : GodotPl
      */
     internal fun setReplay(player: Int, replay: String) {
         this.replay = "player:$player,$replay"
-        Log.i("gamepigeon", "Set replay: ${this.replay}")
+        Log.i("openpigeon-checkers", "Set replay: ${this.replay}")
+        if (mainLoopStarted)
+            emitSignal(SET_REPLAY_SIGNAL.name, replay)
     }
 }
