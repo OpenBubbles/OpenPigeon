@@ -14,6 +14,7 @@
         tools:targetApi="31">
         <activity
             android:name=".checkers.CheckersActivity"
+            android:process=":godot"
             android:exported="false" />
         <activity
             android:name=".wordhunt.WordHuntActivity"
@@ -41,6 +42,15 @@
             <meta-data
                 android:name="madrid_bundle_id"
                 android:value="com.apple.messages.MSMessageExtensionBalloonPlugin:EWFNLB79LQ:com.gamerdelights.gamepigeon.ext" />
+        </service>
+
+        <service
+            android:name=".GameSessionService"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.example.openbubblesextension.IGameSession" />
+            </intent-filter>
         </service>
     </application>
 

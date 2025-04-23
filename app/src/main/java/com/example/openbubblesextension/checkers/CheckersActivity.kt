@@ -5,7 +5,9 @@ import android.util.Log
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.example.openbubblesextension.Game
 import com.example.openbubblesextension.GameSession
+import com.example.openbubblesextension.IGameSession
 import com.example.openbubblesextension.MadridExtension
 import com.example.openbubblesextension.R
 import org.godotengine.godot.Godot
@@ -15,6 +17,8 @@ import org.godotengine.godot.plugin.GodotPlugin
 
 class CheckersActivity : GodotActivity() {
     private var appPlugin: AppPlugin? = null
+    var sessionId: String? = null
+    var gameSessionIPC: GameSessionIPC? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,14 +30,26 @@ class CheckersActivity : GodotActivity() {
             insets
         }
 
-        val sessionId: String = intent.getStringExtra("SESSION")!!
-        val currentMessage = MadridExtension.activeSessions[sessionId]!!.currentMessage
-        setReplay(currentMessage["player"]!!.toInt(), currentMessage["replay"]!!)
+        sessionId = intent.getStringExtra("SESSION")!!
+        Log.i("openpigeon-checkers", "session: $sessionId")
+
+        GameSessionIPC(applicationContext) { gameSessionIPC ->
+            this.gameSessionIPC = gameSessionIPC
+            val currentMessage = gameSessionIPC.getCurrentMessage(sessionId!!)
+            if (currentMessage.isNotEmpty()) {
+                Log.i("openpigeon-checkers", "player: ${currentMessage["player"]!!.toInt()}, replay: ${currentMessage["replay"]!!}")
+                setReplay(currentMessage["player"]!!.toInt(), currentMessage["replay"]!!)
+            }
+        }
+
+//        gameSession!!.messageUpdated = { new: MutableMap<String, String> ->
+//            setReplay(new["player"]!!.toInt(), new["replay"]!!)
+//        }
     }
 
     private fun getOrCreateAppPlugin() {
         if (appPlugin == null) {
-            appPlugin = AppPlugin(godot!!, intent, this)
+            appPlugin = AppPlugin(godot!!, this)
         }
     }
 
@@ -49,7 +65,8 @@ class CheckersActivity : GodotActivity() {
 
     override fun onGodotForceQuit(instance: Godot) {
         runOnUiThread {
-            activity!!.finish()
+//            gameSession?.unlock()
+            activity?.finish()
         }
         super.onGodotForceQuit(instance)
     }

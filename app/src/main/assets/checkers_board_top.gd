@@ -33,8 +33,6 @@ func _ready() -> void:
 			has_connected = true
 	else:
 		print("App plugin is not available")
-		if replay == null or player == null:
-			_set_replay("player:1,board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,0,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,2,0,0,0,0,1,0,0,0,1,1,0,0,0,1,0,0,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,0,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,2,0,0,0,0,1,0,1,0,1,1,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0")
 	
 	if replay == null or player == null:
 		return
@@ -98,10 +96,10 @@ func _ready() -> void:
 					jump_piece(int(movePos[0]), int(movePos[1]), int(movePos[2]), int(movePos[3]), i*0.5)
 
 func _set_replay(new_replay: String):
-	#player = int(new_replay.substr(7, 1))
-	#replay = new_replay.substr(9)
-	player = 2
-	replay = "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,2,0,2,0,2,0,2,2,0,2,0,0,0,0,0,0,0,0,1,0,1,0,1,1,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0|move:5,4,6,3|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,2,0,2,0,2,0,2,2,0,2,0,0,0,1,0,0,0,0,1,0,0,0,1,1,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0"
+	player = int(new_replay.substr(7, 1))
+	replay = new_replay.substr(9)
+	#player = 2
+	#replay = "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,2,0,2,0,2,0,2,2,0,2,0,0,0,0,0,0,0,0,1,0,1,0,1,1,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0|move:5,4,6,3|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,2,0,2,0,2,0,2,2,0,2,0,0,0,1,0,0,0,0,1,0,0,0,1,1,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0"
 	_ready()
 
 func export_replay() -> String:
@@ -256,9 +254,9 @@ func undo_move():
 
 func check_player(piece: Sprite2D) -> bool:
 	var color = get_piece_color(piece)
-	if player == 2 and color == "black":
+	if player == 1 and color == "black":
 		return true
-	elif player == 1 and color == "red":
+	elif player == 2 and color == "red":
 		return true
 	return false
 

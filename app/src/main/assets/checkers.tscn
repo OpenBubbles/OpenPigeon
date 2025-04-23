@@ -71,7 +71,7 @@ texture_scale = 1.45
 height = 1000.0
 script = ExtResource("6_srtqa")
 
-[node name="P1Label" type="RichTextLabel" parent="CheckersBoardTop"]
+[node name="P2Label" type="RichTextLabel" parent="CheckersBoardTop"]
 offset_left = -369.0
 offset_top = -720.0
 offset_right = -277.0
@@ -85,7 +85,7 @@ position = Vector2(-323.333, -778.333)
 scale = Vector2(0.0531675, 0.0531675)
 texture = ExtResource("2_t0jlu")
 
-[node name="P2Label" type="RichTextLabel" parent="CheckersBoardTop"]
+[node name="P1Label" type="RichTextLabel" parent="CheckersBoardTop"]
 offset_left = 265.0
 offset_top = -718.333
 offset_right = 357.0

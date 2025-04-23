@@ -4,21 +4,15 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.graphics.BitmapFactory
 import android.util.Log
 import android.widget.RemoteViews
-import androidx.core.content.ContextCompat.RECEIVER_EXPORTED
-import androidx.core.content.ContextCompat.registerReceiver
 import com.bluebubbles.messaging.IKeyboardHandle
 import com.bluebubbles.messaging.IMadridExtension
 import com.bluebubbles.messaging.IMessageViewHandle
-import com.bluebubbles.messaging.ITaskCompleteCallback
 import com.bluebubbles.messaging.IViewUpdateCallback
 import com.bluebubbles.messaging.MadridMessage
-import com.example.openbubblesextension.checkers.CheckersActivity
 import com.example.openbubblesextension.checkers.CheckersGame
-import com.example.openbubblesextension.wordhunt.WordHuntActivity
 import com.example.openbubblesextension.wordhunt.WordHuntGame
 import org.json.JSONObject
 
@@ -109,7 +103,8 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
                 .apply {
                     putExtra("SESSION", message.session)
                 }
-            var pendingIntent = PendingIntent.getActivity(context, 9, intent, PendingIntent.FLAG_IMMUTABLE)
+            val requestCode = System.currentTimeMillis().toInt()
+            var pendingIntent = PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE)
             view.setOnClickPendingIntent(R.id.gameImage, pendingIntent)
         }
         return view

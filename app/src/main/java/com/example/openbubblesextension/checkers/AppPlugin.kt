@@ -1,9 +1,12 @@
 package com.example.openbubblesextension.checkers
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.bluebubbles.messaging.ITaskCompleteCallback
+import com.example.openbubblesextension.GameSession
+import com.example.openbubblesextension.MadridExtension
 import org.godotengine.godot.Godot
 import org.godotengine.godot.plugin.GodotPlugin
 import org.godotengine.godot.plugin.SignalInfo
@@ -13,8 +16,7 @@ import org.godotengine.godot.plugin.UsedByGodot
 /**
  * Runtime [GodotPlugin] used to enable interaction with the Godot gdscript logic.
  */
-class AppPlugin(godot: Godot, val intent: Intent, val _activity: Activity) : GodotPlugin(godot) {
-
+class AppPlugin(godot: Godot, private val _activity: CheckersActivity) : GodotPlugin(godot) {
     private var replay = "";
 
     companion object {
@@ -33,23 +35,18 @@ class AppPlugin(godot: Godot, val intent: Intent, val _activity: Activity) : God
     @UsedByGodot
     fun sendReplay(replay: String) {
         Log.d("openpigeon-checkers", "sendReplay: $replay")
+        val gameSessionIPC = _activity.gameSessionIPC!!
+        val currentMessage = gameSessionIPC.getCurrentMessage(_activity.sessionId!!)
 
-//        runOnUiThread {
-//            gameData.setReplay(replay)
-//            val newUrl = gameData.nextTurnUrl()
-//
-//            Log.d("checkers", "New GP Data URL: $newUrl")
-//
-//            message.url = newUrl
-//
-//            handle.updateMessage(message, object : ITaskCompleteCallback.Stub() {
-//                override fun complete() {
-//                    Log.i("checkers", "Sent updated game message.")
-//                    handle.unlock()
-//                    _activity.finish()
-//                }
-//            })
-//        }
+        val updates = mapOf(
+            "player" to if (currentMessage["player"] == "2") "1" else "2",
+            "replay" to replay,
+            "num" to (currentMessage["num"]?.toInt()!! + 1).toString()
+        )
+
+        _activity.gameSessionIPC!!.updateSession(updates, _activity.sessionId!!) {
+            Log.i("openpigeon-checkers", "Game session updated")
+        }
     }
 
     /**
