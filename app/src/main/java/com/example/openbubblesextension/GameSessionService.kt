@@ -28,7 +28,11 @@ class GameSessionService : Service() {
             val gameSession: GameSession = MadridExtension.activeSessions[mySession] ?: return
             val updateMap = updates.toStringMap()
             gameSession.updateSession(applicationContext, updateMap, mySession) {
-                callback?.onFinished()
+                try {
+                    callback?.onFinished()
+                } catch(e: DeadObjectException) {
+                    Log.e("openpigeon-checkers", "Callback object is dead!")
+                }
             }
         }
 

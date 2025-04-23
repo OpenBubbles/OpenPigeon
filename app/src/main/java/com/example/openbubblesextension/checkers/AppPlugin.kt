@@ -60,6 +60,6 @@ class AppPlugin(godot: Godot, private val _activity: CheckersActivity) : GodotPl
         this.replay = "player:$player,$replay"
         Log.i("openpigeon-checkers", "Set replay: ${this.replay}")
         if (mainLoopStarted)
-            emitSignal(SET_REPLAY_SIGNAL.name, replay)
+            emitSignal(SET_REPLAY_SIGNAL.name, this.replay)
     }
 }

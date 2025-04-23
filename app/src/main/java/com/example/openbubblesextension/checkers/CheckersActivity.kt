@@ -51,7 +51,7 @@ class CheckersActivity : GodotActivity() {
                 }
             }
         }
-    }
+        }
 
     private fun getOrCreateAppPlugin() {
         if (appPlugin == null) {

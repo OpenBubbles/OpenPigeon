@@ -33,12 +33,16 @@ func _ready() -> void:
 			appPlugin.connect("set_replay", _set_replay)
 			has_connected = true
 	else:
-		print("App plugin is not available")
+		if player == null or replay == null:
+			_set_replay("player:1,board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0")
+			print("App plugin is not available")
 	
 	if replay == null or player == null:
 		return
-		
-	get_node("P" + str(player) + "Label").set_text("You")
+	
+	var playerLabel = get_node_or_null("P" + str(player) + "Label")
+	if playerLabel != null:
+		playerLabel.set_text("You")
 		
 	redPiece = get_node("CheckerPieceRed")
 	var blackPiece: Sprite2D = get_node("CheckerPieceBlack")
@@ -99,13 +103,19 @@ func _ready() -> void:
 				if moveType == "attack":
 					jump_piece(int(movePos[0]), int(movePos[1]), int(movePos[2]), int(movePos[3]), i*0.5)
 					
-	waitingForOpponent = false
+	set_waiting(false)
+
+func set_waiting(enabled: bool):
+	if enabled:
+		waitingForOpponent = true
+		get_node("waitingLabel").visible = true
+	else:
+		waitingForOpponent = false
+		get_node("waitingLabel").visible = false
 
 func _set_replay(new_replay: String):
 	player = int(new_replay.substr(7, 1))
 	replay = new_replay.substr(9)
-	#player = 2
-	#replay = "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,2,0,2,0,2,0,2,2,0,2,0,0,0,0,0,0,0,0,1,0,1,0,1,1,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0|move:5,4,6,3|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,2,0,2,0,2,0,2,2,0,2,0,0,0,1,0,0,0,0,1,0,0,0,1,1,0,0,0,1,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0"
 	_ready()
 
 func export_replay() -> String:
@@ -143,11 +153,12 @@ func export_replay() -> String:
 	clear_highlights()
 	clicked_piece = null
 	has_moved = false
+	moves.clear()
 	prev_jumps.clear()
 	prev_moves.clear()
 	(get_node("../UndoButton") as Button).disabled = true
 	(get_node("../SendButton") as Button).disabled = true
-	waitingForOpponent = true
+	set_waiting(true)
 	
 	return replay.split('|')[-1] + move_str + "board:" + boardStr.substr(0, boardStr.length()-1)
 	
@@ -277,7 +288,7 @@ func check_player(piece: Sprite2D) -> bool:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
-		if event.pressed and event.button_index == 1:
+		if event.pressed and event.button_index == 1 and waitingForOpponent == false:
 			var x: int = ceil(event.position.x / 80) - 1;
 			var y: int = ceil(event.position.y / 80) - 4;
 			print("board position at ", x, ",", 7-y, " clicked")

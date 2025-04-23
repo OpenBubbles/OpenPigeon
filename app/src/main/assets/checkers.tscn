@@ -99,6 +99,24 @@ position = Vector2(310, -778.333)
 scale = Vector2(0.0531675, 0.0531675)
 texture = ExtResource("2_nlcs0")
 
+[node name="waitingLabel" type="ColorRect" parent="CheckersBoardTop"]
+visible = false
+top_level = true
+offset_left = 116.0
+offset_top = 511.0
+offset_right = 547.0
+offset_bottom = 608.0
+color = Color(0.376471, 0.376471, 0.376471, 0.796078)
+
+[node name="RichTextLabel" type="RichTextLabel" parent="CheckersBoardTop/waitingLabel"]
+layout_mode = 0
+offset_left = 18.0
+offset_top = 25.3333
+offset_right = 421.0
+offset_bottom = 67.3333
+theme_override_font_sizes/normal_font_size = 30
+text = "WAITING FOR OPPONENT..."
+
 [node name="SendButton" type="Button" parent="."]
 offset_left = 171.0
 offset_top = 985.0

@@ -27,7 +27,7 @@ class CheckersGame : Game {
     }
 
     override fun gamePoster(): Int {
-        return R.drawable.empty
+        return R.drawable.checkers
     }
 
     override fun getNewGameData(): MutableMap<String, String> {

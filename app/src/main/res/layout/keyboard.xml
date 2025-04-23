@@ -79,7 +79,7 @@
             android:layout_weight="1"
             android:contentDescription="Game 3"
             android:scaleType="centerCrop"
-            android:src="@drawable/empty" />
+            android:src="@drawable/checkers" />
 
         <ImageView
             android:id="@+id/btn_game_4"
