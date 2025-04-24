@@ -10,8 +10,8 @@ config_version=5
 
 [application]
 
-config/name="GamePidgeon Checkers"
-run/main_scene="res://checkers.tscn"
+config/name="OpenPigeon Games"
+run/main_scene="uid://cj7d2jqu5r5ym"
 config/features=PackedStringArray("4.4", "Mobile")
 config/icon="res://icon.svg"
 

@@ -1,4 +1,4 @@
-package com.example.openbubblesextension
+package com.example.openbubblesextension.godot
 
 import android.app.Service
 import android.content.Intent
@@ -6,9 +6,11 @@ import android.os.Bundle
 import android.os.DeadObjectException
 import android.os.IBinder
 import android.util.Log
+import com.example.openbubblesextension.GameSession
 import com.example.openbubblesextension.IGameSession
 import com.example.openbubblesextension.IUpdateGameSessionCallback
 import com.example.openbubblesextension.IMessageUpdatedCallback
+import com.example.openbubblesextension.MadridExtension
 
 class GameSessionService : Service() {
     private var onMessageUpdatedCB: IMessageUpdatedCallback? = null

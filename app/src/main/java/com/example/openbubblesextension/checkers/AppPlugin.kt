@@ -35,6 +35,11 @@ class AppPlugin(godot: Godot, private val _activity: CheckersActivity) : GodotPl
     }
 
     @UsedByGodot
+    fun getGameName(): String {
+        return _activity.game_name
+    }
+
+    @UsedByGodot
     fun sendReplay(replay: String) {
         Log.d("openpigeon-checkers", "sendReplay: $replay")
         val gameSessionIPC = _activity.gameSessionIPC!!

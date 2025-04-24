@@ -5,17 +5,16 @@ import android.util.Log
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import com.example.openbubblesextension.Game
-import com.example.openbubblesextension.GameSession
-import com.example.openbubblesextension.IGameSession
-import com.example.openbubblesextension.MadridExtension
 import com.example.openbubblesextension.R
+import com.example.openbubblesextension.godot.GameSessionIPC
 import org.godotengine.godot.Godot
 import org.godotengine.godot.GodotActivity
 import org.godotengine.godot.plugin.GodotPlugin
 
 
 class CheckersActivity : GodotActivity() {
+    val game_name: String = CheckersGame().getName()
+
     private var appPlugin: AppPlugin? = null
     var sessionId: String? = null
     var gameSessionIPC: GameSessionIPC? = null
@@ -51,7 +50,7 @@ class CheckersActivity : GodotActivity() {
                 }
             }
         }
-        }
+    }
 
     private fun getOrCreateAppPlugin() {
         if (appPlugin == null) {
@@ -71,7 +70,6 @@ class CheckersActivity : GodotActivity() {
 
     override fun onGodotForceQuit(instance: Godot) {
         runOnUiThread {
-//            gameSession?.unlock()
             activity?.finish()
         }
         super.onGodotForceQuit(instance)

@@ -1,10 +1,10 @@
 extends Sprite2D
 class_name CheckersBoardTop
 
-var black_king_texture = preload("res://checker_black_king.png")
-var red_king_texture = preload("res://checker_red_king.png")
-var black_normal_texture = preload("res://checker_black.png")
-var red_normal_texture = preload("res://checker_red.png")
+var black_king_texture = preload("res://checkers/checker_black_king.png")
+var red_king_texture = preload("res://checkers/checker_red_king.png")
+var black_normal_texture = preload("res://checkers/checker_black.png")
+var red_normal_texture = preload("res://checkers/checker_red.png")
 
 var replay = null
 var redPiece: Sprite2D
@@ -110,6 +110,12 @@ func set_waiting(enabled: bool):
 		waitingForOpponent = true
 		get_node("waitingLabel").visible = true
 	else:
+		clear_highlights()
+		clicked_piece = null
+		has_moved = false
+		moves.clear()
+		prev_jumps.clear()
+		prev_moves.clear()
 		waitingForOpponent = false
 		get_node("waitingLabel").visible = false
 
@@ -238,6 +244,7 @@ func gen_moves():
 	for diagonal in diagonals:
 		var clickedPiecePos = getPiecePos(clicked_piece)
 		var pos = Vector2(clickedPiecePos.x + diagonal.x, clickedPiecePos.y + diagonal.y)
+		print(str(len(prev_moves)/2) + ", "  + str(len(prev_jumps)))
 		if pos.y <= 7 and pos.y >= 0:
 			var piece = get_node_or_null(str(pos.x) + "," + str(pos.y))
 			if piece == null:

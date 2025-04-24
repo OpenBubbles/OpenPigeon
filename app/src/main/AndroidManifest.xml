@@ -45,7 +45,7 @@
         </service>
 
         <service
-            android:name=".GameSessionService"
+            android:name=".godot.GameSessionService"
             android:enabled="true"
             android:exported="true">
             <intent-filter>

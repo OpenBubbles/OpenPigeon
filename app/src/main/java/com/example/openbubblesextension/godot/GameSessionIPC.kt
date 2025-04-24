@@ -1,4 +1,4 @@
-package com.example.openbubblesextension.checkers
+package com.example.openbubblesextension.godot
 
 import android.content.ComponentName
 import android.content.Context
@@ -6,8 +6,6 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
-import com.example.openbubblesextension.Game
-import com.example.openbubblesextension.GameSession
 import com.example.openbubblesextension.IGameSession
 import com.example.openbubblesextension.IMessageUpdatedCallback
 import com.example.openbubblesextension.IUpdateGameSessionCallback

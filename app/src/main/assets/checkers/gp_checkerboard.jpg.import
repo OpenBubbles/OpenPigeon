@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d37tvmulfubj4"
-path="res://.godot/imported/checkersboard_plain.png-99db459fccd43369e76782d3f3abd246.ctex"
+uid="uid://c04pqvth7jxny"
+path="res://.godot/imported/gp_checkerboard.jpg-86e6d9de0bf2cc61a05d1e50f8ffcfeb.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://checkersboard_plain.png"
-dest_files=["res://.godot/imported/checkersboard_plain.png-99db459fccd43369e76782d3f3abd246.ctex"]
+source_file="res://checkers/gp_checkerboard.jpg"
+dest_files=["res://.godot/imported/gp_checkerboard.jpg-86e6d9de0bf2cc61a05d1e50f8ffcfeb.ctex"]
 
 [params]
 

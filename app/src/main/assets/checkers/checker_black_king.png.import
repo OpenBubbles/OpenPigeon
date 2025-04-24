@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c04pqvth7jxny"
-path="res://.godot/imported/gp_checkerboard.jpg-7358ffc41d4d474174e9d4398050b5b4.ctex"
+uid="uid://nev5y4and3i6"
+path="res://.godot/imported/checker_black_king.png-c8d704e2cb978dc88c156979bfe32405.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://gp_checkerboard.jpg"
-dest_files=["res://.godot/imported/gp_checkerboard.jpg-7358ffc41d4d474174e9d4398050b5b4.ctex"]
+source_file="res://checkers/checker_black_king.png"
+dest_files=["res://.godot/imported/checker_black_king.png-c8d704e2cb978dc88c156979bfe32405.ctex"]
 
 [params]
 
