@@ -183,7 +183,7 @@ func export_replay() -> String:
 		var moveType = "move"
 		if abs(prev_moves[i].x - prev_moves[i+1].x) > 1:
 			moveType = "attack"
-		move_str += moveType + ":" + str(prev_moves[i].x) + "," + str(prev_moves[i].y) + "," + str(prev_moves[i+1].x) + "," + str(prev_moves[i+1].y) + "|"
+		move_str += moveType + ":" + str(int(prev_moves[i].x)) + "," + str(int(prev_moves[i].y)) + "," + str(int(prev_moves[i+1].x)) + "," + str(int(prev_moves[i+1].y)) + "|"
 	
 	clear_highlights()
 	clicked_piece = null
