@@ -3,6 +3,8 @@ class_name BoardHighlight
 
 # Called when the node enters the scene tree for the first time.
 func _ready() -> void:
+	get_child(0).visible = true
+	get_child(1).visible = true
 	var tween = get_tree().create_tween()
 	tween.tween_method(set_energy, 0.0, 5.0, 0.5).set_trans(Tween.TRANS_SINE)
 	tween.tween_method(set_energy, 5.0, 0.0, 0.5).set_trans(Tween.TRANS_SINE)

@@ -29,9 +29,13 @@ class AppPlugin(godot: Godot, private val _activity: CheckersActivity) : GodotPl
     override fun getPluginSignals() = setOf(SET_REPLAY_SIGNAL)
 
     override fun onGodotMainLoopStarted() {
-        mainLoopStarted = true
-        emitSignal(SET_REPLAY_SIGNAL.name, replay)
         super.onGodotMainLoopStarted()
+        mainLoopStarted = true
+    }
+
+    @UsedByGodot
+    fun onReady() {
+        emitSignal(SET_REPLAY_SIGNAL.name, this.replay)
     }
 
     @UsedByGodot

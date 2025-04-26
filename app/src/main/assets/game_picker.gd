@@ -8,6 +8,6 @@ var games = {
 func _ready() -> void:
 	var appPlugin := Engine.get_singleton("AppPlugin")
 	if appPlugin:
-		print("App plugin is available")
-		get_tree().change_scene_to_file(games[appPlugin.getGameName()])
+		print("Game picker loaded..")
+		get_tree().call_deferred("change_scene_to_file", games[appPlugin.getGameName()])
 	

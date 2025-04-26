@@ -30,10 +30,11 @@ var player = null
 func _ready() -> void:
 	var appPlugin := Engine.get_singleton("AppPlugin")
 	if appPlugin:
-		print("App plugin is available")
 		if not has_connected:
+			print("App plugin is available")
 			appPlugin.connect("set_replay", _set_replay)
 			has_connected = true
+			appPlugin.onReady()
 	else:
 		if player == null or replay == null:
 			_set_replay("player:1,board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0")
@@ -74,17 +75,23 @@ func _ready() -> void:
 			for x in range(0, 8):
 				var val = prevBoard[(7 - y) * 8 + x];
 				var newPiece: Sprite2D = null;
-				if val == "2":
-					newPiece = blackPiece.duplicate()
-				elif val == "1":
+				if val == "1":
 					newPiece = redPiece.duplicate();
+				elif val == "2":
+					newPiece = blackPiece.duplicate()
+				elif val == "3":
+					newPiece = redPiece.duplicate();
+					set_checker_king(newPiece, "red")
+				elif val == "4":
+					newPiece = blackPiece.duplicate();
+					set_checker_king(newPiece, "black")
 					
 				if newPiece != null:
 					newPiece.position = Vector2(redPiece.position.x + (135 * x), redPiece.position.y + (135 * y));
 					newPiece.name = str(x) + "," + str(7-y)
 					newPiece.visible = true
 					add_child(newPiece)
-					print(newPiece.name, " : ", newPiece.position)
+					#print(newPiece.name, " : ", newPiece.position)
 	
 	print("New replay: " + str(replayMoves))
 	
@@ -136,6 +143,7 @@ func set_waiting(enabled: bool):
 	if win_loss == "win":
 		get_node("winLoseLabel").get_child(0).set_text("[center]YOU WIN![/center]")
 		get_node("winLoseLabel").visible = true
+		get_node("waitingLabel").visible = false
 	elif win_loss == "lose":
 		get_node("winLoseLabel").get_child(0).set_text("[center]YOU LOSE :([/center]")
 		get_node("winLoseLabel").visible = true
@@ -200,8 +208,8 @@ func check_win_loss():
 					num_your_pieces += 1
 				else:
 					num_other_pieces += 1
-	print("Your pieces remaining: " + str(num_your_pieces))
-	print("Other player's pieces remaining: " + str(num_other_pieces))
+	#print("Your pieces remaining: " + str(num_your_pieces))
+	#print("Other player's pieces remaining: " + str(num_other_pieces))
 	if num_your_pieces == 0:
 		return "lose"
 	if num_other_pieces == 0:
@@ -277,7 +285,7 @@ func gen_moves():
 	if color == "black" or isKing:
 		diagonals.append(Vector2(-1, 1))
 		diagonals.append(Vector2(1, 1))
-	elif color == "red" or isKing:
+	if color == "red" or isKing:
 		diagonals.append(Vector2(1, -1));
 		diagonals.append(Vector2(-1, -1));
 		
@@ -285,7 +293,7 @@ func gen_moves():
 		var clickedPiecePos = getPiecePos(clicked_piece)
 		var pos = Vector2(clickedPiecePos.x + diagonal.x, clickedPiecePos.y + diagonal.y)
 		if pos.y <= 7 and pos.y >= 0:
-			var piece = get_node_or_null(str(pos.x) + "," + str(pos.y))
+			var piece = get_node_or_null(str(int(pos.x)) + "," + str(int(pos.y)))
 			if piece == null:
 				if checking_for_jumps == false:
 					if len(prev_moves) > 0:
@@ -296,7 +304,7 @@ func gen_moves():
 				var x_step = 1 if pos.x > clickedPiecePos.x else -1
 				var y_step = 1 if pos.y > clickedPiecePos.y else -1
 				var newPos = Vector2(pos.x + x_step, pos.y + y_step)
-				if get_node_or_null(str(newPos.x) + "," + str(newPos.y)) == null:
+				if get_node_or_null(str(int(newPos.x)) + "," + str(int(newPos.y))) == null:
 					moves.append(newPos)
 					add_highlight(newPos.x, 7 - newPos.y)
 

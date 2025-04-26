@@ -57,6 +57,7 @@ metadata/Position = Vector2(40.5, 281.5)
 metadata/Visible = false
 
 [node name="HighlightX" type="PointLight2D" parent="CheckersBoardTop/BoardHighlight"]
+visible = false
 z_as_relative = false
 position = Vector2(40.5, 281.5)
 scale = Vector2(0.872845, 0.872845)
@@ -67,6 +68,7 @@ height = 1000.0
 script = ExtResource("6_srtqa")
 
 [node name="HighlightY" type="PointLight2D" parent="CheckersBoardTop/BoardHighlight"]
+visible = false
 z_as_relative = false
 position = Vector2(40.5, 281.5)
 scale = Vector2(0.873, 0.873)
