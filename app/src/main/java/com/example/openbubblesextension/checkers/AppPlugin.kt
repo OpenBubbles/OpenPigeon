@@ -40,7 +40,7 @@ class AppPlugin(godot: Godot, private val _activity: CheckersActivity) : GodotPl
 
     @UsedByGodot
     fun getGameName(): String {
-        return _activity.game_name
+        return _activity.baseGame.getName()
     }
 
     @UsedByGodot

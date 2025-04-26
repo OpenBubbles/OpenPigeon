@@ -13,7 +13,7 @@ import org.godotengine.godot.plugin.GodotPlugin
 
 
 class CheckersActivity : GodotActivity() {
-    val game_name: String = CheckersGame().getName()
+    val baseGame = CheckersGame()
 
     private var appPlugin: AppPlugin? = null
     var sessionId: String? = null
@@ -36,16 +36,16 @@ class CheckersActivity : GodotActivity() {
             this.gameSessionIPC = gameSessionIPC
             val currentMessage = gameSessionIPC.getCurrentMessage(sessionId!!)
             if (currentMessage.isNotEmpty()) {
-                Log.i("openpigeon-checkers", "player: ${currentMessage["player"]!!.toInt()}, replay: ${currentMessage["replay"]!!}")
-                setReplay(currentMessage["player"]!!.toInt(), currentMessage["replay"]!!)
+                Log.i("openpigeon-checkers", "player: ${currentMessage["player"]!!.toInt()}, replay: ${currentMessage["replay"]}")
+                setReplay(currentMessage["player"]!!.toInt(), currentMessage["replay"])
 
                 gameSessionIPC.onMessageUpdated(sessionId!!) { new: Map<String, String> ->
                     if(new["player"]!!.toInt() == currentMessage["player"]!!.toInt()) {
                         Log.i(
                             "openpigeon-checkers",
-                            "onMessageUpdated -> player: ${new["player"]!!.toInt()}, replay: ${new["replay"]!!}"
+                            "onMessageUpdated -> player: ${new["player"]!!.toInt()}, replay: ${new["replay"]}"
                         )
-                        setReplay(new["player"]!!.toInt(), new["replay"]!!)
+                        setReplay(new["player"]!!.toInt(), new["replay"])
                     }
                 }
             }
@@ -58,9 +58,13 @@ class CheckersActivity : GodotActivity() {
         }
     }
 
-    private fun setReplay(player: Int, replay: String) {
+    private fun setReplay(player: Int, replay: String?) {
         getOrCreateAppPlugin()
-        appPlugin!!.setReplay(player, replay)
+        if (replay.isNullOrEmpty()) {
+            appPlugin!!.setReplay(player, baseGame.getDefaultReplay())
+        } else {
+            appPlugin!!.setReplay(player, replay)
+        }
     }
 
     override fun getHostPlugins(godot: Godot): Set<GodotPlugin> {
