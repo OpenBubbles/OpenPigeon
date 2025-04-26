@@ -42,9 +42,9 @@ func _ready() -> void:
 	if replay == null or player == null:
 		return
 	
-	var playerLabel = get_node_or_null("P" + str(player) + "Label")
-	if playerLabel != null:
-		playerLabel.set_text("You")
+	var playerBox = get_node_or_null("Player" + str(player) + "Box")
+	if playerBox != null:
+		playerBox.get_child(0).set_text("[center]You[/center]")
 		
 	redPiece = get_node("CheckerPieceRed")
 	var blackPiece: Sprite2D = get_node("CheckerPieceBlack")
@@ -113,11 +113,9 @@ func _ready() -> void:
 		for x in range(0, 8):
 			var piece = get_node_or_null(str(x) + "," + str(7-y))
 			if piece != null and check_player(piece):
-				print("Checking for move: " + str(piece))
 				clicked_piece = piece
 				gen_moves()
 				if len(moves) > 0:
-					print(str(moves))
 					must_jump = true
 					break
 	checking_for_jumps = false
@@ -133,6 +131,14 @@ func set_waiting(enabled: bool):
 		prev_moves.clear()
 		waitingForOpponent = false
 		get_node("waitingLabel").visible = false
+	
+	var win_loss = check_win_loss()
+	if win_loss == "win":
+		get_node("winLoseLabel").get_child(0).set_text("[center]YOU WIN![/center]")
+		get_node("winLoseLabel").visible = true
+	elif win_loss == "lose":
+		get_node("winLoseLabel").get_child(0).set_text("[center]YOU LOSE :([/center]")
+		get_node("winLoseLabel").visible = true
 
 func _set_replay(new_replay: String):
 	player = int(new_replay.substr(7, 1))
@@ -183,6 +189,25 @@ func export_replay() -> String:
 	
 	return replay.split('|')[-1] + move_str + "board:" + boardStr.substr(0, boardStr.length()-1)
 	
+func check_win_loss():
+	var num_your_pieces = 0
+	var num_other_pieces = 0
+	for y in range(0, 8):
+		for x in range(0, 8):
+			var piece = get_node_or_null(str(x) + "," + str(7-y))
+			if piece != null:
+				if check_player(piece):
+					num_your_pieces += 1
+				else:
+					num_other_pieces += 1
+	print("Your pieces remaining: " + str(num_your_pieces))
+	print("Other player's pieces remaining: " + str(num_other_pieces))
+	if num_your_pieces == 0:
+		return "lose"
+	if num_other_pieces == 0:
+		return "win"
+	return ""
+	
 func jump_piece(prevX: int, prevY: int, newX: int, newY: int, anim_delay: float = 0.0, replay: bool = false):
 	var x_step = 1 if newX > prevX else -1
 	var y_step = 1 if newY > prevY else -1
@@ -230,7 +255,6 @@ func add_highlight(x: int, y: int):
 	var newPos = Vector2(basePos.x + (81 * x), basePos.y + (81 * y))
 	newHighlight.set_meta("Position", newPos)
 	newHighlight.set_meta("Visible", true);
-	print("Highlighting: ", x, ",", y);
 
 
 func clear_highlights():
@@ -262,9 +286,6 @@ func gen_moves():
 		var pos = Vector2(clickedPiecePos.x + diagonal.x, clickedPiecePos.y + diagonal.y)
 		if pos.y <= 7 and pos.y >= 0:
 			var piece = get_node_or_null(str(pos.x) + "," + str(pos.y))
-			if piece != null:
-				print("Checking spot " + str(pos.x) + "," + str(pos.y) + " for a jump. " + str(piece) + " - " + str(check_player(piece)))
-				print(str(len(prev_moves)/2) + " == " + str(len(prev_jumps)))
 			if piece == null:
 				if checking_for_jumps == false:
 					if len(prev_moves) > 0:

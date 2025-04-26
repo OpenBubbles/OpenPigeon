@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3 uid="uid://cnrr1hwlmd565"]
+[gd_scene load_steps=12 format=3 uid="uid://cnrr1hwlmd565"]
 
 [ext_resource type="Texture2D" uid="uid://d37tvmulfubj4" path="res://checkers/checkersboard_plain.png" id="1_ys403"]
 [ext_resource type="Script" uid="uid://ci8p3eom1mxpq" path="res://checkers/checkers_board_top.gd" id="2_3slu2"]
@@ -22,6 +22,13 @@ repeat = 2
 gradient = SubResource("Gradient_q1lfo")
 fill_from = Vector2(0.495413, 0.522936)
 repeat = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4qhse"]
+bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
+corner_radius_top_left = 25
+corner_radius_top_right = 25
+corner_radius_bottom_right = 25
+corner_radius_bottom_left = 25
 
 [node name="Node2D" type="Node2D"]
 
@@ -71,67 +78,103 @@ texture_scale = 1.45
 height = 1000.0
 script = ExtResource("6_srtqa")
 
-[node name="P2Label" type="RichTextLabel" parent="CheckersBoardTop"]
-offset_left = -369.0
-offset_top = -720.0
-offset_right = -277.0
-offset_bottom = -640.0
-theme_override_font_sizes/normal_font_size = 50
-text = "P1"
-horizontal_alignment = 1
+[node name="Player1Box" type="Panel" parent="CheckersBoardTop"]
+top_level = true
+offset_left = 413.0
+offset_top = 36.0
+offset_right = 559.0
+offset_bottom = 193.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
 
-[node name="PlayerCheckerRed" type="Sprite2D" parent="CheckersBoardTop"]
-position = Vector2(-323.333, -778.333)
-scale = Vector2(0.0531675, 0.0531675)
-texture = ExtResource("2_t0jlu")
+[node name="P1Label" type="RichTextLabel" parent="CheckersBoardTop/Player1Box"]
+offset_left = 1.0
+offset_top = 90.2499
+offset_right = 148.0
+offset_bottom = 138.25
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]Player 2[/center]"
 
-[node name="P1Label" type="RichTextLabel" parent="CheckersBoardTop"]
-offset_left = 265.0
-offset_top = -718.333
-offset_right = 357.0
-offset_bottom = -638.333
-theme_override_font_sizes/normal_font_size = 50
-text = "P2"
-horizontal_alignment = 1
-
-[node name="PlayerCheckerBlack" type="Sprite2D" parent="CheckersBoardTop"]
-position = Vector2(310, -778.333)
-scale = Vector2(0.0531675, 0.0531675)
+[node name="PlayerCheckerBlack" type="Sprite2D" parent="CheckersBoardTop/Player1Box"]
+position = Vector2(74, 54.25)
+scale = Vector2(0.0319005, 0.0319005)
 texture = ExtResource("2_nlcs0")
 
-[node name="waitingLabel" type="ColorRect" parent="CheckersBoardTop"]
+[node name="Player2Box" type="Panel" parent="CheckersBoardTop"]
+top_level = true
+offset_left = 87.0
+offset_top = 36.0
+offset_right = 233.0
+offset_bottom = 193.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
+
+[node name="P2Label" type="RichTextLabel" parent="CheckersBoardTop/Player2Box"]
+offset_left = 1.0
+offset_top = 90.2499
+offset_right = 148.0
+offset_bottom = 138.25
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]Player 1[/center]"
+
+[node name="PlayerCheckerRed" type="Sprite2D" parent="CheckersBoardTop/Player2Box"]
+position = Vector2(74, 54.25)
+scale = Vector2(0.0319005, 0.0319005)
+texture = ExtResource("2_t0jlu")
+
+[node name="waitingLabel" type="Panel" parent="CheckersBoardTop"]
 visible = false
 top_level = true
 offset_left = 116.0
-offset_top = 511.0
-offset_right = 547.0
-offset_bottom = 608.0
-color = Color(0.376471, 0.376471, 0.376471, 0.796078)
+offset_top = 514.0
+offset_right = 546.0
+offset_bottom = 614.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
 
 [node name="RichTextLabel" type="RichTextLabel" parent="CheckersBoardTop/waitingLabel"]
 layout_mode = 0
-offset_left = 18.0
-offset_top = 25.3333
-offset_right = 421.0
-offset_bottom = 67.3333
+offset_left = 14.0
+offset_top = 29.2222
+offset_right = 417.0
+offset_bottom = 71.2222
 theme_override_font_sizes/normal_font_size = 30
-text = "WAITING FOR OPPONENT..."
+bbcode_enabled = true
+text = "[center]WAITING FOR OPPONENT...[/center]"
+
+[node name="winLoseLabel" type="Panel" parent="CheckersBoardTop"]
+visible = false
+top_level = true
+offset_left = 116.0
+offset_top = 514.0
+offset_right = 546.0
+offset_bottom = 614.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
+
+[node name="RichTextLabel" type="RichTextLabel" parent="CheckersBoardTop/winLoseLabel"]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 29.2222
+offset_right = 419.0
+offset_bottom = 71.2222
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]YOU WIN![/center]"
 
 [node name="SendButton" type="Button" parent="."]
-offset_left = 171.0
-offset_top = 985.0
-offset_right = 274.0
-offset_bottom = 1027.0
+offset_left = 112.0
+offset_top = 970.0
+offset_right = 232.0
+offset_bottom = 1020.0
 disabled = true
 text = "Send
 "
 script = ExtResource("9_14sfn")
 
 [node name="UndoButton" type="Button" parent="."]
-offset_left = 385.0
-offset_top = 985.0
-offset_right = 488.0
-offset_bottom = 1027.0
+offset_left = 415.0
+offset_top = 970.0
+offset_right = 535.0
+offset_bottom = 1020.0
 disabled = true
 text = "Undo"
 script = ExtResource("9_14sfn")
