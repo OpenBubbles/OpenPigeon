@@ -19,6 +19,8 @@ var has_moved: bool = false
 var prev_moves: Array[Vector2]
 var prev_jumps: Array[Sprite2D]
 
+var checking_for_jumps = false
+var must_jump = false
 var has_connected = false
 var waitingForOpponent = false
 
@@ -101,7 +103,24 @@ func _ready() -> void:
 				if (color == "black" and int(movePos[3]) == 7) or (color == "red" and int(movePos[3]) == 0):
 					tween.tween_callback(set_checker_king.bind(movedPiece, color))
 				if moveType == "attack":
-					jump_piece(int(movePos[0]), int(movePos[1]), int(movePos[2]), int(movePos[3]), i*0.5)
+					jump_piece(int(movePos[0]), int(movePos[1]), int(movePos[2]), int(movePos[3]), i*0.5, true)
+	
+	must_jump = false
+	checking_for_jumps = true
+	for y in range(0, 8):
+		if must_jump:
+			break
+		for x in range(0, 8):
+			var piece = get_node_or_null(str(x) + "," + str(7-y))
+			if piece != null and check_player(piece):
+				print("Checking for move: " + str(piece))
+				clicked_piece = piece
+				gen_moves()
+				if len(moves) > 0:
+					print(str(moves))
+					must_jump = true
+					break
+	checking_for_jumps = false
 					
 	set_waiting(false)
 
@@ -110,10 +129,6 @@ func set_waiting(enabled: bool):
 		waitingForOpponent = true
 		get_node("waitingLabel").visible = true
 	else:
-		clear_highlights()
-		clicked_piece = null
-		has_moved = false
-		moves.clear()
 		prev_jumps.clear()
 		prev_moves.clear()
 		waitingForOpponent = false
@@ -168,7 +183,7 @@ func export_replay() -> String:
 	
 	return replay.split('|')[-1] + move_str + "board:" + boardStr.substr(0, boardStr.length()-1)
 	
-func jump_piece(prevX: int, prevY: int, newX: int, newY: int, anim_delay: float = 0.0):
+func jump_piece(prevX: int, prevY: int, newX: int, newY: int, anim_delay: float = 0.0, replay: bool = false):
 	var x_step = 1 if newX > prevX else -1
 	var y_step = 1 if newY > prevY else -1
 	var jumpedPiece: Sprite2D = get_node_or_null(str(prevX + x_step) + "," + str(prevY + y_step))
@@ -179,7 +194,8 @@ func jump_piece(prevX: int, prevY: int, newX: int, newY: int, anim_delay: float 
 		tween.tween_interval(anim_delay)
 		tween.tween_property(jumpedPiece, "self_modulate", modulate_color, 0.5).set_trans(Tween.TRANS_LINEAR)
 		jumpedPiece.name = str(prevX + x_step) + "," + str(prevY + y_step) + "_jumped"
-		prev_jumps.append(jumpedPiece)
+		if replay == false:
+			prev_jumps.append(jumpedPiece)
 
 func move_piece(piece: Sprite2D, x: int, y: int, anim_delay: float = 0.0):
 	var newPos = Vector2(redPiece.position.x + (135 * x), redPiece.position.y + (135 * y))
@@ -244,14 +260,17 @@ func gen_moves():
 	for diagonal in diagonals:
 		var clickedPiecePos = getPiecePos(clicked_piece)
 		var pos = Vector2(clickedPiecePos.x + diagonal.x, clickedPiecePos.y + diagonal.y)
-		print(str(len(prev_moves)/2) + ", "  + str(len(prev_jumps)))
 		if pos.y <= 7 and pos.y >= 0:
 			var piece = get_node_or_null(str(pos.x) + "," + str(pos.y))
+			if piece != null:
+				print("Checking spot " + str(pos.x) + "," + str(pos.y) + " for a jump. " + str(piece) + " - " + str(check_player(piece)))
+				print(str(len(prev_moves)/2) + " == " + str(len(prev_jumps)))
 			if piece == null:
-				if len(prev_moves) > 0:
-					continue
-				moves.append(pos)
-				add_highlight(pos.x, 7 - pos.y)
+				if checking_for_jumps == false:
+					if len(prev_moves) > 0:
+						continue
+					moves.append(pos)
+					add_highlight(pos.x, 7 - pos.y)
 			elif !check_player(piece) and len(prev_moves)/2 == len(prev_jumps): #only allow jump if the last move was a jump
 				var x_step = 1 if pos.x > clickedPiecePos.x else -1
 				var y_step = 1 if pos.y > clickedPiecePos.y else -1
@@ -301,7 +320,7 @@ func _input(event: InputEvent) -> void:
 			print("board position at ", x, ",", 7-y, " clicked")
 			
 			var clickedPiece: Sprite2D = get_node_or_null(str(x) + "," + str(7-y))
-			if clickedPiece != null and (clicked_piece == null or has_moved == false):
+			if must_jump != true and clickedPiece != null and (clicked_piece == null or has_moved == false):
 				if check_player(clickedPiece):
 					clear_highlights()
 					clicked_piece = clickedPiece
@@ -317,7 +336,8 @@ func _input(event: InputEvent) -> void:
 				if abs(prev_moves[-2].x - prev_moves[-1].x) > 1:
 					jump_piece(prev_moves[-2].x, prev_moves[-2].y, prev_moves[-1].x, prev_moves[-1].y)
 				gen_moves()
-				(get_node("../UndoButton") as Button).disabled = false
+				if must_jump == false:
+					(get_node("../UndoButton") as Button).disabled = false
 				(get_node("../SendButton") as Button).disabled = false
 				
 # Called every frame. 'delta' is the elapsed time since the previous frame.
