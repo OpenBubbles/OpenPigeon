@@ -123,6 +123,7 @@ func _ready() -> void:
 				clicked_piece = piece
 				gen_moves()
 				if len(moves) > 0:
+					print(str(moves))
 					must_jump = true
 					break
 	checking_for_jumps = false
@@ -292,7 +293,7 @@ func gen_moves():
 	for diagonal in diagonals:
 		var clickedPiecePos = getPiecePos(clicked_piece)
 		var pos = Vector2(clickedPiecePos.x + diagonal.x, clickedPiecePos.y + diagonal.y)
-		if pos.y <= 7 and pos.y >= 0:
+		if (pos.x >= 0 and pos.x <= 7) and (pos.y >= 0 and pos.y <= 7):
 			var piece = get_node_or_null(str(int(pos.x)) + "," + str(int(pos.y)))
 			if piece == null:
 				if checking_for_jumps == false:
@@ -304,9 +305,10 @@ func gen_moves():
 				var x_step = 1 if pos.x > clickedPiecePos.x else -1
 				var y_step = 1 if pos.y > clickedPiecePos.y else -1
 				var newPos = Vector2(pos.x + x_step, pos.y + y_step)
-				if get_node_or_null(str(int(newPos.x)) + "," + str(int(newPos.y))) == null:
-					moves.append(newPos)
-					add_highlight(newPos.x, 7 - newPos.y)
+				if (newPos.x >= 0 and newPos.x <= 7) and (newPos.y >= 0 and newPos.y <= 7):
+					if get_node_or_null(str(int(newPos.x)) + "," + str(int(newPos.y))) == null:
+						moves.append(newPos)
+						add_highlight(newPos.x, 7 - newPos.y)
 
 
 func undo_move():
@@ -345,7 +347,7 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.pressed and event.button_index == 1 and waitingForOpponent == false:
 			var x: int = ceil(event.position.x / 80) - 1;
-			var y: int = ceil(event.position.y / 80) - 4;
+			var y: int = ceil(event.position.y / 80) - 5;
 			print("board position at ", x, ",", 7-y, " clicked")
 			
 			var clickedPiece: Sprite2D = get_node_or_null(str(x) + "," + str(7-y))

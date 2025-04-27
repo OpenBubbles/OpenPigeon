@@ -33,7 +33,7 @@ corner_radius_bottom_left = 25
 [node name="Node2D" type="Node2D"]
 
 [node name="CheckersBoardTop" type="Sprite2D" parent="."]
-position = Vector2(324, 565)
+position = Vector2(324, 663)
 scale = Vector2(0.6, 0.6)
 texture = ExtResource("1_ys403")
 script = ExtResource("2_3slu2")
@@ -53,13 +53,12 @@ texture = ExtResource("2_nlcs0")
 [node name="BoardHighlight" type="Node" parent="CheckersBoardTop"]
 script = ExtResource("5_1kvqq")
 metadata/Energy = 16.0
-metadata/Position = Vector2(40.5, 281.5)
+metadata/Position = Vector2(40.5, 379.5)
 metadata/Visible = false
 
 [node name="HighlightX" type="PointLight2D" parent="CheckersBoardTop/BoardHighlight"]
-visible = false
 z_as_relative = false
-position = Vector2(40.5, 281.5)
+position = Vector2(40.5, 379.5)
 scale = Vector2(0.872845, 0.872845)
 energy = 5.0
 texture = SubResource("GradientTexture2D_2v7vs")
@@ -68,9 +67,8 @@ height = 1000.0
 script = ExtResource("6_srtqa")
 
 [node name="HighlightY" type="PointLight2D" parent="CheckersBoardTop/BoardHighlight"]
-visible = false
 z_as_relative = false
-position = Vector2(40.5, 281.5)
+position = Vector2(40.5, 379.5)
 scale = Vector2(0.873, 0.873)
 energy = 5.0
 range_z_min = 0
@@ -128,9 +126,9 @@ texture = ExtResource("2_t0jlu")
 visible = false
 top_level = true
 offset_left = 116.0
-offset_top = 514.0
+offset_top = 609.0
 offset_right = 546.0
-offset_bottom = 614.0
+offset_bottom = 709.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
 
 [node name="RichTextLabel" type="RichTextLabel" parent="CheckersBoardTop/waitingLabel"]
@@ -147,9 +145,9 @@ text = "[center]WAITING FOR OPPONENT...[/center]"
 visible = false
 top_level = true
 offset_left = 116.0
-offset_top = 514.0
+offset_top = 609.0
 offset_right = 546.0
-offset_bottom = 614.0
+offset_bottom = 709.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
 
 [node name="RichTextLabel" type="RichTextLabel" parent="CheckersBoardTop/winLoseLabel"]
@@ -164,9 +162,9 @@ text = "[center]YOU WIN![/center]"
 
 [node name="SendButton" type="Button" parent="."]
 offset_left = 112.0
-offset_top = 970.0
+offset_top = 1068.0
 offset_right = 232.0
-offset_bottom = 1020.0
+offset_bottom = 1118.0
 disabled = true
 text = "Send
 "
@@ -174,9 +172,9 @@ script = ExtResource("9_14sfn")
 
 [node name="UndoButton" type="Button" parent="."]
 offset_left = 415.0
-offset_top = 970.0
+offset_top = 1068.0
 offset_right = 535.0
-offset_bottom = 1020.0
+offset_bottom = 1118.0
 disabled = true
 text = "Undo"
 script = ExtResource("9_14sfn")
