@@ -1,5 +1,6 @@
 package com.example.openbubblesextension.checkers
 
+import android.content.Context
 import com.example.openbubblesextension.Game
 import com.example.openbubblesextension.R
 import com.example.openbubblesextension.wordhunt.WordHuntActivity
@@ -30,8 +31,8 @@ class CheckersGame : Game {
         return R.drawable.checkers
     }
 
-    override fun getNewGameData(): MutableMap<String, String> {
-        return super.getNewGameData().apply {
+    override fun getNewGameData(context: Context): MutableMap<String, String> {
+        return super.getNewGameData(context).apply {
             put("mode", "n")
         }
     }

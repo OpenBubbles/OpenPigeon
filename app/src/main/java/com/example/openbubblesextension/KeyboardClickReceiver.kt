@@ -19,7 +19,7 @@ class KeyboardClickReceiver : BroadcastReceiver() {
 
         val game = intent.getStringExtra("game_name")?.let { MadridExtension.findByName(it) } ?: return
 
-        val message = game.buildGameMessage(context, game.getNewGameData(), null)
+        val message = game.buildGameMessage(context, game.getNewGameData(context), null)
 
         MadridExtension.currentKeyboardHandle?.addMessage(message)
     }

@@ -1,5 +1,6 @@
 package com.example.openbubblesextension.wordhunt
 
+import android.content.Context
 import com.example.openbubblesextension.Game
 import com.example.openbubblesextension.R
 import org.json.JSONObject
@@ -29,8 +30,8 @@ class WordHuntGame : Game {
         return "47"
     }
 
-    override fun getNewGameData(): MutableMap<String, String> {
-        return super.getNewGameData().apply {
+    override fun getNewGameData(context: Context): MutableMap<String, String> {
+        return super.getNewGameData(context).apply {
             put("letters", WordHuntActivity.generateLetterPool().joinToString(""))
             put("lang", "en")
         }

@@ -1,6 +1,7 @@
 package com.example.openbubblesextension
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
@@ -10,6 +11,7 @@ import java.io.ByteArrayOutputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.UUID
+import androidx.core.content.edit
 
 interface Game {
 
@@ -30,10 +32,21 @@ interface Game {
         }.joinToString("&", prefix = "?")
     }
 
+    private fun getSenderUUID(context: Context): String {
+        val sharedPrefs = context.getSharedPreferences("openpigeon", Context.MODE_PRIVATE)
+        val sender: String? = sharedPrefs.getString("sender_uuid", null)
+        if (sender.isNullOrEmpty()) {
+            val newSender = UUID.randomUUID().toString()
+            sharedPrefs.edit { putString("sender_uuid", newSender) }
+            return newSender
+        }
+        return sender
+    }
+
     fun buildGameMessage(context: Context, message: Map<String, String>, currentSession: String?): MadridMessage {
         val data = encodeQuery(mapOf(
             "ver" to "52",
-            "data" to Cryption.encrypt(encodeQuery(message))
+            "data" to Cryption.encrypt(encodeQuery(message).replace("+", "%20"))
         ))
 
         val bm = BitmapFactory.decodeResource(context.resources, gamePoster())
@@ -55,8 +68,8 @@ interface Game {
         }
     }
 
-    fun getNewGameData(): MutableMap<String, String> {
-        val sender = "F9C3BCE3-3BD9-4051-95D9-57C1263FA5A1nf4vkU"
+    fun getNewGameData(context: Context): MutableMap<String, String> {
+        val sender = getSenderUUID(context)
         return mutableMapOf(
             "sender" to sender,
             "tver" to "5",
