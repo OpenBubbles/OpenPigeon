@@ -36,4 +36,8 @@ class WordHuntGame : Game {
             put("lang", "en")
         }
     }
+
+    override fun getDefaultReplay(): String {
+        TODO("Not yet implemented")
+    }
 }

@@ -3,8 +3,12 @@ package com.example.openbubblesextension.checkers
 import android.content.Context
 import com.example.openbubblesextension.Game
 import com.example.openbubblesextension.R
-import com.example.openbubblesextension.wordhunt.WordHuntActivity
-import org.json.JSONObject
+import com.example.openbubblesextension.godot.GodotGameActivity
+
+class CheckersActivity : GodotGameActivity() {
+    override var baseGame: Game = CheckersGame()
+    override var activityLayout: Int = R.layout.activity_checkers
+}
 
 class CheckersGame : Game {
     override fun getVersion(): String {
@@ -20,7 +24,7 @@ class CheckersGame : Game {
     }
 
     override fun buttonId(): Int {
-        return R.id.checkers
+        return R.id.btn_checkers
     }
 
     override fun gameClass(): Class<*> {
@@ -37,7 +41,7 @@ class CheckersGame : Game {
         }
     }
 
-    fun getDefaultReplay(): String {
+    override fun getDefaultReplay(): String {
         return "board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0"
     }
 }

@@ -13,6 +13,7 @@ import com.bluebubbles.messaging.IMessageViewHandle
 import com.bluebubbles.messaging.IViewUpdateCallback
 import com.bluebubbles.messaging.MadridMessage
 import com.example.openbubblesextension.checkers.CheckersGame
+import com.example.openbubblesextension.connect.ConnectGame
 import com.example.openbubblesextension.wordhunt.WordHuntGame
 import org.json.JSONObject
 
@@ -27,7 +28,8 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
 
         val games: List<Game> = listOf(
             CheckersGame(),
-            WordHuntGame()
+            WordHuntGame(),
+            ConnectGame()
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {
@@ -96,7 +98,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
 
         val bitmap = BitmapFactory.decodeResource(context.resources, game?.gamePoster() ?: R.drawable.empty)
         view.setImageViewBitmap(R.id.gameImage, bitmap)
-        view.setTextViewText(R.id.gameNameTextView, message.ldText)
+        view.setTextViewText(R.id.gameNameTextView, message.caption)
 
         if (game != null) {
             var intent = Intent(context, game.gameClass())

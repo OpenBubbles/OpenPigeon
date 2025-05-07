@@ -1,12 +1,6 @@
-package com.example.openbubblesextension.checkers
+package com.example.openbubblesextension.godot
 
-import android.app.Activity
-import android.content.Context
-import android.content.Intent
 import android.util.Log
-import com.bluebubbles.messaging.ITaskCompleteCallback
-import com.example.openbubblesextension.GameSession
-import com.example.openbubblesextension.MadridExtension
 import org.godotengine.godot.Godot
 import org.godotengine.godot.plugin.GodotPlugin
 import org.godotengine.godot.plugin.SignalInfo
@@ -16,7 +10,7 @@ import org.godotengine.godot.plugin.UsedByGodot
 /**
  * Runtime [GodotPlugin] used to enable interaction with the Godot gdscript logic.
  */
-class AppPlugin(godot: Godot, private val _activity: CheckersActivity) : GodotPlugin(godot) {
+class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) : GodotPlugin(godot) {
     private var replay = "";
     private var mainLoopStarted = false;
 
@@ -40,23 +34,24 @@ class AppPlugin(godot: Godot, private val _activity: CheckersActivity) : GodotPl
 
     @UsedByGodot
     fun getGameName(): String {
-        return _activity.baseGame.getName()
+        return gameActivity.baseGame.getName()
     }
 
     @UsedByGodot
     fun sendReplay(replay: String) {
-        Log.d("openpigeon-checkers", "sendReplay: $replay")
-        val gameSessionIPC = _activity.gameSessionIPC!!
-        val currentMessage = gameSessionIPC.getCurrentMessage(_activity.sessionId!!)
+        Log.d("openpigeon-${gameActivity.baseGame.getName()}", "sendReplay: $replay")
+        val gameSessionIPC = gameActivity.gameSessionIPC!!
+        val currentMessage = gameSessionIPC.getCurrentMessage(gameActivity.sessionId)
 
         val updates = mapOf(
             "player" to if (currentMessage["player"] == "2") "1" else "2",
             "replay" to replay,
-            "num" to (currentMessage["num"]?.toInt()!! + 1).toString()
+            "num" to (currentMessage["num"]?.toInt()!! + 1).toString(),
+            "sender" to gameSessionIPC.getSenderUUID(gameActivity.sessionId)
         )
 
-        _activity.gameSessionIPC!!.updateSession(updates, _activity.sessionId!!) {
-            Log.i("openpigeon-checkers", "Game session updated")
+        gameActivity.gameSessionIPC!!.updateSession(updates, gameActivity.sessionId) {
+            Log.i("openpigeon-${gameActivity.baseGame.getName()}", "Game session updated")
         }
     }
 
@@ -65,9 +60,10 @@ class AppPlugin(godot: Godot, private val _activity: CheckersActivity) : GodotPl
      *
      * @param replay Replay string from GP url
      */
-    internal fun setReplay(player: Int, replay: String) {
-        this.replay = "player:$player,$replay"
-        Log.i("openpigeon-checkers", "Set replay: ${this.replay}")
+    internal fun setReplay(isYourTurn: Boolean, player: Int, replay: String) {
+        var turn = if (isYourTurn) 1 else 0
+        this.replay = "isYourTurn:$turn;player:$player;replay:$replay"
+        Log.i("openpigeon-${gameActivity.baseGame.getName()}", "Set replay: ${this.replay}")
         if (mainLoopStarted)
             emitSignal(SET_REPLAY_SIGNAL.name, this.replay)
     }

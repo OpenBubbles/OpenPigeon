@@ -73,7 +73,7 @@
             android:src="@drawable/basketball" />
 
         <ImageView
-            android:id="@+id/checkers"
+            android:id="@+id/btn_checkers"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
@@ -82,13 +82,13 @@
             android:src="@drawable/checkers" />
 
         <ImageView
-            android:id="@+id/btn_game_4"
+            android:id="@+id/btn_connect"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:contentDescription="Game 4"
             android:scaleType="centerCrop"
-            android:src="@drawable/empty" />
+            android:src="@drawable/connect4" />
     </LinearLayout>
 
     <LinearLayout

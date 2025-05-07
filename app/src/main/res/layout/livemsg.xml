@@ -15,10 +15,11 @@
     <TextView
         android:id="@+id/gameNameTextView"
         android:layout_width="match_parent"
-        android:layout_height="74dp"
-        android:gravity="center_vertical"
+        android:layout_height="34dp"
+        android:layout_gravity="center_vertical"
+        android:gravity="center"
         android:text="TextView"
         android:textAlignment="center"
-        android:textSize="24sp" />
+        android:textSize="18sp" />
 
 </LinearLayout>

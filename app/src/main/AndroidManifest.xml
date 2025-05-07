@@ -13,9 +13,13 @@
         android:theme="@style/Theme.OpenBubblesSampleExtension"
         tools:targetApi="31">
         <activity
+            android:name=".connect.ConnectActivity"
+            android:exported="false"
+            android:process=":godot" />
+        <activity
             android:name=".checkers.CheckersActivity"
-            android:process=":godot"
-            android:exported="false" />
+            android:exported="false"
+            android:process=":godot" />
         <activity
             android:name=".wordhunt.WordHuntActivity"
             android:exported="false"
@@ -43,7 +47,6 @@
                 android:name="madrid_bundle_id"
                 android:value="com.apple.messages.MSMessageExtensionBalloonPlugin:EWFNLB79LQ:com.gamerdelights.gamepigeon.ext" />
         </service>
-
         <service
             android:name=".godot.GameSessionService"
             android:enabled="true"

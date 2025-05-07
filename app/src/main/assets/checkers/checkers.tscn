@@ -87,6 +87,7 @@ offset_bottom = 193.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
 
 [node name="P1Label" type="RichTextLabel" parent="CheckersBoardTop/Player1Box"]
+layout_mode = 0
 offset_left = 1.0
 offset_top = 90.2499
 offset_right = 148.0
@@ -109,6 +110,7 @@ offset_bottom = 193.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
 
 [node name="P2Label" type="RichTextLabel" parent="CheckersBoardTop/Player2Box"]
+layout_mode = 0
 offset_left = 1.0
 offset_top = 90.2499
 offset_right = 148.0

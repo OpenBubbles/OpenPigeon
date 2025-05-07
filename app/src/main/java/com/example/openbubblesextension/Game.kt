@@ -23,6 +23,7 @@ interface Game {
     fun displayName(): String
 
     fun getVersion(): String
+    fun getDefaultReplay(): String
 
     private fun encodeQuery(params: Map<String, String>): String {
         return params.map { (key, value) ->
@@ -32,7 +33,7 @@ interface Game {
         }.joinToString("&", prefix = "?")
     }
 
-    private fun getSenderUUID(context: Context): String {
+    fun getSenderUUID(context: Context): String {
         val sharedPrefs = context.getSharedPreferences("openpigeon", Context.MODE_PRIVATE)
         val sender: String? = sharedPrefs.getString("sender_uuid", null)
         if (sender.isNullOrEmpty()) {

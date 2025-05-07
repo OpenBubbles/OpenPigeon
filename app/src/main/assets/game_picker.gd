@@ -1,7 +1,8 @@
 extends Control
 
 var games = {
-	"checkers": "res://checkers/checkers.tscn"
+	"checkers": "res://checkers/checkers.tscn",
+	"connect": "res://connect/connect.tscn"
 }
 
 # Called when the node enters the scene tree for the first time.
@@ -10,4 +11,11 @@ func _ready() -> void:
 	if appPlugin:
 		print("Game picker loaded..")
 		get_tree().call_deferred("change_scene_to_file", games[appPlugin.getGameName()])
-	
+	else:
+		print("Error: App not connected")
+
+func _pressed() -> void:
+	if name == "CheckersButton":
+		get_tree().call_deferred("change_scene_to_file", games["checkers"])
+	elif name == "ConnectFourButton":
+		get_tree().call_deferred("change_scene_to_file", games["connect"])

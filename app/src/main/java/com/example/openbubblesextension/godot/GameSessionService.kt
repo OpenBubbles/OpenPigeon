@@ -17,6 +17,7 @@ class GameSessionService : Service() {
 
     private val binder = object : IGameSession.Stub() {
         override fun getCurrentMessage(id: String?): Bundle {
+            Log.i("openpigeon-GameSessionService", "${MadridExtension.activeSessions}")
             val gameSession: GameSession = MadridExtension.activeSessions[id!!] ?: return Bundle()
 
             return Bundle().apply {
@@ -33,9 +34,29 @@ class GameSessionService : Service() {
                 try {
                     callback?.onFinished()
                 } catch(e: DeadObjectException) {
-                    Log.e("openpigeon-checkers", "Callback object is dead!")
+                    Log.e("openpigeon-GameSessionService", "Callback object is dead!")
                 }
             }
+        }
+
+        override fun getSenderUUID(id: String): String {
+            val gameSession: GameSession = MadridExtension.activeSessions[id] ?: return ""
+            return gameSession.getGame()!!.getSenderUUID(applicationContext)
+        }
+
+        override fun setSuppressNotifications(id: String, suppress: Boolean) {
+            val gameSession: GameSession = MadridExtension.activeSessions[id] ?: return
+            gameSession.handle.setSuppressNotifications(suppress)
+        }
+
+        override fun lockMsgHandle(id: String?) {
+            val gameSession: GameSession = MadridExtension.activeSessions[id] ?: return
+            gameSession.handle.lock()
+        }
+
+        override fun unlockMsgHandle(id: String?) {
+            val gameSession: GameSession = MadridExtension.activeSessions[id] ?: return
+            gameSession.handle.unlock()
         }
 
         override fun registerCallback(id: String, callback: IMessageUpdatedCallback?) {
@@ -50,7 +71,7 @@ class GameSessionService : Service() {
                         }
                     })
                 } catch (e: DeadObjectException) {
-                    Log.e("openpigeon-checkers", "Callback object is dead!")
+                    Log.e("openpigeon-GameSessionService", "Callback object is dead!")
                     gameSession.messageUpdated = {}
                 }
             }

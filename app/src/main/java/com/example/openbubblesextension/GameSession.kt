@@ -2,6 +2,7 @@ package com.example.openbubblesextension
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import com.bluebubbles.messaging.IMessageViewHandle
 import com.bluebubbles.messaging.MadridMessage
 import java.net.URL

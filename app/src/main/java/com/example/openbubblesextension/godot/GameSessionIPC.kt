@@ -48,6 +48,22 @@ class GameSessionIPC(val context: Context, private val onBind: (GameSessionIPC) 
         gameSession!!.updateSession(updatesBundle, mySession, ipcCallback)
     }
 
+    fun setSuppressNotifications(id: String, suppress: Boolean) {
+        gameSession!!.setSuppressNotifications(id, suppress)
+    }
+
+    fun lockMsgHandle(id: String) {
+        gameSession!!.lockMsgHandle(id)
+    }
+
+    fun unlockMsgHandle(id: String) {
+        gameSession!!.unlockMsgHandle(id)
+    }
+
+    fun getSenderUUID(id: String): String {
+        return gameSession!!.getSenderUUID(id)
+    }
+
     fun onMessageUpdated(id: String, callback: (Map<String, String>) -> Unit) {
         val ipcCallback = object : IMessageUpdatedCallback.Stub() {
             override fun onMessageUpdated(data: Bundle?) {

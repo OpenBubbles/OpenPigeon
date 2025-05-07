@@ -22,6 +22,8 @@ var prev_jumps: Array[Sprite2D]
 var checking_for_jumps = false
 var must_jump = false
 var has_connected = false
+
+var isTurn = false
 var waitingForOpponent = false
 
 var player = null
@@ -35,10 +37,12 @@ func _ready() -> void:
 			appPlugin.connect("set_replay", _set_replay)
 			has_connected = true
 			appPlugin.onReady()
+			return
 	else:
 		if player == null or replay == null:
-			_set_replay("player:1,board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0")
+			_set_replay("isYourTurn:0;player:2;replay:board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0")
 			print("App plugin is not available")
+			return
 	
 	if replay == null or player == null:
 		return
@@ -128,7 +132,7 @@ func _ready() -> void:
 					break
 	checking_for_jumps = false
 					
-	set_waiting(false)
+	set_waiting(not isTurn)
 
 func set_waiting(enabled: bool):
 	if enabled:
@@ -150,8 +154,19 @@ func set_waiting(enabled: bool):
 		get_node("winLoseLabel").visible = true
 
 func _set_replay(new_replay: String):
-	player = int(new_replay.substr(7, 1))
-	replay = new_replay.substr(9)
+	for elem in new_replay.split(';'):
+		var spl = elem.split(':', true, 1)
+		print(spl)
+		if spl[0] == "isYourTurn":
+			isTurn = bool(int(spl[1]))
+		elif spl[0] == "player":
+			player = int(spl[1])
+		elif spl[0] == "replay":
+			replay = spl[1]
+	
+	if isTurn == false:
+		player = 2 if player == 1 else 1
+		print(player)
 	_ready()
 
 func export_replay() -> String:

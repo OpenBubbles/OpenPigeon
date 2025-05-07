@@ -1,0 +1,387 @@
+[gd_scene load_steps=16 format=3 uid="uid://cqobnjjddyewo"]
+
+[ext_resource type="Texture2D" uid="uid://dicka3jn4dugu" path="res://connect/red_piece.png" id="2_ipfru"]
+[ext_resource type="Texture2D" uid="uid://r70smsct6hsw" path="res://connect/board_7x6/layer0.png" id="3_28fnr"]
+[ext_resource type="Texture2D" uid="uid://c0lylxao0uoyy" path="res://connect/blue_piece.png" id="3_utbov"]
+[ext_resource type="Script" uid="uid://dycmjnt74pgsv" path="res://connect/game_board.gd" id="4_utbov"]
+[ext_resource type="Script" uid="uid://dvn5ywa7yy11c" path="res://connect/row_click.gd" id="6_28fnr"]
+[ext_resource type="Texture2D" uid="uid://dxfreveleyckw" path="res://connect/board_7x6/layer1.png" id="6_wlgta"]
+[ext_resource type="Script" uid="uid://bhkk1jj0y7aan" path="res://connect/game_piece.gd" id="7_wlgta"]
+[ext_resource type="Script" uid="uid://c68qs2fpnpemn" path="res://connect/button_click.gd" id="8_pcele"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_28fnr"]
+bg_color = Color(0.6, 0.6, 0.6, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vrcua"]
+bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
+corner_radius_top_left = 25
+corner_radius_top_right = 25
+corner_radius_bottom_right = 25
+corner_radius_bottom_left = 25
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_utbov"]
+size = Vector2(678.133, 18)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_vrcua"]
+size = Vector2(8.00367, 589.209)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_wlgta"]
+size = Vector2(7.44318, 589.208)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_ipfru"]
+size = Vector2(74, 83)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pcele"]
+bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
+corner_radius_top_left = 25
+corner_radius_top_right = 25
+corner_radius_bottom_right = 25
+corner_radius_bottom_left = 25
+
+[node name="Connect" type="Node2D"]
+
+[node name="Row0" type="Panel" parent="."]
+top_level = true
+offset_left = 40.0
+offset_top = 246.0
+offset_right = 117.0
+offset_bottom = 867.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_28fnr")
+script = ExtResource("6_28fnr")
+
+[node name="Row1" type="Panel" parent="."]
+top_level = true
+offset_left = 123.0
+offset_top = 246.0
+offset_right = 200.0
+offset_bottom = 867.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_28fnr")
+script = ExtResource("6_28fnr")
+
+[node name="Row2" type="Panel" parent="."]
+top_level = true
+offset_left = 203.0
+offset_top = 246.0
+offset_right = 280.0
+offset_bottom = 867.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_28fnr")
+script = ExtResource("6_28fnr")
+
+[node name="Row3" type="Panel" parent="."]
+top_level = true
+offset_left = 286.0
+offset_top = 246.0
+offset_right = 363.0
+offset_bottom = 867.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_28fnr")
+script = ExtResource("6_28fnr")
+
+[node name="Row4" type="Panel" parent="."]
+top_level = true
+offset_left = 367.0
+offset_top = 246.0
+offset_right = 444.0
+offset_bottom = 867.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_28fnr")
+script = ExtResource("6_28fnr")
+
+[node name="Row5" type="Panel" parent="."]
+top_level = true
+offset_left = 448.0
+offset_top = 246.0
+offset_right = 525.0
+offset_bottom = 867.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_28fnr")
+script = ExtResource("6_28fnr")
+
+[node name="Row6" type="Panel" parent="."]
+top_level = true
+offset_left = 529.0
+offset_top = 246.0
+offset_right = 606.0
+offset_bottom = 867.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_28fnr")
+script = ExtResource("6_28fnr")
+
+[node name="Player1Box" type="Panel" parent="."]
+top_level = true
+offset_left = 413.0
+offset_top = 36.0
+offset_right = 559.0
+offset_bottom = 193.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_vrcua")
+
+[node name="P1Label" type="RichTextLabel" parent="Player1Box"]
+layout_mode = 0
+offset_left = 1.0
+offset_top = 90.2499
+offset_right = 148.0
+offset_bottom = 138.25
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]Player 2[/center]"
+
+[node name="PlayerPieceRed" type="Sprite2D" parent="Player1Box"]
+position = Vector2(74, 54.25)
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("2_ipfru")
+
+[node name="Player2Box" type="Panel" parent="."]
+top_level = true
+offset_left = 87.0
+offset_top = 36.0
+offset_right = 233.0
+offset_bottom = 193.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_vrcua")
+
+[node name="P2Label" type="RichTextLabel" parent="Player2Box"]
+layout_mode = 0
+offset_left = 1.0
+offset_top = 90.2499
+offset_right = 148.0
+offset_bottom = 138.25
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]Player 1[/center]"
+
+[node name="PlayerPieceBlue" type="Sprite2D" parent="Player2Box"]
+position = Vector2(73, 52.25)
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("3_utbov")
+
+[node name="GameBoard" type="Node2D" parent="."]
+position = Vector2(323.759, 608.5)
+script = ExtResource("4_utbov")
+
+[node name="TextureLayer1" type="Sprite2D" parent="GameBoard"]
+z_index = 1
+scale = Vector2(0.885, 0.885)
+texture = ExtResource("3_28fnr")
+
+[node name="TextureLayer2" type="Sprite2D" parent="GameBoard"]
+scale = Vector2(0.885, 0.885)
+texture = ExtResource("6_wlgta")
+
+[node name="BoardCollisions" type="RigidBody2D" parent="GameBoard"]
+freeze = true
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="GameBoard/BoardCollisions"]
+position = Vector2(0.243988, 236.284)
+shape = SubResource("RectangleShape2D_utbov")
+
+[node name="Column1" type="CollisionShape2D" parent="GameBoard/BoardCollisions"]
+position = Vector2(-285.943, -20.9896)
+shape = SubResource("RectangleShape2D_vrcua")
+
+[node name="Column2" type="CollisionShape2D" parent="GameBoard/BoardCollisions"]
+position = Vector2(-203.76, -20.8957)
+shape = SubResource("RectangleShape2D_vrcua")
+
+[node name="Column3" type="CollisionShape2D" parent="GameBoard/BoardCollisions"]
+position = Vector2(-121.759, -20.896)
+shape = SubResource("RectangleShape2D_vrcua")
+
+[node name="Column4" type="CollisionShape2D" parent="GameBoard/BoardCollisions"]
+position = Vector2(-40.4803, -20.8958)
+shape = SubResource("RectangleShape2D_wlgta")
+
+[node name="Column5" type="CollisionShape2D" parent="GameBoard/BoardCollisions"]
+position = Vector2(41.3, -20.896)
+shape = SubResource("RectangleShape2D_vrcua")
+
+[node name="Column6" type="CollisionShape2D" parent="GameBoard/BoardCollisions"]
+position = Vector2(122.6, -20.896)
+shape = SubResource("RectangleShape2D_vrcua")
+
+[node name="Column7" type="CollisionShape2D" parent="GameBoard/BoardCollisions"]
+position = Vector2(203.6, -20.896)
+shape = SubResource("RectangleShape2D_vrcua")
+
+[node name="Column8" type="CollisionShape2D" parent="GameBoard/BoardCollisions"]
+position = Vector2(284.6, -20.896)
+shape = SubResource("RectangleShape2D_vrcua")
+
+[node name="ConnectPiece0" type="RigidBody2D" parent="GameBoard"]
+visible = false
+position = Vector2(-244.759, -316.5)
+gravity_scale = 3.0
+freeze = true
+script = ExtResource("7_wlgta")
+metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
+
+[node name="PieceSprite" type="Sprite2D" parent="GameBoard/ConnectPiece0"]
+position = Vector2(0.8, -0.59)
+scale = Vector2(0.44, 0.44)
+texture = ExtResource("2_ipfru")
+
+[node name="PieceCollision" type="CollisionShape2D" parent="GameBoard/ConnectPiece0"]
+position = Vector2(-0.125, -6.5)
+shape = SubResource("RectangleShape2D_ipfru")
+disabled = true
+
+[node name="ConnectPiece1" type="RigidBody2D" parent="GameBoard"]
+visible = false
+position = Vector2(-162.759, -316.5)
+gravity_scale = 3.0
+freeze = true
+script = ExtResource("7_wlgta")
+metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
+
+[node name="PieceSprite" type="Sprite2D" parent="GameBoard/ConnectPiece1"]
+position = Vector2(0.8, -0.59)
+scale = Vector2(0.44, 0.44)
+texture = ExtResource("2_ipfru")
+
+[node name="PieceCollision" type="CollisionShape2D" parent="GameBoard/ConnectPiece1"]
+position = Vector2(-0.125, -6.5)
+shape = SubResource("RectangleShape2D_ipfru")
+disabled = true
+
+[node name="ConnectPiece2" type="RigidBody2D" parent="GameBoard"]
+visible = false
+position = Vector2(-80.759, -316.5)
+gravity_scale = 3.0
+freeze = true
+script = ExtResource("7_wlgta")
+metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
+
+[node name="PieceSprite" type="Sprite2D" parent="GameBoard/ConnectPiece2"]
+position = Vector2(0.8, -0.59)
+scale = Vector2(0.44, 0.44)
+texture = ExtResource("2_ipfru")
+
+[node name="PieceCollision" type="CollisionShape2D" parent="GameBoard/ConnectPiece2"]
+position = Vector2(-0.125, -6.5)
+shape = SubResource("RectangleShape2D_ipfru")
+disabled = true
+
+[node name="ConnectPiece3" type="RigidBody2D" parent="GameBoard"]
+visible = false
+position = Vector2(0.240997, -316.5)
+gravity_scale = 3.0
+freeze = true
+script = ExtResource("7_wlgta")
+metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
+
+[node name="PieceSprite" type="Sprite2D" parent="GameBoard/ConnectPiece3"]
+position = Vector2(0.8, -0.59)
+scale = Vector2(0.44, 0.44)
+texture = ExtResource("2_ipfru")
+
+[node name="PieceCollision" type="CollisionShape2D" parent="GameBoard/ConnectPiece3"]
+position = Vector2(-0.125, -6.5)
+shape = SubResource("RectangleShape2D_ipfru")
+disabled = true
+
+[node name="ConnectPiece4" type="RigidBody2D" parent="GameBoard"]
+visible = false
+position = Vector2(82.241, -316.5)
+gravity_scale = 3.0
+freeze = true
+script = ExtResource("7_wlgta")
+metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
+
+[node name="PieceSprite" type="Sprite2D" parent="GameBoard/ConnectPiece4"]
+position = Vector2(0.8, -0.59)
+scale = Vector2(0.44, 0.44)
+texture = ExtResource("2_ipfru")
+
+[node name="PieceCollision" type="CollisionShape2D" parent="GameBoard/ConnectPiece4"]
+position = Vector2(-0.125, -6.5)
+shape = SubResource("RectangleShape2D_ipfru")
+disabled = true
+
+[node name="ConnectPiece5" type="RigidBody2D" parent="GameBoard"]
+visible = false
+position = Vector2(163.241, -316.5)
+gravity_scale = 3.0
+freeze = true
+script = ExtResource("7_wlgta")
+metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
+
+[node name="PieceSprite" type="Sprite2D" parent="GameBoard/ConnectPiece5"]
+position = Vector2(0.8, -0.59)
+scale = Vector2(0.44, 0.44)
+texture = ExtResource("2_ipfru")
+
+[node name="PieceCollision" type="CollisionShape2D" parent="GameBoard/ConnectPiece5"]
+position = Vector2(-0.125, -6.5)
+shape = SubResource("RectangleShape2D_ipfru")
+disabled = true
+
+[node name="ConnectPiece6" type="RigidBody2D" parent="GameBoard"]
+visible = false
+position = Vector2(244.241, -316.5)
+gravity_scale = 3.0
+freeze = true
+script = ExtResource("7_wlgta")
+metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
+
+[node name="PieceSprite" type="Sprite2D" parent="GameBoard/ConnectPiece6"]
+position = Vector2(0.8, -0.59)
+scale = Vector2(0.44, 0.44)
+texture = ExtResource("2_ipfru")
+
+[node name="PieceCollision" type="CollisionShape2D" parent="GameBoard/ConnectPiece6"]
+position = Vector2(-0.125, -6.5)
+shape = SubResource("RectangleShape2D_ipfru")
+disabled = true
+
+[node name="SendButton" type="Button" parent="."]
+offset_left = 112.0
+offset_top = 1068.0
+offset_right = 232.0
+offset_bottom = 1118.0
+disabled = true
+text = "Send
+"
+script = ExtResource("8_pcele")
+
+[node name="UndoButton" type="Button" parent="."]
+offset_left = 415.0
+offset_top = 1068.0
+offset_right = 535.0
+offset_bottom = 1118.0
+disabled = true
+text = "Undo"
+script = ExtResource("8_pcele")
+
+[node name="waitingLabel" type="Panel" parent="."]
+visible = false
+top_level = true
+z_index = 5
+offset_left = 116.0
+offset_top = 540.0
+offset_right = 546.0
+offset_bottom = 640.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_pcele")
+
+[node name="RichTextLabel" type="RichTextLabel" parent="waitingLabel"]
+layout_mode = 0
+offset_left = 14.0
+offset_top = 29.2222
+offset_right = 417.0
+offset_bottom = 71.2222
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]WAITING FOR OPPONENT...[/center]"
+
+[node name="winLoseLabel" type="Panel" parent="."]
+visible = false
+top_level = true
+z_index = 5
+offset_left = 116.0
+offset_top = 540.0
+offset_right = 546.0
+offset_bottom = 640.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_pcele")
+
+[node name="RichTextLabel" type="RichTextLabel" parent="winLoseLabel"]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 29.2222
+offset_right = 419.0
+offset_bottom = 71.2222
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]YOU WIN![/center]"

@@ -8,6 +8,8 @@ import com.bluebubbles.messaging.ITaskCompleteCallback;
 interface IMessageViewHandle {
     void updateMessage(in MadridMessage message, in ITaskCompleteCallback callback);
 
+    void setSuppressNotifications(boolean suppress);
+
     void lock();
     void unlock();
 }
