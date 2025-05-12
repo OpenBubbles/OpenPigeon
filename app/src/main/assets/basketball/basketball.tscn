@@ -1,0 +1,145 @@
+[gd_scene load_steps=20 format=3 uid="uid://boa2cnt5daakv"]
+
+[ext_resource type="Script" uid="uid://dk82qyx6ut4l5" path="res://basketball/basketball.gd" id="1_oq83f"]
+[ext_resource type="Script" uid="uid://bn3bvbnu1sr7k" path="res://basketball/ball.gd" id="2_j8ag5"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_10mmx"]
+sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
+ground_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
+
+[sub_resource type="Sky" id="Sky_512qa"]
+sky_material = SubResource("ProceduralSkyMaterial_10mmx")
+
+[sub_resource type="Environment" id="Environment_impb6"]
+background_mode = 2
+sky = SubResource("Sky_512qa")
+tonemap_mode = 2
+glow_enabled = true
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_10mmx"]
+size = Vector2(7.56, 6.003)
+
+[sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_10mmx"]
+data = PackedVector3Array(3.78, 0, 3.0015, -3.78, 0, 3.0015, 3.78, 0, -3.0015, -3.78, 0, 3.0015, -3.78, 0, -3.0015, 3.78, 0, -3.0015)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_impb6"]
+size = Vector2(7.497, 24)
+orientation = 0
+
+[sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_hvw6b"]
+data = PackedVector3Array(0, -12, -3.7485, 0, -12, 3.7485, 0, 12, -3.7485, 0, -12, 3.7485, 0, 12, 3.7485, 0, 12, -3.7485)
+
+[sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_8nfq6"]
+data = PackedVector3Array(0, -12, -3.7485, 0, -12, 3.7485, 0, 12, -3.7485, 0, -12, 3.7485, 0, 12, 3.7485, 0, 12, -3.7485)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_512qa"]
+size = Vector2(7.497, 24)
+orientation = 2
+
+[sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_g73cu"]
+data = PackedVector3Array(3.7485, -12, 0, -3.7485, -12, 0, 3.7485, 12, 0, -3.7485, -12, 0, -3.7485, 12, 0, 3.7485, 12, 0)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fgwmy"]
+albedo_color = Color(0.282353, 1, 1, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_nih06"]
+material = SubResource("StandardMaterial3D_fgwmy")
+size = Vector3(0.988, 0.614, 0.029)
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_koq1v"]
+friction = 0.5
+bounce = 0.5
+
+[sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_me8a1"]
+data = PackedVector3Array(-0.494, 0.307, 0.0145, 0.494, 0.307, 0.0145, -0.494, -0.307, 0.0145, 0.494, 0.307, 0.0145, 0.494, -0.307, 0.0145, -0.494, -0.307, 0.0145, 0.494, 0.307, -0.0145, -0.494, 0.307, -0.0145, 0.494, -0.307, -0.0145, -0.494, 0.307, -0.0145, -0.494, -0.307, -0.0145, 0.494, -0.307, -0.0145, 0.494, 0.307, 0.0145, 0.494, 0.307, -0.0145, 0.494, -0.307, 0.0145, 0.494, 0.307, -0.0145, 0.494, -0.307, -0.0145, 0.494, -0.307, 0.0145, -0.494, 0.307, -0.0145, -0.494, 0.307, 0.0145, -0.494, -0.307, -0.0145, -0.494, 0.307, 0.0145, -0.494, -0.307, 0.0145, -0.494, -0.307, -0.0145, 0.494, 0.307, 0.0145, -0.494, 0.307, 0.0145, 0.494, 0.307, -0.0145, -0.494, 0.307, 0.0145, -0.494, 0.307, -0.0145, 0.494, 0.307, -0.0145, -0.494, -0.307, 0.0145, 0.494, -0.307, 0.0145, -0.494, -0.307, -0.0145, 0.494, -0.307, 0.0145, 0.494, -0.307, -0.0145, -0.494, -0.307, -0.0145)
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_10mmx"]
+bounce = 0.8
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_10mmx"]
+radius = 0.1
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_10mmx"]
+
+[node name="Node3D" type="Node3D"]
+script = ExtResource("1_oq83f")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_impb6")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.94786, 0.318682, 0.00174891, 0.228726, -0.684103, 0.692595, 0.221914, -0.656083, -0.721324, 0, 3.63211, -4.60591)
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0.49)
+keep_aspect = 0
+fov = 51.0
+far = 7.0
+
+[node name="floor" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.59, -2.14097)
+mesh = SubResource("PlaneMesh_10mmx")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="floor"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="floor/StaticBody3D"]
+shape = SubResource("ConcavePolygonShape3D_10mmx")
+
+[node name="wall2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.746, 0, -1.11)
+mesh = SubResource("PlaneMesh_impb6")
+skeleton = NodePath("../wall")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="wall2"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="wall2/StaticBody3D"]
+shape = SubResource("ConcavePolygonShape3D_hvw6b")
+
+[node name="wall3" type="MeshInstance3D" parent="."]
+transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 3.746, 0, -1.11)
+mesh = SubResource("PlaneMesh_impb6")
+skeleton = NodePath("../wall")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="wall3"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="wall3/StaticBody3D"]
+shape = SubResource("ConcavePolygonShape3D_8nfq6")
+
+[node name="wall" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -4.497)
+mesh = SubResource("PlaneMesh_512qa")
+skeleton = NodePath("../Camera3D")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="wall"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="wall/StaticBody3D"]
+shape = SubResource("ConcavePolygonShape3D_g73cu")
+
+[node name="backboard" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.227, -3.834)
+mesh = SubResource("BoxMesh_nih06")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="backboard"]
+physics_material_override = SubResource("PhysicsMaterial_koq1v")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="backboard/StaticBody3D"]
+shape = SubResource("ConcavePolygonShape3D_me8a1")
+
+[node name="Ball" type="RigidBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, -0.317)
+visible = false
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+script = ExtResource("2_j8ag5")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ball"]
+shape = SubResource("SphereShape3D_10mmx")
+disabled = true
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="Ball"]
+use_collision = true
+radius = 0.1
+radial_segments = 50
+rings = 50
+material = SubResource("StandardMaterial3D_10mmx")

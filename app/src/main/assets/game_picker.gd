@@ -2,7 +2,8 @@ extends Control
 
 var games = {
 	"checkers": "res://checkers/checkers.tscn",
-	"connect": "res://connect/connect.tscn"
+	"connect": "res://connect/connect.tscn",
+	"basketball": "res://basketball/basketball.tscn"
 }
 
 # Called when the node enters the scene tree for the first time.
@@ -19,3 +20,5 @@ func _pressed() -> void:
 		get_tree().call_deferred("change_scene_to_file", games["checkers"])
 	elif name == "ConnectFourButton":
 		get_tree().call_deferred("change_scene_to_file", games["connect"])
+	elif name == "BasketballButton":
+		get_tree().call_deferred("change_scene_to_file", games["basketball"])

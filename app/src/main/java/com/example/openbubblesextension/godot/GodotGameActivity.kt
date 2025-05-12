@@ -41,15 +41,15 @@ abstract class GodotGameActivity : GodotActivity() {
                 gameSessionIPC.setSuppressNotifications(sessionId, true)
                 Log.i("openpigeon-${baseGame.getName()}", "CRINGE!!! ${currentMessage}")
                 Log.i("openpigeon-${baseGame.getName()}", "player: ${currentMessage["player"]!!.toInt()}, replay: ${currentMessage["replay"]}")
-                setReplay(isYourTurn(currentMessage), currentMessage["player"]!!.toInt(), currentMessage["replay"])
+                sendGameData(isYourTurn(currentMessage), currentMessage.toMutableMap())
 
                 gameSessionIPC.onMessageUpdated(sessionId) { new: Map<String, String> ->
-                    if(new["player"]!!.toInt() == currentMessage["player"]!!.toInt()) {
+                    if(isYourTurn(new)) {
                         Log.i(
                             "openpigeon-${baseGame.getName()}",
-                            "onMessageUpdated -> isYourTurn: ${isYourTurn(new)}, player: ${new["player"]!!.toInt()}, replay: ${new["replay"]}"
+                            "onMessageUpdated -> isYourTurn: ${isYourTurn(new)}, message: $new"
                         )
-                        setReplay(isYourTurn(new), new["player"]!!.toInt(), new["replay"])
+                        sendGameData(isYourTurn(new), new.toMutableMap())
                     }
                 }
             } else {
@@ -90,12 +90,11 @@ abstract class GodotGameActivity : GodotActivity() {
         return message["sender"]!! != gameSessionIPC!!.getSenderUUID(sessionId)
     }
 
-    private fun setReplay(isYourTurn: Boolean, player: Int, replay: String?) {
-        if (replay.isNullOrEmpty()) {
-            getOrCreateAppPlugin().setReplay(isYourTurn, player, baseGame.getDefaultReplay())
-        } else {
-            getOrCreateAppPlugin().setReplay(isYourTurn, player, replay)
+    private fun sendGameData(isYourTurn: Boolean, message: MutableMap<String, String>) {
+        if (message["replay"].isNullOrEmpty()) {
+            message["replay"] = baseGame.getDefaultReplay()
         }
+        getOrCreateAppPlugin().setGameData(isYourTurn, message)
     }
 
     override fun getHostPlugins(godot: Godot): Set<GodotPlugin> {

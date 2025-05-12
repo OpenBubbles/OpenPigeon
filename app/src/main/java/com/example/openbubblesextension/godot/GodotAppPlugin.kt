@@ -5,6 +5,9 @@ import org.godotengine.godot.Godot
 import org.godotengine.godot.plugin.GodotPlugin
 import org.godotengine.godot.plugin.SignalInfo
 import org.godotengine.godot.plugin.UsedByGodot
+import com.example.openbubblesextension.Cryption.Rand48
+import kotlin.collections.iterator
+import kotlin.collections.set
 
 
 /**
@@ -13,14 +16,15 @@ import org.godotengine.godot.plugin.UsedByGodot
 class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) : GodotPlugin(godot) {
     private var replay = "";
     private var mainLoopStarted = false;
+    private var rand48: Rand48 = Rand48(0L)
 
     companion object {
-        val SET_REPLAY_SIGNAL = SignalInfo("set_replay", String::class.java)
+        val SET_GAME_DATA_SIGNAL = SignalInfo("set_game_data", String::class.java)
     }
 
     override fun getPluginName() = "AppPlugin"
 
-    override fun getPluginSignals() = setOf(SET_REPLAY_SIGNAL)
+    override fun getPluginSignals() = setOf(SET_GAME_DATA_SIGNAL)
 
     override fun onGodotMainLoopStarted() {
         super.onGodotMainLoopStarted()
@@ -29,7 +33,7 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
 
     @UsedByGodot
     fun onReady() {
-        emitSignal(SET_REPLAY_SIGNAL.name, this.replay)
+        emitSignal(SET_GAME_DATA_SIGNAL.name, this.replay)
     }
 
     @UsedByGodot
@@ -55,16 +59,30 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
         }
     }
 
+    @UsedByGodot
+    fun srand48(seed: Int) {
+        rand48.srand(seed)
+    }
+
+    @UsedByGodot
+    fun drand48(): Double {
+        return rand48.drand()
+    }
+
     /**
      * Used to emit a signal to the gdscript logic to update the game board.
      *
      * @param replay Replay string from GP url
      */
-    internal fun setReplay(isYourTurn: Boolean, player: Int, replay: String) {
+    internal fun setGameData(isYourTurn: Boolean, message: MutableMap<String, String>) {
         var turn = if (isYourTurn) 1 else 0
-        this.replay = "isYourTurn:$turn;player:$player;replay:$replay"
-        Log.i("openpigeon-${gameActivity.baseGame.getName()}", "Set replay: ${this.replay}")
+        this.replay = "isYourTurn:$turn;"
+        for (data in message) {
+            this.replay += "${data.key}:${data.value};"
+        }
+        this.replay = replay.dropLast(1)
+        Log.i("openpigeon-${gameActivity.baseGame.getName()}", "Set game data: ${this.replay}")
         if (mainLoopStarted)
-            emitSignal(SET_REPLAY_SIGNAL.name, this.replay)
+            emitSignal(SET_GAME_DATA_SIGNAL.name, this.replay)
     }
 }

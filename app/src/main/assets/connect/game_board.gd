@@ -26,13 +26,13 @@ func _ready() -> void:
 	if appPlugin:
 		if not has_connected:
 			print("App plugin is available")
-			appPlugin.connect("set_replay", _set_replay)
+			appPlugin.connect("set_game_data", _set_game_data)
 			has_connected = true
 			appPlugin.onReady()
 			return
 	else:
 		if player == null or replay == null:
-			_set_replay("isYourTurn:1;player:1;replay:board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0")
+			_set_game_data("isYourTurn:1;player:1;replay:board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0")
 			print("App plugin is not available")
 			return
 		
@@ -97,7 +97,7 @@ func export_replay() -> String:
 	
 	return "board:" + boardStr + "|move:" + str(moveX) + "," + str(moveY) + "," + moveColor
 		
-func _set_replay(new_replay: String):
+func _set_game_data(new_replay: String):
 	for elem in new_replay.split(';'):
 		var spl = elem.split(':', true, 1)
 		print(spl)

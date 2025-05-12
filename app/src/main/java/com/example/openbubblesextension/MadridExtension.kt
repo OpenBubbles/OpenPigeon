@@ -12,6 +12,7 @@ import com.bluebubbles.messaging.IMadridExtension
 import com.bluebubbles.messaging.IMessageViewHandle
 import com.bluebubbles.messaging.IViewUpdateCallback
 import com.bluebubbles.messaging.MadridMessage
+import com.example.openbubblesextension.basketball.BasketballGame
 import com.example.openbubblesextension.checkers.CheckersGame
 import com.example.openbubblesextension.connect.ConnectGame
 import com.example.openbubblesextension.wordhunt.WordHuntGame
@@ -29,7 +30,8 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
         val games: List<Game> = listOf(
             CheckersGame(),
             WordHuntGame(),
-            ConnectGame()
+            ConnectGame(),
+            BasketballGame()
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {

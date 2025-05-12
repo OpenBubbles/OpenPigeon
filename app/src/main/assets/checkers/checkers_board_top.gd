@@ -34,13 +34,13 @@ func _ready() -> void:
 	if appPlugin:
 		if not has_connected:
 			print("App plugin is available")
-			appPlugin.connect("set_replay", _set_replay)
+			appPlugin.connect("set_game_data", _set_game_data)
 			has_connected = true
 			appPlugin.onReady()
 			return
 	else:
 		if player == null or replay == null:
-			_set_replay("isYourTurn:0;player:2;replay:board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0")
+			_set_game_data("isYourTurn:0;player:2;replay:board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0")
 			print("App plugin is not available")
 			return
 	
@@ -153,7 +153,7 @@ func set_waiting(enabled: bool):
 		get_node("winLoseLabel").get_child(0).set_text("[center]YOU LOSE :([/center]")
 		get_node("winLoseLabel").visible = true
 
-func _set_replay(new_replay: String):
+func _set_game_data(new_replay: String):
 	for elem in new_replay.split(';'):
 		var spl = elem.split(':', true, 1)
 		print(spl)
