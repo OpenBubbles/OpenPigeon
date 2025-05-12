@@ -30,6 +30,7 @@ text = "Connect Four"
 script = ExtResource("1_4r7pt")
 
 [node name="BasketballButton" type="Button" parent="."]
+layout_mode = 0
 offset_left = 143.0
 offset_top = 404.0
 offset_right = 489.0

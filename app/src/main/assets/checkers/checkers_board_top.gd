@@ -211,7 +211,7 @@ func export_replay() -> String:
 	(get_node("../SendButton") as Button).disabled = true
 	set_waiting(true)
 	
-	return replay.split('|')[-1] + move_str + "board:" + boardStr.substr(0, boardStr.length()-1)
+	return "replay:" + replay.split('|')[-1] + move_str + "board:" + boardStr.substr(0, boardStr.length()-1)
 	
 func check_win_loss():
 	var num_your_pieces = 0

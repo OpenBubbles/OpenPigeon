@@ -42,19 +42,23 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
     }
 
     @UsedByGodot
-    fun sendReplay(replay: String) {
-        Log.d("openpigeon-${gameActivity.baseGame.getName()}", "sendReplay: $replay")
+    fun updateGameData(updates: String) {
+        Log.d("openpigeon-${gameActivity.baseGame.getName()}", "updateGameData: $updates")
         val gameSessionIPC = gameActivity.gameSessionIPC!!
         val currentMessage = gameSessionIPC.getCurrentMessage(gameActivity.sessionId)
 
-        val updates = mapOf(
+        val msgUpdates = mapOf(
             "player" to if (currentMessage["player"] == "2") "1" else "2",
-            "replay" to replay,
             "num" to (currentMessage["num"]?.toInt()!! + 1).toString(),
             "sender" to gameSessionIPC.getSenderUUID(gameActivity.sessionId)
-        )
+        ).toMutableMap()
 
-        gameActivity.gameSessionIPC!!.updateSession(updates, gameActivity.sessionId) {
+        for (update in updates.split(';')) {
+            var updateSplit = update.split(':', limit = 2)
+            msgUpdates[updateSplit[0]] = updateSplit[1]
+        }
+
+        gameActivity.gameSessionIPC!!.updateSession(msgUpdates, gameActivity.sessionId) {
             Log.i("openpigeon-${gameActivity.baseGame.getName()}", "Game session updated")
         }
     }

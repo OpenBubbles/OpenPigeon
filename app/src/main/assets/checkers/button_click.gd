@@ -18,7 +18,7 @@ func _pressed() -> void:
 
 		var appPlugin := Engine.get_singleton("AppPlugin")
 		if appPlugin:
-			appPlugin.sendReplay(board.export_replay())
+			appPlugin.updateGameData(board.export_replay())
 		else:
 			print("app not connected??")
 			

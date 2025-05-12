@@ -95,7 +95,7 @@ func export_replay() -> String:
 	(get_node("../UndoButton") as Button).disabled = true
 	(get_node("../SendButton") as Button).disabled = true
 	
-	return "board:" + boardStr + "|move:" + str(moveX) + "," + str(moveY) + "," + moveColor
+	return "replay:board:" + boardStr + "|move:" + str(moveX) + "," + str(moveY) + "," + moveColor
 		
 func _set_game_data(new_replay: String):
 	for elem in new_replay.split(';'):

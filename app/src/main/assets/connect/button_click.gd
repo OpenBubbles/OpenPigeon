@@ -13,7 +13,7 @@ func _pressed() -> void:
 		var board: ConnectGameBoard = get_node("../GameBoard")
 		var appPlugin := Engine.get_singleton("AppPlugin")
 		if appPlugin:
-			appPlugin.sendReplay(board.export_replay())
+			appPlugin.updateGameData(board.export_replay())
 		else:
 			print(board.export_replay())
 			print("App not connected!")
