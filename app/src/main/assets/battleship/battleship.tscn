@@ -1,0 +1,98 @@
+[gd_scene load_steps=7 format=3 uid="uid://cwj68wu8ntln"]
+
+[ext_resource type="Script" uid="uid://d11d0tliu83pm" path="res://battleship/battleground.gd" id="1_4q04m"]
+[ext_resource type="Script" uid="uid://bmxmvwf7usewn" path="res://battleship/battleship.gd" id="1_urm0v"]
+[ext_resource type="PackedScene" uid="uid://t4n0g4ud7n6f" path="res://battleship/patrolboat.tscn" id="2_o7hy2"]
+[ext_resource type="PackedScene" uid="uid://bk5btqccsu6bo" path="res://battleship/marker.tscn" id="4_yk3pl"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_yk3pl"]
+bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
+corner_radius_top_left = 25
+corner_radius_top_right = 25
+corner_radius_bottom_right = 25
+corner_radius_bottom_left = 25
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_elyco"]
+bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
+corner_radius_top_left = 25
+corner_radius_top_right = 25
+corner_radius_bottom_right = 25
+corner_radius_bottom_left = 25
+
+[node name="Battleship" type="Node2D"]
+script = ExtResource("1_urm0v")
+
+[node name="BattleGround1" type="Node2D" parent="."]
+position = Vector2(68, 320)
+script = ExtResource("1_4q04m")
+rows = 8
+rect_size = Vector2(512, 512)
+ship_class = ExtResource("2_o7hy2")
+marker = ExtResource("4_yk3pl")
+
+[node name="BattleGround2" type="Node2D" parent="."]
+position = Vector2(68, 320)
+script = ExtResource("1_4q04m")
+rows = 8
+rect_size = Vector2(512, 512)
+ship_class = ExtResource("2_o7hy2")
+marker = ExtResource("4_yk3pl")
+
+[node name="SendButton" type="Button" parent="."]
+offset_left = 263.0
+offset_top = 1069.0
+offset_right = 383.0
+offset_bottom = 1119.0
+disabled = true
+text = "Send
+"
+
+[node name="waitingLabel" type="Panel" parent="."]
+top_level = true
+offset_left = 116.0
+offset_top = 609.0
+offset_right = 546.0
+offset_bottom = 709.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_yk3pl")
+
+[node name="RichTextLabel" type="RichTextLabel" parent="waitingLabel"]
+layout_mode = 0
+offset_left = 14.0
+offset_top = 29.2222
+offset_right = 417.0
+offset_bottom = 71.2222
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]WAITING FOR OPPONENT...[/center]"
+
+[node name="Label" type="Label" parent="."]
+offset_left = 1.0
+offset_top = 1021.0
+offset_right = 647.0
+offset_bottom = 1044.0
+text = "State"
+horizontal_alignment = 1
+justification_flags = 162
+
+[node name="winLoseLabel" type="Panel" parent="."]
+visible = false
+top_level = true
+offset_left = 116.0
+offset_top = 609.0
+offset_right = 546.0
+offset_bottom = 709.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_elyco")
+
+[node name="RichTextLabel" type="RichTextLabel" parent="winLoseLabel"]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 29.2222
+offset_right = 419.0
+offset_bottom = 71.2222
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]YOU WIN![/center]"
+
+[connection signal="is_valid" from="BattleGround1" to="." method="_on_battle_ground_is_valid"]
+[connection signal="is_valid" from="BattleGround2" to="." method="_on_battle_ground_is_valid"]
+[connection signal="pressed" from="SendButton" to="." method="_on_send_button_pressed"]

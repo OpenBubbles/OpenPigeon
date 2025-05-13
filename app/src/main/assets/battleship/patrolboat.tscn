@@ -1,0 +1,21 @@
+[gd_scene load_steps=7 format=3 uid="uid://t4n0g4ud7n6f"]
+
+[ext_resource type="Texture2D" uid="uid://c7uvb2h48m2ia" path="res://battleship/Cruiser.png" id="1_k588v"]
+[ext_resource type="Script" uid="uid://dmhjdqjlvlkmb" path="res://battleship/patrolboat.gd" id="2_6humw"]
+[ext_resource type="Texture2D" uid="uid://b4s7hv1ohjjmi" path="res://battleship/PatrolBoat.png" id="2_nst3b"]
+[ext_resource type="Texture2D" uid="uid://4gohtq840vqw" path="res://battleship/BattleShip.png" id="4_n4ukn"]
+[ext_resource type="Texture2D" uid="uid://hxiegfjs0idr" path="res://battleship/AircraftCarrier.png" id="5_fvnb5"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_nst3b"]
+
+[node name="Patrolboat" type="Sprite2D"]
+texture = ExtResource("4_n4ukn")
+script = ExtResource("2_6humw")
+textures = Array[Texture2D]([ExtResource("2_nst3b"), ExtResource("1_k588v"), ExtResource("4_n4ukn"), ExtResource("5_fvnb5")])
+
+[node name="Area2D" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
+shape = SubResource("RectangleShape2D_nst3b")
+
+[connection signal="input_event" from="Area2D" to="." method="_on_area_2d_input_event"]

@@ -1,0 +1,86 @@
+[gd_scene load_steps=8 format=3 uid="uid://bk5btqccsu6bo"]
+
+[ext_resource type="Script" uid="uid://ha006dy7643s" path="res://battleship/marker.gd" id="1_b5j2w"]
+[ext_resource type="Texture2D" uid="uid://coumyqola56fc" path="res://battleship/eliminated.png" id="2_k1eae"]
+[ext_resource type="Script" uid="uid://dqr43vqx41jms" path="res://battleship/missed.gd" id="3_08lfg"]
+[ext_resource type="Texture2D" uid="uid://dq8a3etxkoflw" path="res://battleship/target.png" id="4_k1eae"]
+
+[sub_resource type="Animation" id="Animation_k1eae"]
+resource_name = "eliminate"
+length = 0.2
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath(".:scale")
+tracks/0/interp = 2
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.2),
+"transitions": PackedFloat32Array(1, 1),
+"update": 0,
+"values": [Vector2(1.5, 1.5), Vector2(1, 1)]
+}
+tracks/1/type = "bezier"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath(".:modulate:a")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"handle_modes": PackedInt32Array(0, 0),
+"points": PackedFloat32Array(0, -0.25, 0, 0.25, 0, 1, -0.25, 0, 0.25, 0),
+"times": PackedFloat32Array(0, 0.2)
+}
+
+[sub_resource type="Animation" id="Animation_08lfg"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath(".:scale")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector2(2, 2)]
+}
+tracks/1/type = "bezier"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath(".:modulate:a")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"handle_modes": PackedInt32Array(0),
+"points": PackedFloat32Array(1, -0.25, 0, 0.25, 0),
+"times": PackedFloat32Array(0)
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_7h8q3"]
+_data = {
+&"RESET": SubResource("Animation_08lfg"),
+&"eliminate": SubResource("Animation_k1eae")
+}
+
+[node name="Marker" type="Node2D"]
+scale = Vector2(2, 2)
+script = ExtResource("1_b5j2w")
+
+[node name="Eliminated" type="Sprite2D" parent="."]
+texture = ExtResource("2_k1eae")
+
+[node name="Missed" type="Node2D" parent="."]
+script = ExtResource("3_08lfg")
+radius = 4.0
+color = Color(0.266667, 0.266667, 0.266667, 1)
+
+[node name="Target" type="Sprite2D" parent="."]
+texture = ExtResource("4_k1eae")
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+libraries = {
+&"": SubResource("AnimationLibrary_7h8q3")
+}
+autoplay = "eliminate"

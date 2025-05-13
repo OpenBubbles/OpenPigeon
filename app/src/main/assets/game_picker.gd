@@ -3,7 +3,8 @@ extends Control
 var games = {
 	"checkers": "res://checkers/checkers.tscn",
 	"connect": "res://connect/connect.tscn",
-	"basketball": "res://basketball/basketball.tscn"
+	"basketball": "res://basketball/basketball.tscn",
+	"sea": "res://battleship/battleship.tscn",
 }
 
 # Called when the node enters the scene tree for the first time.
