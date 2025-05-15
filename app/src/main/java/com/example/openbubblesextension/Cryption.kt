@@ -86,8 +86,8 @@ object Cryption {
     fun getId(): String {
         val randBytes = ByteArray(12)
         Random.nextBytes(randBytes)
-        val id = Base64.encode(randBytes, Base64.DEFAULT)
-        return "$id"
+        val id = Base64.encodeToString(randBytes, Base64.DEFAULT)
+        return id
     }
 
     private const val PREFIX: String = "data:?ver=52&data="

@@ -1,4 +1,5 @@
 [versions]
+activityCompose = "1.10.1"
 agp = "8.9.1"
 calligraphy3 = "3.1.1"
 kotlin = "1.9.0"
@@ -19,7 +20,11 @@ godot = "4.4.1.stable"
 activityKtx = "1.9.1"
 
 [libraries]
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-material3 = { module = "androidx.compose.material3:material3" }
+androidx-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+androidx-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 godot = { module = "org.godotengine:godot", version.ref = "godot" }
 androidx-activity-ktx = { module = "androidx.activity:activity-ktx", version.ref = "activityKtx" }
 calligraphy3 = { module = "io.github.inflationx:calligraphy3", version.ref = "calligraphy3" }

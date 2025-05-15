@@ -108,13 +108,13 @@
             android:src="@drawable/battleship" />
 
         <ImageView
-            android:id="@+id/btn_game_6"
+            android:id="@+id/btn_crazy8"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:contentDescription="Game 6"
+            android:contentDescription="Crazy 8"
             android:scaleType="centerCrop"
-            android:src="@drawable/empty" />
+            android:src="@drawable/crazy8thumb" />
 
         <ImageView
             android:id="@+id/btn_game_7"

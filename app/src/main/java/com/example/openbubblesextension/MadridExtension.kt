@@ -12,6 +12,7 @@ import com.bluebubbles.messaging.IMadridExtension
 import com.bluebubbles.messaging.IMessageViewHandle
 import com.bluebubbles.messaging.IViewUpdateCallback
 import com.bluebubbles.messaging.MadridMessage
+import com.example.openbubblesextension.crazy8.Crazy8Game
 import com.example.openbubblesextension.battleship.BattleshipGame
 import com.example.openbubblesextension.checkers.CheckersGame
 import com.example.openbubblesextension.connect.ConnectGame
@@ -32,6 +33,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
             WordHuntGame(),
             ConnectGame(),
             BattleshipGame(),
+            Crazy8Game(),
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {

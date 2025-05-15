@@ -1,7 +1,12 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.jetbrainsKotlinAndroid)
 }
+
+val props = Properties()
+file("$rootDir/config.properties").inputStream().use { props.load(it) }
 
 android {
     namespace = "com.example.openbubblesextension"
@@ -18,11 +23,20 @@ android {
         aaptOptions {
             ignoreAssetsPattern = "!.svn:!.git:!.gitignore:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"
         }
+
+        buildConfigField("String", "PIO_SHARED_SECRET", "\"${props["PIO_SHARED_SECRET"]}\"")
+        buildConfigField("String", "PIO_GAME_ID", "\"${props["PIO_GAME_ID"]}\"")
     }
 
     buildFeatures {
         aidl = true
         viewBinding = true
+        buildConfig = true
+        compose = true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.2"
     }
 
     buildTypes {
@@ -54,9 +68,23 @@ dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.ui.graphics.android)
     implementation(libs.androidx.media3.common.ktx)
+    implementation(files("libs/PlayerIO.aar"))
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     implementation(libs.godot)
     implementation(libs.androidx.activity.ktx)
+
+    val composeBom = platform("androidx.compose:compose-bom:2025.05.00")
+    implementation(composeBom)
+    androidTestImplementation(composeBom)
+
+    // Choose one of the following:
+    // Material Design 3
+    implementation(libs.androidx.material3)
+
+    implementation(libs.androidx.ui.tooling.preview)
+    debugImplementation(libs.androidx.ui.tooling)
+
+    implementation(libs.androidx.activity.compose)
 }

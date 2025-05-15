@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Just for PlayerIO, we shouldn't be hitting the internet under any other circumstances -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -11,7 +14,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.OpenBubblesSampleExtension"
+        android:usesCleartextTraffic="true"
         tools:targetApi="31">
+        <!-- Uses cleartext traffic for PlayerIO; a company still talking about adobe flash and Yahoo games... -->
         <activity
             android:name=".connect.ConnectActivity"
             android:exported="false"
@@ -32,6 +37,11 @@
             android:name=".battleship.BattleshipActivity"
             android:exported="false"
             android:theme="@style/Theme.OpenBubblesSampleExtension" />
+        <activity
+            android:name=".crazy8.Crazy8Activity"
+            android:exported="false"
+            android:theme="@style/Theme.OpenBubblesSampleExtension"
+            android:windowSoftInputMode="adjustResize"/>
 
         <receiver
             android:name=".KeyboardClickReceiver"
