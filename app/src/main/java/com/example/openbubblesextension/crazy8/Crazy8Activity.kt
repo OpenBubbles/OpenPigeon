@@ -462,7 +462,7 @@ class Crazy8Activity : ComponentActivity() {
                             } else if (move[1] == "d") {
                                 moved.cardCount += move.size - 2 // card, d
                                 if (moved.isMe) {
-                                    game.hand.addAll(move.slice(3..<move.size).map { CrazyCard.parse(it) })
+                                    game.hand.addAll(move.slice(2..<move.size).map { CrazyCard.parse(it) })
                                     val card = CrazyCard.parse(move[2])
                                     if (card.rank != 5 && card.isCompatibleWith(game.card)) {
                                         game.hand.remove(card)
