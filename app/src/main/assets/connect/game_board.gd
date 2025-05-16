@@ -95,18 +95,15 @@ func export_replay() -> String:
 	(get_node("../UndoButton") as Button).disabled = true
 	(get_node("../SendButton") as Button).disabled = true
 	
-	return "replay:board:" + boardStr + "|move:" + str(moveX) + "," + str(moveY) + "," + moveColor
+	return JSON.stringify({
+		"replay": "board:" + boardStr + "|move:" + str(moveX) + "," + str(moveY) + "," + moveColor
+	})
 		
 func _set_game_data(new_replay: String):
-	for elem in new_replay.split(';'):
-		var spl = elem.split(':', true, 1)
-		print(spl)
-		if spl[0] == "isYourTurn":
-			isTurn = bool(int(spl[1]))
-		elif spl[0] == "player":
-			player = int(spl[1])
-		elif spl[0] == "replay":
-			replay = spl[1]
+	var data = JSON.parse_string(new_replay)
+	isTurn = data["isYourTurn"]
+	player = int(data["player"])
+	replay = data["replay"]
 	
 	if isTurn == false:
 		player = 2 if player == 1 else 1

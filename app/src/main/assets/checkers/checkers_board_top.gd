@@ -154,15 +154,10 @@ func set_waiting(enabled: bool):
 		get_node("winLoseLabel").visible = true
 
 func _set_game_data(new_replay: String):
-	for elem in new_replay.split(';'):
-		var spl = elem.split(':', true, 1)
-		print(spl)
-		if spl[0] == "isYourTurn":
-			isTurn = bool(int(spl[1]))
-		elif spl[0] == "player":
-			player = int(spl[1])
-		elif spl[0] == "replay":
-			replay = spl[1]
+	var data = JSON.parse_string(new_replay)
+	isTurn = data["isYourTurn"]
+	player = int(data["player"])
+	replay = data["replay"]
 	
 	if isTurn == false:
 		player = 2 if player == 1 else 1
@@ -211,7 +206,9 @@ func export_replay() -> String:
 	(get_node("../SendButton") as Button).disabled = true
 	set_waiting(true)
 	
-	return "replay:" + replay.split('|')[-1] + move_str + "board:" + boardStr.substr(0, boardStr.length()-1)
+	return JSON.stringify({
+		"replay": replay.split('|')[-1] + move_str + "board:" + boardStr.substr(0, boardStr.length()-1)
+	})
 	
 func check_win_loss():
 	var num_your_pieces = 0

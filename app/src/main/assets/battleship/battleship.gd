@@ -32,34 +32,19 @@ var theirBattleground: BattleGround = null
 func _set_game_data(new_replay: String):
 	var battleground1 = get_node("BattleGround1") as BattleGround
 	var battleground2 = get_node("BattleGround2") as BattleGround
-	var replay = ""
-	var bullets1 = ""
-	var bullets2 = ""
-	var skip = ""
-	var s1 = ""
-	var s2 = ""
-	var size = 8
+	
+	var parsed = JSON.parse_string(new_replay)
+	
+	var replay = parsed["replay"]
+	var bullets1 = parsed["bullets1"]
+	var bullets2 = parsed["bullets2"]
+	var skip = parsed["skip_ships"]
+	var s1 = parsed["ships1"]
+	var s2 = parsed["ships2"]
+	var size = int(parsed["size"])
+	isTurn = parsed["isYourTurn"]
+	player = int(parsed["player"])
 	print(new_replay)
-	for elem in new_replay.split(';'):
-		var spl = elem.split(':', true, 1)
-		if spl[0] == "ships1":
-			s1 = spl[1]
-		if spl[0] == "ships2":
-			s2 = spl[1]
-		if spl[0] == "size":
-			size = int(spl[1])
-		if spl[0] == "skip_ships":
-			skip = spl[1]
-		if spl[0] == "bullets1":
-			bullets1 = spl[1]
-		if spl[0] == "bullets2":
-			bullets2 = spl[1]
-		if spl[0] == "replay":
-			replay = spl[1]
-		if spl[0] == "isYourTurn":
-			isTurn = bool(int(spl[1]))
-		if spl[0] == "player":
-			player = int(spl[1])
 	if isTurn:
 		player = 2 if player == 1 else 1
 	
@@ -139,17 +124,22 @@ var replay: Array[String] = []
 func send_update():
 	var myEncoded = myBattleground.encode_ships()
 	var bullets = myBattleground.encode_bullets()
-	var msg = "ships" + str(player) + ":" + myEncoded + ";bullets" + str(player) + ":" + bullets
+	var msg = {
+		"ships" + str(player): myEncoded,
+		"bullets" + str(player): bullets,
+	}
 	if not replay.is_empty():
-		msg += ";replay:" + "|".join(replay)
-		msg += ";skip_ships:" + theirBattleground.encode_ships()
-		msg += ";skip_bullets:" + theirBattleground.encode_bullets()
+		msg["replay"] = "|".join(replay)
+		msg["skip_ships"] = theirBattleground.encode_ships()
+		msg["skip_bullets"] = theirBattleground.encode_bullets()
+	
+	var encoded = JSON.stringify(msg)
 	
 	print("replay")
-	print(msg)
+	print(encoded)
 	var appPlugin := Engine.get_singleton("AppPlugin")
 	if appPlugin:
-		appPlugin.updateGameData(msg)
+		appPlugin.updateGameData(encoded)
 	else:
 		print("app not connected??")
 	state.text = ""

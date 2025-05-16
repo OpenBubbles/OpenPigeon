@@ -6,6 +6,7 @@ import org.godotengine.godot.plugin.GodotPlugin
 import org.godotengine.godot.plugin.SignalInfo
 import org.godotengine.godot.plugin.UsedByGodot
 import com.example.openbubblesextension.Cryption.Rand48
+import org.json.JSONObject
 import kotlin.collections.iterator
 import kotlin.collections.set
 
@@ -53,9 +54,9 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
             "sender" to gameSessionIPC.getSenderUUID(gameActivity.sessionId)
         ).toMutableMap()
 
-        for (update in updates.split(';')) {
-            var updateSplit = update.split(':', limit = 2)
-            msgUpdates[updateSplit[0]] = updateSplit[1]
+        val parsed = JSONObject(updates)
+        for (update in parsed.keys()) {
+            msgUpdates[update] = parsed.getString(update)
         }
 
         gameActivity.gameSessionIPC!!.updateSession(msgUpdates, gameActivity.sessionId) {
@@ -79,12 +80,13 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
      * @param replay Replay string from GP url
      */
     internal fun setGameData(isYourTurn: Boolean, message: MutableMap<String, String>) {
-        var turn = if (isYourTurn) 1 else 0
-        this.replay = "isYourTurn:$turn;"
-        for (data in message) {
-            this.replay += "${data.key}:${data.value};"
-        }
-        this.replay = replay.dropLast(1)
+        replay = JSONObject().apply {
+            put("isYourTurn", isYourTurn)
+            for (data in message) {
+                put(data.key, data.value)
+            }
+        }.toString()
+
         Log.i("openpigeon-${gameActivity.baseGame.getName()}", "Set game data: ${this.replay}")
         if (mainLoopStarted)
             emitSignal(SET_GAME_DATA_SIGNAL.name, this.replay)
