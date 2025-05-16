@@ -81,6 +81,7 @@ class GameSession(var handle: IMessageViewHandle) {
                 handle.unlock()
                 newHandle.lock()
             }
+            handle = newHandle
         }
     }
 }
