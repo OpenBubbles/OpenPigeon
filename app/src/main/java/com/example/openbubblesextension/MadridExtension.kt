@@ -12,6 +12,7 @@ import com.bluebubbles.messaging.IMadridExtension
 import com.bluebubbles.messaging.IMessageViewHandle
 import com.bluebubbles.messaging.IViewUpdateCallback
 import com.bluebubbles.messaging.MadridMessage
+import com.example.openbubblesextension.basketball.BasketballGame
 import com.example.openbubblesextension.crazy8.Crazy8Game
 import com.example.openbubblesextension.battleship.BattleshipGame
 import com.example.openbubblesextension.checkers.CheckersGame
@@ -32,6 +33,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
             CheckersGame(),
             WordHuntGame(),
             ConnectGame(),
+            BasketballGame(),
             BattleshipGame(),
             Crazy8Game(),
         )
@@ -91,7 +93,9 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
         message: MadridMessage?,
         handle: IMessageViewHandle?
     ): RemoteViews {
-        if (message == null) { return RemoteViews(context.packageName, R.layout.livemsg) }
+        if (message == null) {
+            return RemoteViews(context.packageName, R.layout.livemsg)
+        }
         Log.i("live view", "init")
         var view = RemoteViews(context.packageName, R.layout.livemsg)
 
@@ -100,7 +104,10 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
 
         val game = session.getGame()
 
-        val bitmap = BitmapFactory.decodeResource(context.resources, game?.gamePoster() ?: R.drawable.empty)
+        val bitmap = BitmapFactory.decodeResource(
+            context.resources,
+            game?.gamePoster() ?: R.drawable.empty
+        )
         view.setImageViewBitmap(R.id.gameImage, bitmap)
         view.setTextViewText(R.id.gameNameTextView, message.caption)
 
@@ -110,7 +117,12 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
                     putExtra("SESSION", message.session)
                 }
             val requestCode = System.currentTimeMillis().toInt()
-            var pendingIntent = PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE)
+            var pendingIntent = PendingIntent.getActivity(
+                context,
+                requestCode,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE
+            )
             view.setOnClickPendingIntent(R.id.gameImage, pendingIntent)
         }
         return view

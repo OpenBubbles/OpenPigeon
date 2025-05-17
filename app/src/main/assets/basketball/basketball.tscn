@@ -1,7 +1,15 @@
-[gd_scene load_steps=20 format=3 uid="uid://boa2cnt5daakv"]
+[gd_scene load_steps=43 format=3 uid="uid://boa2cnt5daakv"]
 
 [ext_resource type="Script" uid="uid://dk82qyx6ut4l5" path="res://basketball/basketball.gd" id="1_oq83f"]
+[ext_resource type="Script" uid="uid://cvxqha68lb1tx" path="res://basketball/button_click.gd" id="2_0e03b"]
 [ext_resource type="Script" uid="uid://bn3bvbnu1sr7k" path="res://basketball/ball.gd" id="2_j8ag5"]
+[ext_resource type="Texture2D" uid="uid://daj3ssi0w1lee" path="res://basketball/basketball_floor.png" id="2_ryf8r"]
+[ext_resource type="Texture2D" uid="uid://dutexrlgv763w" path="res://basketball/brickwall.jpeg" id="3_7e2oe"]
+[ext_resource type="Texture2D" uid="uid://ermcfvwnyb8n" path="res://basketball/balldimpled.png" id="3_edmja"]
+[ext_resource type="Texture2D" uid="uid://dhj26lkqags20" path="res://basketball/backboard.png" id="3_julsv"]
+[ext_resource type="Texture2D" uid="uid://hpdw0d2vvdy4" path="res://basketball/AdobeStock_530856469.png" id="7_xqbk1"]
+[ext_resource type="FontFile" uid="uid://dk1un3cvg4j5k" path="res://basketball/segment-eglas.ttf" id="8_kluaa"]
+[ext_resource type="Texture2D" uid="uid://bxkp6dpfg4vlk" path="res://basketball/scoreboard.png" id="9_lrgjq"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_10mmx"]
 sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
@@ -16,6 +24,48 @@ sky = SubResource("Sky_512qa")
 tonemap_mode = 2
 glow_enabled = true
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_xqbk1"]
+bg_color = Color(0.303233, 0.303233, 0.303233, 0.72549)
+corner_radius_top_left = 25
+corner_radius_top_right = 25
+corner_radius_bottom_right = 25
+corner_radius_bottom_left = 25
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0e03b"]
+bg_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="LabelSettings" id="LabelSettings_lrgjq"]
+font_size = 42
+font_color = Color(0, 0, 0, 1)
+outline_size = 3
+outline_color = Color(0, 0, 0, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_kluaa"]
+font_color = Color(0, 0, 0, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kluaa"]
+bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
+corner_radius_top_left = 25
+corner_radius_top_right = 25
+corner_radius_bottom_right = 25
+corner_radius_bottom_left = 25
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_banb7"]
+bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
+corner_radius_top_left = 25
+corner_radius_top_right = 25
+corner_radius_bottom_right = 25
+corner_radius_bottom_left = 25
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_julsv"]
+albedo_texture = ExtResource("2_ryf8r")
+texture_filter = 5
+texture_repeat = false
+
 [sub_resource type="PlaneMesh" id="PlaneMesh_10mmx"]
 size = Vector2(7.56, 6.003)
 
@@ -23,7 +73,7 @@ size = Vector2(7.56, 6.003)
 data = PackedVector3Array(3.78, 0, 3.0015, -3.78, 0, 3.0015, 3.78, 0, -3.0015, -3.78, 0, 3.0015, -3.78, 0, -3.0015, 3.78, 0, -3.0015)
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_impb6"]
-size = Vector2(7.497, 24)
+size = Vector2(0.5, 0.5)
 orientation = 0
 
 [sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_hvw6b"]
@@ -32,12 +82,23 @@ data = PackedVector3Array(0, -12, -3.7485, 0, -12, 3.7485, 0, 12, -3.7485, 0, -1
 [sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_8nfq6"]
 data = PackedVector3Array(0, -12, -3.7485, 0, -12, 3.7485, 0, 12, -3.7485, 0, -12, 3.7485, 0, 12, 3.7485, 0, 12, -3.7485)
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xqbk1"]
+albedo_texture = ExtResource("3_7e2oe")
+uv1_scale = Vector3(1.5, 7.5, 1.5)
+uv1_offset = Vector3(-0.25, 0, 0)
+
 [sub_resource type="PlaneMesh" id="PlaneMesh_512qa"]
 size = Vector2(7.497, 24)
 orientation = 2
 
 [sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_g73cu"]
 data = PackedVector3Array(3.7485, -12, 0, -3.7485, -12, 0, 3.7485, 12, 0, -3.7485, -12, 0, -3.7485, 12, 0, 3.7485, 12, 0)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7e2oe"]
+albedo_texture = ExtResource("3_julsv")
+uv1_scale = Vector3(0.995, 1.575, 2.445)
+uv1_offset = Vector3(-0.5, 0.5, 0)
+uv1_triplanar = true
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fgwmy"]
 albedo_color = Color(0.282353, 1, 1, 1)
@@ -54,14 +115,39 @@ bounce = 0.5
 data = PackedVector3Array(-0.494, 0.307, 0.0145, 0.494, 0.307, 0.0145, -0.494, -0.307, 0.0145, 0.494, 0.307, 0.0145, 0.494, -0.307, 0.0145, -0.494, -0.307, 0.0145, 0.494, 0.307, -0.0145, -0.494, 0.307, -0.0145, 0.494, -0.307, -0.0145, -0.494, 0.307, -0.0145, -0.494, -0.307, -0.0145, 0.494, -0.307, -0.0145, 0.494, 0.307, 0.0145, 0.494, 0.307, -0.0145, 0.494, -0.307, 0.0145, 0.494, 0.307, -0.0145, 0.494, -0.307, -0.0145, 0.494, -0.307, 0.0145, -0.494, 0.307, -0.0145, -0.494, 0.307, 0.0145, -0.494, -0.307, -0.0145, -0.494, 0.307, 0.0145, -0.494, -0.307, 0.0145, -0.494, -0.307, -0.0145, 0.494, 0.307, 0.0145, -0.494, 0.307, 0.0145, 0.494, 0.307, -0.0145, -0.494, 0.307, 0.0145, -0.494, 0.307, -0.0145, 0.494, 0.307, -0.0145, -0.494, -0.307, 0.0145, 0.494, -0.307, 0.0145, -0.494, -0.307, -0.0145, 0.494, -0.307, 0.0145, 0.494, -0.307, -0.0145, -0.494, -0.307, -0.0145)
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_10mmx"]
+friction = 0.5
 bounce = 0.8
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_j8ag5"]
+margin = 0.004
+radius = 0.012
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_10mmx"]
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_10mmx"]
 radius = 0.1
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_10mmx"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_edmja"]
+transparency = 4
+albedo_texture = ExtResource("3_edmja")
 
-[node name="Node3D" type="Node3D"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0e03b"]
+transparency = 1
+albedo_texture = ExtResource("7_xqbk1")
+detail_blend_mode = 2
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_lrgjq"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_kluaa"]
+albedo_texture = ExtResource("9_lrgjq")
+uv1_scale = Vector3(0.65, 0.47, 1)
+uv1_offset = Vector3(0.17, 0.26, 0)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_banb7"]
+size = Vector2(1.742, 0.735)
+orientation = 2
+
+[node name="BasketballScene" type="Node3D"]
 script = ExtResource("1_oq83f")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
@@ -73,15 +159,163 @@ shadow_enabled = true
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0.49)
-keep_aspect = 0
-fov = 51.0
+fov = 55.5
 far = 7.0
 
+[node name="SubViewportContainer" type="SubViewportContainer" parent="."]
+offset_right = 648.0
+offset_bottom = 1411.0
+
+[node name="SubViewport" type="SubViewport" parent="SubViewportContainer"]
+transparent_bg = true
+handle_input_locally = false
+size = Vector2i(648, 1400)
+render_target_update_mode = 4
+
+[node name="BlackBackground" type="Panel" parent="SubViewportContainer/SubViewport"]
+visible = false
+top_level = true
+offset_left = -14.0
+offset_top = -13.0
+offset_right = 663.0
+offset_bottom = 1410.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_xqbk1")
+
+[node name="Round1UI" type="Panel" parent="SubViewportContainer/SubViewport"]
+visible = false
+top_level = true
+offset_left = 105.0
+offset_top = 425.0
+offset_right = 549.0
+offset_bottom = 707.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_0e03b")
+
+[node name="Label" type="Label" parent="SubViewportContainer/SubViewport/Round1UI"]
+layout_mode = 0
+offset_left = 136.0
+offset_top = 11.0
+offset_right = 303.0
+offset_bottom = 71.0
+text = "Round 1"
+label_settings = SubResource("LabelSettings_lrgjq")
+
+[node name="Label2" type="Label" parent="SubViewportContainer/SubViewport/Round1UI"]
+layout_mode = 0
+offset_left = 133.0
+offset_top = 124.0
+offset_right = 310.0
+offset_bottom = 173.0
+text = "Score as many balls as 
+you can in 45 seconds"
+label_settings = SubResource("LabelSettings_kluaa")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="StartButton" type="Button" parent="SubViewportContainer/SubViewport/Round1UI"]
+layout_mode = 0
+offset_left = 182.0
+offset_top = 222.0
+offset_right = 257.0
+offset_bottom = 255.0
+text = "Start"
+script = ExtResource("2_0e03b")
+
+[node name="Round2UI" type="Panel" parent="SubViewportContainer/SubViewport"]
+visible = false
+top_level = true
+offset_left = 105.0
+offset_top = 425.0
+offset_right = 549.0
+offset_bottom = 707.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_0e03b")
+
+[node name="Label" type="Label" parent="SubViewportContainer/SubViewport/Round2UI"]
+layout_mode = 0
+offset_left = 136.0
+offset_top = 11.0
+offset_right = 303.0
+offset_bottom = 71.0
+text = "Round 2"
+label_settings = SubResource("LabelSettings_lrgjq")
+
+[node name="Label2" type="Label" parent="SubViewportContainer/SubViewport/Round2UI"]
+layout_mode = 0
+offset_left = 133.0
+offset_top = 124.0
+offset_right = 310.0
+offset_bottom = 173.0
+text = "Score as many balls as 
+you can in 45 seconds"
+label_settings = SubResource("LabelSettings_kluaa")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="StartButton" type="Button" parent="SubViewportContainer/SubViewport/Round2UI"]
+layout_mode = 0
+offset_left = 182.0
+offset_top = 222.0
+offset_right = 257.0
+offset_bottom = 255.0
+text = "Start"
+script = ExtResource("2_0e03b")
+
+[node name="waitingLabel" type="Panel" parent="SubViewportContainer/SubViewport"]
+visible = false
+top_level = true
+z_index = 5
+offset_left = 116.0
+offset_top = 540.0
+offset_right = 546.0
+offset_bottom = 640.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_kluaa")
+
+[node name="RichTextLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/waitingLabel"]
+layout_mode = 0
+offset_left = 14.0
+offset_top = 29.2222
+offset_right = 417.0
+offset_bottom = 71.2222
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]WAITING FOR OPPONENT...[/center]"
+
+[node name="SkipButton" type="Button" parent="SubViewportContainer/SubViewport"]
+visible = false
+offset_left = 254.0
+offset_top = 847.0
+offset_right = 389.0
+offset_bottom = 893.0
+text = "Skip Replay"
+script = ExtResource("2_0e03b")
+
+[node name="winnerLabel" type="Panel" parent="SubViewportContainer/SubViewport"]
+visible = false
+top_level = true
+z_index = 5
+offset_left = 116.0
+offset_top = 540.0
+offset_right = 546.0
+offset_bottom = 640.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_banb7")
+
+[node name="RichTextLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/winnerLabel"]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 29.2222
+offset_right = 419.0
+offset_bottom = 71.2222
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]YOU WIN![/center]"
+
 [node name="floor" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.59, -2.14097)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0046854, -0.6, -1.52002)
+material_override = SubResource("StandardMaterial3D_julsv")
 mesh = SubResource("PlaneMesh_10mmx")
 
 [node name="StaticBody3D" type="StaticBody3D" parent="floor"]
+collision_layer = 3
+collision_mask = 3
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="floor/StaticBody3D"]
 shape = SubResource("ConcavePolygonShape3D_10mmx")
@@ -92,6 +326,8 @@ mesh = SubResource("PlaneMesh_impb6")
 skeleton = NodePath("../wall")
 
 [node name="StaticBody3D" type="StaticBody3D" parent="wall2"]
+collision_layer = 3
+collision_mask = 3
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="wall2/StaticBody3D"]
 shape = SubResource("ConcavePolygonShape3D_hvw6b")
@@ -102,44 +338,413 @@ mesh = SubResource("PlaneMesh_impb6")
 skeleton = NodePath("../wall")
 
 [node name="StaticBody3D" type="StaticBody3D" parent="wall3"]
+collision_layer = 3
+collision_mask = 3
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="wall3/StaticBody3D"]
 shape = SubResource("ConcavePolygonShape3D_8nfq6")
 
 [node name="wall" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -4.497)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00220406, 0.00190681, -4.49693)
+material_override = SubResource("StandardMaterial3D_xqbk1")
 mesh = SubResource("PlaneMesh_512qa")
 skeleton = NodePath("../Camera3D")
 
 [node name="StaticBody3D" type="StaticBody3D" parent="wall"]
+collision_layer = 3
+collision_mask = 3
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="wall/StaticBody3D"]
 shape = SubResource("ConcavePolygonShape3D_g73cu")
 
 [node name="backboard" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.227, -3.834)
+material_override = SubResource("StandardMaterial3D_7e2oe")
+cast_shadow = 0
 mesh = SubResource("BoxMesh_nih06")
 
 [node name="StaticBody3D" type="StaticBody3D" parent="backboard"]
+collision_layer = 3
+collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_koq1v")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="backboard/StaticBody3D"]
 shape = SubResource("ConcavePolygonShape3D_me8a1")
 
-[node name="Ball" type="RigidBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, -0.317)
+[node name="hoop_collision" type="Node3D" parent="."]
 visible = false
+
+[node name="HoopCollisionSphere1" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.974, -3.35)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+contact_monitor = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere1"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere1"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere2" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.135, 0.845, -3.518)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere2"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere2"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere3" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.845, -3.66)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere3"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere3"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere4" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.144, 0.845, -3.518)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere4"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere4"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere5" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.11, 0.91, -3.422)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere5"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere5"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere6" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.093, 0.91, -3.63)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere6"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere6"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere7" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.117, 0.91, -3.417)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere7"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere7"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere8" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.117, 0.91, -3.63)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere8"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere8"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere9" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.845, -3.391)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere9"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere9"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere10" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.918, -3.371)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere10"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere10"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere11" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -3.709)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere11"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere11"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere12" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.141, 1, -3.654)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere12"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere12"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere13" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.141, 1, -3.366)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere13"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere13"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere14" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.141, 1, -3.654)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere14"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere14"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere15" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.141, 1, -3.366)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere15"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere15"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere16" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.199, 1, -3.51)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere16"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere16"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere17" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -3.311)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere17"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere17"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere18" type="RigidBody3D" parent="hoop_collision"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.199, 1, -3.51)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_10mmx")
+freeze = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere18"]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere18"]
+use_collision = true
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="Ball" type="RigidBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.091, -0.45, 2.16719)
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 script = ExtResource("2_j8ag5")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Ball"]
 shape = SubResource("SphereShape3D_10mmx")
-disabled = true
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="Ball"]
+material_override = SubResource("StandardMaterial3D_edmja")
 use_collision = true
 radius = 0.1
 radial_segments = 50
 rings = 50
 material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="net" type="MeshInstance3D" parent="."]
+transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, -0.0094685, 0.776366, -3.30605)
+material_override = SubResource("StandardMaterial3D_0e03b")
+cast_shadow = 0
+mesh = SubResource("PlaneMesh_impb6")
+skeleton = NodePath("../wall")
+
+[node name="pole" type="Node3D" parent="."]
+
+[node name="CSGCylinder3D" type="CSGCylinder3D" parent="pole"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.00985837, 0, -4.24123)
+cast_shadow = 0
+use_collision = true
+radius = 0.04
+sides = 25
+material = SubResource("StandardMaterial3D_lrgjq")
+
+[node name="Scoreboard" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00220406, 2.05542, -4.06871)
+material_override = SubResource("StandardMaterial3D_kluaa")
+mesh = SubResource("PlaneMesh_banb7")
+skeleton = NodePath("../Camera3D")
+
+[node name="Time" type="Label3D" parent="Scoreboard"]
+transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.00753897, -0.0821884, 0.00315475)
+text = "0:45"
+font = ExtResource("8_kluaa")
+font_size = 23
+outline_size = 0
+
+[node name="YouScore" type="Label3D" parent="Scoreboard"]
+transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, -0.543613, -0.0821884, 0.00315475)
+text = "00"
+font = ExtResource("8_kluaa")
+font_size = 38
+outline_size = 0
+
+[node name="OppScore" type="Label3D" parent="Scoreboard"]
+transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.585, -0.082, 0.003)
+text = "00"
+font = ExtResource("8_kluaa")
+font_size = 38
+outline_size = 0
+
+[node name="StaticBody3D" type="StaticBody3D" parent="Scoreboard"]
+collision_layer = 3
+collision_mask = 3
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Scoreboard/StaticBody3D"]
+shape = SubResource("ConcavePolygonShape3D_g73cu")

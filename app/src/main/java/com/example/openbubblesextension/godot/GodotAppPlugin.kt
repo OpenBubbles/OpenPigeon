@@ -17,7 +17,10 @@ import kotlin.collections.set
 class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) : GodotPlugin(godot) {
     private var replay = "";
     private var mainLoopStarted = false;
-    private var rand48: Rand48 = Rand48(0L)
+    private var rand48: Map<Int, Rand48> = mapOf(
+        1 to Rand48(0L),
+        2 to Rand48(0L)
+    )
 
     companion object {
         val SET_GAME_DATA_SIGNAL = SignalInfo("set_game_data", String::class.java)
@@ -65,13 +68,13 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
     }
 
     @UsedByGodot
-    fun srand48(seed: Int) {
-        rand48.srand(seed)
+    fun srand48(player: Int, seed: Int) {
+        rand48[player]!!.srand(seed)
     }
 
     @UsedByGodot
-    fun drand48(): Double {
-        return rand48.drand()
+    fun drand48(player: Int): Double {
+        return rand48[player]!!.drand()
     }
 
     /**

@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.openbubblesextension.Game
 import com.example.openbubblesextension.R
 import com.example.openbubblesextension.godot.GodotGameActivity
+import kotlin.random.Random
 
 class BasketballActivity : GodotGameActivity() {
     override var baseGame: Game = BasketballGame()
@@ -38,6 +39,13 @@ class BasketballGame : Game {
     override fun getNewGameData(context: Context): MutableMap<String, String> {
         return super.getNewGameData(context).apply {
             put("mode", "n")
+            put("skip_score1", "0")
+            put("skip_score2", "0")
+            put("score1", "0")
+            put("score2", "0")
+            put("seed", "${Random.nextInt()}")
+            put("seed2", "${Random.nextInt()}")
+            put("round", "1")
         }
     }
 

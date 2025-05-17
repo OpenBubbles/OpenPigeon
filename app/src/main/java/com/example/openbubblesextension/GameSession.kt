@@ -21,7 +21,11 @@ class GameSession(var handle: IMessageViewHandle) {
         val parsed = "data://$decrypted".toUri()
         val newMessage: MutableMap<String, String> = mutableMapOf()
         for (key in parsed.queryParameterNames) {
-            newMessage[key] = parsed.getQueryParameter(key)!!
+            try {
+                newMessage[key] = parsed.getQueryParameter(key)!!
+            } catch (exc: Exception) {
+                Log.e("openpigeon-gamesession", "Exception parsing $key: $exc")
+            }
         }
 
         messageUpdated(newMessage)
