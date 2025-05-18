@@ -14,9 +14,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.OpenBubblesSampleExtension"
-        android:usesCleartextTraffic="true"
         tools:targetApi="31">
-        <!-- Uses cleartext traffic for PlayerIO; a company still talking about adobe flash and Yahoo games... -->
         <activity
             android:name=".connect.ConnectActivity"
             android:exported="false"

@@ -216,6 +216,8 @@ class Crazy8Activity : ComponentActivity() {
             }
         }
 
+        PlayerIO.setUseSecureApiRequests(true)
+
         setContent {
             val prefs = remember { getPrefs() }
             
