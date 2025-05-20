@@ -59,6 +59,10 @@ abstract class GodotGameActivity : GodotActivity() {
         }
     }
 
+//    override fun getCommandLine(): MutableList<String> {
+//        return mutableListOf<String>("--remote-debug", "tcp://192.168.0.81:6008")
+//    }
+
     override fun onResume() {
         if (gameSessionIPC != null) {
             gameSessionIPC?.setSuppressNotifications(sessionId, true)

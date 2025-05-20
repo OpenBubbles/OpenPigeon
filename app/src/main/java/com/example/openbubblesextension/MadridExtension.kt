@@ -17,6 +17,7 @@ import com.example.openbubblesextension.crazy8.Crazy8Game
 import com.example.openbubblesextension.battleship.BattleshipGame
 import com.example.openbubblesextension.checkers.CheckersGame
 import com.example.openbubblesextension.connect.ConnectGame
+import com.example.openbubblesextension.darts.DartsGame
 import com.example.openbubblesextension.wordhunt.WordHuntGame
 import org.json.JSONObject
 
@@ -36,6 +37,7 @@ class MadridExtension(private val context: Context) : IMadridExtension.Stub() {
             BasketballGame(),
             BattleshipGame(),
             Crazy8Game(),
+            DartsGame()
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {

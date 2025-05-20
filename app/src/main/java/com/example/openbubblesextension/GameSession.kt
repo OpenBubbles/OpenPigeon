@@ -20,6 +20,7 @@ class GameSession(var handle: IMessageViewHandle) {
         val decrypted = Cryption.decrypt(data)
         val parsed = "data://$decrypted".toUri()
         val newMessage: MutableMap<String, String> = mutableMapOf()
+        Log.i("openpigeon", "New game! $parsed")
         for (key in parsed.queryParameterNames) {
             try {
                 newMessage[key] = parsed.getQueryParameter(key)!!

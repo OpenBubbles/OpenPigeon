@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".darts.DartsActivity">
+
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/godot_fragment_container"
+        android:name="org.godotengine.godot.GodotFragment"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        tools:layout_editor_absoluteX="143dp"
+        tools:layout_editor_absoluteY="166dp" />
+</androidx.constraintlayout.widget.ConstraintLayout>

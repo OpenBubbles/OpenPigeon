@@ -28,6 +28,10 @@
             android:exported="false"
             android:process=":godot" />
         <activity
+            android:name=".darts.DartsActivity"
+            android:exported="false"
+            android:process=":godot" />
+        <activity
             android:name=".wordhunt.WordHuntActivity"
             android:exported="false"
             android:theme="@style/Theme.OpenBubblesSampleExtension" />

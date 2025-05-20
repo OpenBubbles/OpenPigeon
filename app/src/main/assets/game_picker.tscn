@@ -23,17 +23,26 @@ script = ExtResource("1_4r7pt")
 [node name="ConnectFourButton" type="Button" parent="."]
 layout_mode = 0
 offset_left = 144.0
-offset_top = 321.0
+offset_top = 314.0
 offset_right = 490.0
-offset_bottom = 382.0
+offset_bottom = 375.0
 text = "Connect Four"
 script = ExtResource("1_4r7pt")
 
 [node name="BasketballButton" type="Button" parent="."]
 layout_mode = 0
 offset_left = 143.0
-offset_top = 404.0
+offset_top = 397.0
 offset_right = 489.0
-offset_bottom = 465.0
+offset_bottom = 458.0
 text = "Basketball"
+script = ExtResource("1_4r7pt")
+
+[node name="DartsButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 143.0
+offset_top = 479.0
+offset_right = 489.0
+offset_bottom = 540.0
+text = "Darts"
 script = ExtResource("1_4r7pt")
