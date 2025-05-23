@@ -39,7 +39,7 @@ import com.example.openbubblesextension.R
 import kotlin.math.pow
 
 class GameUI {
-    private val tilePositions = Array(4) { Array(4) { TilePosition() } }
+    private lateinit var tilePositions: Array<Array<TilePosition>>
 
     private val fivoSansFamily = FontFamily(
         Font(R.font.fivosans_black, FontWeight.Black),
@@ -49,6 +49,7 @@ class GameUI {
 
     @Composable
     fun GameScreen(gameState: WordHuntGameState) {
+        tilePositions = Array(gameState.mode.gridSize) { Array(gameState.mode.gridSize) { TilePosition() } }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -80,7 +81,6 @@ class GameUI {
                 modifier = Modifier
                     .align(Alignment.Center)
                     .offset(0.dp, 80.dp)
-                    .shadow(40.dp)
             )
         }
     }
@@ -170,22 +170,26 @@ class GameUI {
             modifier = modifier
                 .size(350.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(shape = RoundedCornerShape(15.dp))
-                    .background(color = Color(0xff92eb89))
+            val gameBoardBackground = when (gameState.mode) {
+                WordHuntActivity.GameMode.MODE1 -> R.drawable.wordhunt_board_mode1
+                WordHuntActivity.GameMode.MODE2 -> R.drawable.wordhunt_board_mode2
+                WordHuntActivity.GameMode.MODE3 -> R.drawable.wordhunt_board_mode3
+                WordHuntActivity.GameMode.MODE4 -> R.drawable.wordhunt_board_mode1
+            }
+            Image(
+                painter = painterResource(gameBoardBackground),
+                contentDescription = "",
+                modifier = Modifier.fillMaxSize()
             )
             Box(
                 modifier = Modifier
                     .align(alignment = Alignment.Center)
                     .size(330.dp)
                     .clip(shape = RoundedCornerShape(10.dp))
-                    .background(color = Color(0xff425b42))
                     .pointerInput(Unit) {
                         val size = this.size.toSize()
-                        val tileWidth = size.width / 4
-                        val tileHeight = size.height / 4
+                        val tileWidth = size.width / gameState.mode.gridSize
+                        val tileHeight = size.height / gameState.mode.gridSize
 
                         val hitboxScale = 0.9f
 
@@ -196,8 +200,8 @@ class GameUI {
                                 val position = downEvent.position
 
                                 // Calculate tile position
-                                val col = (position.x / tileWidth).toInt().coerceIn(0, 3)
-                                val row = (position.y / tileHeight).toInt().coerceIn(0, 3)
+                                val col = (position.x / tileWidth).toInt().coerceIn(0, gameState.mode.gridSize - 1)
+                                val row = (position.y / tileHeight).toInt().coerceIn(0, gameState.mode.gridSize - 1)
 
                                 // Calculate center of that tile
                                 val centerX = (col + 0.5f) * tileWidth
@@ -213,7 +217,7 @@ class GameUI {
                                 val radius =
                                     hitboxScale * kotlin.math.min(tileWidth, tileHeight) / 2
 
-                                if (distance <= radius) {
+                                if (distance <= radius && !gameState.mode.invalidPositions.contains(Pair(row, col))) {
                                     // Start selection on touch down
                                     gameState.startSelection(row, col)
 
@@ -223,9 +227,9 @@ class GameUI {
                                         val currentPosition = event.changes.first().position
 
                                         val currentCol =
-                                            (currentPosition.x / tileWidth).toInt().coerceIn(0, 3)
+                                            (currentPosition.x / tileWidth).toInt().coerceIn(0, gameState.mode.gridSize - 1)
                                         val currentRow =
-                                            (currentPosition.y / tileHeight).toInt().coerceIn(0, 3)
+                                            (currentPosition.y / tileHeight).toInt().coerceIn(0, gameState.mode.gridSize - 1)
 
                                         // Calculate tile center
                                         val curCenterX = (currentCol + 0.5f) * tileWidth
@@ -237,7 +241,7 @@ class GameUI {
                                                     (currentPosition.y - curCenterY).pow(2)
                                         )
 
-                                        if (curDistance <= radius) {
+                                        if (curDistance <= radius && !gameState.mode.invalidPositions.contains(Pair(currentRow, currentCol))) {
                                             gameState.addToSelection(currentRow, currentCol)
                                         }
 
@@ -256,13 +260,13 @@ class GameUI {
                     .padding(20.dp)
                     .fillMaxSize()
             ) {
-                repeat(4) { row ->
+                repeat(gameState.mode.gridSize) { row ->
                     TileRow(
                         gameState = gameState,
                         row = row,
                         board = board,
                         modifier = Modifier
-                            .weight(weight = 0.25f))
+                            .weight(weight = 1f/gameState.mode.gridSize))
                 }
             }
 
@@ -274,7 +278,7 @@ class GameUI {
                 val size = LocalDensity.current.run { 315.dp.toPx() }
                 SelectionPathOverlay(
                     gameState = gameState,
-                    tileSize = size / 4,
+                    tileSize = size / gameState.mode.gridSize,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -333,14 +337,14 @@ class GameUI {
             modifier = modifier
                 .fillMaxSize()
         ) {
-            repeat(4) { col ->
+            repeat(gameState.mode.gridSize) { col ->
                 Tile(
                     gameState = gameState,
                     row = row,
                     col = col,
                     letter = board[row][col],
                     modifier = Modifier
-                        .weight(weight = 0.25f))
+                        .weight(weight = 1f/gameState.mode.gridSize))
             }
         }
     }
@@ -364,7 +368,7 @@ class GameUI {
             modifier = modifier
                 .fillMaxSize()
                 .shadow(
-                    elevation = 10.dp,
+                    elevation = if(!gameState.mode.invalidPositions.contains(Pair(row, col))) 10.dp else 0.dp,
                     shape = RoundedCornerShape(10.dp)
                 )
                 .onGloballyPositioned { coordinates ->
@@ -379,36 +383,40 @@ class GameUI {
                     //Log.d("TilePosition", "Tile[$row][$col]: left=${position.x}, top=${position.y}, right=${position.x + size.width}, bottom=${position.y + size.height}")
                 }
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.wordhunt_letter_bg),
-                contentDescription = "Background",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(
-                        shape = RoundedCornerShape(10.dp)
-                    ),
-                //colorFilter = if(gameState.selectedPositions.contains(Pair(row, col))) ColorFilter.tint(gameState.wordStatusColor) else null
-            )
-
-            if(gameState.selectedPositions.contains(Pair(row, col))) {
-                Box(
+            if (!gameState.mode.invalidPositions.contains(Pair(row, col))) {
+                Image(
+                    painter = painterResource(id = R.drawable.wordhunt_letter_bg),
+                    contentDescription = "Background",
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(shape = RoundedCornerShape(10.dp))
-                        .background(gameState.wordStatusColor.copy(alpha = 0.8f))  // Adjust alpha for transparency
+                        .clip(
+                            shape = RoundedCornerShape(10.dp)
+                        ),
+                    //colorFilter = if(gameState.selectedPositions.contains(Pair(row, col))) ColorFilter.tint(gameState.wordStatusColor) else null
+                )
+
+                if (gameState.selectedPositions.contains(Pair(row, col))) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(shape = RoundedCornerShape(10.dp))
+                            .background(gameState.wordStatusColor.copy(alpha = 0.8f))  // Adjust alpha for transparency
+                    )
+                }
+
+                Text(
+                    text = letter.toString(),
+                    color = Color.Black,
+                    textAlign = TextAlign.Center,
+                    style = TextStyle(
+                        fontSize = if (gameState.mode.gridSize == 4) 60.sp else 40.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .wrapContentHeight(align = Alignment.CenterVertically)
                 )
             }
-
-            Text(
-                text = letter.toString(),
-                color = Color.Black,
-                textAlign = TextAlign.Center,
-                style = TextStyle(
-                    fontSize = 60.sp,
-                    fontWeight = FontWeight.Bold),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .wrapContentHeight(align = Alignment.CenterVertically))
         }
     }
 

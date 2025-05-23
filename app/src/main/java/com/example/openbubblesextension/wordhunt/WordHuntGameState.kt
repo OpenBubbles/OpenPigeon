@@ -6,7 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
 import com.example.openbubblesextension.wordhunt.WordHuntActivity.Companion.MIN_WORD_LENGTH
 
-class WordHuntGameState(private val dictionary: WordDictionary) {
+class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHuntActivity.GameMode) {
     var isGameActive: Boolean = false
     private val _selectedPositions = mutableStateListOf<Pair<Int, Int>>()
     val selectedPositions: List<Pair<Int, Int>> = _selectedPositions

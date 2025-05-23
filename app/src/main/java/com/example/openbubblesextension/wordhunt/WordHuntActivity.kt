@@ -27,14 +27,26 @@ class WordHuntActivity : AppCompatActivity() {
 
     private val gameUI = GameUI()
 
+    enum class GameMode(val gridSize: Int, val invalidPositions: List<Pair<Int, Int>>){
+        MODE1(4, emptyList()),
+        MODE2(5, listOf(
+            Pair(0,0), Pair(0,4), Pair(2,2), Pair(4,0), Pair(4,4)
+        )),
+        MODE3(5, listOf(
+            Pair(0,2), Pair(2,0), Pair(2,4), Pair(4,2)
+        )),
+        MODE4(5, emptyList())
+    }
+
+
+
     // Game constants
     companion object {
-        const val GRID_SIZE = 4
         const val GAME_DURATION = 80000L // 80 seconds
         const val MIN_WORD_LENGTH = 3
 
-        fun generateLetterPool(): List<Char> {
-            val totalLetters = GRID_SIZE * GRID_SIZE
+        fun generateLetterPool(mode: GameMode): List<Char> {
+            val totalLetters = mode.gridSize * mode.gridSize
 
             // Define letter frequencies
             val scrabbleFrequencyMap = mapOf(
@@ -54,6 +66,19 @@ class WordHuntActivity : AppCompatActivity() {
             // Shuffle and select as many as needed
             fullPool.shuffle()
             return fullPool.take(totalLetters)
+        }
+
+        fun mode(mode: Int): GameMode {
+            return when(mode) {
+                1 -> GameMode.MODE1
+                2 -> GameMode.MODE2
+                3 -> GameMode.MODE3
+                4 -> GameMode.MODE4
+                else -> {
+                    Log.e("WordHunt", "Mode does not exist")
+                    GameMode.MODE1
+                }
+            }
         }
     }
 
@@ -82,7 +107,6 @@ class WordHuntActivity : AppCompatActivity() {
         sessionId = intent.getStringExtra("SESSION")!!
 
         dictionary = WordDictionary(this)
-        gameState = WordHuntGameState(dictionary)
 
         gameSessionIPC = GameSessionIPC(this) { ipc ->
             // This is called when the service is bound
@@ -124,6 +148,7 @@ class WordHuntActivity : AppCompatActivity() {
     }
 
     private fun setupGame() {
+        gameState = WordHuntGameState(dictionary, mode(currentMessage["mode"]!!.toInt()))
         gameState.setBoard(populatedBoard(currentMessage["letters"]!!))
         gameState.isGameActive = true
         startGameTimer()
@@ -146,10 +171,11 @@ class WordHuntActivity : AppCompatActivity() {
     }
 
     private fun populatedBoard(letterPool: String): Array<CharArray> {
-        val boardArray= Array(4) { CharArray(4) }
+        val gridSize = gameState.mode.gridSize
+        val boardArray= Array(gridSize) { CharArray(gridSize) }
         var poolIndex = 0
-        for (i in GRID_SIZE - 1 downTo  0) {
-            for (j in 0 until GRID_SIZE) {
+        for (i in gridSize - 1 downTo  0) {
+            for (j in 0 until gridSize) {
                 boardArray[i][j] = letterPool[poolIndex++]
             }
         }
