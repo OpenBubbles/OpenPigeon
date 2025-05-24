@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".pool.PoolActivity"
+    android:fitsSystemWindows="true"
+    android:background="#FF000000">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <SurfaceView
+            android:id="@+id/surfaceView"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <LinearLayout
+            android:id="@+id/controls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="10dp"
+            android:orientation="horizontal">
+
+            <FrameLayout
+                android:id="@+id/cueContainer"
+                android:layout_width="0dp"
+                android:layout_height="30dp"
+                android:layout_gravity="center"
+                android:layout_weight="1"
+                android:background="@drawable/cue_drag_bg"
+                android:clipToOutline="true"
+                android:outlineProvider="background">
+
+                <ImageView
+                    android:id="@+id/cueTip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:layout_gravity="right|center_vertical"
+                    android:background="#ff333333"
+                    android:paddingRight="2dp"
+                    android:src="@drawable/cue" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/cueView"
+                android:layout_width="50dp"
+                android:layout_height="50dp"
+                android:layout_marginLeft="10dp"
+                android:background="@drawable/cue_item">
+
+                <ImageView
+                    android:id="@+id/cueDot"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:translationX="21dp"
+                    android:translationY="21dp"
+                    app:srcCompat="@drawable/cue_point" />
+            </FrameLayout>
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/state_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="#77000000"
+        android:padding="10dp"
+        android:text="Waiting for opponent..."
+        android:textColor="@color/white" />
+
+    <Button
+        android:id="@+id/skip_replay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="100dp"
+        android:text="Skip" />
+
+
+</FrameLayout>

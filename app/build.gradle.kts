@@ -26,6 +26,11 @@ android {
 
         buildConfigField("String", "PIO_SHARED_SECRET", "\"${props["PIO_SHARED_SECRET"]}\"")
         buildConfigField("String", "PIO_GAME_ID", "\"${props["PIO_GAME_ID"]}\"")
+        externalNativeBuild {
+            cmake {
+                cppFlags += ""
+            }
+        }
     }
 
     buildFeatures {
@@ -54,6 +59,12 @@ android {
     }
     kotlinOptions {
         jvmTarget = "1.8"
+    }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 }
 

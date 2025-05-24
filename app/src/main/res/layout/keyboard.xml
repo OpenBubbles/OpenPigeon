@@ -126,13 +126,13 @@
             android:src="@drawable/darts" />
 
         <ImageView
-            android:id="@+id/btn_game_8"
+            android:id="@+id/btn_8_ball"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:contentDescription="Game 8"
             android:scaleType="centerCrop"
-            android:src="@drawable/empty" />
+            android:src="@drawable/pool_image" />
     </LinearLayout>
 
 </LinearLayout>

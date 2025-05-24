@@ -6,7 +6,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.example.openbubblesextension.Game
-import com.example.openbubblesextension.GameSession
 import com.example.openbubblesextension.R
 import org.godotengine.godot.Godot
 import org.godotengine.godot.GodotActivity
@@ -24,7 +23,7 @@ abstract class GodotGameActivity : GodotActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(activityLayout)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.surfaceView)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets

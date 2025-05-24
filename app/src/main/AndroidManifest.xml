@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-
     <!-- Just for PlayerIO, we shouldn't be hitting the internet under any other circumstances -->
     <uses-permission android:name="android.permission.INTERNET" />
 
@@ -15,6 +14,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.OpenBubblesSampleExtension"
         tools:targetApi="31">
+        <activity
+            android:name=".pool.PoolActivity"
+            android:exported="false"
+            android:theme="@style/Theme.OpenBubblesSampleExtension" />
         <activity
             android:name=".connect.ConnectActivity"
             android:exported="false"
@@ -43,7 +46,7 @@
             android:name=".crazy8.Crazy8Activity"
             android:exported="false"
             android:theme="@style/Theme.OpenBubblesSampleExtension"
-            android:windowSoftInputMode="adjustResize"/>
+            android:windowSoftInputMode="adjustResize" />
 
         <receiver
             android:name=".KeyboardClickReceiver"
