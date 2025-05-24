@@ -50,11 +50,14 @@ interface Game {
             "data" to Cryption.encrypt(encodeQuery(message).replace("+", "%20"))
         ))
 
-        val bm = BitmapFactory.decodeResource(context.resources, gamePoster())
-        val baos = ByteArrayOutputStream()
-        bm.compress(Bitmap.CompressFormat.JPEG, 70, baos)
-        val b = baos.toByteArray()
-        val imageEncoded: String = Base64.encodeToString(b, Base64.NO_WRAP)
+        var imageEncoded: String? = null
+        if (currentSession == null) {
+            val bm = BitmapFactory.decodeResource(context.resources, gamePoster())
+            val baos = ByteArrayOutputStream()
+            bm.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+            val b = baos.toByteArray()
+            imageEncoded = Base64.encodeToString(b, Base64.NO_WRAP)
+        }
 
         return MadridMessage().apply {
             messageGuid = UUID.randomUUID().toString()

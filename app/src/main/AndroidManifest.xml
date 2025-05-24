@@ -59,7 +59,7 @@
             android:exported="true">
             <meta-data
                 android:name="madrid_icon"
-                android:resource="@drawable/madrid_icon" />
+                android:resource="@drawable/madrid_icon_small" />
             <meta-data
                 android:name="madrid_id"
                 android:value="1124197642" />
