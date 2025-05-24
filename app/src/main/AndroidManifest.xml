@@ -57,6 +57,9 @@
             android:name=".MadridExtensionService"
             android:enabled="true"
             android:exported="true">
+            <intent-filter>
+                <action android:name="com.openbubbles.messaging.MadridExtensionService" />
+            </intent-filter>
             <meta-data
                 android:name="madrid_icon"
                 android:resource="@drawable/madrid_icon_small" />
