@@ -38,6 +38,7 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
+import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
@@ -114,6 +115,35 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
     override fun keyboardClosed() {
         currentKeyboardHandle = null
+        callback = null
+        configuringGame = null
+    }
+
+    var configuringGame: Game? = null
+
+    @Composable
+    fun MainKeyboard() {
+        if (configuringGame != null) {
+            RenderKeyboardConfig(this@MadridExtension, configuringGame!!)
+        } else {
+            RenderKeyboard(this@MadridExtension)
+        }
+    }
+
+    @OptIn(ExperimentalGlanceRemoteViewsApi::class)
+    fun updateKeyboard() {
+        callback?.let {
+            val displayMetrics = context.resources.displayMetrics
+            val dpWidth = displayMetrics.widthPixels / displayMetrics.density
+
+            val result = runBlocking {
+                keyboardRemoteViews.compose(context, DpSize(dpWidth.dp, 300.dp)) {
+                    MainKeyboard()
+                }
+            }
+
+            it.updateView(result.remoteViews)
+        }
     }
 
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
@@ -127,7 +157,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
         val result = runBlocking {
             keyboardRemoteViews.compose(context, DpSize(dpWidth.dp, 300.dp)) {
-                RenderKeyboard(this@MadridExtension)
+                MainKeyboard()
             }
         }
 
@@ -182,6 +212,26 @@ class ChooseGameCallback : ActionCallback {
         val message = game.buildGameMessage(context, game.getNewGameData(context), null)
 
         MadridExtension.currentKeyboardHandle?.addMessage(message)
+
+        if (game.isConfigurable()) {
+            MadridExtensionService.extension?.let {
+                it.configuringGame = game
+                it.updateKeyboard()
+            }
+        }
+    }
+}
+
+class GoBackCallback : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        MadridExtensionService.extension?.let {
+            it.configuringGame = null
+            it.updateKeyboard()
+        }
     }
 }
 
@@ -236,6 +286,23 @@ fun RenderKeyboard(extension: MadridExtension?) {
     }
 }
 
+@Composable
+fun RenderKeyboardConfig(extension: MadridExtension?, game: Game) {
+    Column(modifier = GlanceModifier.fillMaxHeight().padding(1.dp)) {
+        Box(contentAlignment = Alignment.CenterStart) {
+            Row(horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Vertical.CenterVertically) {
+                Image(ImageProvider(game.gamePoster()), game.getName(), modifier = GlanceModifier.width(50.dp).padding(8.dp).wrapContentHeight())
+                Text(game.displayName(), style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray), fontWeight = FontWeight.Bold),)
+            }
+            Image(ImageProvider(R.drawable.ios_back), "Back", modifier = GlanceModifier.padding(start = 10.dp)
+                .clickable(onClick = actionRunCallback<GoBackCallback>()))
+        }
+        game.Configuration(extension?.context)
+    }
+}
+
 private val gameSession = ActionParameters.Key<String>("SESSION")
 @OptIn(ExperimentalGlanceApi::class)
 @Composable
@@ -275,8 +342,71 @@ fun RenderLiveExtensionPreview() {
 @OptIn(ExperimentalGlancePreviewApi::class)
 @Preview(widthDp = 400, heightDp = 300)
 @Composable
+fun RenderKeyboardConfigPreview() {
+    Box(modifier = GlanceModifier.background(Color.Black)) {
+        RenderKeyboardConfig(null, PoolGame())
+    }
+}
+
+@OptIn(ExperimentalGlancePreviewApi::class)
+@Preview(widthDp = 400, heightDp = 300)
+@Composable
 fun RenderKeyboardPreview() {
     Box(modifier = GlanceModifier.background(Color.Black)) {
         RenderKeyboard(null)
+    }
+}
+
+private val configName = ActionParameters.Key<String>("configName")
+private val configVal = ActionParameters.Key<String>("configVal")
+class ConfigureCallback : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        val game = parameters[gameName]?.let { MadridExtension.findByName(it) } ?: return
+
+        game.setConfigOption(parameters[configName]!!, parameters[configVal]!!)
+
+        val message = game.buildGameMessage(context, game.getNewGameData(context), null)
+        MadridExtension.currentKeyboardHandle?.addMessage(message)
+
+        if (game.isConfigurable()) {
+            MadridExtensionService.extension?.updateKeyboard()
+        }
+    }
+}
+
+@Composable
+fun RenderConfigOption(game: Game, name: String, options: List<String>, selected: String) {
+    Column(modifier = GlanceModifier.padding(8.dp)) {
+        Text(name.uppercase(), style = TextStyle(color = ColorProvider(Color.Gray),
+                fontWeight = FontWeight.Bold, fontSize = 11.sp))
+        Spacer(modifier = GlanceModifier.height(2.dp).background(Color.Gray).fillMaxWidth())
+        Row(verticalAlignment = Alignment.Vertical.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
+            for (option in options) {
+                Text(option, style = TextStyle(fontWeight =
+                        if (selected == option) FontWeight.Bold else FontWeight.Normal, color = ColorProvider(Color.Gray),
+                    fontSize = 18.sp, textAlign = TextAlign.Center
+                ), modifier = GlanceModifier.padding(horizontal = 8.dp, vertical = 4.dp).clickable(onClick = actionRunCallback<ConfigureCallback>(actionParametersOf(
+                    gameName to game.getName(),
+                    configName to name,
+                    configVal to option,
+                ))).defaultWeight())
+                if (options.last() != option) {
+                    Spacer(modifier = GlanceModifier.width(1.dp).background(Color.Gray).height(15.dp))
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalGlancePreviewApi::class)
+@Preview(widthDp = 400, heightDp = 300)
+@Composable
+fun RenderConfigOptionPreview() {
+    Box(modifier = GlanceModifier.background(Color.Black).fillMaxSize()) {
+        RenderConfigOption(BasketballGame(), "Game Mode", listOf("8 Ball", "8 Ball+"), "8 Ball")
     }
 }

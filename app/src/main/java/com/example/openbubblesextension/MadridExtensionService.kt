@@ -1,12 +1,26 @@
 package com.example.openbubblesextension
 
+import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 
 class MadridExtensionService : Service() {
 
+    companion object {
+        @SuppressLint("StaticFieldLeak")
+        var extension: MadridExtension? = null
+    }
+
     override fun onBind(intent: Intent): IBinder {
-        return MadridExtension(this)
+        if (extension == null) {
+            extension = MadridExtension(this)
+        }
+        return extension!!
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        extension = null
     }
 }

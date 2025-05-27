@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
+import androidx.compose.runtime.Composable
 import com.bluebubbles.messaging.MadridMessage
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -23,6 +24,15 @@ interface Game {
 
     fun getVersion(): String
     fun getDefaultReplay(): String
+
+    fun isConfigurable(): Boolean {
+        return false
+    }
+
+    @Composable
+    fun Configuration(context: Context?) { }
+
+    fun setConfigOption(name: String, value: String) { }
 
     private fun encodeQuery(params: Map<String, String>): String {
         return params.map { (key, value) ->
