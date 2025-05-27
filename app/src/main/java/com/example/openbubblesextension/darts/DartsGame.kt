@@ -4,7 +4,6 @@ import android.content.Context
 import com.example.openbubblesextension.Game
 import com.example.openbubblesextension.R
 import com.example.openbubblesextension.godot.GodotGameActivity
-import kotlin.random.Random
 
 class DartsActivity : GodotGameActivity() {
     override var baseGame: Game = DartsGame()
@@ -28,7 +27,7 @@ class DartsGame : Game {
         return DartsActivity::class.java
     }
 
-    override fun gamePoster(): Int {
+    override fun gamePoster(config: Map<String, String>?): Int {
         return R.drawable.darts
     }
 

@@ -1,15 +1,9 @@
 package com.example.openbubblesextension.crazy8
 
 import android.content.Context
-import android.os.Bundle
 import android.util.Log
-import androidx.activity.ComponentActivity
-import com.example.openbubblesextension.Cryption
 import com.example.openbubblesextension.Game
 import com.example.openbubblesextension.R
-import com.example.openbubblesextension.godot.GameSessionIPC
-import com.example.openbubblesextension.godot.GodotGameActivity
-import com.google.android.vending.licensing.util.Base64
 import java.util.UUID
 import kotlin.random.Random
 
@@ -30,7 +24,7 @@ class Crazy8Game : Game {
         return Crazy8Activity::class.java
     }
 
-    override fun gamePoster(): Int {
+    override fun gamePoster(config: Map<String, String>?): Int {
         return R.drawable.crazy8thumb
     }
 

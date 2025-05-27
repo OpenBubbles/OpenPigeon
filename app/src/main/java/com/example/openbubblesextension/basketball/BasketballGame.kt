@@ -28,7 +28,7 @@ class BasketballGame : Game {
         return BasketballActivity::class.java
     }
 
-    override fun gamePoster(): Int {
+    override fun gamePoster(config: Map<String, String>?): Int {
         return R.drawable.basketball
     }
 
