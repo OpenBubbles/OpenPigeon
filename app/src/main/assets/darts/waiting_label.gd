@@ -12,6 +12,8 @@ var anim_stages: Array[String] = [
 var curr_anim_stage = 0
 
 func _ready():
+	var screen_size: Vector2 = get_node("../../../").get_viewport().get_visible_rect().size
+	self.position.y = (screen_size.y/2) - self.size.y
 	label = get_child(0)
 	text_anim = Timer.new()
 	text_anim.wait_time = 0.5

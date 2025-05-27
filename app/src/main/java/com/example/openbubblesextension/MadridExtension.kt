@@ -59,6 +59,7 @@ import com.example.openbubblesextension.connect.ConnectGame
 import com.example.openbubblesextension.crazy8.Crazy8Game
 import com.example.openbubblesextension.darts.DartsActivity
 import com.example.openbubblesextension.darts.DartsGame
+import com.example.openbubblesextension.pong.PongGame
 import com.example.openbubblesextension.pool.PoolGame
 import com.example.openbubblesextension.wordhunt.WordHuntGame
 import kotlinx.coroutines.runBlocking
@@ -84,6 +85,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             Crazy8Game(),
             DartsGame(),
             PoolGame(),
+            PongGame()
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {

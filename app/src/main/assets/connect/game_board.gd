@@ -32,7 +32,7 @@ func _ready() -> void:
 			return
 	else:
 		if player == null or replay == null:
-			_set_game_data("isYourTurn:1;player:1;replay:board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0")
+			_set_game_data('{"isYourTurn":true,"player":"1","replay":"board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"}')
 			print("App plugin is not available")
 			return
 		

@@ -46,3 +46,12 @@ offset_right = 489.0
 offset_bottom = 540.0
 text = "Darts"
 script = ExtResource("1_4r7pt")
+
+[node name="BeerButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 143.0
+offset_top = 561.0
+offset_right = 489.0
+offset_bottom = 622.0
+text = "Cup Pong"
+script = ExtResource("1_4r7pt")

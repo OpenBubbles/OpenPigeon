@@ -47,6 +47,10 @@
             android:exported="false"
             android:theme="@style/Theme.OpenBubblesSampleExtension"
             android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".pong.PongActivity"
+            android:exported="false"
+            android:process=":godot" />
 
         <service
             android:name=".MadridExtensionService"

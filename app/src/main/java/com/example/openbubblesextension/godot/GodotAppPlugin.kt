@@ -46,6 +46,12 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
     }
 
     @UsedByGodot
+    fun getSenderUUID(): String {
+        val gameSessionIPC = gameActivity.gameSessionIPC!!
+        return gameSessionIPC.getSenderUUID(gameActivity.sessionId)
+    }
+
+    @UsedByGodot
     fun updateGameData(updates: String) {
         Log.d("openpigeon-${gameActivity.baseGame.getName()}", "updateGameData: $updates")
         val gameSessionIPC = gameActivity.gameSessionIPC!!
