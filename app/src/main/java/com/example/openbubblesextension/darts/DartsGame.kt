@@ -1,8 +1,14 @@
 package com.example.openbubblesextension.darts
 
 import android.content.Context
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
+import androidx.glance.GlanceModifier
+import androidx.glance.layout.Box
+import androidx.glance.layout.padding
 import com.example.openbubblesextension.Game
 import com.example.openbubblesextension.R
+import com.example.openbubblesextension.RenderConfigOption
 import com.example.openbubblesextension.godot.GodotGameActivity
 
 class DartsActivity : GodotGameActivity() {
@@ -31,9 +37,28 @@ class DartsGame : Game {
         return R.drawable.darts
     }
 
+    override fun isConfigurable(): Boolean {
+        return true
+    }
+
+    var gameMode = "101"
+
+    @Composable
+    override fun Configuration(
+        context: Context?,
+    ) {
+        Box(modifier = GlanceModifier.padding(16.dp)) {
+            RenderConfigOption(this, "Game Mode", listOf("101", "201", "301"), gameMode)
+        }
+    }
+
+    override fun setConfigOption(name: String, value: String) {
+        gameMode = value
+    }
+
     override fun getNewGameData(context: Context): MutableMap<String, String> {
         return super.getNewGameData(context).apply {
-            put("mode", "101")
+            put("mode", gameMode)
             put("style2", "0")
         }
     }
