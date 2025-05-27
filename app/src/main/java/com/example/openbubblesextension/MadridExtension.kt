@@ -1,8 +1,8 @@
 package com.example.openbubblesextension
 
 import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import android.widget.RemoteViews
 import androidx.compose.runtime.Composable
@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import androidx.glance.ExperimentalGlanceApi
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -17,12 +18,12 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
-import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.ExperimentalGlanceRemoteViewsApi
 import androidx.glance.appwidget.GlanceRemoteViews
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.background
 import androidx.glance.layout.Alignment
@@ -295,19 +296,18 @@ fun RenderKeyboardConfig(extension: MadridExtension?, game: Game) {
     }
 }
 
-private val gameSession = ActionParameters.Key<String>("SESSION")
 @OptIn(ExperimentalGlanceApi::class)
 @Composable
 fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, message: MadridMessage?) {
     Column(modifier = GlanceModifier.fillMaxHeight().let {
         if (extension != null) {
+            val intent = Intent(extension.context, session?.getGame()?.gameClass() ?: DartsActivity::class.java).apply {
+                putExtra("SESSION", message?.session ?: "")
+                data = "data://${System.currentTimeMillis()}".toUri()
+            }
             it.clickable(onClick =
-                actionStartActivity(
-                    ComponentName(extension.context, session?.getGame()?.gameClass() ?: DartsActivity::class.java),
-                    parameters = actionParametersOf(
-                        gameSession to (message?.session ?: "")
-                    )
-                ))
+                actionStartActivity(intent)
+            )
         } else {
             it
         }
