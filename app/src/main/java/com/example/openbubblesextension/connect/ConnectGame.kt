@@ -22,10 +22,6 @@ class ConnectGame : Game {
         return "Four in a Row"
     }
 
-    override fun buttonId(): Int {
-        return R.id.btn_connect
-    }
-
     override fun gameClass(): Class<*> {
         return ConnectActivity::class.java
     }

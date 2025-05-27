@@ -18,10 +18,6 @@ class PoolGame : Game {
         return "8 Ball"
     }
 
-    override fun buttonId(): Int {
-        return R.id.btn_8_ball
-    }
-
     override fun gameClass(): Class<*> {
         return PoolActivity::class.java
     }

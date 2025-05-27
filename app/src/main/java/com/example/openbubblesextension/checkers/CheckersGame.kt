@@ -23,10 +23,6 @@ class CheckersGame : Game {
         return "Checkers"
     }
 
-    override fun buttonId(): Int {
-        return R.id.btn_checkers
-    }
-
     override fun gameClass(): Class<*> {
         return CheckersActivity::class.java
     }

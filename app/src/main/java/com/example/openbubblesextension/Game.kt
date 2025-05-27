@@ -16,7 +16,6 @@ import androidx.core.content.edit
 interface Game {
 
     fun getName(): String
-    fun buttonId(): Int
     fun gameClass(): Class<*>
 
     fun gamePoster(): Int

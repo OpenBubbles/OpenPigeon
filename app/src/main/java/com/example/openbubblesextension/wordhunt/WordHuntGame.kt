@@ -10,10 +10,6 @@ class WordHuntGame : Game {
         return "hunt"
     }
 
-    override fun buttonId(): Int {
-        return R.id.btn_wordhunt
-    }
-
     override fun gameClass(): Class<*> {
         return WordHuntActivity::class.java
     }

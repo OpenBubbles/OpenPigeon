@@ -7,12 +7,16 @@ import com.bluebubbles.messaging.IMessageViewHandle
 import com.bluebubbles.messaging.MadridMessage
 import java.net.URL
 import androidx.core.net.toUri
+import androidx.glance.appwidget.ExperimentalGlanceRemoteViewsApi
+import androidx.glance.appwidget.GlanceRemoteViews
 import com.bluebubbles.messaging.ITaskCompleteCallback
 
 class GameSession(var handle: IMessageViewHandle) {
 
     var messageUpdated: (new: MutableMap<String, String>) -> Unit = {}
     var currentMessage: MutableMap<String, String> = mutableMapOf()
+    @OptIn(ExperimentalGlanceRemoteViewsApi::class)
+    var liveRemoteViews = GlanceRemoteViews()
 
     fun handleNewMessage(message: MadridMessage) {
         val url = message.url.replace("data:", "data://").toUri()

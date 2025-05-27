@@ -26,10 +26,6 @@ class Crazy8Game : Game {
         return "CRAZY 8"
     }
 
-    override fun buttonId(): Int {
-        return R.id.btn_crazy8
-    }
-
     override fun gameClass(): Class<*> {
         return Crazy8Activity::class.java
     }

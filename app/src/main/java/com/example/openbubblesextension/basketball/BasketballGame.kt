@@ -24,10 +24,6 @@ class BasketballGame : Game {
         return "Basketball"
     }
 
-    override fun buttonId(): Int {
-        return R.id.btn_basketball
-    }
-
     override fun gameClass(): Class<*> {
         return BasketballActivity::class.java
     }

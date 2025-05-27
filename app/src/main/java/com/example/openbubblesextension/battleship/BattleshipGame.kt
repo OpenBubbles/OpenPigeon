@@ -23,10 +23,6 @@ class BattleshipGame : Game {
         return "Sea Battle"
     }
 
-    override fun buttonId(): Int {
-        return R.id.btn_battleship
-    }
-
     override fun gameClass(): Class<*> {
         return BattleshipActivity::class.java
     }
