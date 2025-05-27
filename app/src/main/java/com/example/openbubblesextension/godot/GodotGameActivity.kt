@@ -38,7 +38,6 @@ abstract class GodotGameActivity : GodotActivity() {
             if (currentMessage.isNotEmpty()) {
                 gameSessionIPC.lockMsgHandle(sessionId)
                 gameSessionIPC.setSuppressNotifications(sessionId, true)
-                Log.i("openpigeon-${baseGame.getName()}", "CRINGE!!! ${currentMessage}")
                 Log.i("openpigeon-${baseGame.getName()}", "player: ${currentMessage["player"]!!.toInt()}, replay: ${currentMessage["replay"]}")
                 sendGameData(isYourTurn(currentMessage), currentMessage.toMutableMap())
 

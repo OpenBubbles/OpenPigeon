@@ -54,7 +54,7 @@ func shoot(x_delta: float) -> void:
 	if player != BasketballGame.player:
 		x_force *= -1
 	
-	self.apply_impulse(Vector3(x_force, 6.75, -2.5))
+	self.apply_impulse(Vector3(x_force, 6.80, -2.5))
 	self.apply_torque_impulse(Vector3(-0.02, 0, 0))
 	
 	var timer = Timer.new()

@@ -157,7 +157,7 @@ func setWaiting(isWaiting: bool):
 
 func interpolate_x_delta(value: float) -> float:
 	# Normalize the value to 0.0 - 1.0
-	var t = inverse_lerp(-400.0, 400.0, value)
+	var t = inverse_lerp(-200.0, 200.0, value)
 	# Interpolate to the new range
 	return lerp(-1, 1, t)
 
