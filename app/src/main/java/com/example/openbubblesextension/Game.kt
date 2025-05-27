@@ -1,13 +1,11 @@
 package com.example.openbubblesextension
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.compose.runtime.Composable
 import com.bluebubbles.messaging.MadridMessage
-import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -19,7 +17,7 @@ interface Game {
     fun getName(): String
     fun gameClass(): Class<*>
 
-    fun gamePoster(): Int
+    fun gamePoster(config: Map<String, String>?): Int
     fun displayName(): String
 
     fun getVersion(): String
@@ -61,7 +59,7 @@ interface Game {
 
         var imageEncoded: String? = null
         if (currentSession == null) {
-            val bm = BitmapFactory.decodeResource(context.resources, gamePoster())
+            val bm = BitmapFactory.decodeResource(context.resources, gamePoster(message))
             val baos = ByteArrayOutputStream()
             bm.compress(Bitmap.CompressFormat.JPEG, 70, baos)
             val b = baos.toByteArray()

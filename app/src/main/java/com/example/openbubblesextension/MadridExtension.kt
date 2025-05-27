@@ -1,12 +1,8 @@
 package com.example.openbubblesextension
 
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
-import android.graphics.BitmapFactory
-import android.os.Bundle
 import android.util.Log
 import android.widget.RemoteViews
 import androidx.compose.runtime.Composable
@@ -28,10 +24,6 @@ import androidx.glance.appwidget.GlanceRemoteViews
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
-import androidx.glance.appwidget.lazy.GridCells
-import androidx.glance.appwidget.lazy.LazyColumn
-import androidx.glance.appwidget.lazy.LazyVerticalGrid
-import androidx.glance.appwidget.lazy.items
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -241,7 +233,7 @@ private val gameName = ActionParameters.Key<String>("game_name")
 fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: GlanceModifier = GlanceModifier) {
     Column(modifier = modifier.wrapContentHeight().padding(1.dp), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
         Image(
-            ImageProvider(game.gamePoster()),
+            ImageProvider(game.gamePoster(null)),
             contentDescription = game.displayName(),
             modifier = GlanceModifier.wrapContentHeight().clickable(
                 onClick = actionRunCallback<ChooseGameCallback>(actionParametersOf(
@@ -293,7 +285,7 @@ fun RenderKeyboardConfig(extension: MadridExtension?, game: Game) {
             Row(horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Vertical.CenterVertically) {
-                Image(ImageProvider(game.gamePoster()), game.getName(), modifier = GlanceModifier.width(50.dp).padding(8.dp).wrapContentHeight())
+                Image(ImageProvider(game.gamePoster(null)), game.getName(), modifier = GlanceModifier.width(50.dp).padding(8.dp).wrapContentHeight())
                 Text(game.displayName(), style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray), fontWeight = FontWeight.Bold),)
             }
             Image(ImageProvider(R.drawable.ios_back), "Back", modifier = GlanceModifier.padding(start = 10.dp)
@@ -320,7 +312,7 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
             it
         }
     }, horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
-        Image(ImageProvider(session?.getGame()?.gamePoster() ?: R.drawable.empty),
+        Image(ImageProvider(session?.getGame()?.gamePoster(session.currentMessage) ?: R.drawable.empty),
             session?.getGame()?.getName() ?: "Game",
             modifier = GlanceModifier.defaultWeight(), contentScale = ContentScale.Crop)
         Text((message?.caption ?: "Game Name").uppercase(),

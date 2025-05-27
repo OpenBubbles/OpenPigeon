@@ -9,7 +9,6 @@ import androidx.glance.layout.padding
 import com.example.openbubblesextension.Game
 import com.example.openbubblesextension.R
 import com.example.openbubblesextension.RenderConfigOption
-import com.example.openbubblesextension.godot.GodotGameActivity
 
 class PoolGame : Game {
     override fun getVersion(): String {
@@ -47,7 +46,7 @@ class PoolGame : Game {
         return PoolActivity::class.java
     }
 
-    override fun gamePoster(): Int {
+    override fun gamePoster(config: Map<String, String>?): Int {
         return R.drawable.pool_image
     }
 

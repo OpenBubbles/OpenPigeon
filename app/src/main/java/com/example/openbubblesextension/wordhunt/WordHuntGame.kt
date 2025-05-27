@@ -65,12 +65,14 @@ class WordHuntGame : Game {
         return WordHuntActivity::class.java
     }
 
-    override fun gamePoster(): Int {
+    override fun gamePoster(config: Map<String, String>?): Int {
+        val mode = config?.get("mode")
         return when (mode) {
-            1 -> R.drawable.wordhunt
-            2 -> R.drawable.wordhunt_2
-            3 -> R.drawable.wordhunt_3
-            4 -> R.drawable.wordhunt_4
+            "1" -> R.drawable.wordhunt
+            null -> R.drawable.wordhunt
+            "2" -> R.drawable.wordhunt_2
+            "3" -> R.drawable.wordhunt_3
+            "4" -> R.drawable.wordhunt_4
             else -> {R.drawable.empty}
         }
     }
