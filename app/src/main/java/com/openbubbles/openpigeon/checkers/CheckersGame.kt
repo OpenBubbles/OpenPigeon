@@ -1,0 +1,38 @@
+package com.openbubbles.openpigeon.checkers
+
+import android.content.Context
+import com.openbubbles.openpigeon.Game
+import com.openbubbles.openpigeon.R
+import com.openbubbles.openpigeon.godot.GodotGameActivity
+
+class CheckersGame : Game {
+    override fun getVersion(): String {
+        return "5"
+    }
+
+    override fun getName(): String {
+        return "checkers"
+    }
+
+    override fun displayName(): String {
+        return "Checkers"
+    }
+
+    override fun gameClass(): Class<*> {
+        return GodotGameActivity::class.java
+    }
+
+    override fun gamePoster(config: Map<String, String>?): Int {
+        return R.drawable.checkers
+    }
+
+    override fun getNewGameData(context: Context): MutableMap<String, String> {
+        return super.getNewGameData(context).apply {
+            put("mode", "n")
+        }
+    }
+
+    override fun getDefaultReplay(): String {
+        return "board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0"
+    }
+}

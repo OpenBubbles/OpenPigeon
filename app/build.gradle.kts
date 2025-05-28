@@ -9,11 +9,11 @@ val props = Properties()
 file("$rootDir/config.properties").inputStream().use { props.load(it) }
 
 android {
-    namespace = "com.example.openbubblesextension"
+    namespace = "com.openbubbles.openpigeon"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.openbubblesextension"
+        applicationId = "com.openbubbles.openpigeon"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

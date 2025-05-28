@@ -57,7 +57,7 @@
             android:enabled="true"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.example.openbubblesextension.IGameSession" />
+                <action android:name=".IGameSession" />
             </intent-filter>
         </service>
     </application>
