@@ -11,11 +11,6 @@ import com.example.openbubblesextension.R
 import com.example.openbubblesextension.RenderConfigOption
 import com.example.openbubblesextension.godot.GodotGameActivity
 
-class BattleshipActivity : GodotGameActivity() {
-    override var baseGame: Game = BattleshipGame()
-    override var activityLayout: Int = R.layout.activity_checkers
-}
-
 class BattleshipGame : Game {
     override fun getVersion(): String {
         return "19"
@@ -49,7 +44,7 @@ class BattleshipGame : Game {
     }
 
     override fun gameClass(): Class<*> {
-        return BattleshipActivity::class.java
+        return GodotGameActivity::class.java
     }
 
     override fun gamePoster(config: Map<String, String>?): Int {

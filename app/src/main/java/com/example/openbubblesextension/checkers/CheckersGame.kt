@@ -5,11 +5,6 @@ import com.example.openbubblesextension.Game
 import com.example.openbubblesextension.R
 import com.example.openbubblesextension.godot.GodotGameActivity
 
-class CheckersActivity : GodotGameActivity() {
-    override var baseGame: Game = CheckersGame()
-    override var activityLayout: Int = R.layout.activity_checkers
-}
-
 class CheckersGame : Game {
     override fun getVersion(): String {
         return "5"
@@ -24,7 +19,7 @@ class CheckersGame : Game {
     }
 
     override fun gameClass(): Class<*> {
-        return CheckersActivity::class.java
+        return GodotGameActivity::class.java
     }
 
     override fun gamePoster(config: Map<String, String>?): Int {

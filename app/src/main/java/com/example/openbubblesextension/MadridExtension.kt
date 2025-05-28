@@ -3,6 +3,7 @@ package com.example.openbubblesextension
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.util.Log
 import android.widget.RemoteViews
 import androidx.compose.runtime.Composable
@@ -57,11 +58,12 @@ import com.example.openbubblesextension.battleship.BattleshipGame
 import com.example.openbubblesextension.checkers.CheckersGame
 import com.example.openbubblesextension.connect.ConnectGame
 import com.example.openbubblesextension.crazy8.Crazy8Game
-import com.example.openbubblesextension.darts.DartsActivity
 import com.example.openbubblesextension.darts.DartsGame
+import com.example.openbubblesextension.godot.GodotGameActivity
 import com.example.openbubblesextension.pong.PongGame
 import com.example.openbubblesextension.pool.PoolGame
 import com.example.openbubblesextension.wordhunt.WordHuntGame
+import com.google.android.vending.licensing.util.Base64
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import kotlin.math.ceil
@@ -303,8 +305,9 @@ fun RenderKeyboardConfig(extension: MadridExtension?, game: Game) {
 fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, message: MadridMessage?) {
     Column(modifier = GlanceModifier.fillMaxHeight().let {
         if (extension != null) {
-            val intent = Intent(extension.context, session?.getGame()?.gameClass() ?: DartsActivity::class.java).apply {
+            val intent = Intent(extension.context, session?.getGame()?.gameClass() ?: GodotGameActivity::class.java).apply {
                 putExtra("SESSION", message?.session ?: "")
+                putExtra("GAME", session?.getGame()?.getName())
                 data = "data://${System.currentTimeMillis()}".toUri()
             }
             it.clickable(onClick =
@@ -316,7 +319,7 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
     }, horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
         Image(ImageProvider(session?.getGame()?.gamePoster(session.currentMessage) ?: R.drawable.empty),
             session?.getGame()?.getName() ?: "Game",
-            modifier = GlanceModifier.defaultWeight(), contentScale = ContentScale.Crop)
+                modifier = GlanceModifier.defaultWeight(), contentScale = ContentScale.Crop)
         Text((message?.caption ?: "Game Name").uppercase(),
                 style = TextStyle(fontSize = 16.sp, color = ColorProvider(Color.Gray),
                     textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),

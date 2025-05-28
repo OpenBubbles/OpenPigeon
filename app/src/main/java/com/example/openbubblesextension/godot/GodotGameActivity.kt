@@ -6,14 +6,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.example.openbubblesextension.Game
+import com.example.openbubblesextension.MadridExtension
 import com.example.openbubblesextension.R
 import org.godotengine.godot.Godot
 import org.godotengine.godot.GodotActivity
 import org.godotengine.godot.plugin.GodotPlugin
 
-abstract class GodotGameActivity : GodotActivity() {
-    abstract var baseGame: Game
-    abstract var activityLayout: Int
+class GodotGameActivity : GodotActivity() {
+    lateinit var baseGame: Game
 
     lateinit var sessionId: String
     var appPlugin: GodotAppPlugin? = null
@@ -22,7 +22,7 @@ abstract class GodotGameActivity : GodotActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContentView(activityLayout)
+        setContentView(R.layout.activity_godot)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.surfaceView)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
@@ -30,6 +30,7 @@ abstract class GodotGameActivity : GodotActivity() {
         }
 
         sessionId = intent.getStringExtra("SESSION")!!
+        baseGame = MadridExtension.findByName(intent.getStringExtra("GAME")!!)!!
 
         Log.i("openpigeon-${baseGame.getName()}", "GodotGameActivity opened with session: $sessionId")
         GameSessionIPC(applicationContext) { gameSessionIPC ->

@@ -4,11 +4,6 @@ import com.example.openbubblesextension.Game
 import com.example.openbubblesextension.R
 import com.example.openbubblesextension.godot.GodotGameActivity
 
-class ConnectActivity : GodotGameActivity() {
-    override var baseGame: Game = ConnectGame()
-    override var activityLayout: Int = R.layout.activity_connect
-}
-
 class ConnectGame : Game {
     override fun getVersion(): String {
         return "5"
@@ -23,7 +18,7 @@ class ConnectGame : Game {
     }
 
     override fun gameClass(): Class<*> {
-        return ConnectActivity::class.java
+        return GodotGameActivity::class.java
     }
 
     override fun gamePoster(config: Map<String, String>?): Int {

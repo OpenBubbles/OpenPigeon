@@ -6,11 +6,6 @@ import com.example.openbubblesextension.R
 import com.example.openbubblesextension.godot.GodotGameActivity
 import kotlin.random.Random
 
-class BasketballActivity : GodotGameActivity() {
-    override var baseGame: Game = BasketballGame()
-    override var activityLayout: Int = R.layout.activity_basketball
-}
-
 class BasketballGame : Game {
     override fun getVersion(): String {
         return "5"
@@ -25,7 +20,7 @@ class BasketballGame : Game {
     }
 
     override fun gameClass(): Class<*> {
-        return BasketballActivity::class.java
+        return GodotGameActivity::class.java
     }
 
     override fun gamePoster(config: Map<String, String>?): Int {

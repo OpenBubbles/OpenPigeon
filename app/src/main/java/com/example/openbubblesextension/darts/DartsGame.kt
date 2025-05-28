@@ -11,11 +11,6 @@ import com.example.openbubblesextension.R
 import com.example.openbubblesextension.RenderConfigOption
 import com.example.openbubblesextension.godot.GodotGameActivity
 
-class DartsActivity : GodotGameActivity() {
-    override var baseGame: Game = DartsGame()
-    override var activityLayout: Int = R.layout.activity_connect
-}
-
 class DartsGame : Game {
     override fun getVersion(): String {
         return "5"
@@ -30,7 +25,7 @@ class DartsGame : Game {
     }
 
     override fun gameClass(): Class<*> {
-        return DartsActivity::class.java
+        return GodotGameActivity::class.java
     }
 
     override fun gamePoster(config: Map<String, String>?): Int {

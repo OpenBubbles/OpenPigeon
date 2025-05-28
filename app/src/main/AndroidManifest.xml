@@ -19,19 +19,7 @@
             android:exported="false"
             android:theme="@style/Theme.OpenBubblesSampleExtension" />
         <activity
-            android:name=".connect.ConnectActivity"
-            android:exported="false"
-            android:process=":godot" />
-        <activity
-            android:name=".checkers.CheckersActivity"
-            android:exported="false"
-            android:process=":godot" />
-        <activity
-            android:name=".basketball.BasketballActivity"
-            android:exported="false"
-            android:process=":godot" />
-        <activity
-            android:name=".darts.DartsActivity"
+            android:name=".godot.GodotGameActivity"
             android:exported="false"
             android:process=":godot" />
         <activity
@@ -39,18 +27,10 @@
             android:exported="false"
             android:theme="@style/Theme.OpenBubblesSampleExtension" />
         <activity
-            android:name=".battleship.BattleshipActivity"
-            android:exported="false"
-            android:theme="@style/Theme.OpenBubblesSampleExtension" />
-        <activity
             android:name=".crazy8.Crazy8Activity"
             android:exported="false"
             android:theme="@style/Theme.OpenBubblesSampleExtension"
             android:windowSoftInputMode="adjustResize" />
-        <activity
-            android:name=".pong.PongActivity"
-            android:exported="false"
-            android:process=":godot" />
 
         <service
             android:name=".MadridExtensionService"
