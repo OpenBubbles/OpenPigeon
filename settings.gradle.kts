@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "OpenBubbles Sample Extension"
+rootProject.name = "OpenPigeon"
 include(":app")
  
