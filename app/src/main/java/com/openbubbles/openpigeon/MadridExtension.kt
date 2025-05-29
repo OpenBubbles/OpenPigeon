@@ -180,7 +180,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         val messageWidth = (dpWidth * 0.60).roundToInt() - 10
 
         val result = runBlocking {
-            keyboardRemoteViews.compose(context, DpSize(messageWidth.dp, 250.dp)) {
+            session.liveRemoteViews.compose(context, DpSize(messageWidth.dp, 250.dp)) {
                 RenderLiveExtension(this@MadridExtension, session, message)
             }
         }
