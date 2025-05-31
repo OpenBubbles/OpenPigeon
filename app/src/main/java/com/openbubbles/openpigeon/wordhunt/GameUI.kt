@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
 import kotlin.math.pow
 import com.openbubbles.openpigeon.R
+import kotlin.math.min
+import kotlin.math.sqrt
 
 class GameUI {
     private lateinit var tilePositions: Array<Array<TilePosition>>
@@ -184,7 +186,7 @@ class GameUI {
             Box(
                 modifier = Modifier
                     .align(alignment = Alignment.Center)
-                    .size(330.dp)
+                    .fillMaxSize()
                     .clip(shape = RoundedCornerShape(10.dp))
                     .pointerInput(Unit) {
                         val size = this.size.toSize()
@@ -208,14 +210,14 @@ class GameUI {
                                 val centerY = (row + 0.5f) * tileHeight
 
                                 // Calculate distance from center
-                                val distance = kotlin.math.sqrt(
+                                val distance = sqrt(
                                     (position.x - centerX).pow(2) +
                                             (position.y - centerY).pow(2)
                                 )
 
                                 // Check if within circle
                                 val radius =
-                                    hitboxScale * kotlin.math.min(tileWidth, tileHeight) / 2
+                                    hitboxScale * min(tileWidth, tileHeight) / 2
 
                                 if (distance <= radius && !gameState.mode.invalidPositions.contains(Pair(row, col))) {
                                     // Start selection on touch down
@@ -236,7 +238,7 @@ class GameUI {
                                         val curCenterY = (currentRow + 0.5f) * tileHeight
 
                                         // Calculate distance from center
-                                        val curDistance = kotlin.math.sqrt(
+                                        val curDistance = sqrt(
                                             (currentPosition.x - curCenterX).pow(2) +
                                                     (currentPosition.y - curCenterY).pow(2)
                                         )
@@ -255,9 +257,9 @@ class GameUI {
                         }
                     })
             Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Top),
+                verticalArrangement = Arrangement.spacedBy((30/gameState.mode.gridSize).dp, Alignment.Top),
                 modifier = Modifier
-                    .padding(20.dp)
+                    .padding(14.dp)
                     .fillMaxSize()
             ) {
                 repeat(gameState.mode.gridSize) { row ->
@@ -272,10 +274,10 @@ class GameUI {
 
             Box(
                 modifier = Modifier
-                    .size(315.dp) // TODO: fix this to be adaptive
+                    .size(335.dp) // TODO: fix this to be adaptive
                     .align(Alignment.Center)
             ) {
-                val size = LocalDensity.current.run { 315.dp.toPx() }
+                val size = LocalDensity.current.run { 335.dp.toPx() }
                 SelectionPathOverlay(
                     gameState = gameState,
                     tileSize = size / gameState.mode.gridSize,
@@ -332,7 +334,7 @@ class GameUI {
         modifier: Modifier = Modifier
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.Start),
+            horizontalArrangement = Arrangement.spacedBy((30/gameState.mode.gridSize).dp, Alignment.Start),
             verticalAlignment = Alignment.CenterVertically,
             modifier = modifier
                 .fillMaxSize()
