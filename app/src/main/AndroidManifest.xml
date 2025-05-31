@@ -4,6 +4,10 @@
     <!-- Just for PlayerIO, we shouldn't be hitting the internet under any other circumstances -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <queries>
+        <package android:name="com.openbubbles.messaging" />
+    </queries>
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -31,6 +35,27 @@
             android:exported="false"
             android:theme="@style/Theme.OpenBubblesSampleExtension"
             android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".GameNotFound"
+            android:exported="false"
+            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert" />
+
+        <activity
+            android:name=".AboutActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert" />
+
+        <activity
+            android:name=".MainEntryActivity"
+            android:exported="true"
+            android:enabled="true"
+            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
 
         <service
             android:name=".MadridExtensionService"

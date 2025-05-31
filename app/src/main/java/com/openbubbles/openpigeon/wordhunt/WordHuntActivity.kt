@@ -207,7 +207,6 @@ class WordHuntActivity : AppCompatActivity() {
             "score$player" to gameState.score.toString(),
             "words$player" to gameState.wordCount.toString(),
             "words_list$player" to gameState.sortedWords().joinToString("|"),
-            "avatar$player" to "body,1|eyes,0|mouth,2|acc,0|wins,65|bg_color,0.836088,0.426998,0.540486|body_color,0.992157,0.690196,0.435294|glasses,3|stache,0|backdrop,7|hair,0|clothes,3|hair_color,0.000000,0.000000,0.000000|clothes_color,0.599498,0.352663,0.188019",
             "caption" to caption,
         )
 

@@ -89,7 +89,6 @@ class WordHuntGame : Game {
         return super.getNewGameData(context).apply {
             put("letters", WordHuntActivity.generateLetterPool(WordHuntActivity.mode(mode)).joinToString(""))
             put("lang", "gp_en2")
-            put("avatar2", "body,1|eyes,0|mouth,2|acc,0|wins,65|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,3|stache,0|backdrop,7|hair,0|clothes,3|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021")
             put("mode", "$mode")
         }
     }

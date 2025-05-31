@@ -275,11 +275,12 @@ fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: Glance
 fun RenderKeyboard(extension: MadridExtension?) {
     val itemsPerRow = 5
     Column(modifier = GlanceModifier.fillMaxHeight().padding(1.dp)) {
-        Row(horizontalAlignment = Alignment.Horizontal.CenterHorizontally, modifier = GlanceModifier.fillMaxWidth()) {
+        Row(horizontalAlignment = Alignment.Horizontal.CenterHorizontally, verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
             Image(ImageProvider(R.drawable.madrid_icon), "OpenPigeon", modifier = GlanceModifier.width(50.dp).padding(8.dp).wrapContentHeight())
             Text("Games", style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(end = 6.dp))
             Text("|", style = TextStyle(fontSize = 30.sp, color = ColorProvider(Color.Gray)))
-            Text("Settings", style = TextStyle(fontSize = 15.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(start = 6.dp))
+            Text("About", style = TextStyle(fontSize = 15.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(start = 6.dp)
+                    .clickable(onClick = androidx.glance.action.actionStartActivity<AboutActivity>()))
         }
         for (index in 0..<ceil(games.size / itemsPerRow.toDouble()).toInt()) {
             Row(modifier = GlanceModifier.padding(bottom = 3.dp)) {
@@ -318,9 +319,10 @@ fun RenderKeyboardConfig(extension: MadridExtension?, game: Game) {
 fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, message: MadridMessage?) {
     Column(modifier = GlanceModifier.fillMaxHeight().let {
         if (extension != null) {
-            val intent = Intent(extension.context, session?.getGame()?.gameClass() ?: GodotGameActivity::class.java).apply {
+            val intent = Intent(extension.context, session?.getGame()?.gameClass() ?: GameNotFound::class.java).apply {
                 putExtra("SESSION", message?.session ?: "")
                 putExtra("GAME", session?.getGame()?.getName())
+                putExtra("DISPLAY_GAME", session?.currentMessage?.get("game_name"))
                 data = "data://${System.currentTimeMillis()}".toUri()
             }
             it.clickable(onClick =

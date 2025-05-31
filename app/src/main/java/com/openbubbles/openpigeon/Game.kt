@@ -94,7 +94,6 @@ interface Game {
             "version" to getVersion(),
             "player" to "2",
             "id" to Cryption.getId(),
-            "avatar2" to "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021",
             "game" to getName(),
             "game_name" to displayName(),
             "num" to "1",
