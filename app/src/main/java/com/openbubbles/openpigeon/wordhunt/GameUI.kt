@@ -63,6 +63,7 @@ class GameUI {
             ScoreDisplay(
                 gameState = gameState,
                 modifier = Modifier.align(Alignment.TopCenter)
+                    .statusBarsPadding()
             )
 
             if (gameState.currentWord != "") {
@@ -463,7 +464,9 @@ class GameUI {
                 verticalAlignment = Alignment.Top,
                 modifier = modifier
                     .fillMaxSize()
-                    .padding(horizontal = screenWidth * 0.05f, vertical = screenHeight * 0.05f)
+                    .padding(horizontal = screenWidth * 0.05f, vertical = 10.dp)
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
             ) {
                 val wordList1 = score["words_list1"]?.takeIf { it.isNotBlank() }?.split("|") ?: emptyList()
                 val wordList2 = score["words_list2"]?.takeIf { it.isNotBlank() }?.split("|") ?: emptyList()
@@ -495,13 +498,6 @@ class GameUI {
                     fontWeight = FontWeight.Bold
                 )
             }
-
-            Box(
-                modifier = Modifier
-                    .size(60.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xffd9d9d9))
-            )
 
             Box(
                 modifier = Modifier
