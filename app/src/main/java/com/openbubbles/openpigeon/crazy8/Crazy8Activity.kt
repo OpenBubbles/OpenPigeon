@@ -959,7 +959,7 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
                 }
             }
         }
-        Text("3-6 players required to start", color = Color.White, modifier = Modifier.padding(8.dp).alpha(participants.all { it.ready }) 1.0f else 0.0f))
+        Text("3-6 players required to start", color = Color.White, modifier = Modifier.padding(8.dp).alpha(if (participants.all { it.ready }) 1.0f else 0.0f))
         Button(onClick = {
             me!!.ready = !me.ready
             activity!!.setReady(me.ready)
