@@ -13,6 +13,7 @@ config_version=5
 config/name="OpenPigeon Games"
 run/main_scene="uid://cj7d2jqu5r5ym"
 config/features=PackedStringArray("4.4", "Mobile")
+boot_splash/image="uid://b2iwsnhjqswss"
 config/icon="res://icon.svg"
 
 [display]
