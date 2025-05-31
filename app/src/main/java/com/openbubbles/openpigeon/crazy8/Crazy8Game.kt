@@ -20,6 +20,10 @@ class Crazy8Game : Game {
         return "CRAZY 8"
     }
 
+    override fun minPlayerRequirement(): Int {
+        return 3
+    }
+
     override fun gameClass(): Class<*> {
         return Crazy8Activity::class.java
     }

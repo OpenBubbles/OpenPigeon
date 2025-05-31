@@ -3,8 +3,11 @@ package com.openbubbles.openpigeon
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.RemoteViews
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
@@ -104,6 +107,8 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         fun findByName(name: String): Game? {
             return games.find { it.getName() == name }
         }
+
+        var currentUserCount: Int = 2
     }
 
     private var callback: IViewUpdateCallback? = null
@@ -140,15 +145,16 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             it.updateView(result.remoteViews)
         }
     }
-
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
     val keyboardRemoteViews = GlanceRemoteViews()
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
-    override fun keyboardOpened(callback: IViewUpdateCallback?, handle: IKeyboardHandle?): RemoteViews {
+    override fun keyboardOpened(callback: IViewUpdateCallback?, handle: IKeyboardHandle?, userCount: Int): RemoteViews {
         this.callback = callback
 
         val displayMetrics = context.resources.displayMetrics
         val dpWidth = displayMetrics.widthPixels / displayMetrics.density
+
+        currentUserCount = userCount
 
         val result = runBlocking {
             keyboardRemoteViews.compose(context, DpSize(dpWidth.dp, 300.dp)) {
@@ -161,7 +167,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         return result.remoteViews
     }
 
-    override fun didTapTemplate(message: MadridMessage?, handle: IMessageViewHandle?) {
+    override fun didTapTemplate(message: MadridMessage?, handle: IMessageViewHandle?, userCount: Int) {
         // no need to handle, we only have live messages
     }
 
@@ -170,7 +176,8 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
     override fun getLiveView(
         callback: IViewUpdateCallback?,
         message: MadridMessage?,
-        handle: IMessageViewHandle?
+        handle: IMessageViewHandle?,
+        userCount: Int
     ): RemoteViews {
         val session = getSessionFor(message!!.session, handle!!)
         session.handleNewMessage(message)
@@ -204,6 +211,14 @@ class ChooseGameCallback : ActionCallback {
         parameters: ActionParameters
     ) {
         val game = parameters[gameName]?.let { MadridExtension.findByName(it) } ?: return
+
+        if (MadridExtension.currentUserCount < game.minPlayerRequirement()) {
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(context, "Minimum ${game.minPlayerRequirement()} players required for this game!", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
+
         val message = game.buildGameMessage(context, game.getNewGameData(context), null)
 
         MadridExtension.currentKeyboardHandle?.addMessage(message)

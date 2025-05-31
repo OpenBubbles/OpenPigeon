@@ -32,6 +32,10 @@ interface Game {
 
     fun setConfigOption(name: String, value: String) { }
 
+    fun minPlayerRequirement(): Int {
+        return 0
+    }
+
     private fun encodeQuery(params: Map<String, String>): String {
         return params.map { (key, value) ->
             val encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8.toString())

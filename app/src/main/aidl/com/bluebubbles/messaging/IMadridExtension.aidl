@@ -10,11 +10,11 @@ import com.bluebubbles.messaging.IMessageViewHandle;
 // Declare any non-default types here with import statements
 
 interface IMadridExtension {
-    RemoteViews keyboardOpened(in IViewUpdateCallback callback, in IKeyboardHandle handle);
+    RemoteViews keyboardOpened(in IViewUpdateCallback callback, in IKeyboardHandle handle, in int userCount);
     void keyboardClosed();
 
-    void didTapTemplate(in MadridMessage message, in IMessageViewHandle handle);
+    void didTapTemplate(in MadridMessage message, in IMessageViewHandle handle, in int userCount);
 
-    RemoteViews getLiveView(in IViewUpdateCallback callback, in MadridMessage message, in IMessageViewHandle handle);
+    RemoteViews getLiveView(in IViewUpdateCallback callback, in MadridMessage message, in IMessageViewHandle handle, in int userCount);
     void messageUpdated(in MadridMessage message);
 }
