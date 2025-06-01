@@ -57,8 +57,12 @@ interface Game {
 
     fun getSubtitle(context: Context, message: Map<String, String>): String {
         message["winner"]?.let {
-            val winner = it.split("|")[0]
-            return if (message["sender"]!! == winner) "I won!" else "You Won!"
+            val parts = it.split("|")
+            var iWon = message["sender"]!! == parts[0]
+            if (parts[1] == "-1") {
+                iWon = !iWon
+            }
+            return if (iWon) "I won!" else "You Won!"
         }
         val isMyTurn = message["sender"]!! != getSenderUUID(context)
         return if (isMyTurn) "Your Move." else "Opponent's Move"
