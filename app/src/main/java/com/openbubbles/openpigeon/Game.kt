@@ -55,6 +55,15 @@ interface Game {
         return sender
     }
 
+    fun getSubtitle(context: Context, message: Map<String, String>): String {
+        message["winner"]?.let {
+            val winner = it.split("|")[0]
+            return if (message["sender"]!! == winner) "I won!" else "You Won!"
+        }
+        val isMyTurn = message["sender"]!! != getSenderUUID(context)
+        return if (isMyTurn) "Your Move." else "Opponent's Move"
+    }
+
     fun buildGameMessage(context: Context, message: Map<String, String>, currentSession: String?): MadridMessage {
         val data = encodeQuery(mapOf(
             "ver" to "52",

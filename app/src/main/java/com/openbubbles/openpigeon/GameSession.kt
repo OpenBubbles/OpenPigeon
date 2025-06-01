@@ -41,6 +41,8 @@ class GameSession(var handle: IMessageViewHandle) {
             modifiedUpdated[update.key] = update.value
         }
 
+        modifiedUpdated["caption"] = getGame()!!.getSubtitle(context, modifiedUpdated)
+
         val update = getGame()!!.buildGameMessage(context, modifiedUpdated, currentSession = mySession)
 
         handle.updateMessage(update, object : ITaskCompleteCallback.Stub() {

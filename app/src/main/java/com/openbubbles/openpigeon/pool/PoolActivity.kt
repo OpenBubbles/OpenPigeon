@@ -477,7 +477,6 @@ class PoolActivity : AppCompatActivity() {
                     // this person win
                     winState = true
                 }
-                return
             }
 
             if (poolBalls.any { it.sunk } && !scratch && winState == null) {
@@ -553,6 +552,11 @@ class PoolActivity : AppCompatActivity() {
                 "sender" to gameSessionIPC!!.getSenderUUID(sessionId),
                 "replay" to replays,
             ).toMutableMap()
+
+            if (winState != null) {
+                val playerWon = if (winState) player else if (player == 1) 2 else 1
+                msgUpdates["winner"] = "${if (playerWon == 1) uuid1!! else uuid2!!}|1"
+            }
 
             gameSessionIPC!!.updateSession(msgUpdates, sessionId) {
                 Log.i("openpigeon-${baseGame.getName()}", "Game session updated")
@@ -681,6 +685,8 @@ class PoolActivity : AppCompatActivity() {
 
     var isHard = false
     var player = 0
+    var uuid1: String? = null
+    var uuid2: String? = null
     fun handleMessage(msg: Map<String, String>) {
         if (table == 0L) return; // we are dead
         clearBalls(table)
@@ -688,6 +694,8 @@ class PoolActivity : AppCompatActivity() {
         replayHits.clear()
         isHard = msg["mode"]!! != "n"
         val num = msg["num"]!!
+        uuid1 = msg["player1"]
+        uuid2 = msg["player2"]
         Log.i("number", "$num")
         if (num == "2") {
             isFirst = true // for replay
