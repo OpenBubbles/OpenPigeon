@@ -186,29 +186,29 @@ class WordHuntActivity : AppCompatActivity() {
         gameTimer?.cancel()
         val player: Int = if (currentMessage["score2"].isNullOrBlank()) 2 else 1
         val opponent = if(player - 1 == 0) 2 else 1
-        var caption = "Your move."
         val score1 = currentMessage["score1"]
         val score2 = currentMessage["score2"]
         val scores = arrayOf(score1, score2)
-        if (!score2.isNullOrBlank() || !score1.isNullOrBlank()){
-            caption =
-                if (gameState.score < scores[opponent-1]!!.toInt()) {
-                    "You Won!"
-                } else if (gameState.score > scores[opponent-1]!!.toInt()) {
-                    "I Won!"
-                } else {
-                    "Draw!"
-                }
-        }
         
-        val updates = mapOf(
+        val updates = mutableMapOf(
             "sender" to gameSessionIPC!!.getSenderUUID(sessionId),
             "player$player" to gameSessionIPC!!.getSenderUUID(sessionId),
             "score$player" to gameState.score.toString(),
             "words$player" to gameState.wordCount.toString(),
             "words_list$player" to gameState.sortedWords().joinToString("|"),
-            "caption" to caption,
         )
+
+        if (!score2.isNullOrBlank() || !score1.isNullOrBlank()){
+            updates["winner"] = "${if(player == 1) currentMessage["player1"] else currentMessage["player2"]}|${
+                if (gameState.score < scores[opponent-1]!!.toInt()) {
+                    "-1"
+                } else if (gameState.score > scores[opponent-1]!!.toInt()) {
+                    "1"
+                } else {
+                    "0"
+                }
+            }"
+        }
 
         Log.i("Word List", gameState.sortedWords().joinToString("|"))
         gameSessionIPC!!.updateSession(updates, sessionId) {

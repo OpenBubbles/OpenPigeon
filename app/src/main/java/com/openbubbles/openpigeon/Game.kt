@@ -62,10 +62,12 @@ interface Game {
             if (parts[1] == "-1") {
                 iWon = !iWon
             }
+            if (parts[1] == "0") {
+                return "Draw!"
+            }
             return if (iWon) "I won!" else "You Won!"
         }
-        val isMyTurn = message["sender"]!! != getSenderUUID(context)
-        return if (isMyTurn) "Your Move." else "Opponent's Move"
+        return "Your Move."
     }
 
     fun buildGameMessage(context: Context, message: Map<String, String>, currentSession: String?): MadridMessage {
