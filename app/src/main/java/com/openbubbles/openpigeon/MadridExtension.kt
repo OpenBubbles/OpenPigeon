@@ -170,7 +170,26 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
     }
 
     override fun didTapTemplate(message: MadridMessage?, handle: IMessageViewHandle?, userCount: Int) {
-        // no need to handle, we only have live messages
+        if (message == null || handle == null) return
+        val session = getSessionFor(message.session, handle)
+        session.handleNewMessage(message)
+        val game = session.getGame()
+
+        Log.i("Session", message.session.toString())
+        if (game != null ) {
+            val intent = Intent(context, game.gameClass())
+                .apply {
+                    putExtra("SESSION", message.session)
+                    putExtra("GAME", session.getGame()?.getName())
+                    putExtra("DISPLAY_GAME", session.currentMessage["game_name"])
+                    data = "data://${System.currentTimeMillis()}".toUri()
+                }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } else {
+            Log.e("Game","null")
+            return
+        }
     }
 
 
