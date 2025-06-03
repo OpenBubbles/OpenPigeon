@@ -554,8 +554,7 @@ class PoolActivity : AppCompatActivity() {
             ).toMutableMap()
 
             if (winState != null) {
-                val playerWon = if (winState) player else if (player == 1) 2 else 1
-                msgUpdates["winner"] = "${if (playerWon == 1) uuid1!! else uuid2!!}|1"
+                msgUpdates["winner"] = "${gameSessionIPC!!.getSenderUUID(sessionId)}|${if (winState) "1" else "-1"}"
             }
 
             gameSessionIPC!!.updateSession(msgUpdates, sessionId) {

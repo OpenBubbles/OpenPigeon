@@ -88,9 +88,10 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
      *
      * @param replay Replay string from GP url
      */
-    internal fun setGameData(isYourTurn: Boolean, message: MutableMap<String, String>) {
+    internal fun setGameData(isYourTurn: Boolean, myPlayerId: String, message: MutableMap<String, String>) {
         replay = JSONObject().apply {
             put("isYourTurn", isYourTurn)
+            put("myPlayerId", myPlayerId)
             for (data in message) {
                 put(data.key, data.value)
             }

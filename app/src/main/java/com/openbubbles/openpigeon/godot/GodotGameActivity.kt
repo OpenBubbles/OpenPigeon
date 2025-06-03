@@ -97,7 +97,7 @@ class GodotGameActivity : GodotActivity() {
         if (message["replay"].isNullOrEmpty()) {
             message["replay"] = baseGame.getDefaultReplay()
         }
-        getOrCreateAppPlugin().setGameData(isYourTurn, message)
+        getOrCreateAppPlugin().setGameData(isYourTurn, gameSessionIPC!!.getSenderUUID(sessionId), message)
     }
 
     override fun getHostPlugins(godot: Godot): Set<GodotPlugin> {

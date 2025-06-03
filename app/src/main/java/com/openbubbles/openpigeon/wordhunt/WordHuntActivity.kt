@@ -199,7 +199,7 @@ class WordHuntActivity : AppCompatActivity() {
         )
 
         if (!score2.isNullOrBlank() || !score1.isNullOrBlank()){
-            updates["winner"] = "${if(player == 1) currentMessage["player1"] else currentMessage["player2"]}|${
+            updates["winner"] = "${gameSessionIPC!!.getSenderUUID(sessionId)}|${
                 if (gameState.score < scores[opponent-1]!!.toInt()) {
                     "-1"
                 } else if (gameState.score > scores[opponent-1]!!.toInt()) {

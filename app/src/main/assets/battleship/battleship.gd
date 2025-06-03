@@ -28,8 +28,7 @@ func _ready() -> void:
 var isTurn = false
 var myBattleground: BattleGround = null
 var theirBattleground: BattleGround = null
-var uuid1
-var uuid2
+var my_player
 
 func _set_game_data(new_replay: String):
 	var battleground1 = get_node("BattleGround1") as BattleGround
@@ -37,8 +36,7 @@ func _set_game_data(new_replay: String):
 	
 	var parsed = JSON.parse_string(new_replay)
 	
-	uuid1 = parsed["player1"]
-	uuid2 = parsed["player2"]
+	my_player = parsed["myPlayerId"]
 	var replay = parsed["replay"]
 	var bullets1 = parsed["bullets1"]
 	var bullets2 = parsed["bullets2"]
@@ -138,8 +136,7 @@ func send_update():
 		msg["skip_bullets"] = theirBattleground.encode_bullets()
 	
 	if is_end:
-		var whoWon = player if winner else 2 if player == 1 else 1
-		msg["winner"] = (uuid1 if whoWon == 1 else uuid2) + "|1"
+		msg["winner"] = my_player + "|" + ("1" if winner else "-1")
 	
 	var encoded = JSON.stringify(msg)
 	

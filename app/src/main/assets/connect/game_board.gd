@@ -15,7 +15,7 @@ var isTurn = false
 var has_connected = false
 var waitingForOpponent = true
 var replay = null
-var player = null
+var player = null # note; enemy player id, not my player id
 
 var boardSizeX = 7
 var boardSizeY = 6
@@ -89,16 +89,23 @@ func export_replay() -> String:
 	var moveY = int(droppedPiece.name.split(',')[1])
 	var moveColor = getPositionInt(moveX, moveY)
 	
-	if check_win() == false:
+	var didWin = check_win()
+	if didWin == false:
 		set_waiting(true)
 	droppedPiece = null
 	(get_node("../UndoButton") as Button).disabled = true
 	(get_node("../SendButton") as Button).disabled = true
 	
-	return JSON.stringify({
+	var result = {
 		"replay": "board:" + boardStr + "|move:" + str(moveX) + "," + str(moveY) + "," + moveColor
-	})
-		
+	}
+	
+	if didWin:
+		result["winner"] = my_player + "|" + ("1" if didIWin else "-1")
+	
+	return JSON.stringify(result)
+
+var my_player
 func _set_game_data(new_replay: String):
 	var data = JSON.parse_string(new_replay)
 	isTurn = data["isYourTurn"]
@@ -108,6 +115,8 @@ func _set_game_data(new_replay: String):
 	if isTurn == false:
 		player = 2 if player == 1 else 1
 		print(player)
+	my_player = data["myPlayerId"]
+	print("Whoami" + str(player))
 	_ready()
 	
 func getPlayerColor(other: bool = false) -> String:
@@ -189,7 +198,8 @@ func check_dir(direction: Vector2, startingPos: Vector2, numChecks: int = 1) -> 
 				return true
 			return check_dir(direction, newPos, numChecks+1)
 	return false
-		
+
+var didIWin = false
 func check_win() -> bool:
 	var directions: Array[Vector2] = [
 		Vector2(0, 1),  Vector2(0, -1), Vector2(1, 0),  
@@ -204,6 +214,7 @@ func check_win() -> bool:
 				continue
 			for direction in directions:
 				if check_dir(direction, Vector2(x, y)):
+					didIWin = getPieceColor(piece) == getPlayerColor()
 					if getPieceColor(piece) == getPlayerColor():
 						get_node("../winLoseLabel").get_child(0).set_text("[center]YOU WIN!!![/center]")
 					else:

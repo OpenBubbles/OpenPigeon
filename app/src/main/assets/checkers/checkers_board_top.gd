@@ -26,7 +26,7 @@ var has_connected = false
 var isTurn = false
 var waitingForOpponent = false
 
-var player = null
+var player = null # note; enemy player id, not my player id
 
 # Called when the node enters the scene tree for the first time.
 func _ready() -> void:
@@ -150,6 +150,7 @@ func set_waiting(enabled: bool):
 		get_node("winLoseLabel").get_child(0).set_text("[center]YOU LOSE :([/center]")
 		get_node("winLoseLabel").visible = true
 
+var my_player
 func _set_game_data(new_replay: String):
 	var data = JSON.parse_string(new_replay)
 	isTurn = data["isYourTurn"]
@@ -159,6 +160,7 @@ func _set_game_data(new_replay: String):
 	if isTurn == false:
 		player = 2 if player == 1 else 1
 		print(player)
+	my_player = data["myPlayerId"]
 	_ready()
 
 func export_replay() -> String:
@@ -202,10 +204,15 @@ func export_replay() -> String:
 	(get_node("../UndoButton") as Button).disabled = true
 	(get_node("../SendButton") as Button).disabled = true
 	set_waiting(true)
-	
-	return JSON.stringify({
+	var result = {
 		"replay": replay.split('|')[-1] + move_str + "board:" + boardStr.substr(0, boardStr.length()-1)
-	})
+	}
+	
+	var win_loss_state = check_win_loss()
+	if win_loss_state != "":
+		result["winner"] = my_player + "|" + ("1" if win_loss_state == "win" else "-1")
+	
+	return JSON.stringify(result)
 	
 func check_win_loss():
 	var num_your_pieces = 0

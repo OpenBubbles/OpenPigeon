@@ -41,6 +41,11 @@ class GameSession(var handle: IMessageViewHandle) {
             modifiedUpdated[update.key] = update.value
         }
 
+        val myUUID = getGame()!!.getSenderUUID(context)
+        if (modifiedUpdated["player2"] != myUUID && !modifiedUpdated.containsKey("player1")) {
+            modifiedUpdated["player1"] = myUUID
+        }
+
         modifiedUpdated["caption"] = getGame()!!.getSubtitle(context, modifiedUpdated)
 
         val update = getGame()!!.buildGameMessage(context, modifiedUpdated, currentSession = mySession)
