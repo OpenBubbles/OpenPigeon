@@ -1,7 +1,7 @@
 extends Node3D
 class_name ArcheryGame
 
-@export var sensitivity: float = 0.5
+@export var sensitivity: float = 1.5
 @export var damping_factor: float = 0.9 
 @export var max_speed: float = 1000.0 
 
@@ -269,7 +269,7 @@ func add_score(score: int, you: bool = true) -> void:
 	
 var aim_cursor_velocity: Vector2 = Vector2.ZERO
 var is_dragging: bool = false
-var last_finger_pos: Vector2 = Vector2.ZERO
+var initial_pos: Vector2 = Vector2.ZERO
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == 1 and current_arrow != null:
@@ -278,7 +278,7 @@ func _input(event: InputEvent) -> void:
 				aim_cursor.position = Vector2(300, 500)
 				aim_cursor.visible = true
 				is_dragging = true
-				last_finger_pos = event.position
+				initial_pos = event.position
 				camera_zoom(41.5)
 				start_aim_timer()
 				print("started dragging")
@@ -287,14 +287,14 @@ func _input(event: InputEvent) -> void:
 				print("stopped dragging")
 	elif event is InputEventMouseMotion:
 		if is_dragging:
-			var delta_finger_pos: Vector2 = event.position - last_finger_pos
-			var desired_velocity = delta_finger_pos * sensitivity / get_process_delta_time() # Divide by delta time to get velocity per second
-			aim_cursor_velocity = aim_cursor_velocity.lerp(desired_velocity, 0.2) # Adjust 0.2 for responsiveness
+			var delta_finger_pos: Vector2 = event.position - initial_pos
+			var desired_velocity = delta_finger_pos * sensitivity # Divide by delta time to get velocity per second
 			
-			if aim_cursor_velocity.length() > max_speed:
-				aim_cursor_velocity = aim_cursor_velocity.normalized() * max_speed
-				
-			last_finger_pos = event.position
+			get_tree().create_timer(0.2).timeout.connect(func():
+				aim_cursor_velocity = desired_velocity
+				if aim_cursor_velocity.length() > max_speed:
+					aim_cursor_velocity = aim_cursor_velocity.normalized() * max_speed
+			)
 
 func _process(delta: float) -> void:
 	if not is_dragging:
@@ -364,7 +364,7 @@ func shoot_dart() -> void:
 	print("initial shot pos: " + str(shot_pos))
 	
 	var flight_time = (0.15 * score_box.set_num) if score_box.set_num > 1 else 0.50
-	var wind_displacement: Vector2 = current_wind_angle * flight_time * (current_wind_power*0.5)
+	var wind_displacement: Vector2 = current_wind_angle * flight_time * (current_wind_power*0.25)
 	print("wind displacement: " + str(wind_displacement))
 	
 	var shot_pos_2d = Vector2(shot_pos.x, shot_pos.y) + wind_displacement
