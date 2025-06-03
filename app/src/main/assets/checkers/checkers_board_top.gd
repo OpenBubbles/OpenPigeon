@@ -23,6 +23,7 @@ var checking_for_jumps = false
 var must_jump = false
 var has_connected = false
 
+var mode = "n"
 var isTurn = false
 var waitingForOpponent = false
 
@@ -116,18 +117,19 @@ func _ready() -> void:
 				if moveType == "attack":
 					jump_piece(int(movePos[0]), int(movePos[1]), int(movePos[2]), int(movePos[3]), i*0.5, true)
 	
-	must_jump = false
-	checking_for_jumps = true
-	for y in range(0, 8):
-		for x in range(0, 8):
-			var piece = get_node_or_null(str(x) + "," + str(7-y))
-			if piece != null and check_player(piece):
-				clicked_piece = piece
-				gen_moves(true)
-				if len(moves) > 0:
-					print(str(moves))
-					must_jump = true
-	checking_for_jumps = false
+	if mode == "n":
+		must_jump = false
+		checking_for_jumps = true
+		for y in range(0, 8):
+			for x in range(0, 8):
+				var piece = get_node_or_null(str(x) + "," + str(7-y))
+				if piece != null and check_player(piece):
+					clicked_piece = piece
+					gen_moves(true)
+					if len(moves) > 0:
+						print(str(moves))
+						must_jump = true
+		checking_for_jumps = false
 					
 	set_waiting(not isTurn)
 
@@ -156,6 +158,7 @@ func _set_game_data(new_replay: String):
 	isTurn = data["isYourTurn"]
 	player = int(data["player"])
 	replay = data["replay"]
+	mode = data["mode"]
 	
 	if isTurn == false:
 		player = 2 if player == 1 else 1
