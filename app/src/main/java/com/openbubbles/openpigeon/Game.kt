@@ -23,6 +23,10 @@ interface Game {
     fun getVersion(): String
     fun getDefaultReplay(): String
 
+    fun playName(): String {
+        return displayName()
+    }
+
     fun isConfigurable(): Boolean {
         return false
     }
@@ -105,7 +109,7 @@ interface Game {
             "tver" to "5",
             "ios" to "18.3.2",
             "start" to "",
-            "caption" to "Let's play ${displayName()}!",
+            "caption" to "Let's play ${playName()}!",
             "version" to getVersion(),
             "player" to "2",
             "id" to Cryption.getId(),

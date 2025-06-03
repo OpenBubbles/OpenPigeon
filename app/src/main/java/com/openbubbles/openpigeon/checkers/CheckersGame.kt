@@ -1,8 +1,14 @@
 package com.openbubbles.openpigeon.checkers
 
 import android.content.Context
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
+import androidx.glance.GlanceModifier
+import androidx.glance.layout.Box
+import androidx.glance.layout.padding
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
+import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
 
 class CheckersGame : Game {
@@ -18,6 +24,29 @@ class CheckersGame : Game {
         return "Checkers"
     }
 
+    override fun isConfigurable(): Boolean {
+        return true
+    }
+
+    var mode = "Checkers"
+
+    @Composable
+    override fun Configuration(
+        context: Context?,
+    ) {
+        Box(modifier = GlanceModifier.padding(16.dp)) {
+            RenderConfigOption(this, "Game Mode", listOf("Checkers", "Newbie Checkers"), mode)
+        }
+    }
+
+    override fun playName(): String {
+        return mode
+    }
+
+    override fun setConfigOption(name: String, value: String) {
+        mode = value
+    }
+
     override fun gameClass(): Class<*> {
         return GodotGameActivity::class.java
     }
@@ -28,7 +57,7 @@ class CheckersGame : Game {
 
     override fun getNewGameData(context: Context): MutableMap<String, String> {
         return super.getNewGameData(context).apply {
-            put("mode", "n")
+            put("mode", if (mode == "Checkers") "n" else "h")
         }
     }
 
