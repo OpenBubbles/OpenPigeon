@@ -24,7 +24,7 @@ class ArcheryGame : Game {
     }
 
     override fun gamePoster(config: Map<String, String>?): Int {
-        return R.drawable.empty
+        return R.drawable.archery
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String> {
