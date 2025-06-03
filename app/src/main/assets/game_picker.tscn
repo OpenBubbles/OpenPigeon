@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://b56glsl3s85ue" path="res://game_picker.gd" id="1_4r7pt"]
 
-[node name="Control" type="Control"]
+[node name="GamePicker" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -54,4 +54,13 @@ offset_top = 561.0
 offset_right = 489.0
 offset_bottom = 622.0
 text = "Cup Pong"
+script = ExtResource("1_4r7pt")
+
+[node name="ArcheryButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 143.0
+offset_top = 642.0
+offset_right = 489.0
+offset_bottom = 703.0
+text = "Archery"
 script = ExtResource("1_4r7pt")

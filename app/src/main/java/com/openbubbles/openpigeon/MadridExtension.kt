@@ -55,6 +55,7 @@ import com.bluebubbles.messaging.IMessageViewHandle
 import com.bluebubbles.messaging.IViewUpdateCallback
 import com.bluebubbles.messaging.MadridMessage
 import com.openbubbles.openpigeon.MadridExtension.Companion.games
+import com.openbubbles.openpigeon.archery.ArcheryGame
 import com.openbubbles.openpigeon.basketball.BasketballGame
 import com.openbubbles.openpigeon.battleship.BattleshipGame
 import com.openbubbles.openpigeon.checkers.CheckersGame
@@ -88,7 +89,8 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             Crazy8Game(),
             DartsGame(),
             PoolGame(),
-            PongGame()
+            PongGame(),
+            ArcheryGame()
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {

@@ -6,17 +6,19 @@ var games = {
 	"basketball": "res://basketball/basketball.tscn",
 	"sea": "res://battleship/battleship.tscn",
 	"darts": "res://darts/DartsScene.tscn",
-	"beer": "res://pong/cuppong.tscn"
+	"beer": "res://pong/cuppong.tscn",
+	"archery": "res://archery/archery.tscn"
 }
 
 # Called when the node enters the scene tree for the first time.
 func _ready() -> void:
-	var appPlugin := Engine.get_singleton("AppPlugin")
-	if appPlugin:
-		print("Game picker loaded..")
-		get_tree().call_deferred("change_scene_to_file", games[appPlugin.getGameName()])
-	else:
-		print("Error: App not connected")
+	if name == "GamePicker":
+		var appPlugin := Engine.get_singleton("AppPlugin")
+		if appPlugin:
+			print("Game picker loaded..")
+			get_tree().call_deferred("change_scene_to_file", games[appPlugin.getGameName()])
+		else:
+			print("Error: App not connected")
 
 func _pressed() -> void:
 	if name == "CheckersButton":
@@ -29,3 +31,5 @@ func _pressed() -> void:
 		get_tree().call_deferred("change_scene_to_file", games["darts"])
 	elif name == "BeerButton":
 		get_tree().call_deferred("change_scene_to_file", games["beer"])
+	elif name == "ArcheryButton":
+		get_tree().call_deferred("change_scene_to_file", games["archery"])
