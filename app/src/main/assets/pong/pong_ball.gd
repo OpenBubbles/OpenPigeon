@@ -45,7 +45,7 @@ func _physics_process(delta: float) -> void:
 func throw(x_force: float, y_force: float):
 	apply_impulse(Vector3(-x_force, -1.30, y_force))
 	thrown = true
-	await get_tree().create_timer(1.75).timeout
+	await get_tree().create_timer(3).timeout
 	remove()
 	
 func remove():
