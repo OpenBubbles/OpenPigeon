@@ -14,7 +14,7 @@ var highlights: Array[BoardHighlight]
 
 var clicked_piece: Sprite2D
 
-var moves: Array[Vector2]
+var moves: Dictionary[Vector2, Sprite2D]
 var has_moved: bool = false
 var prev_moves: Array[Vector2]
 var prev_jumps: Array[Sprite2D]
@@ -119,17 +119,14 @@ func _ready() -> void:
 	must_jump = false
 	checking_for_jumps = true
 	for y in range(0, 8):
-		if must_jump:
-			break
 		for x in range(0, 8):
 			var piece = get_node_or_null(str(x) + "," + str(7-y))
 			if piece != null and check_player(piece):
 				clicked_piece = piece
-				gen_moves()
+				gen_moves(true)
 				if len(moves) > 0:
 					print(str(moves))
 					must_jump = true
-					break
 	checking_for_jumps = false
 					
 	set_waiting(not isTurn)
@@ -290,8 +287,10 @@ func get_piece_color(piece: Sprite2D) -> String:
 		return "black"
 	return "unknown"
 
-func gen_moves():
-	moves.clear()
+func gen_moves(first_move: bool = false):
+	if not first_move:
+		moves.clear()
+		
 	var diagonals: Array[Vector2]
 	var color = get_piece_color(clicked_piece)
 	var isKing = is_checker_king(clicked_piece)
@@ -311,7 +310,7 @@ func gen_moves():
 				if checking_for_jumps == false:
 					if len(prev_moves) > 0:
 						continue
-					moves.append(pos)
+					moves[pos] = clicked_piece
 					add_highlight(pos.x, 7 - pos.y)
 			elif !check_player(piece) and len(prev_moves)/2 == len(prev_jumps): #only allow jump if the last move was a jump
 				var x_step = 1 if pos.x > clickedPiecePos.x else -1
@@ -319,7 +318,7 @@ func gen_moves():
 				var newPos = Vector2(pos.x + x_step, pos.y + y_step)
 				if (newPos.x >= 0 and newPos.x <= 7) and (newPos.y >= 0 and newPos.y <= 7):
 					if get_node_or_null(str(int(newPos.x)) + "," + str(int(newPos.y))) == null:
-						moves.append(newPos)
+						moves[newPos] = clicked_piece
 						add_highlight(newPos.x, 7 - newPos.y)
 
 
@@ -370,6 +369,7 @@ func _input(event: InputEvent) -> void:
 					add_highlight(x, y)
 					gen_moves()
 			elif clicked_piece != null and moves.has(Vector2(x, 7-y)):
+				clicked_piece = moves[Vector2(x, 7-y)]
 				var prevPiecePos = getPiecePos(clicked_piece)
 				move_piece(clicked_piece, x, y)
 				clear_highlights()
