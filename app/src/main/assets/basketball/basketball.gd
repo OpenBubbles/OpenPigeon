@@ -275,7 +275,7 @@ func spawnBall(player_num: int, didGoInReplay = null) -> BasketballBall:
 	currentBall[player_num] = new_ball
 	return new_ball
 		
-func _set_game_data(new_replay: String):
+func _set_game_data(new_replay: String, saved: bool = false):
 	var parsed = JSON.parse_string(new_replay)
 	print("NEW REPLAY: " + str(parsed))
 	
@@ -286,26 +286,41 @@ func _set_game_data(new_replay: String):
 	
 	isTurn = parsed["isYourTurn"]
 	player = int(parsed["player"])
-	seed = int(parsed["seed"])
-	seed2 = int(parsed["seed2"])
-	turnNum = int(parsed["num"])
-	score1 = int(parsed["score1"])
-	score2 = int(parsed["score2"])
-	skip_score1 = int(parsed["skip_score1"])
-	skip_score2 = int(parsed["skip_score2"])
-	replay = parsed["replay"]
-	replay2 = parsed["replay2"] if "replay2" in parsed else null
-	replay3 = parsed["replay3"] if "replay3" in parsed else null
-	replay4 = parsed["replay4"] if "replay4" in parsed else null
-		
+	
 	if isTurn:
 		player = 2 if player == 1 else 1
-	
 	print("YOU ARE PLAYER " + str(player))	
+	
+	if saved:
+		turnNum = int(parsed["num"])
+		if player == 1:
+			score2 = int(parsed["score2"])
+			skip_score2 = int(parsed["skip_score2"])
+			replay2 = parsed["replay2"] if "replay2" in parsed else null
+			replay4 = parsed["replay4"] if "replay4" in parsed else null
+		else:
+			score1 = int(parsed["score1"])
+			skip_score1 = int(parsed["skip_score1"])
+			replay = parsed["replay"]
+			replay3 = parsed["replay3"] if "replay3" in parsed else null
+	else:
+		seed = int(parsed["seed"])
+		seed2 = int(parsed["seed2"])
+		turnNum = int(parsed["num"])
+		score1 = int(parsed["score1"])
+		score2 = int(parsed["score2"])
+		skip_score1 = int(parsed["skip_score1"])
+		skip_score2 = int(parsed["skip_score2"])
+		replay = parsed["replay"]
+		replay2 = parsed["replay2"] if "replay2" in parsed else null
+		replay3 = parsed["replay3"] if "replay3" in parsed else null
+		replay4 = parsed["replay4"] if "replay4" in parsed else null
 	
 	receivedMessage = null
 	gameDataSet = true
-	_ready()
+	
+	if not saved:
+		_ready()
 	
 func sendGameData() -> void:
 	turnNum += 1
@@ -385,6 +400,10 @@ func _process(delta: float) -> void:
 			replayPlaying = false
 			await get_tree().create_timer(3).timeout
 			
+			if receivedMessage != null:
+				print("Received message during game! Setting new data..")
+				_set_game_data(receivedMessage, true)
+			
 			if wasReplayPlaying == false:
 				sendGameData()
 				if player == 1:
@@ -412,11 +431,6 @@ func _process(delta: float) -> void:
 					setScore(2, skip_score2)
 				
 			clearBalls()
-			
-			if receivedMessage != null:
-				print("Received message during game! Setting new data..")
-				_set_game_data(receivedMessage)
-				return
 			
 			print("ready up!")
 			_ready()
