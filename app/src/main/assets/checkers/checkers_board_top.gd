@@ -96,9 +96,7 @@ func _ready() -> void:
 					newPiece.name = str(x) + "," + str(7-y)
 					newPiece.visible = true
 					add_child(newPiece)
-					#print(newPiece.name, " : ", newPiece.position)
 	
-	print("New replay: " + str(replayMoves))
 	
 	if len(replayMoves) > 0:
 		var firstMovePos = replayMoves[0].split(':')[1].split(',')
@@ -127,7 +125,6 @@ func _ready() -> void:
 					clicked_piece = piece
 					gen_moves(true)
 					if len(moves) > 0:
-						print(str(moves))
 						must_jump = true
 		checking_for_jumps = false
 					
@@ -162,7 +159,6 @@ func _set_game_data(new_replay: String):
 	
 	if isTurn == false:
 		player = 2 if player == 1 else 1
-		print(player)
 	my_player = data["myPlayerId"]
 	_ready()
 
@@ -228,8 +224,7 @@ func check_win_loss():
 					num_your_pieces += 1
 				else:
 					num_other_pieces += 1
-	#print("Your pieces remaining: " + str(num_your_pieces))
-	#print("Other player's pieces remaining: " + str(num_other_pieces))
+	
 	if num_your_pieces == 0:
 		return "lose"
 	if num_other_pieces == 0:
@@ -369,7 +364,6 @@ func _input(event: InputEvent) -> void:
 		if event.pressed and event.button_index == 1 and waitingForOpponent == false:
 			var x: int = ceil(event.position.x / 80) - 1;
 			var y: int = ceil(event.position.y / 80) - 5;
-			print("board position at ", x, ",", 7-y, " clicked")
 			
 			var clickedPiece: Sprite2D = get_node_or_null(str(x) + "," + str(7-y))
 			if must_jump != true and clickedPiece != null and (clicked_piece == null or has_moved == false):
