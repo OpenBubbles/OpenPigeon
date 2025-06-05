@@ -2,9 +2,11 @@ package com.openbubbles.openpigeon
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.core.net.toUri
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+
 
 class AboutActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,6 +40,18 @@ class AboutActivity : Activity() {
                 intent.data = "https://github.com/OpenBubbles/OpenPigeon".toUri()
                 startActivity(intent)
                 finishAndRemoveTask()
+            }
+            .setNeutralButton("Attributions") { dialog, which ->
+                val inputStream = assets.open("attributions.html")
+                val bytes = inputStream.readBytes().decodeToString()
+                val url = "data:text/html;charset=utf8,$bytes"
+
+                startActivity(
+                    Intent.makeMainSelectorActivity(
+                        Intent.ACTION_MAIN, Intent.CATEGORY_APP_BROWSER
+                    )
+                        .setData(url.toUri())
+                )
             }
             .setCancelable(false)
             .show()
