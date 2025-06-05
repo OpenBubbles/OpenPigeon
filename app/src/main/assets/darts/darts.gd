@@ -267,8 +267,8 @@ func _input(event: InputEvent) -> void:
 
 const rect_min_x = -250.0
 const rect_max_x = 250.0
-const rect_min_y = 0.0
-const rect_max_y = 350.0
+const rect_min_y = 100.0
+const rect_max_y = 550.0
 const board_radius = 0.535
 func calc_shot_coordinates(shot_delta: Vector2) -> Vector2:
 	var rect_center_x: float = (rect_min_x + rect_max_x) / 2.0
