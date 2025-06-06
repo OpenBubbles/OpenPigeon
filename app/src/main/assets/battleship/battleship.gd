@@ -34,6 +34,8 @@ func _set_game_data(new_replay: String):
 	var battleground1 = get_node("BattleGround1") as BattleGround
 	var battleground2 = get_node("BattleGround2") as BattleGround
 	
+	replay.clear()
+	
 	var parsed = JSON.parse_string(new_replay)
 	
 	my_player = parsed["myPlayerId"]
