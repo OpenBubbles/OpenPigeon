@@ -27,6 +27,10 @@ class PongGame : Game {
         return R.drawable.cuppong
     }
 
+    override fun isSupported(message: Map<String, String>): Boolean {
+        return message["mode"] != "h"
+    }
+
     override fun getNewGameData(context: Context): MutableMap<String, String> {
         return super.getNewGameData(context).apply {
             put("seed", "${Random.nextInt()}")

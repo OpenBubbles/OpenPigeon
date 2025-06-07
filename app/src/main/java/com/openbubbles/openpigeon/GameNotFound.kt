@@ -11,7 +11,11 @@ class GameNotFound : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val name = intent.getStringExtra("DISPLAY_GAME")
+        var name = intent.getStringExtra("DISPLAY_GAME")
+        val isGameSupported = intent.getStringExtra("GAME")
+        if (isGameSupported != null) {
+            name = "this game mode"
+        }
         MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
             .setTitle("Sorry, we don't support $name!")
             .setMessage("But we could! OpenPigeon is fully open-source, and we're looking for game developers to contribute their favorite games. If you're interested, find out more on GitHub.")

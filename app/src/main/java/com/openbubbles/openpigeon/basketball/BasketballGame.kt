@@ -40,6 +40,10 @@ class BasketballGame : Game {
         }
     }
 
+    override fun isSupported(message: Map<String, String>): Boolean {
+        return message["mode"] != "h"
+    }
+
     override fun getDefaultReplay(): String {
         return ""
     }

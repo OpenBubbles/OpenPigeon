@@ -340,7 +340,7 @@ fun RenderKeyboardConfig(extension: MadridExtension?, game: Game) {
 fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, message: MadridMessage?) {
     Column(modifier = GlanceModifier.fillMaxHeight().let {
         if (extension != null) {
-            val intent = Intent(extension.context, session?.getGame()?.gameClass() ?: GameNotFound::class.java).apply {
+            val intent = Intent(extension.context, if (session?.getGame()?.isSupported(session.currentMessage) == true) session.getGame()!!.gameClass() else GameNotFound::class.java).apply {
                 putExtra("SESSION", message?.session ?: "")
                 putExtra("GAME", session?.getGame()?.getName())
                 putExtra("DISPLAY_GAME", session?.currentMessage?.get("game_name"))

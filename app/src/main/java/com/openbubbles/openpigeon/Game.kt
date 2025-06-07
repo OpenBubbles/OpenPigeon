@@ -59,6 +59,10 @@ interface Game {
         return sender
     }
 
+    fun isSupported(message: Map<String, String>): Boolean {
+        return true
+    }
+
     fun getSubtitle(context: Context, message: Map<String, String>): String {
         message["winner"]?.let {
             val parts = it.split("|")
