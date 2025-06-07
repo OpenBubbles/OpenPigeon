@@ -356,13 +356,13 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
         Box(modifier = GlanceModifier.defaultWeight()) {
             Image(ImageProvider(session?.getGame()?.gamePoster(session.currentMessage) ?: R.drawable.empty),
                 session?.getGame()?.getName() ?: "Game", contentScale = ContentScale.Crop)
-            val winMode = session?.getGame()?.getWinStateImage(session.currentMessage)
+            val winMode = session?.getGame()?.getWinStateImage(extension!!.context, session.currentMessage)
             if (winMode != null) {
                 Image(ImageProvider(winMode), message?.caption ?: "Game Over", contentScale = ContentScale.Crop,
                     modifier = GlanceModifier.fillMaxSize().padding(32.dp))
             }
         }
-        Text((message?.caption ?: "Game Name").uppercase(),
+        Text((session?.getGame()?.getDisplaySubtitle(extension!!.context, session.currentMessage) ?: "GAME NAME").uppercase(),
                 style = TextStyle(fontSize = 16.sp, color = ColorProvider(Color.Gray),
                     textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
             modifier = GlanceModifier.padding(vertical = 10.dp))

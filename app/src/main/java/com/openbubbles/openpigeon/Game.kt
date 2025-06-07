@@ -78,10 +78,26 @@ interface Game {
         return "Your Move."
     }
 
-    fun getWinStateImage(message: Map<String, String>): Int? {
+    fun getDisplaySubtitle(context: Context, message: Map<String, String>): String {
         message["winner"]?.let {
             val parts = it.split("|")
-            var iWon = message["sender"]!! == parts[0]
+            var iWon = getSenderUUID(context) == parts[0]
+            if (parts[1] == "-1") {
+                iWon = !iWon
+            }
+            if (parts[1] == "0") {
+                return "Draw!"
+            }
+            return if (iWon) "You Won!" else "You Lost!"
+        }
+        return if (message["caption"]?.startsWith("Let's") == true) message["caption"]!! else
+            if (message["sender"] == getSenderUUID(context)) "Opponent's Move." else "Your Move."
+    }
+
+    fun getWinStateImage(context: Context, message: Map<String, String>): Int? {
+        message["winner"]?.let {
+            val parts = it.split("|")
+            var iWon = getSenderUUID(context) == parts[0]
             if (parts[1] == "-1") {
                 iWon = !iWon
             }
