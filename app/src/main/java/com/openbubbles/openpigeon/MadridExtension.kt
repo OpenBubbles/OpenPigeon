@@ -353,9 +353,15 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
             it
         }
     }, horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
-        Image(ImageProvider(session?.getGame()?.gamePoster(session.currentMessage) ?: R.drawable.empty),
-            session?.getGame()?.getName() ?: "Game",
-                modifier = GlanceModifier.defaultWeight(), contentScale = ContentScale.Crop)
+        Box(modifier = GlanceModifier.defaultWeight()) {
+            Image(ImageProvider(session?.getGame()?.gamePoster(session.currentMessage) ?: R.drawable.empty),
+                session?.getGame()?.getName() ?: "Game", contentScale = ContentScale.Crop)
+            val winMode = session?.getGame()?.getWinStateImage(session.currentMessage)
+            if (winMode != null) {
+                Image(ImageProvider(winMode), message?.caption ?: "Game Over", contentScale = ContentScale.Crop,
+                    modifier = GlanceModifier.fillMaxSize().padding(32.dp))
+            }
+        }
         Text((message?.caption ?: "Game Name").uppercase(),
                 style = TextStyle(fontSize = 16.sp, color = ColorProvider(Color.Gray),
                     textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),

@@ -78,6 +78,21 @@ interface Game {
         return "Your Move."
     }
 
+    fun getWinStateImage(message: Map<String, String>): Int? {
+        message["winner"]?.let {
+            val parts = it.split("|")
+            var iWon = message["sender"]!! == parts[0]
+            if (parts[1] == "-1") {
+                iWon = !iWon
+            }
+            if (parts[1] == "0") {
+                return R.drawable.sync_alt_24px
+            }
+            return if (iWon) R.drawable.crown_24px else R.drawable.close_24px
+        }
+        return null
+    }
+
     fun buildGameMessage(context: Context, message: Map<String, String>, currentSession: String?): MadridMessage {
         val data = encodeQuery(mapOf(
             "ver" to "52",
