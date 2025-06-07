@@ -2,10 +2,12 @@ package com.openbubbles.openpigeon
 
 import android.app.Activity
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import androidx.core.net.toUri
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.mixpanel.android.mpmetrics.MixpanelAPI
+import org.json.JSONObject
+
 
 class GameNotFound : Activity() {
 
@@ -16,6 +18,11 @@ class GameNotFound : Activity() {
         if (isGameSupported != null) {
             name = "this $name mode"
         }
+        val mixpanel = MixpanelAPI.getInstance(this, "08ab09f9b770ceac98553fcc5507874c", false)
+
+        mixpanel.track("missing_game", JSONObject().apply {
+            put("display", name)
+        })
 
         val warn = if (isGameSupported != null) "This is a missing feature in OpenPigeon. GamePigeon is an unaffiliated app, and is not responsible for providing this paid game mode. Do not ask for a refund.\n\n" else ""
         MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)

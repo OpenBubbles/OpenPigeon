@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <!-- Just for PlayerIO, we shouldn't be hitting the internet under any other circumstances -->
+    <!-- Just for PlayerIO and MixPanel, we shouldn't be hitting the internet under any other circumstances -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <queries>
