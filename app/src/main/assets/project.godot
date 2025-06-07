@@ -16,6 +16,10 @@ config/features=PackedStringArray("4.4", "Mobile")
 boot_splash/image="uid://b2iwsnhjqswss"
 config/icon="res://icon.svg"
 
+[autoload]
+
+ChangeScene="*res://change_scene.gd"
+
 [display]
 
 window/size/viewport_width=648

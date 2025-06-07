@@ -1,5 +1,6 @@
 package com.openbubbles.openpigeon.godot
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.enableEdgeToEdge
@@ -28,7 +29,41 @@ class GodotGameActivity : GodotActivity() {
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
             insets
         }
+        initGameSession(intent)
+    }
 
+    override fun onNewIntent(newIntent: Intent) {
+        super.onNewIntent(newIntent)
+        baseGame = MadridExtension.findByName(newIntent.getStringExtra("GAME")!!)!!
+        getOrCreateAppPlugin().switchGame(baseGame.getName())
+        initGameSession(newIntent)
+    }
+
+//    override fun getCommandLine(): MutableList<String> {
+//        return mutableListOf<String>("--remote-debug", "tcp://192.168.0.81:6008")
+//    }
+
+    override fun onResume() {
+        if (gameSessionIPC != null) {
+            gameSessionIPC?.setSuppressNotifications(sessionId, true)
+        } else {
+            Log.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
+        }
+        super.onResume()
+    }
+
+    override fun onPause() {
+        gameSessionIPC!!.setSuppressNotifications(sessionId, false)
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        gameSessionIPC!!.setSuppressNotifications(sessionId, false)
+        gameSessionIPC!!.unlockMsgHandle(sessionId)
+        super.onDestroy()
+    }
+
+    private fun initGameSession(intent: Intent) {
         sessionId = intent.getStringExtra("SESSION")!!
         baseGame = MadridExtension.findByName(intent.getStringExtra("GAME")!!)!!
 
@@ -56,30 +91,6 @@ class GodotGameActivity : GodotActivity() {
                 activity?.finish()
             }
         }
-    }
-
-//    override fun getCommandLine(): MutableList<String> {
-//        return mutableListOf<String>("--remote-debug", "tcp://192.168.0.81:6008")
-//    }
-
-    override fun onResume() {
-        if (gameSessionIPC != null) {
-            gameSessionIPC?.setSuppressNotifications(sessionId, true)
-        } else {
-            Log.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
-        }
-        super.onResume()
-    }
-
-    override fun onPause() {
-        gameSessionIPC!!.setSuppressNotifications(sessionId, false)
-        super.onPause()
-    }
-
-    override fun onDestroy() {
-        gameSessionIPC!!.setSuppressNotifications(sessionId, false)
-        gameSessionIPC!!.unlockMsgHandle(sessionId)
-        super.onDestroy()
     }
 
     private fun getOrCreateAppPlugin(): GodotAppPlugin {

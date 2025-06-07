@@ -24,15 +24,21 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
 
     companion object {
         val SET_GAME_DATA_SIGNAL = SignalInfo("set_game_data", String::class.java)
+        val SWITCH_GAME_SIGNAL = SignalInfo("switch_game", String::class.java)
     }
 
     override fun getPluginName() = "AppPlugin"
 
-    override fun getPluginSignals() = setOf(SET_GAME_DATA_SIGNAL)
+    override fun getPluginSignals() = setOf(SET_GAME_DATA_SIGNAL, SWITCH_GAME_SIGNAL)
 
     override fun onGodotMainLoopStarted() {
         super.onGodotMainLoopStarted()
         mainLoopStarted = true
+    }
+
+    @UsedByGodot
+    fun switchGame(game: String) {
+        emitSignal("switch_game", game)
     }
 
     @UsedByGodot

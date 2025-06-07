@@ -25,7 +25,8 @@
         <activity
             android:name=".godot.GodotGameActivity"
             android:exported="false"
-            android:process=":godot" />
+            android:process=":godot"
+            android:launchMode="singleTop"/>
         <activity
             android:name=".wordhunt.WordHuntActivity"
             android:exported="false"
