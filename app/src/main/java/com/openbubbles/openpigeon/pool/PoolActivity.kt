@@ -267,6 +267,20 @@ class PoolActivity : AppCompatActivity() {
         renderer.running = false
     }
 
+    override fun onResume() {
+        if (gameSessionIPC != null) {
+            gameSessionIPC?.setSuppressNotifications(sessionId, true)
+        } else {
+            Log.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
+        }
+        super.onResume()
+    }
+
+    override fun onPause() {
+        gameSessionIPC!!.setSuppressNotifications(sessionId, false)
+        super.onPause()
+    }
+
     external fun createPoolTable(): Long
     external fun destroyPoolTable(table: Long)
     external fun makeBall(table: Long, x: Float, y: Float, rot: Float, density: Float, number: Int, shouldGoIn: Int, outputs: FloatBuffer)

@@ -114,7 +114,7 @@ class WordHuntActivity : AppCompatActivity() {
             Log.i("message", "currentMessage: $currentMessage")
 
             if (currentMessage.isNotEmpty()) {
-
+                gameSessionIPC!!.setSuppressNotifications(sessionId, true)
                 val score1 = currentMessage["score1"]
                 val score2 = currentMessage["score2"]
 
@@ -217,6 +217,15 @@ class WordHuntActivity : AppCompatActivity() {
                 finish()
             }
         }
+    }
+
+    override fun onResume() {
+        if (gameSessionIPC != null) {
+            gameSessionIPC?.setSuppressNotifications(sessionId, true)
+        } else {
+            Log.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
+        }
+        super.onResume()
     }
 
     override fun onPause() {
