@@ -172,14 +172,8 @@ class GameUI {
             modifier = modifier
                 .size(350.dp)
         ) {
-            val gameBoardBackground = when (gameState.mode) {
-                WordHuntActivity.GameMode.MODE1 -> R.drawable.wordhunt_board_mode1
-                WordHuntActivity.GameMode.MODE2 -> R.drawable.wordhunt_board_mode2
-                WordHuntActivity.GameMode.MODE3 -> R.drawable.wordhunt_board_mode3
-                WordHuntActivity.GameMode.MODE4 -> R.drawable.wordhunt_board_mode1
-            }
             Image(
-                painter = painterResource(gameBoardBackground),
+                painter = painterResource(gameState.mode.drawable),
                 contentDescription = "",
                 modifier = Modifier.fillMaxSize()
             )

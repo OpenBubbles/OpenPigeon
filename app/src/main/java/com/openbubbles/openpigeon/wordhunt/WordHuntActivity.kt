@@ -12,6 +12,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.ui.Modifier
 import com.openbubbles.openpigeon.Game
+import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.godot.GameSessionIPC
 
 class WordHuntActivity : AppCompatActivity() {
@@ -27,15 +28,15 @@ class WordHuntActivity : AppCompatActivity() {
 
     private val gameUI = GameUI()
 
-    enum class GameMode(val gridSize: Int, val invalidPositions: List<Pair<Int, Int>>){
-        MODE1(4, emptyList()),
+    enum class GameMode(val gridSize: Int, val invalidPositions: List<Pair<Int, Int>>, val drawable: Int){
+        MODE1(4, emptyList(), R.drawable.wordhunt_board_mode1),
         MODE2(5, listOf(
             Pair(0,0), Pair(0,4), Pair(2,2), Pair(4,0), Pair(4,4)
-        )),
+        ), R.drawable.wordhunt_board_mode2),
         MODE3(5, listOf(
             Pair(0,2), Pair(2,0), Pair(2,4), Pair(4,2)
-        )),
-        MODE4(5, emptyList())
+        ), R.drawable.wordhunt_board_mode3),
+        MODE4(5, emptyList(), R.drawable.wordhunt_board_mode1)
     }
 
 
