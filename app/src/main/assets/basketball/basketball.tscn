@@ -7,7 +7,7 @@
 [ext_resource type="Texture2D" uid="uid://dutexrlgv763w" path="res://basketball/brickwall.jpeg" id="3_7e2oe"]
 [ext_resource type="Texture2D" uid="uid://ermcfvwnyb8n" path="res://basketball/balldimpled.png" id="3_edmja"]
 [ext_resource type="Texture2D" uid="uid://dhj26lkqags20" path="res://basketball/backboard.png" id="3_julsv"]
-[ext_resource type="Texture2D" uid="uid://sussm1wgclog" path="res://basketball/AdobeStock_530856469.jpg" id="8_banb7"]
+[ext_resource type="Texture2D" uid="uid://jkmn81x6v6s" path="res://basketball/AdobeStock_530856469.png" id="8_banb7"]
 [ext_resource type="FontFile" uid="uid://dk1un3cvg4j5k" path="res://basketball/segment-eglas.ttf" id="8_kluaa"]
 [ext_resource type="Texture2D" uid="uid://bxkp6dpfg4vlk" path="res://basketball/scoreboard.png" id="9_lrgjq"]
 

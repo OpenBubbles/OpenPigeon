@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://sussm1wgclog"
-path.s3tc="res://.godot/imported/AdobeStock_530856469.jpg-e81aa8e286606ea547766287bb1d6ccb.s3tc.ctex"
-path.etc2="res://.godot/imported/AdobeStock_530856469.jpg-e81aa8e286606ea547766287bb1d6ccb.etc2.ctex"
+uid="uid://jkmn81x6v6s"
+path.s3tc="res://.godot/imported/AdobeStock_530856469.png-64ec26c846bb288a2dc03e7d0ab30804.s3tc.ctex"
+path.etc2="res://.godot/imported/AdobeStock_530856469.png-64ec26c846bb288a2dc03e7d0ab30804.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://basketball/AdobeStock_530856469.jpg"
-dest_files=["res://.godot/imported/AdobeStock_530856469.jpg-e81aa8e286606ea547766287bb1d6ccb.s3tc.ctex", "res://.godot/imported/AdobeStock_530856469.jpg-e81aa8e286606ea547766287bb1d6ccb.etc2.ctex"]
+source_file="res://basketball/AdobeStock_530856469.png"
+dest_files=["res://.godot/imported/AdobeStock_530856469.png-64ec26c846bb288a2dc03e7d0ab30804.s3tc.ctex", "res://.godot/imported/AdobeStock_530856469.png-64ec26c846bb288a2dc03e7d0ab30804.etc2.ctex"]
 
 [params]
 
