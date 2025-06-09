@@ -109,20 +109,22 @@ class WordHuntActivity : AppCompatActivity() {
 
         dictionary = WordDictionary(this)
 
-        gameSessionIPC = GameSessionIPC(this) { ipc ->
+        GameSessionIPC(applicationContext) { gameSessionIPC ->
             // This is called when the service is bound
-            currentMessage = ipc.getCurrentMessage(sessionId)
+            this.gameSessionIPC = gameSessionIPC
+            currentMessage = gameSessionIPC.getCurrentMessage(sessionId)
             Log.i("message", "currentMessage: $currentMessage")
 
             if (currentMessage.isNotEmpty()) {
-                gameSessionIPC!!.setSuppressNotifications(sessionId, true)
+                gameSessionIPC.lockMsgHandle(sessionId)
+                gameSessionIPC.setSuppressNotifications(sessionId, true)
                 val score1 = currentMessage["score1"]
                 val score2 = currentMessage["score2"]
 
                 if (!score1.isNullOrBlank() && !score2.isNullOrBlank()) {
                     setScoreScreen()
                 } else {
-                    ipc.lockMsgHandle(sessionId)
+                    gameSessionIPC.lockMsgHandle(sessionId)
                     setupGame()
                     setContent {
                         gameUI.GameScreen(gameState)
@@ -207,7 +209,7 @@ class WordHuntActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     private fun setScoreScreen() {
         val scores = arrayOf(currentMessage["score1"], currentMessage["score2"])
 
@@ -232,13 +234,11 @@ class WordHuntActivity : AppCompatActivity() {
         if (gameSessionIPC != null) {
             gameSessionIPC?.setSuppressNotifications(sessionId, true)
         } else {
-            Log.w(
-                "openpigeon-${baseGame.getName()}",
-                "onResume called before gameSessionIPC was initialized!"
-            )
+            Log.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
         }
         super.onResume()
     }
+
     override fun onPause() {
         gameSessionIPC!!.setSuppressNotifications(sessionId, false)
         gameTimer?.cancel()
