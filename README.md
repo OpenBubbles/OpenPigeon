@@ -8,7 +8,7 @@ OpenPigeon is fully open-source, and we're actively looking for game developers 
 
 ## Supported Games
 - Checkers (Normal and Newbie)
-- Word Hunt
+- Word Hunt (all modes)
 - Four in a Row
 - Basketball
 - Sea Battle (all sizes)
