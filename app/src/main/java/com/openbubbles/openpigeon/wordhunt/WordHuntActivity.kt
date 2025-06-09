@@ -120,20 +120,7 @@ class WordHuntActivity : AppCompatActivity() {
                 val score2 = currentMessage["score2"]
 
                 if (!score1.isNullOrBlank() && !score2.isNullOrBlank()) {
-                    val client = if(currentMessage["player1"] == gameSessionIPC!!.getSenderUUID(sessionId)) 1 else 2
-                    val opponent = if(client - 1 == 0) 2 else 1
-                    val scores = intArrayOf(score1.toInt(), score2.toInt())
-                    setContent {
-                        gameUI.ScoreScreen(
-                            Modifier, mutableMapOf(
-                                "score1" to scores[client-1].toString(),
-                                "score2" to scores[opponent-1].toString(),
-                                "words1" to currentMessage["words$client"]!!,
-                                "words2" to currentMessage["words$opponent"]!!,
-                                "words_list1" to currentMessage["words_list$client"]!!,
-                                "words_list2" to currentMessage["words_list$opponent"]!!
-                            ))
-                    }
+                    setScoreScreen()
                 } else {
                     ipc.lockMsgHandle(sessionId)
                     setupGame()
@@ -214,9 +201,30 @@ class WordHuntActivity : AppCompatActivity() {
         Log.i("Word List", gameState.sortedWords().joinToString("|"))
         gameSessionIPC!!.updateSession(updates, sessionId) {
             runOnUiThread {
+                currentMessage = gameSessionIPC!!.getCurrentMessage(sessionId)
                 gameSessionIPC!!.unlockMsgHandle(sessionId)
-                finish()
+                setScoreScreen()
             }
+        }
+    }
+    
+    private fun setScoreScreen() {
+        val scores = arrayOf(currentMessage["score1"], currentMessage["score2"])
+
+        val client = if(currentMessage["player1"] == gameSessionIPC!!.getSenderUUID(sessionId)) 1 else 2
+        val opponent = if(client - 1 == 0) 2 else 1
+        Log.i("setting screen", "score screen")
+        setContent {
+            gameUI.ScoreScreen(
+                Modifier, mutableMapOf(
+                    "score1" to (scores[client - 1] ?: gameState.score.toString()),
+                    "score2" to (scores[opponent - 1] ?: "????"),
+                    "words1" to (currentMessage["words$client"] ?: gameState.wordCount.toString()),
+                    "words2" to (currentMessage["words$opponent"] ?: ""),
+                    "words_list1" to (currentMessage["words_list$client"] ?: gameState.sortedWords().joinToString("|")),
+                    "words_list2" to (currentMessage["words_list$opponent"] ?: "")
+                )
+            )
         }
     }
 
@@ -224,11 +232,13 @@ class WordHuntActivity : AppCompatActivity() {
         if (gameSessionIPC != null) {
             gameSessionIPC?.setSuppressNotifications(sessionId, true)
         } else {
-            Log.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
+            Log.w(
+                "openpigeon-${baseGame.getName()}",
+                "onResume called before gameSessionIPC was initialized!"
+            )
         }
         super.onResume()
     }
-
     override fun onPause() {
         gameSessionIPC!!.setSuppressNotifications(sessionId, false)
         gameTimer?.cancel()

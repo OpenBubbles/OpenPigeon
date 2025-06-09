@@ -532,7 +532,7 @@ class GameUI {
             }
 
             val wordItemHeight = 25.dp + 10.dp
-            val maxListHeight = screenHeight * 0.55f
+            val maxListHeight = screenHeight * 0.65f
 
             val maxItems = with(LocalDensity.current) { (maxListHeight / wordItemHeight).toInt() }
             val visibleWords = wordList.take(maxItems)
