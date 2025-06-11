@@ -66,6 +66,18 @@ android {
             version = "3.22.1"
         }
     }
+
+    sourceSets {
+        getByName("release") {
+            assets.setSrcDirs(files(project.layout.buildDirectory.dir("generated/release_assets")))
+        }
+        getByName("debug") {
+            assets.setSrcDirs(files( project.layout.projectDirectory.dir("src/main/assets")))
+        }
+        getByName("main") {
+            assets.setSrcDirs(files())
+        }
+    }
 }
 
 dependencies {
@@ -103,4 +115,63 @@ dependencies {
     implementation(libs.androidx.glance.appwidget.preview)
 
     implementation(libs.mixpanel.android)
+}
+
+tasks.register<Exec>("exportGodotRelease") {
+    description = "Exports the Godot project for release."
+    group = "godot"
+
+    workingDir = rootProject.projectDir
+    val projectPath = project.layout.projectDirectory.dir("src/main/assets")
+    val exportZipPath = project.layout.buildDirectory.file("godot_export.zip")
+
+    inputs.dir(projectPath).withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.file(exportZipPath)
+
+    commandLine("godot", "--headless", "--path", projectPath, "--export-pack", "Android", exportZipPath.get().asFile.absolutePath)
+
+    doFirst {
+        exportZipPath.get().asFile.parentFile.mkdirs()
+    }
+}
+
+tasks.register<Copy>("unzipGodotRelease") {
+    description = "Unzips the exported Godot project for the release build."
+    group = "godot"
+
+    dependsOn("exportGodotRelease")
+
+    val exportZipPath = tasks.named<Exec>("exportGodotRelease").get().outputs.files.singleFile
+
+    from(zipTree(exportZipPath))
+    into(project.layout.buildDirectory.dir("generated/release_assets"))
+}
+
+tasks.register<Copy>("copyMissingAssets") {
+    description = "Copy missing texture from original assets folder."
+    group = "godot"
+
+    dependsOn("unzipGodotRelease")
+    from(project.layout.projectDirectory.dir("src/main/assets/.godot/imported")) {
+        include("RedCupAlbedo.png-*.s3tc.ctex")
+    }
+    into(project.layout.buildDirectory.dir("generated/release_assets/.godot/imported"))
+}
+
+tasks.register<Copy>("copyOtherAssets") {
+    description = "Copies the other misc assets files to the build directory."
+    group = "godot"
+
+    dependsOn("copyMissingAssets")
+
+    from(project.layout.projectDirectory.dir("src/main/assets")) {
+        include("attributions.html")
+    }
+    into(project.layout.buildDirectory.dir("generated/release_assets"))
+}
+
+tasks.whenTaskAdded {
+    if (name == "mergeReleaseAssets" || name.startsWith("lintVital") || name.startsWith("generateReleaseLint")) {
+        dependsOn(tasks.named<Copy>("copyOtherAssets"))
+    }
 }
