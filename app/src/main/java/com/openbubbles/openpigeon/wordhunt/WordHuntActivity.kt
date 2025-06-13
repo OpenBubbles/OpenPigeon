@@ -1,16 +1,17 @@
 package com.openbubbles.openpigeon.wordhunt
 
-import android.os.Build
+import android.annotation.SuppressLint
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.util.Log
-import android.view.View
-import android.view.WindowInsets
-import android.view.WindowInsetsController
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.rememberNavController
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.godot.GameSessionIPC
@@ -21,12 +22,14 @@ class WordHuntActivity : AppCompatActivity() {
     private var gameSessionIPC: GameSessionIPC? = null
     lateinit var sessionId: String
     private lateinit var currentMessage: Map<String, String>
+    private lateinit var currentMessageState: MutableState<Map<String, String>>
     private lateinit var dictionary: WordDictionary
     private lateinit var gameState: WordHuntGameState
 
     private var gameTimer: CountDownTimer? = null
 
     private val gameUI = GameUI()
+    private lateinit var navController: NavHostController
 
     enum class GameMode(val gridSize: Int, val invalidPositions: List<Pair<Int, Int>>, val drawable: Int){
         MODE1(4, emptyList(), R.drawable.wordhunt_board_mode1),
@@ -108,7 +111,7 @@ class WordHuntActivity : AppCompatActivity() {
         sessionId = intent.getStringExtra("SESSION")!!
 
         dictionary = WordDictionary(this)
-
+        lateinit var startDestination: String
         GameSessionIPC(applicationContext) { gameSessionIPC ->
             // This is called when the service is bound
             this.gameSessionIPC = gameSessionIPC
@@ -118,17 +121,30 @@ class WordHuntActivity : AppCompatActivity() {
             if (currentMessage.isNotEmpty()) {
                 gameSessionIPC.lockMsgHandle(sessionId)
                 gameSessionIPC.setSuppressNotifications(sessionId, true)
-                val score1 = currentMessage["score1"]
-                val score2 = currentMessage["score2"]
-
-                if (!score1.isNullOrBlank() && !score2.isNullOrBlank()) {
-                    setScoreScreen()
-                } else {
-                    gameSessionIPC.lockMsgHandle(sessionId)
-                    setupGame()
-                    setContent {
-                        gameUI.GameScreen(gameState)
+                gameSessionIPC.onMessageUpdated(sessionId) {
+                    synchronized(this) {
+                        Log.i("message", "updated in background")
+                        runOnUiThread {
+                            val updatedMessage = gameSessionIPC.getCurrentMessage(sessionId)
+                            currentMessage = updatedMessage
+                            currentMessageState.value = updatedMessage
+                        }
                     }
+                }
+
+                val player = if (currentMessage["player2"] == gameSessionIPC.getSenderUUID(sessionId)) 2 else 1
+                setupGame()
+                startDestination = if (!currentMessage["score$player"].isNullOrBlank()) {
+                    GameUI.Screen.Score.route
+                } else {
+                    GameUI.Screen.Game.route
+                }
+
+                setContent {
+                    currentMessageState = remember { mutableStateOf(currentMessage) }
+
+                    navController = rememberNavController()
+                    gameUI.WordHuntNavigation(navController, startDestination, gameState, { startGameTimer() }, { getScoreData(currentMessageState.value) })
                 }
             } else {
                 Log.e("openpigeon-${baseGame.getName()}", "$sessionId does not exist!")
@@ -141,7 +157,6 @@ class WordHuntActivity : AppCompatActivity() {
         gameState = WordHuntGameState(dictionary, mode(currentMessage["mode"]!!.toInt()))
         gameState.setBoard(populatedBoard(currentMessage["letters"]!!))
         gameState.isGameActive = true
-        startGameTimer()
     }
 
     private fun startGameTimer() {
@@ -173,6 +188,7 @@ class WordHuntActivity : AppCompatActivity() {
     }
 
     private fun endGame() {
+        currentMessage = gameSessionIPC!!.getCurrentMessage(sessionId)
         gameTimer?.cancel()
         val player: Int = if (currentMessage["score2"].isNullOrBlank()) 2 else 1
         val opponent = if(player - 1 == 0) 2 else 1
@@ -205,29 +221,31 @@ class WordHuntActivity : AppCompatActivity() {
             runOnUiThread {
                 currentMessage = gameSessionIPC!!.getCurrentMessage(sessionId)
                 gameSessionIPC!!.unlockMsgHandle(sessionId)
-                setScoreScreen()
+                navController.navigate(GameUI.Screen.Score.route)
             }
         }
     }
 
-    private fun setScoreScreen() {
-        val scores = arrayOf(currentMessage["score1"], currentMessage["score2"])
+    private fun getScoreData(msg: Map<String, String>): MutableMap<String, String> {
+        val scores = arrayOf(msg["score1"], msg["score2"])
 
-        val client = if(currentMessage["player1"] == gameSessionIPC!!.getSenderUUID(sessionId)) 1 else 2
+        val client = if(msg["player1"] == gameSessionIPC!!.getSenderUUID(sessionId)) 1 else 2
         val opponent = if(client - 1 == 0) 2 else 1
-        Log.i("setting screen", "score screen")
-        setContent {
-            gameUI.ScoreScreen(
-                Modifier, mutableMapOf(
-                    "score1" to (scores[client - 1] ?: gameState.score.toString()),
-                    "score2" to (scores[opponent - 1] ?: "????"),
-                    "words1" to (currentMessage["words$client"] ?: gameState.wordCount.toString()),
-                    "words2" to (currentMessage["words$opponent"] ?: ""),
-                    "words_list1" to (currentMessage["words_list$client"] ?: gameState.sortedWords().joinToString("|")),
-                    "words_list2" to (currentMessage["words_list$opponent"] ?: "")
-                )
-            )
-        }
+
+        val scoreData = mutableMapOf(
+            "score1" to (scores[client - 1] ?: gameState.score.toString()),
+            "score2" to (scores[opponent - 1] ?: "????"),
+            "words1" to (msg["words$client"] ?: gameState.wordCount.toString()),
+            "words2" to (msg["words$opponent"] ?: ""),
+            "words_list1" to (msg["words_list$client"] ?: gameState.sortedWords().joinToString("|")),
+            "words_list2" to (msg["words_list$opponent"] ?: "")
+        )
+        return scoreData
+    }
+
+    @SuppressLint("MissingSuperCall")
+    override fun onBackPressed() {
+        finish()
     }
 
     override fun onResume() {

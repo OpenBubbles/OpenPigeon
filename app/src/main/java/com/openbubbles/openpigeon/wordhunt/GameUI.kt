@@ -1,14 +1,23 @@
 package com.openbubbles.openpigeon.wordhunt
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -18,15 +27,18 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -34,8 +46,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
 import kotlin.math.pow
 import com.openbubbles.openpigeon.R
+import kotlinx.coroutines.delay
 import kotlin.math.min
 import kotlin.math.sqrt
 
@@ -48,8 +64,64 @@ class GameUI {
         Font(R.font.fivosans_bold, FontWeight.Bold)
     )
 
+    @OptIn(ExperimentalTextApi::class)
+    private val interFamily = FontFamily(
+        Font(
+            R.font.inter_variable,
+            variationSettings = FontVariation.Settings(
+                FontVariation.weight(800),
+            )
+        )
+    )
+
+    sealed class Screen(val route: String) {
+        data object Game : Screen("game")
+        data object Score : Screen("score")
+    }
+
     @Composable
-    fun GameScreen(gameState: WordHuntGameState) {
+    fun WordHuntNavigation(navController: NavHostController, startDestination: String, gameState: WordHuntGameState, onGameStart: () -> Unit, score: () -> MutableMap<String, String>) {
+
+        NavHost(
+            navController = navController,
+            startDestination = startDestination
+        ) {
+            composable(
+                route = Screen.Game.route,
+                exitTransition = {
+                    slideOutOfContainer(
+                        AnimatedContentTransitionScope.SlideDirection.Left,
+                        tween(700)
+                    )
+                }
+            ) {
+                GameScreen(
+                    gameState = gameState,
+                    onGameStart = onGameStart
+                )
+            }
+            composable(
+                route = Screen.Score.route,
+                enterTransition = {
+                    slideIntoContainer(
+                        AnimatedContentTransitionScope.SlideDirection.Left,
+                        tween(700)
+                    )
+                }
+            ) {
+                ScoreScreen(
+                    score = score
+                )
+            }
+        }
+    }
+
+    @Composable
+    fun GameScreen(gameState: WordHuntGameState, onGameStart: () -> Unit) {
+        LaunchedEffect(Unit) {
+            onGameStart()
+        }
+
         tilePositions = Array(gameState.mode.gridSize) { Array(gameState.mode.gridSize) { TilePosition() } }
         Box(
             modifier = Modifier
@@ -134,27 +206,28 @@ class GameUI {
                     .padding(16.dp)
             ) {
                 Row {
-                    Image(
-                        painter = painterResource(R.drawable.madrid_icon),
-                        contentDescription = "Icon",
-                        modifier = Modifier
-                            .size(70.dp)
-                    )
+//                    Image(
+//                        painter = painterResource(R.drawable.madrid_icon),
+//                        contentDescription = "Icon",
+//                        modifier = Modifier
+//                            .size(70.dp)
+//                    )
                     Column(
                         modifier = Modifier
-                            .padding(10.dp, 0.dp, 0.dp, 0.dp)
+                            .padding(10.dp, 0.dp, 0.dp, 0.dp),
+                        verticalArrangement = Arrangement.spacedBy((-2).dp)
                     ) {
                         Text(
                             text = "WORDS: ${gameState.wordCount}",
-                            fontFamily = fivoSansFamily,
+                            fontFamily = interFamily,
                             fontWeight = FontWeight.Black,
                             fontSize = 20.sp
                         )
                         Text(
-                            text = "SCORE: ${gameState.score}",
-                            fontFamily = fivoSansFamily,
+                            text = "SCORE: ${gameState.score.toString().padStart(4, '0')}",
+                            fontFamily = interFamily,
                             fontWeight = FontWeight.Black,
-                            fontSize = 26.sp,
+                            fontSize = 35.sp,
                         )
                     }
                 }
@@ -292,7 +365,7 @@ class GameUI {
         Canvas(modifier = modifier.fillMaxSize()) {
             if (selectedPositions.isNotEmpty()) {
                 // Define path styling
-                val pathColor = Color(0xfff76576)
+                val pathColor = if(gameState.wordStatus == "INVALID") Color(0xB2FF8491) else Color(0xB2FFFFFF)
                 val strokeWidth = 25f
 
                 // Draw path connecting the tiles
@@ -360,11 +433,36 @@ class GameUI {
         letter: Char,
         modifier: Modifier = Modifier
     ) {
+        val isSelected = gameState.selectedPositions.contains(Pair(row, col))
+        val isValid = !gameState.mode.invalidPositions.contains(Pair(row, col))
+
+        val scale by animateFloatAsState(
+            targetValue = if (isSelected) 1.05f else 1f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioLowBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "tile_scale"
+        )
+
+        val elevation by animateDpAsState(
+            targetValue = if (isSelected) 20.dp else if (isValid) 10.dp else 0.dp,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioLowBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "tile_elevation"
+        )
+
         Box(
             modifier = modifier
                 .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
                 .shadow(
-                    elevation = if(!gameState.mode.invalidPositions.contains(Pair(row, col))) 10.dp else 0.dp,
+                    elevation = elevation,
                     shape = RoundedCornerShape(10.dp)
                 )
                 .onGloballyPositioned { coordinates ->
@@ -376,27 +474,23 @@ class GameUI {
                         position.x + size.width,
                         position.y + size.height
                     )
-                    //Log.d("TilePosition", "Tile[$row][$col]: left=${position.x}, top=${position.y}, right=${position.x + size.width}, bottom=${position.y + size.height}")
                 }
         ) {
-            if (!gameState.mode.invalidPositions.contains(Pair(row, col))) {
+            if (isValid) {
                 Image(
                     painter = painterResource(id = R.drawable.wordhunt_letter_bg),
                     contentDescription = "Background",
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(
-                            shape = RoundedCornerShape(10.dp)
-                        ),
-                    //colorFilter = if(gameState.selectedPositions.contains(Pair(row, col))) ColorFilter.tint(gameState.wordStatusColor) else null
+                        .clip(shape = RoundedCornerShape(10.dp)),
                 )
 
-                if (gameState.selectedPositions.contains(Pair(row, col))) {
+                if (isSelected) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(shape = RoundedCornerShape(10.dp))
-                            .background(gameState.wordStatusColor.copy(alpha = 0.8f))  // Adjust alpha for transparency
+                            .background(gameState.wordStatusColor.copy(alpha = 0.8f))
                     )
                 }
 
@@ -438,13 +532,14 @@ class GameUI {
     }
 
     @Composable
-    fun ScoreScreen(modifier: Modifier = Modifier, score: MutableMap<String, String>) {
+    fun ScoreScreen(modifier: Modifier = Modifier, score: () -> MutableMap<String, String>) {
         BoxWithConstraints(modifier = Modifier
             .fillMaxSize()
         ) {
             val screenWidth = maxWidth
             val screenHeight = maxHeight
 
+            val scoreData = score()
             // Background
             Image(
                 painter = painterResource(R.drawable.wordhunt_background),
@@ -454,30 +549,105 @@ class GameUI {
                 contentScale = ContentScale.Crop
             )
 
-            // Layout
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
-                verticalAlignment = Alignment.Top,
-                modifier = modifier
-                    .fillMaxSize()
-                    .padding(horizontal = screenWidth * 0.05f, vertical = 10.dp)
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-            ) {
-                val wordList1 = score["words_list1"]?.takeIf { it.isNotBlank() }?.split("|") ?: emptyList()
-                val wordList2 = score["words_list2"]?.takeIf { it.isNotBlank() }?.split("|") ?: emptyList()
-
-
-                PlayerColumn(score["words1"], score["score1"], isLeft = true, wordList = wordList1, modifier = Modifier.weight(1f), screenHeight = screenHeight)
-                PlayerColumn(score["words2"], score["score2"], isLeft = false, wordList = wordList2, modifier = Modifier.weight(1f), screenHeight = screenHeight)
+            if (!scoreData["words2"].isNullOrBlank()) {
+                var text = "DRAW!"
+                var bgColor = Color.White
+                var textColor = Color.Black
+                if (scoreData["score1"]!!.toInt() > scoreData["score2"]!!.toInt()) {
+                    text = "YOU WON!"
+                    bgColor = Color(0xffffe535)
+                    textColor = Color.Black
+                } else if (scoreData["score1"]!!.toInt() < scoreData["score2"]!!.toInt()) {
+                    text = "YOU LOST!"
+                    bgColor = Color.Black
+                    textColor = Color(0xffea5860)
+                }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .navigationBarsPadding()
+                        .background(
+                            bgColor,
+                            shape = RoundedCornerShape(5.dp)
+                        )
+                        .padding(3.dp, 0.dp)
+                ) {
+                    Text(
+                        modifier = Modifier.padding(8.dp),
+                        text = text,
+                        color = textColor,
+                        fontSize = 16.sp,
+                        fontFamily = interFamily,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize(),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    verticalAlignment = Alignment.Top,
+                    modifier = modifier
+                        .fillMaxSize()
+                        .weight(1f)
+                        .padding(start = screenWidth * 0.03f, end = screenWidth * 0.03f, top = 20.dp, bottom = 10.dp)
+                        .statusBarsPadding()
+                        .navigationBarsPadding()
+                ) {
+                    val wordList1 = scoreData["words_list1"]?.takeIf { it.isNotBlank() }?.split("|") ?: emptyList()
+                    val wordList2 = scoreData["words_list2"]?.takeIf { it.isNotBlank() }?.split("|") ?: emptyList()
+
+                    PlayerColumn(scoreData["words1"], scoreData["score1"], isLeft = true, wordList = wordList1, modifier = Modifier.weight(1f), screenHeight = screenHeight)
+                    PlayerColumn(scoreData["words2"], scoreData["score2"], isLeft = false, wordList = wordList2, modifier = Modifier.weight(1f), screenHeight = screenHeight)
+                }
+
+                val dotCount = remember { mutableIntStateOf(1) }
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        dotCount.intValue = dotCount.intValue % 3 + 1
+                        delay(500)
+                    }
+                }
+
+                val dots = ".".repeat(dotCount.intValue)
+                val isWaiting = scoreData["words2"].isNullOrBlank()
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(bottom = 20.dp)
+                        .background(
+                            if (isWaiting) Color(0xFF222E1F) else Color.Transparent,
+                            shape = RoundedCornerShape(5.dp)
+                        )
+                        .width(250.dp)
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        modifier = Modifier.padding(8.dp),
+                        text = "Waiting for opponent$dots",
+                        color = if (isWaiting) Color.White else Color.Transparent,
+                        fontSize = 16.sp,
+                        fontFamily = fivoSansFamily,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
         }
     }
 
+    @OptIn(ExperimentalTextApi::class)
     @Composable
     fun PlayerColumn(words: String?, score: String?, wordList: List<String>, isLeft: Boolean, modifier: Modifier, screenHeight: Dp) {
         Column(
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
             horizontalAlignment = if (isLeft) Alignment.Start else Alignment.End,
             modifier = modifier
                 .fillMaxHeight()
@@ -495,36 +665,37 @@ class GameUI {
                 )
             }
 
+            val scoreBackground = if (!words.isNullOrBlank()) Color(0xfffdfdfd) else Color.Transparent
+            val scoreTextColor = if (!words.isNullOrBlank()) Color.Black else Color(0xFFC7CFC7)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(85.dp)
+                    .height(65.dp)
+                    .background(scoreBackground)
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(0xfffdfdfd))
-                )
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy((-2).dp),
                     horizontalAlignment = if (isLeft) Alignment.Start else Alignment.End,
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .padding(horizontal = 12.dp)
+                        .padding(horizontal = 5.dp)
+
                 ) {
                     Text(
-                        text = "WORDS: ${words.orEmpty()}",
-                        color = Color.Black,
-                        fontSize = 18.sp,
+                        text = "WORDS: ${if(words.isNullOrBlank()) "?" else words}",
+                        color = scoreTextColor,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
+                        fontFamily = interFamily,
                         textAlign = if (isLeft) TextAlign.Start else TextAlign.End,
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text(
-                        text = "SCORE: ${score.orEmpty()}",
-                        color = Color.Black,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = "SCORE: ${if(score.isNullOrBlank()) "????" else score.padStart(4, '0')}",
+                        color = scoreTextColor,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = interFamily,
                         textAlign = if (isLeft) TextAlign.Start else TextAlign.End,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -532,7 +703,7 @@ class GameUI {
             }
 
             val wordItemHeight = 25.dp + 10.dp
-            val maxListHeight = screenHeight * 0.65f
+            val maxListHeight = screenHeight * 0.68f
 
             val maxItems = with(LocalDensity.current) { (maxListHeight / wordItemHeight).toInt() }
             val visibleWords = wordList.take(maxItems)
@@ -546,24 +717,41 @@ class GameUI {
                     .weight(1f)
                     .clip(RoundedCornerShape(5.dp))
                     .background(Color(0xff385334))
-                    .padding(horizontal = 16.dp, vertical = 29.dp)
+                    .padding(horizontal = 7.dp, vertical = 7.dp)
             ) {
                 visibleWords.forEach { word ->
-                    Box(
-                        modifier = Modifier
-                            .wrapContentWidth()
-                            .height(25.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(Color(0xfff9edc3))
-                            .padding(horizontal = 8.dp),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = word,
-                            color = Color.Black,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold
+                        val wordScoreFont = FontFamily(
+                            Font(
+                                R.font.inter_variable,
+                                variationSettings = FontVariation.Settings(
+                                    FontVariation.weight(600),
+                                )
+                            )
                         )
+                        if (isLeft) {
+                            WordBox(word)
+                            Text(
+                                text = WordHuntGameState.calculatePoints(word).toString(),
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = wordScoreFont
+                            )
+                        } else {
+                            Text(
+                                text = WordHuntGameState.calculatePoints(word).toString(),
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = wordScoreFont
+                            )
+                            WordBox(word)
+                        }
                     }
                 }
                 if (hiddenCount > 0) {
@@ -585,8 +773,28 @@ class GameUI {
         }
     }
 
+    @Composable
+    private fun WordBox(word: String) {
+        Box(
+            modifier = Modifier
+                .wrapContentSize()
+                .clip(RoundedCornerShape(3.dp))
+                .background(Color(0xffCEAA71))
+                .padding(start = 3.dp, end = 3.dp, top = 0.dp, bottom = 0.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = word,
+                color = Color.Black,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Normal,
+                fontFamily = FontFamily(Font(R.font.jellee_roman))
+            )
+        }
+    }
 
-    @Preview(widthDp = 520, heightDp = 800)
+
+    @Preview(widthDp = 400, heightDp = 700)
     @Composable
     private fun ScoreScreenPreview() {
         val score =  mutableMapOf(
@@ -597,6 +805,7 @@ class GameUI {
             "words_list1" to "HELP",
             "words_list2" to "THIS|WORLD|BEG|ANOTHER|WORD|UNDER|THE|SEA|GROW|SHOW|UNDER|OVER"
         )
-        ScoreScreen(Modifier, score)
+        fun getScore() = score
+        ScoreScreen(Modifier) { getScore() }
     }
 }

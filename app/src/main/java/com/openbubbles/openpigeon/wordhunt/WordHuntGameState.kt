@@ -15,6 +15,7 @@ class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHu
     val currentWord: String get() = _currentWord.value
 
     private val _wordStatus = mutableStateOf("VALID")
+    val wordStatus: String get() = _wordStatus.value
     private val _wordStatusColor = mutableStateOf(Color.Gray)
     val wordStatusColor get() = _wordStatusColor.value
 
@@ -119,25 +120,27 @@ class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHu
     private fun updateWordStatus() {
         _wordStatus.value = checkWord(_currentWord.value)
         _wordStatusColor.value = when(_wordStatus.value) {
-            "INVALID" -> Color.Gray
+            "INVALID" -> Color(0xFFEAEAEA)
             "VALID" -> Color(0xFF86FE8C)
-            "FOUND" -> Color.Yellow
+            "FOUND" -> Color(0xFFFFE95E)
             else -> {Color.Cyan}
-        }
-    }
-
-    private fun calculatePoints(word: String): Int {
-        return when (word.length) {
-            3 -> 100
-            4 -> 400
-            5 -> 800
-            6 -> 1400
-            7 -> 1800
-            else -> 2200
         }
     }
 
     fun setSecondsLeft(seconds: Int) {
         _secondsLeft.intValue = seconds
+    }
+
+    companion object {
+        fun calculatePoints(word: String): Int {
+            return when (word.length) {
+                3 -> 100
+                4 -> 400
+                5 -> 800
+                6 -> 1400
+                7 -> 1800
+                else -> 2200
+            }
+        }
     }
 }

@@ -89,6 +89,7 @@ dependencies {
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
     implementation(libs.androidx.activity)
+    implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.ui.graphics.android)
     implementation(libs.androidx.media3.common.ktx)
     implementation(files("libs/PlayerIO.aar"))
