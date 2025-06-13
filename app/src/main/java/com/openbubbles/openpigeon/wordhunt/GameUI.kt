@@ -17,13 +17,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -42,7 +46,9 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
@@ -54,6 +60,7 @@ import com.openbubbles.openpigeon.R
 import kotlinx.coroutines.delay
 import kotlin.math.min
 import kotlin.math.sqrt
+import kotlin.random.Random
 
 class GameUI {
     private lateinit var tilePositions: Array<Array<TilePosition>>
@@ -136,8 +143,9 @@ class GameUI {
 
             ScoreDisplay(
                 gameState = gameState,
-                modifier = Modifier.align(Alignment.TopCenter)
-                    .statusBarsPadding()
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 50.dp)
             )
 
             if (gameState.currentWord != "") {
@@ -202,6 +210,7 @@ class GameUI {
                         elevation = 50.dp
                     )
                     .background(Color.White)
+                    .clip(TornPaperShape())
                     .size(300.dp, 100.dp)
                     .padding(16.dp)
             ) {
@@ -565,13 +574,13 @@ class GameUI {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .statusBarsPadding()
-                        .navigationBarsPadding()
+                        .padding(top = 50.dp)
+                        .padding(3.dp, 0.dp)
+                        .shadow(10.dp)
                         .background(
                             bgColor,
                             shape = RoundedCornerShape(5.dp)
                         )
-                        .padding(3.dp, 0.dp)
                 ) {
                     Text(
                         modifier = Modifier.padding(8.dp),
@@ -587,7 +596,6 @@ class GameUI {
             Column(
                 modifier = Modifier
                     .fillMaxSize(),
-                verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(24.dp),
@@ -595,9 +603,7 @@ class GameUI {
                     modifier = modifier
                         .fillMaxSize()
                         .weight(1f)
-                        .padding(start = screenWidth * 0.03f, end = screenWidth * 0.03f, top = 20.dp, bottom = 10.dp)
-                        .statusBarsPadding()
-                        .navigationBarsPadding()
+                        .padding(start = screenWidth * 0.03f, end = screenWidth * 0.03f, top = 95.dp, bottom = 93.dp)
                 ) {
                     val wordList1 = scoreData["words_list1"]?.takeIf { it.isNotBlank() }?.split("|") ?: emptyList()
                     val wordList2 = scoreData["words_list2"]?.takeIf { it.isNotBlank() }?.split("|") ?: emptyList()
@@ -622,20 +628,20 @@ class GameUI {
                         .align(Alignment.CenterHorizontally)
                         .padding(bottom = 20.dp)
                         .background(
-                            if (isWaiting) Color(0xFF222E1F) else Color.Transparent,
+                            if (isWaiting) Color(0xD2222E1F) else Color.Transparent,
                             shape = RoundedCornerShape(5.dp)
                         )
-                        .width(250.dp)
+                        .width(260.dp)
                         .padding(8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         modifier = Modifier.padding(8.dp),
-                        text = "Waiting for opponent$dots",
+                        text = "WAITING FOR OPPONENT$dots",
                         color = if (isWaiting) Color.White else Color.Transparent,
-                        fontSize = 16.sp,
+                        fontSize = 13.sp,
                         fontFamily = fivoSansFamily,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.ExtraBold
                     )
                 }
             }
@@ -666,11 +672,13 @@ class GameUI {
             }
 
             val scoreBackground = if (!words.isNullOrBlank()) Color(0xfffdfdfd) else Color.Transparent
-            val scoreTextColor = if (!words.isNullOrBlank()) Color.Black else Color(0xFFC7CFC7)
+            val scoreTextColor = if (!words.isNullOrBlank()) Color.Black else Color(0xB2C7CFC7)
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(65.dp)
+                    .clip(TornPaperShape())
                     .background(scoreBackground)
             ) {
                 Column(
@@ -763,7 +771,7 @@ class GameUI {
                     ) {
                         Text(
                             text = "($hiddenCount more)",
-                            color = Color.Black,
+                            color = Color(0xB2C7CFC7),
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -790,6 +798,59 @@ class GameUI {
                 fontWeight = FontWeight.Normal,
                 fontFamily = FontFamily(Font(R.font.jellee_roman))
             )
+        }
+    }
+
+    class TornPaperShape(private val tearIntensity: Float = 1f) : Shape {
+        override fun createOutline(
+            size: Size,
+            layoutDirection: LayoutDirection,
+            density: Density
+        ): Outline {
+            // Use a seed based on size to make it consistent across recompositions
+            val random = Random(size.width.toInt() + size.height.toInt())
+
+            val path = Path().apply {
+                // Very fine tears - scale with component size but keep subtle
+                val maxTearHeight = (2f + tearIntensity * 2f) // Maximum 2-6 pixels
+                val tearStep = 5f + random.nextFloat() * 4f // Step between tears
+
+                // Start from top-left
+                moveTo(0f, 0f)
+
+                // Create fine torn top edge
+                var x = 0f
+                while (x < size.width) {
+                    val tearHeight = random.nextFloat() * maxTearHeight
+                    x += tearStep + random.nextFloat() * 4f
+                    if (x >= size.width) {
+                        lineTo(size.width, random.nextFloat() * maxTearHeight * 0.5f)
+                        break
+                    } else {
+                        lineTo(x, tearHeight)
+                    }
+                }
+
+                // Straight right edge
+                lineTo(size.width, size.height)
+
+                // Create fine torn bottom edge
+                x = size.width
+                while (x > 0f) {
+                    val tearHeight = size.height - (random.nextFloat() * maxTearHeight)
+                    x -= tearStep + random.nextFloat() * 4f
+                    if (x <= 0f) {
+                        lineTo(0f, size.height - random.nextFloat() * maxTearHeight * 0.5f)
+                        break
+                    } else {
+                        lineTo(x, tearHeight)
+                    }
+                }
+
+                // Straight left edge
+                close()
+            }
+            return Outline.Generic(path)
         }
     }
 
