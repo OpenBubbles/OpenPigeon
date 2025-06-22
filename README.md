@@ -2,7 +2,7 @@
 
 OpenPigeon is a GamePigeon-compatible game pack for OpenBubbles on Android. OpenBubbles is used to access iMessage.
 
-Get it on the Play Store!
+[![Play Store](https://openbubbles.app/google_play_badge.png)](https://play.google.com/store/apps/details?id=com.openbubbles.openpigeon)
 
 OpenPigeon is fully open-source, and we're actively looking for game developers to contribute their favorite games.
 
