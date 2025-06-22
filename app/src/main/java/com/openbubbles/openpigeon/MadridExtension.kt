@@ -362,7 +362,7 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
                     modifier = GlanceModifier.fillMaxSize().padding(32.dp))
             }
         }
-        Text((session?.getGame()?.getDisplaySubtitle(extension!!.context, session.currentMessage) ?: "GAME NAME").uppercase(),
+        Text((session?.getGame()?.getDisplaySubtitle(extension!!.context, session.currentMessage) ?: message?.caption ?: "Game Name").uppercase(),
                 style = TextStyle(fontSize = 16.sp, color = ColorProvider(Color.Gray),
                     textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
             modifier = GlanceModifier.padding(vertical = 10.dp))
