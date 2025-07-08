@@ -3,6 +3,7 @@ activityCompose = "1.10.1"
 agp = "8.9.1"
 calligraphy3 = "3.1.1"
 glanceAppwidget = "1.1.1"
+glanceAppwidgetVersion = "1.2.0-alpha01"
 kotlin = "1.9.0"
 coreKtx = "1.13.1"
 junit = "4.13.2"
@@ -27,6 +28,7 @@ androidx-activity-compose = { module = "androidx.activity:activity-compose", ver
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-glance-appwidget = { module = "androidx.glance:glance-appwidget", version.ref = "glanceAppwidget" }
 androidx-glance-appwidget-preview = { module = "androidx.glance:glance-appwidget-preview", version.ref = "glanceAppwidget" }
+androidx-glance-appwidget-v120alpha01 = { module = "androidx.glance:glance-appwidget", version.ref = "glanceAppwidgetVersion" }
 androidx-glance-preview = { module = "androidx.glance:glance-preview", version.ref = "glanceAppwidget" }
 androidx-material3 = { module = "androidx.compose.material3:material3" }
 androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigationCompose" }

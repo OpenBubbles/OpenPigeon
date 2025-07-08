@@ -31,6 +31,8 @@ class GameSession(var handle: IMessageViewHandle) {
             }
         }
 
+        Log.i("openpigeon", "New game! Parsed message: $newMessage")
+
         messageUpdated(newMessage)
         currentMessage = newMessage
     }

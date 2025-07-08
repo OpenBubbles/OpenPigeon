@@ -19,6 +19,13 @@ class MadridExtensionService : Service() {
         return extension!!
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        if (extension == null) {
+            extension = MadridExtension(this)
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         extension = null

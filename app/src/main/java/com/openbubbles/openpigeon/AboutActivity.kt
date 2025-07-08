@@ -29,6 +29,7 @@ class AboutActivity : Activity() {
                 8 Ball - Copper
                 Cup Pong - jakecrowley
                 Archery - jakecrowley
+                Reversi - ty8447
 
                 Are you a developer? Add your favorite game on GitHub!
             """.trimIndent())

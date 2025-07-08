@@ -1,0 +1,302 @@
+[gd_scene load_steps=17 format=3 uid="uid://dtbbaumnb5h2m"]
+
+[ext_resource type="Script" uid="uid://bwig68hkxtmyu" path="res://reversi/reversi.gd" id="1_0y82s"]
+[ext_resource type="Texture2D" uid="uid://dlyev28m5qgvf" path="res://reversi/settings.png" id="2_by1w1"]
+[ext_resource type="Texture2D" uid="uid://drtck47x6kjrk" path="res://reversi/rules.png" id="3_cwv3m"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ig7tw"]
+bg_color = Color(0, 0, 0, 1)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 4
+border_width_bottom = 4
+border_color = Color(0, 0, 0, 1)
+border_blend = true
+shadow_color = Color(0, 0, 0, 0.54902)
+shadow_size = 7
+shadow_offset = Vector2(0, 10)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0y82s"]
+bg_color = Color(0.533037, 0.533037, 0.533037, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 5.0
+expand_margin_right = 20.0
+expand_margin_bottom = 5.0
+shadow_color = Color(0, 0, 0, 0.647059)
+shadow_size = 4
+shadow_offset = Vector2(-1, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_by1w1"]
+bg_color = Color(0.466181, 0.466181, 0.466181, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 5.0
+expand_margin_right = 20.0
+expand_margin_bottom = 5.0
+shadow_color = Color(0, 0, 0, 0.647059)
+shadow_size = 4
+shadow_offset = Vector2(-1, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_2damg"]
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 5.0
+expand_margin_right = 20.0
+expand_margin_bottom = 5.0
+shadow_color = Color(0, 0, 0, 0.647059)
+shadow_size = 4
+shadow_offset = Vector2(-1, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_h2yge"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_m5bvx"]
+texture = ExtResource("2_by1w1")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_gybti"]
+texture = ExtResource("2_by1w1")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_31pxf"]
+texture = ExtResource("2_by1w1")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_on1mr"]
+texture = ExtResource("3_cwv3m")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_an3or"]
+texture = ExtResource("3_cwv3m")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_yb6cj"]
+texture = ExtResource("3_cwv3m")
+
+[sub_resource type="SystemFont" id="SystemFont_ig7tw"]
+font_weight = 600
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0xm2m"]
+bg_color = Color(0.129412, 0.282353, 0.686275, 1)
+border_color = Color(0.8, 0.8, 0.8, 0)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+expand_margin_left = 20.0
+expand_margin_top = 6.0
+expand_margin_right = 20.0
+expand_margin_bottom = 6.0
+shadow_size = 2
+shadow_offset = Vector2(0, 2)
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 1
+script = ExtResource("1_0y82s")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.898039, 0.898039, 0.898039, 1)
+
+[node name="MainVBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 4
+alignment = 1
+
+[node name="BlackCountLabel" type="Label" parent="MainVBoxContainer/TopInfoHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="SpacerLeft" type="Control" parent="MainVBoxContainer/TopInfoHBoxContainer"]
+custom_minimum_size = Vector2(5, 0)
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="CurrentTurnLabel" type="Label" parent="MainVBoxContainer/TopInfoHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+horizontal_alignment = 3
+vertical_alignment = 1
+
+[node name="SpacerRight" type="Control" parent="MainVBoxContainer/TopInfoHBoxContainer"]
+custom_minimum_size = Vector2(5, 0)
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="WhiteCountLabel" type="Label" parent="MainVBoxContainer/TopInfoHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="GameAreaCenterContainer" type="CenterContainer" parent="MainVBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="BoardVBoxContainer" type="VBoxContainer" parent="MainVBoxContainer/GameAreaCenterContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="BorderPanelContainer" type="PanelContainer" parent="MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_ig7tw")
+
+[node name="GridContainer" type="GridContainer" parent="MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer/BorderPanelContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_constants/h_separation = 2
+theme_override_constants/v_separation = 2
+columns = 8
+
+[node name="ReplayButton" type="Button" parent="MainVBoxContainer/GameAreaCenterContainer"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+theme_override_styles/hover = SubResource("StyleBoxFlat_0y82s")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_by1w1")
+theme_override_styles/normal = SubResource("StyleBoxFlat_2damg")
+
+[node name="ReplayButtonWrapper" type="Control" parent="MainVBoxContainer/GameAreaCenterContainer"]
+layout_mode = 2
+
+[node name="WinLossLabel" type="Label" parent="MainVBoxContainer/GameAreaCenterContainer"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_h2yge")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SentLabel" type="Label" parent="MainVBoxContainer/GameAreaCenterContainer"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_h2yge")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="StarPointLayer" type="Control" parent="MainVBoxContainer/GameAreaCenterContainer"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer"]
+custom_minimum_size = Vector2(0, 250)
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_constants/separation = 10
+
+[node name="MarginContainer" type="MarginContainer" parent="MainVBoxContainer/BottomItemHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 30
+
+[node name="SettingsButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 10
+size_flags_vertical = 8
+theme_override_font_sizes/font_size = 32
+theme_override_styles/hover = SubResource("StyleBoxTexture_m5bvx")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_gybti")
+theme_override_styles/normal = SubResource("StyleBoxTexture_31pxf")
+
+[node name="RulesButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 8
+theme_override_font_sizes/font_size = 32
+theme_override_styles/hover = SubResource("StyleBoxTexture_on1mr")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_an3or")
+theme_override_styles/normal = SubResource("StyleBoxTexture_yb6cj")
+
+[node name="SendButton" type="Button" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+size_flags_vertical = 8
+theme_override_colors/icon_hover_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_colors/icon_pressed_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_colors/icon_focus_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_colors/icon_normal_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_fonts/font = SubResource("SystemFont_ig7tw")
+theme_override_font_sizes/font_size = 40
+theme_override_styles/normal = SubResource("StyleBoxFlat_0xm2m")
+
+[node name="WaitBlur" type="ColorRect" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.152941, 0.152941, 0.152941, 0.556863)
+
+[node name="WaitingContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_bottom = 185
+
+[node name="WaitForOpponentLabel" type="Label" parent="WaitingContainer"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_h2yge")
+text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="DotTimer" type="Timer" parent="."]
+wait_time = 0.75

@@ -1,6 +1,5 @@
 package com.openbubbles.openpigeon
 
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
@@ -62,21 +61,23 @@ import com.openbubbles.openpigeon.checkers.CheckersGame
 import com.openbubbles.openpigeon.connect.ConnectGame
 import com.openbubbles.openpigeon.crazy8.Crazy8Game
 import com.openbubbles.openpigeon.darts.DartsGame
-import com.openbubbles.openpigeon.godot.GodotGameActivity
 import com.openbubbles.openpigeon.pong.PongGame
 import com.openbubbles.openpigeon.pool.PoolGame
+import com.openbubbles.openpigeon.reversi.ReversiGame
 import com.openbubbles.openpigeon.wordhunt.WordHuntGame
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 
+var flashbackground = false
 
 class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
     companion object {
         var currentKeyboardHandle: IKeyboardHandle? = null
-        var broadcastReceiver: BroadcastReceiver? = null
+
+        var recompositionNonce: Long = System.currentTimeMillis()
 
         val activeSessions: MutableMap<String, GameSession> = mutableMapOf()
 
@@ -90,7 +91,8 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             DartsGame(),
             PoolGame(),
             PongGame(),
-            ArcheryGame()
+            ArcheryGame(),
+            ReversiGame()
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {
@@ -111,6 +113,9 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         }
 
         var currentUserCount: Int = 2
+
+        var currentPage = 0
+        val gamesPerPage = 10
     }
 
     private var callback: IViewUpdateCallback? = null
@@ -119,6 +124,8 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         currentKeyboardHandle = null
         callback = null
         configuringGame = null
+        currentPage = 0
+        flashbackground = false
     }
 
     var configuringGame: Game? = null
@@ -134,21 +141,41 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
     fun updateKeyboard() {
-        callback?.let {
-            val displayMetrics = context.resources.displayMetrics
-            val dpWidth = displayMetrics.widthPixels / displayMetrics.density
+        val displayMetrics = context.resources.displayMetrics
+        val dpWidth = displayMetrics.widthPixels / displayMetrics.density
 
-            val result = runBlocking {
-                keyboardRemoteViews.compose(context, DpSize(dpWidth.dp, 300.dp)) {
-                    MainKeyboard()
-                }
+        recompositionNonce = System.currentTimeMillis()
+
+        keyboardRemoteViews = GlanceRemoteViews()
+
+        val result = runBlocking {
+            keyboardRemoteViews.compose(context, DpSize(dpWidth.dp, 300.dp)) {
+                MainKeyboard()
             }
+        }
 
-            it.updateView(result.remoteViews)
+        if (callback != null) {
+            callback?.updateView(result.remoteViews)
+
+            Handler(Looper.getMainLooper()).postDelayed({
+                callback?.updateView(result.remoteViews)
+            }, 30)
+        } else {
+            Log.e("updateKeyboard", "Callback is null — falling back to handle invalidation")
+        }
+
+        currentKeyboardHandle?.let {
+             val refreshMessage = MadridMessage().apply {
+                caption = "refresh_${System.currentTimeMillis()}"
+            }
+            it.addMessage(refreshMessage)
+        } ?: run {
+            Log.e("updateKeyboard", "currentKeyboardHandle is null — cannot force refresh")
         }
     }
+
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
-    val keyboardRemoteViews = GlanceRemoteViews()
+    var keyboardRemoteViews = GlanceRemoteViews()
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
     override fun keyboardOpened(callback: IViewUpdateCallback?, handle: IKeyboardHandle?, userCount: Int): RemoteViews {
         this.callback = callback
@@ -175,7 +202,6 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         session.handleNewMessage(message)
         val game = session.getGame()
 
-        Log.i("Session", message.session.toString())
         if (game != null ) {
             val intent = Intent(context, game.gameClass())
                 .apply {
@@ -219,7 +245,6 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
     override fun messageUpdated(message: MadridMessage?) {
         if (message == null) return
         activeSessions[message.session]?.handleNewMessage(message)
-        Log.i("update", "message")
     }
 
 }
@@ -268,6 +293,9 @@ class GoBackCallback : ActionCallback {
 
 private val gameName = ActionParameters.Key<String>("game_name")
 
+private val pageDirection = ActionParameters.Key<String>("direction")
+
+
 @Composable
 fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: GlanceModifier = GlanceModifier) {
     Column(modifier = modifier.wrapContentHeight().padding(1.dp), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
@@ -276,7 +304,7 @@ fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: Glance
             contentDescription = game.displayName(),
             modifier = GlanceModifier.wrapContentHeight().clickable(
                 onClick = actionRunCallback<ChooseGameCallback>(actionParametersOf(
-                        gameName to game.getName()
+                    gameName to game.getName()
                 ))
             ).height(80.dp).cornerRadius(5.dp),
             contentScale = ContentScale.Crop,
@@ -295,22 +323,91 @@ fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: Glance
 @Composable
 fun RenderKeyboard(extension: MadridExtension?) {
     val itemsPerRow = 5
+    val gamesList = MadridExtension.games
+    val start = MadridExtension.currentPage * MadridExtension.gamesPerPage
+    val pageGames = gamesList.subList(start, (start + MadridExtension.gamesPerPage).coerceAtMost(gamesList.size))
+    val totalPages = ceil(gamesList.size / MadridExtension.gamesPerPage.toDouble()).toInt()
+
+    Text(
+        "RECOMPOSE_NONCE_${MadridExtension.recompositionNonce}",
+        style = TextStyle(fontSize = 1.sp, color = ColorProvider(Color.Transparent))
+    )
+
     Column(modifier = GlanceModifier.fillMaxHeight().padding(1.dp)) {
-        Row(horizontalAlignment = Alignment.Horizontal.CenterHorizontally, verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
-            Image(ImageProvider(R.drawable.madrid_icon), "OpenPigeon", modifier = GlanceModifier.width(50.dp).padding(8.dp).wrapContentHeight())
-            Text("Games", style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(end = 6.dp))
-            Text("|", style = TextStyle(fontSize = 30.sp, color = ColorProvider(Color.Gray)))
-            Text("About", style = TextStyle(fontSize = 15.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(start = 6.dp)
-                    .clickable(onClick = androidx.glance.action.actionStartActivity<AboutActivity>()))
+        Row(
+            modifier = GlanceModifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalAlignment = Alignment.Horizontal.CenterHorizontally
+        ) {
+            Box(modifier = GlanceModifier.width(70.dp), contentAlignment = Alignment.CenterStart) {
+                if (MadridExtension.currentPage > 0) {
+                    Text(
+                        "◀ Prev",
+                        style = TextStyle(fontSize = 18.sp, color = ColorProvider(Color.LightGray)),
+                        modifier = GlanceModifier.clickable(
+                            onClick = actionRunCallback<PageChangeCallback>(
+                                actionParametersOf(pageDirection to "prev")
+                            )
+                        )
+                    )
+                }
+            }
+
+            Spacer(GlanceModifier.defaultWeight())
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(
+                    ImageProvider(R.drawable.madrid_icon),
+                    "OpenPigeon",
+                    modifier = GlanceModifier.width(50.dp).padding(end = 8.dp).wrapContentHeight()
+                )
+                Text("Games", style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(end = 6.dp))
+                Text("|", style = TextStyle(fontSize = 30.sp, color = ColorProvider(Color.Gray)))
+                Text(
+                    "About",
+                    style = TextStyle(fontSize = 15.sp, color = ColorProvider(Color.Gray)),
+                    modifier = GlanceModifier
+                        .padding(start = 6.dp)
+                        .clickable(
+                            onClick = actionStartActivity(
+                                Intent(extension?.context, AboutActivity::class.java).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                            )
+                        )
+                )
+            }
+
+            Spacer(GlanceModifier.defaultWeight())
+
+            Box(modifier = GlanceModifier.width(70.dp), contentAlignment = Alignment.CenterEnd) {
+                if (MadridExtension.currentPage < totalPages - 1) {
+                    Text(
+                        "Next ▶",
+                        style = TextStyle(fontSize = 18.sp, color = ColorProvider(Color.LightGray)),
+                        modifier = GlanceModifier.clickable(
+                            onClick = actionRunCallback<PageChangeCallback>(
+                                actionParametersOf(pageDirection to "next")
+                            )
+                        )
+                    )
+                }
+            }
         }
-        for (index in 0..<ceil(games.size / itemsPerRow.toDouble()).toInt()) {
+
+        Text(
+            "KEYBOARD_VERSION_${MadridExtension.currentPage}_${System.currentTimeMillis()}",
+            style = TextStyle(fontSize = 1.sp, color = ColorProvider(Color.Transparent))
+        )
+
+        for (row in 0 until 2) {
             Row(modifier = GlanceModifier.padding(bottom = 3.dp)) {
-                for (i in 0..<itemsPerRow) {
-                    val game = games.getOrNull(index * itemsPerRow + i)
+                for (col in 0 until itemsPerRow) {
+                    val game = pageGames.getOrNull(row * itemsPerRow + col)
                     if (game != null) {
                         RenderKeyboardGame(game, extension, modifier = GlanceModifier.defaultWeight())
                     } else {
-                        Box(modifier = GlanceModifier.defaultWeight()) {  }
+                        Box(modifier = GlanceModifier.defaultWeight()) { }
                     }
                 }
             }
@@ -363,8 +460,8 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
             }
         }
         Text((session?.getGame()?.getDisplaySubtitle(extension!!.context, session.currentMessage) ?: message?.caption ?: "Game Name").uppercase(),
-                style = TextStyle(fontSize = 16.sp, color = ColorProvider(Color.Gray),
-                    textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
+            style = TextStyle(fontSize = 16.sp, color = ColorProvider(Color.Gray),
+                textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
             modifier = GlanceModifier.padding(vertical = 10.dp))
     }
 }
@@ -417,16 +514,35 @@ class ConfigureCallback : ActionCallback {
     }
 }
 
+class PageChangeCallback : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val dir = parameters[pageDirection] ?: return
+        val maxPage = (games.size - 1) / MadridExtension.gamesPerPage
+        val currentPageBefore = MadridExtension.currentPage
+
+        when (dir) {
+            "next" -> if (MadridExtension.currentPage < maxPage) MadridExtension.currentPage++
+            "prev" -> if (MadridExtension.currentPage > 0) MadridExtension.currentPage--
+        }
+
+        if (currentPageBefore != MadridExtension.currentPage) {
+            Handler(Looper.getMainLooper()).post {
+                MadridExtensionService.extension?.updateKeyboard()
+            }
+        }
+    }
+}
+
 @Composable
 fun RenderConfigOption(game: Game, name: String, options: List<String>, selected: String) {
     Column(modifier = GlanceModifier.padding(8.dp)) {
         Text(name.uppercase(), style = TextStyle(color = ColorProvider(Color.Gray),
-                fontWeight = FontWeight.Bold, fontSize = 11.sp))
+            fontWeight = FontWeight.Bold, fontSize = 11.sp))
         Spacer(modifier = GlanceModifier.height(2.dp).background(Color.Gray).fillMaxWidth())
         Row(verticalAlignment = Alignment.Vertical.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
             for (option in options) {
                 Text(option, style = TextStyle(fontWeight =
-                        if (selected == option) FontWeight.Bold else FontWeight.Normal, color = ColorProvider(Color.Gray),
+                    if (selected == option) FontWeight.Bold else FontWeight.Normal, color = ColorProvider(Color.Gray),
                     fontSize = 18.sp, textAlign = TextAlign.Center
                 ), modifier = GlanceModifier.padding(horizontal = 8.dp, vertical = 4.dp).clickable(onClick = actionRunCallback<ConfigureCallback>(actionParametersOf(
                     gameName to game.getName(),
