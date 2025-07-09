@@ -330,6 +330,8 @@ func update_piece_counts() -> Dictionary:
 				white_count += 1
 			elif piece == "⚫":
 				black_count += 1
+	white_count = white_count + 1 if temp_piece_active and player_val == 2 else 0
+	black_count = black_count + 1 if temp_piece_active and player_val == 1 else 0
 	white_count_label.text = str(white_count)
 	black_count_label.text = str(black_count)
 	white_score = white_count
