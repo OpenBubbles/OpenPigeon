@@ -42,9 +42,9 @@ const STAR_POINT_SCENE = preload("res://reversi/StarPoint.tscn")
 
 const STAR_POINTS = [
 Vector2i(2, 2),
-Vector2i(2, 5),
+Vector2i(2, 6),
 Vector2i(5, 2),
-Vector2i(5, 5),
+Vector2i(5, 6),
 ]
 
 # --- Temporary Piece State Variables ---

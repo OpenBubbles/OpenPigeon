@@ -18,12 +18,6 @@ const COLORS = [0, 1, 2, 3, 4, 5]  # Red, Green, Yellow, Blue, Purple, Black
 const BOARD_WIDTH = 8  # For the number of columns
 const BOARD_HEIGHT = 7 # For the number of rows
 
-# New variables for the custom C-style RNG
-var _rng_state: int = 0
-const _RNG_A: int = 0x5DEECE66D
-const _RNG_C: int = 0xB
-const _RNG_M: int = 281474976710656 # This is 2^48
-
 const COLOR_MAP = {
 	0: Color(0.92, 0.13, 0.432), # Red
 	1: Color(0.45, 0.75, 0.29),  # Green
@@ -40,7 +34,6 @@ const RULES_POPUP_SCENE = preload("res://reversi/RulesPopup.tscn")
 var board: Array = []
 var color_board: Array = []
 #var used_colors := []
-var appPlugin = null
 var tween: Tween # Used for color selector animation
 
 var game_ended = false
@@ -64,75 +57,74 @@ var my_player: String = "1"
 var sent_tween: Tween # Tween for the "Sent" label
 var dot_count = 0 # For the "Waiting..." dots animation
 
-const DEBUG_SEED = -1576055645
-
 func _ready():
-	# 1) Basic UI setup (selectors, grid, tweens, dot‐timer, etc)
-	print("--- _ready() start ---")
 	randomize()
-	print("1) RNG randomized")
-
-	print("2) Building UI chrome…")
+	print("Scene ready!")
 	setup_color_selector()
 	setup_board_structure()
-	setup_tween()
-	
-	if dot_timer:
-		dot_timer.connect("timeout", _on_dot_timer_timeout)
-
-	# 2) Try to hook into the native plugin for a real GamePigeon seed
-	print("3) Getting AppPlugin…")
-	appPlugin = Engine.get_singleton("AppPlugin")
-	if appPlugin:
-		print("4) AppPlugin FOUND, requesting game data")
-		appPlugin.connect("set_game_data", _on_game_data_received)
-		appPlugin.onReady()
-	else:
-		print("4) AppPlugin NOT FOUND, falling back to DEBUG_SEED")
-		_init_board_with_seed(DEBUG_SEED)
-		
-func _init_board_with_seed(seed: int) -> void:
-	# Generate exactly GamePigeon’s board for this seed
-	print("→ Generating board with seed:", seed)
-	color_board = generate_gamepigeon_board(seed)
-	
-	# Corner colors & selector states
-	left_color  = get_color_from_position(left_start)
-	right_color = get_color_from_position(right_start)
-	update_color_selector_states()
-	
-	# Flood‐fill scores
-	var ui = get_score_elements()
-	var my_c  = get_connected_cells(ui.my_start, ui.my_color).size()
-	var op_c  = get_connected_cells(ui.opponent_start, ui.opponent_color).size()
-	ui.my_score_label.text       = str(my_c)
-	ui.opponent_score_label.text = str(op_c)
-	
-	# Paint it all
+	generate_filler_colors(0x210)
 	apply_colors_to_cells()
+	#print ("67 Update Selectors")
+	#update_color_selector_states()
 
-func _on_game_data_received(new_game_data_json: String) -> void:
-	# 1) Parse seed out of JSON
-	var parsed = JSON.parse_string(new_game_data_json)
-	if typeof(parsed) != TYPE_DICTIONARY:
-		push_error("Bad game data JSON")
-		return
-	var dict = parsed as Dictionary
-	var seed = int(dict.get("seed", str(DEBUG_SEED)))
-	print("→ Received seed from plugin:", seed)
+	var ui = get_score_elements()
+	print("72 ", ui)
 	
-	# 2) Now initialize exactly as above
-	_init_board_with_seed(seed)
+	#if my_player == "1":
+	if is_instance_valid(ui.my_color_rect):
+		ui.my_color_rect.color = COLOR_MAP.get(ui.my_color, Color.GRAY)
+	if is_instance_valid(ui.opponent_color_rect):
+		ui.opponent_color_rect.color = COLOR_MAP.get(ui.opponent_color, Color.GRAY)
+
+	ui.my_score_label.text = str(get_connected_cells(ui.my_start, ui.my_color).size())
+	ui.opponent_score_label.text = str(get_connected_cells(ui.opponent_start, ui.opponent_color).size())
+	#else:
+		#if is_instance_valid(ui.my_color_rect):
+			#ui.my_color_rect.color = COLOR_MAP.get(ui.opponent_color, Color.GRAY)
+		#if is_instance_valid(ui.opponent_color_rect):
+			#ui.opponent_color_rect.color = COLOR_MAP.get(ui.my_color, Color.GRAY)
+#
+		#used_colors.append(ui.my_color)
+		#used_colors.append(ui.opponent_color)
+#
+		#ui.my_score_label.text = str(get_connected_cells(ui.opponent_start, ui.opponent_color).size())
+		#ui.opponent_score_label.text = str(get_connected_cells(ui.my_start, ui.my_color).size())
 	
-	# 3) And finally apply the replay‐string logic to push moves, scores, etc.
-	#    (you can still call parse_replay_string here if you want to replay a move)
+	setup_tween() # For color selector animation
+	show_color_selector()
+
+	# Connect the dot_timer timeout signal
+	if is_instance_valid(dot_timer):
+		dot_timer.connect("timeout", _on_dot_timer_timeout)
+	else:
+		print("Warning: dot_timer is not valid.")
+
+	var appPlugin = Engine.get_singleton("AppPlugin")
+	if appPlugin:
+		print("AppPlugin Available")
+		if not has_connected:
+			appPlugin.connect("set_game_data", _set_game_data)
+			has_connected = true
+			appPlugin.onReady()
+			print("AppPlugin Connected")
+	else:
+		_set_game_data('{ "isYourTurn": true, "player": "2", "seed": "1796765200", "replay": "board:5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,4,5,5,5,5,4,5,4,4,5,5,5,5,4,4,4,4,5,4,5,5,4,4,4,4,4,5,5,4,4,4,4,4,4,4,4,4,4,4,4,4|move:2|board:1,2,2,2,2,2,2,2,2,2,2,2,2,4,4,4,2,2,2,2,4,4,4,4,2,2,2,2,4,4,4,4,2,2,2,2,4,4,4,4,4,2,2,4,4,4,4,4,4,4,4,4,4,4,4,4", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')		
+		update_color_selector_states()
+		print("No AppPlugin Available, Setting Debug Data")
+		
+	left_color = get_color_from_position(left_start)
+	right_color = get_color_from_position(right_start)
 	
-	# (If you also want to show the “waiting” animation or apply turn state, do that here too.)
+	print("64 Update Selectors. Left Color is ",left_color," Right Color is ",right_color)
+		
+	if rules_button:
+		rules_button.pressed.connect(on_rules_button_pressed)
+	if settings_button:
+		settings_button.pressed.connect(on_settings_button_pressed)
 		
 func get_score_elements() -> Dictionary:
 	print("110: ", my_player)
 	if my_player == "1":
-		print("YOU'RE PLAYER 1!!!!!")
 		return {
 			"my_color_rect": left_bg,
 			"opponent_color_rect": right_bg,
@@ -144,7 +136,6 @@ func get_score_elements() -> Dictionary:
 			"opponent_color": left_color
 		}
 	else:
-		print("YOU'RE PLAYER 2!!!!!")
 		return {
 			"my_color_rect": left_bg,
 			"opponent_color_rect": right_bg,
@@ -156,44 +147,52 @@ func get_score_elements() -> Dictionary:
 			"opponent_color": right_color
 		}
 
-func _srand48(seed: int) -> void:
-	_rng_state = (seed << 16) | 0x330E
-
-func _drand48() -> float:
-	_rng_state = (_RNG_A * _rng_state + _RNG_C) & (_RNG_M - 1)
-	return float(_rng_state) / _RNG_M
-
 func generate_gamepigeon_board(seed_val: int) -> Array:
-	_srand48(seed_val)
-	var board := []
+	var result := []
+	var rng = RandomNumberGenerator.new()
+	rng.seed = int(seed_val)
+
 	for y in range(BOARD_HEIGHT):
-		board.append([])
+		result.append([])
 		for x in range(BOARD_WIDTH):
-			# build forbidden list from left & top
 			var forbidden := []
 			if x > 0:
-				forbidden.append(board[y][x - 1])
+				forbidden.append(result[y][x - 1])
 			if y > 0:
-				forbidden.append(board[y - 1][x])
+				forbidden.append(result[y - 1][x])
 
-			# choices that don’t clash
-			var options = COLORS.filter(func(c):
-				return not forbidden.has(c)
-			)
+			var options := COLORS.filter(func(c): return not forbidden.has(c))
 			if options.is_empty():
-				push_error("No valid colors at %d,%d" % [x, y])
-				options = COLORS
+				print("Retrying board gen due to no valid options")
+				return generate_gamepigeon_board(seed_val + 1)
 
-			# pick one
-			var r = _drand48()
-			var idx = int(floor(r * options.size())) % options.size()
-			board[y].append(options[idx])
-	return board
+			var chosen = options[rng.randi_range(0, options.size() - 1)]
+			result[y].append(chosen)
 
-# Replace your old function with this simplified version.
-func generate_filler_colors(seed_val: int):
-	# This function now exclusively uses the correct board generation algorithm.
-	color_board = generate_gamepigeon_board(seed_val)
+	return result
+
+func generate_filler_colors(seed_val: int = -1):
+	if seed_val >= 0:
+		color_board = generate_gamepigeon_board(seed_val)
+		return
+
+	color_board.clear()
+	for y in range(BOARD_HEIGHT):
+		color_board.append([])
+		for x in range(BOARD_WIDTH):
+			var forbidden_colors = []
+			if x > 0:
+				forbidden_colors.append(color_board[y][x - 1])
+			if y > 0:
+				forbidden_colors.append(color_board[y - 1][x])
+
+			var options = COLORS.filter(func(c): return not forbidden_colors.has(c))
+			if options.is_empty():
+				generate_filler_colors()
+				return
+
+			var chosen = options[randi() % options.size()]
+			color_board[y].append(chosen)
 
 func apply_colors_to_cells():
 	var display_board = color_board
@@ -286,7 +285,7 @@ func update_color_selector_states():
 		if not btn:
 			print("283 negative")
 			continue
-		print("Selector: ", i)
+
 		# If the color is either the left or right background color
 		if i == left_color or i == right_color:
 			btn.disabled = false # Enable them so they can be clicked if needed
@@ -407,8 +406,9 @@ func _on_color_selection_made(selected_color_index: int):
 
 	# Refresh selector and send data
 	update_color_selector_states()
-	if appPlugin:
-		appPlugin.updateGameData(JSON.stringify(result))
+	var app = Engine.get_singleton("AppPlugin")
+	if app:
+		app.updateGameData(JSON.stringify(result))
 	else:
 		print("AppPlugin is null. Cannot send game data.")
 
@@ -652,14 +652,7 @@ func get_flipped_board(board_to_flip: Array) -> Array:
 		flipped.append([])
 		for x in range(BOARD_WIDTH):
 			# Flipped coordinates: x => (BOARD_WIDTH - 1 - x), y => (BOARD_HEIGHT - 1 - y)
-			# Ensure board_to_flip has enough rows and columns before accessing
-			if BOARD_HEIGHT - 1 - y < board_to_flip.size() and \
-			   BOARD_WIDTH - 1 - x < board_to_flip[0].size(): # Assuming all inner arrays have same size
-				flipped[y].append(board_to_flip[BOARD_HEIGHT - 1 - y][BOARD_WIDTH - 1 - x])
-			else:
-				# Handle error or append a default value if out of bounds
-				push_error("Error in get_flipped_board: Attempted to access out-of-bounds index.")
-				flipped[y].append(0) # Append a default color to avoid crashing
+			flipped[y].append(board_to_flip[BOARD_HEIGHT - 1 - y][BOARD_WIDTH - 1 - x])
 	return flipped
 
 func check_win() -> bool:
@@ -687,12 +680,8 @@ func check_win() -> bool:
 	
 	# Determine winner: 0=left, 1=right, -1=tie
 	var winner_id = -1
-	if my_player == "1":
-		if my_count > op_count: winner_id = 0
-		elif op_count > my_count: winner_id = 1
-	else:
-		if my_count > op_count: winner_id = 1
-		elif op_count > my_count: winner_id = 0
+	if my_count  > op_count: winner_id = 0
+	elif op_count > my_count: winner_id = 1
 	
 	# Only animate once
 	if not was_over:

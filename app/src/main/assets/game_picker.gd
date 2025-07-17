@@ -7,7 +7,9 @@ var games = {
 	"sea": "res://battleship/battleship.tscn",
 	"darts": "res://darts/DartsScene.tscn",
 	"beer": "res://pong/cuppong.tscn",
-	"archery": "res://archery/archery.tscn"
+	"archery": "res://archery/archery.tscn",
+	"reversi": "res://reversi/reversi.tscn",
+	"fill": "res://fill/fill.tscn"
 }
 
 # Called when the node enters the scene tree for the first time.
