@@ -742,35 +742,33 @@ func preview_flip_pieces(x: int, y: int, player: String):
 
 
 func on_cell_pressed(x: int, y: int) -> void:
-	if not is_my_turn:
-		return
-	if game_over:
-		return
-
-	var piece = get_piece(x, y)
-	reset_board_to_pre_data()
-
-	var directions = get_flippable_directions(x, y, player_symbol)
-	if piece != "" or directions.size() == 0:
-		if temp_piece_active:
-			reset_board_to_pre_data()
-			clear_temp_piece_visual()
-			temp_piece_active = false
-			preview_flips_active = false
-			temp_piece_x = -1
-			temp_piece_y = -1
-
-			if send_button.visible:
-				animate_button_slide_down()
+	# only if it’s your turn and game isn’t over
+	if not is_my_turn or game_over:
 		return
 
+	# ignore a second click on the same preview cell
 	if temp_piece_active and temp_piece_x == x and temp_piece_y == y:
 		return
 
+	# 1) tear down any existing preview so legality checks run on a clean board
 	if temp_piece_active:
 		reset_board_to_pre_data()
 		clear_temp_piece_visual()
+		temp_piece_active = false
+		preview_flips_active = false
+		temp_piece_x = -1
+		temp_piece_y = -1
+		if send_button.visible:
+			animate_button_slide_down()
 
+	# 2) now check the real board for occupancy or move legality
+	var current_piece = get_piece(x, y)
+	var directions = get_flippable_directions(x, y, player_symbol)
+	if current_piece != "" or directions.size() == 0:
+		# either occupied or not a valid flip
+		return
+
+	# 3) it’s a fresh, valid preview—set it up
 	temp_piece_x = x
 	temp_piece_y = y
 	temp_piece_active = true
@@ -778,7 +776,7 @@ func on_cell_pressed(x: int, y: int) -> void:
 
 	place_temp_piece_visual(x, y, player_symbol)
 	preview_flip_pieces(x, y, player_symbol)
-	print("767 Call Update Count")
+
 	update_piece_counts()
 	animate_button_slide_up()
 
