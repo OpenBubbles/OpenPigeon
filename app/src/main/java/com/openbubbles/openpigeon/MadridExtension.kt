@@ -69,6 +69,7 @@ import com.openbubbles.openpigeon.wordhunt.WordHuntGame
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import kotlin.math.ceil
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 
@@ -122,6 +123,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
     }
 
     var configuringGame: Game? = null
+    var currentPage: Int = 0
 
     @Composable
     fun MainKeyboard() {
@@ -292,9 +294,29 @@ fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: Glance
     }
 }
 
+private val page = ActionParameters.Key<Int>("page")
+class ChangePageCallback : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        MadridExtensionService.extension?.let {
+            it.currentPage = parameters[page]!!
+            it.updateKeyboard()
+        }
+    }
+}
+
 @Composable
 fun RenderKeyboard(extension: MadridExtension?) {
     val itemsPerRow = 5
+    val rowsPerPage = 2
+    val p = extension?.currentPage ?: 0
+    val itemsPerPage = itemsPerRow * rowsPerPage
+    val totalPages = ceil(games.size / itemsPerPage.toDouble()).toInt()
+
+    val pageGames = games.slice(min(itemsPerPage * p, games.size)..<min(itemsPerPage * (p + 1), games.size))
     Column(modifier = GlanceModifier.fillMaxHeight().padding(1.dp)) {
         Row(horizontalAlignment = Alignment.Horizontal.CenterHorizontally, verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
             Image(ImageProvider(R.drawable.madrid_icon), "OpenPigeon", modifier = GlanceModifier.width(50.dp).padding(8.dp).wrapContentHeight())
@@ -303,10 +325,10 @@ fun RenderKeyboard(extension: MadridExtension?) {
             Text("About", style = TextStyle(fontSize = 15.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(start = 6.dp)
                     .clickable(onClick = androidx.glance.action.actionStartActivity<AboutActivity>()))
         }
-        for (index in 0..<ceil(games.size / itemsPerRow.toDouble()).toInt()) {
+        for (index in 0..<ceil(pageGames.size / itemsPerRow.toDouble()).toInt()) {
             Row(modifier = GlanceModifier.padding(bottom = 3.dp)) {
                 for (i in 0..<itemsPerRow) {
-                    val game = games.getOrNull(index * itemsPerRow + i)
+                    val game = pageGames.getOrNull(index * itemsPerRow + i)
                     if (game != null) {
                         RenderKeyboardGame(game, extension, modifier = GlanceModifier.defaultWeight())
                     } else {
@@ -314,6 +336,20 @@ fun RenderKeyboard(extension: MadridExtension?) {
                     }
                 }
             }
+        }
+        Spacer(modifier = GlanceModifier.defaultWeight())
+        Row(modifier = GlanceModifier.fillMaxWidth()) {
+            if (p > 0)
+            Image(ImageProvider(R.drawable.baseline_arrow_back_ios_24), "Back", modifier = GlanceModifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                .clickable(onClick = actionRunCallback<ChangePageCallback>(actionParametersOf(
+                    page to (p - 1)
+                ))))
+            Spacer(modifier = GlanceModifier.defaultWeight())
+            if (p < (totalPages - 1))
+            Image(ImageProvider(R.drawable.baseline_arrow_forward_ios_24), "Forward", modifier = GlanceModifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                .clickable(onClick = actionRunCallback<ChangePageCallback>(actionParametersOf(
+                    page to (p + 1)
+                ))))
         }
     }
 }
