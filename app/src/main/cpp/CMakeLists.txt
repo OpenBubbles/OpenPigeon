@@ -50,4 +50,5 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     # List libraries link to the target library
     android
     log
-    Box2D)
+    Box2D
+    C++)

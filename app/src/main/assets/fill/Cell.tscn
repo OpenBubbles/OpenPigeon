@@ -1,0 +1,23 @@
+[gd_scene format=3 uid="uid://bbv87yb2ode1w"]
+
+[node name="Button" type="Control"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 3
+anchors_preset = 0
+offset_right = 64.0
+offset_bottom = 64.0
+
+[node name="Btn_Color" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="DebugLabel" type="Label" parent="."]
+visible = false
+layout_mode = 1
+offset_right = 40.0
+offset_bottom = 23.0

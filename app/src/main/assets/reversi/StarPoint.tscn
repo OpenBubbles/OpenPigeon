@@ -1,0 +1,16 @@
+[gd_scene load_steps=2 format=3 uid="uid://cf1p33pgxpunb"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lp5an"]
+bg_color = Color(0, 0, 0, 1)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_right = 15
+corner_radius_bottom_left = 15
+
+[node name="StarPoint_tscn" type="Panel"]
+custom_minimum_size = Vector2(8, 8)
+offset_right = 13.0
+offset_bottom = 13.0
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_lp5an")

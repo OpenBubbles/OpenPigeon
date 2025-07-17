@@ -1,0 +1,336 @@
+[gd_scene load_steps=18 format=3 uid="uid://cb10bquan8k3d"]
+
+[ext_resource type="Script" uid="uid://b1m5dj5ejua6o" path="res://fill/fill.gd" id="1_cobdr"]
+[ext_resource type="Texture2D" uid="uid://dlyev28m5qgvf" path="res://reversi/settings.png" id="1_jykyx"]
+[ext_resource type="Texture2D" uid="uid://drtck47x6kjrk" path="res://reversi/rules.png" id="2_cobdr"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kqrkf"]
+bg_color = Color(0, 0, 0, 1)
+border_color = Color(0, 0, 0, 1)
+border_blend = true
+shadow_color = Color(0, 0, 0, 0.54902)
+shadow_size = 7
+shadow_offset = Vector2(0, 10)
+
+[sub_resource type="Shader" id="Shader_cobdr"]
+code = "shader_type canvas_item;
+
+uniform sampler2D mask_texture;
+
+void fragment() {
+	vec4 mask = texture(mask_texture, UV);
+	COLOR = vec4(0.5, 0.7, 1.0, mask.r * 0.5); // apply glow with alpha from mask
+}
+"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_fprbq"]
+shader = SubResource("Shader_cobdr")
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_fprbq"]
+bg_color = Color(0.533037, 0.533037, 0.533037, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 5.0
+expand_margin_right = 20.0
+expand_margin_bottom = 5.0
+shadow_color = Color(0, 0, 0, 0.647059)
+shadow_size = 4
+shadow_offset = Vector2(-1, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1gr0b"]
+bg_color = Color(0.466181, 0.466181, 0.466181, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 5.0
+expand_margin_right = 20.0
+expand_margin_bottom = 5.0
+shadow_color = Color(0, 0, 0, 0.647059)
+shadow_size = 4
+shadow_offset = Vector2(-1, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_nn5xc"]
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 5.0
+expand_margin_right = 20.0
+expand_margin_bottom = 5.0
+shadow_color = Color(0, 0, 0, 0.647059)
+shadow_size = 4
+shadow_offset = Vector2(-1, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_008sc"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_05x7v"]
+texture = ExtResource("1_jykyx")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_nr0uu"]
+texture = ExtResource("1_jykyx")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_1y8e2"]
+texture = ExtResource("1_jykyx")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_q50tp"]
+texture = ExtResource("2_cobdr")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_bwi04"]
+texture = ExtResource("2_cobdr")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_ad4vd"]
+texture = ExtResource("2_cobdr")
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cobdr"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[node name="Fill" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_cobdr")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.898039, 0.898039, 0.898039, 1)
+
+[node name="MainVBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_vertical = 4
+alignment = 1
+
+[node name="ScoreMarginContainer" type="MarginContainer" parent="MainVBoxContainer/TopInfoHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 40
+
+[node name="LeftPlayer" type="Control" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer"]
+custom_minimum_size = Vector2(48, 16)
+layout_mode = 2
+size_flags_horizontal = 0
+
+[node name="LeftBG" type="ColorRect" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer/LeftPlayer"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.65098, 1, 1, 1)
+
+[node name="LeftScore" type="Label" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer/LeftPlayer"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Separation" type="Control" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RightPlayer" type="Control" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer"]
+custom_minimum_size = Vector2(48, 16)
+layout_mode = 2
+size_flags_horizontal = 8
+
+[node name="RightBG" type="ColorRect" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer/RightPlayer"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(1, 0.584314, 1, 1)
+
+[node name="RightScore" type="Label" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer/RightPlayer"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="GameAreaCenterContainer" type="CenterContainer" parent="MainVBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="BoardVBoxContainer" type="VBoxContainer" parent="MainVBoxContainer/GameAreaCenterContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="BorderPanelContainer" type="PanelContainer" parent="MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_kqrkf")
+
+[node name="GridContainer" type="GridContainer" parent="MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer/BorderPanelContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_constants/h_separation = 0
+theme_override_constants/v_separation = 0
+columns = 8
+
+[node name="PlayerHighlightOverlay" type="TextureRect" parent="MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer/BorderPanelContainer"]
+visible = false
+modulate = Color(1, 1, 1, 0)
+material = SubResource("ShaderMaterial_fprbq")
+layout_mode = 2
+mouse_filter = 2
+
+[node name="TextureRect" type="TextureRect" parent="MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer/BorderPanelContainer"]
+layout_mode = 2
+
+[node name="ReplayButton" type="Button" parent="MainVBoxContainer/GameAreaCenterContainer"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+theme_override_styles/hover = SubResource("StyleBoxFlat_fprbq")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_1gr0b")
+theme_override_styles/normal = SubResource("StyleBoxFlat_nn5xc")
+
+[node name="ReplayButtonWrapper" type="Control" parent="MainVBoxContainer/GameAreaCenterContainer"]
+visible = false
+layout_mode = 2
+
+[node name="WinLossLabel" type="Label" parent="MainVBoxContainer/GameAreaCenterContainer"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_008sc")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SentLabel" type="Label" parent="MainVBoxContainer/GameAreaCenterContainer"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_008sc")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ColorSelectorContainer" type="HBoxContainer" parent="MainVBoxContainer"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer"]
+custom_minimum_size = Vector2(0, 250)
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="MainVBoxContainer/BottomItemHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 30
+
+[node name="SettingsButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 10
+size_flags_vertical = 8
+theme_override_font_sizes/font_size = 32
+theme_override_styles/hover = SubResource("StyleBoxTexture_05x7v")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_nr0uu")
+theme_override_styles/normal = SubResource("StyleBoxTexture_1y8e2")
+
+[node name="RulesButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 8
+theme_override_font_sizes/font_size = 32
+theme_override_styles/hover = SubResource("StyleBoxTexture_q50tp")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_bwi04")
+theme_override_styles/normal = SubResource("StyleBoxTexture_ad4vd")
+
+[node name="WaitBlur" type="ColorRect" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.152941, 0.152941, 0.152941, 0.556863)
+
+[node name="WaitingContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_bottom = 185
+
+[node name="WaitForOpponentLabel" type="Label" parent="WaitingContainer"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_cobdr")
+text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="DotTimer" type="Timer" parent="."]
+wait_time = 0.75
