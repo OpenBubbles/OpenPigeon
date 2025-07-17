@@ -321,21 +321,31 @@ func update_turn_indicator():
 		turn_indicator_arrow.text = "▶"
 
 func update_piece_counts() -> Dictionary:
+	print("Update Piece Counts Called!")
 	var white_count = 0
 	var black_count = 0
+
+	# 1) Count everything actually on the board
 	for y in range(BOARD_SIZE):
 		for x in range(BOARD_SIZE):
-			var piece = get_piece(x, y)
-			if piece == "⚪":
-				white_count += 1
-			elif piece == "⚫":
-				black_count += 1
-	white_count = white_count + 1 if temp_piece_active and player_val == 2 else 0
-	black_count = black_count + 1 if temp_piece_active and player_val == 1 else 0
+			match get_piece(x, y):
+				"⚪": white_count += 1
+				"⚫": black_count += 1
+
+	# 2) If we're showing a temp (preview) piece, include it
+	if temp_piece_active:
+		if player_symbol == "⚪":
+			white_count += 1
+		elif player_symbol == "⚫":
+			black_count += 1
+
+	# 3) Push out to your labels & state vars
 	white_count_label.text = str(white_count)
 	black_count_label.text = str(black_count)
 	white_score = white_count
 	black_score = black_count
+
+	print("White Count:", white_count, "Black Count:", black_count)
 	return {"white": white_count, "black": black_count}
 
 func highlight_valid_moves():
@@ -400,6 +410,14 @@ func _set_game_data(new_game_data_json: String):
 				pre_board_data.fill(0)
 			
 			process_game_state()
+			print("403 Updating Piece Counts")
+			update_piece_counts()
+			
+			# ▶ new: play/stop waiting animation based on turn
+			if not is_my_turn and not game_over:
+				start_waiting_animation()
+			else:
+				stop_waiting_animation()
 	else:
 		print("Parsed Data is not dictionary")
 		initialize_board_pieces()
@@ -446,7 +464,7 @@ func process_game_state():
 						set_piece(x_godot, y_godot, symbol, true)
 					else:
 						print(str("Error: pre_board_data index out of bounds or size mismatch. Index: ", cell_index, " Size: ", pre_board_data.size()))
-
+	print("453 Call Update Count")
 	update_piece_counts()
 	update_turn_indicator()
 
@@ -610,6 +628,7 @@ func play_replay(replay_string: String):
 		print("Parsed has no valid pre_board. Initializing default board.")
 		initialize_board_pieces()
 
+	print("617 Call Update Count")
 	update_piece_counts()
 
 	if "move" in parsed and parsed["move"] is Array:
@@ -644,6 +663,7 @@ func play_replay(replay_string: String):
 
 					await get_tree().create_timer(0.5).timeout
 
+					print("652 Call Update Count")
 					update_piece_counts()
 				else:
 					print("No pieces to flip for this move")
@@ -758,6 +778,7 @@ func on_cell_pressed(x: int, y: int) -> void:
 
 	place_temp_piece_visual(x, y, player_symbol)
 	preview_flip_pieces(x, y, player_symbol)
+	print("767 Call Update Count")
 	update_piece_counts()
 	animate_button_slide_up()
 
@@ -938,6 +959,7 @@ func has_any_empty_cells() -> bool:
 	return false
 
 func handle_turn_transition():
+	print("948 Call Update Count")
 	update_piece_counts()
 	if not has_any_empty_cells():
 		highlight_valid_moves()

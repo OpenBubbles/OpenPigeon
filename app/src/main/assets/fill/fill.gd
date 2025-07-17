@@ -112,8 +112,8 @@ func _ready():
 		update_color_selector_states()
 		print("No AppPlugin Available, Setting Debug Data")
 		
-	left_color = get_color_from_position(left_start)
-	right_color = get_color_from_position(right_start)
+	left_color = get_color_from_position(ui.my_start)
+	right_color = get_color_from_position(ui.opponent_start)
 	
 	print("64 Update Selectors. Left Color is ",left_color," Right Color is ",right_color)
 		
@@ -273,6 +273,7 @@ func setup_color_selector():
 	#print("270 Update Color Selector States")
 
 func update_color_selector_states():
+	var ui = get_score_elements()
 	var claimed_colors := [left_color, right_color]
 	print("271 Update Selectors. Left Color is ",left_color," Right Color is ",right_color)
 	for i in COLORS:
@@ -360,10 +361,10 @@ func _on_color_selection_made(selected_color_index: int):
 	# Update stored corner color
 	if my_player == "1":
 		left_color = selected_color_index
-		right_color = get_color_from_position(left_start)
+		right_color = get_color_from_position(ui.opponent_start)
 	else:
 		right_color = selected_color_index
-		left_color = get_color_from_position(right_start)
+		left_color = get_color_from_position(ui.my_start)
 		
 	print("355 Color index. Left Color is ",left_color," Right Color is ",right_color)
 
@@ -520,6 +521,7 @@ func _set_game_data(new_game_data_json: String):
 	# --- END NEW ---
 
 func parse_replay_string(replay_str: String):
+	var ui = get_score_elements()
 	var parts = replay_str.split("|")
 	if parts.size() != 3:
 		print("Invalid replay format")
@@ -569,17 +571,17 @@ func parse_replay_string(replay_str: String):
 					color_board[y].append(0)
 		apply_colors_to_cells()
 	# Update stored corner colors
-	left_color = get_color_from_position(left_start)
-	right_color = get_color_from_position(right_start)
+	left_color = get_color_from_position(ui.my_start)
+	right_color = get_color_from_position(ui.opponent_start)
 	
 	print("554 Update Selectors. Left Color is ",left_color," Right Color is ",right_color)
 
 	# Refresh the rect colors
-	var ui = get_score_elements()
+	
 	if is_instance_valid(ui.my_color_rect):
-		ui.my_color_rect.color       = COLOR_MAP.get(ui.my_color, Color.GRAY)
+		ui.my_color_rect.color       = COLOR_MAP.get(left_color, Color.GRAY)
 	if is_instance_valid(ui.opponent_color_rect):
-		ui.opponent_color_rect.color = COLOR_MAP.get(ui.opponent_color, Color.GRAY)
+		ui.opponent_color_rect.color = COLOR_MAP.get(right_color, Color.GRAY)
 
 	# Recount and update score labels
 	my_count = get_connected_cells(ui.my_start, ui.my_color).size()
