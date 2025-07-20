@@ -1,8 +1,8 @@
 [gd_scene load_steps=18 format=3 uid="uid://cb10bquan8k3d"]
 
 [ext_resource type="Script" uid="uid://b1m5dj5ejua6o" path="res://fill/fill.gd" id="1_cobdr"]
-[ext_resource type="Texture2D" uid="uid://dlyev28m5qgvf" path="res://reversi/settings.png" id="1_jykyx"]
-[ext_resource type="Texture2D" uid="uid://drtck47x6kjrk" path="res://reversi/rules.png" id="2_cobdr"]
+[ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://settings.png" id="2_jykyx"]
+[ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://rules.png" id="3_cobdr"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kqrkf"]
 bg_color = Color(0, 0, 0, 1)
@@ -78,23 +78,23 @@ expand_margin_top = 10.0
 expand_margin_right = 20.0
 expand_margin_bottom = 10.0
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_05x7v"]
-texture = ExtResource("1_jykyx")
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_nr0uu"]
-texture = ExtResource("1_jykyx")
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_1y8e2"]
-texture = ExtResource("1_jykyx")
-
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_q50tp"]
-texture = ExtResource("2_cobdr")
+texture = ExtResource("3_cobdr")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_bwi04"]
-texture = ExtResource("2_cobdr")
+texture = ExtResource("3_cobdr")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_ad4vd"]
-texture = ExtResource("2_cobdr")
+texture = ExtResource("3_cobdr")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_cobdr"]
+texture = ExtResource("2_jykyx")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_kqrkf"]
+texture = ExtResource("2_jykyx")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_fprbq"]
+texture = ExtResource("2_jykyx")
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cobdr"]
 bg_color = Color(0, 0, 0, 0.788235)
@@ -282,16 +282,6 @@ theme_override_constants/margin_left = 40
 theme_override_constants/margin_right = 40
 theme_override_constants/margin_bottom = 30
 
-[node name="SettingsButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer"]
-custom_minimum_size = Vector2(64, 64)
-layout_mode = 2
-size_flags_horizontal = 10
-size_flags_vertical = 8
-theme_override_font_sizes/font_size = 32
-theme_override_styles/hover = SubResource("StyleBoxTexture_05x7v")
-theme_override_styles/pressed = SubResource("StyleBoxTexture_nr0uu")
-theme_override_styles/normal = SubResource("StyleBoxTexture_1y8e2")
-
 [node name="RulesButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer"]
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -301,6 +291,16 @@ theme_override_font_sizes/font_size = 32
 theme_override_styles/hover = SubResource("StyleBoxTexture_q50tp")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_bwi04")
 theme_override_styles/normal = SubResource("StyleBoxTexture_ad4vd")
+
+[node name="SettingsButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 10
+size_flags_vertical = 8
+theme_override_font_sizes/font_size = 32
+theme_override_styles/hover = SubResource("StyleBoxTexture_cobdr")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_kqrkf")
+theme_override_styles/normal = SubResource("StyleBoxTexture_fprbq")
 
 [node name="WaitBlur" type="ColorRect" parent="."]
 visible = false

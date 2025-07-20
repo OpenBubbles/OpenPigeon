@@ -31,6 +31,7 @@ class AboutActivity : Activity() {
                 Archery - jakecrowley
 				Reversi - ty8447
 				Filler - ty8447
+                Mancala - ty8447
 
                 Are you a developer? Add your favorite game on GitHub!
             """.trimIndent())

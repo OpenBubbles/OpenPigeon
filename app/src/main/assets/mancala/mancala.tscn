@@ -1,3 +1,231 @@
-[gd_scene format=3 uid="uid://b5cgft50kgoc8"]
+[gd_scene load_steps=17 format=3 uid="uid://b5cgft50kgoc8"]
 
-[node name="Mancala" type="Node2D"]
+[ext_resource type="Script" uid="uid://dh7rsnax7enhf" path="res://mancala/mancala.gd" id="1_wkq4n"]
+[ext_resource type="Texture2D" uid="uid://bje0kd0ednpdh" path="res://mancala/board.png" id="2_d7lhj"]
+[ext_resource type="Shader" uid="uid://dp420yt4x20py" path="res://mancala/vignette.gdshader" id="2_miqih"]
+[ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://settings.png" id="4_miqih"]
+[ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://rules.png" id="5_elfvu"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_elfvu"]
+shader = ExtResource("2_miqih")
+shader_parameter/vignette_intensity = 0.1
+shader_parameter/vignette_opacity = 0.412
+shader_parameter/vignette_rgb = Color(0, 0, 0, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_elfvu"]
+bg_color = Color(0.533037, 0.533037, 0.533037, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 5.0
+expand_margin_right = 20.0
+expand_margin_bottom = 5.0
+shadow_color = Color(0, 0, 0, 0.647059)
+shadow_size = 4
+shadow_offset = Vector2(-1, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8aurd"]
+bg_color = Color(0.466181, 0.466181, 0.466181, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 5.0
+expand_margin_right = 20.0
+expand_margin_bottom = 5.0
+shadow_color = Color(0, 0, 0, 0.647059)
+shadow_size = 4
+shadow_offset = Vector2(-1, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_xpj4b"]
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 5.0
+expand_margin_right = 20.0
+expand_margin_bottom = 5.0
+shadow_color = Color(0, 0, 0, 0.647059)
+shadow_size = 4
+shadow_offset = Vector2(-1, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1ko3n"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_0pvrk"]
+texture = ExtResource("5_elfvu")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_u2n3q"]
+texture = ExtResource("5_elfvu")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_qrx05"]
+texture = ExtResource("5_elfvu")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_miqih"]
+texture = ExtResource("4_miqih")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_elfvu"]
+texture = ExtResource("4_miqih")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_8aurd"]
+texture = ExtResource("4_miqih")
+
+[node name="MancalaBoard" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+script = ExtResource("1_wkq4n")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.439216, 0.294118, 0.290196, 1)
+
+[node name="Vignette" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_elfvu")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.439216, 0.294118, 0.290196, 1)
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_right = 20
+
+[node name="InfoHBoxContainer" type="HBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+mouse_filter = 2
+alignment = 1
+
+[node name="MyCountLabel" type="ColorRect" parent="MarginContainer/InfoHBoxContainer"]
+visible = false
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+color = Color(0.105882, 1, 1, 1)
+
+[node name="GameAreaCenterContainer" type="CenterContainer" parent="MarginContainer/InfoHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+
+[node name="ReplayButton" type="Button" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 30
+theme_override_styles/hover = SubResource("StyleBoxFlat_elfvu")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_8aurd")
+theme_override_styles/normal = SubResource("StyleBoxFlat_xpj4b")
+
+[node name="ReplayButtonWrapper" type="Control" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+
+[node name="WinLossLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_1ko3n")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SentLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_1ko3n")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="BoardSprite" type="TextureRect" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+custom_minimum_size = Vector2(350, 800)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+texture = ExtResource("2_d7lhj")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="PitsContainer" type="Node2D" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+position = Vector2(396, 513.5)
+
+[node name="OpCountLabel" type="ColorRect" parent="MarginContainer/InfoHBoxContainer"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+mouse_filter = 2
+color = Color(1, 0.180392, 1, 1)
+
+[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="."]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -94.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/separation = 10
+
+[node name="MarginContainer" type="MarginContainer" parent="BottomItemHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 30
+
+[node name="RulesButton" type="Button" parent="BottomItemHBoxContainer/MarginContainer"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 8
+theme_override_font_sizes/font_size = 32
+theme_override_styles/hover = SubResource("StyleBoxTexture_0pvrk")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_u2n3q")
+theme_override_styles/normal = SubResource("StyleBoxTexture_qrx05")
+
+[node name="SettingsButton" type="Button" parent="BottomItemHBoxContainer/MarginContainer"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 10
+size_flags_vertical = 8
+theme_override_font_sizes/font_size = 32
+theme_override_styles/hover = SubResource("StyleBoxTexture_miqih")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_elfvu")
+theme_override_styles/normal = SubResource("StyleBoxTexture_8aurd")

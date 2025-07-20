@@ -1,8 +1,8 @@
 [gd_scene load_steps=17 format=3 uid="uid://dtbbaumnb5h2m"]
 
 [ext_resource type="Script" uid="uid://bwig68hkxtmyu" path="res://reversi/reversi.gd" id="1_0y82s"]
-[ext_resource type="Texture2D" uid="uid://dlyev28m5qgvf" path="res://reversi/settings.png" id="2_by1w1"]
-[ext_resource type="Texture2D" uid="uid://drtck47x6kjrk" path="res://reversi/rules.png" id="3_cwv3m"]
+[ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://settings.png" id="2_by1w1"]
+[ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://rules.png" id="3_cwv3m"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ig7tw"]
 bg_color = Color(0, 0, 0, 1)
