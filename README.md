@@ -17,6 +17,9 @@ OpenPigeon is fully open-source, and we're actively looking for game developers 
 - 8 Ball (Easy/Hard)
 - Cup Pong
 - Archery
+- Mancala
+- Reversi
+- Filler
 
 ## Contributing
 1. Git clone with Submodules. 

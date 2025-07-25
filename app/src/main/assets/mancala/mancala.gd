@@ -96,7 +96,7 @@ func _ready() -> void:
 	# Dev: preload a sample game state when running in editor
 	else:
 		print("[DEV] Editor hint active, loading sample game data")
-		var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&2,2,3,3&3,2,2,2&&12,13,13,13&13,11,12,13&12,11,12,12&11,11,11,12&11,12,13,13&13,11,11,13&|move:2,4|board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&&3,2,2,2&&12,13,13,13&11,12,13,11&12,11,12,12,13&11,11,11,12,11&11,12,13,13,12&13,11,11,13,13&","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+		var dev_data = '{"isYourTurn": true,"mode": "n","player": "1","replay": "board:2&2,1&1,1,3&2,3,3,1&2,2,3,3&3,2,2,2&&12,13,13,13&13,11,12,13&12,11,12,12&11,11,11,12&11,12,13,13&13,11,11,13&|move:2,4|board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&&3,2,2,2&&12,13,13,13&11,12,13,11&12,11,12,12,13&11,11,11,12,11&11,12,13,13,12&13,11,11,13,13&","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
 		#var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&13,12,13,13,13&12&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1|move:2,6|board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&12,13,13,13&12,13&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
 		_set_game_data(dev_data)
 	for pit in pit_nodes:
@@ -123,21 +123,21 @@ func _set_game_data(raw_text: String) -> void:
 	print("[PARSE] Raw game data received:", res)
 
 	# basic flags
-	player_str      = int(res.get("player", player))
-	mode        = String(res.get("mode", mode))
-	my_player  = String(res.get("myPlayerId", my_player))
+	player_str = int(res.get("player", player))
+	mode = String(res.get("mode", mode))
+	my_player = String(res.get("myPlayerId", my_player))
 	var sender_id = res.get("sender", "")
 	var player1_id: String = res.get("player1", "")
 	var player2_id: String = res.get("player2", "")
 	game_over = true if res.get("winner", "") != "" else false
 	winner_id = res.get("winner", "")
-	print("Winner State is: ", winner_id, " With Game Over State being: ", game_over)
-	print("SENDER: ", sender_id, " PLAYER1ID: ",player1_id, " PLAYER2ID: ",player2_id)
+	print("Winner State is: ", winner_id, " | With Game Over State being: ", game_over)
+	print("Player Parsed Val: ", player_str, " SENDER: ", sender_id, " PLAYER1ID: ",player1_id, " PLAYER2ID: ",player2_id)
 	is_your_turn = res.get("isYourTurn", false)
 	is_my_turn = true if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == "") else false
 	print("YOUR TURN?: ", is_your_turn, " MY TURN?: ", is_my_turn)
 	player = 1 if player_str == 2 and is_my_turn else 2
-	print("MY PLAYER ID: ", my_player)
+	print("Current Player Number: ", player, " MY PLAYER ID: ", my_player)
 	print("SET GAME MODE: ", mode)
 	
 	print("Set Mode: ", mode)
@@ -151,35 +151,35 @@ func _set_game_data(raw_text: String) -> void:
 	var replay_str: String = String(res.get("replay", ""))
 	
 	# Ensure the board structure and layout are applied before parsing specific board states
-	_apply_board_layout(player, is_my_turn)
+	_apply_board_layout(is_my_turn)
 
 	# parse boards/moves/raw_boards
 	var parsed = parse_game_data(replay_str)
 
-	# store the “previous” board snapshot (which is the first board in the replay string)
+	# --- MODIFICATION START ---
+	# Determine the initial board state for this replay. This is the state *before* the moves in `replay_moves`.
+	var initial_board_for_replay_str = ""
 	var rb: Array = parsed.get("raw_boards", [])
 	if rb.size() > 0:
-		prev_board_str = rb[0] # This will be the board *before* the moves in replay
+		initial_board_for_replay_str = rb[0]
 	else:
-		prev_board_str = ""
+		push_warning("_set_game_data: no initial board state found for replay.")
 
 	# Clear and rebuild pits
 	pits.clear()
 	for i in range(PIT_COUNT):
 		pits.append([])
-
-	# Set up the board with the PREV_BOARD_STATE before replaying moves
-	if prev_board_str != "":
-		var prev_board_data = _parse_single_board(prev_board_str)
-		for i in range(min(prev_board_data.size(), PIT_COUNT)):
-			pits[i] = prev_board_data[i].duplicate()
+	print("Setting up the board with INITIAL_BOARD_STATE for the replay")
+	# Set up the board with the INITIAL_BOARD_STATE for this replay
+	if initial_board_for_replay_str != "":
+		var initial_board_data = _parse_single_board(initial_board_for_replay_str)
+		for i in range(min(initial_board_data.size(), PIT_COUNT)):
+			pits[i] = initial_board_data[i].duplicate()
 		_refresh_all_pits() # Visually update the board to this state
 	else:
 		push_warning("_set_game_data: no previous board state found for replay, using default setup.")
-		# If no prev_board_str, then the game starts with a default configuration
-		# or it's the very first move. `_apply_board_layout` already sets a default.
 
-
+	print("Capturing And Animating Moves (If Present)")
 	# Capture and animate moves if present
 	if parsed.moves.size() > 0:
 		replay_moves = parsed.moves
@@ -187,21 +187,35 @@ func _set_game_data(raw_text: String) -> void:
 		_is_animating = true # Set animation flag to prevent clicks during replay
 		# Animate each move in sequence
 		for move_data in replay_moves:
-			var replay_player = int(move_data[0])
 			var replay_pit_offset = int(move_data[1])
 			var actual_pit_idx = replay_pit_offset
-			if replay_player == 2: # Convert opponent's relative pit index to absolute for player 1's layout
+			if player == 1: # Convert opponent's relative pit index to absolute for player 1's layout
 				# Player 2's pits 0-5 correspond to actual pits 7-12 in our fixed layout
 				actual_pit_idx += 7
 
-			print("Replaying move: Player ", replay_player, ", Pit offset ", replay_pit_offset, " (Actual pit ", actual_pit_idx, ")")
+			print("Replaying move: Player ", player, ", Pit offset ", replay_pit_offset, " (Actual pit ", actual_pit_idx, ")")
 			
 			# Temporarily set the 'player' variable to the replaying player
 			# so _sow_from correctly handles store pits and capture rules for the animation.
 			in_replay = true
+			var original_player_for_sow = player # Store current global player
 			await _sow_from(actual_pit_idx)
+			player = original_player_for_sow # Restore global player
 			in_replay = false
 		_is_animating = false # Reset animation flag after replay
+		
+		# AFTER all replay moves are applied and pits are updated to the final state:
+		# Update the global prev_board_str to reflect the board state *after* the replay.
+		# This is the state that will be used as the "previous board" for *our* next move.
+		prev_board_str = rb[1]
+		print("UPDATED prev_board_str AFTER REPLAY: ", prev_board_str)
+	elif rb.size() > 0:
+		# If there are no moves, but there's a board string in the replay (e.g., initial state from server),
+		# it means the board is simply initialized to that state.
+		# So, that state becomes the prev_board_str for the next move.
+		prev_board_str = rb[0]
+		print("UPDATED prev_board_str (no moves in replay): ", prev_board_str)
+	# --- MODIFICATION END ---
 
 	# If it's your turn, start highlights. Otherwise, start waiting animation.
 	await _check_game_over_and_winner()
@@ -263,6 +277,11 @@ func _init_mancala_board_structure() -> void:
 		pits_root.add_child(pit)
 		pit_nodes.append(pit)
 		spawn_points.append(pit.get_node("SpawnPoint") as Marker2D)
+		var debug_label = pit.find_child("Debug_num")
+		if debug_label and debug_label is Label:
+			debug_label.text = str(i)
+		else:
+			print("No Label for Debug!")
 		
 	pits.clear()
 	for i in range(PIT_COUNT):
@@ -271,10 +290,10 @@ func _init_mancala_board_structure() -> void:
 	print("Mancala board structure initialized.")
 	dot_timer.timeout.connect(_on_dot_timer_timeout)
 
-func _apply_board_layout(current_player: int, is_current_turn: bool) -> void:
+func _apply_board_layout(is_current_turn: bool) -> void:
 	# This function applies the layout and initial stone setup based on player info.
-	print("YOU ARE PLAYER: ", current_player)
-	if current_player == 1:
+	print("YOU ARE PLAYER: ", player)
+	if player == 1:
 		offsets = [
 			Vector2(-271, -342), Vector2(-271, -251), Vector2(-271, -158),
 			Vector2(-271,  -67), Vector2(-271,   24), Vector2(-271,  116),
@@ -283,7 +302,7 @@ func _apply_board_layout(current_player: int, is_current_turn: bool) -> void:
 			Vector2(-173, -158), Vector2(-173, -251), Vector2(-173, -342),
 			Vector2(-226, -438)
 		]
-	elif current_player == 2:
+	elif player == 2:
 		offsets = [
 		Vector2(-173,  116), Vector2(-173,   24), Vector2(-173,  -67),
 		Vector2(-173, -158), Vector2(-173, -251), Vector2(-173, -342),
@@ -405,7 +424,7 @@ func _on_pit_clicked(idx: int) -> void:
 	var give_free_turn = false
 	# Check for "Free Turn" rule (last stone lands in *your* store)
 	if _last_sown_pit != -1: # Ensure a stone was actually sown
-		if (player_str == 1 and _last_sown_pit == 6) or (player_str == 2 and _last_sown_pit == 13):
+		if _last_sown_pit == 6 or _last_sown_pit == 13:
 			give_free_turn = true
 			print("DEBUG: Last stone landed in own store pit → free turn!")
 		else:
@@ -415,6 +434,7 @@ func _on_pit_clicked(idx: int) -> void:
 
 	if give_free_turn:
 		is_my_turn = true
+		free_turn_label.text = "Free Turn."
 		free_turn_label.visible = true
 		var free_turn_tween = create_tween()
 		free_turn_tween.tween_interval(1.0) # Show for 1 second
@@ -515,8 +535,9 @@ func _sow_from(start_idx: int) -> void:
 			current_idx = (current_idx + 1) % PIT_COUNT
 			
 			# Skip opponent's store pit based on the current sowing player
-			if (current_sow_player == 1 and current_idx == 13) or (current_sow_player == 2 and current_idx == 6):
-				continue
+			if not in_replay:
+				if (current_sow_player == 1 and current_idx == 13) or (current_sow_player == 2 and current_idx == 6):
+					continue
 
 			var target_pit_node = pit_nodes[current_idx]
 			var target_global_position_for_pile = target_pit_node.global_position
@@ -592,7 +613,13 @@ func _sow_from(start_idx: int) -> void:
 			if last_sown_was_on_my_side_non_store and pits[_last_sown_pit].size() == 1:
 				# Condition for capture: last stone landed in an empty pit on player's side
 				print("DEBUG: Capture condition met! Last stone landed in pit ", _last_sown_pit, " which was empty.")
-				
+				free_turn_label.text = "Captured!"
+				free_turn_label.visible = true
+				var free_turn_tween = create_tween()
+				free_turn_tween.tween_interval(2.0) # Show for 1 second
+				free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
+				free_turn_label.add_theme_color_override("font_color", Color(1, 1, 1)) # white text
+				free_turn_label.add_theme_color_override("background_color", Color(1.0, 0.84, 0.0))
 				var opposite_pit_idx = -1
 				if current_sow_player == 1: # Player 1's pits 0-5. Opposite pits 12-7.
 					opposite_pit_idx = 12 - _last_sown_pit
@@ -622,6 +649,17 @@ func _sow_from(start_idx: int) -> void:
 					_refresh_pit_count_label(player_store_idx)
 				else:
 					print("DEBUG: Opposite pit ", opposite_pit_idx, " is empty or invalid. No capture.")
+			elif in_replay:
+				# Optionally indicate opponent captured
+				print("REPLAY: Opponent captured stones!")
+				# You can reuse the same label or show something distinct if you'd like:
+				free_turn_label.text = "Opponent Captured!"
+				free_turn_label.visible = true
+				free_turn_label.add_theme_color_override("font_color", Color(0, 0, 0))
+				free_turn_label.add_theme_color_override("background_color", Color(1.0, 0.8, 0.2)) # lighter gold for replay?
+				var replay_capture_tween = create_tween()
+				replay_capture_tween.tween_interval(1.5)
+				replay_capture_tween.tween_callback(func(): free_turn_label.visible = false)
 			else:
 				print("DEBUG: Capture condition not met for pit ", _last_sown_pit, " (size: ", pits[_last_sown_pit].size(), ")")
 			break # End the sowing loop for non-avalanche modes
@@ -783,15 +821,15 @@ func _refresh_pit_count_label(i: int) -> void:
 	if player == 1:
 		if i == 6 or i == 13:
 			if i == 6:
-				lbl.position = base + Vector2(-Mx - lw/2 - OFFX,  My - lh/2 - OFFY)
+				lbl.position = base + Vector2(-Mx - lw/2 - OFFX, My - lh/2 - OFFY)
 			else:
-				lbl.position = base + Vector2( Mx - lw/2 + OFFX, -My - lh/2 + OFFY)
+				lbl.position = base + Vector2(Mx - lw/2 + OFFX, -My - lh/2 + OFFY)
 		else:
 			lbl.scale = Vector2(1,1)
 			if i < 6:
 				lbl.position = base + Vector2(-Mx - lw/2, -lh/2)
 			else:
-				lbl.position = base + Vector2( Mx - lw/2, -lh/2)
+				lbl.position = base + Vector2(Mx - lw/2, -lh/2)
 	elif player == 2:
 		if i == 6 or i == 13:
 			if i == 6:
