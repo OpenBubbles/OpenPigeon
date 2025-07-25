@@ -1,10 +1,22 @@
-[gd_scene load_steps=2 format=3 uid="uid://dkuojkpjpfkg5"]
+[gd_scene load_steps=5 format=3 uid="uid://dkuojkpjpfkg5"]
 
+[ext_resource type="Shader" uid="uid://uv72g3pwj1ou" path="res://mancala/stone.gdshader" id="1_g5x1y"]
 [ext_resource type="Texture2D" uid="uid://24uriyl5au24" path="res://mancala/stone.png" id="1_tl1kx"]
 
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ir6vd"]
+shader = ExtResource("1_g5x1y")
+shader_parameter/stone_color = Color(0, 0, 0, 1)
+shader_parameter/light_direction = Vector2(0.5, -0.5)
+shader_parameter/glare_intensity = 0.5
+shader_parameter/glare_size = 0.2
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_g5x1y"]
+
 [node name="Stone" type="Sprite2D"]
+material = SubResource("ShaderMaterial_ir6vd")
 
 [node name="TextureRect" type="TextureRect" parent="."]
+material = SubResource("ShaderMaterial_g5x1y")
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5

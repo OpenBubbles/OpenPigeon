@@ -23,6 +23,7 @@ var board = []
 var player_symbol = ""
 var game_over = false
 var has_connected: bool = false
+var is_your_turn: bool = false
 var is_my_turn: bool = false
 var player: int = -1
 var replay_val
@@ -367,17 +368,14 @@ func _set_game_data(new_game_data_json: String):
 	var parsed_data = JSON.parse_string(new_game_data_json)
 	if parsed_data is Dictionary:
 		
-		is_my_turn = parsed_data.get("isYourTurn", false)
-		
 		var player_num_array = int(parsed_data.get("player", -1))
 		player_val = 1 if player_num_array == 2 and is_my_turn else 2
 		var sender_id = parsed_data.get("sender", "")
 		var player1_id = parsed_data.get("player1", "")
 		var player2_id = parsed_data.get("player2", "")
-		if is_my_turn:
-			my_player = player2_id if sender_id == player1_id else player1_id
-		else:
-			my_player = player1_id if sender_id == player1_id else player2_id
+		my_player  = parsed_data.get("myPlayerId", my_player)
+		is_your_turn = parsed_data.get("isYourTurn", false)
+		is_my_turn = true if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == "") else false
 		
 		if player_val == 1:
 			player_symbol = "⚫"

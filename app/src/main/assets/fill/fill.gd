@@ -39,6 +39,7 @@ var tween: Tween # Used for color selector animation
 var game_ended = false
 var game_over = false
 var has_connected: bool = false
+var is_your_turn: bool = false
 var is_my_turn: bool = false
 
 var left_start := Vector2i(0, BOARD_HEIGHT - 1)
@@ -51,7 +52,8 @@ var op_count: int
 var pre_board_data: Array = []
 var post_board_data: Array = []
 var my_moves: Array = []
-var my_player: String = "1"
+var my_player = ""
+var player = "1"
 
 # New member variables for sent/waiting animation
 var sent_tween: Tween # Tween for the "Sent" label
@@ -70,7 +72,7 @@ func _ready():
 	var ui = get_score_elements()
 	print("72 ", ui)
 	
-	#if my_player == "1":
+	#if player == "1":
 	if is_instance_valid(ui.my_color_rect):
 		ui.my_color_rect.color = COLOR_MAP.get(ui.my_color, Color.GRAY)
 	if is_instance_valid(ui.opponent_color_rect):
@@ -123,8 +125,8 @@ func _ready():
 		settings_button.pressed.connect(on_settings_button_pressed)
 		
 func get_score_elements() -> Dictionary:
-	print("110: ", my_player)
-	if my_player == "1":
+	print("110: ", player)
+	if player == "1":
 		return {
 			"my_color_rect": left_bg,
 			"opponent_color_rect": right_bg,
@@ -197,8 +199,8 @@ func generate_filler_colors(seed_val: int = -1):
 func apply_colors_to_cells():
 	var display_board = color_board
 	# flip only for Player 1
-	print("184: ", my_player)
-	if my_player == "1":
+	print("184: ", player)
+	if player == "1":
 		display_board = get_flipped_board(color_board)
 
 	for y in range(BOARD_HEIGHT):
@@ -317,7 +319,7 @@ func _on_color_selection_made(selected_color_index: int):
 	var ui               = get_score_elements()
 	var old_color        = ui.my_color
 	var player_start     = ui.my_start
-	var player_id_for_move = int(my_player) - 1
+	var player_id_for_move = int(player) - 1
 
 	# Prevent selecting a claimed color
 	if [left_color, right_color].has(selected_color_index):
@@ -359,7 +361,7 @@ func _on_color_selection_made(selected_color_index: int):
 	apply_colors_to_cells()
 
 	# Update stored corner color
-	if my_player == "1":
+	if player == "1":
 		left_color = selected_color_index
 		right_color = get_color_from_position(ui.opponent_start)
 	else:
@@ -488,7 +490,10 @@ func _set_game_data(new_game_data_json: String):
 	var seed_str: String = data.get("seed", "")
 	var player_str: String = data.get("player", "")
 	var replay_str: String = data.get("replay", "")
-	is_my_turn = data.get("isYourTurn", false)
+	var player1_id: String = data.get("player1", "")
+	var player2_id: String = data.get("player2", "")
+	is_your_turn = data.get("isYourTurn", false)
+	is_my_turn = true if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == "") else false
 
 	# Set values
 	if seed_str != "":
@@ -498,10 +503,10 @@ func _set_game_data(new_game_data_json: String):
 	if player_str != "":
 		print("483 Is my turn: ",is_my_turn)
 		if is_my_turn:
-			my_player = "1" if player_str == "2" else "2"
+			player = "1" if player_str == "2" else "2"
 		else:
-			my_player = "2" if player_str == "2" else "1"
-		print("Parsed player: ", my_player)
+			player = "2" if player_str == "2" else "1"
+		print("Parsed player: ", player)
 
 	if replay_str != "":
 		parse_replay_string(replay_str) # This is where the board is set up and colors/scores updated
@@ -690,7 +695,7 @@ func check_win() -> bool:
 		if winner_id == -1:
 			win_loss_label.text = "TIE!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
-		elif (my_player == "1" and winner_id == 0) or (my_player == "2" and winner_id == 1):
+		elif (player == "1" and winner_id == 0) or (player == "2" and winner_id == 1):
 			win_loss_label.text = "YOU WIN!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 		else:

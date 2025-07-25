@@ -3,10 +3,22 @@ extends Control
 # ——————————————
 # Mancala Game State
 # ——————————————
-@export var player: int     = 0     # 0 = bottom, 1 = top
-@export var is_my_turn: bool = true
-@export var mode: String = ""     # "n", "h", "an", or "ah"
+var player_str: int     = 2
+var player: int     = 1     # 1 = bottom, 2 = top
+var is_your_turn: bool = false
+var is_my_turn: bool = false
+var mode: String = ""     # "n", "h", "an", or "ah"
+var my_player: String = ""
 const PIT_COUNT: int = 14
+var _last_sown_pit: int = -1
+var has_connected: bool = false
+var offsets: Array[Vector2]
+var _board_initialized: bool = false
+var game_over: bool = false
+var is_flipped: bool = false
+const BASE_STONE_SCALE := Vector2(0.1, 0.1)
+var win_loss_state: String = ""
+var winner_id = ""
 
 # Changed to track individual stone labels for each pit
 var pits: Array = [] # Each element is an array of stone labels
@@ -19,14 +31,20 @@ var board_labels: Array = []
 var replay_moves: Array = []
 
 # Scenes
-var PitScene    : PackedScene = preload("res://mancala/Pit.tscn")
-var StoneScene : PackedScene = preload("res://mancala/Stone.tscn")
+var PitScene    : PackedScene = preload("res://mancala/pit.tscn")
+var StoneScene : PackedScene = preload("res://mancala/stone.tscn")
 
 # UI References
 @onready var rules_button    = $BottomItemHBoxContainer/MarginContainer/RulesButton
 @onready var settings_button = $BottomItemHBoxContainer/MarginContainer/SettingsButton
-@onready var turn_label      = $MarginContainer/InfoHBoxContainer/TurnLabel
+@onready var sent_label = $MarginContainer/InfoHBoxContainer/GameAreaCenterContainer/SentLabel
+@onready var waiting_label = $WaitingContainer/WaitForOpponentLabel
+@onready var waiting_blur = $WaitBlur
+@onready var dot_timer = $DotTimer
+@onready var background = $Background
+@onready var win_loss_label = $MarginContainer/InfoHBoxContainer/GameAreaCenterContainer/WinLossLabel
 @onready var pits_root       = $MarginContainer/InfoHBoxContainer/GameAreaCenterContainer/PitsContainer
+@onready var free_turn_label = $MarginContainer/InfoHBoxContainer/GameAreaCenterContainer/FreeTurnLabel
 
 const RULES_POPUP_SCENE = preload("res://mancala/RulesPopup.tscn")
 
@@ -36,9 +54,14 @@ const STONE_DROP_DELAY = 0.1 # Time to pause after dropping each stone
 const PIT_PICKUP_LIFT_Y = -50 # How much the pit lifts when picked up
 const PIT_PICKUP_TIME = 0.2 # How long it takes for the pit to lift
 const PILE_TRAVEL_TIME = 0.2 # Time for the entire pile to move between pits
+var dot_count: int = 0
+const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
+var sent_tween: Tween
 
 # --- Helper to prevent multiple clicks during animation ---
 var _is_animating: bool = false
+var moves_made: Array = []  # store moves as "player,pit" per turn
+var prev_board_str: String = ""  # will hold the prior board snapshot
 
 func _debug_pit_input_layers() -> void:
 	for pit in pit_nodes:
@@ -60,13 +83,26 @@ func _unhandled_input(event: InputEvent) -> void:
 		print("Unhandled Click at: ", event.position)
 
 func _ready() -> void:
-	_init_mancala_board()
+	_init_mancala_board_structure()
+	var appPlugin = Engine.get_singleton("AppPlugin")
+	if appPlugin: 
+		print("AppPlugin Available")
+		if not has_connected:
+			appPlugin.connect("set_game_data", _set_game_data)
+			has_connected = true
+			appPlugin.onReady()
+			print("AppPlugin Connected")
+	# Dev: preload a sample game state when running in editor
+	else:
+		print("[DEV] Editor hint active, loading sample game data")
+		#var dev_data = '{"isYourTurn": true,"mode": "n","player": "1","replay": "board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&2,2,3,3&3,2,2,2&&12,13,13,13&13,11,12,13&12,11,12,12&11,11,11,12&11,12,13,13&13,11,11,13&|move:2,4|board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&&3,2,2,2&&12,13,13,13&11,12,13,11&12,11,12,12,13&11,11,11,12,11&11,12,13,13,12&13,11,11,13,13&","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+		var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&13,12,13,13,13&12&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1|move:2,6|board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&12,13,13,13&12,13&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+		_set_game_data(dev_data)
 	for pit in pit_nodes:
 		for node in pit.get_children():
 			if node is Control and node.name != "DebugRect":
 				node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_debug_pit_input_layers()
-	_start_pit_highlights()
+	#_debug_pit_input_layers()
 	if rules_button:
 		rules_button.pressed.connect(on_rules_button_pressed)
 	if settings_button:
@@ -75,30 +111,147 @@ func _ready() -> void:
 	# Add the carrying stones container to the scene
 	add_child(_carrying_stones_container)
 	_carrying_stones_container.z_index = 100 # Ensure it draws on top of everything
+	
+# ——————————————
+# Game Data Parsing
+# ——————————————
+func _set_game_data(raw_text: String) -> void:
+	var res = JSON.parse_string(raw_text)
+	print("NEW REPLAY: " + str(res))
 
-	var appPlugin = Engine.get_singleton("AppPlugin")
-	if appPlugin and not appPlugin.is_connected("set_game_data", Callable(self, "_set_game_data")):
-		appPlugin.connect("set_game_data", Callable(self, "_set_game_data"))
-		appPlugin.onReady()
-	# Dev: preload a sample game state when running in editor
-	if Engine.is_editor_hint():
-		print("[DEV] Editor hint active, loading sample game data")
-		var dev_data = {
-			"sender": ["7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"],
-			"version": ["5"],
-			"tver": ["5"],
-			"ios": ["18.5"],
-			"caption": ["Let's play Mancala!"],
-			"subcaption": ["Capture Mode"],
-			"id": ["ziadBSjDYgc4ruev"],
-			"player": ["2"],
-			"player2": ["7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"],
-			"replay": ["board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&2,2,3,3&3,2,2,2&&12,13,13,13&13,11,12,13&12,11,12,12&11,11,11,12&11,12,13,13&13,11,11,13&|move:2,4,1|board:..."],
-			"mode": ["n"]
-		}
-		_set_game_data(dev_data)
+	print("[PARSE] Raw game data received:", res)
 
-func _init_mancala_board() -> void:
+	# basic flags
+	player_str      = int(res.get("player", player))
+	mode        = String(res.get("mode", mode))
+	my_player  = String(res.get("myPlayerId", my_player))
+	var sender_id = res.get("sender", "")
+	var player1_id: String = res.get("player1", "")
+	var player2_id: String = res.get("player2", "")
+	game_over = true if res.get("winner", "") != "" else false
+	winner_id = res.get("winner", "")
+	print("SENDER: ", sender_id, " PLAYER1ID: ",player1_id, " PLAYER2ID: ",player2_id)
+	is_your_turn = res.get("isYourTurn", false)
+	is_my_turn = true if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == "") else false
+	print("YOUR TURN?: ", is_your_turn, " MY TURN?: ", is_my_turn)
+	player = 1 if player_str == 2 and is_my_turn else 2
+	print("MY PLAYER ID: ", my_player)
+	print("SET GAME MODE: ", mode)
+	
+	print("Set Mode: ", mode)
+	if mode == "an" or mode == "ah":
+		print("MODE IS AVALANCHE")
+		background.color = Color("#704b4a")
+	else:
+		print("MODE IS CAPTURE")
+		background.color = Color("#6d7c82")
+	# grab the replay string
+	var replay_str: String = String(res.get("replay", ""))
+	
+	# Ensure the board structure and layout are applied before parsing specific board states
+	_apply_board_layout(player, is_my_turn)
+
+	# parse boards/moves/raw_boards
+	var parsed = parse_game_data(replay_str)
+
+	# store the “previous” board snapshot (which is the first board in the replay string)
+	var rb: Array = parsed.get("raw_boards", [])
+	if rb.size() > 0:
+		prev_board_str = rb[0] # This will be the board *before* the moves in replay
+	else:
+		prev_board_str = ""
+
+	# Clear and rebuild pits
+	pits.clear()
+	for i in range(PIT_COUNT):
+		pits.append([])
+
+	# Set up the board with the PREV_BOARD_STATE before replaying moves
+	if prev_board_str != "":
+		var prev_board_data = _parse_single_board(prev_board_str)
+		for i in range(min(prev_board_data.size(), PIT_COUNT)):
+			pits[i] = prev_board_data[i].duplicate()
+		_refresh_all_pits() # Visually update the board to this state
+	else:
+		push_warning("_set_game_data: no previous board state found for replay, using default setup.")
+		# If no prev_board_str, then the game starts with a default configuration
+		# or it's the very first move. `_apply_board_layout` already sets a default.
+
+
+	# Capture and animate moves if present
+	if parsed.moves.size() > 0:
+		replay_moves = parsed.moves
+		print("[PARSE] Parsed moves:", replay_moves)
+		_is_animating = true # Set animation flag to prevent clicks during replay
+		# Animate each move in sequence
+		for move_data in replay_moves:
+			var replay_player = int(move_data[0])
+			var replay_pit_offset = int(move_data[1])
+			var actual_pit_idx = replay_pit_offset
+			if replay_player == 2: # Convert opponent's relative pit index to absolute for player 1's layout
+				# Player 2's pits 0-5 correspond to actual pits 7-12 in our fixed layout
+				actual_pit_idx += 7
+
+			print("Replaying move: Player ", replay_player, ", Pit offset ", replay_pit_offset, " (Actual pit ", actual_pit_idx, ")")
+			
+			# Temporarily set the 'player' variable to the replaying player
+			# so _sow_from correctly handles store pits and capture rules for the animation.
+			var original_player = player
+			player = replay_player
+			is_flipped = true
+			await _sow_from(actual_pit_idx)
+			player = original_player # Restore player after the move
+			is_flipped = false
+		_is_animating = false # Reset animation flag after replay
+
+	# If it's your turn, start highlights. Otherwise, start waiting animation.
+	await _check_game_over_and_winner()
+	if is_my_turn and not game_over:
+		_start_pit_highlights()
+		stop_waiting_animation()
+	elif not is_my_turn and not game_over:
+		start_waiting_animation() # Assuming you have this function to show "Waiting for opponent"
+
+func parse_game_data(raw: String) -> Dictionary:
+	var out = {
+		"boards": [],      # Array of Array[int]
+		"moves": [],       # Array of Array[float]
+		"raw_boards": []   # Array of String
+	}
+
+	for chunk in raw.strip_edges().split("|"):
+		if chunk.begins_with("board:"):
+			var board_str = chunk.substr(6)
+			out["raw_boards"].append(board_str)
+			out["boards"].append(_parse_single_board(board_str))
+		elif chunk.begins_with("move:"):
+			var mv: Array = []
+			for s in chunk.substr(5).split(","):
+				if s != "":
+					mv.append(float(s))
+			out["moves"].append(mv)
+
+	return out
+
+func _parse_single_board(data: String) -> Array:
+	var pit_list = []
+	for pit_str in data.split("&"):
+		if pit_str == "":
+			pit_list.append([])
+		else:
+			var arr = []
+			for lbl in pit_str.split(","):
+				if lbl != "": arr.append(int(lbl))
+			pit_list.append(arr)
+	return pit_list
+	
+func _on_plugin_set_game_data(raw_text: String) -> void:
+	# Immediately hop onto the main thread
+	call_deferred("_set_game_data", raw_text)
+
+func _init_mancala_board_structure() -> void:
+	# This function only creates the pit nodes and adds them to the scene
+	# It DOES NOT set their positions based on player or initialize stones.
 	randomize()
 	for i in range(PIT_COUNT):
 		var pit = PitScene.instantiate() as Area2D
@@ -118,20 +271,56 @@ func _init_mancala_board() -> void:
 		pits_root.add_child(pit)
 		pit_nodes.append(pit)
 		spawn_points.append(pit.get_node("SpawnPoint") as Marker2D)
-	var offsets: Array[Vector2] = [
-		Vector2(-271, -342), Vector2(-271, -251), Vector2(-271, -158),
-		Vector2(-271,  -67), Vector2(-271,   24), Vector2(-271,  116),
-		Vector2(-226,  210),
-		Vector2(-173,  116), Vector2(-173,   24), Vector2(-173,  -67),
-		Vector2(-173, -158), Vector2(-173, -251), Vector2(-173, -342),
-		Vector2(-226, -438)
-	]
-	for i in range(PIT_COUNT): pit_nodes[i].position = offsets[i]
 
+	# Initialize pits array with empty arrays so it's structured,
+	# but don't populate with stones yet.
 	pits.clear()
 	for i in range(PIT_COUNT):
+		pits.append([])
+
+	print("Mancala board structure initialized.")
+	dot_timer.timeout.connect(_on_dot_timer_timeout)
+
+func _apply_board_layout(current_player: int, is_current_turn: bool) -> void:
+	# This function applies the layout and initial stone setup based on player info.
+	print("YOU ARE PLAYER: ", current_player)
+	if current_player == 1:
+		offsets = [
+			Vector2(-271, -342), Vector2(-271, -251), Vector2(-271, -158),
+			Vector2(-271,  -67), Vector2(-271,   24), Vector2(-271,  116),
+			Vector2(-226,  210),
+			Vector2(-173,  116), Vector2(-173,   24), Vector2(-173,  -67),
+			Vector2(-173, -158), Vector2(-173, -251), Vector2(-173, -342),
+			Vector2(-226, -438)
+		]
+	elif current_player == 2:
+		offsets = [
+		Vector2(-173,  116), Vector2(-173,   24), Vector2(-173,  -67),
+		Vector2(-173, -158), Vector2(-173, -251), Vector2(-173, -342),
+		Vector2(-226, -438),
+		Vector2(-271, -342), Vector2(-271, -251), Vector2(-271, -158),
+		Vector2(-271,  -67), Vector2(-271,   24), Vector2(-271,  116),
+		Vector2(-226,  210)
+		]
+	else:
+		print("Cannot Setup Board!! (Player or turn info missing)")
+		# You might want a default layout or error handling here
+
+	# Apply positions to the already instantiated pit_nodes
+	for i in range(PIT_COUNT):
+		if i < pit_nodes.size() and i < offsets.size(): # Safety check
+			pit_nodes[i].position = offsets[i]
+
+	# Initialize stones based on the determined player layout
+	# Only do this if _set_game_data isn't going to immediately overwrite it
+	# with a replay board. If the replay always has a board, this initial fill
+	# might be redundant, but it's safe if you ever need an initial blank board.
+	# For Mancala, the 'replay' string usually dictates the board state,
+	# so this block might be less critical if you always have a replay.
+	# However, if 'replay' is empty and you need a starting board, this is key.
+	for i in range(PIT_COUNT):
 		if i == 6 or i == 13: # Store pits start empty
-			pits.append([]) # Append an empty array for store pits
+			pits[i] = [] # Ensure store pits are empty
 		else:
 			var initial_stones: Array[int] = []
 			var base_label = 0
@@ -141,17 +330,23 @@ func _init_mancala_board() -> void:
 				base_label = 11 # Stone labels for player 1: 11 (white), 12 (black), 13 (blue)
 
 			for _k in range(4): # Each non-store pit starts with 4 stones
-				# Assign colors cyclically (e.g., 1, 2, 3, 1 for player 0; 11, 12, 13, 11 for player 1)
-				initial_stones.append(base_label + (_k % 3)) 
-			pits.append(initial_stones)
-			
-	_refresh_all_pits()
+				initial_stones.append(base_label + (_k % 3))
+			pits[i] = initial_stones
+
+	print("Board layout applied and initial stones set.")
+	if is_my_turn:
+		_start_pit_highlights()
+		stop_waiting_animation()
+	# You might want to call _refresh_all_pits() here if you expect
+	# a visual update immediately after applying the layout,
+	# but _set_game_data will call it after parsing the replay anyway.
 
 func _start_pit_highlights() -> void:
+	print("Starting Pit Highlights! Player: ", player)
 	for pit in pit_nodes:
 		(pit.get_node("HighlightCircle") as ColorRect).visible = false
-	var first = 0 if player == 0 else 7
-	var last  = 5 if player == 0 else 12
+	var first = 0 if player == 1 else 7
+	var last  = 5 if player == 1 else 12
 	for i in range(first, last + 1):
 		var hl = pit_nodes[i].get_node("HighlightCircle") as ColorRect
 		hl.visible = true
@@ -159,207 +354,442 @@ func _start_pit_highlights() -> void:
 		mat.set_shader_parameter("alpha_fade", 0.0)
 		var tw = hl.create_tween()
 		tw.set_loops()
-		tw.tween_property(mat, "shader_parameter/alpha_fade", 0.3, 0.4) \
+		tw.tween_property(mat, "shader_parameter/alpha_fade", 0.2, 0.5) \
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		tw.tween_property(mat, "shader_parameter/alpha_fade", 0.0, 0.6) \
+		tw.tween_property(mat, "shader_parameter/alpha_fade", 0.0, 0.5) \
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			
+func _stop_pit_highlights() -> void:
+	print("Stopped Pit Highlights!!")
+	for pit in pit_nodes:
+		var hl = pit.get_node("HighlightCircle") as ColorRect
+		hl.visible = false
 
 func _on_pit_clicked(idx: int) -> void:
 	if _is_animating: # Prevent multiple clicks during animation
 		return
+	if game_over: # Prevent clicks if game is already over
+		print("Game is over. No more moves.")
+		return
+		
+	_stop_pit_highlights()
 
 	print("Pit clicked: ", idx)
 	if not is_my_turn:
 		print("Not your turn.")
 		return
 	# Check if the clicked pit belongs to the current player and is not a store pit
-	if (player == 0 and (idx < 0 or idx > 5)) or (player == 1 and (idx < 7 or idx > 12)):
+	# The 'player' variable in this function refers to the current client's player number (1 or 2)
+	var my_store_pit_idx = 6 if player_str == 1 else 13
+	if ((player == 1 and (idx < 0 or idx > 5)) or (player == 2 and (idx < 7 or idx > 12))):
 		print("Cannot click opponent's pit or a store pit.")
+		_start_pit_highlights()
 		return
 	if pits[idx].size() == 0: # Check if the pit is empty (using .size() for Array[Array[int]])
 		print("Cannot click an empty pit.")
+		_start_pit_highlights()
 		return
+		
+	var pit_offset: int = idx if idx < 6 else idx - 7
+	moves_made.append(str(player) + "," + str(pit_offset))
 
 	print("[INPUT] Pit clicked:", idx)
 	_is_animating = true # Set animation flag
 
 	# --- Start Pit Pickup Animation ---
-	var clicked_pit = pit_nodes[idx]
-	var original_pit_pos = clicked_pit.position
-	
-	# Lift the pit visually
+	var pit_global = pit_nodes[idx].global_position
+	_carrying_stones_container.global_position = pit_global
 	var tween_lift = create_tween()
-	if tween_lift == null:
-		push_error("tween_lift is null! Cannot animate pit lift.")
-		_is_animating = false
-		return
-	tween_lift.tween_property(clicked_pit, "position", original_pit_pos + Vector2(0, PIT_PICKUP_LIFT_Y), PIT_PICKUP_TIME).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	await tween_lift.finished # Wait for the pit to lift
+	tween_lift.tween_property(
+		_carrying_stones_container, "global_position",
+		pit_global + Vector2(0, PIT_PICKUP_LIFT_Y),
+		PIT_PICKUP_TIME
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	await tween_lift.finished
 
 	is_my_turn = false # Disable further clicks now that animation is starting
-	await _sow_from(idx) # Await the sowing animation
+	
+	# Start the sowing process, which will handle avalanche logic internally
+	await _sow_from(idx) 
 
-	# --- Return Pit to Original Position after sowing ---
-	var tween_return = create_tween()
-	if tween_return == null:
-		push_error("tween_return is null! Cannot animate pit return.")
-		_is_animating = false
-		return
-	tween_return.tween_property(clicked_pit, "position", original_pit_pos, PIT_PICKUP_TIME).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	await tween_return.finished
+	var give_free_turn = false
+	# Check for "Free Turn" rule (last stone lands in *your* store)
+	if _last_sown_pit != -1: # Ensure a stone was actually sown
+		if (player_str == 1 and _last_sown_pit == 6) or (player_str == 2 and _last_sown_pit == 13):
+			give_free_turn = true
+			print("DEBUG: Last stone landed in own store pit → free turn!")
+		else:
+			print("DEBUG: Last stone landed in pit ", _last_sown_pit, " (not a store pit for free turn).")
+	else:
+		print("DEBUG: No stone was sown (this shouldn't happen after _sow_from).")
 
-	_end_turn()
+	if give_free_turn:
+		is_my_turn = true
+		free_turn_label.visible = true
+		var free_turn_tween = create_tween()
+		free_turn_tween.tween_interval(1.0) # Show for 1 second
+		free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
+	else:
+		_end_turn() # No free turn, end the turn
+		
 	_is_animating = false # Reset animation flag
-
-	# Print the new array at the end of each click
-	print("Final Board State after click:")
-	for i in range(PIT_COUNT):
-		print("Pit ", i, ": ", pits[i])
+	if is_my_turn:
+		_start_pit_highlights() # Re-enable highlights for the current player
 
 func _sow_from(start_idx: int) -> void:
-	# Use pits[start_idx].size() to get the count of stones by labels
-	var stones_to_sow_initial_count = pits[start_idx].size()
-	var start_pit_node = pit_nodes[start_idx]
-	var start_container = start_pit_node.get_node("StonesContainer") as Node2D
-
-	# 1. Prepare stones for carrying - get actual stone labels
-	# Duplicate the array of labels from the starting pit
-	var carried_stone_labels: Array = pits[start_idx].duplicate()
+	var current_sowing_pit_idx = start_idx # Track the pit from which we are currently sowing
+	var last_stone_landed_in_empty_pit = false # Flag for avalanche termination
 	
-	# Clear the original pit's *visuals* immediately and update its label
-	# The actual 'pits' array will be cleared after duplicating 'carried_stone_labels'
-	for c in start_container.get_children():
-		c.queue_free()
-	pits[start_idx].clear() # Clear the original pit's labels
-	_refresh_pit_count_label(start_idx) # Update source pit label to 0
+	while true: # Loop for avalanche turns
+		# Determine which player's turn this sowing operation is logically representing
+		# 'player' here will be dynamically set by _set_game_data for replay, or 'player_str' for local clicks
+		var current_sow_player = player # This 'player' variable is adjusted in _set_game_data during replay
+		if not _is_animating and is_my_turn: # If it's a local click, use player_str
+			current_sow_player = player_str
 
-	# Create visual stone nodes for carrying. These will be children of _carrying_stones_container
-	var carried_visual_stones: Array[Node2D] = []
-	for stone_label in carried_stone_labels:
-		var s = StoneScene.instantiate() as Node2D
-		s.scale = Vector2(0.15, 0.15)
-		s.modulate = _get_color_from_label(stone_label) # Use the actual stone's color
-		# Position stones relative to the carrying container's center for a pile effect
-		s.position = Vector2(randf_range(-5, 5), randf_range(-5, 5))
-		_carrying_stones_container.add_child(s)
-		carried_visual_stones.append(s)
 
-	# 2. Position the carrying container at the starting pit's lifted position
-	# The _carrying_stones_container should start at the *original* pit's lifted position,
-	# then travel. The pit itself is already lifted from _on_pit_clicked.
-	_carrying_stones_container.global_position = start_pit_node.global_position 
-	_carrying_stones_container.global_position.y += PIT_PICKUP_LIFT_Y
-	
-	var current_idx = start_idx
-	
-	# Loop while there are stones visually in the _carrying_stones_container
-	while carried_visual_stones.size() > 0:
-		current_idx = (current_idx + 1) % PIT_COUNT
-		
-		# Skip opponent's store pit
-		if (player == 0 and current_idx == 13) or (player == 1 and current_idx == 6):
-			continue
+		# Check for game over condition here before picking up stones
+		var player1_side_empty = true
+		for i in range(0, 6): # Pits 0-5 for player 1's side
+			if pits[i].size() > 0:
+				player1_side_empty = false
+				break
+		var player2_side_empty = true
+		for i in range(7, 13): # Pits 7-12 for player 2's side
+			if pits[i].size() > 0:
+				player2_side_empty = false
+				break
 
-		var target_pit_node = pit_nodes[current_idx]
-		# The target global position for the entire carrying pile
-		# This should align with the *already lifted* pit position
-		var target_global_position_for_pile = target_pit_node.global_position
-		target_global_position_for_pile.y += PIT_PICKUP_LIFT_Y
-
-		# Create a NEW tween for each segment of the pile's movement
-		var segment_tween = create_tween()
-		if segment_tween == null:
-			push_error("segment_tween is null during movement! Aborting sowing animation.")
-			break # Exit loop to prevent further errors
-		
-		# Animate the entire carrying container to the next pit
-		segment_tween.tween_property(_carrying_stones_container, "global_position", target_global_position_for_pile, PILE_TRAVEL_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		await segment_tween.finished # Wait for this segment of pile movement to finish
-
-		# Drop one stone animation
-		var stone_to_drop_visual = carried_visual_stones.pop_front() as Node2D # Get the first visual stone from the carrying pile
-		
-		# Get the label of the stone being dropped (from the original sequence)
-		var dropped_stone_label = carried_stone_labels.pop_front() # Get the label from the original sequence
-
-		if stone_to_drop_visual:
-			# Reparent the visual stone to the target pit's StonesContainer
-			stone_to_drop_visual.reparent(target_pit_node.get_node("StonesContainer"))
-
-			var drop_tween = create_tween()
-			if drop_tween == null:
-				push_error("drop_tween is null during drop! Stone will appear instantly.")
-				# If tween fails, still add stone to pit data and free visual stone
-				stone_to_drop_visual.queue_free()
-			else:
-				var original_stone_local_pos = stone_to_drop_visual.position
-				# Target position for the stone *within* the pit's local coordinate space
-				var drop_target_local_pos = spawn_points[current_idx].position + Vector2(randf_range(-5, 5), randf_range(-5, 5))
+		# If all pits on the *current sowing player's* side are empty, the game ends.
+		if (current_sow_player == 1 and player1_side_empty) or (current_sow_player == 2 and player2_side_empty):
+			print("GAME OVER: Current sowing player's pits are all empty before sowing from ", current_sowing_pit_idx)
+			# Distribute remaining stones to the opponent's store
+			var opponent_store_idx = 6 if current_sow_player == 2 else 13
+			for i in range(PIT_COUNT):
+				# Only sweep stones from the opponent's side
+				var is_opponents_non_store_pit = (current_sow_player == 1 and i >= 7 and i <= 12) or \
+												 (current_sow_player == 2 and i >= 0 and i <= 5)
 				
-				# Animate a small bounce up, then drop down into the pit
-				drop_tween.tween_property(stone_to_drop_visual, "position", original_stone_local_pos + Vector2(0, 20), STONE_DROP_DELAY/2.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-				drop_tween.tween_property(stone_to_drop_visual, "position", drop_target_local_pos, STONE_DROP_DELAY/2.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-				await drop_tween.finished
+				if is_opponents_non_store_pit:
+					if pits[i].size() > 0:
+						print("Moving ", pits[i].size(), " stones from pit ", i, " to opponent's store ", opponent_store_idx)
+						pits[opponent_store_idx].append_array(pits[i])
+						pits[i].clear()
+						print("476 refresh count label call")
+						_refresh_pit_count_label(i)
+						_refresh_pit_count_label(opponent_store_idx)
+			print("483 check game over")
+			await _check_game_over_and_winner() # Final check after distributing stones
+			return # End sowing if game over
 
-			# Update game state: Add the stone's label to the end of the target pit's array
-			pits[current_idx].append(dropped_stone_label)
-			# Only update the pit's count label; _refresh_all_pits will handle full stone re-rendering
-			_refresh_pit_count_label(current_idx) 
+		if pits[current_sowing_pit_idx].size() == 0:
+			# If we are starting a sow from an empty pit (can happen in avalanche mode),
+			# this turn segment ends.
+			last_stone_landed_in_empty_pit = true
+			break 
+		
+		var stones_to_sow = pits[current_sowing_pit_idx].size()
+		if stones_to_sow == 0: # Should not happen if previous check passed, but good for safety
+			last_stone_landed_in_empty_pit = true
+			break
+			
+		var start_pit_node = pit_nodes[current_sowing_pit_idx]
+		var start_container = start_pit_node.get_node("StonesContainer") as Node2D
 
-			# Brief pause after dropping a stone before moving to the next pit
-			if carried_visual_stones.size() > 0: # Only if more stones are left to sow
-				await get_tree().create_timer(STONE_DROP_DELAY / 2.0).timeout
+		var carried_stone_labels: Array = pits[current_sowing_pit_idx].duplicate()
+		
+		# Clear the original pit's *visuals* immediately and update its label
+		for c in start_container.get_children():
+			c.queue_free()
+		pits[current_sowing_pit_idx].clear() # Clear the original pit's labels
+		print("502 refresh count label call")
+		_refresh_pit_count_label(current_sowing_pit_idx) # Update source pit label to 0
+		var current_idx = current_sowing_pit_idx # This will be the index where the last stone lands in this sow cycle
+		var carried_visual_stones: Array[Node2D] = []
+		for stone_label in carried_stone_labels:
+			var s = StoneScene.instantiate() as Node2D
+			s.scale = _get_compensated_stone_scale(current_idx)
+			s.modulate = _get_color_from_label(stone_label)
+			s.position = Vector2(randf_range(-5, 5), randf_range(-5, 5))
+			_carrying_stones_container.add_child(s)
+			carried_visual_stones.append(s)
 
-	# 4. After all stones are distributed, clear the carrying container (it should be empty visually)
-	for c in _carrying_stones_container.get_children():
-		c.queue_free()
+		# Move the carrying container to the start pit's position for visual pickup
+		_carrying_stones_container.global_position = start_pit_node.global_position
+		_carrying_stones_container.global_position.y += PIT_PICKUP_LIFT_Y
+
+		
+		
+		# Animate the distribution of stones
+		while carried_visual_stones.size() > 0:
+			current_idx = (current_idx + 1) % PIT_COUNT
+			
+			# Skip opponent's store pit based on the current sowing player
+			if (current_sow_player == 1 and current_idx == 13) or (current_sow_player == 2 and current_idx == 6):
+				continue
+
+			var target_pit_node = pit_nodes[current_idx]
+			var target_global_position_for_pile = target_pit_node.global_position
+			target_global_position_for_pile.y += PIT_PICKUP_LIFT_Y
+
+			var segment_tween = create_tween()
+			if segment_tween == null:
+				push_error("segment_tween is null during movement! Aborting sowing animation.")
+				return
+			
+			# Increased speed for individual stone drops, but overall pile movement is same
+			segment_tween.tween_property(_carrying_stones_container, "global_position", target_global_position_for_pile, PILE_TRAVEL_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			await segment_tween.finished
+
+			var stone_to_drop_visual = carried_visual_stones.pop_front() as Node2D
+			var dropped_stone_label = carried_stone_labels.pop_front()
+
+			if stone_to_drop_visual:
+				_carrying_stones_container.remove_child(stone_to_drop_visual)
+				
+				var drop_target_local_pos = spawn_points[current_idx].position + Vector2(randf_range(-15, 15), randf_range(-15, 15))
+				
+				# Add stone to target pit's visual container
+				target_pit_node.get_node("StonesContainer").add_child(stone_to_drop_visual)
+				stone_to_drop_visual.position = drop_target_local_pos # Position it correctly immediately
+				stone_to_drop_visual.rotation_degrees = randf_range(0, 360)
+
+				# Create and animate shadow
+				var shadow = Sprite2D.new()
+				shadow.texture = stone_to_drop_visual.texture
+				shadow.modulate = Color(0, 0, 0, 0.3)
+				shadow.position = drop_target_local_pos + Vector2(5, 5)
+				shadow.z_index = -1
+				target_pit_node.get_node("StonesContainer").add_child(shadow)
+
+				# Add the stone label to the logical pit *before* checking for avalanche continuation
+				pits[current_idx].append(dropped_stone_label)
+				print("564 refresh count label call")
+				_refresh_pit_count_label(current_idx)
+
+				if carried_visual_stones.size() > 0:
+					await get_tree().create_timer(STONE_DROP_DELAY / 2.0).timeout # Small delay between stone drops
+
+		_last_sown_pit = current_idx # Update the last sown pit for potential free turn/capture checks
+
+		# Avalanche Mode Logic
+		if (mode == "an" or mode == "ah"):
+			print("Avalanche mode active. Last stone landed in pit: ", _last_sown_pit)
+			var player_store_idx = 6 if current_sow_player == 1 else 13
+			
+			# If the last stone landed in the player's store, the turn ends (no further pick-up).
+			if _last_sown_pit == player_store_idx:
+				print("Avalanche ends: Last stone landed in player's store.")
+				break # End the avalanche loop
+			
+			# If the last stone landed in an empty pit on *any* side, the turn ends.
+			if pits[_last_sown_pit].size() == 1: # It became empty before we dropped the stone, now it has 1
+				print("Avalanche ends: Last stone landed in an empty pit (now 1 stone).")
+				last_stone_landed_in_empty_pit = true
+				break # End the avalanche loop
+			
+			# Otherwise, pick up the stones from _last_sown_pit and continue
+			print("Avalanche continues: Picking up stones from pit ", _last_sown_pit)
+			current_sowing_pit_idx = _last_sown_pit # Set the next pit to sow from
+			# Do not break; the loop will continue to the next iteration
+		else:
+			# Normal/Hard mode capture logic (original logic)
+			# This block only runs if not in avalanche mode
+			var last_sown_was_on_my_side_non_store = \
+				(current_sow_player == 1 and _last_sown_pit >= 0 and _last_sown_pit <= 5) or \
+				(current_sow_player == 2 and _last_sown_pit >= 7 and _last_sown_pit <= 12)
+
+			if last_sown_was_on_my_side_non_store and pits[_last_sown_pit].size() == 1:
+				# Condition for capture: last stone landed in an empty pit on player's side
+				print("DEBUG: Capture condition met! Last stone landed in pit ", _last_sown_pit, " which was empty.")
+				
+				var opposite_pit_idx = -1
+				if current_sow_player == 1: # Player 1's pits 0-5. Opposite pits 12-7.
+					opposite_pit_idx = 12 - _last_sown_pit
+				elif current_sow_player == 2: # Player 2's pits 7-12. Opposite pits 5-0.
+					opposite_pit_idx = 12 - _last_sown_pit
+
+				var player_store_idx = 6 if current_sow_player == 1 else 13
+
+				if opposite_pit_idx != -1 and pits[opposite_pit_idx].size() > 0:
+					print("DEBUG: Capturing stones from opposite pit ", opposite_pit_idx)
+					
+					# Collect stones to be captured (last sown stone + opposite pit's stones)
+					var captured_stones = []
+					captured_stones.append(pits[_last_sown_pit].pop_back()) # Get the single stone from the last sown pit
+					captured_stones.append_array(pits[opposite_pit_idx])
+					pits[opposite_pit_idx].clear() # Clear the opposite pit
+
+					# Visually move stones to the store
+					await _animate_capture(captured_stones, _last_sown_pit, opposite_pit_idx, player_store_idx)
+
+					# Add captured stones to the player's store
+					pits[player_store_idx].append_array(captured_stones)
+					
+					print("626 refresh count label call")
+					_refresh_pit_count_label(_last_sown_pit)
+					_refresh_pit_count_label(opposite_pit_idx)
+					_refresh_pit_count_label(player_store_idx)
+				else:
+					print("DEBUG: Opposite pit ", opposite_pit_idx, " is empty or invalid. No capture.")
+			else:
+				print("DEBUG: Capture condition not met for pit ", _last_sown_pit, " (size: ", pits[_last_sown_pit].size(), ")")
+			break # End the sowing loop for non-avalanche modes
 	
-	# 5. Finally, refresh all pits to ensure correct state and physical stone rendering
-	_refresh_all_pits()
+	# Clear the temporary container after all stones have been moved or captured
+	for child in _carrying_stones_container.get_children():
+		child.queue_free() # Ensure no residual nodes if something went wrong
+
+func _animate_capture(stones_to_capture: Array, last_sown_pit_idx: int, opposite_pit_idx: int, player_store_idx: int) -> void:
+	print("Animating capture of ", stones_to_capture.size(), " stones to store ", player_store_idx)
+	
+	var store_node = pit_nodes[player_store_idx]
+	var store_container = store_node.get_node("StonesContainer") as Node2D
+
+	var last_sown_pit_node = pit_nodes[last_sown_pit_idx]
+	var opposite_pit_node = pit_nodes[opposite_pit_idx]
+	
+	# Collect visual stones from the last_sown_pit (should be just one)
+	var visual_stones_from_last_sown = []
+	var ls_container = last_sown_pit_node.get_node("StonesContainer")
+	for child in ls_container.get_children():
+		if child is Node2D: # Assuming your stones are Node2D based
+			visual_stones_from_last_sown.append(child)
+	
+	# Collect visual stones from the opposite pit
+	var visual_stones_from_opposite = []
+	var opp_container = opposite_pit_node.get_node("StonesContainer")
+	for child in opp_container.get_children():
+		if child is Node2D:
+			visual_stones_from_opposite.append(child)
+
+	# Combine and clear from source pits
+	var all_visual_stones_to_capture = visual_stones_from_last_sown + visual_stones_from_opposite
+	
+	for s_visual in visual_stones_from_last_sown:
+		ls_container.remove_child(s_visual)
+		_carrying_stones_container.add_child(s_visual) # Move to temporary container
+		s_visual.global_position = last_sown_pit_node.global_position # Set global position
+	
+	for s_visual in visual_stones_from_opposite:
+		opp_container.remove_child(s_visual)
+		_carrying_stones_container.add_child(s_visual) # Move to temporary container
+		s_visual.global_position = opposite_pit_node.global_position # Set global position
+	
+	print("681 refresh count label call")
+	_refresh_pit_count_label(last_sown_pit_idx) # Update source pit labels to 0
+	_refresh_pit_count_label(opposite_pit_idx)
+
+	# Animate all stones moving together to the player's store
+	var capture_tween = create_tween()
+	if capture_tween == null:
+		push_error("capture_tween is null during capture animation!")
+		for s_visual in all_visual_stones_to_capture: # Clean up
+			s_visual.queue_free()
+		return
+
+	# Move the temporary container to the target store's position
+	# Using store_node's global position as the target for the _carrying_stones_container
+	var target_global_pos_for_capture = store_node.global_position
+	target_global_pos_for_capture.y += PIT_PICKUP_LIFT_Y # Lift it slightly
+
+	capture_tween.tween_property(
+		_carrying_stones_container, "global_position",
+		target_global_pos_for_capture,
+		PILE_TRAVEL_TIME * 1.5 # Make capture animation slightly longer
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+
+	await capture_tween.finished
+
+	# Once the container arrives, drop all stones into the store
+	for s_visual in all_visual_stones_to_capture:
+		if s_visual:
+			_carrying_stones_container.remove_child(s_visual)
+			store_container.add_child(s_visual)
+			# Apply random position within the store, similar to other pits
+			s_visual.position = spawn_points[player_store_idx].position + Vector2(randf_range(-20, 20), randf_range(-20, 20))
+			s_visual.rotation_degrees = randf_range(0, 360)
+			
+			# Re-add shadow for the captured stone
+			var shadow = Sprite2D.new()
+			shadow.texture = s_visual.texture
+			shadow.modulate = Color(0, 0, 0, 0.3)
+			shadow.scale = s_visual.scale * 1.05
+			shadow.position = s_visual.position + Vector2(5, 5)
+			shadow.z_index = -1
+			store_container.add_child(shadow)
+		await get_tree().create_timer(STONE_DROP_DELAY / (all_visual_stones_to_capture.size() + 1)).timeout # Stagger drops slightly
+	
+	# Clear the temporary container after all stones have been moved
+	for child in _carrying_stones_container.get_children():
+		child.queue_free() # Ensure no residual nodes if something went wrong
+	
+	print("Capture animation finished.")
 
 func _end_turn() -> void:
-	player = 1 - player
-	_update_turn_label()
+	player = 1 if player==2 else 2
+	free_turn_label.visible = false
+
+	# Send the game state each time a turn ends
+	send_game()
 
 func _refresh_all_pits() -> void:
 	for i in range(PIT_COUNT): _refresh_pit(i)
 
-# This function is responsible for clearing all existing stone visuals
-# and re-instantiating them based on the current `pits[i]` array of labels.
 func _refresh_pit(i: int) -> void:
 	var pit = pit_nodes[i]
 	var container = pit.get_node("StonesContainer") as Node2D
 	
-	# Clear old stones
+	# Clear existing stones and shadows
 	for c in container.get_children():
 		c.queue_free()
 	
-	# Instantiate new stones based on labels in pits[i]
-	for stone_label in pits[i]: # Iterate through the array of stone labels
-		var s = StoneScene.instantiate()
-		s.scale = Vector2(0.15, 0.15)
-		s.modulate = _get_color_from_label(stone_label) # Set color based on label
+	for stone_label in pits[i]:
+		var s = StoneScene.instantiate() as Node2D
+		s.scale = _get_compensated_stone_scale(i)
+		s.modulate = _get_color_from_label(stone_label)
+		s.rotation_degrees = randf_range(0, 360) 
+		
+		# Offset position significantly to reduce overlap
 		s.position = spawn_points[i].position + Vector2(
-			randf_range(-5, 5),
-			randf_range(-5, 5)
+			randf_range(-20, 20), # Increased range
+			randf_range(-20, 20)  # Increased range
 		)
+		
 		container.add_child(s)
-	
-	_refresh_pit_count_label(i) # Ensure label is always updated
 
-# New helper function to get color from stone label
+		# Create and add the shadow for each stone
+		var shadow = Sprite2D.new()
+		shadow.texture = s.texture # Assuming StoneScene is a Sprite2D with a texture
+		shadow.modulate = Color(0, 0, 0, 0.3) # Dark, semi-transparent shadow
+		shadow.scale = s.scale * 1.05 # Slightly larger than the stone
+		shadow.position = s.position + Vector2(5, 5) # Offset from the stone for shadow effect
+		shadow.z_index = s.z_index - 1 # Draw behind the actual stone
+		container.add_child(shadow)
+
+	print("772 refresh count label call")
+	_refresh_pit_count_label(i)
+
 func _get_color_from_label(label: int) -> Color:
 	match label:
-		1, 11: return Color.WHITE
-		2, 12: return Color.BLACK
-		3, 13: return Color.BLUE
-		_: return Color(randf_range(0.8,1), randf_range(0.8,1), randf_range(0.8,1)) # Fallback for unknown labels
+		1, 11: return Color("#cacbc5") # Muted white/light gray
+		2, 12: return Color("#525559") # Dark gray
+		3, 13: return Color("#6d8be4") # Lighter blue
+		_: return Color(randf_range(0.8,1), randf_range(0.8,1), randf_range(0.8,1))
+		
 
-# New function to only refresh the count label
+
+func _get_compensated_stone_scale(pit_idx: int) -> Vector2:
+	var pit_scale = pit_nodes[pit_idx].scale
+	return Vector2(
+		BASE_STONE_SCALE.x / pit_scale.x,
+		BASE_STONE_SCALE.y / pit_scale.y
+	)
+
 func _refresh_pit_count_label(i: int) -> void:
 	var pit = pit_nodes[i]
 	var lbl = pit.get_node("CountLabel") as Label
-	lbl.text = str(pits[i].size()) # Get the count from the size of the labels array
+	lbl.text = str(pits[i].size())
 	lbl.get_parent().force_update_transform()
 	var lw = lbl.get_minimum_size().x
 	var lh = lbl.get_minimum_size().y
@@ -368,106 +798,169 @@ func _refresh_pit_count_label(i: int) -> void:
 	const OFFY = 10
 	const Mx = 50
 	const My = 50
-	if i == 6 or i == 13: # Houses
-		lbl.scale = Vector2(0.5, 1) # Only scale label for houses
-		if i == 6: # Player 0's house (right side of their pits)
-			lbl.position = base + Vector2(-Mx - lw/2 + OFFX*2,  My - lh/2 - OFFY)
-		else: # Player 1's house (left side of their pits)
-			lbl.position = base + Vector2( Mx - lw/2 - OFFX, -My - lh/2 + OFFY)
-	else: # Regular pits
-		lbl.scale = Vector2(1,1) # Ensure regular pits don't have scaled labels
-		if i < 6: # Player 0's pits
-			lbl.position = base + Vector2(-Mx - lw/2,        -lh/2)
-		else: # Player 1's pits
-			lbl.position = base + Vector2( Mx - lw/2,        -lh/2)
-
+	print("REFRESH COUNT:: PLAYER: ", player, " Pit Number: ", i, " Is Flipped?: ", is_flipped)
+	if ((player == 1 and not is_flipped) or  player == 2 and is_flipped):
+		if i == 6 or i == 13:
+			lbl.scale = Vector2(0.5, 1)
+			if i == 6:
+				lbl.position = base + Vector2(-Mx - lw/2 + OFFX*2,  My - lh/2 - OFFY)
+			else:
+				lbl.position = base + Vector2( Mx - lw/2 - OFFX, -My - lh/2 + OFFY)
+		else:
+			lbl.scale = Vector2(1,1)
+			if i < 6:
+				lbl.position = base + Vector2(-Mx - lw/2, -lh/2)
+			else:
+				lbl.position = base + Vector2( Mx - lw/2, -lh/2)
+	elif ((player == 2 and not is_flipped) or  player == 1 and is_flipped):
+		if i == 6 or i == 13:
+			lbl.scale = Vector2(0.5, 1)
+			if i == 6:
+				lbl.position = base + Vector2(Mx - lw/2 - OFFX,  -My - lh/2 + OFFY)
+			else:
+				lbl.position = base + Vector2(-Mx - lw/2 + OFFX*2, My - lh/2 - OFFY)
+		else:
+			lbl.scale = Vector2(1,1)
+			if i < 6:
+				lbl.position = base + Vector2(Mx - lw/2, -lh/2)
+			else:
+				lbl.position = base + Vector2(-Mx - lw/2, -lh/2)
+	else:
+		print("Shouldn't Update Label as it is not my turn")
 
 func _place_stone(container: Node2D, base_pos: Vector2, label: int) -> void:
-	# This function is deprecated and no longer used in the animated sowing.
 	pass
-
-func _update_turn_label() -> void:
-	if turn_label:
-		turn_label.text = "Your Turn" if is_my_turn else "Opponent's Turn"
-	else:
-		push_error("turn_label is null! Cannot update turn label.")
-
-
-# ——————————————
-# Game Data Parsing
-# ——————————————
-func _set_game_data(raw: Dictionary) -> void:
-	print("[PARSE] Raw game data received:", raw)
-	var parsed = parse_game_data(raw)
-	mode = parsed.mode
-	print("[PARSE] Mode:", mode)
 	
-	pits.clear() # Clear existing pits data before parsing new data
-	for _i in range(PIT_COUNT):
-		pits.append([]) # Initialize each pit with an empty array of stone labels
+func send_game() -> void:
+	print("Send Game Called!")
+	var all_moves = ""
+	for m in moves_made:
+		all_moves += "move:" + m + "|"
+	moves_made.clear()
 
-	# Use first board for initial layout
-	if parsed.boards.size() > 0:
-		board_labels = parsed.boards[0]
-		print("[PARSE] Parsed", parsed.boards.size(), "boards; first board labels:", board_labels)
-		# Set pit contents by assigning the array of labels directly
-		for i in range(min(board_labels.size(), PIT_COUNT)):
-			pits[i] = board_labels[i].duplicate() # Assign the array of labels directly
-		_refresh_all_pits()
-	else:
-		push_warning("_set_game_data: no boards parsed")
+	var post_board_str = "board:"
+	for i in range(pits.size()):
+		var pit = pits[i]
+		if pit.size() > 0:
+			# Manually join elements with commas, avoiding trailing comma
+			for j in range(pit.size()):
+				post_board_str += str(pit[j])
+				if j < pit.size() - 1: # Only add comma if it's not the last element
+					post_board_str += ","
+		
+		if i < pits.size() - 1:
+			post_board_str += "&"
 	
-	# If a second board exists, assume it's post-move and apply
-	if parsed.boards.size() > 1:
-		print("[PARSE] Applying post-move board")
-		var post = parsed.boards[1]
-		for i in range(min(post.size(), PIT_COUNT)):
-			pits[i] = post[i].duplicate() # Assign the array of labels
-		_refresh_all_pits()
+	var payload = {
+		"replay": "board:" + prev_board_str + "|" + all_moves + post_board_str
+	}
+	print("PAYLOAD: ", payload)
+	if await _check_game_over_and_winner():
+		print("Check Win 863 my_player: ", my_player, " win_loss_state: ", win_loss_state)
+		if game_over == true:
+			payload["winner"] = my_player + "|" + ("1" if win_loss_state == "win" else "-1")
+	# wrap our string in JSON so AppPlugin can parse it
+	var game_data = JSON.stringify(payload)
+	print("Game data being sent: " + game_data)
 
-	# If moves exist, log them (could animate here)
-	if parsed.moves.size() > 0:
-		replay_moves = parsed.moves
-		print("[PARSE] Parsed moves:", replay_moves)
-	
-	# Turn and player
-	if raw.has("isYourTurn"): is_my_turn = raw["isYourTurn"][0].to_bool()
-	if raw.has("player"): player = int(raw["player"][0]) - 1
-	_update_turn_label()
-
-func parse_game_data(raw: Dictionary) -> Dictionary:
-	var out = {"mode": null, "boards": [], "moves": []}
-	if raw.has("mode"):
-		out.mode = str(raw["mode"][0])
+	var appPlugin := Engine.get_singleton("AppPlugin")
+	if appPlugin:
+		print("Attempting to send game data via AppPlugin.")
+		appPlugin.updateGameData(game_data)
+		play_sent_animation()
 	else:
-		push_error("parse_game_data: no mode field!")
-	if raw.has("replay"):
-		var replay_str = str(raw["replay"][0])
-		print("[PARSE] Replay string:", replay_str)
-		for chunk in replay_str.strip_edges().split("|"):
-			if chunk.begins_with("board:"):
-				var data = chunk.substr(6)
-				out.boards.append(_parse_single_board(data))
-			elif chunk.begins_with("move:"):
-				var mv = []
-				for v in chunk.substr(5).split(","):
-					if v != "": mv.append(float(v))
-				out.moves.append(mv)
-	else:
-		push_warning("parse_game_data: no replay field!")
-	return out
+		print("AppPlugin is null. Cannot send game data.")
+		play_sent_animation()
+		
+func _check_game_over_and_winner() -> bool:
 
-func _parse_single_board(data: String) -> Array:
-	var pit_list = []
-	for pit_str in data.split("&"):
-		if pit_str == "":
-			pit_list.append([]) # Append an empty array for empty pits
+	print("Checking for game over condition...")
+	var is_game_over_condition_met = false
+
+	if not game_over:
+		var player1_store_count = pits[6].size()
+		var player2_store_count = pits[13].size()
+		
+		# Condition 1: A player's store has more than 24 stones
+		if player1_store_count > 24 or player2_store_count > 24 or winner_id == "":
+			print("Game over: A player's store has more than 24 stones.")
+			is_game_over_condition_met = true
 		else:
-			var arr = []
-			for lbl in pit_str.split(","):
-				if lbl != "": arr.append(int(lbl))
-			pit_list.append(arr)
-	return pit_list
+			# Condition 2: One player's non-store pits are empty
+			var player1_side_empty = true
+			for i in range(0, 6): # Pits 0-5 for player 1's side
+				if pits[i].size() > 0:
+					player1_side_empty = false
+					break
+			var player2_side_empty = true
+			for i in range(7, 13): # Pits 7-12 for player 2's side
+				if pits[i].size() > 0:
+					player2_side_empty = false
+					break
+			
+			if player1_side_empty or player2_side_empty:
+				print("Game over: One player's side is empty.")
+				is_game_over_condition_met = true
+				
+				# Distribute remaining stones from the non-empty side to that player's store
+				if player1_side_empty:
+					print("Player 1's side is empty. Moving remaining stones from Player 2's side to Player 2's store.")
+					for i in range(7, 13): # Pits 7-12 (Player 2's side)
+						if pits[i].size() > 0:
+							pits[13].append_array(pits[i])
+							pits[i].clear()
+							print("903 refresh count label call")
+							_refresh_pit_count_label(i)
+					print("905 refresh count label call")
+					_refresh_pit_count_label(13) # Update Player 2's store count
+				elif player2_side_empty:
+					print("Player 2's side is empty. Moving remaining stones from Player 1's side to Player 1's store.")
+					for i in range(0, 6): # Pits 0-5 (Player 1's side)
+						if pits[i].size() > 0:
+							pits[6].append_array(pits[i])
+							pits[i].clear()
+							print("913 refresh count label call")
+							_refresh_pit_count_label(i)
+					print("915 refresh count label call")
+					_refresh_pit_count_label(6)
+	
+	if is_game_over_condition_met and not game_over:
+		game_over = true
+
+		print("Final scores: Player 1 (store 6): ", pits[6].size(), ", Player 2 (store 13): ", pits[13].size())
+		var winner_id = -1
+		if pits[6].size() > pits[13].size():
+			winner_id = 1
+		elif pits[13].size() > pits[6].size():
+			winner_id = 2
+			
+	if game_over and winner_id != "":
+		print("Setting Game_Over_State")
+		if winner_id == -1:
+			win_loss_label.text = "TIE!"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+			win_loss_state = "tie"
+		# Use player_str to determine if 'YOU WIN' or 'YOU LOSE'
+		elif (player == 1 and winner_id == 1) or (player == 2 and winner_id == 2):
+			win_loss_label.text = "YOU WIN!"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			win_loss_state = "win"
+		else:
+			win_loss_label.text = "YOU LOSE"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+			win_loss_state = "loss"
+		
+		win_loss_label.visible = true
+		await get_tree().process_frame
+		win_loss_label.scale = Vector2.ZERO
+		win_loss_label.pivot_offset = win_loss_label.size / 2
+
+		var tween_in = create_tween()
+		tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		await tween_in.finished
+		
+	return game_over
 
 func on_rules_button_pressed() -> void:
 	var popup = RULES_POPUP_SCENE.instantiate()
@@ -501,11 +994,68 @@ func on_rules_button_pressed() -> void:
 	tween.tween_property(popup, "size:x", size.x, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.parallel().tween_property(popup, "position:x", 0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 	popup.grab_focus()
+	
+# --- Animation Functions ---
+func play_sent_animation():
+	if sent_label:
+		if sent_tween and sent_tween.is_running():
+			sent_tween.kill()
 
+		sent_tween = create_tween().set_parallel(false)
+
+		sent_label.text = "Sent"
+		sent_label.visible = true
+		sent_label.modulate.a = 0.0
+		sent_label.scale = Vector2.ONE
+		sent_label.pivot_offset = sent_label.get_size() / 2.0
+
+		sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
+
+		sent_tween.tween_interval(0.6)
+		sent_tween.tween_callback(func():
+			sent_label.text = "Sent ✔"
+		)
+
+		sent_tween.tween_interval(2.0)
+		sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
+
+		sent_tween.tween_callback(func():
+			sent_label.visible = false
+			sent_label.modulate.a = 1.0
+			start_waiting_animation()
+		)
+ 
+func start_waiting_animation():
+	print("Starting Waiting Animation 826")
+	dot_count = 0
+	waiting_label.text = BASE_WAIT_TEXT + "."
+	waiting_label.visible = true
+	waiting_blur.visible = true
+
+	waiting_label.modulate.a = 0.0
+	waiting_blur.modulate.a = 0.0
+
+	var tween = create_tween().set_parallel(true)
+	tween.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
+	tween.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
+
+	dot_timer.start()
+
+
+func stop_waiting_animation():
+	dot_timer.stop()
+	waiting_label.visible = false
+	waiting_blur.visible = false
+	
+func _on_dot_timer_timeout():
+	dot_count = (dot_count % 3) + 1
+	var dots = ""
+	for i in range(dot_count):
+		dots += "."
+	waiting_label.text = BASE_WAIT_TEXT + dots
 
 func on_settings_button_pressed() -> void:
 	show_toast_notification("Feature Coming Soon")
-
 
 func show_toast_notification(message: String, duration: float=2.0) -> void:
 	var toast = Label.new()

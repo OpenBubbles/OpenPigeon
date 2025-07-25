@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3 uid="uid://b5cgft50kgoc8"]
+[gd_scene load_steps=18 format=3 uid="uid://b5cgft50kgoc8"]
 
 [ext_resource type="Script" uid="uid://dh7rsnax7enhf" path="res://mancala/mancala.gd" id="1_wkq4n"]
 [ext_resource type="Texture2D" uid="uid://bje0kd0ednpdh" path="res://mancala/board.png" id="2_d7lhj"]
@@ -82,6 +82,17 @@ texture = ExtResource("4_miqih")
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_8aurd"]
 texture = ExtResource("4_miqih")
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_miqih"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
 [node name="MancalaBoard" type="Control"]
 layout_mode = 3
 anchors_preset = 15
@@ -127,7 +138,6 @@ mouse_filter = 2
 alignment = 1
 
 [node name="MyCountLabel" type="ColorRect" parent="MarginContainer/InfoHBoxContainer"]
-visible = false
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_horizontal = 4
@@ -138,6 +148,19 @@ color = Color(0.105882, 1, 1, 1)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
+
+[node name="BoardSprite" type="TextureRect" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+custom_minimum_size = Vector2(350, 800)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+texture = ExtResource("2_d7lhj")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="PitsContainer" type="Node2D" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+position = Vector2(396, 513.5)
 
 [node name="ReplayButton" type="Button" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
 visible = false
@@ -153,14 +176,6 @@ visible = false
 layout_mode = 2
 mouse_filter = 2
 
-[node name="WinLossLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
-visible = false
-layout_mode = 2
-theme_override_font_sizes/font_size = 25
-theme_override_styles/normal = SubResource("StyleBoxFlat_1ko3n")
-horizontal_alignment = 1
-vertical_alignment = 1
-
 [node name="SentLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
 visible = false
 layout_mode = 2
@@ -170,18 +185,22 @@ text = "SENT"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="BoardSprite" type="TextureRect" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
-custom_minimum_size = Vector2(350, 800)
+[node name="WinLossLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+visible = false
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
-mouse_filter = 2
-texture = ExtResource("2_d7lhj")
-expand_mode = 1
-stretch_mode = 5
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_1ko3n")
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="PitsContainer" type="Node2D" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
-position = Vector2(396, 513.5)
+[node name="FreeTurnLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_1ko3n")
+text = "Free Turn."
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="OpCountLabel" type="ColorRect" parent="MarginContainer/InfoHBoxContainer"]
 custom_minimum_size = Vector2(64, 64)
@@ -229,3 +248,36 @@ theme_override_font_sizes/font_size = 32
 theme_override_styles/hover = SubResource("StyleBoxTexture_miqih")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_elfvu")
 theme_override_styles/normal = SubResource("StyleBoxTexture_8aurd")
+
+[node name="WaitBlur" type="ColorRect" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.152941, 0.152941, 0.152941, 0.556863)
+
+[node name="WaitingContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_bottom = 185
+
+[node name="WaitForOpponentLabel" type="Label" parent="WaitingContainer"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_miqih")
+text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="DotTimer" type="Timer" parent="."]
+wait_time = 0.75
