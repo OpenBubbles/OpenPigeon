@@ -64,3 +64,29 @@ offset_right = 489.0
 offset_bottom = 703.0
 text = "Archery"
 script = ExtResource("1_4r7pt")
+
+[node name="ReversiButton" type="Button" parent="."]
+offset_left = 143.0
+offset_top = 804.0
+offset_right = 489.0
+offset_bottom = 865.0
+text = "Reversi"
+script = ExtResource("1_4r7pt")
+
+[node name="FillerButton" type="Button" parent="."]
+offset_left = 143.0
+offset_top = 885.0
+offset_right = 489.0
+offset_bottom = 946.0
+text = "Filler
+"
+script = ExtResource("1_4r7pt")
+
+[node name="MancalaButton" type="Button" parent="."]
+offset_left = 143.0
+offset_top = 723.0
+offset_right = 489.0
+offset_bottom = 784.0
+text = "Mancala
+"
+script = ExtResource("1_4r7pt")

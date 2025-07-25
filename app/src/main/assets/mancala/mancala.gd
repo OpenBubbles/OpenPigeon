@@ -15,7 +15,7 @@ var has_connected: bool = false
 var offsets: Array[Vector2]
 var _board_initialized: bool = false
 var game_over: bool = false
-var is_flipped: bool = false
+var in_replay: bool = false
 const BASE_STONE_SCALE := Vector2(0.1, 0.1)
 var win_loss_state: String = ""
 var winner_id = ""
@@ -32,6 +32,7 @@ var replay_moves: Array = []
 
 # Scenes
 var PitScene    : PackedScene = preload("res://mancala/pit.tscn")
+var StoreScene  : PackedScene = preload("res://mancala/store.tscn")
 var StoneScene : PackedScene = preload("res://mancala/stone.tscn")
 
 # UI References
@@ -53,7 +54,7 @@ var _carrying_stones_container: Node2D = Node2D.new() # A temporary container fo
 const STONE_DROP_DELAY = 0.1 # Time to pause after dropping each stone
 const PIT_PICKUP_LIFT_Y = -50 # How much the pit lifts when picked up
 const PIT_PICKUP_TIME = 0.2 # How long it takes for the pit to lift
-const PILE_TRAVEL_TIME = 0.2 # Time for the entire pile to move between pits
+const PILE_TRAVEL_TIME = 0.3 # Time for the entire pile to move between pits
 var dot_count: int = 0
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 var sent_tween: Tween
@@ -95,8 +96,8 @@ func _ready() -> void:
 	# Dev: preload a sample game state when running in editor
 	else:
 		print("[DEV] Editor hint active, loading sample game data")
-		#var dev_data = '{"isYourTurn": true,"mode": "n","player": "1","replay": "board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&2,2,3,3&3,2,2,2&&12,13,13,13&13,11,12,13&12,11,12,12&11,11,11,12&11,12,13,13&13,11,11,13&|move:2,4|board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&&3,2,2,2&&12,13,13,13&11,12,13,11&12,11,12,12,13&11,11,11,12,11&11,12,13,13,12&13,11,11,13,13&","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
-		var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&13,12,13,13,13&12&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1|move:2,6|board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&12,13,13,13&12,13&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+		var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&2,2,3,3&3,2,2,2&&12,13,13,13&13,11,12,13&12,11,12,12&11,11,11,12&11,12,13,13&13,11,11,13&|move:2,4|board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&&3,2,2,2&&12,13,13,13&11,12,13,11&12,11,12,12,13&11,11,11,12,11&11,12,13,13,12&13,11,11,13,13&","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+		#var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&13,12,13,13,13&12&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1|move:2,6|board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&12,13,13,13&12,13&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
 		_set_game_data(dev_data)
 	for pit in pit_nodes:
 		for node in pit.get_children():
@@ -130,6 +131,7 @@ func _set_game_data(raw_text: String) -> void:
 	var player2_id: String = res.get("player2", "")
 	game_over = true if res.get("winner", "") != "" else false
 	winner_id = res.get("winner", "")
+	print("Winner State is: ", winner_id, " With Game Over State being: ", game_over)
 	print("SENDER: ", sender_id, " PLAYER1ID: ",player1_id, " PLAYER2ID: ",player2_id)
 	is_your_turn = res.get("isYourTurn", false)
 	is_my_turn = true if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == "") else false
@@ -196,12 +198,9 @@ func _set_game_data(raw_text: String) -> void:
 			
 			# Temporarily set the 'player' variable to the replaying player
 			# so _sow_from correctly handles store pits and capture rules for the animation.
-			var original_player = player
-			player = replay_player
-			is_flipped = true
+			in_replay = true
 			await _sow_from(actual_pit_idx)
-			player = original_player # Restore player after the move
-			is_flipped = false
+			in_replay = false
 		_is_animating = false # Reset animation flag after replay
 
 	# If it's your turn, start highlights. Otherwise, start waiting animation.
@@ -250,30 +249,21 @@ func _on_plugin_set_game_data(raw_text: String) -> void:
 	call_deferred("_set_game_data", raw_text)
 
 func _init_mancala_board_structure() -> void:
-	# This function only creates the pit nodes and adds them to the scene
-	# It DOES NOT set their positions based on player or initialize stones.
 	randomize()
 	for i in range(PIT_COUNT):
-		var pit = PitScene.instantiate() as Area2D
+		var pit: Area2D
+		if i == 6 or i == 13: # These are the store pits
+			pit = StoreScene.instantiate() as Area2D
+			pit.name = "Store%d" % i
+		else:
+			pit = PitScene.instantiate() as Area2D
+			pit.name = "Pit%d" % i
 		pit.index = i
-		var dbg = Label.new()
-		dbg.add_theme_font_size_override("font_size", 18)
-		dbg.modulate = Color(1, 0, 0)
-		dbg.position = Vector2(0, 0)
-		pit.add_child(dbg)
-		if i == 6 or i == 13:
-			pit.scale = Vector2(2, 1)
-			var cs = pit.get_node("CollisionShape2D") as CollisionShape2D
-			var rect_shape = RectangleShape2D.new()
-			rect_shape.extents = Vector2(100, 40)
-			cs.shape = rect_shape
 		pit.connect("pit_clicked", Callable(self, "_on_pit_clicked"))
 		pits_root.add_child(pit)
 		pit_nodes.append(pit)
 		spawn_points.append(pit.get_node("SpawnPoint") as Marker2D)
-
-	# Initialize pits array with empty arrays so it's structured,
-	# but don't populate with stones yet.
+		
 	pits.clear()
 	for i in range(PIT_COUNT):
 		pits.append([])
@@ -508,7 +498,7 @@ func _sow_from(start_idx: int) -> void:
 		var carried_visual_stones: Array[Node2D] = []
 		for stone_label in carried_stone_labels:
 			var s = StoneScene.instantiate() as Node2D
-			s.scale = _get_compensated_stone_scale(current_idx)
+			s.scale = BASE_STONE_SCALE
 			s.modulate = _get_color_from_label(stone_label)
 			s.position = Vector2(randf_range(-5, 5), randf_range(-5, 5))
 			_carrying_stones_container.add_child(s)
@@ -746,7 +736,7 @@ func _refresh_pit(i: int) -> void:
 	
 	for stone_label in pits[i]:
 		var s = StoneScene.instantiate() as Node2D
-		s.scale = _get_compensated_stone_scale(i)
+		s.scale = BASE_STONE_SCALE
 		s.modulate = _get_color_from_label(stone_label)
 		s.rotation_degrees = randf_range(0, 360) 
 		
@@ -776,15 +766,6 @@ func _get_color_from_label(label: int) -> Color:
 		2, 12: return Color("#525559") # Dark gray
 		3, 13: return Color("#6d8be4") # Lighter blue
 		_: return Color(randf_range(0.8,1), randf_range(0.8,1), randf_range(0.8,1))
-		
-
-
-func _get_compensated_stone_scale(pit_idx: int) -> Vector2:
-	var pit_scale = pit_nodes[pit_idx].scale
-	return Vector2(
-		BASE_STONE_SCALE.x / pit_scale.x,
-		BASE_STONE_SCALE.y / pit_scale.y
-	)
 
 func _refresh_pit_count_label(i: int) -> void:
 	var pit = pit_nodes[i]
@@ -794,31 +775,29 @@ func _refresh_pit_count_label(i: int) -> void:
 	var lw = lbl.get_minimum_size().x
 	var lh = lbl.get_minimum_size().y
 	var base = spawn_points[i].position
-	const OFFX = 5
+	const OFFX = 40
 	const OFFY = 10
 	const Mx = 50
 	const My = 50
-	print("REFRESH COUNT:: PLAYER: ", player, " Pit Number: ", i, " Is Flipped?: ", is_flipped)
-	if ((player == 1 and not is_flipped) or  player == 2 and is_flipped):
+	print("REFRESH COUNT:: PLAYER: ", player, " Pit Number: ", i, " In Replay?: ", in_replay)
+	if player == 1:
 		if i == 6 or i == 13:
-			lbl.scale = Vector2(0.5, 1)
 			if i == 6:
-				lbl.position = base + Vector2(-Mx - lw/2 + OFFX*2,  My - lh/2 - OFFY)
+				lbl.position = base + Vector2(-Mx - lw/2 - OFFX,  My - lh/2 - OFFY)
 			else:
-				lbl.position = base + Vector2( Mx - lw/2 - OFFX, -My - lh/2 + OFFY)
+				lbl.position = base + Vector2( Mx - lw/2 + OFFX, -My - lh/2 + OFFY)
 		else:
 			lbl.scale = Vector2(1,1)
 			if i < 6:
 				lbl.position = base + Vector2(-Mx - lw/2, -lh/2)
 			else:
 				lbl.position = base + Vector2( Mx - lw/2, -lh/2)
-	elif ((player == 2 and not is_flipped) or  player == 1 and is_flipped):
+	elif player == 2:
 		if i == 6 or i == 13:
-			lbl.scale = Vector2(0.5, 1)
 			if i == 6:
-				lbl.position = base + Vector2(Mx - lw/2 - OFFX,  -My - lh/2 + OFFY)
+				lbl.position = base + Vector2(Mx - lw/2 + OFFX,  -My - lh/2 + OFFY)
 			else:
-				lbl.position = base + Vector2(-Mx - lw/2 + OFFX*2, My - lh/2 - OFFY)
+				lbl.position = base + Vector2(-Mx - lw/2 - OFFX, My - lh/2 - OFFY)
 		else:
 			lbl.scale = Vector2(1,1)
 			if i < 6:
@@ -925,7 +904,7 @@ func _check_game_over_and_winner() -> bool:
 					_refresh_pit_count_label(6)
 	
 	if is_game_over_condition_met and not game_over:
-		game_over = true
+		game_over == true
 
 		print("Final scores: Player 1 (store 6): ", pits[6].size(), ", Player 2 (store 13): ", pits[13].size())
 		var winner_id = -1

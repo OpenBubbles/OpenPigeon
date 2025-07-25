@@ -36,3 +36,9 @@ func _pressed() -> void:
 		get_tree().call_deferred("change_scene_to_file", games["beer"])
 	elif name == "ArcheryButton":
 		get_tree().call_deferred("change_scene_to_file", games["archery"])
+	elif name == "ReversiButton":
+		get_tree().call_deferred("change_scene_to_file", games["reversi"])
+	elif name == "FillerButton":
+		get_tree().call_deferred("change_scene_to_file", games["fill"])
+	elif name == "MancalaButton":
+		get_tree().call_deferred("change_scene_to_file", games["mancala"])
