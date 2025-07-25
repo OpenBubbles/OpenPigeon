@@ -661,12 +661,12 @@ func _sow_from(start_idx: int) -> void:
 				free_turn_label.add_theme_color_override("font_color", Color(1, 1, 1)) # white text
 				free_turn_label.add_theme_color_override("background_color", Color(1.0, 0.84, 0.0))
 				var opposite_pit_idx = -1
-				if current_sow_player == 1: # Player 1's pits 0-5. Opposite pits 12-7.
+				if current_sow_player == 2: # Player 1's pits 0-5. Opposite pits 12-7.
 					opposite_pit_idx = 12 - _last_sown_pit
-				elif current_sow_player == 2: # Player 2's pits 7-12. Opposite pits 5-0.
+				elif current_sow_player == 1: # Player 2's pits 7-12. Opposite pits 5-0.
 					opposite_pit_idx = 12 - _last_sown_pit
 
-				var player_store_idx = 6 if current_sow_player == 1 else 13
+				var player_store_idx = 13 if current_sow_player == 1 else 6
 
 				if opposite_pit_idx != -1 and pits[opposite_pit_idx].size() > 0:
 					print("DEBUG: Capturing stones from opposite pit ", opposite_pit_idx)
