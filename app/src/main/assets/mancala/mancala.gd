@@ -455,7 +455,7 @@ func _sow_from(start_idx: int) -> void:
 		# 'player' here will be dynamically set by _set_game_data for replay, or 'player_str' for local clicks
 		var current_sow_player = player # This 'player' variable is adjusted in _set_game_data during replay
 		if not _is_animating and is_my_turn: # If it's a local click, use player_str
-			current_sow_player = player_str
+			current_sow_player = player_str if not in_replay else player
 
 
 		# Check for game over condition here before picking up stones
@@ -649,44 +649,44 @@ func _sow_from(start_idx: int) -> void:
 					_refresh_pit_count_label(player_store_idx)
 				else:
 					print("DEBUG: Opposite pit ", opposite_pit_idx, " is empty or invalid. No capture.")
-			elif in_replay:
-				# Optionally indicate opponent captured
-				print("REPLAY: Opponent captured stones!")
-				# You can reuse the same label or show something distinct if you'd like:
-				free_turn_label.text = "Captured!"
-				free_turn_label.visible = true
-				var free_turn_tween = create_tween()
-				free_turn_tween.tween_interval(2.0) # Show for 1 second
-				free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
-				free_turn_label.add_theme_color_override("font_color", Color(1, 1, 1)) # white text
-				free_turn_label.add_theme_color_override("background_color", Color(1.0, 0.84, 0.0))
-				var opposite_pit_idx = -1
-				if current_sow_player == 2: # Player 1's pits 0-5. Opposite pits 12-7.
-					opposite_pit_idx = 12 - _last_sown_pit
-				elif current_sow_player == 1: # Player 2's pits 7-12. Opposite pits 5-0.
-					opposite_pit_idx = 12 - _last_sown_pit
-
-				var player_store_idx = 13 if current_sow_player == 1 else 6
-
-				if opposite_pit_idx != -1 and pits[opposite_pit_idx].size() > 0:
-					print("DEBUG: Capturing stones from opposite pit ", opposite_pit_idx)
-					
-					# Collect stones to be captured (last sown stone + opposite pit's stones)
-					var captured_stones = []
-					captured_stones.append(pits[_last_sown_pit].pop_back()) # Get the single stone from the last sown pit
-					captured_stones.append_array(pits[opposite_pit_idx])
-					pits[opposite_pit_idx].clear() # Clear the opposite pit
-
-					# Visually move stones to the store
-					await _animate_capture(captured_stones, _last_sown_pit, opposite_pit_idx, player_store_idx)
-
-					# Add captured stones to the player's store
-					pits[player_store_idx].append_array(captured_stones)
-					
-					print("626 refresh count label call")
-					_refresh_pit_count_label(_last_sown_pit)
-					_refresh_pit_count_label(opposite_pit_idx)
-					_refresh_pit_count_label(player_store_idx)
+			#elif in_replay:
+				## Optionally indicate opponent captured
+				#print("REPLAY: Opponent captured stones!")
+				## You can reuse the same label or show something distinct if you'd like:
+				#free_turn_label.text = "Captured!"
+				#free_turn_label.visible = true
+				#var free_turn_tween = create_tween()
+				#free_turn_tween.tween_interval(2.0) # Show for 1 second
+				#free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
+				#free_turn_label.add_theme_color_override("font_color", Color(1, 1, 1)) # white text
+				#free_turn_label.add_theme_color_override("background_color", Color(1.0, 0.84, 0.0))
+				#var opposite_pit_idx = -1
+				#if current_sow_player == 2: # Player 1's pits 0-5. Opposite pits 12-7.
+					#opposite_pit_idx = 12 - _last_sown_pit
+				#elif current_sow_player == 1: # Player 2's pits 7-12. Opposite pits 5-0.
+					#opposite_pit_idx = 12 - _last_sown_pit
+#
+				#var player_store_idx = 13 if current_sow_player == 1 else 6
+#
+				#if opposite_pit_idx != -1 and pits[opposite_pit_idx].size() > 0:
+					#print("DEBUG: Capturing stones from opposite pit ", opposite_pit_idx)
+					#
+					## Collect stones to be captured (last sown stone + opposite pit's stones)
+					#var captured_stones = []
+					#captured_stones.append(pits[_last_sown_pit].pop_back()) # Get the single stone from the last sown pit
+					#captured_stones.append_array(pits[opposite_pit_idx])
+					#pits[opposite_pit_idx].clear() # Clear the opposite pit
+#
+					## Visually move stones to the store
+					#await _animate_capture(captured_stones, _last_sown_pit, opposite_pit_idx, player_store_idx)
+#
+					## Add captured stones to the player's store
+					#pits[player_store_idx].append_array(captured_stones)
+					#
+					#print("626 refresh count label call")
+					#_refresh_pit_count_label(_last_sown_pit)
+					#_refresh_pit_count_label(opposite_pit_idx)
+					#_refresh_pit_count_label(player_store_idx)
 			else:
 				print("DEBUG: Capture condition not met for pit ", _last_sown_pit, " (size: ", pits[_last_sown_pit].size(), ")")
 			break # End the sowing loop for non-avalanche modes
