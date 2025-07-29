@@ -480,6 +480,7 @@ func create_radial_gradient_texture(size: int) -> Texture2D:
 
 func _set_game_data(new_game_data_json: String):
 	var parsed = JSON.parse_string(new_game_data_json)
+	print("PARSED DATA: ", parsed)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		print("Failed to parse game data")
 		return
@@ -493,8 +494,9 @@ func _set_game_data(new_game_data_json: String):
 	var player1_id: String = data.get("player1", "")
 	var player2_id: String = data.get("player2", "")
 	is_your_turn = data.get("isYourTurn", false)
-	is_my_turn = true if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == "") else false
-
+	#is_my_turn = true if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == "") else false
+	is_my_turn = is_your_turn
+	
 	# Set values
 	if seed_str != "":
 		var seed: int = int(seed_str)
@@ -502,11 +504,8 @@ func _set_game_data(new_game_data_json: String):
 
 	if player_str != "":
 		print("483 Is my turn: ",is_my_turn)
-		if is_my_turn:
-			player = "1" if player_str == "2" else "2"
-		else:
-			player = "2" if player_str == "2" else "1"
-		print("Parsed player: ", player)
+		player = "1" if (player_str == "2" and is_my_turn) or (player_str == "1" and not is_my_turn) else "2"
+		print("Parsed player: ", player, " | PLAYER_STR: ", player_str, " | IS MY TURN?: ", is_my_turn)
 
 	if replay_str != "":
 		parse_replay_string(replay_str) # This is where the board is set up and colors/scores updated
@@ -604,6 +603,7 @@ func parse_replay_string(replay_str: String):
 	update_color_selector_states()
 	print("595 checking win")
 	game_ended = await check_win()
+	print("GAME ENDED?: ", game_ended, " | PLAYER: ", player, " | IS_MY_TURN?: ", is_my_turn)
 	if not game_ended and not is_my_turn:
 		play_sent_animation()
 		print("596 Playing Sent Animation")

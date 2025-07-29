@@ -18,7 +18,7 @@ var game_over: bool = false
 var in_replay: bool = false
 const BASE_STONE_SCALE := Vector2(0.1, 0.1)
 var win_loss_state: String = ""
-var winner_id = ""
+var winner_id = -1
 
 # Changed to track individual stone labels for each pit
 var pits: Array = [] # Each element is an array of stone labels
@@ -134,7 +134,8 @@ func _set_game_data(raw_text: String) -> void:
 	print("Winner State is: ", winner_id, " | With Game Over State being: ", game_over)
 	print("Player Parsed Val: ", player_str, " SENDER: ", sender_id, " PLAYER1ID: ",player1_id, " PLAYER2ID: ",player2_id)
 	is_your_turn = res.get("isYourTurn", false)
-	is_my_turn = true if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == "") else false
+	#is_my_turn = true if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == "") else false
+	is_my_turn = is_your_turn
 	print("YOUR TURN?: ", is_your_turn, " MY TURN?: ", is_my_turn)
 	player = 1 if player_str == 2 and is_my_turn else 2
 	print("Current Player Number: ", player, " MY PLAYER ID: ", my_player)
@@ -416,7 +417,7 @@ func _on_pit_clicked(idx: int) -> void:
 	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	await tween_lift.finished
 
-	is_my_turn = false # Disable further clicks now that animation is starting
+	
 	
 	# Start the sowing process, which will handle avalanche logic internally
 	await _sow_from(idx) 
@@ -453,9 +454,11 @@ func _sow_from(start_idx: int) -> void:
 	while true: # Loop for avalanche turns
 		# Determine which player's turn this sowing operation is logically representing
 		# 'player' here will be dynamically set by _set_game_data for replay, or 'player_str' for local clicks
-		var current_sow_player = player # This 'player' variable is adjusted in _set_game_data during replay
-		if not _is_animating and is_my_turn: # If it's a local click, use player_str
-			current_sow_player = player_str if not in_replay else player
+		var current_sow_player = player_str # This 'player' variable is adjusted in _set_game_data during replay
+		if not in_replay and is_my_turn: # If it's a local click, use player_str
+			current_sow_player = player
+		else:
+			print("SOW STATS!!!!~~ IS ANIMATING: ", _is_animating, " IS MY TURN: ", is_my_turn, " CURRENT SOW PLAYER: ", current_sow_player, " IN_REPLAY: ", in_replay, " PLAYER_STR: ", player_str," PLAYER: ", player)
 
 
 		# Check for game over condition here before picking up stones
@@ -489,7 +492,7 @@ func _sow_from(start_idx: int) -> void:
 						_refresh_pit_count_label(i)
 						_refresh_pit_count_label(opponent_store_idx)
 			print("483 check game over")
-			await _check_game_over_and_winner() # Final check after distributing stones
+			#await _check_game_over_and_winner() # Final check after distributing stones
 			return # End sowing if game over
 
 		if pits[current_sowing_pit_idx].size() == 0:
@@ -535,9 +538,8 @@ func _sow_from(start_idx: int) -> void:
 			current_idx = (current_idx + 1) % PIT_COUNT
 			
 			# Skip opponent's store pit based on the current sowing player
-			if not in_replay:
-				if (current_sow_player == 1 and current_idx == 13) or (current_sow_player == 2 and current_idx == 6):
-					continue
+			if (current_sow_player == 1 and current_idx == 13) or (current_sow_player == 2 and current_idx == 6):
+				continue
 
 			var target_pit_node = pit_nodes[current_idx]
 			var target_global_position_for_pile = target_pit_node.global_position
@@ -601,25 +603,41 @@ func _sow_from(start_idx: int) -> void:
 			
 			# Otherwise, pick up the stones from _last_sown_pit and continue
 			print("Avalanche continues: Picking up stones from pit ", _last_sown_pit)
+			if current_sowing_pit_idx == 6 or current_sowing_pit_idx == 13:
+				break
 			current_sowing_pit_idx = _last_sown_pit # Set the next pit to sow from
 			# Do not break; the loop will continue to the next iteration
 		else:
 			# Normal/Hard mode capture logic (original logic)
 			# This block only runs if not in avalanche mode
-			var last_sown_was_on_my_side_non_store = \
-				(current_sow_player == 1 and _last_sown_pit >= 0 and _last_sown_pit <= 5) or \
-				(current_sow_player == 2 and _last_sown_pit >= 7 and _last_sown_pit <= 12)
 
-			if last_sown_was_on_my_side_non_store and pits[_last_sown_pit].size() == 1:
-				# Condition for capture: last stone landed in an empty pit on player's side
-				print("DEBUG: Capture condition met! Last stone landed in pit ", _last_sown_pit, " which was empty.")
-				free_turn_label.text = "Captured!"
-				free_turn_label.visible = true
-				var free_turn_tween = create_tween()
-				free_turn_tween.tween_interval(2.0) # Show for 1 second
-				free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
-				free_turn_label.add_theme_color_override("font_color", Color(1, 1, 1)) # white text
-				free_turn_label.add_theme_color_override("background_color", Color(1.0, 0.84, 0.0))
+			# Determine if the last sown stone landed in a non-store pit
+			var last_sown_pit_is_non_store = (_last_sown_pit >= 0 and _last_sown_pit <= 5) or (_last_sown_pit >= 7 and _last_sown_pit <= 12)
+
+			# --- Define the capture conditions more precisely ---
+			var should_capture = false
+
+			# Case 1: Live game (not in replay)
+			if not in_replay:
+				# Player 1's turn, last stone landed on Player 1's side (pits 0-5) AND pit now has 1 stone
+				if current_sow_player == 1 and _last_sown_pit >= 0 and _last_sown_pit <= 5 and pits[_last_sown_pit].size() == 1:
+					should_capture = true
+				# Player 2's turn, last stone landed on Player 2's side (pits 7-12) AND pit now has 1 stone
+				elif current_sow_player == 2 and _last_sown_pit >= 7 and _last_sown_pit <= 12 and pits[_last_sown_pit].size() == 1:
+					should_capture = true
+			# Case 2: In replay mode
+			else:
+				# If it's Player 1's "turn" in replay, and they landed on their side (0-5) and pit now has 1 stone
+				if current_sow_player == 1 and _last_sown_pit >= 0 and _last_sown_pit <= 5 and pits[_last_sown_pit].size() == 1:
+					should_capture = true
+				# If it's Player 2's "turn" in replay, and they landed on their side (7-12) and pit now has 1 stone
+				elif current_sow_player == 2 and _last_sown_pit >= 7 and _last_sown_pit <= 12 and pits[_last_sown_pit].size() == 1:
+					should_capture = true
+
+			# --- Execute capture logic if conditions are met ---
+			if should_capture:
+				print("DEBUG: Capture condition met! Last stone landed in pit ", _last_sown_pit, " which was empty before this stone.")
+				
 				var opposite_pit_idx = -1
 				if current_sow_player == 1: # Player 1's pits 0-5. Opposite pits 12-7.
 					opposite_pit_idx = 12 - _last_sown_pit
@@ -633,60 +651,39 @@ func _sow_from(start_idx: int) -> void:
 					
 					# Collect stones to be captured (last sown stone + opposite pit's stones)
 					var captured_stones = []
-					captured_stones.append(pits[_last_sown_pit].pop_back()) # Get the single stone from the last sown pit
+					if pits[_last_sown_pit].size() > 0:
+						# Temporarily remove the last sown stone from the pit to add it to captured_stones
+						captured_stones.append(pits[_last_sown_pit].pop_back())
+					
+					# Add all stones from the opposite pit to captured_stones
 					captured_stones.append_array(pits[opposite_pit_idx])
 					pits[opposite_pit_idx].clear() # Clear the opposite pit
+					
+					# --- Visual and UI feedback - only for the local player during live play ---
+					# 'player' here refers to the local player ID
+					if not in_replay and current_sow_player == player: 
+						print("DEBUG: Displaying 'Captured!' label for live player.")
+						free_turn_label.text = "Captured!"
+						free_turn_label.visible = true
+						var free_turn_tween = create_tween()
+						free_turn_tween.tween_interval(0.5) # Shorter display for quick feedback
+						free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
+						free_turn_label.add_theme_color_override("font_color", Color(1, 1, 1)) # white text
+						free_turn_label.add_theme_color_override("background_color", Color(1.0, 0.84, 0.0))
 
-					# Visually move stones to the store
+					# Visually move stones to the store (always animate during replay for accuracy)
 					await _animate_capture(captured_stones, _last_sown_pit, opposite_pit_idx, player_store_idx)
 
 					# Add captured stones to the player's store
 					pits[player_store_idx].append_array(captured_stones)
 					
+					# Refresh pit counts (always refresh regardless of in_replay for accurate display)
 					print("626 refresh count label call")
 					_refresh_pit_count_label(_last_sown_pit)
 					_refresh_pit_count_label(opposite_pit_idx)
 					_refresh_pit_count_label(player_store_idx)
 				else:
 					print("DEBUG: Opposite pit ", opposite_pit_idx, " is empty or invalid. No capture.")
-			#elif in_replay:
-				## Optionally indicate opponent captured
-				#print("REPLAY: Opponent captured stones!")
-				## You can reuse the same label or show something distinct if you'd like:
-				#free_turn_label.text = "Captured!"
-				#free_turn_label.visible = true
-				#var free_turn_tween = create_tween()
-				#free_turn_tween.tween_interval(2.0) # Show for 1 second
-				#free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
-				#free_turn_label.add_theme_color_override("font_color", Color(1, 1, 1)) # white text
-				#free_turn_label.add_theme_color_override("background_color", Color(1.0, 0.84, 0.0))
-				#var opposite_pit_idx = -1
-				#if current_sow_player == 2: # Player 1's pits 0-5. Opposite pits 12-7.
-					#opposite_pit_idx = 12 - _last_sown_pit
-				#elif current_sow_player == 1: # Player 2's pits 7-12. Opposite pits 5-0.
-					#opposite_pit_idx = 12 - _last_sown_pit
-#
-				#var player_store_idx = 13 if current_sow_player == 1 else 6
-#
-				#if opposite_pit_idx != -1 and pits[opposite_pit_idx].size() > 0:
-					#print("DEBUG: Capturing stones from opposite pit ", opposite_pit_idx)
-					#
-					## Collect stones to be captured (last sown stone + opposite pit's stones)
-					#var captured_stones = []
-					#captured_stones.append(pits[_last_sown_pit].pop_back()) # Get the single stone from the last sown pit
-					#captured_stones.append_array(pits[opposite_pit_idx])
-					#pits[opposite_pit_idx].clear() # Clear the opposite pit
-#
-					## Visually move stones to the store
-					#await _animate_capture(captured_stones, _last_sown_pit, opposite_pit_idx, player_store_idx)
-#
-					## Add captured stones to the player's store
-					#pits[player_store_idx].append_array(captured_stones)
-					#
-					#print("626 refresh count label call")
-					#_refresh_pit_count_label(_last_sown_pit)
-					#_refresh_pit_count_label(opposite_pit_idx)
-					#_refresh_pit_count_label(player_store_idx)
 			else:
 				print("DEBUG: Capture condition not met for pit ", _last_sown_pit, " (size: ", pits[_last_sown_pit].size(), ")")
 			break # End the sowing loop for non-avalanche modes
@@ -694,6 +691,8 @@ func _sow_from(start_idx: int) -> void:
 	# Clear the temporary container after all stones have been moved or captured
 	for child in _carrying_stones_container.get_children():
 		child.queue_free() # Ensure no residual nodes if something went wrong
+	
+	await _check_game_over_and_winner()
 
 func _animate_capture(stones_to_capture: Array, last_sown_pit_idx: int, opposite_pit_idx: int, player_store_idx: int) -> void:
 	print("Animating capture of ", stones_to_capture.size(), " stones to store ", player_store_idx)
@@ -877,6 +876,7 @@ func _place_stone(container: Node2D, base_pos: Vector2, label: int) -> void:
 	
 func send_game() -> void:
 	print("Send Game Called!")
+	is_my_turn = false # Disable further clicks
 	var all_moves = ""
 	for m in moves_made:
 		all_moves += "move:" + m + "|"
@@ -924,9 +924,10 @@ func _check_game_over_and_winner() -> bool:
 	if not game_over:
 		var player1_store_count = pits[6].size()
 		var player2_store_count = pits[13].size()
+		print("PLAYER 1 STORE QTY: ", player1_store_count, " | PLAYER 2 STORE QTY: ", player2_store_count)
 		
 		# Condition 1: A player's store has more than 24 stones
-		if player1_store_count > 24 or player2_store_count > 24 or winner_id == "":
+		if player1_store_count > 24 or player2_store_count > 24:
 			print("Game over: A player's store has more than 24 stones.")
 			is_game_over_condition_met = true
 		else:
@@ -969,16 +970,19 @@ func _check_game_over_and_winner() -> bool:
 					_refresh_pit_count_label(6)
 	
 	if is_game_over_condition_met and not game_over:
-		game_over == true
+		game_over = true
 
 		print("Final scores: Player 1 (store 6): ", pits[6].size(), ", Player 2 (store 13): ", pits[13].size())
-		var winner_id = -1
+		var local_winner = -1
 		if pits[6].size() > pits[13].size():
-			winner_id = 1
+			local_winner = 1
 		elif pits[13].size() > pits[6].size():
-			winner_id = 2
+			local_winner = 2
+
+		winner_id = local_winner
+
 			
-	if game_over and winner_id != "":
+	if game_over and winner_id != -1:
 		print("Setting Game_Over_State")
 		if winner_id == -1:
 			win_loss_label.text = "TIE!"

@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3 uid="uid://jkrqbd1yqry1"]
+[gd_scene load_steps=5 format=3 uid="uid://lnotg6to3boy"]
 
 [ext_resource type="Script" uid="uid://c3l6ovhjgbbms" path="res://mancala/pit.gd" id="1_vwixt"]
 [ext_resource type="Shader" uid="uid://cl4gtk6xuuyaj" path="res://mancala/PitHighlight.gdshader" id="2_tossc"]
