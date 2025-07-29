@@ -19,6 +19,7 @@ var in_replay: bool = false
 const BASE_STONE_SCALE := Vector2(0.1, 0.1)
 var win_loss_state: String = ""
 var winner_id = -1
+var disp_winner = false
 
 # Changed to track individual stone labels for each pit
 var pits: Array = [] # Each element is an array of stone labels
@@ -129,7 +130,7 @@ func _set_game_data(raw_text: String) -> void:
 	var sender_id = res.get("sender", "")
 	var player1_id: String = res.get("player1", "")
 	var player2_id: String = res.get("player2", "")
-	game_over = true if res.get("winner", "") != "" else false
+	#game_over = true if res.get("winner", "") != "" else false
 	winner_id = res.get("winner", "")
 	print("Winner State is: ", winner_id, " | With Game Over State being: ", game_over)
 	print("Player Parsed Val: ", player_str, " SENDER: ", sender_id, " PLAYER1ID: ",player1_id, " PLAYER2ID: ",player2_id)
@@ -188,21 +189,39 @@ func _set_game_data(raw_text: String) -> void:
 		_is_animating = true # Set animation flag to prevent clicks during replay
 		# Animate each move in sequence
 		for move_data in replay_moves:
+			var replay_player = int(move_data[0]) # Get the player who made this move in replay
 			var replay_pit_offset = int(move_data[1])
 			var actual_pit_idx = replay_pit_offset
-			if player == 1: # Convert opponent's relative pit index to absolute for player 1's layout
-				# Player 2's pits 0-5 correspond to actual pits 7-12 in our fixed layout
+			if replay_player == 2: # Convert player 2's relative pit index to absolute for our fixed layout
 				actual_pit_idx += 7
-
-			print("Replaying move: Player ", player, ", Pit offset ", replay_pit_offset, " (Actual pit ", actual_pit_idx, ")")
 			
-			# Temporarily set the 'player' variable to the replaying player
-			# so _sow_from correctly handles store pits and capture rules for the animation.
+			# Special handling for Player 1's perspective: if replay_player is 2, and player (local client) is 1,
+			# then actual_pit_idx needs to be mapped from player 2's perspective to player 1's "opponent's side"
+			# This part seems to be redundant if `_sow_from` handles `current_sow_player` correctly.
+			# Let's rely on _sow_from's logic for pit traversal using current_sow_player.
+			
+			print("Replaying move: Player ", replay_player, ", Pit offset ", replay_pit_offset, " (Actual pit ", actual_pit_idx, ")")
+			
+			# Temporarily set the 'player_str' (current_sow_player in _sow_from) to the replaying player
+			var original_player_str_for_sow = player_str
+			player_str = replay_player # This is the key change for replay's _sow_from
+			
 			in_replay = true
-			var original_player_for_sow = player # Store current global player
 			await _sow_from(actual_pit_idx)
-			player = original_player_for_sow # Restore global player
 			in_replay = false
+			
+			# After sowing, check if the last stone landed in the current sowing player's store
+			var current_sow_player_store_idx = 6 if player_str == 1 else 13
+			if _last_sown_pit == current_sow_player_store_idx:
+				print("DEBUG: Replay - Player ", player_str, " got a free turn!")
+				free_turn_label.text = "Free Turn!"
+				free_turn_label.visible = true
+				var free_turn_tween = create_tween()
+				free_turn_tween.tween_interval(0.8) # Show for a moment
+				free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
+				await free_turn_tween.finished # Wait for the label to disappear before next move
+			
+			player_str = original_player_str_for_sow # Restore global player_str
 		_is_animating = false # Reset animation flag after replay
 		
 		# AFTER all replay moves are applied and pits are updated to the final state:
@@ -661,15 +680,14 @@ func _sow_from(start_idx: int) -> void:
 					
 					# --- Visual and UI feedback - only for the local player during live play ---
 					# 'player' here refers to the local player ID
-					if not in_replay and current_sow_player == player: 
-						print("DEBUG: Displaying 'Captured!' label for live player.")
-						free_turn_label.text = "Captured!"
-						free_turn_label.visible = true
-						var free_turn_tween = create_tween()
-						free_turn_tween.tween_interval(0.5) # Shorter display for quick feedback
-						free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
-						free_turn_label.add_theme_color_override("font_color", Color(1, 1, 1)) # white text
-						free_turn_label.add_theme_color_override("background_color", Color(1.0, 0.84, 0.0))
+					print("DEBUG: Displaying 'Captured!' label for live player.")
+					free_turn_label.text = "Captured!"
+					free_turn_label.visible = true
+					var free_turn_tween = create_tween()
+					free_turn_tween.tween_interval(0.5) # Shorter display for quick feedback
+					free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
+					free_turn_label.add_theme_color_override("font_color", Color(1, 1, 1)) # white text
+					free_turn_label.add_theme_color_override("background_color", Color(1.0, 0.84, 0.0))
 
 					# Visually move stones to the store (always animate during replay for accuracy)
 					await _animate_capture(captured_stones, _last_sown_pit, opposite_pit_idx, player_store_idx)
@@ -926,48 +944,44 @@ func _check_game_over_and_winner() -> bool:
 		var player2_store_count = pits[13].size()
 		print("PLAYER 1 STORE QTY: ", player1_store_count, " | PLAYER 2 STORE QTY: ", player2_store_count)
 		
-		# Condition 1: A player's store has more than 24 stones
-		if player1_store_count > 24 or player2_store_count > 24:
-			print("Game over: A player's store has more than 24 stones.")
+		# Condition: Check if one player's non-store pits are empty
+		var player1_side_empty = true
+		for i in range(0, 6): # Pits 0-5 for player 1's side
+			if pits[i].size() > 0:
+				player1_side_empty = false
+				break
+		var player2_side_empty = true
+		for i in range(7, 13): # Pits 7-12 for player 2's side
+			if pits[i].size() > 0:
+				player2_side_empty = false
+				break
+		
+		if player1_side_empty or player2_side_empty:
+			print("Game over: One player's side is empty.")
 			is_game_over_condition_met = true
-		else:
-			# Condition 2: One player's non-store pits are empty
-			var player1_side_empty = true
-			for i in range(0, 6): # Pits 0-5 for player 1's side
-				if pits[i].size() > 0:
-					player1_side_empty = false
-					break
-			var player2_side_empty = true
-			for i in range(7, 13): # Pits 7-12 for player 2's side
-				if pits[i].size() > 0:
-					player2_side_empty = false
-					break
 			
-			if player1_side_empty or player2_side_empty:
-				print("Game over: One player's side is empty.")
-				is_game_over_condition_met = true
-				
-				# Distribute remaining stones from the non-empty side to that player's store
-				if player1_side_empty:
-					print("Player 1's side is empty. Moving remaining stones from Player 2's side to Player 2's store.")
-					for i in range(7, 13): # Pits 7-12 (Player 2's side)
-						if pits[i].size() > 0:
-							pits[13].append_array(pits[i])
-							pits[i].clear()
-							print("903 refresh count label call")
-							_refresh_pit_count_label(i)
-					print("905 refresh count label call")
-					_refresh_pit_count_label(13) # Update Player 2's store count
-				elif player2_side_empty:
-					print("Player 2's side is empty. Moving remaining stones from Player 1's side to Player 1's store.")
-					for i in range(0, 6): # Pits 0-5 (Player 1's side)
-						if pits[i].size() > 0:
-							pits[6].append_array(pits[i])
-							pits[i].clear()
-							print("913 refresh count label call")
-							_refresh_pit_count_label(i)
-					print("915 refresh count label call")
-					_refresh_pit_count_label(6)
+			# Distribute remaining stones from the non-empty side to that player's store
+			# This logic is correct and handles which side sweeps
+			if player1_side_empty:
+				print("Player 1's side is empty. Moving remaining stones from Player 2's side to Player 2's store.")
+				for i in range(7, 13): # Pits 7-12 (Player 2's side)
+					if pits[i].size() > 0:
+						pits[13].append_array(pits[i])
+						pits[i].clear()
+						print("903 refresh count label call")
+						_refresh_pit_count_label(i)
+				print("905 refresh count label call")
+				_refresh_pit_count_label(13) # Update Player 2's store count
+			elif player2_side_empty:
+				print("Player 2's side is empty. Moving remaining stones from Player 1's side to Player 1's store.")
+				for i in range(0, 6): # Pits 0-5 (Player 1's side)
+					if pits[i].size() > 0:
+						pits[6].append_array(pits[i])
+						pits[i].clear()
+						print("913 refresh count label call")
+						_refresh_pit_count_label(i)
+				print("915 refresh count label call")
+				_refresh_pit_count_label(6)
 	
 	if is_game_over_condition_met and not game_over:
 		game_over = true
@@ -978,13 +992,15 @@ func _check_game_over_and_winner() -> bool:
 			local_winner = 1
 		elif pits[13].size() > pits[6].size():
 			local_winner = 2
-
+		# If scores are equal, local_winner remains -1 (for a tie)
+		
 		winner_id = local_winner
 
 			
-	if game_over and winner_id != -1:
+	if game_over and winner_id != -1 and not disp_winner: # Only proceed to display winner if game is over and winner_id is set
 		print("Setting Game_Over_State")
-		if winner_id == -1:
+		disp_winner = true
+		if winner_id == -1: # Check for tie
 			win_loss_label.text = "TIE!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
 			win_loss_state = "tie"
@@ -999,7 +1015,7 @@ func _check_game_over_and_winner() -> bool:
 			win_loss_state = "loss"
 		
 		win_loss_label.visible = true
-		await get_tree().process_frame
+		await get_tree().process_frame # Ensure UI updates before tweening
 		win_loss_label.scale = Vector2.ZERO
 		win_loss_label.pivot_offset = win_loss_label.size / 2
 
