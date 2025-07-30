@@ -1139,7 +1139,7 @@ func on_rules_button_pressed() -> void:
 
 	# 🎯 Inject rule text based on mode
 	var rules_label = popup.get_node("MarginContainer/PanelContainer/VBoxContainer/BodyMarginContainer/RulesLabel")
-	if rules_label and rules_label is Label:
+	if rules_label and rules_label is RichTextLabel:
 		rules_label.text = _get_rules_text_for_mode(mode)
 
 	await get_tree().process_frame
@@ -1161,16 +1161,57 @@ func on_rules_button_pressed() -> void:
 	
 func _get_rules_text_for_mode(mode: String) -> String:
 	match mode:
-		"n":
-			return "🎯 Normal Mode:\n\nEach player takes turns placing stones in pits, counterclockwise. If your last stone lands in your store, you get another turn. Capture occurs if you land on your side in an empty pit and the opposite pit has stones."
-		"h":
-			return "🔥 Hard Mode:\n\nSame as Normal Mode, but capture only occurs if your last stone lands in an empty pit *and* the opposite pit has an odd number of stones. Strategy is key!"
-		"an":
-			return "🌊 Avalanche Mode:\n\nIf your last stone lands in a non-empty pit, you pick up those stones and keep going — potentially creating huge chains! Land in your store to end your turn."
-		"ah":
-			return "🌪️ Avalanche + Hard Mode:\n\nSame avalanche chain reaction as Avalanche Mode, but with hard-mode capture rules. Maximum brain burn!"
+		"n", "h":
+			return """
+[font_size={32px}][b]Capture Mode[/b][/font_size]
+
+[font_size={24px}][b]Rules:[/b][/font_size]
+
+1. Each player has a store on one side of the board.
+
+2. Players take turns choosing a pile from one of the holes. Moving counter-clockwise, stones from the selected pile are deposited in each of the following holes until you run out of stones.
+
+3. If you drop the last stone into your store - you get a free turn.
+
+4. If you drop the last stone into an empty hole on your side of the board - you can capture stones from the hole on the opposite side.
+
+5. The game ends when all six holes on either side of the board are empty. If a player has any stones on their side of the board when the game ends - they will capture all of those stones.
+
+[font_size={24px}][b]Goal:[/b][/font_size]
+
+Player with the most stones in thir store wins. 
+"""
+		"an", "ah":
+			return """
+[font_size={32px}][b]Avalanche Mode[/b][/font_size]
+
+[font_size={24px}][b]Rules:[/b][/font_size]
+
+1. Each player has a store on one side of the board.
+
+2. Players take turns choosing a pile from one of the holes. Moving counter-clockwise, stones from the selected pile are deposited in each of the following holes until you run out of stones.
+
+3. If you drop the last stone into an unempty hole, you will pick up the stones from that hole and continue depositing them counter-clockwise.
+
+4. You turn is over when you drop the last stone into an empty hole.
+
+5. If you drop the last stone into your store - you get a free turn.
+
+5. The game ends when all six holes on either side of the board are empty. If a player has any stones on their side of the board when the game ends - they will capture all of those stones.
+
+[font_size={24px}][b]Goal:[/b][/font_size]
+
+Player with the most stones in thir store wins. 
+"""
 		_:
-			return "No rules available for this mode."
+			return """
+[b][font_size=22]Unknown Mode[/font_size][/b]
+
+[b]Rules:[/b]
+
+No rule info found for this mode.
+"""
+
 	
 # --- Animation Functions ---
 func play_sent_animation():
