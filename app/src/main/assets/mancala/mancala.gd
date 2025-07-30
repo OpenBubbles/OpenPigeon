@@ -932,7 +932,7 @@ func _get_color_from_label(label: int) -> Color:
 	match label:
 		1, 11: return Color("#fffcf2") # Creamy white
 		2, 12: return Color("#414851") # Jet gray
-		3, 13: return Color("#2196f3") # Bright blue (Google blue)
+		3, 13: return Color("#176cab") # Bright blue (Google blue)
 		_: return Color(randf_range(0.9, 1.0), randf_range(0.9, 1.0), randf_range(0.9, 1.0))
 
 func _refresh_pit_count_label(i: int) -> void:
