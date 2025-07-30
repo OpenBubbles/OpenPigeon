@@ -144,14 +144,17 @@ func _set_game_data(raw_text: String) -> void:
 	is_your_turn = res.get("isYourTurn", false)
 	if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == ""):
 		is_my_turn = true
+		player = 1 if (player_str == 2 and is_my_turn) else 2
+		print("Current Player Number post: ", player, " MY PLAYER ID: ", my_player)
 	else:
+		print("Spectator mode activated")
 		spectator_mode = true
 		spec_label.visible = true
 		player = 1
+		print("Current Player Number pre: ", player, " MY PLAYER ID: ", my_player)
 	#is_my_turn = is_your_turn
-	print("YOUR TURN?: ", is_your_turn, " MY TURN?: ", is_my_turn)
-	player = 1 if player_str == 2 and is_my_turn and not spectator_mode else 2
-	print("Current Player Number: ", player, " MY PLAYER ID: ", my_player)
+	print("YOUR TURN?: ", is_your_turn, " MY TURN?: ", is_my_turn, " Spectator Mode: ", spectator_mode)
+	
 	print("SET GAME MODE: ", mode)
 	
 	print("Set Mode: ", mode)
@@ -243,7 +246,7 @@ func _set_game_data(raw_text: String) -> void:
 		# After the replay loop (either completed or broken by skip)
 		skip_button.visible = false # Hide the skip button
 		_is_animating = false # Reset animation flag after replay
-		_skip_replay_animation = false
+		
 
 		# If replay was skipped, or finished, set the board to the final state (rb[1])
 		# This is crucial for skipped replays to show the final board immediately.
@@ -251,11 +254,12 @@ func _set_game_data(raw_text: String) -> void:
 			var final_board_data = _parse_single_board(rb[rb.size() - 1]) # Get the last board state
 			for k in range(min(final_board_data.size(), PIT_COUNT)):
 				pits[k] = final_board_data[k].duplicate()
-			_refresh_all_pits() # Update visuals to the final state
+			if _skip_replay_animation:
+				_refresh_all_pits() # Update visuals to the final state
 			print("Board updated to final state from raw_boards after replay (or skip).")
 		else:
 			push_warning("_set_game_data: No final board state (rb[1]) available for post-replay update.")
-
+		_skip_replay_animation = false
 		# Update the global prev_board_str to reflect the board state *after* the replay.
 		prev_board_str = rb[rb.size() - 1] if rb.size() > 0 else "" # Use the last available board state
 		print("UPDATED prev_board_str AFTER REPLAY: ", prev_board_str)
@@ -389,9 +393,6 @@ func _apply_board_layout(is_current_turn: bool) -> void:
 	if is_my_turn:
 		_start_pit_highlights()
 		stop_waiting_animation()
-	# You might want to call _refresh_all_pits() here if you expect
-	# a visual update immediately after applying the layout,
-	# but _set_game_data will call it after parsing the replay anyway.
 
 func _start_pit_highlights() -> void:
 	print("Starting Pit Highlights! Player: ", player)
@@ -929,10 +930,10 @@ func _refresh_pit(i: int) -> void:
 
 func _get_color_from_label(label: int) -> Color:
 	match label:
-		1, 11: return Color("#cacbc5") # Muted white/light gray
-		2, 12: return Color("#525559") # Dark gray
-		3, 13: return Color("#6d8be4") # Lighter blue
-		_: return Color(randf_range(0.8,1), randf_range(0.8,1), randf_range(0.8,1))
+		1, 11: return Color("#fffcf2") # Creamy white
+		2, 12: return Color("#414851") # Jet gray
+		3, 13: return Color("#2196f3") # Bright blue (Google blue)
+		_: return Color(randf_range(0.9, 1.0), randf_range(0.9, 1.0), randf_range(0.9, 1.0))
 
 func _refresh_pit_count_label(i: int) -> void:
 	var pit = pit_nodes[i]
@@ -1004,7 +1005,7 @@ func send_game() -> void:
 	print("PAYLOAD: ", payload)
 	if await _check_game_over_and_winner():
 		print("Check Win 863 my_player: ", my_player, " win_loss_state: ", win_loss_state)
-		if game_over == true:
+		if game_over == true and not spectator_mode:
 			payload["winner"] = my_player + "|" + ("1" if win_loss_state == "win" else "-1")
 	# wrap our string in JSON so AppPlugin can parse it
 	var game_data = JSON.stringify(payload)
@@ -1086,20 +1087,23 @@ func _check_game_over_and_winner() -> bool:
 	if game_over and winner_id != -1 and not disp_winner: # Only proceed to display winner if game is over and winner_id is set
 		print("Setting Game_Over_State")
 		disp_winner = true
-		if winner_id == -1: # Check for tie
-			win_loss_label.text = "TIE!"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
-			win_loss_state = "tie"
-		# Use player_str to determine if 'YOU WIN' or 'YOU LOSE'
-		elif (player == 1 and winner_id == 1) or (player == 2 and winner_id == 2):
-			win_loss_label.text = "YOU WIN!"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			win_loss_state = "win"
+		if not spectator_mode:
+			if winner_id == -1: # Check for tie
+				win_loss_label.text = "TIE!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+				win_loss_state = "tie"
+			# Use player_str to determine if 'YOU WIN' or 'YOU LOSE'
+			elif (player == 1 and winner_id == 1) or (player == 2 and winner_id == 2):
+				win_loss_label.text = "YOU WIN!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+				win_loss_state = "win"
+			else:
+				win_loss_label.text = "YOU LOSE"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+				win_loss_state = "loss"
 		else:
-			win_loss_label.text = "YOU LOSE"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
-			win_loss_state = "loss"
-		
+			win_loss_label.text = "Game Over!"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 		win_loss_label.visible = true
 		await get_tree().process_frame # Ensure UI updates before tweening
 		win_loss_label.scale = Vector2.ZERO
