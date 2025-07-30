@@ -1137,6 +1137,11 @@ func on_rules_button_pressed() -> void:
 			popup.queue_free()
 		)
 
+	# 🎯 Inject rule text based on mode
+	var rules_label = popup.get_node("MarginContainer/PanelContainer/VBoxContainer/BodyMarginContainer/RulesLabel")
+	if rules_label and rules_label is Label:
+		rules_label.text = _get_rules_text_for_mode(mode)
+
 	await get_tree().process_frame
 	var size = get_viewport_rect().size
 	popup.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
@@ -1147,12 +1152,25 @@ func on_rules_button_pressed() -> void:
 
 	var final_h = popup.get_combined_minimum_size().y
 	popup.position = Vector2(size.x/2, (size.y - final_h)/2)
-	popup.size      = Vector2(0, final_h)
+	popup.size = Vector2(0, final_h)
 
 	var tween = create_tween()
 	tween.tween_property(popup, "size:x", size.x, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.parallel().tween_property(popup, "position:x", 0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 	popup.grab_focus()
+	
+func _get_rules_text_for_mode(mode: String) -> String:
+	match mode:
+		"n":
+			return "🎯 Normal Mode:\n\nEach player takes turns placing stones in pits, counterclockwise. If your last stone lands in your store, you get another turn. Capture occurs if you land on your side in an empty pit and the opposite pit has stones."
+		"h":
+			return "🔥 Hard Mode:\n\nSame as Normal Mode, but capture only occurs if your last stone lands in an empty pit *and* the opposite pit has an odd number of stones. Strategy is key!"
+		"an":
+			return "🌊 Avalanche Mode:\n\nIf your last stone lands in a non-empty pit, you pick up those stones and keep going — potentially creating huge chains! Land in your store to end your turn."
+		"ah":
+			return "🌪️ Avalanche + Hard Mode:\n\nSame avalanche chain reaction as Avalanche Mode, but with hard-mode capture rules. Maximum brain burn!"
+		_:
+			return "No rules available for this mode."
 	
 # --- Animation Functions ---
 func play_sent_animation():
