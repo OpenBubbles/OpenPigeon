@@ -7,6 +7,7 @@ var player_str: int     = 2
 var player: int     = 1     # 1 = bottom, 2 = top
 var is_your_turn: bool = false
 var is_my_turn: bool = false
+var spectator_mode: bool = false
 var mode: String = ""     # "n", "h", "an", or "ah"
 var my_player: String = ""
 const PIT_COUNT: int = 14
@@ -20,6 +21,7 @@ const BASE_STONE_SCALE := Vector2(0.1, 0.1)
 var win_loss_state: String = ""
 var winner_id = -1
 var disp_winner = false
+var _skip_replay_animation = false # New flag to control replay skipping
 
 # Changed to track individual stone labels for each pit
 var pits: Array = [] # Each element is an array of stone labels
@@ -47,15 +49,18 @@ var StoneScene : PackedScene = preload("res://mancala/stone.tscn")
 @onready var win_loss_label = $MarginContainer/InfoHBoxContainer/GameAreaCenterContainer/WinLossLabel
 @onready var pits_root       = $MarginContainer/InfoHBoxContainer/GameAreaCenterContainer/PitsContainer
 @onready var free_turn_label = $MarginContainer/InfoHBoxContainer/GameAreaCenterContainer/FreeTurnLabel
+@onready var skip_button = $MarginContainer/InfoHBoxContainer/GameAreaCenterContainer/SkipButton
+@onready var spec_label = $MarginContainer/SpecLabel
 
 const RULES_POPUP_SCENE = preload("res://mancala/RulesPopup.tscn")
 
 # --- New Animation Variables ---
 var _carrying_stones_container: Node2D = Node2D.new() # A temporary container for stones being carried
 const STONE_DROP_DELAY = 0.1 # Time to pause after dropping each stone
-const PIT_PICKUP_LIFT_Y = -50 # How much the pit lifts when picked up
-const PIT_PICKUP_TIME = 0.2 # How long it takes for the pit to lift
-const PILE_TRAVEL_TIME = 0.3 # Time for the entire pile to move between pits
+const PIT_PICKUP_TIME = 0.3 # How long it takes for the pit to lift
+const PILE_TRAVEL_TIME = 0.35 # Time for the entire pile to move between pits
+const BOUNCE_SCALE_FACTOR = 1.3 # Stones will scale to 120% of their base size
+const BOUNCE_DURATION = 0.01 # Duration for the initial bounce at pickup (for the very first pickup)
 var dot_count: int = 0
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 var sent_tween: Tween
@@ -97,7 +102,7 @@ func _ready() -> void:
 	# Dev: preload a sample game state when running in editor
 	else:
 		print("[DEV] Editor hint active, loading sample game data")
-		var dev_data = '{"isYourTurn": true,"mode": "n","player": "1","replay": "board:2&2,1&1,1,3&2,3,3,1&2,2,3,3&3,2,2,2&&12,13,13,13&13,11,12,13&12,11,12,12&11,11,11,12&11,12,13,13&13,11,11,13&|move:2,4|board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&&3,2,2,2&&12,13,13,13&11,12,13,11&12,11,12,12,13&11,11,11,12,11&11,12,13,13,12&13,11,11,13,13&","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+		var dev_data = '{"isYourTurn": true,"mode": "n","player": "1","replay": "board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&12&3,2,2,2&12&12,13,13,13&11,12,13,11&12,11,12,12,13&11,11,11,12,11&11,12,1,2,3,1,2,3,1,2,3,1,2,3,1,2,3,1,2,3&13,11,11,13,13&11|move:2,4|board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&12&3,2,2,2&12&12,13,13,13&11,12,13,11&12,11,12,12,13&11,11,11,12,11&&13,11,11,13,13,11&11,12","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
 		#var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&13,12,13,13,13&12&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1|move:2,6|board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&12,13,13,13&12,13&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
 		_set_game_data(dev_data)
 	for pit in pit_nodes:
@@ -109,6 +114,8 @@ func _ready() -> void:
 		rules_button.pressed.connect(on_rules_button_pressed)
 	if settings_button:
 		settings_button.pressed.connect(on_settings_button_pressed)
+	if skip_button: # Always good practice to check if the node exists
+		skip_button.pressed.connect(_on_skip_button_pressed)
 
 	# Add the carrying stones container to the scene
 	add_child(_carrying_stones_container)
@@ -130,15 +137,20 @@ func _set_game_data(raw_text: String) -> void:
 	var sender_id = res.get("sender", "")
 	var player1_id: String = res.get("player1", "")
 	var player2_id: String = res.get("player2", "")
-	#game_over = true if res.get("winner", "") != "" else false
+	#game_over = true if res.get("winner", "") != "" else false # Keep this commented out as per previous logic
 	winner_id = res.get("winner", "")
 	print("Winner State is: ", winner_id, " | With Game Over State being: ", game_over)
 	print("Player Parsed Val: ", player_str, " SENDER: ", sender_id, " PLAYER1ID: ",player1_id, " PLAYER2ID: ",player2_id)
 	is_your_turn = res.get("isYourTurn", false)
-	#is_my_turn = true if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == "") else false
-	is_my_turn = is_your_turn
+	if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == ""):
+		is_my_turn = true
+	else:
+		spectator_mode = true
+		spec_label.visible = true
+		player = 1
+	#is_my_turn = is_your_turn
 	print("YOUR TURN?: ", is_your_turn, " MY TURN?: ", is_my_turn)
-	player = 1 if player_str == 2 and is_my_turn else 2
+	player = 1 if player_str == 2 and is_my_turn and not spectator_mode else 2
 	print("Current Player Number: ", player, " MY PLAYER ID: ", my_player)
 	print("SET GAME MODE: ", mode)
 	
@@ -188,17 +200,21 @@ func _set_game_data(raw_text: String) -> void:
 		print("[PARSE] Parsed moves:", replay_moves)
 		_is_animating = true # Set animation flag to prevent clicks during replay
 		# Animate each move in sequence
-		for move_data in replay_moves:
+		
+		# Enable the skip button only during replay animation
+		skip_button.visible = true # Assuming skip_button is a Node reference
+
+		for i in range(replay_moves.size()): # Use index to access corresponding raw_board
+			if _skip_replay_animation:
+				print("Replay animation skipped by user.")
+				break # Exit the replay loop early
+				
+			var move_data = replay_moves[i]
 			var replay_player = int(move_data[0]) # Get the player who made this move in replay
 			var replay_pit_offset = int(move_data[1])
 			var actual_pit_idx = replay_pit_offset
 			if replay_player == 2: # Convert player 2's relative pit index to absolute for our fixed layout
 				actual_pit_idx += 7
-			
-			# Special handling for Player 1's perspective: if replay_player is 2, and player (local client) is 1,
-			# then actual_pit_idx needs to be mapped from player 2's perspective to player 1's "opponent's side"
-			# This part seems to be redundant if `_sow_from` handles `current_sow_player` correctly.
-			# Let's rely on _sow_from's logic for pit traversal using current_sow_player.
 			
 			print("Replaying move: Player ", replay_player, ", Pit offset ", replay_pit_offset, " (Actual pit ", actual_pit_idx, ")")
 			
@@ -207,7 +223,8 @@ func _set_game_data(raw_text: String) -> void:
 			player_str = replay_player # This is the key change for replay's _sow_from
 			
 			in_replay = true
-			await _sow_from(actual_pit_idx)
+			# We need to pass the skip flag to _sow_from or ensure _sow_from checks it internally
+			await _sow_from(actual_pit_idx) 
 			in_replay = false
 			
 			# After sowing, check if the last stone landed in the current sowing player's store
@@ -222,12 +239,25 @@ func _set_game_data(raw_text: String) -> void:
 				await free_turn_tween.finished # Wait for the label to disappear before next move
 			
 			player_str = original_player_str_for_sow # Restore global player_str
+			
+		# After the replay loop (either completed or broken by skip)
+		skip_button.visible = false # Hide the skip button
 		_is_animating = false # Reset animation flag after replay
-		
-		# AFTER all replay moves are applied and pits are updated to the final state:
+		_skip_replay_animation = false
+
+		# If replay was skipped, or finished, set the board to the final state (rb[1])
+		# This is crucial for skipped replays to show the final board immediately.
+		if rb.size() > 1: # Ensure post_board exists
+			var final_board_data = _parse_single_board(rb[rb.size() - 1]) # Get the last board state
+			for k in range(min(final_board_data.size(), PIT_COUNT)):
+				pits[k] = final_board_data[k].duplicate()
+			_refresh_all_pits() # Update visuals to the final state
+			print("Board updated to final state from raw_boards after replay (or skip).")
+		else:
+			push_warning("_set_game_data: No final board state (rb[1]) available for post-replay update.")
+
 		# Update the global prev_board_str to reflect the board state *after* the replay.
-		# This is the state that will be used as the "previous board" for *our* next move.
-		prev_board_str = rb[1]
+		prev_board_str = rb[rb.size() - 1] if rb.size() > 0 else "" # Use the last available board state
 		print("UPDATED prev_board_str AFTER REPLAY: ", prev_board_str)
 	elif rb.size() > 0:
 		# If there are no moves, but there's a board string in the replay (e.g., initial state from server),
@@ -315,21 +345,21 @@ func _apply_board_layout(is_current_turn: bool) -> void:
 	print("YOU ARE PLAYER: ", player)
 	if player == 1:
 		offsets = [
-			Vector2(-271, -342), Vector2(-271, -251), Vector2(-271, -158),
-			Vector2(-271,  -67), Vector2(-271,   24), Vector2(-271,  116),
-			Vector2(-226,  210),
-			Vector2(-173,  116), Vector2(-173,   24), Vector2(-173,  -67),
-			Vector2(-173, -158), Vector2(-173, -251), Vector2(-173, -342),
-			Vector2(-226, -438)
+			Vector2(125, 171.5), Vector2(125, 262.5), Vector2(125, 355.5),
+			Vector2(125, 446.5), Vector2(125, 537.5), Vector2(125, 629.5),
+			Vector2(170, 723.5), # Store
+			Vector2(223, 629.5), Vector2(223, 537.5), Vector2(223, 446.5),
+			Vector2(223, 355.5), Vector2(223, 262.5), Vector2(223, 171.5),
+			Vector2(170, 75.5) # Store
 		]
 	elif player == 2:
 		offsets = [
-		Vector2(-173,  116), Vector2(-173,   24), Vector2(-173,  -67),
-		Vector2(-173, -158), Vector2(-173, -251), Vector2(-173, -342),
-		Vector2(-226, -438),
-		Vector2(-271, -342), Vector2(-271, -251), Vector2(-271, -158),
-		Vector2(-271,  -67), Vector2(-271,   24), Vector2(-271,  116),
-		Vector2(-226,  210)
+			Vector2(223, 629.5), Vector2(223, 537.5), Vector2(223, 446.5),
+			Vector2(223, 355.5), Vector2(223, 262.5), Vector2(223, 171.5),
+			Vector2(170, 75.5), # Store
+			Vector2(125, 171.5), Vector2(125, 262.5), Vector2(125, 355.5),
+			Vector2(125, 446.5), Vector2(125, 537.5), Vector2(125, 629.5),
+			Vector2(170, 723.5) # Store
 		]
 	else:
 		print("Cannot Setup Board!! (Player or turn info missing)")
@@ -340,13 +370,6 @@ func _apply_board_layout(is_current_turn: bool) -> void:
 		if i < pit_nodes.size() and i < offsets.size(): # Safety check
 			pit_nodes[i].position = offsets[i]
 
-	# Initialize stones based on the determined player layout
-	# Only do this if _set_game_data isn't going to immediately overwrite it
-	# with a replay board. If the replay always has a board, this initial fill
-	# might be redundant, but it's safe if you ever need an initial blank board.
-	# For Mancala, the 'replay' string usually dictates the board state,
-	# so this block might be less critical if you always have a replay.
-	# However, if 'replay' is empty and you need a starting board, this is key.
 	for i in range(PIT_COUNT):
 		if i == 6 or i == 13: # Store pits start empty
 			pits[i] = [] # Ensure store pits are empty
@@ -408,13 +431,12 @@ func _on_pit_clicked(idx: int) -> void:
 		print("Not your turn.")
 		return
 	# Check if the clicked pit belongs to the current player and is not a store pit
-	# The 'player' variable in this function refers to the current client's player number (1 or 2)
 	var my_store_pit_idx = 6 if player_str == 1 else 13
 	if ((player == 1 and (idx < 0 or idx > 5)) or (player == 2 and (idx < 7 or idx > 12))):
 		print("Cannot click opponent's pit or a store pit.")
 		_start_pit_highlights()
 		return
-	if pits[idx].size() == 0: # Check if the pit is empty (using .size() for Array[Array[int]])
+	if pits[idx].size() == 0: # Check if the pit is empty
 		print("Cannot click an empty pit.")
 		_start_pit_highlights()
 		return
@@ -425,21 +447,32 @@ func _on_pit_clicked(idx: int) -> void:
 	print("[INPUT] Pit clicked:", idx)
 	_is_animating = true # Set animation flag
 
-	# --- Start Pit Pickup Animation ---
-	var pit_global = pit_nodes[idx].global_position
-	_carrying_stones_container.global_position = pit_global
-	var tween_lift = create_tween()
-	tween_lift.tween_property(
-		_carrying_stones_container, "global_position",
-		pit_global + Vector2(0, PIT_PICKUP_LIFT_Y),
-		PIT_PICKUP_TIME
-	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	await tween_lift.finished
+	# --- Start Pit Pickup Animation (MODIFIED) ---
+	var start_pit_node = pit_nodes[idx]
+	_carrying_stones_container.global_position = start_pit_node.global_position # Set initial position
 
+	# Animate container scale up for the "lift" effect
+	var tween_pickup_scale = create_tween()
+	tween_pickup_scale.set_parallel(true) # Allow parallel tweens for scale and position
+
+	# Tween scale up
+	tween_pickup_scale.tween_property(
+		_carrying_stones_container, "scale",
+		Vector2(1.2, 1.2), # Increase size by 20% for "raised" look
+		PIT_PICKUP_TIME * 0.7 # Quicker initial pop-up
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+	# Optional: Slight vertical shift for extra pop, if desired, but less crucial now
+	# tween_pickup_scale.tween_property(
+	# 	_carrying_stones_container, "global_position:y",
+	# 	start_pit_node.global_position.y - 15, # Small upward hop
+	# 	PIT_PICKUP_TIME * 0.7
+	# ).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	
+	await tween_pickup_scale.finished # Wait for the pickup effect to finish
 	
 	# Start the sowing process, which will handle avalanche logic internally
-	await _sow_from(idx) 
+	await _sow_from(idx)
 
 	var give_free_turn = false
 	# Check for "Free Turn" rule (last stone lands in *your* store)
@@ -471,8 +504,11 @@ func _sow_from(start_idx: int) -> void:
 	var last_stone_landed_in_empty_pit = false # Flag for avalanche termination
 	
 	while true: # Loop for avalanche turns
-		# Determine which player's turn this sowing operation is logically representing
-		# 'player' here will be dynamically set by _set_game_data for replay, or 'player_str' for local clicks
+		# Check for skip flag early in the loop
+		if _skip_replay_animation:
+			print("Sow from interrupted by skip button.")
+			break # Exit this sow loop
+
 		var current_sow_player = player_str # This 'player' variable is adjusted in _set_game_data during replay
 		if not in_replay and is_my_turn: # If it's a local click, use player_str
 			current_sow_player = player
@@ -518,7 +554,7 @@ func _sow_from(start_idx: int) -> void:
 			# If we are starting a sow from an empty pit (can happen in avalanche mode),
 			# this turn segment ends.
 			last_stone_landed_in_empty_pit = true
-			break 
+			break
 		
 		var stones_to_sow = pits[current_sowing_pit_idx].size()
 		if stones_to_sow == 0: # Should not happen if previous check passed, but good for safety
@@ -546,14 +582,34 @@ func _sow_from(start_idx: int) -> void:
 			_carrying_stones_container.add_child(s)
 			carried_visual_stones.append(s)
 
-		# Move the carrying container to the start pit's position for visual pickup
+		await get_tree().create_timer(0.01).timeout # A minimal delay (e.g., 0.01 seconds)
+		print("DEBUG: pits_root global_position: ", pits_root.global_position)
+		print("DEBUG: start_pit_node local position: ", start_pit_node.global_position, " Current Sowing Pit Index: ", current_sowing_pit_idx)
 		_carrying_stones_container.global_position = start_pit_node.global_position
-		_carrying_stones_container.global_position.y += PIT_PICKUP_LIFT_Y
-
+		print("DEBUG: Carrying container set to start pit position: ", _carrying_stones_container.global_position, " (start_pit_node global: ", start_pit_node.global_position, ")")
 		
+		# Animate the initial "raise" (scale up and down) at the pickup pit
+		var pickup_tween = create_tween()
+		if pickup_tween == null:
+			push_error("pickup_tween is null during initial pickup! Aborting.")
+			return
+
+		# Scale up the carrying container to simulate stones raising
+		pickup_tween.tween_property(_carrying_stones_container, "scale", Vector2(BOUNCE_SCALE_FACTOR, BOUNCE_SCALE_FACTOR), BOUNCE_DURATION / 2.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		# Then scale it back down slightly, preparing for movement
+		pickup_tween.tween_property(_carrying_stones_container, "scale", Vector2(1.0, 1.0), BOUNCE_DURATION / 2.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		await pickup_tween.finished # Wait for the initial bounce to complete before moving
+		print("DEBUG: Carrying container position after pickup tween: ", _carrying_stones_container.global_position)
 		
 		# Animate the distribution of stones
 		while carried_visual_stones.size() > 0:
+			if _skip_replay_animation: # Check for skip flag inside the stone distribution loop
+				print("Stone distribution interrupted by skip button.")
+				# Clear any remaining visual stones in the carrying container if skipped mid-sow
+				for c in _carrying_stones_container.get_children():
+					c.queue_free()
+				return # Exit the function immediately
+				
 			current_idx = (current_idx + 1) % PIT_COUNT
 			
 			# Skip opponent's store pit based on the current sowing player
@@ -562,16 +618,34 @@ func _sow_from(start_idx: int) -> void:
 
 			var target_pit_node = pit_nodes[current_idx]
 			var target_global_position_for_pile = target_pit_node.global_position
-			target_global_position_for_pile.y += PIT_PICKUP_LIFT_Y
+			print("DEBUG: Moving to target pit ", current_idx, " at global position: ", target_global_position_for_pile)
 
-			var segment_tween = create_tween()
-			if segment_tween == null:
-				push_error("segment_tween is null during movement! Aborting sowing animation.")
+			# --- Movement to the next pit with integrated bouncing ---
+			var travel_tween = create_tween()
+			if travel_tween == null:
+				push_error("travel_tween is null during movement! Aborting sowing animation.")
 				return
 			
-			# Increased speed for individual stone drops, but overall pile movement is same
-			segment_tween.tween_property(_carrying_stones_container, "global_position", target_global_position_for_pile, PILE_TRAVEL_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-			await segment_tween.finished
+			# Animate position of the carrying container
+			travel_tween.tween_property(_carrying_stones_container, "global_position", target_global_position_for_pile, PILE_TRAVEL_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			
+			# Set the tween to run the next property in parallel
+			travel_tween.set_parallel(true)
+			
+			# Scale up during the first half of the travel
+			travel_tween.tween_property(_carrying_stones_container, "scale", Vector2(BOUNCE_SCALE_FACTOR, BOUNCE_SCALE_FACTOR), PILE_TRAVEL_TIME / 2.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+			
+			# Scale back down during the second half of the travel
+			travel_tween.tween_property(_carrying_stones_container, "scale", Vector2(1.0, 1.0), PILE_TRAVEL_TIME / 2.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN).set_delay(PILE_TRAVEL_TIME / 2.0)
+			
+			await travel_tween.finished
+			print("DEBUG: Carrying container position after travel tween to pit ", current_idx, ": ", _carrying_stones_container.global_position)
+
+			if _skip_replay_animation: # Check after tween finishes
+				print("Stone distribution interrupted after travel by skip button.")
+				for c in _carrying_stones_container.get_children():
+					c.queue_free()
+				return # Exit the function immediately
 
 			var stone_to_drop_visual = carried_visual_stones.pop_front() as Node2D
 			var dropped_stone_label = carried_stone_labels.pop_front()
@@ -601,11 +675,16 @@ func _sow_from(start_idx: int) -> void:
 
 				if carried_visual_stones.size() > 0:
 					await get_tree().create_timer(STONE_DROP_DELAY / 2.0).timeout # Small delay between stone drops
+					if _skip_replay_animation: # Check after short delay as well
+						print("Stone distribution interrupted during delay by skip button.")
+						for c in _carrying_stones_container.get_children():
+							c.queue_free()
+						return # Exit the function immediately
 
 		_last_sown_pit = current_idx # Update the last sown pit for potential free turn/capture checks
 
 		# Avalanche Mode Logic
-		if (mode == "an" or mode == "ah"):
+		if mode == "an" or mode == "ah":
 			print("Avalanche mode active. Last stone landed in pit: ", _last_sown_pit)
 			var player_store_idx = 6 if current_sow_player == 1 else 13
 			
@@ -691,6 +770,10 @@ func _sow_from(start_idx: int) -> void:
 
 					# Visually move stones to the store (always animate during replay for accuracy)
 					await _animate_capture(captured_stones, _last_sown_pit, opposite_pit_idx, player_store_idx)
+					if _skip_replay_animation: # Check after capture animation as well
+						print("Capture animation interrupted by skip button.")
+						return # Exit the function immediately
+
 
 					# Add captured stones to the player's store
 					pits[player_store_idx].append_array(captured_stones)
@@ -702,13 +785,15 @@ func _sow_from(start_idx: int) -> void:
 					_refresh_pit_count_label(player_store_idx)
 				else:
 					print("DEBUG: Opposite pit ", opposite_pit_idx, " is empty or invalid. No capture.")
-			else:
-				print("DEBUG: Capture condition not met for pit ", _last_sown_pit, " (size: ", pits[_last_sown_pit].size(), ")")
 			break # End the sowing loop for non-avalanche modes
 	
 	# Clear the temporary container after all stones have been moved or captured
+	# This should always run unless an early return due to skip happens
 	for child in _carrying_stones_container.get_children():
 		child.queue_free() # Ensure no residual nodes if something went wrong
+	
+	# Ensure the scale is reset to base after all animations are done
+	_carrying_stones_container.scale = Vector2(1.0, 1.0) # Reset container's scale to normal
 	
 	await _check_game_over_and_winner()
 
@@ -763,7 +848,7 @@ func _animate_capture(stones_to_capture: Array, last_sown_pit_idx: int, opposite
 	# Move the temporary container to the target store's position
 	# Using store_node's global position as the target for the _carrying_stones_container
 	var target_global_pos_for_capture = store_node.global_position
-	target_global_pos_for_capture.y += PIT_PICKUP_LIFT_Y # Lift it slightly
+	target_global_pos_for_capture.y
 
 	capture_tween.tween_property(
 		_carrying_stones_container, "global_position",
@@ -799,7 +884,7 @@ func _animate_capture(stones_to_capture: Array, last_sown_pit_idx: int, opposite
 	print("Capture animation finished.")
 
 func _end_turn() -> void:
-	player = 1 if player==2 else 2
+	player = 1 if player==2 and not spectator_mode else 2
 	free_turn_label.visible = false
 
 	# Send the game state each time a turn ends
@@ -962,26 +1047,27 @@ func _check_game_over_and_winner() -> bool:
 			
 			# Distribute remaining stones from the non-empty side to that player's store
 			# This logic is correct and handles which side sweeps
-			if player1_side_empty:
-				print("Player 1's side is empty. Moving remaining stones from Player 2's side to Player 2's store.")
-				for i in range(7, 13): # Pits 7-12 (Player 2's side)
-					if pits[i].size() > 0:
-						pits[13].append_array(pits[i])
-						pits[i].clear()
-						print("903 refresh count label call")
-						_refresh_pit_count_label(i)
-				print("905 refresh count label call")
-				_refresh_pit_count_label(13) # Update Player 2's store count
-			elif player2_side_empty:
-				print("Player 2's side is empty. Moving remaining stones from Player 1's side to Player 1's store.")
-				for i in range(0, 6): # Pits 0-5 (Player 1's side)
-					if pits[i].size() > 0:
-						pits[6].append_array(pits[i])
-						pits[i].clear()
-						print("913 refresh count label call")
-						_refresh_pit_count_label(i)
-				print("915 refresh count label call")
-				_refresh_pit_count_label(6)
+			if mode == "an" or mode == "ah":
+				if player1_side_empty:
+					print("Player 1's side is empty. Moving remaining stones from Player 2's side to Player 2's store.")
+					for i in range(7, 13): # Pits 7-12 (Player 2's side)
+						if pits[i].size() > 0:
+							pits[13].append_array(pits[i])
+							pits[i].clear()
+							print("903 refresh count label call")
+							_refresh_pit_count_label(i)
+					print("905 refresh count label call")
+					_refresh_pit_count_label(13) # Update Player 2's store count
+				elif player2_side_empty:
+					print("Player 2's side is empty. Moving remaining stones from Player 1's side to Player 1's store.")
+					for i in range(0, 6): # Pits 0-5 (Player 1's side)
+						if pits[i].size() > 0:
+							pits[6].append_array(pits[i])
+							pits[i].clear()
+							print("913 refresh count label call")
+							_refresh_pit_count_label(i)
+					print("915 refresh count label call")
+					_refresh_pit_count_label(6)
 	
 	if is_game_over_condition_met and not game_over:
 		game_over = true
@@ -1025,6 +1111,11 @@ func _check_game_over_and_winner() -> bool:
 		await tween_in.finished
 		
 	return game_over
+	
+func _on_skip_button_pressed() -> void:
+	if in_replay: # Only allow skipping if currently in replay mode
+		print("Skip button pressed during replay!")
+		_skip_replay_animation = true	
 
 func on_rules_button_pressed() -> void:
 	var popup = RULES_POPUP_SCENE.instantiate()

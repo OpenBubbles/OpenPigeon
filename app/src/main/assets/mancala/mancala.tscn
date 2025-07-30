@@ -1,8 +1,9 @@
-[gd_scene load_steps=18 format=3 uid="uid://b5cgft50kgoc8"]
+[gd_scene load_steps=19 format=3 uid="uid://b5cgft50kgoc8"]
 
 [ext_resource type="Script" uid="uid://dh7rsnax7enhf" path="res://mancala/mancala.gd" id="1_wkq4n"]
 [ext_resource type="Texture2D" uid="uid://bje0kd0ednpdh" path="res://mancala/board.png" id="2_d7lhj"]
 [ext_resource type="Shader" uid="uid://dp420yt4x20py" path="res://mancala/vignette.gdshader" id="2_miqih"]
+[ext_resource type="Texture2D" uid="uid://jk4e6m7vh6ay" path="res://mancala/next.png" id="4_elfvu"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://settings.png" id="4_miqih"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://rules.png" id="5_elfvu"]
 
@@ -110,6 +111,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 color = Color(0.439216, 0.294118, 0.290196, 1)
 
 [node name="Vignette" type="ColorRect" parent="."]
@@ -120,6 +122,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 color = Color(0.439216, 0.294118, 0.290196, 1)
 
 [node name="MarginContainer" type="MarginContainer" parent="."]
@@ -134,7 +137,6 @@ theme_override_constants/margin_right = 20
 
 [node name="InfoHBoxContainer" type="HBoxContainer" parent="MarginContainer"]
 layout_mode = 2
-mouse_filter = 2
 alignment = 1
 
 [node name="MyCountLabel" type="ColorRect" parent="MarginContainer/InfoHBoxContainer"]
@@ -142,6 +144,7 @@ custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
+mouse_filter = 2
 color = Color(0.105882, 1, 1, 1)
 
 [node name="GameAreaCenterContainer" type="CenterContainer" parent="MarginContainer/InfoHBoxContainer"]
@@ -160,7 +163,6 @@ expand_mode = 1
 stretch_mode = 5
 
 [node name="PitsContainer" type="Node2D" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
-position = Vector2(396, 513.5)
 
 [node name="ReplayButton" type="Button" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
 visible = false
@@ -202,6 +204,12 @@ text = "Free Turn."
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="SkipButton" type="TextureButton" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+layout_mode = 2
+texture_normal = ExtResource("4_elfvu")
+texture_pressed = ExtResource("4_elfvu")
+texture_hover = ExtResource("4_elfvu")
+
 [node name="OpCountLabel" type="ColorRect" parent="MarginContainer/InfoHBoxContainer"]
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -209,6 +217,15 @@ size_flags_horizontal = 4
 size_flags_vertical = 4
 mouse_filter = 2
 color = Color(1, 0.180392, 1, 1)
+
+[node name="SpecLabel" type="Label" parent="MarginContainer"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 50
+text = "Spectating..."
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="BottomItemHBoxContainer" type="HBoxContainer" parent="."]
 custom_minimum_size = Vector2(0, 100)
@@ -257,6 +274,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 
 [node name="WaitingContainer" type="MarginContainer" parent="."]
