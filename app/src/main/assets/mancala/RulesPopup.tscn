@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://cd1xporemieyg"]
+[gd_scene load_steps=8 format=3 uid="uid://cd1xporemieyg"]
 
 [ext_resource type="Script" uid="uid://b2uoho8muw6c" path="res://reversi/rules_popup.gd" id="1_6cue0"]
 [ext_resource type="Texture2D" uid="uid://f32p6cvtxkp" path="res://reversi/close.png" id="2_083pe"]
@@ -13,6 +13,11 @@ corner_radius_top_right = 10
 corner_radius_bottom_right = 10
 corner_radius_bottom_left = 10
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tn3y7"]
+bg_color = Color(0.298039, 0.298039, 0.298039, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_l8ihy"]
 texture = ExtResource("2_083pe")
 
@@ -23,6 +28,7 @@ texture = ExtResource("2_083pe")
 texture = ExtResource("2_083pe")
 
 [node name="Control" type="Control"]
+top_level = true
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -47,6 +53,7 @@ theme_override_constants/margin_bottom = 50
 
 [node name="PanelContainer" type="PanelContainer" parent="MarginContainer"]
 layout_mode = 2
+mouse_filter = 1
 theme_override_styles/panel = SubResource("StyleBoxFlat_4gcu8")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/PanelContainer"]
@@ -55,10 +62,38 @@ size_flags_vertical = 4
 
 [node name="HeaderMarginContainer" type="MarginContainer" parent="MarginContainer/PanelContainer/VBoxContainer"]
 layout_mode = 2
-theme_override_constants/margin_top = 5
-theme_override_constants/margin_right = 10
+size_flags_vertical = 0
 
-[node name="CloseButton" type="Button" parent="MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer"]
+[node name="ColorRect" type="Panel" parent="MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_tn3y7")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer"]
+layout_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 5
+theme_override_constants/margin_top = 5
+theme_override_constants/margin_right = 5
+theme_override_constants/margin_bottom = 5
+
+[node name="Control2" type="Control" parent="MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/HBoxContainer/MarginContainer"]
+custom_minimum_size = Vector2(45, 0)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Title" type="Label" parent="MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/HBoxContainer/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 20
+text = "How to play Mancala"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CloseButton" type="Button" parent="MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/HBoxContainer/MarginContainer"]
 custom_minimum_size = Vector2(40, 40)
 layout_mode = 2
 size_flags_horizontal = 8
@@ -67,8 +102,14 @@ theme_override_styles/hover = SubResource("StyleBoxTexture_l8ihy")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_xt2m2")
 theme_override_styles/normal = SubResource("StyleBoxTexture_gj8jg")
 
+[node name="Control" type="Control" parent="MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/HBoxContainer/MarginContainer"]
+custom_minimum_size = Vector2(5, 0)
+layout_mode = 2
+mouse_filter = 2
+
 [node name="BodyMarginContainer" type="MarginContainer" parent="MarginContainer/PanelContainer/VBoxContainer"]
 layout_mode = 2
+mouse_filter = 2
 theme_override_constants/margin_left = 10
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 10
@@ -76,6 +117,7 @@ theme_override_constants/margin_bottom = 10
 [node name="RulesLabel" type="RichTextLabel" parent="MarginContainer/PanelContainer/VBoxContainer/BodyMarginContainer"]
 layout_mode = 2
 size_flags_vertical = 3
+mouse_filter = 2
 bbcode_enabled = true
 text = "[font_size={32px}][b]Capture Mode[/b][/font_size]
 
@@ -97,4 +139,4 @@ Player with the most stones in thir store wins. "
 fit_content = true
 autowrap_mode = 2
 
-[connection signal="pressed" from="MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/CloseButton" to="." method="_on_close_button_pressed"]
+[connection signal="pressed" from="MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/HBoxContainer/MarginContainer/CloseButton" to="." method="_on_close_button_pressed"]

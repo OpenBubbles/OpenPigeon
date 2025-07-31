@@ -4,6 +4,7 @@ extends Control
 # Mancala Game State
 # ——————————————
 var player_str: int     = 2
+var game_settings_category: String
 var player: int     = 1     # 1 = bottom, 2 = top
 var is_your_turn: bool = false
 var is_my_turn: bool = false
@@ -53,6 +54,7 @@ var StoneScene : PackedScene = preload("res://mancala/stone.tscn")
 @onready var spec_label = $MarginContainer/SpecLabel
 
 const RULES_POPUP_SCENE = preload("res://mancala/RulesPopup.tscn")
+var SETTINGS_POPUP_SCENE = preload("res://settings_popup.tscn")
 
 # --- New Animation Variables ---
 var _carrying_stones_container: Node2D = Node2D.new() # A temporary container for stones being carried
@@ -90,6 +92,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		print("Unhandled Click at: ", event.position)
 
 func _ready() -> void:
+	# Get the name of the current scene (e.g., "MainGame" from "res://scenes/MainGame.tscn")
+	game_settings_category = SettingsManager.get_game_name_from_path(get_tree().current_scene.scene_file_path)
+	print("Current game scene for settings: ", game_settings_category)
+	
+	# Load initial states of game-specific settings here, or in the popup itself
+	_load_game_specific_settings()
 	_init_mancala_board_structure()
 	var appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin: 
@@ -113,13 +121,13 @@ func _ready() -> void:
 	if rules_button:
 		rules_button.pressed.connect(on_rules_button_pressed)
 	if settings_button:
-		settings_button.pressed.connect(on_settings_button_pressed)
+		settings_button.pressed.connect(_on_settings_button_pressed)
 	if skip_button: # Always good practice to check if the node exists
 		skip_button.pressed.connect(_on_skip_button_pressed)
 
 	# Add the carrying stones container to the scene
 	add_child(_carrying_stones_container)
-	_carrying_stones_container.z_index = 100 # Ensure it draws on top of everything
+	_carrying_stones_container.z_index = 90 # Ensure it draws on top of everything
 	
 # ——————————————
 # Game Data Parsing
@@ -1123,40 +1131,66 @@ func _on_skip_button_pressed() -> void:
 
 func on_rules_button_pressed() -> void:
 	var popup = RULES_POPUP_SCENE.instantiate()
-	var dim   = ColorRect.new()
-	dim.color = Color(0,0,0,0.5)
+	var dim = ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(dim)
-	add_child(popup)
-	move_child(dim, get_child_count() - 2)
 
-	var close_btn = popup.get_node("MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/CloseButton")
+	var root = get_tree().root
+	root.add_child(dim)
+	root.add_child(popup)
+
+	popup.z_index = 100
+	dim.z_index = 99
+
+	# Ensure dim is behind popup
+	root.move_child(dim, root.get_child_count() - 2)
+
+	# Setup close button
+	var close_btn = popup.get_node("MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/HBoxContainer/MarginContainer/CloseButton")
 	if close_btn:
 		close_btn.pressed.connect(func():
 			dim.queue_free()
 			popup.queue_free()
 		)
 
-	# 🎯 Inject rule text based on mode
-	var rules_label = popup.get_node("MarginContainer/PanelContainer/VBoxContainer/BodyMarginContainer/RulesLabel")
-	if rules_label and rules_label is RichTextLabel:
+	# Set rules label content
+	var rules_label = popup.get_node("MarginContainer/PanelContainer/VBoxContainer/RulesLabel") as RichTextLabel
+	if rules_label:
+		rules_label.bbcode_enabled = true
+		rules_label.visible = true
+		rules_label.fit_content_height = true
+		rules_label.scroll_active = false
+		rules_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rules_label.text = _get_rules_text_for_mode(mode)
 
-	await get_tree().process_frame
-	var size = get_viewport_rect().size
-	popup.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	# Set as top level early so it's not constrained by parent
 	popup.set_as_top_level(true)
-	popup.visible = true
-	popup.size = Vector2(size.x, 10)
+	popup.visible = true # Make visible for size calculation
+
+	# Allow a frame for the layout to calculate minimum size
 	await get_tree().process_frame
 
-	var final_h = popup.get_combined_minimum_size().y
-	popup.position = Vector2(size.x/2, (size.y - final_h)/2)
-	popup.size = Vector2(0, final_h)
+	var viewport_size = get_viewport_rect().size
+
+	# Calculate desired popup size (e.g., 90% of viewport width, and its intrinsic height)
+	var desired_width = viewport_size.x * 0.9
+	var desired_height = popup.get_combined_minimum_size().y
+	
+	popup.size = Vector2(desired_width, desired_height)
+
+	# Set the pivot to the center of the popup
+	popup.set_pivot_offset(popup.size / 2)
+
+	# Calculate the position to truly center the popup
+	# (viewport center - half of popup size, since pivot is now at popup's center)
+	popup.position = (viewport_size / 2) - (popup.size / 2)
+
+	# Start tiny and animate
+	popup.scale = Vector2(0, 0) # Start tiny after pivot and position are set
 
 	var tween = create_tween()
-	tween.tween_property(popup, "size:x", size.x, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.parallel().tween_property(popup, "position:x", 0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(popup, "scale", Vector2(1, 1), 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
 	popup.grab_focus()
 	
 func _get_rules_text_for_mode(mode: String) -> String:
@@ -1166,7 +1200,7 @@ func _get_rules_text_for_mode(mode: String) -> String:
 [font_size={32px}][b]Capture Mode[/b][/font_size]
 
 [font_size={24px}][b]Rules:[/b][/font_size]
-
+[font_size={18px}]
 1. Each player has a store on one side of the board.
 
 2. Players take turns choosing a pile from one of the holes. Moving counter-clockwise, stones from the selected pile are deposited in each of the following holes until you run out of stones.
@@ -1176,17 +1210,18 @@ func _get_rules_text_for_mode(mode: String) -> String:
 4. If you drop the last stone into an empty hole on your side of the board - you can capture stones from the hole on the opposite side.
 
 5. The game ends when all six holes on either side of the board are empty. If a player has any stones on their side of the board when the game ends - they will capture all of those stones.
-
+[/font_size]
 [font_size={24px}][b]Goal:[/b][/font_size]
-
+[font_size={18px}]
 Player with the most stones in thir store wins. 
+[/font_size]
 """
 		"an", "ah":
 			return """
 [font_size={32px}][b]Avalanche Mode[/b][/font_size]
 
 [font_size={24px}][b]Rules:[/b][/font_size]
-
+[font_size={18px}]
 1. Each player has a store on one side of the board.
 
 2. Players take turns choosing a pile from one of the holes. Moving counter-clockwise, stones from the selected pile are deposited in each of the following holes until you run out of stones.
@@ -1198,10 +1233,11 @@ Player with the most stones in thir store wins.
 5. If you drop the last stone into your store - you get a free turn.
 
 5. The game ends when all six holes on either side of the board are empty. If a player has any stones on their side of the board when the game ends - they will capture all of those stones.
-
+[/font_size]
 [font_size={24px}][b]Goal:[/b][/font_size]
-
-Player with the most stones in thir store wins. 
+[font_size={18px}]
+Player with the most stones in thir store wins.
+[/font_size]
 """
 		_:
 			return """
@@ -1272,34 +1308,130 @@ func _on_dot_timer_timeout():
 		dots += "."
 	waiting_label.text = BASE_WAIT_TEXT + dots
 
-func on_settings_button_pressed() -> void:
-	show_toast_notification("Feature Coming Soon")
+func _on_settings_button_pressed() -> void: # Connect this to your settings button
+	# Create dimming background
+	var dim = ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-func show_toast_notification(message: String, duration: float=2.0) -> void:
-	var toast = Label.new()
-	toast.text = message
-	toast.add_theme_font_size_override("font_size", 28)
-	toast.add_theme_color_override("font_color", Color.WHITE)
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0,0,0,0.7)
-	style.corner_radius_bottom_left = 10
-	style.corner_radius_bottom_right = 10
-	style.corner_radius_top_left = 10
-	style.corner_radius_top_right = 10
-	style.content_margin_left      = 20
-	style.content_margin_right  = 20
-	style.content_margin_top      = 10
-	style.content_margin_bottom = 10
-	toast.add_theme_stylebox_override("normal", style)
-	toast.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	toast.position.y -= 150
-	toast.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
-	toast.set_v_size_flags(Control.SIZE_SHRINK_CENTER)
-	toast.modulate.a = 0.0
-	add_child(toast)
+	# Instantiate the settings popup
+	var popup_instance = SETTINGS_POPUP_SCENE.instantiate() as PanelContainer
+	var settings_popup_script = popup_instance as SettingsPopup # Cast to our custom script type
 
-	var tw_toast = create_tween()
-	tw_toast.tween_property(toast, "modulate:a", 1.0, 0.3)
-	tw_toast.tween_interval(duration)
-	tw_toast.tween_property(toast, "modulate:a", 0.0, 0.5)
-	tw_toast.tween_callback(toast.queue_free)
+	var root = get_tree().root
+	root.add_child(dim)
+	root.add_child(popup_instance)
+
+	popup_instance.z_index = 100
+	dim.z_index = 99
+	root.move_child(dim, root.get_child_count() - 2)
+
+	# Call the setup function on the popup script to pass the dim_rect
+	settings_popup_script.setup_popup(dim)
+
+	# --- Game-specific customization ---
+	# Example: Add a slider for game volume
+	var volume_setting_hbox = HBoxContainer.new()
+	volume_setting_hbox.add_child(Label.new())
+	volume_setting_hbox.get_child(0).text = "Game Volume:"
+	volume_setting_hbox.get_child(0).set_h_size_flags(Control.SIZE_EXPAND_FILL)
+
+	var volume_slider = HSlider.new()
+	volume_slider.min_value = 0.0
+	volume_slider.max_value = 1.0
+	volume_slider.step = 0.05
+	
+	# --- CORRECTED LINE: Load initial volume from SettingsManager ---
+	var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75) # Default to 0.75
+	volume_slider.value = saved_volume # Set the slider's value from the loaded setting
+	# --- END CORRECTION ---
+
+	volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	volume_slider.value_changed.connect(func(value):
+		AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
+		print("Master Volume: ", value)
+		SettingsManager.set_setting(game_settings_category, "master_volume", value)
+	)
+	volume_setting_hbox.add_child(volume_slider)
+
+	settings_popup_script.add_custom_setting(volume_setting_hbox)
+	
+	# Example: Add a checkbox for a game specific option
+	var toggle_debug_checkbox = CheckBox.new()
+	toggle_debug_checkbox.text = "Show Debug Info"
+	
+	# --- CORRECTED LINE: Load initial debug info from SettingsManager ---
+	var saved_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false) # Default to false
+	toggle_debug_checkbox.button_pressed = saved_debug_info # Set the checkbox's state from the loaded setting
+	# --- END CORRECTION ---
+
+	toggle_debug_checkbox.pressed.connect(func():
+		print("Debug Info Toggled: ", toggle_debug_checkbox.button_pressed)
+		SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
+		# Your game logic to toggle debug info
+	)
+	settings_popup_script.add_custom_setting(toggle_debug_checkbox)
+
+	# If you added custom settings, make the "Game Specific Settings" title visible
+	var custom_settings_title = popup_instance.find_child("CustomSettingsTitleLabel", true)
+	# Also ensure the title is only visible if there are actually custom settings
+	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:
+		custom_settings_title.visible = true
+	else:
+		if custom_settings_title and custom_settings_title is Label:
+			custom_settings_title.visible = false
+	# --- End Game-specific customization ---
+
+	# Connect to signals from the popup
+	settings_popup_script.closed.connect(func():
+		print("Settings popup was closed for game: ", game_settings_category)
+		# Any cleanup specific to this game scene when settings close
+	)
+	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
+
+
+	# Animate the slide-up (this part remains largely the same as before)
+	popup_instance.set_as_top_level(true)
+	popup_instance.visible = true
+	await get_tree().process_frame # Wait a frame for layout to calculate size
+
+	var viewport_size = get_viewport_rect().size
+	var desired_width = viewport_size.x * 0.8
+	var desired_height = popup_instance.get_combined_minimum_size().y
+	
+	popup_instance.size = Vector2(desired_width, desired_height)
+	popup_instance.position = Vector2((viewport_size.x - desired_width) / 2, viewport_size.y)
+	
+	var bottom_offset = 50
+	var target_y_position = viewport_size.y - desired_height - bottom_offset
+	var target_position = Vector2((viewport_size.x - desired_width) / 2, target_y_position)
+
+	var tween = create_tween()
+	tween.tween_property(popup_instance, "position", target_position, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+	popup_instance.grab_focus()
+
+# Function to handle theme changes (can be in a global autoload/singleton for actual theme switching)
+func _on_theme_changed(new_theme_name: String):
+	print("Game scene received theme change: ", new_theme_name)
+	# Here you would call your ThemeManager or apply the new theme
+	# For example: ThemeManager.set_current_theme(new_theme_name)
+	pass
+	
+func _load_game_specific_settings():
+	# This is where you would load settings that might affect the game
+	# immediately upon scene load, even before the settings popup is opened.
+	# For example, applying the saved master volume.
+	
+	# Apply saved master volume
+	var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))
+
+	# Apply saved debug info state
+	var show_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
+	# Example: Call a game function to toggle debug display
+	# toggle_game_debug_display(show_debug_info)
+	
+	print("Loaded game-specific settings for ", game_settings_category, ":")
+	print("  Master Volume: ", saved_volume)
+	print("  Show Debug Info: ", show_debug_info)
