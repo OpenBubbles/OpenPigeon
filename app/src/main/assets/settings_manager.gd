@@ -2,6 +2,8 @@
 extends Node
 class_name GlobalSettings
 
+signal avatar_changed
+
 const SETTINGS_FILE_PATH = "user://settings.cfg"
 var config = ConfigFile.new()
 

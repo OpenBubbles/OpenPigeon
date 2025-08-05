@@ -3,11 +3,12 @@
 extends TextureButton
 class_name AvatarThumbnail
 
-# --- Node References (Using % Unique Name syntax) ---
-@onready var viewport_container: SubViewportContainer = %SubViewportContainer
-@onready var viewport: SubViewport = %SubViewport
-@onready var background_rect: ColorRect = %ColorRect
-@onready var avatar_background_image: Sprite2D = %AvatarBackground
+# This checkbox appears in the Inspector to switch behaviors
+@export var is_display_only: bool = false
+
+# --- Node References ---
+@onready var color_rect: ColorRect = %ColorRect
+@onready var avatar_background: Sprite2D = %AvatarBackground
 @onready var avatar_base_body: Sprite2D = %AvatarBaseBody
 @onready var avatar_hair: Sprite2D = %AvatarHair
 @onready var avatar_eyes: Sprite2D = %AvatarEyes
@@ -16,7 +17,7 @@ class_name AvatarThumbnail
 @onready var avatar_head_accessories: Sprite2D = %AvatarHeadAccessories
 @onready var avatar_face_accessories: Sprite2D = %AvatarFaceAccessories
 
-# --- Textures and Regions (must match SettingsPopup.gd) ---
+# --- Texture Maps ---
 const AVATAR_BG_MAP_PATH = "res://avatar_textures/backgrounds/background_sheet.png"
 const AVATAR_BODY_MAP_PATH = "res://avatar_textures/body/avatar_bodies.png"
 const AVATAR_HAIR_MAP_PATH = "res://avatar_textures/hair/avatar_hair.png"
@@ -25,7 +26,8 @@ const AVATAR_MOUTH_MAP_PATH = "res://avatar_textures/face/avatar_mouth.png"
 const AVATAR_CLOTHING_MAP_PATH = "res://avatar_textures/clothing/avatar_clothing.png"
 const AVATAR_ACCESSORIES_MAP_PATH = "res://avatar_textures/accessories/avatar_accessories.png"
 
-var avatar_background_regions = { "Pattern 1":  Rect2(0,   0,   128, 128), "Pattern 2":  Rect2(128, 0,   128, 128), "Pattern 3":  Rect2(256, 0,   128, 128), "Pattern 4":  Rect2(384, 0,   128, 128), "Pattern 5":  Rect2(0,   128, 128, 128), "Pattern 6":  Rect2(128, 128, 128, 128), "Pattern 7":  Rect2(256, 128, 128, 128), "Pattern 8":  Rect2(384, 128, 128, 128), "Pattern 9":  Rect2(0,   256, 128, 128) }
+# --- Region Dictionaries ---
+var avatar_background_regions = { "Pattern 1": Rect2(0, 0, 128, 128), "Pattern 2": Rect2(128, 0, 128, 128), "Pattern 3": Rect2(256, 0, 128, 128), "Pattern 4": Rect2(384, 0, 128, 128), "Pattern 5": Rect2(0, 128, 128, 128), "Pattern 6": Rect2(128, 128, 128, 128), "Pattern 7": Rect2(256, 128, 128, 128), "Pattern 8": Rect2(384, 128, 128, 128), "Pattern 9": Rect2(0, 256, 128, 128) }
 var avatar_body_regions = { "Default": Rect2(0, 0, 64, 64), "Smiling": Rect2(64, 0, 64, 64), "Winking": Rect2(128, 0, 64, 64), "Surprised": Rect2(192, 0, 64, 64), "Frowning": Rect2(256, 0, 64, 64), "Tongue Out": Rect2(320, 0, 64, 64), "Cute": Rect2(384, 0, 64, 64) }
 var avatar_hair_regions = { "Spiky": Rect2(0, 0, 64, 64), "Long": Rect2(64, 0, 64, 64), "Bun": Rect2(128, 0, 64, 64), "Bald": Rect2(192, 0, 64, 64) }
 var avatar_eyes_regions = { "Open": Rect2(0, 0, 64, 64), "Closed": Rect2(64, 0, 64, 64), "Winking": Rect2(128, 0, 64, 64) }
@@ -37,147 +39,160 @@ var avatar_face_accessories_regions = { "None": Rect2(0, 0, 1, 1), "Glasses": Re
 var _selection_stylebox: StyleBox = null
 
 func _ready():
-	# The SubViewport's texture is automatically used by the TextureButton parent
-	texture_normal = viewport.get_texture()
-
-	# Create a stylebox for highlighting the selection
+	# Configure the selection border style once
 	var stylebox_flat = StyleBoxFlat.new()
-	stylebox_flat.bg_color = Color(0,0,0,0) # Transparent background
-	stylebox_flat.border_width_left = 3
-	stylebox_flat.border_width_top = 3
-	stylebox_flat.border_width_right = 3
-	stylebox_flat.border_width_bottom = 3
-	stylebox_flat.border_color = Color(0.2, 0.8, 0.2, 0.9) # Bright green border
-	stylebox_flat.corner_radius_top_left = 5
-	stylebox_flat.corner_radius_top_right = 5
-	stylebox_flat.corner_radius_bottom_left = 5
-	stylebox_flat.corner_radius_bottom_right = 5
+	stylebox_flat.bg_color = Color(0,0,0,0)
+	stylebox_flat.border_width_left = 3; stylebox_flat.border_width_top = 3; stylebox_flat.border_width_right = 3; stylebox_flat.border_width_bottom = 3
+	stylebox_flat.border_color = Color(0.2, 0.8, 0.2, 0.9)
+	stylebox_flat.corner_radius_top_left = 5; stylebox_flat.corner_radius_top_right = 5; stylebox_flat.corner_radius_bottom_left = 5; stylebox_flat.corner_radius_bottom_right = 5
 	_selection_stylebox = stylebox_flat
 
-	# Initial centering of sprites
-	_center_sprites()
-
-
-func update_preview(settings: Dictionary, category: String, key: String, override_value):
-	# Create a temporary copy of the settings to modify
-	var temp_settings = settings.duplicate(true)
-	# Apply the specific override for this thumbnail
-	temp_settings[category][key] = override_value
-
-	# --- Load Textures ---
-	# In a larger project, you might pass textures in to avoid reloading them constantly.
-	avatar_base_body.texture = load(AVATAR_BODY_MAP_PATH)
-	avatar_hair.texture = load(AVATAR_HAIR_MAP_PATH)
-	avatar_eyes.texture = load(AVATAR_EYES_MAP_PATH)
-	avatar_mouth.texture = load(AVATAR_MOUTH_MAP_PATH)
-	avatar_clothing.texture = load(AVATAR_CLOTHING_MAP_PATH)
-	avatar_head_accessories.texture = load(AVATAR_ACCESSORIES_MAP_PATH)
-	avatar_face_accessories.texture = load(AVATAR_ACCESSORIES_MAP_PATH)
-
-	# --- Render Avatar using temp_settings ---
-	var bg_color = temp_settings["background"]["color"]
-	var bg_bright = temp_settings["background"]["brightness"]
-	background_rect.color = _calculate_final_color(bg_color, bg_bright)
-	
-	var bg_style = temp_settings["background"]["style"]
-	if bg_style == "Plain" or not avatar_background_regions.has(bg_style):
-		avatar_background_image.texture = null # Hide the pattern sprite
-		avatar_background_image.region_enabled = false
+	if is_display_only:
+		# --- DISPLAY MODE ---
+		self.disabled = true
+		SettingsManager.avatar_changed.connect(update_display_from_settings)
+		update_display_from_settings()
 	else:
-		avatar_background_image.texture = load(AVATAR_BG_MAP_PATH)
-		avatar_background_image.region_enabled = true
-		avatar_background_image.region_rect = avatar_background_regions[bg_style]
+		# --- PREVIEW THUMBNAIL MODE ---
+		# Will be configured by the settings popup.
+		pass
 
-	var tone_color = temp_settings["body"]["color"]
-	var tone_bright = temp_settings["body"]["brightness"]
-	avatar_base_body.self_modulate = _calculate_final_color(tone_color, tone_bright)
-	var body_style = temp_settings["body"]["head_style"]
+# Called by settings popup to show a variation
+func update_preview(base_settings: Dictionary, category: String, key: String, override_value):
+	var temp_settings = base_settings.duplicate(true)
+	temp_settings[category][key] = override_value
+	_draw_avatar(temp_settings)
+
+# Called by global signal or on ready to show the current saved avatar
+func update_display_from_settings():
+	var current_settings = _get_current_avatar_settings()
+	_draw_avatar(current_settings)
+
+# The single, private function that does all the rendering
+func _draw_avatar(settings: Dictionary):
+	# Background
+	var bg_color = settings["background"]["color"]
+	var final_bg = calculate_final_color(bg_color, settings["background"]["brightness"])
+	color_rect.color = final_bg
+	var bg_style = settings["background"]["style"]
+	if bg_style == "Plain" or not avatar_background_regions.has(bg_style):
+		color_rect.visible = true
+		avatar_background.visible = false
+	else:
+		color_rect.visible = false
+		avatar_background.visible = true
+		var atlas = AtlasTexture.new()
+		atlas.atlas = load(AVATAR_BG_MAP_PATH)
+		atlas.region = avatar_background_regions[bg_style]
+		avatar_background.texture = atlas
+		
+	# Body
+	var tone_color = settings["body"]["color"]
+	avatar_base_body.self_modulate = calculate_final_color(tone_color, settings["body"]["brightness"])
+	avatar_base_body.texture = load(AVATAR_BODY_MAP_PATH)
+	var body_style = settings["body"]["head_style"]
 	if avatar_body_regions.has(body_style):
 		avatar_base_body.region_enabled = true
 		avatar_base_body.region_rect = avatar_body_regions[body_style]
 
-	var hair_color = temp_settings["hair"]["color"]
-	var hair_bright = temp_settings["hair"]["brightness"]
-	avatar_hair.self_modulate = _calculate_final_color(hair_color, hair_bright)
-	var hair_style = temp_settings["hair"]["style"]
+	# Hair
+	var hair_color = settings["hair"]["color"]
+	avatar_hair.self_modulate = calculate_final_color(hair_color, settings["hair"]["brightness"])
+	avatar_hair.texture = load(AVATAR_HAIR_MAP_PATH)
+	var hair_style = settings["hair"]["style"]
 	if avatar_hair_regions.has(hair_style):
 		avatar_hair.region_enabled = true
 		avatar_hair.region_rect = avatar_hair_regions[hair_style]
 
-	var eyes_style = temp_settings["face"]["eyes"]
+	# Face
+	avatar_eyes.texture = load(AVATAR_EYES_MAP_PATH)
+	avatar_mouth.texture = load(AVATAR_MOUTH_MAP_PATH)
+	var eyes_style = settings["face"]["eyes"]
 	if avatar_eyes_regions.has(eyes_style):
 		avatar_eyes.region_enabled = true
 		avatar_eyes.region_rect = avatar_eyes_regions[eyes_style]
-
-	var mouth_style = temp_settings["face"]["mouth"]
+	var mouth_style = settings["face"]["mouth"]
 	if avatar_mouth_regions.has(mouth_style):
 		avatar_mouth.region_enabled = true
 		avatar_mouth.region_rect = avatar_mouth_regions[mouth_style]
 
-	var clothing_color = temp_settings["clothing"]["color"]
-	var clothing_bright = temp_settings["clothing"]["brightness"]
-	avatar_clothing.self_modulate = _calculate_final_color(clothing_color, clothing_bright)
-	var clothing_style = temp_settings["clothing"]["style"]
+	# Clothing
+	var clothing_color = settings["clothing"]["color"]
+	avatar_clothing.self_modulate = calculate_final_color(clothing_color, settings["clothing"]["brightness"])
+	avatar_clothing.texture = load(AVATAR_CLOTHING_MAP_PATH)
+	var clothing_style = settings["clothing"]["style"]
 	if avatar_clothing_regions.has(clothing_style):
 		avatar_clothing.region_enabled = true
 		avatar_clothing.region_rect = avatar_clothing_regions[clothing_style]
 
-	var acc_color = temp_settings["accessories"]["color"]
-	var acc_bright = temp_settings["accessories"]["brightness"]
-	var final_acc_color = _calculate_final_color(acc_color, acc_bright)
-	
+	# Accessories
+	var acc_color = settings["accessories"]["color"]
+	var final_acc_color = calculate_final_color(acc_color, settings["accessories"]["brightness"])
+	avatar_head_accessories.texture = load(AVATAR_ACCESSORIES_MAP_PATH)
+	avatar_face_accessories.texture = load(AVATAR_ACCESSORIES_MAP_PATH)
 	avatar_head_accessories.self_modulate = final_acc_color
-	var head_acc_style = temp_settings["accessories"]["head_style"]
+	avatar_face_accessories.self_modulate = final_acc_color
+	var head_acc_style = settings["accessories"]["head_style"]
 	if avatar_head_accessories_regions.has(head_acc_style) and head_acc_style != "None":
 		avatar_head_accessories.region_enabled = true
 		avatar_head_accessories.region_rect = avatar_head_accessories_regions[head_acc_style]
 		avatar_head_accessories.self_modulate.a = 1.0
 	else:
 		avatar_head_accessories.self_modulate.a = 0.0
-
-	avatar_face_accessories.self_modulate = final_acc_color
-	var face_acc_style = temp_settings["accessories"]["face_style"]
+	var face_acc_style = settings["accessories"]["face_style"]
 	if avatar_face_accessories_regions.has(face_acc_style) and face_acc_style != "None":
 		avatar_face_accessories.region_enabled = true
 		avatar_face_accessories.region_rect = avatar_face_accessories_regions[face_acc_style]
 		avatar_face_accessories.self_modulate.a = 1.0
 	else:
 		avatar_face_accessories.self_modulate.a = 0.0
+	
+	_center_and_scale_sprites()
+
+func _get_current_avatar_settings() -> Dictionary:
+	return {
+		"background": { "color": SettingsManager.get_setting("avatar_background", "color", Color("#4e5d89")), "brightness": SettingsManager.get_setting("avatar_background", "brightness", 0.0), "style": SettingsManager.get_setting("avatar_background", "style", "Plain"), },
+		"body": { "color": SettingsManager.get_setting("avatar_body", "color", Color("#e0ac69")), "brightness": SettingsManager.get_setting("avatar_body", "brightness", 0.0), "head_style": SettingsManager.get_setting("avatar_body", "head_style", "Default"), },
+		"hair": { "color": SettingsManager.get_setting("avatar_hair", "color", Color("#2c232b")), "brightness": SettingsManager.get_setting("avatar_hair", "brightness", 0.0), "style": SettingsManager.get_setting("avatar_hair", "style", "Spiky"), },
+		"face": { "eyes": SettingsManager.get_setting("avatar_face", "eyes", "Open"), "mouth": SettingsManager.get_setting("avatar_face", "mouth", "Plain"), },
+		"clothing": { "color": SettingsManager.get_setting("avatar_clothing", "color", Color("#a03c3c")), "brightness": SettingsManager.get_setting("avatar_clothing", "brightness", 0.0), "style": SettingsManager.get_setting("avatar_clothing", "style", "T-Shirt"), },
+		"accessories": { "color": SettingsManager.get_setting("avatar_accessories", "color", Color("#ffffff")), "brightness": SettingsManager.get_setting("avatar_accessories", "brightness", 0.0), "head_style": SettingsManager.get_setting("avatar_accessories", "head_style", "None"), "face_style": SettingsManager.get_setting("avatar_accessories", "face_style", "None"), }
+	}
 
 func set_selected(is_selected: bool):
 	if is_selected:
-		add_theme_stylebox_override("focus", _selection_stylebox)
-		add_theme_stylebox_override("hover", _selection_stylebox)
 		add_theme_stylebox_override("normal", _selection_stylebox)
-		add_theme_stylebox_override("pressed", _selection_stylebox)
 	else:
-		# Clear the overrides to return to default
-		remove_theme_stylebox_override("focus")
-		remove_theme_stylebox_override("hover")
 		remove_theme_stylebox_override("normal")
-		remove_theme_stylebox_override("pressed")
 
-func _center_sprites():
-	var viewport_size = viewport.size # This is 64x64
-	var center_pos = viewport_size / 2.0
+func _center_and_scale_sprites():
+	# The 'size' variable refers to the size of this component's root Control node
+	var center_pos: Vector2 = size / 2.0
+
+	# --- Define the original art sizes ---
+	var base_bg_size = 128.0      # Our background patterns are 128x128
+	var base_character_size = 64.0 # Our character parts are 64x64
+
+	# --- Calculate scale factors based on the component's current height ---
+	var bg_scale_factor = size.y / base_bg_size
+	var char_scale_factor = size.y / base_character_size
+
+	# --- Position and scale the background ---
+	avatar_background.position = center_pos
+	avatar_background.scale = Vector2(bg_scale_factor, bg_scale_factor)
 	
-	# --- Manually position and scale the background sprite ---
-	# The base size of our background art region is 128x128
-	var texture_size = 128.0
-	avatar_background_image.scale.x = viewport_size.x / texture_size # 64 / 128 = 0.5
-	avatar_background_image.scale.y = viewport_size.y / texture_size # 64 / 128 = 0.5
-	avatar_background_image.position = center_pos
-	
-	# Center all the character parts
+	# --- Position and scale all character sprites ---
 	for sprite in [ avatar_base_body, avatar_hair, avatar_eyes, avatar_mouth, \
 					avatar_clothing, avatar_head_accessories, avatar_face_accessories ]:
 		sprite.centered = true
 		sprite.position = center_pos
+		sprite.scale = Vector2(char_scale_factor, char_scale_factor)
 
-func _calculate_final_color(base_color: Color, brightness_slider_val: float) -> Color:
+func calculate_final_color(base_color: Color, brightness_slider_val: float) -> Color:
 	if brightness_slider_val < 0.0:
 		var t = brightness_slider_val + 1.0
-		return Color.from_hsv(base_color.h, base_color.s, t * base_color.v)
+		var new_v = lerp(0.3, base_color.v, t)
+		return Color.from_hsv(base_color.h, base_color.s, new_v)
 	elif brightness_slider_val > 0.0:
 		var h_val = base_color.h
 		var s_val = base_color.s * (1.0 - brightness_slider_val)

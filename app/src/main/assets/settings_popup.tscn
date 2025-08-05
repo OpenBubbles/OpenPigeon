@@ -33,48 +33,11 @@ layout_mode = 2
 layout_mode = 2
 size_flags_vertical = 6
 
-[node name="CenterContainer" type="CenterContainer" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer"]
+[node name="MainPreviewContainer" type="CenterContainer" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 64)
 layout_mode = 2
 size_flags_vertical = 6
-
-[node name="AvatarPreview" type="Control" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer/CenterContainer"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(80, 60)
-layout_mode = 2
-
-[node name="ColorRect" type="ColorRect" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer/CenterContainer/AvatarPreview"]
-custom_minimum_size = Vector2(80, 60)
-layout_mode = 0
-offset_right = 80.0
-offset_bottom = 60.0
-
-[node name="AvatarBackground" type="Sprite2D" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer/CenterContainer/AvatarPreview"]
-unique_name_in_owner = true
-texture_filter = 1
-texture_repeat = 2
-region_enabled = true
-
-[node name="AvatarBaseBody" type="Sprite2D" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer/CenterContainer/AvatarPreview"]
-unique_name_in_owner = true
-
-[node name="AvatarEyes" type="Sprite2D" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer/CenterContainer/AvatarPreview"]
-unique_name_in_owner = true
-
-[node name="AvatarMouth" type="Sprite2D" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer/CenterContainer/AvatarPreview"]
-unique_name_in_owner = true
-
-[node name="AvatarHair" type="Sprite2D" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer/CenterContainer/AvatarPreview"]
-unique_name_in_owner = true
-
-[node name="AvatarClothing" type="Sprite2D" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer/CenterContainer/AvatarPreview"]
-unique_name_in_owner = true
-
-[node name="AvatarHeadAccessories" type="Sprite2D" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer/CenterContainer/AvatarPreview"]
-unique_name_in_owner = true
-
-[node name="AvatarFaceAccessories" type="Sprite2D" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer/CenterContainer/AvatarPreview"]
-unique_name_in_owner = true
 
 [node name="AvatarTabContainer" type="TabBar" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer"]
 unique_name_in_owner = true

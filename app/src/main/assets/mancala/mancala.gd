@@ -40,6 +40,7 @@ var StoreScene  : PackedScene = preload("res://mancala/store.tscn")
 var StoneScene : PackedScene = preload("res://mancala/stone.tscn")
 
 # UI References
+@onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var rules_button    = $BottomItemHBoxContainer/MarginContainer/RulesButton
 @onready var settings_button = $BottomItemHBoxContainer/MarginContainer/SettingsButton
 @onready var sent_label = $MarginContainer/InfoHBoxContainer/GameAreaCenterContainer/SentLabel
@@ -1315,7 +1316,7 @@ func _on_settings_button_pressed() -> void: # Connect this to your settings butt
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	# Instantiate the settings popup
-	var popup_instance = SETTINGS_POPUP_SCENE.instantiate() as PanelContainer
+	var popup_instance = SETTINGS_POPUP_SCENE.instantiate()
 	var settings_popup_script = popup_instance as SettingsPopup # Cast to our custom script type
 
 	var root = get_tree().root
@@ -1385,7 +1386,8 @@ func _on_settings_button_pressed() -> void: # Connect this to your settings butt
 	# Connect to signals from the popup
 	settings_popup_script.closed.connect(func():
 		print("Settings popup was closed for game: ", game_settings_category)
-		# Any cleanup specific to this game scene when settings close
+		if is_instance_valid(player_avatar_display):
+			player_avatar_display.update_display_from_settings()
 	)
 	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
 
