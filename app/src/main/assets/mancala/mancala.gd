@@ -1396,7 +1396,7 @@ func _on_settings_button_pressed() -> void: # Connect this to your settings butt
 	await get_tree().process_frame # Wait a frame for layout to calculate size
 
 	var viewport_size = get_viewport_rect().size
-	var desired_width = viewport_size.x * 0.8
+	var desired_width = viewport_size.x * 0.95
 	var desired_height = popup_instance.get_combined_minimum_size().y
 	
 	popup_instance.size = Vector2(desired_width, desired_height)
