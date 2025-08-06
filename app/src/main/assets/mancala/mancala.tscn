@@ -215,8 +215,10 @@ texture_hover = ExtResource("4_elfvu")
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
+size_flags_horizontal = 1
 size_flags_vertical = 4
 is_display_only = true
+controlled_by_data = true
 
 [node name="SpecLabel" type="Label" parent="MarginContainer"]
 visible = false

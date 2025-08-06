@@ -5,6 +5,7 @@ class_name AvatarThumbnail
 
 # This checkbox appears in the Inspector to switch behaviors
 @export var is_display_only: bool = false
+@export var controlled_by_data: bool = false
 
 # --- Node References ---
 @onready var color_rect: ColorRect = %ColorRect
@@ -40,6 +41,8 @@ var _selection_stylebox: StyleBox = null
 
 func _ready():
 	# Configure the selection border style once
+	print("AvatarThumbnail ready: '", self.name, "'. is_display_only: ", is_display_only, ", controlled_by_data: ", controlled_by_data)
+
 	var stylebox_flat = StyleBoxFlat.new()
 	stylebox_flat.bg_color = Color(0,0,0,0)
 	stylebox_flat.border_width_left = 3; stylebox_flat.border_width_top = 3; stylebox_flat.border_width_right = 3; stylebox_flat.border_width_bottom = 3
@@ -48,20 +51,65 @@ func _ready():
 	_selection_stylebox = stylebox_flat
 
 	if is_display_only:
-		# --- DISPLAY MODE ---
 		self.disabled = true
-		SettingsManager.avatar_changed.connect(update_display_from_settings)
-		update_display_from_settings()
-	else:
-		# --- PREVIEW THUMBNAIL MODE ---
-		# Will be configured by the settings popup.
+		
+	if controlled_by_data:
+		# If this is true, do nothing on ready.
+		# It will wait for the game to push data to it and will NOT connect to the global signal.
 		pass
-
+	else:
+		# If this is a local player display, it loads its own data and listens for changes.
+		if SettingsManager:
+			SettingsManager.avatar_changed.connect(update_display_from_settings)
+		update_display_from_settings()
+	
 # Called by settings popup to show a variation
 func update_preview(base_settings: Dictionary, category: String, key: String, override_value):
 	var temp_settings = base_settings.duplicate(true)
 	temp_settings[category][key] = override_value
 	_draw_avatar(temp_settings)
+	
+func update_avatar_from_data(avatar_data: Dictionary):
+	# This function is specifically for drawing an avatar from a data packet,
+	# like the one received from an opponent.
+	print("SUCCESS: '", self.name, "' is updating from this external data: ", avatar_data)
+
+	# Create a full settings dictionary using the provided data, with safe defaults
+	var settings = {
+		"background": {
+			"color": avatar_data.get("bg_color", Color.WHITE),
+			"brightness": avatar_data.get("bg_brightness", 0.0),
+			"style": avatar_data.get("bg_style", "Plain")
+		},
+		"body": {
+			"color": avatar_data.get("body_color", Color.WHITE),
+			"brightness": avatar_data.get("body_brightness", 0.0),
+			"head_style": avatar_data.get("body_style", "Default")
+		},
+		"hair": {
+			"color": avatar_data.get("hair_color", Color.BLACK),
+			"brightness": avatar_data.get("hair_brightness", 0.0),
+			"style": avatar_data.get("hair_style", "Spiky")
+		},
+		"face": {
+			"eyes": avatar_data.get("eyes_style", "Open"),
+			"mouth": avatar_data.get("mouth_style", "Plain")
+		},
+		"clothing": {
+			"color": avatar_data.get("clothing_color", Color.WHITE),
+			"brightness": avatar_data.get("clothing_brightness", 0.0),
+			"style": avatar_data.get("clothing_style", "T-Shirt")
+		},
+		"accessories": {
+			"color": avatar_data.get("acc_color", Color.WHITE),
+			"brightness": avatar_data.get("acc_brightness", 0.0),
+			"head_style": avatar_data.get("head_acc_style", "None"),
+			"face_style": avatar_data.get("face_acc_style", "None")
+		}
+	}
+	
+	# Call the main drawing function with this temporary settings dictionary
+	_draw_avatar(settings)
 
 # Called by global signal or on ready to show the current saved avatar
 func update_display_from_settings():
@@ -158,6 +206,56 @@ func _get_current_avatar_settings() -> Dictionary:
 		"clothing": { "color": SettingsManager.get_setting("avatar_clothing", "color", Color("#a03c3c")), "brightness": SettingsManager.get_setting("avatar_clothing", "brightness", 0.0), "style": SettingsManager.get_setting("avatar_clothing", "style", "T-Shirt"), },
 		"accessories": { "color": SettingsManager.get_setting("avatar_accessories", "color", Color("#ffffff")), "brightness": SettingsManager.get_setting("avatar_accessories", "brightness", 0.0), "head_style": SettingsManager.get_setting("avatar_accessories", "head_style", "None"), "face_style": SettingsManager.get_setting("avatar_accessories", "face_style", "None"), }
 	}
+	
+func get_avatar_data_string() -> String:
+	# This function now uses our helper function to get all settings at once.
+	var settings = _get_current_avatar_settings()
+
+	# Create reverse maps to convert style names back to integer indexes
+	var hair_map = {}
+	for i in avatar_hair_regions.keys().size(): hair_map[avatar_hair_regions.keys()[i]] = i
+	var body_map = {}
+	for i in avatar_body_regions.keys().size(): body_map[avatar_body_regions.keys()[i]] = i
+	var eyes_map = {}
+	for i in avatar_eyes_regions.keys().size(): eyes_map[avatar_eyes_regions.keys()[i]] = i
+	var mouth_map = {}
+	for i in avatar_mouth_regions.keys().size(): mouth_map[avatar_mouth_regions.keys()[i]] = i
+	var clothing_map = {}
+	for i in avatar_clothing_regions.keys().size(): clothing_map[avatar_clothing_regions.keys()[i]] = i
+
+	var parts = []
+
+	# Read from the 'settings' dictionary instead of calling SettingsManager repeatedly
+	
+	# Body
+	var body_style_name = settings["body"]["head_style"]
+	parts.append("body,%d" % body_map.get(body_style_name, 0))
+	var body_c = settings["body"]["color"]
+	parts.append("body_color,%.6f,%.6f,%.6f" % [body_c.r, body_c.g, body_c.b])
+
+	# Hair
+	var hair_style_name = settings["hair"]["style"]
+	parts.append("hair,%d" % hair_map.get(hair_style_name, 0))
+	var hair_c = settings["hair"]["color"]
+	parts.append("hair_color,%.6f,%.6f,%.6f" % [hair_c.r, hair_c.g, hair_c.b])
+
+	# Face
+	var eyes_style_name = settings["face"]["eyes"]
+	parts.append("eyes,%d" % eyes_map.get(eyes_style_name, 0))
+	var mouth_style_name = settings["face"]["mouth"]
+	parts.append("mouth,%d" % mouth_map.get(mouth_style_name, 0))
+
+	# Clothing
+	var clothing_style_name = settings["clothing"]["style"]
+	parts.append("clothes,%d" % clothing_map.get(clothing_style_name, 0))
+	var clothes_c = settings["clothing"]["color"]
+	parts.append("clothes_color,%.6f,%.6f,%.6f" % [clothes_c.r, clothes_c.g, clothes_c.b])
+
+	# Background Color
+	var bg_c = settings["background"]["color"]
+	parts.append("bg_color,%.6f,%.6f,%.6f" % [bg_c.r, bg_c.g, bg_c.b])
+	
+	return "|".join(parts)
 
 func set_selected(is_selected: bool):
 	if is_selected:

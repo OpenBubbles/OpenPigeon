@@ -41,6 +41,7 @@ var StoneScene : PackedScene = preload("res://mancala/stone.tscn")
 
 # UI References
 @onready var player_avatar_display = %PlayerAvatarDisplay
+@onready var opp_avatar_display = %OppAvatarDisplay
 @onready var rules_button    = $BottomItemHBoxContainer/MarginContainer/RulesButton
 @onready var settings_button = $BottomItemHBoxContainer/MarginContainer/SettingsButton
 @onready var sent_label = $MarginContainer/InfoHBoxContainer/GameAreaCenterContainer/SentLabel
@@ -111,8 +112,27 @@ func _ready() -> void:
 	# Dev: preload a sample game state when running in editor
 	else:
 		print("[DEV] Editor hint active, loading sample game data")
-		var dev_data = '{"isYourTurn": true,"mode": "n","player": "1","replay": "board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&12&3,2,2,2&12&12,13,13,13&11,12,13,11&12,11,12,12,13&11,11,11,12,11&11,12,1,2,3,1,2,3,1,2,3,1,2,3,1,2,3,1,2,3&13,11,11,13,13&11|move:2,4|board:2,3,2,3&2,1,3,2&1,1,3,3&2,3,3,1&12&3,2,2,2&12&12,13,13,13&11,12,13,11&12,11,12,12,13&11,11,11,12,11&&13,11,11,13,13,11&11,12","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
-		#var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&13,12,13,13,13&12&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1|move:2,6|board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&12,13,13,13&12,13&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+		#var dev_data = """
+		#{
+			#"isYourTurn": true,
+			#"mode": "n",
+			#"player": "1",
+			#"myPlayerId": "7482724F-12A2-4917-9EB3-8857DD4D44EAP3AIzX",
+			#"replay": "board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&13,12,13,13,13&12&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1|move:2,6|board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&12,13,13,13&12,13&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1",
+			#"player2": "7482724F-12A2-4917-9EB3-8857DD4D44EAP3AIzX",
+			#"player1": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX",
+			#"avatar1": "body,1|eyes,2|mouth,1|hair,1|clothes,2|bg_color,0.42,0.94,0.86|body_color,0.79,0.70,0.66|hair_color,0.43,0.25,0.12|clothes_color,0.22,0.80,0.69",
+			#"avatar2": "body,3|eyes,1|mouth,1|hair,3|clothes,2|bg_color,0.42,0.94,0.86|body_color,0.79,0.70,0.66|hair_color,0.43,0.25,0.12|clothes_color,0.22,0.80,0.69",
+			#"replay": "board:4,4,4,4,4,4&&4,4,4,4,4,4&",
+			#"sender": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX",
+			#"version": "5",
+			#"tver": "5",
+			#"ios": "18.5",
+			#"subcaption": "Capture Mode",
+			#"id": "ziadBSjDYgc4ruev"
+		#}
+		#"""		
+		var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&13,12,13,13,13&12&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1|move:2,6|board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&12,13,13,13&12,13&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
 		_set_game_data(dev_data)
 	for pit in pit_nodes:
 		for node in pit.get_children():
@@ -135,55 +155,53 @@ func _ready() -> void:
 # ——————————————
 func _set_game_data(raw_text: String) -> void:
 	var res = JSON.parse_string(raw_text)
-	print("NEW REPLAY: " + str(res))
-
 	print("[PARSE] Raw game data received:", res)
 
-	# basic flags
+	# --- Opponent Avatar Logic ---
+	var my_id = res.get("myPlayerId", "")
+	var p1_id = res.get("player1", "")
+	var p2_id = res.get("player2", "")
+	var opponent_avatar_key = ""
+
+	if my_id != "" and p1_id != "" and p2_id != "":
+		if my_id == p1_id:
+			opponent_avatar_key = "avatar2"
+		elif my_id == p2_id:
+			opponent_avatar_key = "avatar1"
+	
+	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
+		var avatar_string = res[opponent_avatar_key]
+		var opponent_data = _parse_avatar_string(avatar_string)
+		if is_instance_valid(opp_avatar_display):
+			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+	# --- END AVATAR LOGIC ---
+
+	# The rest of your game logic continues from here...
 	player_str = int(res.get("player", player))
 	mode = String(res.get("mode", mode))
-	my_player = String(res.get("myPlayerId", my_player))
+	my_player = my_id # Use the variable we already have
 	var sender_id = res.get("sender", "")
-	var player1_id: String = res.get("player1", "")
-	var player2_id: String = res.get("player2", "")
-	#game_over = true if res.get("winner", "") != "" else false # Keep this commented out as per previous logic
 	winner_id = res.get("winner", "")
-	print("Winner State is: ", winner_id, " | With Game Over State being: ", game_over)
-	print("Player Parsed Val: ", player_str, " SENDER: ", sender_id, " PLAYER1ID: ",player1_id, " PLAYER2ID: ",player2_id)
+	
 	is_your_turn = res.get("isYourTurn", false)
-	if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == ""):
+	if is_your_turn and (my_player == p1_id or my_player == p2_id or p1_id == ""):
 		is_my_turn = true
 		player = 1 if (player_str == 2 and is_my_turn) else 2
-		print("Current Player Number post: ", player, " MY PLAYER ID: ", my_player)
 	else:
-		print("Spectator mode activated")
 		spectator_mode = true
 		spec_label.visible = true
 		player = 1
-		print("Current Player Number pre: ", player, " MY PLAYER ID: ", my_player)
-	#is_my_turn = is_your_turn
+
 	print("YOUR TURN?: ", is_your_turn, " MY TURN?: ", is_my_turn, " Spectator Mode: ", spectator_mode)
 	
-	print("SET GAME MODE: ", mode)
-	
-	print("Set Mode: ", mode)
 	if mode == "an" or mode == "ah":
-		print("MODE IS AVALANCHE")
 		background.color = Color("#704b4a")
 	else:
-		print("MODE IS CAPTURE")
 		background.color = Color("#6d7c82")
-	# grab the replay string
+
 	var replay_str: String = String(res.get("replay", ""))
-	
-	# Ensure the board structure and layout are applied before parsing specific board states
 	_apply_board_layout(is_my_turn)
-
-	# parse boards/moves/raw_boards
 	var parsed = parse_game_data(replay_str)
-
-	# --- MODIFICATION START ---
-	# Determine the initial board state for this replay. This is the state *before* the moves in `replay_moves`.
 	var initial_board_for_replay_str = ""
 	var rb: Array = parsed.get("raw_boards", [])
 	if rb.size() > 0:
@@ -191,102 +209,66 @@ func _set_game_data(raw_text: String) -> void:
 	else:
 		push_warning("_set_game_data: no initial board state found for replay.")
 
-	# Clear and rebuild pits
 	pits.clear()
 	for i in range(PIT_COUNT):
 		pits.append([])
-	print("Setting up the board with INITIAL_BOARD_STATE for the replay")
-	# Set up the board with the INITIAL_BOARD_STATE for this replay
+
 	if initial_board_for_replay_str != "":
 		var initial_board_data = _parse_single_board(initial_board_for_replay_str)
 		for i in range(min(initial_board_data.size(), PIT_COUNT)):
 			pits[i] = initial_board_data[i].duplicate()
-		_refresh_all_pits() # Visually update the board to this state
+		_refresh_all_pits()
 	else:
 		push_warning("_set_game_data: no previous board state found for replay, using default setup.")
 
-	print("Capturing And Animating Moves (If Present)")
-	# Capture and animate moves if present
 	if parsed.moves.size() > 0:
 		replay_moves = parsed.moves
-		print("[PARSE] Parsed moves:", replay_moves)
-		_is_animating = true # Set animation flag to prevent clicks during replay
-		# Animate each move in sequence
-		
-		# Enable the skip button only during replay animation
-		skip_button.visible = true # Assuming skip_button is a Node reference
-
-		for i in range(replay_moves.size()): # Use index to access corresponding raw_board
+		_is_animating = true
+		skip_button.visible = true
+		for i in range(replay_moves.size()):
 			if _skip_replay_animation:
-				print("Replay animation skipped by user.")
-				break # Exit the replay loop early
-				
+				break
 			var move_data = replay_moves[i]
-			var replay_player = int(move_data[0]) # Get the player who made this move in replay
+			var replay_player = int(move_data[0])
 			var replay_pit_offset = int(move_data[1])
 			var actual_pit_idx = replay_pit_offset
-			if replay_player == 2: # Convert player 2's relative pit index to absolute for our fixed layout
+			if replay_player == 2:
 				actual_pit_idx += 7
-			
-			print("Replaying move: Player ", replay_player, ", Pit offset ", replay_pit_offset, " (Actual pit ", actual_pit_idx, ")")
-			
-			# Temporarily set the 'player_str' (current_sow_player in _sow_from) to the replaying player
 			var original_player_str_for_sow = player_str
-			player_str = replay_player # This is the key change for replay's _sow_from
-			
+			player_str = replay_player
 			in_replay = true
-			# We need to pass the skip flag to _sow_from or ensure _sow_from checks it internally
-			await _sow_from(actual_pit_idx) 
+			await _sow_from(actual_pit_idx)
 			in_replay = false
-			
-			# After sowing, check if the last stone landed in the current sowing player's store
 			var current_sow_player_store_idx = 6 if player_str == 1 else 13
 			if _last_sown_pit == current_sow_player_store_idx:
-				print("DEBUG: Replay - Player ", player_str, " got a free turn!")
 				free_turn_label.text = "Free Turn!"
 				free_turn_label.visible = true
 				var free_turn_tween = create_tween()
-				free_turn_tween.tween_interval(0.8) # Show for a moment
+				free_turn_tween.tween_interval(0.8)
 				free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
-				await free_turn_tween.finished # Wait for the label to disappear before next move
-			
-			player_str = original_player_str_for_sow # Restore global player_str
-			
-		# After the replay loop (either completed or broken by skip)
-		skip_button.visible = false # Hide the skip button
-		_is_animating = false # Reset animation flag after replay
-		
-
-		# If replay was skipped, or finished, set the board to the final state (rb[1])
-		# This is crucial for skipped replays to show the final board immediately.
-		if rb.size() > 1: # Ensure post_board exists
-			var final_board_data = _parse_single_board(rb[rb.size() - 1]) # Get the last board state
+				await free_turn_tween.finished
+			player_str = original_player_str_for_sow
+		skip_button.visible = false
+		_is_animating = false
+		if rb.size() > 1:
+			var final_board_data = _parse_single_board(rb[rb.size() - 1])
 			for k in range(min(final_board_data.size(), PIT_COUNT)):
 				pits[k] = final_board_data[k].duplicate()
 			if _skip_replay_animation:
-				_refresh_all_pits() # Update visuals to the final state
-			print("Board updated to final state from raw_boards after replay (or skip).")
+				_refresh_all_pits()
 		else:
 			push_warning("_set_game_data: No final board state (rb[1]) available for post-replay update.")
 		_skip_replay_animation = false
-		# Update the global prev_board_str to reflect the board state *after* the replay.
-		prev_board_str = rb[rb.size() - 1] if rb.size() > 0 else "" # Use the last available board state
-		print("UPDATED prev_board_str AFTER REPLAY: ", prev_board_str)
+		prev_board_str = rb[rb.size() - 1] if rb.size() > 0 else ""
 	elif rb.size() > 0:
-		# If there are no moves, but there's a board string in the replay (e.g., initial state from server),
-		# it means the board is simply initialized to that state.
-		# So, that state becomes the prev_board_str for the next move.
 		prev_board_str = rb[0]
-		print("UPDATED prev_board_str (no moves in replay): ", prev_board_str)
-	# --- MODIFICATION END ---
-
-	# If it's your turn, start highlights. Otherwise, start waiting animation.
+	
 	await _check_game_over_and_winner()
 	if is_my_turn and not game_over:
 		_start_pit_highlights()
 		stop_waiting_animation()
 	elif not is_my_turn and not game_over:
-		start_waiting_animation() # Assuming you have this function to show "Waiting for opponent"
+		start_waiting_animation()
 
 func parse_game_data(raw: String) -> Dictionary:
 	var out = {
@@ -308,6 +290,45 @@ func parse_game_data(raw: String) -> Dictionary:
 			out["moves"].append(mv)
 
 	return out
+	
+func _parse_avatar_string(data_string: String) -> Dictionary:
+	# These maps translate the integer index from the network data
+	# into the style name our component understands.
+	var hair_map = ["Spiky", "Long", "Bun", "Bald"] # Assumes order
+	var body_map = ["Default", "Smiling", "Winking", "Surprised", "Frowning", "Tongue Out", "Cute"]
+	var eyes_map = ["Open", "Closed", "Winking"]
+	var mouth_map = ["Plain", "Smile", "Frown"]
+	var clothing_map = ["T-Shirt", "Sweater", "Tank Top"]
+	# Add maps for accessories if they are sent as numbers
+
+	var data = {}
+	var parts = data_string.split("|")
+	for part in parts:
+		var key_value = part.split(",")
+		if key_value.size() < 2:
+			continue # Skip malformed parts
+
+		var key = key_value[0]
+		var values = key_value.slice(1)
+
+		match key:
+			"hair":
+				data["hair_style"] = hair_map[int(values[0])]
+			"body":
+				data["body_style"] = body_map[int(values[0])]
+			"eyes":
+				data["eyes_style"] = eyes_map[int(values[0])]
+			"mouth":
+				data["mouth_style"] = mouth_map[int(values[0])]
+			"clothes":
+				data["clothing_style"] = clothing_map[int(values[0])]
+			"bg_color", "body_color", "hair_color", "clothes_color":
+				if values.size() >= 3:
+					var color_key = key.replace("_color", "") + "_color"
+					data[color_key] = Color(float(values[0]), float(values[1]), float(values[2]))
+			# Add cases for other keys like "backdrop", "acc", etc. as needed
+
+	return data
 
 func _parse_single_board(data: String) -> Array:
 	var pit_list = []
@@ -1011,6 +1032,13 @@ func send_game() -> void:
 	var payload = {
 		"replay": "board:" + prev_board_str + "|" + all_moves + post_board_str
 	}
+	
+	if player != 0 and is_instance_valid(player_avatar_display):
+		var avatar_string = player_avatar_display.get_avatar_data_string()
+		var avatar_key = "avatar" + str(player)
+		payload[avatar_key] = avatar_string
+		print("Adding my avatar data to payload with key '", avatar_key, "'")
+	
 	print("PAYLOAD: ", payload)
 	if await _check_game_over_and_winner():
 		print("Check Win 863 my_player: ", my_player, " win_loss_state: ", win_loss_state)
