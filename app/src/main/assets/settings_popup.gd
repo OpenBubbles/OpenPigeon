@@ -4,11 +4,8 @@ class_name SettingsPopup
 signal closed
 signal settings_theme_selected(new_theme_name: String)
 
-# --- Scene Preloads ---
-# !!! IMPORTANT: Make sure this path points to your avatar component scene
 const AvatarThumbnailScene = preload("res://avatar_textures/AvatarThumbnail.tscn")
 
-# --- Node References (Simplified) ---
 @onready var settings_label = %SettingsLabel as Label
 @onready var theme_option_button = %ThemeOptionButton as OptionButton
 @onready var main_preview_container = %MainPreviewContainer as CenterContainer
@@ -16,13 +13,10 @@ const AvatarThumbnailScene = preload("res://avatar_textures/AvatarThumbnail.tscn
 @onready var properties_box = %PropertiesBox as VBoxContainer
 @onready var custom_settings_container = %CustomSettingsContainer as VBoxContainer
 
-# --- Other Variables ---
 var dim_rect: ColorRect
-var main_avatar_preview: Node # Will hold the instance of our main preview component
+var main_avatar_preview: Node
 var current_brightness_slider: HSlider = null
 const GRABBER_IMAGE_PATH = "res://hollow_grabber.png"
-
-# --- Main Functions ---
 
 func _ready():
 	print("SettingsPopup: _ready() called.")
@@ -31,7 +25,6 @@ func _ready():
 	_setup_avatar_customizer()
 
 func close_popup():
-	# Broadcast to the rest of the game that the avatar has changed
 	SettingsManager.avatar_changed.emit()
 	
 	print("SettingsPopup: Closing popup.")
@@ -43,8 +36,6 @@ func close_popup():
 		if is_instance_valid(dim_rect):
 			dim_rect.queue_free()
 	)
-
-# --- Theme Setup ---
 
 func _setup_theme_button():
 	if theme_option_button:
@@ -67,16 +58,12 @@ func _on_theme_option_button_item_selected(index: int):
 	settings_theme_selected.emit(selected_theme_name)
 	SettingsManager.set_setting("global", "theme", selected_theme_name)
 
-# --- Avatar Customizer Logic ---
-
 func _setup_avatar_customizer():
-	# --- NEW: Instantiate the main avatar preview from code ---
 	main_avatar_preview = AvatarThumbnailScene.instantiate()
-	main_avatar_preview.is_display_only = true # Make it a non-clickable display
-	main_avatar_preview.custom_minimum_size = Vector2(64, 64) # Give it a good size
+	main_avatar_preview.is_display_only = true
+	main_avatar_preview.custom_minimum_size = Vector2(96, 64)
 	main_preview_container.add_child(main_avatar_preview)
-	
-	# The rest of the setup logic
+
 	avatar_tab_container.tab_changed.connect(_on_avatar_tab_changed)
 	avatar_tab_container.add_tab("Background")
 	avatar_tab_container.add_tab("Body")
@@ -103,39 +90,37 @@ func _on_avatar_tab_changed(tab_index: int):
 		"Clothing": _populate_clothing_properties()
 		"Accessories": _populate_accessories_properties()
 
-# --- Setting Change Handlers ---
-
-# Lightweight update for smooth dragging
 func _on_avatar_preview_setting_changed(value, category: String, key: String):
 	SettingsManager.set_setting("avatar_" + category, key, value)
-	# Tell our main preview to update itself immediately
 	main_avatar_preview.update_display_from_settings()
 
-# Full update for single-click changes (colors, styles)
 func _on_avatar_setting_changed(category: String, key: String, value):
 	SettingsManager.set_setting("avatar_" + category, key, value)
-	# Tell our main preview to update
-	main_avatar_preview.update_display_from_settings()
-	# Rebuild the options panel to update all thumbnails
-	_on_avatar_tab_changed(avatar_tab_container.current_tab)
 
-# --- UI Population Functions ---
+	var saved_value = SettingsManager.get_setting("avatar_" + category, key)
+	print("--- SETTING CHANGED ---")
+	print("Saved '", key, "' for '", category, "' with new value: '", saved_value, "'")
+	print("-----------------------")
+
+	if is_instance_valid(main_avatar_preview):
+		main_avatar_preview.update_display_from_settings()
+	_on_avatar_tab_changed(avatar_tab_container.current_tab)
 
 func _populate_background_properties():
 	var preset_colors = [ Color("#7c7c7c"), Color("#e7639f"), Color("#9e45c0"), Color("#5798f6"), Color("#32d5c8"), Color("#7cb33e"), Color("#b1da1a"), Color("#f6d61a"), Color("#ee7c09"), Color("#f11f06"), Color("#d3292c") ]
 	var default_color = SettingsManager.get_setting("avatar_background", "color", Color("#4e5d89"))
 	var initial_brightness = SettingsManager.get_setting("avatar_background", "brightness", 0.0)
-	_create_color_and_brightness_control("Background Color", "background", "color", "brightness", preset_colors, default_color, initial_brightness)
+	_create_color_and_brightness_control("background", "color", "brightness", preset_colors, default_color, initial_brightness)
 	var style_options = ["Plain", "Pattern 1", "Pattern 2", "Pattern 3", "Pattern 4", "Pattern 5", "Pattern 6", "Pattern 7", "Pattern 8", "Pattern 9"]
 	_create_image_presets_scrollbar("background", "style", style_options)
 
 func _populate_body_properties():
-	var body_styles = ["Default", "Smiling", "Winking", "Surprised", "Frowning", "Tongue Out", "Cute"]
+	var body_styles = ["Default", "body1", "body2", "body3", "body4", "body5", "body6"]
 	_create_image_presets_scrollbar("body", "head_style", body_styles)
 	var skin_tones = [ Color("#ffbd9a"), Color("#ffb070"), Color("#804734"), Color("#5f442f"), Color("#cccccc"), Color("#da73a2"), Color("#6394f1"), Color("#82b941"), Color("#f8cf55"), Color("#f6820c"), Color("#c34126") ]
 	var default_tone = SettingsManager.get_setting("avatar_body", "color", Color("#e0ac69"))
 	var initial_brightness = SettingsManager.get_setting("avatar_body", "brightness", 0.0)
-	_create_color_and_brightness_control("Skin Tone", "body", "color", "brightness", skin_tones, default_tone, initial_brightness)
+	_create_color_and_brightness_control("body", "color", "brightness", skin_tones, default_tone, initial_brightness)
 
 func _populate_hair_properties():
 	var hair_styles = ["Spiky", "Long", "Bun", "Bald"]
@@ -143,7 +128,7 @@ func _populate_hair_properties():
 	var hair_colors = [ Color("#f8cf55"), Color("#e1872f"), Color("#d24325"), Color("#6d411d"), Color("#572c1f"), Color("#000000"), Color("#e1e1e1"), Color("#ee67a4"), Color("#a348c7"), Color("#699bff"), Color("#82b941") ]
 	var default_color = SettingsManager.get_setting("avatar_hair", "color", Color("#2c232b"))
 	var initial_brightness = SettingsManager.get_setting("avatar_hair", "brightness", 0.0)
-	_create_color_and_brightness_control("Hair Color", "hair", "color", "brightness", hair_colors, default_color, initial_brightness)
+	_create_color_and_brightness_control("hair", "color", "brightness", hair_colors, default_color, initial_brightness)
 
 func _populate_face_properties():
 	var eye_styles = ["Open", "Closed", "Winking"]
@@ -157,7 +142,7 @@ func _populate_clothing_properties():
 	var clothing_colors = [ Color("#7c7c7c"), Color("#e7639f"), Color("#9e45c0"), Color("#5798f6"), Color("#32d5c8"), Color("#7cb33e"), Color("#b1da1a"), Color("#f6d61a"), Color("#ee7c09"), Color("#f11f06"), Color("#d3292c") ]
 	var default_color = SettingsManager.get_setting("avatar_clothing", "color", Color("#a03c3c"))
 	var initial_brightness = SettingsManager.get_setting("avatar_clothing", "brightness", 0.0)
-	_create_color_and_brightness_control("Clothing Color", "clothing", "color", "brightness", clothing_colors, default_color, initial_brightness)
+	_create_color_and_brightness_control("clothing", "color", "brightness", clothing_colors, default_color, initial_brightness)
 
 func _populate_accessories_properties():
 	var head_accessories_styles = ["None", "Hat1", "Headband"]
@@ -165,9 +150,7 @@ func _populate_accessories_properties():
 	var face_accessories_styles = ["None", "Glasses", "Mask"]
 	_create_image_presets_scrollbar("accessories", "face_style", face_accessories_styles)
 
-# --- UI Control Creation Helpers ---
-
-func _create_color_and_brightness_control(label_text: String, category: String, color_key: String, brightness_key: String, colors: PackedColorArray, default_color: Color, initial_brightness: float):
+func _create_color_and_brightness_control(category: String, color_key: String, brightness_key: String, colors: PackedColorArray, default_color: Color, initial_brightness: float):
 	var vbox = VBoxContainer.new()
 	vbox.custom_minimum_size.y = 80
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -289,15 +272,13 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 	var current_style_value = SettingsManager.get_setting("avatar_" + category, key, style_options[0])
 	for style_name in style_options:
 		var thumbnail = AvatarThumbnailScene.instantiate()
-		thumbnail.custom_minimum_size = Vector2(64, 64)
+		thumbnail.custom_minimum_size = Vector2(96, 64)
 		hbox.add_child(thumbnail)
 		thumbnail.call_deferred("update_preview", current_settings, category, key, style_name)
 		if style_name == current_style_value:
 			thumbnail.set_selected(true)
 		thumbnail.pressed.connect(_on_avatar_setting_changed.bind(category, key, style_name))
 	_add_property_to_box(scroll_container)
-
-# --- Popup Management ---
 
 func _exit_tree():
 	print("SettingsPopup: _exit_tree() called.")

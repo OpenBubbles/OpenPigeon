@@ -25,6 +25,7 @@ SettingsManager="*res://settings_manager.gd"
 
 window/size/viewport_width=648
 window/size/viewport_height=1152
+window/size/always_on_top=true
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=1

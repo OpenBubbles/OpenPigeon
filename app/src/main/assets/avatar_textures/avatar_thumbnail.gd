@@ -1,13 +1,10 @@
 # AvatarThumbnail.gd
-# This script controls a single, self-contained avatar preview.
 extends TextureButton
 class_name AvatarThumbnail
 
-# This checkbox appears in the Inspector to switch behaviors
 @export var is_display_only: bool = false
 @export var controlled_by_data: bool = false
 
-# --- Node References ---
 @onready var color_rect: ColorRect = %ColorRect
 @onready var avatar_background: Sprite2D = %AvatarBackground
 @onready var avatar_base_body: Sprite2D = %AvatarBaseBody
@@ -18,7 +15,6 @@ class_name AvatarThumbnail
 @onready var avatar_head_accessories: Sprite2D = %AvatarHeadAccessories
 @onready var avatar_face_accessories: Sprite2D = %AvatarFaceAccessories
 
-# --- Texture Maps ---
 const AVATAR_BG_MAP_PATH = "res://avatar_textures/backgrounds/background_sheet.png"
 const AVATAR_BODY_MAP_PATH = "res://avatar_textures/body/avatar_bodies.png"
 const AVATAR_HAIR_MAP_PATH = "res://avatar_textures/hair/avatar_hair.png"
@@ -27,9 +23,8 @@ const AVATAR_MOUTH_MAP_PATH = "res://avatar_textures/face/avatar_mouth.png"
 const AVATAR_CLOTHING_MAP_PATH = "res://avatar_textures/clothing/avatar_clothing.png"
 const AVATAR_ACCESSORIES_MAP_PATH = "res://avatar_textures/accessories/avatar_accessories.png"
 
-# --- Region Dictionaries ---
 var avatar_background_regions = { "Pattern 1": Rect2(0, 0, 128, 128), "Pattern 2": Rect2(128, 0, 128, 128), "Pattern 3": Rect2(256, 0, 128, 128), "Pattern 4": Rect2(384, 0, 128, 128), "Pattern 5": Rect2(0, 128, 128, 128), "Pattern 6": Rect2(128, 128, 128, 128), "Pattern 7": Rect2(256, 128, 128, 128), "Pattern 8": Rect2(384, 128, 128, 128), "Pattern 9": Rect2(0, 256, 128, 128) }
-var avatar_body_regions = { "Default": Rect2(0, 0, 64, 64), "Smiling": Rect2(64, 0, 64, 64), "Winking": Rect2(128, 0, 64, 64), "Surprised": Rect2(192, 0, 64, 64), "Frowning": Rect2(256, 0, 64, 64), "Tongue Out": Rect2(320, 0, 64, 64), "Cute": Rect2(384, 0, 64, 64) }
+var avatar_body_regions = { "Default": Rect2(0, 0, 96, 64), "body1": Rect2(96, 0, 96, 64), "body2": Rect2(192, 0, 96, 64), "body3": Rect2(288, 0, 96, 64), "body4": Rect2(384, 0, 96, 64), "body5": Rect2(0, 64, 96, 64), "body6": Rect2(96, 64, 96, 64) }
 var avatar_hair_regions = { "Spiky": Rect2(0, 0, 64, 64), "Long": Rect2(64, 0, 64, 64), "Bun": Rect2(128, 0, 64, 64), "Bald": Rect2(192, 0, 64, 64) }
 var avatar_eyes_regions = { "Open": Rect2(0, 0, 64, 64), "Closed": Rect2(64, 0, 64, 64), "Winking": Rect2(128, 0, 64, 64) }
 var avatar_mouth_regions = { "Plain": Rect2(0, 0, 64, 64), "Smile": Rect2(64, 0, 64, 64), "Frown": Rect2(128, 0, 64, 64) }
@@ -40,7 +35,6 @@ var avatar_face_accessories_regions = { "None": Rect2(0, 0, 1, 1), "Glasses": Re
 var _selection_stylebox: StyleBox = null
 
 func _ready():
-	# Configure the selection border style once
 	print("AvatarThumbnail ready: '", self.name, "'. is_display_only: ", is_display_only, ", controlled_by_data: ", controlled_by_data)
 
 	var stylebox_flat = StyleBoxFlat.new()
@@ -54,27 +48,20 @@ func _ready():
 		self.disabled = true
 		
 	if controlled_by_data:
-		# If this is true, do nothing on ready.
-		# It will wait for the game to push data to it and will NOT connect to the global signal.
 		pass
 	else:
-		# If this is a local player display, it loads its own data and listens for changes.
 		if SettingsManager:
 			SettingsManager.avatar_changed.connect(update_display_from_settings)
 		update_display_from_settings()
-	
-# Called by settings popup to show a variation
+
 func update_preview(base_settings: Dictionary, category: String, key: String, override_value):
 	var temp_settings = base_settings.duplicate(true)
 	temp_settings[category][key] = override_value
 	_draw_avatar(temp_settings)
 	
 func update_avatar_from_data(avatar_data: Dictionary):
-	# This function is specifically for drawing an avatar from a data packet,
-	# like the one received from an opponent.
 	print("SUCCESS: '", self.name, "' is updating from this external data: ", avatar_data)
 
-	# Create a full settings dictionary using the provided data, with safe defaults
 	var settings = {
 		"background": {
 			"color": avatar_data.get("bg_color", Color.WHITE),
@@ -107,16 +94,12 @@ func update_avatar_from_data(avatar_data: Dictionary):
 			"face_style": avatar_data.get("face_acc_style", "None")
 		}
 	}
-	
-	# Call the main drawing function with this temporary settings dictionary
 	_draw_avatar(settings)
 
-# Called by global signal or on ready to show the current saved avatar
 func update_display_from_settings():
 	var current_settings = _get_current_avatar_settings()
 	_draw_avatar(current_settings)
 
-# The single, private function that does all the rendering
 func _draw_avatar(settings: Dictionary):
 	# Background
 	var bg_color = settings["background"]["color"]
@@ -208,10 +191,7 @@ func _get_current_avatar_settings() -> Dictionary:
 	}
 	
 func get_avatar_data_string() -> String:
-	# This function now uses our helper function to get all settings at once.
 	var settings = _get_current_avatar_settings()
-
-	# Create reverse maps to convert style names back to integer indexes
 	var hair_map = {}
 	for i in avatar_hair_regions.keys().size(): hair_map[avatar_hair_regions.keys()[i]] = i
 	var body_map = {}
@@ -222,11 +202,10 @@ func get_avatar_data_string() -> String:
 	for i in avatar_mouth_regions.keys().size(): mouth_map[avatar_mouth_regions.keys()[i]] = i
 	var clothing_map = {}
 	for i in avatar_clothing_regions.keys().size(): clothing_map[avatar_clothing_regions.keys()[i]] = i
+	var backdrop_map = ["Plain", "Pattern 1", "Pattern 2", "Pattern 3", "Pattern 4", "Pattern 5", "Pattern 6", "Pattern 7", "Pattern 8", "Pattern 9"]
+
 
 	var parts = []
-
-	# Read from the 'settings' dictionary instead of calling SettingsManager repeatedly
-	
 	# Body
 	var body_style_name = settings["body"]["head_style"]
 	parts.append("body,%d" % body_map.get(body_style_name, 0))
@@ -254,6 +233,13 @@ func get_avatar_data_string() -> String:
 	# Background Color
 	var bg_c = settings["background"]["color"]
 	parts.append("bg_color,%.6f,%.6f,%.6f" % [bg_c.r, bg_c.g, bg_c.b])
+
+	# Backdrop Style
+	var bg_style_name = settings["background"]["style"]
+	var backdrop_index = backdrop_map.find(bg_style_name)
+	if backdrop_index == -1:
+		backdrop_index = 0
+	parts.append("backdrop,%d" % backdrop_index)
 	
 	return "|".join(parts)
 
@@ -264,22 +250,18 @@ func set_selected(is_selected: bool):
 		remove_theme_stylebox_override("normal")
 
 func _center_and_scale_sprites():
-	# The 'size' variable refers to the size of this component's root Control node
 	var center_pos: Vector2 = size / 2.0
+	var base_bg_size = 128.0
+	var base_character_size = 64.0
+	var bg_scale_x = size.x / base_bg_size
+	var bg_scale_y = size.y / base_bg_size
+	var bg_scale_factor = max(bg_scale_x, bg_scale_y)
 
-	# --- Define the original art sizes ---
-	var base_bg_size = 128.0      # Our background patterns are 128x128
-	var base_character_size = 64.0 # Our character parts are 64x64
-
-	# --- Calculate scale factors based on the component's current height ---
-	var bg_scale_factor = size.y / base_bg_size
-	var char_scale_factor = size.y / base_character_size
-
-	# --- Position and scale the background ---
 	avatar_background.position = center_pos
 	avatar_background.scale = Vector2(bg_scale_factor, bg_scale_factor)
-	
-	# --- Position and scale all character sprites ---
+
+	var char_scale_factor = size.y / base_character_size
+
 	for sprite in [ avatar_base_body, avatar_hair, avatar_eyes, avatar_mouth, \
 					avatar_clothing, avatar_head_accessories, avatar_face_accessories ]:
 		sprite.centered = true

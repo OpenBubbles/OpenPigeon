@@ -14,9 +14,6 @@ func load_settings():
 	var error = config.load(SETTINGS_FILE_PATH)
 	if error != OK:
 		print("Settings file not found or corrupted, creating new one.")
-		# Optionally, save default settings here
-		# config.set_value("global", "theme", "Default")
-		# config.save(SETTINGS_FILE_PATH)
 
 func save_settings():
 	var error = config.save(SETTINGS_FILE_PATH)
@@ -25,12 +22,11 @@ func save_settings():
 
 func set_setting(category: String, key: String, value):
 	config.set_value(category, key, value)
-	save_settings() # Save immediately after setting a value
+	save_settings()
 
 func get_setting(category: String, key: String, default_value = null):
 	return config.get_value(category, key, default_value)
 
 func get_game_name_from_path(scene_path: String) -> String:
-	# Extracts the scene name without extension from its path
 	var file_name = scene_path.get_file()
 	return file_name.get_basename()

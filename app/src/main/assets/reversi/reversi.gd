@@ -1,31 +1,33 @@
 extends Control
 
-# --- Node Paths ---
-@onready var turn_indicator_arrow = $MainVBoxContainer/TopInfoHBoxContainer/CurrentTurnLabel
-@onready var white_count_label = $MainVBoxContainer/TopInfoHBoxContainer/WhiteCountLabel
-@onready var black_count_label = $MainVBoxContainer/TopInfoHBoxContainer/BlackCountLabel
-@onready var grid = $MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer/BorderPanelContainer/GridContainer
-@onready var send_button = $SendButton
-@onready var sent_label = $MainVBoxContainer/GameAreaCenterContainer/SentLabel
-@onready var waiting_label = $WaitingContainer/WaitForOpponentLabel
-@onready var waiting_blur = $WaitBlur
-@onready var win_loss_label = $MainVBoxContainer/GameAreaCenterContainer/WinLossLabel
-@onready var dot_timer = $DotTimer
-@onready var replay_button = $MainVBoxContainer/GameAreaCenterContainer/ReplayButton
-@onready var rules_button = $MainVBoxContainer/BottomItemHBoxContainer/MarginContainer/RulesButton
-@onready var settings_button = $MainVBoxContainer/BottomItemHBoxContainer/MarginContainer/SettingsButton
+@onready var player_avatar_display = %PlayerAvatarDisplay
+@onready var opp_avatar_display = %OppAvatarDisplay
+@onready var player_count_label = %PlayerCountLabel
+@onready var opp_count_label = %OppCountLabel
+@onready var grid = %GridContainer
+@onready var send_button = %SendButton
+@onready var sent_label = %SentLabel
+@onready var waiting_label = %WaitForOpponentLabel
+@onready var waiting_blur = %WaitBlur
+@onready var win_loss_label = %WinLossLabel
+@onready var dot_timer = %DotTimer
+@onready var replay_button = %ReplayButton
+@onready var rules_button = %RulesButton
+@onready var settings_button = %SettingsButton
+@onready var spec_label = %SpecLabel
 
-# --- Game Constants ---
 const BOARD_SIZE = 8
 
-# --- Game State Variables ---
 var board = []
+var game_settings_category: String
 var player_symbol = ""
 var game_over = false
 var has_connected: bool = false
 var is_your_turn: bool = false
 var is_my_turn: bool = false
+var spectator_mode: bool = false
 var player: int = -1
+var avatar_key = 0
 var replay_val
 var replay_symbol
 var replay: String = ""
@@ -48,12 +50,10 @@ Vector2i(5, 2),
 Vector2i(5, 6),
 ]
 
-# --- Temporary Piece State Variables ---
 var temp_piece_active = false
 var temp_piece_x = -1
 var temp_piece_y = -1
 
-# --- Animation Variables ---
 var dot_count: int = 0
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 var button_tween: Tween
@@ -61,6 +61,7 @@ var sent_tween: Tween
 var send_button_target_y_position = -1
 const BUTTON_OFFSCREEN_OFFSET = 100
 const RULES_POPUP_SCENE = preload("res://reversi/RulesPopup.tscn")
+const SETTINGS_POPUP_SCENE = preload("res://settings_popup.tscn")
 
 func _ready():
 	post_board_data.resize(64)
@@ -79,9 +80,7 @@ func _ready():
 			appPlugin.onReady()
 			print("AppPlugin Connected")
 	else:
-		#Setting State to pre_win state
 		_set_game_data('{ "isYourTurn": true, "player": "1", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,0,2,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0|move:0,3,1|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,2,2,2,0,0,1,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
-		#Setting State to new_game state
 		#_set_game_data('{ "isYourTurn": true, "player": "1", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0|move:3,1,2|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
 		print("No AppPlugin Available, Setting Debug Data")
 		
@@ -95,9 +94,8 @@ func _ready():
 	if rules_button:
 		rules_button.pressed.connect(on_rules_button_pressed)
 	if settings_button:
-		settings_button.pressed.connect(on_settings_button_pressed)
-	
-# --- New setup_board_structure() function ---
+		settings_button.pressed.connect(_on_settings_button_pressed)
+
 func setup_board_structure():
 	if not grid:
 		return
@@ -165,58 +163,70 @@ func setup_ui_elements_style_and_signals():
 		send_button.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
 		send_button.set_v_size_flags(Control.SIZE_SHRINK_BEGIN)
 
-	if black_count_label:
-		var black_score_style = StyleBoxFlat.new()
-		black_score_style.bg_color = Color.BLACK
-		black_score_style.set_border_width_all(2)
-		black_score_style.border_color = Color.GRAY
-		black_count_label.add_theme_stylebox_override("normal", black_score_style)
-		black_count_label.add_theme_color_override("font_color", Color.WHITE)
-		black_count_label.add_theme_font_size_override("font_size", 24)
-		black_count_label.set_custom_minimum_size(Vector2(100, 40))
-		black_count_label.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
-		black_count_label.set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER)
-		black_count_label.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
+	if player_count_label:
+		var player_score_style = StyleBoxFlat.new()
+		player_score_style.bg_color = Color.BLACK
+		player_score_style.set_border_width_all(2)
+		player_score_style.border_color = Color.GRAY
+		player_count_label.add_theme_stylebox_override("normal", player_score_style)
+		player_count_label.add_theme_color_override("font_color", Color.WHITE)
+		player_count_label.add_theme_font_size_override("font_size", 24)
+		player_count_label.set_custom_minimum_size(Vector2(100, 40))
+		player_count_label.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
+		player_count_label.set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER)
+		player_count_label.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
 
-	if white_count_label:
-		var white_score_style = StyleBoxFlat.new()
-		white_score_style.bg_color = Color.WHITE
-		white_score_style.set_border_width_all(2)
-		white_score_style.border_color = Color.DARK_GRAY
-		white_count_label.add_theme_stylebox_override("normal", white_score_style)
-		white_count_label.add_theme_color_override("font_color", Color.BLACK)
-		white_count_label.add_theme_font_size_override("font_size", 24)
-		white_count_label.set_custom_minimum_size(Vector2(100, 40))
-		white_count_label.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
-		white_count_label.set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER)
-		white_count_label.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
+	if opp_count_label:
+		var opp_score_style = StyleBoxFlat.new()
+		opp_score_style.bg_color = Color.WHITE
+		opp_score_style.set_border_width_all(2)
+		opp_score_style.border_color = Color.DARK_GRAY
+		opp_count_label.add_theme_stylebox_override("normal", opp_score_style)
+		opp_count_label.add_theme_color_override("font_color", Color.BLACK)
+		opp_count_label.add_theme_font_size_override("font_size", 24)
+		opp_count_label.set_custom_minimum_size(Vector2(100, 40))
+		opp_count_label.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
+		opp_count_label.set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER)
+		opp_count_label.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
 				
 func setup_score_labels():
-	if black_count_label:
-		var black_score_style = StyleBoxFlat.new()
-		black_score_style.bg_color = Color.BLACK
-		black_score_style.set_border_width_all(2)
-		black_score_style.border_color = Color.GRAY
-		black_count_label.add_theme_stylebox_override("normal", black_score_style)
-		black_count_label.add_theme_color_override("font_color", Color.WHITE)
-		black_count_label.add_theme_font_size_override("font_size", 24)
-		black_count_label.set_custom_minimum_size(Vector2(100, 40))
-		black_count_label.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
-		black_count_label.set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER)
-		black_count_label.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
+	if player_count_label:
+		var player_score_style = StyleBoxFlat.new()
+		if player == 1:
+			player_score_style.bg_color = Color.BLACK
+		else:
+			player_score_style.bg_color = Color.WHITE
+		player_score_style.set_border_width_all(2)
+		player_score_style.border_color = Color.GRAY
+		player_count_label.add_theme_stylebox_override("normal", player_score_style)
+		if player == 1:
+			player_count_label.add_theme_color_override("font_color", Color.WHITE)
+		else:
+			player_count_label.add_theme_color_override("font_color", Color.BLACK)
+		player_count_label.add_theme_font_size_override("font_size", 24)
+		player_count_label.set_custom_minimum_size(Vector2(100, 40))
+		player_count_label.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
+		player_count_label.set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER)
+		player_count_label.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
 
-	if white_count_label:
-		var white_score_style = StyleBoxFlat.new()
-		white_score_style.bg_color = Color.WHITE
-		white_score_style.set_border_width_all(2)
-		white_score_style.border_color = Color.DARK_GRAY
-		white_count_label.add_theme_stylebox_override("normal", white_score_style)
-		white_count_label.add_theme_color_override("font_color", Color.BLACK)
-		white_count_label.add_theme_font_size_override("font_size", 24)
-		white_count_label.set_custom_minimum_size(Vector2(100, 40))
-		white_count_label.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
-		white_count_label.set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER)
-		white_count_label.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
+	if opp_count_label:
+		var opp_score_style = StyleBoxFlat.new()
+		if player == 1:
+			opp_score_style.bg_color = Color.WHITE
+		else:
+			opp_score_style.bg_color = Color.BLACK
+		opp_score_style.set_border_width_all(2)
+		opp_score_style.border_color = Color.DARK_GRAY
+		opp_count_label.add_theme_stylebox_override("normal", opp_score_style)
+		if player == 1:
+			opp_count_label.add_theme_color_override("font_color", Color.BLACK)
+		else:
+			opp_count_label.add_theme_color_override("font_color", Color.WHITE)
+		opp_count_label.add_theme_font_size_override("font_size", 24)
+		opp_count_label.set_custom_minimum_size(Vector2(100, 40))
+		opp_count_label.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
+		opp_count_label.set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER)
+		opp_count_label.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
 
 func setup_sent_label():
 	if sent_label:
@@ -284,7 +294,6 @@ func get_piece(x: int, y: int) -> String:
 	else:
 		return ""
 
-# --- UI Update Functions ---
 func place_star_points():
 	var star_layer = $MainVBoxContainer/GameAreaCenterContainer/StarPointLayer
 	for child in star_layer.get_children():
@@ -310,39 +319,29 @@ func place_star_points():
 		star.position = relative_pos + offset
 		star_layer.add_child(star)
 
-func update_turn_indicator():
-	await check_win()
-		
-	turn_indicator_arrow.add_theme_font_size_override("font_size", 48)
-	turn_indicator_arrow.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
-	
-	if player_symbol == "⚫":
-		turn_indicator_arrow.text = "◀"
-	else:
-		turn_indicator_arrow.text = "▶"
-
 func update_piece_counts() -> Dictionary:
 	print("Update Piece Counts Called!")
 	var white_count = 0
 	var black_count = 0
 
-	# 1) Count everything actually on the board
 	for y in range(BOARD_SIZE):
 		for x in range(BOARD_SIZE):
 			match get_piece(x, y):
 				"⚪": white_count += 1
 				"⚫": black_count += 1
 
-	# 2) If we're showing a temp (preview) piece, include it
 	if temp_piece_active:
 		if player_symbol == "⚪":
 			white_count += 1
 		elif player_symbol == "⚫":
 			black_count += 1
 
-	# 3) Push out to your labels & state vars
-	white_count_label.text = str(white_count)
-	black_count_label.text = str(black_count)
+	if player == 1:
+		opp_count_label.text = str(white_count)
+		player_count_label.text = str(black_count)
+	else:
+		opp_count_label.text = str(black_count)
+		player_count_label.text = str(white_count)
 	white_score = white_count
 	black_score = black_count
 
@@ -373,10 +372,20 @@ func _set_game_data(new_game_data_json: String):
 		var sender_id = parsed_data.get("sender", "")
 		var player1_id = parsed_data.get("player1", "")
 		var player2_id = parsed_data.get("player2", "")
+		var my_player = parsed_data.get("myPlayerId", "")
+		var opponent_avatar_key = ""
 		my_player  = parsed_data.get("myPlayerId", my_player)
 		is_your_turn = parsed_data.get("isYourTurn", false)
-		is_my_turn = true if is_your_turn and (my_player == player1_id or my_player == player2_id or player1_id == "") else false
-		
+		if (my_player == player1_id or my_player == player2_id or player1_id == ""):
+			if is_your_turn:
+				is_my_turn = true	
+		else:
+			spectator_mode = true
+			print("Spectator Mode Enabled!")
+			spec_label.visible = true
+			player = 1
+			print("199 Setting Player to ", player)
+			
 		if player_val == 1:
 			player_symbol = "⚫"
 		elif player_val == 2:
@@ -387,6 +396,20 @@ func _set_game_data(new_game_data_json: String):
 		print("My Device ID (my_player): ", my_player)
 		print("My Numerical Player (player_val): ", player_val)
 		print("My Player Symbol: ", player_symbol)
+		
+		if my_player != "" and player1_id != "" and player2_id != "":
+			if my_player == player1_id:
+				opponent_avatar_key = "avatar2"
+				print("Opp is avatar2")
+			elif my_player == player2_id:
+				opponent_avatar_key = "avatar1"
+				print("Opp is avatar1")
+		
+		if opponent_avatar_key != "" and parsed_data.has(opponent_avatar_key):
+			var avatar_string = parsed_data[opponent_avatar_key]
+			var opponent_data = _parse_avatar_string(avatar_string)
+			if is_instance_valid(opp_avatar_display):
+				opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
 		replay = parsed_data.get("replay", "")
 		
@@ -410,8 +433,7 @@ func _set_game_data(new_game_data_json: String):
 			process_game_state()
 			print("403 Updating Piece Counts")
 			update_piece_counts()
-			
-			# ▶ new: play/stop waiting animation based on turn
+
 			if not is_my_turn and not game_over:
 				start_waiting_animation()
 			else:
@@ -420,8 +442,47 @@ func _set_game_data(new_game_data_json: String):
 		print("Parsed Data is not dictionary")
 		initialize_board_pieces()
 		update_piece_counts()
-		update_turn_indicator()
 		highlight_valid_moves()
+		
+func _parse_avatar_string(data_string: String) -> Dictionary:
+	var hair_map = ["Spiky", "Long", "Bun", "Bald"]
+	var body_map = ["Default", "Smiling", "Winking", "Surprised", "Frowning", "Tongue Out", "Cute"]
+	var eyes_map = ["Open", "Closed", "Winking"]
+	var mouth_map = ["Plain", "Smile", "Frown"]
+	var clothing_map = ["T-Shirt", "Sweater", "Tank Top"]
+	var backdrop_map = ["Plain", "Pattern 1", "Pattern 2", "Pattern 3", "Pattern 4", "Pattern 5", "Pattern 6", "Pattern 7", "Pattern 8", "Pattern 9"]
+
+	var data = {}
+	var parts = data_string.split("|")
+	for part in parts:
+		var key_value = part.split(",")
+		if key_value.size() < 2:
+			continue
+
+		var key = key_value[0]
+		var values = key_value.slice(1)
+
+		match key:
+			"hair":
+				data["hair_style"] = hair_map[int(values[0])]
+			"body":
+				data["body_style"] = body_map[int(values[0])]
+			"eyes":
+				data["eyes_style"] = eyes_map[int(values[0])]
+			"mouth":
+				data["mouth_style"] = mouth_map[int(values[0])]
+			"clothes":
+				data["clothing_style"] = clothing_map[int(values[0])]
+			"backdrop":
+				var backdrop_index = int(values[0])
+				if backdrop_index >= 0 and backdrop_index < backdrop_map.size():
+					data["bg_style"] = backdrop_map[backdrop_index]
+			"bg_color", "body_color", "hair_color", "clothes_color":
+				if values.size() >= 3:
+					var color_key = key.replace("_color", "") + "_color"
+					data[color_key] = Color(float(values[0]), float(values[1]), float(values[2]))
+
+	return data
 		
 func reset_board_to_pre_data():
 	for idx in range(BOARD_SIZE * BOARD_SIZE):
@@ -464,7 +525,6 @@ func process_game_state():
 						print(str("Error: pre_board_data index out of bounds or size mismatch. Index: ", cell_index, " Size: ", pre_board_data.size()))
 	print("453 Call Update Count")
 	update_piece_counts()
-	update_turn_indicator()
 
 	if is_my_turn and not game_over:
 		highlight_valid_moves()
@@ -508,15 +568,15 @@ func check_win() -> bool:
 		if (player_val == 2 and white_score > black_score) or (player_val == 1 and black_score > white_score):
 			win_loss_label.text = "YOU WIN!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			win_loss_state = "win"
+			win_loss_state = "1"
 		elif white_score == black_score:
 			win_loss_label.text = "TIE!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
-			win_loss_state = "tie"
+			win_loss_state = "0"
 		else:
 			win_loss_label.text = "YOU LOSE"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
-			win_loss_state = "loss"
+			win_loss_state = "-1"
 
 		win_loss_label.visible = true
 
@@ -537,7 +597,6 @@ func check_win() -> bool:
 			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_LINEAR)
 		await fade_tween.finished
 		win_loss_label.visible = false
-		#show_replay_button()
 		return true
 	else:
 		print("Game Over Status: ", game_over)
@@ -740,15 +799,12 @@ func preview_flip_pieces(x: int, y: int, player: String):
 
 
 func on_cell_pressed(x: int, y: int) -> void:
-	# only if it’s your turn and game isn’t over
 	if not is_my_turn or game_over:
 		return
 
-	# ignore a second click on the same preview cell
 	if temp_piece_active and temp_piece_x == x and temp_piece_y == y:
 		return
 
-	# 1) tear down any existing preview so legality checks run on a clean board
 	if temp_piece_active:
 		reset_board_to_pre_data()
 		clear_temp_piece_visual()
@@ -758,15 +814,11 @@ func on_cell_pressed(x: int, y: int) -> void:
 		temp_piece_y = -1
 		if send_button.visible:
 			animate_button_slide_down()
-
-	# 2) now check the real board for occupancy or move legality
 	var current_piece = get_piece(x, y)
 	var directions = get_flippable_directions(x, y, player_symbol)
 	if current_piece != "" or directions.size() == 0:
-		# either occupied or not a valid flip
 		return
 
-	# 3) it’s a fresh, valid preview—set it up
 	temp_piece_x = x
 	temp_piece_y = y
 	temp_piece_active = true
@@ -791,8 +843,9 @@ func on_send_button_pressed():
 		return
 	flip_pieces(temp_piece_x, temp_piece_y, player_symbol, directions_to_flip)
 	set_piece(temp_piece_x, temp_piece_y, player_symbol,true)
-
-
+	print("Pre Avatar Assignment Number: ", player)
+	avatar_key = "avatar" + str(player)
+	print("Post Avatar Assignment Number: ", avatar_key)
 	post_board_data = get_current_board_as_array()
 	
 	print("Pre board data: ", pre_board_data)
@@ -810,13 +863,19 @@ func on_send_button_pressed():
 		"replay": "board:" + ",".join(pre_board_data) + "|" + moves_str + "|" + "board:" + ",".join(post_board_data)
 	}
 	
+	if player != 0 and is_instance_valid(player_avatar_display):
+		var avatar_string = player_avatar_display.get_avatar_data_string()
+		result[avatar_key] = avatar_string
+		print("Adding my avatar data to payload with key '", avatar_key, "'")
+	
+	
 	print("Replay string before JSON encode: ", result["replay"])
 	print("Type of replay field: ", typeof(result["replay"]))
 	
 	if await check_win():
 		print("Check Win 773 my_player: ", my_player, " win_loss_state: ", win_loss_state)
 		if win_loss_state != "":
-			result["winner"] = my_player + "|" + ("1" if win_loss_state == "win" else "-1")
+			result["winner"] = my_player + "|" + win_loss_state
 	else:
 		play_sent_animation()
 		print("play sent 783 on send button pressed")
@@ -839,7 +898,6 @@ func on_send_button_pressed():
 	animate_button_slide_down()
 	is_my_turn = false
 
-# --- Animation Functions ---
 func start_waiting_animation():
 	dot_count = 0
 	waiting_label.text = BASE_WAIT_TEXT + "."
@@ -920,8 +978,6 @@ func animate_button_slide_down():
 		await check_win()
 	)
 
-# --- Visual Management & Game State ---
-
 func set_highlight_visibility(visible: bool):
 	for y in range(BOARD_SIZE):
 		for x in range(BOARD_SIZE):
@@ -961,8 +1017,6 @@ func handle_turn_transition():
 		highlight_valid_moves()
 		return
 
-# --- Core Game Rules ---
-
 func is_valid_move(x: int, y: int, player: String) -> bool:
 	return get_flippable_directions(x, y, player).size() > 0
 
@@ -1000,8 +1054,6 @@ func get_flippable_directions(x: int, y: int, player: String) -> Array:
 func is_in_bounds(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.x < BOARD_SIZE and pos.y >= 0 and pos.y < BOARD_SIZE
 
-# --- Utility Function ---
-
 func create_radial_gradient_texture(size: int = 64) -> Texture2D:
 	var image = Image.create(size, size, false, Image.FORMAT_RGBA8)
 	var center = Vector2(size / 2, size / 2)
@@ -1015,82 +1067,157 @@ func create_radial_gradient_texture(size: int = 64) -> Texture2D:
 	return ImageTexture.create_from_image(image)
 	
 func on_rules_button_pressed():
-
+	rules_button.pivot_offset = rules_button.size / 2.0
+	var tween = create_tween()
+	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3)\
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await tween.finished
 	var rules_popup_instance = RULES_POPUP_SCENE.instantiate()
-
 	var dim_background = ColorRect.new()
 	dim_background.color = Color(0, 0, 0, 0.5)
 	dim_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(dim_background)
-
-	add_child(rules_popup_instance)
-
-	move_child(dim_background, get_child_count() - 2)
+	get_tree().root.add_child(dim_background)
+	get_tree().root.add_child(rules_popup_instance)
 
 	var close_button = rules_popup_instance.get_node("MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/CloseButton")
 	if close_button:
 		close_button.pressed.connect(func():
-			if dim_background.is_inside_tree():
+			if is_instance_valid(dim_background):
 				dim_background.queue_free()
-			if rules_popup_instance.is_inside_tree():
+			if is_instance_valid(rules_popup_instance):
 				rules_popup_instance.queue_free()
 		)
-	else:
-		print("Close button not found")
 
 	await get_tree().process_frame
 
 	var screen_size = get_viewport_rect().size
-	rules_popup_instance.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	rules_popup_instance.set_as_top_level(true)
-	rules_popup_instance.visible = true
 
-	rules_popup_instance.size = Vector2(screen_size.x, 10)
-	await get_tree().process_frame
-	var final_height = rules_popup_instance.get_combined_minimum_size().y
-	var center_y = (screen_size.y - final_height) / 2
+	var desired_width = screen_size.x * 0.9
+	var desired_height = rules_popup_instance.get_combined_minimum_size().y
+	
+	rules_popup_instance.size = Vector2(desired_width, desired_height)
 
-	rules_popup_instance.position = Vector2(screen_size.x / 2, center_y)
-	rules_popup_instance.size = Vector2(0, final_height)
+	rules_popup_instance.pivot_offset = rules_popup_instance.size / 2
 
-	var tween = create_tween()
-	tween.tween_property(rules_popup_instance, "size:x", screen_size.x, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.parallel().tween_property(rules_popup_instance, "position:x", 0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	rules_popup_instance.position = (screen_size - rules_popup_instance.size) / 2
+
+	rules_popup_instance.scale = Vector2.ZERO
+
+	var popup_tween = create_tween()
+	popup_tween.tween_property(rules_popup_instance, "scale", Vector2.ONE, 0.4)\
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 	rules_popup_instance.grab_focus()
 
-func on_settings_button_pressed():
-	show_toast_notification("Feature Coming Soon")
+func _on_settings_button_pressed() -> void:
 
-func show_toast_notification(message: String, duration: float = 2.0):
-	var toast_label = Label.new()
-	toast_label.text = message
-	toast_label.add_theme_font_size_override("font_size", 28)
-	toast_label.add_theme_color_override("font_color", Color.WHITE)
-	
-	var toast_style = StyleBoxFlat.new()
-	toast_style.bg_color = Color(0, 0, 0, 0.7)
-	toast_style.corner_radius_bottom_left = 10
-	toast_style.corner_radius_bottom_right = 10
-	toast_style.corner_radius_top_left = 10
-	toast_style.corner_radius_top_right = 10
-	toast_style.content_margin_left = 20
-	toast_style.content_margin_right = 20
-	toast_style.content_margin_top = 10
-	toast_style.content_margin_bottom = 10
-	toast_label.add_theme_stylebox_override("normal", toast_style)
-
-	toast_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	toast_label.position.y -= 150
-	toast_label.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
-	toast_label.set_v_size_flags(Control.SIZE_SHRINK_CENTER)
-	toast_label.modulate.a = 0.0
-
-	add_child(toast_label)
-
+	settings_button.pivot_offset = settings_button.size / 2.0
 	var tween = create_tween()
+	tween.tween_property(settings_button, "scale", Vector2(1.3, 1.3), 0.1)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(settings_button, "scale", Vector2.ONE, 0.3)\
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await tween.finished
+
+	var dim = ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var popup_instance = SETTINGS_POPUP_SCENE.instantiate()
+	var settings_popup_script = popup_instance as SettingsPopup
+	var root = get_tree().root
+	root.add_child(dim)
+	root.add_child(popup_instance)
+
+	popup_instance.z_index = 100
+	dim.z_index = 99
+	root.move_child(dim, root.get_child_count() - 2)
+
+	settings_popup_script.setup_popup(dim)
+
+	var volume_setting_hbox = HBoxContainer.new()
+	volume_setting_hbox.add_child(Label.new())
+	volume_setting_hbox.get_child(0).text = "Game Volume:"
+	volume_setting_hbox.get_child(0).set_h_size_flags(Control.SIZE_EXPAND_FILL)
+
+	var volume_slider = HSlider.new()
+	volume_slider.min_value = 0.0
+	volume_slider.max_value = 1.0
+	volume_slider.step = 0.05
 	
-	tween.tween_property(toast_label, "modulate:a", 1.0, 0.3)
-	tween.tween_interval(duration)
-	tween.tween_property(toast_label, "modulate:a", 0.0, 0.5)
-	tween.tween_callback(toast_label.queue_free)
+	var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
+	volume_slider.value = saved_volume
+
+	volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	volume_slider.value_changed.connect(func(value):
+		AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
+		print("Master Volume: ", value)
+		SettingsManager.set_setting(game_settings_category, "master_volume", value)
+	)
+	volume_setting_hbox.add_child(volume_slider)
+
+	settings_popup_script.add_custom_setting(volume_setting_hbox)
+	
+	var toggle_debug_checkbox = CheckBox.new()
+	toggle_debug_checkbox.text = "Show Debug Info"
+	
+	var saved_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
+	toggle_debug_checkbox.button_pressed = saved_debug_info
+
+	toggle_debug_checkbox.pressed.connect(func():
+		print("Debug Info Toggled: ", toggle_debug_checkbox.button_pressed)
+		SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
+	)
+	settings_popup_script.add_custom_setting(toggle_debug_checkbox)
+
+	var custom_settings_title = popup_instance.find_child("CustomSettingsTitleLabel", true)
+	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:
+		custom_settings_title.visible = true
+	else:
+		if custom_settings_title and custom_settings_title is Label:
+			custom_settings_title.visible = false
+
+	settings_popup_script.closed.connect(func():
+		print("Settings popup was closed for game: ", game_settings_category)
+		if is_instance_valid(player_avatar_display):
+			player_avatar_display.update_display_from_settings()
+	)
+	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
+
+	popup_instance.set_as_top_level(true)
+	popup_instance.visible = true
+	await get_tree().process_frame
+
+	var viewport_size = get_viewport_rect().size
+	var desired_width = viewport_size.x * 0.95
+	var desired_height = popup_instance.get_combined_minimum_size().y
+	
+	popup_instance.size = Vector2(desired_width, desired_height)
+	popup_instance.position = Vector2((viewport_size.x - desired_width) / 2, viewport_size.y)
+	
+	var bottom_offset = 50
+	var target_y_position = viewport_size.y - desired_height - bottom_offset
+	var target_position = Vector2((viewport_size.x - desired_width) / 2, target_y_position)
+
+	var popup_tween = create_tween()
+	popup_tween.tween_property(popup_instance, "position", target_position, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
+	popup_instance.grab_focus()
+	
+func _on_theme_changed(new_theme_name: String):
+	print("Game scene received theme change: ", new_theme_name)
+
+	pass
+	
+func _load_game_specific_settings():
+	var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))
+
+	var show_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
+
+	
+	print("Loaded game-specific settings for ", game_settings_category, ":")
+	print("  Master Volume: ", saved_volume)
+	print("  Show Debug Info: ", show_debug_info)

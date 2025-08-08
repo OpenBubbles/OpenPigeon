@@ -63,6 +63,7 @@ custom_minimum_size = Vector2(40, 40)
 layout_mode = 2
 size_flags_horizontal = 8
 size_flags_vertical = 4
+focus_mode = 0
 theme_override_styles/hover = SubResource("StyleBoxTexture_l8ihy")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_xt2m2")
 theme_override_styles/normal = SubResource("StyleBoxTexture_gj8jg")

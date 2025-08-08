@@ -1,11 +1,12 @@
-[gd_scene load_steps=18 format=3 uid="uid://cb10bquan8k3d"]
+[gd_scene load_steps=19 format=3 uid="uid://cb10bquan8k3d"]
 
 [ext_resource type="Script" uid="uid://b1m5dj5ejua6o" path="res://fill/fill.gd" id="1_cobdr"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://settings.png" id="2_jykyx"]
+[ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://avatar_textures/AvatarThumbnail.tscn" id="2_kqrkf"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://rules.png" id="3_cobdr"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kqrkf"]
-bg_color = Color(0, 0, 0, 1)
+bg_color = Color(0, 0, 0, 0)
 border_color = Color(0, 0, 0, 1)
 border_blend = true
 shadow_color = Color(0, 0, 0, 0.54902)
@@ -133,25 +134,62 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer"]
-custom_minimum_size = Vector2(0, 48)
-layout_mode = 2
-size_flags_vertical = 4
-alignment = 1
-
-[node name="ScoreMarginContainer" type="MarginContainer" parent="MainVBoxContainer/TopInfoHBoxContainer"]
+[node name="ScoreMarginContainer" type="MarginContainer" parent="MainVBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/margin_left = 40
 theme_override_constants/margin_top = 20
 theme_override_constants/margin_right = 40
 
-[node name="LeftPlayer" type="Control" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer"]
-custom_minimum_size = Vector2(48, 16)
+[node name="TopInfoHBoxContainer2" type="HBoxContainer" parent="MainVBoxContainer/ScoreMarginContainer"]
+layout_mode = 2
+size_flags_vertical = 4
+alignment = 1
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2"]
+layout_mode = 2
+
+[node name="YouLabel" type="Label" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 18
+text = "You"
+horizontal_alignment = 1
+
+[node name="PlayerAvatarDisplay" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer" instance=ExtResource("2_kqrkf")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+is_display_only = true
+
+[node name="VBoxContainer3" type="VBoxContainer" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Label" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3"]
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Separation3" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3/HBoxContainer"]
+custom_minimum_size = Vector2(8, 0)
+layout_mode = 2
+
+[node name="LeftPlayer" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3/HBoxContainer"]
+custom_minimum_size = Vector2(48, 32)
 layout_mode = 2
 size_flags_horizontal = 0
+size_flags_vertical = 4
 
-[node name="LeftBG" type="ColorRect" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer/LeftPlayer"]
+[node name="LeftBG" type="ColorRect" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3/HBoxContainer/LeftPlayer"]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -160,7 +198,8 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.65098, 1, 1, 1)
 
-[node name="LeftScore" type="Label" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer/LeftPlayer"]
+[node name="LeftScore" type="Label" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3/HBoxContainer/LeftPlayer"]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -168,19 +207,22 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 20
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Separation" type="Control" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer"]
+[node name="Separation" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3/HBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="RightPlayer" type="Control" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer"]
-custom_minimum_size = Vector2(48, 16)
+[node name="RightPlayer" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3/HBoxContainer"]
+custom_minimum_size = Vector2(48, 32)
 layout_mode = 2
 size_flags_horizontal = 8
+size_flags_vertical = 4
 
-[node name="RightBG" type="ColorRect" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer/RightPlayer"]
+[node name="RightBG" type="ColorRect" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3/HBoxContainer/RightPlayer"]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -189,7 +231,8 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(1, 0.584314, 1, 1)
 
-[node name="RightScore" type="Label" parent="MainVBoxContainer/TopInfoHBoxContainer/ScoreMarginContainer/RightPlayer"]
+[node name="RightScore" type="Label" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3/HBoxContainer/RightPlayer"]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -197,6 +240,41 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 20
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Separation2" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3/HBoxContainer"]
+custom_minimum_size = Vector2(8, 0)
+layout_mode = 2
+
+[node name="Separation" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VBoxContainer2" type="VBoxContainer" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2"]
+layout_mode = 2
+
+[node name="Label" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer2"]
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
+
+[node name="OppAvatarDisplay" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer2" instance=ExtResource("2_kqrkf")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 1
+size_flags_vertical = 4
+is_display_only = true
+controlled_by_data = true
+
+[node name="SpecLabel" type="Label" parent="MainVBoxContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 50
+text = "Spectating..."
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -215,6 +293,7 @@ size_flags_vertical = 4
 theme_override_styles/panel = SubResource("StyleBoxFlat_kqrkf")
 
 [node name="GridContainer" type="GridContainer" parent="MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer/BorderPanelContainer"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -245,6 +324,7 @@ visible = false
 layout_mode = 2
 
 [node name="WinLossLabel" type="Label" parent="MainVBoxContainer/GameAreaCenterContainer"]
+unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_font_sizes/font_size = 25
@@ -253,6 +333,7 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="SentLabel" type="Label" parent="MainVBoxContainer/GameAreaCenterContainer"]
+unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_font_sizes/font_size = 25
@@ -262,7 +343,7 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="ColorSelectorContainer" type="HBoxContainer" parent="MainVBoxContainer"]
-custom_minimum_size = Vector2(0, 100)
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 4
 theme_override_constants/separation = 8
@@ -283,26 +364,31 @@ theme_override_constants/margin_right = 40
 theme_override_constants/margin_bottom = 30
 
 [node name="RulesButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_horizontal = 0
 size_flags_vertical = 8
+focus_mode = 0
 theme_override_font_sizes/font_size = 32
 theme_override_styles/hover = SubResource("StyleBoxTexture_q50tp")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_bwi04")
 theme_override_styles/normal = SubResource("StyleBoxTexture_ad4vd")
 
 [node name="SettingsButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_horizontal = 10
 size_flags_vertical = 8
+focus_mode = 0
 theme_override_font_sizes/font_size = 32
 theme_override_styles/hover = SubResource("StyleBoxTexture_cobdr")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_kqrkf")
 theme_override_styles/normal = SubResource("StyleBoxTexture_fprbq")
 
 [node name="WaitBlur" type="ColorRect" parent="."]
+unique_name_in_owner = true
 visible = false
 layout_mode = 1
 anchors_preset = 15
@@ -323,6 +409,7 @@ mouse_filter = 2
 theme_override_constants/margin_bottom = 185
 
 [node name="WaitForOpponentLabel" type="Label" parent="WaitingContainer"]
+unique_name_in_owner = true
 visible = false
 layout_mode = 2
 size_flags_horizontal = 4
@@ -333,4 +420,5 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="DotTimer" type="Timer" parent="."]
+unique_name_in_owner = true
 wait_time = 0.75

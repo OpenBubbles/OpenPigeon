@@ -1,13 +1,21 @@
-[gd_scene load_steps=4 format=3 uid="uid://hknsjsntnvnb"]
+[gd_scene load_steps=3 format=3 uid="uid://hknsjsntnvnb"]
 
-[ext_resource type="Shader" uid="uid://s0sdc0s3rt0r" path="res://avatar_textures/AvatarThumbnail.gdshader" id="1_faxjs"]
 [ext_resource type="Script" uid="uid://cioutleovop7t" path="res://avatar_textures/avatar_thumbnail.gd" id="1_fqlcb"]
-
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_faxjs"]
-shader = ExtResource("1_faxjs")
-shader_parameter/corner_radius = 32.0
+[ext_resource type="Texture2D" uid="uid://bdrmqf2xjgbe1" path="res://avatar_textures/pill_mask.png" id="2_faxjs"]
 
 [node name="AvatarThumbnail" type="TextureButton"]
+custom_minimum_size = Vector2(96, 64)
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -372.0
+offset_top = -608.0
+offset_right = -276.0
+offset_bottom = -544.0
+grow_horizontal = 2
+grow_vertical = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 mouse_filter = 1
@@ -15,17 +23,10 @@ script = ExtResource("1_fqlcb")
 
 [node name="SubViewportContainer" type="SubViewportContainer" parent="."]
 unique_name_in_owner = true
-material = SubResource("ShaderMaterial_faxjs")
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -32.0
-offset_top = -32.0
-offset_right = 32.0
-offset_bottom = 32.0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -33,26 +34,27 @@ grow_vertical = 2
 unique_name_in_owner = true
 transparent_bg = true
 handle_input_locally = false
-size = Vector2i(64, 64)
+size = Vector2i(96, 64)
 render_target_update_mode = 4
 
-[node name="ColorRect" type="ColorRect" parent="SubViewportContainer/SubViewport"]
+[node name="PillMask" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
+clip_children = 2
+position = Vector2(0, 4)
+texture = ExtResource("2_faxjs")
+centered = false
+
+[node name="ColorRect" type="ColorRect" parent="SubViewportContainer/SubViewport/PillMask"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(64, 64)
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -32.0
-offset_top = -32.0
-offset_right = 32.0
-offset_bottom = 32.0
+custom_minimum_size = Vector2(96, 60)
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+color = Color(1, 0.784314, 1, 1)
 
-[node name="AvatarBackground" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
+[node name="AvatarBackground" type="Sprite2D" parent="SubViewportContainer/SubViewport/PillMask"]
 unique_name_in_owner = true
 
 [node name="AvatarBaseBody" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
