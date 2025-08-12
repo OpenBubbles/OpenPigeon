@@ -5,6 +5,9 @@ signal closed
 signal settings_theme_selected(new_theme_name: String)
 
 const AvatarThumbnailScene = preload("res://avatar_textures/AvatarThumbnail.tscn")
+const MOON_TEX: Texture2D = preload("res://avatar_textures/moon.svg")
+const SUN_TEX: Texture2D  = preload("res://avatar_textures/sun.svg")
+
 
 @onready var settings_label = %SettingsLabel as Label
 @onready var theme_option_button = %ThemeOptionButton as OptionButton
@@ -12,6 +15,7 @@ const AvatarThumbnailScene = preload("res://avatar_textures/AvatarThumbnail.tscn
 @onready var avatar_tab_container = %AvatarTabContainer as TabBar
 @onready var properties_box = %PropertiesBox as VBoxContainer
 @onready var custom_settings_container = %CustomSettingsContainer as VBoxContainer
+@onready var global_settings_container = %GlobalSettingsContainer as VBoxContainer
 
 var dim_rect: ColorRect
 var main_avatar_preview: Node
@@ -22,6 +26,7 @@ func _ready():
 	print("SettingsPopup: _ready() called.")
 	self.custom_minimum_size.x = 400
 	_setup_theme_button()
+	_add_dark_mode_toggle()
 	_setup_avatar_customizer()
 
 func close_popup():
@@ -289,6 +294,208 @@ func setup_popup(dimmer: ColorRect):
 	dim_rect = dimmer
 	if is_instance_valid(dim_rect):
 		dim_rect.gui_input.connect(_on_dim_rect_gui_input)
+		
+func _add_dark_mode_toggle():
+	# card
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color(1, 1, 1, 0.1)
+	card_style.border_width_left = 1; card_style.border_width_top = 1; card_style.border_width_right = 1; card_style.border_width_bottom = 1
+	card_style.border_color = Color(1, 1, 1, 0.2)
+	card_style.corner_radius_top_left = 5; card_style.corner_radius_top_right = 5
+	card_style.corner_radius_bottom_left = 5; card_style.corner_radius_bottom_right = 5
+	card_style.set_content_margin_all(8)
+	card.add_theme_stylebox_override("panel", card_style)
+
+	# Row for centering toggle
+	var row := CenterContainer.new()  # <-- changed from HBoxContainer
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.custom_minimum_size = Vector2(0, 40)
+
+	var switch_btn := _make_switch_button()
+	row.add_child(switch_btn)
+
+	card.add_child(row)
+
+	if is_instance_valid(global_settings_container):
+		global_settings_container.add_child(card)
+	else:
+		printerr("SettingsPopup: GlobalSettingsContainer not found; cannot add dark mode toggle.")
+
+	var saved_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
+	switch_btn.set_pressed_no_signal(saved_dark)
+	_update_switch_visual(switch_btn, saved_dark, true)
+	_sync_theme_dropdown_from_dark(saved_dark)
+
+	switch_btn.toggled.connect(func(pressed: bool):
+		SettingsManager.set_setting("global", "dark_mode", pressed)
+		_update_switch_visual(switch_btn, pressed, false)
+		_sync_theme_dropdown_from_dark(pressed)
+	)
+	
+func _make_switch_button() -> Button:
+	var btn := Button.new()
+	btn.toggle_mode = true
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.custom_minimum_size = Vector2(72, 36)	# larger track
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	btn.clip_contents = false
+
+	# Track
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(0.75, 0.75, 0.78, 1.0)
+	track.corner_radius_top_left = 18
+	track.corner_radius_top_right = 18
+	track.corner_radius_bottom_left = 18
+	track.corner_radius_bottom_right = 18
+	track.content_margin_left = 2; track.content_margin_right = 2
+	track.content_margin_top = 2; track.content_margin_bottom = 2
+	btn.add_theme_stylebox_override("normal", track)
+	btn.add_theme_stylebox_override("hover", track)
+	btn.add_theme_stylebox_override("pressed", track)
+	btn.add_theme_stylebox_override("focus", track)
+	btn.add_theme_stylebox_override("disabled", track)
+
+	# Knob wrapper (fully transparent)
+	var knob_wrap := PanelContainer.new()
+	knob_wrap.name = "KnobWrap"
+	knob_wrap.size = Vector2(32, 32)	# larger knob
+	knob_wrap.position = Vector2(2, 2)	# X gets animated; Y is centered in _layout
+	knob_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	knob_wrap.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	btn.add_child(knob_wrap)
+
+	# Circular knob (always BLACK)
+	var knob := PanelContainer.new()
+	knob.name = "Knob"
+	knob.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	knob.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var kbox := StyleBoxFlat.new()
+	kbox.bg_color = Color(0, 0, 0, 1)	# <- black
+	kbox.corner_radius_top_left = 16
+	kbox.corner_radius_top_right = 16
+	kbox.corner_radius_bottom_left = 16
+	kbox.corner_radius_bottom_right = 16
+	kbox.anti_aliasing = true
+	knob.add_theme_stylebox_override("panel", kbox)
+	knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	knob_wrap.add_child(knob)
+
+	# Icons INSIDE track, above knob, ignoring input
+	var moon := TextureRect.new()
+	moon.name = "MoonIn"
+	moon.texture = MOON_TEX
+	moon.ignore_texture_size = true
+	moon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	moon.z_index = 2
+	btn.add_child(moon)
+
+	var sun := TextureRect.new()
+	sun.name = "SunIn"
+	sun.texture = SUN_TEX
+	sun.ignore_texture_size = true
+	sun.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sun.z_index = 2
+	btn.add_child(sun)
+
+	# Layout now + whenever the button resizes
+	_layout_switch_children(btn)
+	btn.resized.connect(_layout_switch_children.bind(btn))
+
+	return btn
+	
+func _layout_switch_children(btn: Button) -> void:
+	var icon_size := 20.0
+	var pad := 8.0
+
+	var moon := btn.get_node_or_null("MoonIn") as TextureRect
+	var sun := btn.get_node_or_null("SunIn") as TextureRect
+	var knob_wrap := btn.get_node_or_null("KnobWrap") as PanelContainer
+
+	if is_instance_valid(moon):
+		moon.custom_minimum_size = Vector2(icon_size, icon_size)
+		moon.size = moon.custom_minimum_size
+		moon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		moon.position = Vector2(pad, (btn.size.y - icon_size) / 2.0)
+
+	if is_instance_valid(sun):
+		sun.custom_minimum_size = Vector2(icon_size, icon_size)
+		sun.size = sun.custom_minimum_size
+		sun.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		sun.position = Vector2(btn.size.x - icon_size - pad, (btn.size.y - icon_size) / 2.0)
+
+	if is_instance_valid(knob_wrap):
+		knob_wrap.position.y = (btn.size.y - knob_wrap.size.y) / 2.0
+
+func _update_switch_visual(btn: Button, on: bool, instant: bool):
+	# Track color (lighter when ON, darker when OFF)
+	var base := btn.get_theme_stylebox("normal", "Button") as StyleBoxFlat
+	if base:
+		var tdup := base.duplicate() as StyleBoxFlat
+		tdup.bg_color = Color(0.85, 0.85, 0.85, 1.0) if on else Color(0.4, 0.4, 0.4, 1.0)
+		btn.add_theme_stylebox_override("normal", tdup)
+		btn.add_theme_stylebox_override("hover", tdup)
+		btn.add_theme_stylebox_override("pressed", tdup)
+
+	var knob_wrap := btn.get_node_or_null("KnobWrap") as PanelContainer
+	var knob := knob_wrap.get_node_or_null("Knob") if is_instance_valid(knob_wrap) else null
+	var moon := btn.get_node_or_null("MoonIn") as TextureRect
+	var sun := btn.get_node_or_null("SunIn") as TextureRect
+	if not is_instance_valid(knob_wrap) or not is_instance_valid(knob):
+		return
+
+	# Ensure icons draw over knob
+	if is_instance_valid(moon): moon.move_to_front()
+	if is_instance_valid(sun): sun.move_to_front()
+
+	# Positions
+	var left_x := 2.0
+	var right_x := btn.size.x - knob_wrap.size.x - 2.0
+	var target_x := right_x if on else left_x
+
+	# Colors:
+	# ON  -> knob WHITE, icons BLACK
+	# OFF -> knob BLACK, icons WHITE
+	var knob_color := Color(1, 1, 1) if on else Color(0, 0, 0)
+	var icon_color := Color(0, 0, 0) if on else Color(1, 1, 1)
+
+	# Apply knob color
+	var kbox := knob.get_theme_stylebox("panel") as StyleBoxFlat
+	if kbox:
+		kbox = kbox.duplicate() as StyleBoxFlat
+		kbox.bg_color = knob_color
+		knob.add_theme_stylebox_override("panel", kbox)
+
+	if instant:
+		knob_wrap.position.x = target_x
+		if is_instance_valid(moon): moon.modulate = icon_color
+		if is_instance_valid(sun):  sun.modulate  = icon_color
+	else:
+		var tw := create_tween().set_parallel(true)
+		tw.tween_property(knob_wrap, "position:x", target_x, 0.2)\
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		if is_instance_valid(moon):
+			tw.tween_property(moon, "modulate", icon_color, 0.15)
+		if is_instance_valid(sun):
+			tw.tween_property(sun, "modulate", icon_color, 0.15)
+
+func _sync_theme_dropdown_from_dark(dark_on: bool):
+	# Map your toggle to existing theme names
+	# Adjust these if you want Penguin to mirror too.
+	var desired := "Default (Dark)" if dark_on else "Default"
+
+	# update dropdown selection
+	if is_instance_valid(theme_option_button):
+		for i in range(theme_option_button.item_count):
+			if theme_option_button.get_item_text(i) == desired:
+				theme_option_button.select(i)
+				break
+
+	# persist + notify
+	SettingsManager.set_setting("global", "theme", desired)
+	settings_theme_selected.emit(desired)
+
 
 func _on_dim_rect_gui_input(event: InputEvent):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:

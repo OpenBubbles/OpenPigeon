@@ -36,6 +36,7 @@ const COLOR_MAP = {
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 const RULES_POPUP_SCENE = preload("res://reversi/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://settings_popup.tscn")
+const AvatarWinAnimScene := preload("res://avatar_textures/avatar_win_anim.tscn")
 
 var board: Array = []
 var color_board: Array = []
@@ -86,7 +87,7 @@ func _ready():
 			appPlugin.onReady()
 			print("AppPlugin Connected")
 	else:
-		call_deferred("_set_game_data", '{ "isYourTurn": true, "player": "2", "seed": "1796765200", "replay": "board:4,5,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,3,3,3,3,3,4,3,3,3,3,3,3,3,4,3,3,3,3,3,3,3|move:5|board:5,5,3,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,3,5,5,5,5,3,3,3,3,3,5,3,3,3,3,3,3,3,5,3,3,3,3,3,3,3", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player2": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player1": "f7898779-d537-4b0f-8c51-d604e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
+		call_deferred("_set_game_data", '{ "isYourTurn": true, "player": "2", "seed": "1796765200", "replay": "board:4,5,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,3,3,3,3,3,4,3,3,3,3,3,3,3,4,3,3,3,3,3,3,3|move:5|board:5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,3,5,5,5,5,3,3,3,3,3,5,3,3,3,3,3,3,3,5,3,3,3,3,3,3,3", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player2": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player1": "f7898779-d537-4b0f-8c51-d604e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
 		#call_deferred("_set_game_data", '{ "isYourTurn": true, "player": "2", "seed": "1796765200", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player2": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
 		
 	if rules_button:
@@ -764,14 +765,25 @@ func check_win() -> bool:
 		print("-> Evaluating final scores. My score: %d, Opponent's score: %d" % [my_count, op_count])
 		if my_count > op_count:
 			print("-> FINAL TALLY: YOU WIN!")
-			win_loss_label.text = "YOU WIN!"
+			_show_win_burst(player_avatar_display)
+			if not spectator_mode:
+				win_loss_label.text = "YOU WIN!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			else:
+				win_loss_label.text = "Player 1 Wins!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 			win_loss_state = "1"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 		elif op_count > my_count:
 			print("-> FINAL TALLY: YOU LOSE")
+			_show_win_burst(opp_avatar_display)
 			win_loss_label.text = "YOU LOSE"
+			if not spectator_mode:
+				win_loss_label.text = "YOU LOSE"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+			else:
+				win_loss_label.text = "Player 2 Wins!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 			win_loss_state = "-1"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
 		else:
 			print("-> FINAL TALLY: TIE!")
 			win_loss_label.text = "DRAW!"
@@ -789,6 +801,70 @@ func check_win() -> bool:
 		print("-> Game was already marked as over. No new result displayed.")
 
 	return true
+	
+func _show_win_burst(avatar: Control) -> void:
+	var wrapper: Control = _ensure_avatar_wrapper(avatar)
+	if not is_instance_valid(wrapper):
+		return
+
+	var existing: Node = wrapper.get_node_or_null("AvatarWinAnim")
+	if existing != null:
+		return
+
+	var anim_instance: Control = AvatarWinAnimScene.instantiate() as Control
+	anim_instance.name = "AvatarWinAnim"
+	wrapper.add_child(anim_instance)
+
+	var avatar_idx: int = avatar.get_index()
+	wrapper.move_child(anim_instance, avatar_idx)
+
+	anim_instance.z_as_relative = false
+	avatar.z_as_relative = false
+	anim_instance.z_index = 0
+	avatar.z_index = max(avatar.z_index, 1)
+
+	anim_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
+	anim_instance.offset_left = -52.0
+	anim_instance.offset_right = 52.0
+	anim_instance.offset_top = -43.0
+	anim_instance.offset_bottom = 43.0
+
+	(anim_instance as Node).call("set_color", Color(1.0, 0.84, 0.0))
+	(anim_instance as Node).call("set_rays", 10)
+	(anim_instance as Node).call("set_brightness", 1.2)
+	(anim_instance as Node).call("play", 0.15)
+
+func _ensure_avatar_wrapper(avatar: Control) -> Control:
+	var parent: Node = avatar.get_parent()
+	if parent == null:
+		return null
+
+	if parent is Control and not (parent is Container):
+		return parent as Control
+
+	var wrapper: Control = Control.new()
+	wrapper.name = "%s_Wrap" % avatar.name
+	wrapper.size_flags_horizontal = avatar.size_flags_horizontal
+	wrapper.size_flags_vertical = avatar.size_flags_vertical
+	wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
+
+	var idx: int = avatar.get_index()
+	parent.add_child(wrapper)
+	parent.move_child(wrapper, idx)
+
+	avatar.reparent(wrapper)
+	avatar.set_anchors_preset(Control.PRESET_FULL_RECT)
+	avatar.offset_left = 0.0
+	avatar.offset_top = 0.0
+	avatar.offset_right = 0.0
+	avatar.offset_bottom = 0.0
+
+	avatar.item_rect_changed.connect(func():
+		if is_instance_valid(wrapper):
+			wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
+	)
+
+	return wrapper
 	
 func get_unique_colors_on_board() -> Array:
 	var unique_colors = []
