@@ -3,6 +3,7 @@ extends Control
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var grid = %GridContainer
+@onready var background = %Background
 @onready var color_selector: HBoxContainer = %ColorSelectorContainer
 @onready var left_bg: ColorRect = %LeftBG
 @onready var right_bg: ColorRect = %RightBG
@@ -68,12 +69,14 @@ var sent_tween: Tween
 var dot_count = 0
 
 func _ready():
+	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
+	_apply_bg_for_dark(is_dark)
+	
 	randomize()
 	print("Scene ready!")
 	setup_color_selector()
 	init_color_selector_collapsed()
 	setup_board_structure()
-	
 
 	if is_instance_valid(dot_timer):
 		dot_timer.connect("timeout", _on_dot_timer_timeout)
@@ -95,6 +98,9 @@ func _ready():
 	if settings_button:
 		settings_button.pressed.connect(_on_settings_button_pressed)
 		
+func _apply_bg_for_dark(is_dark: bool) -> void:
+	if is_instance_valid(background):
+		background.color = Color(0.08, 0.08, 0.08) if is_dark else Color("#e5e5e5")
 
 func generate_gamepigeon_board(seed_val: int) -> Array:
 	var result := []
@@ -830,9 +836,7 @@ func _show_win_burst(avatar: Control) -> void:
 	anim_instance.offset_bottom = 43.0
 
 	(anim_instance as Node).call("set_color", Color(1.0, 0.84, 0.0))
-	(anim_instance as Node).call("set_rays", 10)
-	(anim_instance as Node).call("set_brightness", 1.2)
-	(anim_instance as Node).call("play", 0.15)
+	(anim_instance as Node).call("play", 0.05)
 
 func _ensure_avatar_wrapper(avatar: Control) -> Control:
 	var parent: Node = avatar.get_parent()
@@ -1067,6 +1071,7 @@ func _on_settings_button_pressed() -> void:
 			player_avatar_display.update_display_from_settings()
 	)
 	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
+	settings_popup_script.dark_mode_changed.connect(_apply_bg_for_dark)
 
 	popup_instance.set_as_top_level(true)
 	popup_instance.visible = true

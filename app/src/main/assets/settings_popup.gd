@@ -3,6 +3,11 @@ class_name SettingsPopup
 
 signal closed
 signal settings_theme_selected(new_theme_name: String)
+signal dark_mode_changed(is_dark: bool)
+
+var dark_mode_enabled: bool = false              # canonical state you can read
+var dark_mode_auto_apply_theme: bool = true      # set false to NOT sync theme automatically
+var dark_mode_button: Button = null
 
 const AvatarThumbnailScene = preload("res://avatar_textures/AvatarThumbnail.tscn")
 const MOON_TEX: Texture2D = preload("res://avatar_textures/moon.svg")
@@ -28,6 +33,9 @@ func _ready():
 	_setup_theme_button()
 	_add_dark_mode_toggle()
 	_setup_avatar_customizer()
+	
+	var saved_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
+	set_dark_mode(saved_dark, dark_mode_auto_apply_theme, true)
 
 func close_popup():
 	SettingsManager.avatar_changed.emit()
@@ -295,8 +303,42 @@ func setup_popup(dimmer: ColorRect):
 	if is_instance_valid(dim_rect):
 		dim_rect.gui_input.connect(_on_dim_rect_gui_input)
 		
+func set_dark_mode(enabled: bool, apply_theme: bool = true, instant: bool = false) -> void:
+	if dark_mode_enabled == enabled:
+		_apply_dark_mode_visuals(enabled, instant)
+		return
+	dark_mode_enabled = enabled
+	SettingsManager.set_setting("global", "dark_mode", enabled)
+	_apply_dark_mode_visuals(enabled, instant)
+	if apply_theme:
+		_sync_theme_dropdown_from_dark(enabled)
+	emit_signal("dark_mode_changed", enabled)
+
+func get_dark_mode() -> bool:
+	return dark_mode_enabled
+
+func get_dark_palette() -> Dictionary:
+	if dark_mode_enabled:
+		return {
+			"bg": Color(0.12,0.12,0.12),
+			"fg": Color(0.92,0.92,0.92),
+			"muted": Color(0.65,0.65,0.65),
+			"accent": Color(0.85,0.85,0.85)
+		}
+	else:
+		return {
+			"bg": Color(0.95,0.95,0.95),
+			"fg": Color(0.10,0.10,0.10),
+			"muted": Color(0.40,0.40,0.40),
+			"accent": Color(0.40,0.40,0.40)
+		}
+
+func _apply_dark_mode_visuals(enabled: bool, instant: bool) -> void:
+	if dark_mode_button == null: return
+	dark_mode_button.set_pressed_no_signal(enabled)
+	_update_switch_visual(dark_mode_button, enabled, instant)
+		
 func _add_dark_mode_toggle():
-	# card
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var card_style := StyleBoxFlat.new()
@@ -308,14 +350,12 @@ func _add_dark_mode_toggle():
 	card_style.set_content_margin_all(8)
 	card.add_theme_stylebox_override("panel", card_style)
 
-	# Row for centering toggle
-	var row := CenterContainer.new()  # <-- changed from HBoxContainer
+	var row := CenterContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.custom_minimum_size = Vector2(0, 40)
 
-	var switch_btn := _make_switch_button()
-	row.add_child(switch_btn)
-
+	dark_mode_button = _make_switch_button()
+	row.add_child(dark_mode_button)
 	card.add_child(row)
 
 	if is_instance_valid(global_settings_container):
@@ -323,26 +363,18 @@ func _add_dark_mode_toggle():
 	else:
 		printerr("SettingsPopup: GlobalSettingsContainer not found; cannot add dark mode toggle.")
 
-	var saved_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
-	switch_btn.set_pressed_no_signal(saved_dark)
-	_update_switch_visual(switch_btn, saved_dark, true)
-	_sync_theme_dropdown_from_dark(saved_dark)
-
-	switch_btn.toggled.connect(func(pressed: bool):
-		SettingsManager.set_setting("global", "dark_mode", pressed)
-		_update_switch_visual(switch_btn, pressed, false)
-		_sync_theme_dropdown_from_dark(pressed)
+	dark_mode_button.toggled.connect(func(pressed: bool):
+		set_dark_mode(pressed, dark_mode_auto_apply_theme, false)
 	)
 	
 func _make_switch_button() -> Button:
 	var btn := Button.new()
 	btn.toggle_mode = true
 	btn.focus_mode = Control.FOCUS_NONE
-	btn.custom_minimum_size = Vector2(72, 36)	# larger track
+	btn.custom_minimum_size = Vector2(72, 36)
 	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	btn.clip_contents = false
 
-	# Track
 	var track := StyleBoxFlat.new()
 	track.bg_color = Color(0.75, 0.75, 0.78, 1.0)
 	track.corner_radius_top_left = 18
@@ -357,22 +389,20 @@ func _make_switch_button() -> Button:
 	btn.add_theme_stylebox_override("focus", track)
 	btn.add_theme_stylebox_override("disabled", track)
 
-	# Knob wrapper (fully transparent)
 	var knob_wrap := PanelContainer.new()
 	knob_wrap.name = "KnobWrap"
-	knob_wrap.size = Vector2(32, 32)	# larger knob
-	knob_wrap.position = Vector2(2, 2)	# X gets animated; Y is centered in _layout
+	knob_wrap.size = Vector2(32, 32)
+	knob_wrap.position = Vector2(2, 2)
 	knob_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	knob_wrap.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	btn.add_child(knob_wrap)
 
-	# Circular knob (always BLACK)
 	var knob := PanelContainer.new()
 	knob.name = "Knob"
 	knob.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	knob.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var kbox := StyleBoxFlat.new()
-	kbox.bg_color = Color(0, 0, 0, 1)	# <- black
+	kbox.bg_color = Color(0, 0, 0, 1)
 	kbox.corner_radius_top_left = 16
 	kbox.corner_radius_top_right = 16
 	kbox.corner_radius_bottom_left = 16
@@ -382,7 +412,6 @@ func _make_switch_button() -> Button:
 	knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	knob_wrap.add_child(knob)
 
-	# Icons INSIDE track, above knob, ignoring input
 	var moon := TextureRect.new()
 	moon.name = "MoonIn"
 	moon.texture = MOON_TEX
@@ -399,7 +428,6 @@ func _make_switch_button() -> Button:
 	sun.z_index = 2
 	btn.add_child(sun)
 
-	# Layout now + whenever the button resizes
 	_layout_switch_children(btn)
 	btn.resized.connect(_layout_switch_children.bind(btn))
 
@@ -417,23 +445,22 @@ func _layout_switch_children(btn: Button) -> void:
 		moon.custom_minimum_size = Vector2(icon_size, icon_size)
 		moon.size = moon.custom_minimum_size
 		moon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		moon.position = Vector2(pad, (btn.size.y - icon_size) / 2.0)
+		moon.position = Vector2(btn.size.x - icon_size - pad, (btn.size.y - icon_size) / 2.0)
 
 	if is_instance_valid(sun):
 		sun.custom_minimum_size = Vector2(icon_size, icon_size)
 		sun.size = sun.custom_minimum_size
 		sun.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		sun.position = Vector2(btn.size.x - icon_size - pad, (btn.size.y - icon_size) / 2.0)
+		sun.position = Vector2(pad, (btn.size.y - icon_size) / 2.0)
 
 	if is_instance_valid(knob_wrap):
 		knob_wrap.position.y = (btn.size.y - knob_wrap.size.y) / 2.0
 
 func _update_switch_visual(btn: Button, on: bool, instant: bool):
-	# Track color (lighter when ON, darker when OFF)
 	var base := btn.get_theme_stylebox("normal", "Button") as StyleBoxFlat
 	if base:
 		var tdup := base.duplicate() as StyleBoxFlat
-		tdup.bg_color = Color(0.85, 0.85, 0.85, 1.0) if on else Color(0.4, 0.4, 0.4, 1.0)
+		tdup.bg_color = Color(0.4, 0.4, 0.4, 1.0) if on else Color(0.85, 0.85, 0.85, 1.0)
 		btn.add_theme_stylebox_override("normal", tdup)
 		btn.add_theme_stylebox_override("hover", tdup)
 		btn.add_theme_stylebox_override("pressed", tdup)
@@ -445,22 +472,16 @@ func _update_switch_visual(btn: Button, on: bool, instant: bool):
 	if not is_instance_valid(knob_wrap) or not is_instance_valid(knob):
 		return
 
-	# Ensure icons draw over knob
 	if is_instance_valid(moon): moon.move_to_front()
 	if is_instance_valid(sun): sun.move_to_front()
 
-	# Positions
 	var left_x := 2.0
 	var right_x := btn.size.x - knob_wrap.size.x - 2.0
 	var target_x := right_x if on else left_x
 
-	# Colors:
-	# ON  -> knob WHITE, icons BLACK
-	# OFF -> knob BLACK, icons WHITE
-	var knob_color := Color(1, 1, 1) if on else Color(0, 0, 0)
-	var icon_color := Color(0, 0, 0) if on else Color(1, 1, 1)
+	var knob_color := Color(0, 0, 0) if on else Color(1, 1, 1)
+	var icon_color := Color(1, 1, 1) if on else Color(0, 0, 0)
 
-	# Apply knob color
 	var kbox := knob.get_theme_stylebox("panel") as StyleBoxFlat
 	if kbox:
 		kbox = kbox.duplicate() as StyleBoxFlat
@@ -481,18 +502,14 @@ func _update_switch_visual(btn: Button, on: bool, instant: bool):
 			tw.tween_property(sun, "modulate", icon_color, 0.15)
 
 func _sync_theme_dropdown_from_dark(dark_on: bool):
-	# Map your toggle to existing theme names
-	# Adjust these if you want Penguin to mirror too.
 	var desired := "Default (Dark)" if dark_on else "Default"
 
-	# update dropdown selection
 	if is_instance_valid(theme_option_button):
 		for i in range(theme_option_button.item_count):
 			if theme_option_button.get_item_text(i) == desired:
 				theme_option_button.select(i)
 				break
 
-	# persist + notify
 	SettingsManager.set_setting("global", "theme", desired)
 	settings_theme_selected.emit(desired)
 

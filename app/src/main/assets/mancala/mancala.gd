@@ -134,7 +134,21 @@ func _ready() -> void:
 	add_child(_carrying_stones_container)
 	_carrying_stones_container.z_index = 90
 	
+func _apply_bg_for_dark(is_dark: bool, mode: String) -> void:
+	if is_instance_valid(background):
+		if is_dark:
+			if mode == "an" or mode == "ah":
+				background.color = Color("#261a19")
+			else:
+				background.color = Color("#202526")
+		else:
+			if mode == "an" or mode == "ah":
+				background.color = Color("#704b4a")
+			else:
+				background.color = Color("#6d7c82")
+
 func _set_game_data(raw_text: String) -> void:
+	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
 	var res = JSON.parse_string(raw_text)
 	print("[PARSE] Raw game data received:", res)
 
@@ -177,10 +191,7 @@ func _set_game_data(raw_text: String) -> void:
 
 	print("YOUR TURN?: ", is_your_turn, " MY TURN?: ", is_my_turn, " Spectator Mode: ", spectator_mode)
 	
-	if mode == "an" or mode == "ah":
-		background.color = Color("#704b4a")
-	else:
-		background.color = Color("#6d7c82")
+	_apply_bg_for_dark(is_dark, mode)
 
 	var replay_str: String = String(res.get("replay", ""))
 	_apply_board_layout(is_my_turn)
@@ -1058,9 +1069,7 @@ func _show_win_burst(avatar: Control) -> void:
 	anim_instance.offset_bottom = 43.0
 
 	(anim_instance as Node).call("set_color", Color(1.0, 0.84, 0.0))
-	(anim_instance as Node).call("set_rays", 10)
-	(anim_instance as Node).call("set_brightness", 1.2)
-	(anim_instance as Node).call("play", 0.15)
+	(anim_instance as Node).call("play", 0.05)
 
 func _ensure_avatar_wrapper(avatar: Control) -> Control:
 	var parent: Node = avatar.get_parent()
@@ -1343,6 +1352,7 @@ func _on_settings_button_pressed() -> void:
 			player_avatar_display.update_display_from_settings()
 	)
 	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
+	settings_popup_script.dark_mode_changed.connect(_apply_bg_for_dark)
 
 	popup_instance.set_as_top_level(true)
 	popup_instance.visible = true

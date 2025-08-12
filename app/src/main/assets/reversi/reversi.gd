@@ -7,6 +7,7 @@ extends Control
 @onready var grid = %GridContainer
 @onready var send_button = %SendButton
 @onready var sent_label = %SentLabel
+@onready var background = %Background
 @onready var waiting_label = %WaitForOpponentLabel
 @onready var waiting_blur = %WaitBlur
 @onready var win_loss_label = %WinLossLabel
@@ -65,6 +66,8 @@ const STAR_POINT_SCENE = preload("res://reversi/StarPoint.tscn")
 const AvatarWinAnimScene := preload("res://avatar_textures/avatar_win_anim.tscn")
 
 func _ready():
+	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
+	_apply_bg_for_dark(is_dark)
 	post_board_data.resize(64)
 	post_board_data.fill(0)
 
@@ -96,6 +99,10 @@ func _ready():
 		rules_button.pressed.connect(on_rules_button_pressed)
 	if settings_button:
 		settings_button.pressed.connect(_on_settings_button_pressed)
+		
+func _apply_bg_for_dark(is_dark: bool) -> void:
+	if is_instance_valid(background):
+		background.color = Color(0.08, 0.08, 0.08) if is_dark else Color("#e5e5e5")
 
 func setup_board_structure():
 	if not grid:
@@ -647,9 +654,7 @@ func _show_win_burst(avatar: Control) -> void:
 	anim_instance.offset_bottom = 43.0
 
 	(anim_instance as Node).call("set_color", Color(1.0, 0.84, 0.0))
-	(anim_instance as Node).call("set_rays", 10)
-	(anim_instance as Node).call("set_brightness", 1.2)
-	(anim_instance as Node).call("play", 0.15)
+	(anim_instance as Node).call("play", 0.05)
 
 func _ensure_avatar_wrapper(avatar: Control) -> Control:
 	var parent: Node = avatar.get_parent()
@@ -1263,6 +1268,7 @@ func _on_settings_button_pressed() -> void:
 			player_avatar_display.update_display_from_settings()
 	)
 	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
+	settings_popup_script.dark_mode_changed.connect(_apply_bg_for_dark)
 
 	popup_instance.set_as_top_level(true)
 	popup_instance.visible = true

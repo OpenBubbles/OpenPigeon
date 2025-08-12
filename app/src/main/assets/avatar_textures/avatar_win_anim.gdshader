@@ -2,15 +2,15 @@ shader_type canvas_item;
 render_mode unshaded, blend_add;
 
 uniform vec4	ray_color : source_color = vec4(1.0, 0.84, 0.0, 0.9);
-uniform float	rays : hint_range(4.0, 64.0) = 5.0;
-uniform float	ray_width : hint_range(0.0, 1.0) = 1.5;	// controls gap size
-uniform float	ray_softness : hint_range(0.0, 0.5) = 0.55;
+uniform float	rays : hint_range(4.0, 64.0) = 10.0;
+uniform float	ray_width : hint_range(0.0, 3.0) = 3;	// controls gap size
+uniform float	ray_softness : hint_range(0.0, 0.5) = 0.3;
 
 uniform float	inner = 0.18;			// circular inner radius
-uniform float	feather = 0.02;			// feather for both inner/outer edges
+uniform float	feather = 0.06;			// feather for both inner/outer edges
 
 uniform float	speed : hint_range(0.0, 0.5) = 0.05;
-uniform float	brightness = 1.0;
+uniform float	brightness = 1.5;
 uniform float	spin_offset = 0.0;
 
 // --- Pill controls (new) ---
