@@ -920,7 +920,7 @@ func send_game() -> void:
 	if await _check_game_over_and_winner():
 		print("Check Win 863 my_player: ", my_player, " win_loss_state: ", win_loss_state)
 		if game_over == true and not spectator_mode:
-			payload["winner"] = my_player + "|" + ("1" if win_loss_state == "win" else "-1")
+			payload["winner"] = my_player + "|" + win_loss_state
 	var game_data = JSON.stringify(payload)
 	print("Game data being sent: " + game_data)
 
@@ -995,24 +995,28 @@ func _check_game_over_and_winner() -> bool:
 	if game_over and winner_id != -1 and not disp_winner:
 		print("Setting Game_Over_State")
 		disp_winner = true
-		if not spectator_mode:
-			if winner_id == -1:
-				win_loss_label.text = "TIE!"
-				win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
-				win_loss_state = "tie"
-			elif (player == 1 and winner_id == 1) or (player == 2 and winner_id == 2):
+		if winner_id == -1:
+			win_loss_label.text = "DRAW!"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+			win_loss_state = "0"
+		elif (player == 1 and winner_id == 1) or (player == 2 and winner_id == 2):
+			_show_win_burst(player_avatar_display)
+			if not spectator_mode:
 				win_loss_label.text = "YOU WIN!"
-				_show_win_burst(player_avatar_display)
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-				win_loss_state = "win"
 			else:
-				win_loss_label.text = "YOU LOSE"
-				_show_win_burst(opp_avatar_display)
-				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
-				win_loss_state = "loss"
+				win_loss_label.text = "Player 1 Wins!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			win_loss_state = "1"
 		else:
-			win_loss_label.text = "Game Over!"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			_show_win_burst(opp_avatar_display)
+			if not spectator_mode:
+				win_loss_label.text = "YOU LOSE"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+			else:
+				win_loss_label.text = "Player 2 Wins!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			win_loss_state = "-1"
 		win_loss_label.visible = true
 		await get_tree().process_frame
 		win_loss_label.scale = Vector2.ZERO

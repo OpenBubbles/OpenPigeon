@@ -434,6 +434,8 @@ func _set_game_data(new_game_data_json: String):
 			process_game_state()
 			print("403 Updating Piece Counts")
 			update_piece_counts()
+			
+			await check_win()
 
 			if not is_my_turn and not game_over:
 				start_waiting_animation()
@@ -567,18 +569,26 @@ func check_win() -> bool:
 		set_cells_interactable(false)
 		print("Valid, player: ", player_val, " White Score: ", white_score, " Black Score: ", black_score)
 		if (player_val == 2 and white_score > black_score) or (player_val == 1 and black_score > white_score):
-			win_loss_label.text = "YOU WIN!"
 			_show_win_burst(player_avatar_display)
-			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			if not spectator_mode:
+				win_loss_label.text = "YOU WIN!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			else:
+				win_loss_label.text = "Player 1 Wins!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 			win_loss_state = "1"
 		elif white_score == black_score:
-			win_loss_label.text = "TIE!"
-			_show_win_burst(opp_avatar_display)
+			win_loss_label.text = "DRAW!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
 			win_loss_state = "0"
 		else:
-			win_loss_label.text = "YOU LOSE"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+			_show_win_burst(opp_avatar_display)
+			if not spectator_mode:
+				win_loss_label.text = "YOU LOSE"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+			else:
+				win_loss_label.text = "Player 2 Wins!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 			win_loss_state = "-1"
 
 		win_loss_label.visible = true
