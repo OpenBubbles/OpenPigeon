@@ -30,6 +30,7 @@ var replay_moves: Array = []
 var PitScene    : PackedScene = preload("res://mancala/pit.tscn")
 var StoreScene  : PackedScene = preload("res://mancala/store.tscn")
 var StoneScene : PackedScene = preload("res://mancala/stone.tscn")
+const AvatarWinAnimScene := preload("res://avatar_textures/avatar_win_anim.tscn")
 
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var opp_avatar_display = %OppAvatarDisplay
@@ -1001,10 +1002,12 @@ func _check_game_over_and_winner() -> bool:
 				win_loss_state = "tie"
 			elif (player == 1 and winner_id == 1) or (player == 2 and winner_id == 2):
 				win_loss_label.text = "YOU WIN!"
+				_show_win_burst(player_avatar_display)
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 				win_loss_state = "win"
 			else:
 				win_loss_label.text = "YOU LOSE"
+				_show_win_burst(opp_avatar_display)
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
 				win_loss_state = "loss"
 		else:
@@ -1021,6 +1024,71 @@ func _check_game_over_and_winner() -> bool:
 		await tween_in.finished
 		
 	return game_over
+	
+	
+func _show_win_burst(avatar: Control) -> void:
+	var wrapper: Control = _ensure_avatar_wrapper(avatar)
+	if not is_instance_valid(wrapper):
+		return
+
+	var existing: Node = wrapper.get_node_or_null("AvatarWinAnim")
+	if existing != null:
+		return
+
+	var anim_instance: Control = AvatarWinAnimScene.instantiate() as Control
+	anim_instance.name = "AvatarWinAnim"
+	wrapper.add_child(anim_instance)
+
+	var avatar_idx: int = avatar.get_index()
+	wrapper.move_child(anim_instance, avatar_idx)
+
+	anim_instance.z_as_relative = false
+	avatar.z_as_relative = false
+	anim_instance.z_index = 0
+	avatar.z_index = max(avatar.z_index, 1)
+
+	anim_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
+	anim_instance.offset_left = -52.0
+	anim_instance.offset_right = 52.0
+	anim_instance.offset_top = -43.0
+	anim_instance.offset_bottom = 43.0
+
+	(anim_instance as Node).call("set_color", Color(1.0, 0.84, 0.0))
+	(anim_instance as Node).call("set_rays", 10)
+	(anim_instance as Node).call("set_brightness", 1.2)
+	(anim_instance as Node).call("play", 0.15)
+
+func _ensure_avatar_wrapper(avatar: Control) -> Control:
+	var parent: Node = avatar.get_parent()
+	if parent == null:
+		return null
+
+	if parent is Control and not (parent is Container):
+		return parent as Control
+
+	var wrapper: Control = Control.new()
+	wrapper.name = "%s_Wrap" % avatar.name
+	wrapper.size_flags_horizontal = avatar.size_flags_horizontal
+	wrapper.size_flags_vertical = avatar.size_flags_vertical
+	wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
+
+	var idx: int = avatar.get_index()
+	parent.add_child(wrapper)
+	parent.move_child(wrapper, idx)
+
+	avatar.reparent(wrapper)
+	avatar.set_anchors_preset(Control.PRESET_FULL_RECT)
+	avatar.offset_left = 0.0
+	avatar.offset_top = 0.0
+	avatar.offset_right = 0.0
+	avatar.offset_bottom = 0.0
+
+	avatar.item_rect_changed.connect(func():
+		if is_instance_valid(wrapper):
+			wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
+	)
+
+	return wrapper
 	
 func _on_skip_button_pressed() -> void:
 	if in_replay:

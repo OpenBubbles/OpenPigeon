@@ -1,0 +1,39 @@
+[gd_scene load_steps=4 format=3 uid="uid://cggdqwgf1m1e4"]
+
+[ext_resource type="Shader" uid="uid://bwcsswf5yq6l3" path="res://avatar_textures/avatar_win_anim.gdshader" id="1_onnus"]
+[ext_resource type="Script" uid="uid://1lbatcong42w" path="res://avatar_textures/avatar_win_anim.gd" id="1_qyfaf"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_qyfaf"]
+shader = ExtResource("1_onnus")
+shader_parameter/ray_color = Color(1, 0.84, 0, 0.9)
+shader_parameter/rays = 18.0
+shader_parameter/ray_width = 1.5
+shader_parameter/ray_softness = 0.55
+shader_parameter/inner = 0.18
+shader_parameter/feather = 0.02
+shader_parameter/speed = 0.25
+shader_parameter/brightness = 1.0
+shader_parameter/spin_offset = 0.0
+shader_parameter/use_pill = true
+shader_parameter/pill_size = Vector2(0.35, 0.15)
+shader_parameter/pill_radius = 0.15
+shader_parameter/pill_rotation = 0.0
+shader_parameter/inner_feather = 0.02
+
+[node name="AvatarWinAnim" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_qyfaf")
+
+[node name="Fx" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_qyfaf")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
