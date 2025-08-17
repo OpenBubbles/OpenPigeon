@@ -60,8 +60,8 @@ var button_tween: Tween
 var sent_tween: Tween
 var send_button_target_y_position = -1
 const BUTTON_OFFSCREEN_OFFSET = 100
-const RULES_POPUP_SCENE = preload("res://reversi/RulesPopup.tscn")
-const SETTINGS_POPUP_SCENE = preload("res://settings_popup.tscn")
+const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
+const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const STAR_POINT_SCENE = preload("res://reversi/StarPoint.tscn")
 const AvatarWinAnimScene := preload("res://avatar_textures/avatar_win_anim.tscn")
 
@@ -1149,50 +1149,81 @@ func create_radial_gradient_texture(size: int = 64) -> Texture2D:
 			image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return ImageTexture.create_from_image(image)
 	
-func on_rules_button_pressed():
-	rules_button.pivot_offset = rules_button.size / 2.0
-	var tween = create_tween()
-	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1)\
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3)\
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
-	var rules_popup_instance = RULES_POPUP_SCENE.instantiate()
-	var dim_background = ColorRect.new()
-	dim_background.color = Color(0, 0, 0, 0.5)
-	dim_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	get_tree().root.add_child(dim_background)
-	get_tree().root.add_child(rules_popup_instance)
+func on_rules_button_pressed() -> void:
+	if not is_instance_valid(rules_button):
+		return
 
-	var close_button = rules_popup_instance.get_node("MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/CloseButton")
-	if close_button:
-		close_button.pressed.connect(func():
-			if is_instance_valid(dim_background):
-				dim_background.queue_free()
-			if is_instance_valid(rules_popup_instance):
-				rules_popup_instance.queue_free()
+	# Button press animation
+	rules_button.pivot_offset = rules_button.size / 2.0
+	var tween := create_tween()
+	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await tween.finished
+
+	# Create popup and dim background
+	var popup := RULES_POPUP_SCENE.instantiate()
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var root := get_tree().root
+	root.add_child(dim)
+	root.add_child(popup)
+	popup.z_index = 100
+	dim.z_index = 99
+	root.move_child(dim, root.get_child_count() - 2)
+
+	# Close button (optional if it exists)
+	var close_btn := popup.find_child("CloseButton", true, false)
+	if close_btn:
+		close_btn.pressed.connect(func():
+			dim.queue_free()
+			popup.queue_free()
 		)
 
+	# --- POPULATE UNIQUE NODES ---
+	var title_label := popup.find_child("Title", true, false) as Label
+	if title_label:
+		title_label.text = "How to Play Reversi"
+
+	var rules_label := popup.find_child("RulesLabel", true, false) as RichTextLabel
+	if rules_label:
+		rules_label.bbcode_enabled = true
+		rules_label.visible = true
+		rules_label.fit_content = true
+		rules_label.scroll_active = false
+		rules_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		rules_label.text = _get_rules_text()
+
+
+	# Show & animate popup
+	popup.set_as_top_level(true)
+	popup.visible = true
 	await get_tree().process_frame
 
-	var screen_size = get_viewport_rect().size
+	var viewport_size := get_viewport_rect().size
+	var desired_width := viewport_size.x * 0.9
+	var desired_height: float = popup.get_combined_minimum_size().y
+	popup.size = Vector2(desired_width, desired_height)
+	popup.set_pivot_offset(popup.size / 2)
+	popup.position = (viewport_size / 2) - (popup.size / 2)
+	popup.scale = Vector2.ZERO
 
-	var desired_width = screen_size.x * 0.9
-	var desired_height = rules_popup_instance.get_combined_minimum_size().y
+	var popup_tween := create_tween()
+	popup_tween.tween_property(popup, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	popup.grab_focus()
 	
-	rules_popup_instance.size = Vector2(desired_width, desired_height)
-
-	rules_popup_instance.pivot_offset = rules_popup_instance.size / 2
-
-	rules_popup_instance.position = (screen_size - rules_popup_instance.size) / 2
-
-	rules_popup_instance.scale = Vector2.ZERO
-
-	var popup_tween = create_tween()
-	popup_tween.tween_property(rules_popup_instance, "scale", Vector2.ONE, 0.4)\
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-	rules_popup_instance.grab_focus()
+func _get_rules_text() -> String:
+	return """
+[font_size={18px}]
+1. Players take turns placing their colored discs on the board.
+2. When you place a disc, any opponent's discs that are in a straight line (horizontally, vertically, or diagonally) between your new disc and an existing disc of your color are "flipped" to your color.
+3. You must flip at least one disc to make a valid move.
+4. If a player cannot make a valid move, they pass their turn.
+5. The game ends when neither player can make a valid move (usually when the board is full).
+6. The player with the most discs on the board wins!
+[/font_size]
+"""
 
 func _on_settings_button_pressed() -> void:
 

@@ -1,9 +1,9 @@
 [gd_scene load_steps=18 format=3 uid="uid://dtbbaumnb5h2m"]
 
 [ext_resource type="Script" uid="uid://bwig68hkxtmyu" path="res://reversi/reversi.gd" id="1_0y82s"]
-[ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://settings.png" id="2_by1w1"]
+[ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="2_by1w1"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://avatar_textures/AvatarThumbnail.tscn" id="2_cwv3m"]
-[ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://rules.png" id="3_cwv3m"]
+[ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="3_cwv3m"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ig7tw"]
 bg_color = Color(0, 0, 0, 1)
@@ -214,16 +214,6 @@ size_flags_vertical = 4
 is_display_only = true
 controlled_by_data = true
 
-[node name="SpecLabel" type="Label" parent="MainVBoxContainer"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-size_flags_vertical = 0
-theme_override_font_sizes/font_size = 50
-text = "Spectating..."
-horizontal_alignment = 1
-vertical_alignment = 1
-
 [node name="GameAreaCenterContainer" type="CenterContainer" parent="MainVBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
@@ -321,6 +311,7 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_yb6cj")
 
 [node name="SendButton" type="Button" parent="."]
 unique_name_in_owner = true
+visible = false
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -376,3 +367,16 @@ vertical_alignment = 1
 [node name="DotTimer" type="Timer" parent="."]
 unique_name_in_owner = true
 wait_time = 0.75
+
+[node name="SpecLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+offset_top = 129.0
+offset_right = 648.0
+offset_bottom = 198.0
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 50
+text = "Spectating..."
+horizontal_alignment = 1
+vertical_alignment = 1

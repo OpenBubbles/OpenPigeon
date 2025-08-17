@@ -31,6 +31,8 @@ var PitScene    : PackedScene = preload("res://mancala/pit.tscn")
 var StoreScene  : PackedScene = preload("res://mancala/store.tscn")
 var StoneScene : PackedScene = preload("res://mancala/stone.tscn")
 const AvatarWinAnimScene := preload("res://avatar_textures/avatar_win_anim.tscn")
+const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
+const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var opp_avatar_display = %OppAvatarDisplay
@@ -46,9 +48,6 @@ const AvatarWinAnimScene := preload("res://avatar_textures/avatar_win_anim.tscn"
 @onready var free_turn_label = %FreeTurnLabel
 @onready var skip_button = %SkipButton
 @onready var spec_label = %SpecLabel
-
-const RULES_POPUP_SCENE = preload("res://mancala/RulesPopup.tscn")
-const SETTINGS_POPUP_SCENE = preload("res://settings_popup.tscn")
 
 var _carrying_stones_container: Node2D = Node2D.new()
 const STONE_DROP_DELAY = 0.1 # Time to pause after dropping each stone
@@ -118,7 +117,8 @@ func _ready() -> void:
 			#"id": "ziadBSjDYgc4ruev"
 		#}
 		#"""		
-		var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&13,12,13,13,13&12&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1|move:2,6|board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&12,13,13,13&12,13&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+		var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:&&&11&2&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13&&&&&&12&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2|move:2,5|board:&&&&&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13,11,2&&&&&&&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2,12","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+		#var dev_data = "{'myPlayerId': , 'isYourTurn': true,'sender': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f'], 'version': ['0'], 'tver': ['5'], 'ios': ['18.5'], 'game': ['mancala'], 'id': ['9rPZettmFiDTt/eI\n'], 'size': ['4'], 'player': ['2'], 'player1': ['7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX'], 'player2': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f'], 'mode': ['n'], 'avatar1': ['body,0|eyes,1|mouth,0|acc,0|wins,0|bg_color,1.000000,0.928034,0.515868|body_color,1.000000,0.745098,0.600000|glasses,0|stache,0|backdrop,0|hair,3|clothes,0|hair_color,0.431373,0.254902,0.121569|clothes_color,0.225965,0.805188,0.692411'], 'avatar2': ['body,0|body_color,1.000000,0.741176,0.603922|hair,2|hair_color,0.941176,0.901961,0.549020|eyes,0|mouth,0|clothes,0|clothes_color,0.627451,0.235294,0.627451|bg_color,0.619608,0.270588,0.752941|backdrop,8'], 'replay': ['board:&&&11&2&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13&&&&&&12&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2|move:2,5|board:&&&&&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13,11,2&&&&&&&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2,12'], 'num': ['29'], 'build': ['XSaldMy'], 'winner': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f|-1'], 'caption': ['You Won!']}"
 		_set_game_data(dev_data)
 	for pit in pit_nodes:
 		for node in pit.get_children():
@@ -166,9 +166,13 @@ func _set_game_data(raw_text: String) -> void:
 			print("Opp is avatar1")
 	
 	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
+		print("168 Called")
 		var avatar_string = res[opponent_avatar_key]
+		print("170 Called")
 		var opponent_data = _parse_avatar_string(avatar_string)
+		print("172 Called")
 		if is_instance_valid(opp_avatar_display):
+			print("174 Called")
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 	player_str = int(res.get("player", player))
 	mode = String(res.get("mode", mode))
@@ -202,7 +206,7 @@ func _set_game_data(raw_text: String) -> void:
 		initial_board_for_replay_str = rb[0]
 	else:
 		push_warning("_set_game_data: no initial board state found for replay.")
-
+	
 	pits.clear()
 	for i in range(PIT_COUNT):
 		pits.append([])
@@ -233,6 +237,10 @@ func _set_game_data(raw_text: String) -> void:
 			in_replay = true
 			await _sow_from(actual_pit_idx)
 			in_replay = false
+			if game_over:
+				skip_button.visible = false
+				_is_animating = false
+				return
 			var current_sow_player_store_idx = 6 if player_str == 1 else 13
 			if _last_sown_pit == current_sow_player_store_idx:
 				free_turn_label.text = "Free Turn!"
@@ -256,7 +264,7 @@ func _set_game_data(raw_text: String) -> void:
 		prev_board_str = rb[rb.size() - 1] if rb.size() > 0 else ""
 	elif rb.size() > 0:
 		prev_board_str = rb[0]
-	
+	print("258 CALLED GAME OVER")
 	await _check_game_over_and_winner()
 	if is_my_turn and not game_over:
 		_start_pit_highlights()
@@ -435,7 +443,9 @@ func _start_pit_highlights() -> void:
 func _stop_pit_highlights() -> void:
 	print("Stopped Pit Highlights!!")
 	for pit in pit_nodes:
+		print("437 Call 15")
 		var hl = pit.get_node("HighlightCircle") as ColorRect
+		print("439 Call 16")
 		hl.visible = false
 
 func _on_pit_clicked(idx: int) -> void:
@@ -482,6 +492,13 @@ func _on_pit_clicked(idx: int) -> void:
 	
 	await tween_pickup_scale.finished
 	await _sow_from(idx)
+	
+	if game_over:
+		_is_animating = false
+		_stop_pit_highlights()
+		free_turn_label.visible
+		_end_turn()
+		return
 
 	var give_free_turn = false
 	if _last_sown_pit != -1:
@@ -501,6 +518,7 @@ func _on_pit_clicked(idx: int) -> void:
 		free_turn_tween.tween_interval(1.0)
 		free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
 	else:
+		print("END TURN!")
 		_end_turn()
 		
 	_is_animating = false
@@ -536,20 +554,10 @@ func _sow_from(start_idx: int) -> void:
 		if (current_sow_player == 1 and player1_side_empty) or (current_sow_player == 2 and player2_side_empty):
 			print("GAME OVER: Current sowing player's pits are all empty before sowing from ", current_sowing_pit_idx)
 			var opponent_store_idx = 6 if current_sow_player == 2 else 13
-			for i in range(PIT_COUNT):
-				var is_opponents_non_store_pit = (current_sow_player == 1 and i >= 7 and i <= 12) or \
-												 (current_sow_player == 2 and i >= 0 and i <= 5)
-				
-				if is_opponents_non_store_pit:
-					if pits[i].size() > 0:
-						print("Moving ", pits[i].size(), " stones from pit ", i, " to opponent's store ", opponent_store_idx)
-						pits[opponent_store_idx].append_array(pits[i])
-						pits[i].clear()
-						print("476 refresh count label call")
-						_refresh_pit_count_label(i)
-						_refresh_pit_count_label(opponent_store_idx)
-			print("483 check game over")
-			return
+			var pits_to_take = [7, 8, 9, 10, 11, 12] if current_sow_player == 1 else [0, 1, 2, 3, 4, 5]
+			await _animate_sweep(pits_to_take, opponent_store_idx)
+			break
+		# ------------------------------------------------------------
 
 		if pits[current_sowing_pit_idx].size() == 0:
 			last_stone_landed_in_empty_pit = true
@@ -734,7 +742,7 @@ func _sow_from(start_idx: int) -> void:
 	for child in _carrying_stones_container.get_children():
 		child.queue_free()
 	_carrying_stones_container.scale = Vector2(1.0, 1.0)
-	
+	print("735 CALLED GAME OVER")
 	await _check_game_over_and_winner()
 
 func _animate_capture(stones_to_capture: Array, last_sown_pit_idx: int, opposite_pit_idx: int, player_store_idx: int) -> void:
@@ -857,16 +865,24 @@ func _get_color_from_label(label: int) -> Color:
 
 func _refresh_pit_count_label(i: int) -> void:
 	var pit = pit_nodes[i]
+	print("865 Call 6")
 	var lbl = pit.get_node("CountLabel") as Label
+	print("867 Call 7")
 	lbl.text = str(pits[i].size())
+	print("869 Call 8")
 	lbl.get_parent().force_update_transform()
+	print("871 Call 9")
 	var lw = lbl.get_minimum_size().x
+	print("873 Call 10")
 	var lh = lbl.get_minimum_size().y
+	print("875 Call 11")
 	var base = spawn_points[i].position
+	print("877 Call 12")
 	const OFFX = 40
 	const OFFY = 10
 	const Mx = 50
 	const My = 50
+	print("882 Call 13")
 	print("REFRESH COUNT:: PLAYER: ", player, " Pit Number: ", i, " In Replay?: ", in_replay)
 	if player == 1:
 		if i == 6 or i == 13:
@@ -928,6 +944,7 @@ func send_game() -> void:
 		print("Adding my avatar data to payload with key '", avatar_key, "'")
 	
 	print("PAYLOAD: ", payload)
+	print("938 CALLED GAME OVER")
 	if await _check_game_over_and_winner():
 		print("Check Win 863 my_player: ", my_player, " win_loss_state: ", win_loss_state)
 		if game_over == true and not spectator_mode:
@@ -942,166 +959,269 @@ func send_game() -> void:
 			appPlugin.updateGameData(game_data)
 		else:
 			print("AppPlugin is null. Cannot send game data.")
-		play_sent_animation()
+		if not game_over:
+			play_sent_animation()
 		
 func _check_game_over_and_winner() -> bool:
-
 	print("Checking for game over condition...")
-	var is_game_over_condition_met = false
+	var is_game_over_condition_met := false
 
 	if not game_over:
-		var player1_store_count = pits[6].size()
-		var player2_store_count = pits[13].size()
+		var player1_store_count: int = pits[6].size()
+		var player2_store_count: int = pits[13].size()
 		print("PLAYER 1 STORE QTY: ", player1_store_count, " | PLAYER 2 STORE QTY: ", player2_store_count)
 
-		var player1_side_empty = true
+		var player1_side_empty := true
 		for i in range(0, 6):
 			if pits[i].size() > 0:
 				player1_side_empty = false
 				break
-		var player2_side_empty = true
+
+		var player2_side_empty := true
 		for i in range(7, 13):
 			if pits[i].size() > 0:
 				player2_side_empty = false
 				break
-		
+
 		if player1_side_empty or player2_side_empty:
 			print("Game over: One player's side is empty.")
 			is_game_over_condition_met = true
 
-			if mode == "an" or mode == "ah":
-				if player1_side_empty:
-					print("Player 1's side is empty. Moving remaining stones from Player 2's side to Player 2's store.")
-					for i in range(7, 13):
-						if pits[i].size() > 0:
-							pits[13].append_array(pits[i])
-							pits[i].clear()
-							print("903 refresh count label call")
-							_refresh_pit_count_label(i)
-					print("905 refresh count label call")
-					_refresh_pit_count_label(13)
-				elif player2_side_empty:
-					print("Player 2's side is empty. Moving remaining stones from Player 1's side to Player 1's store.")
-					for i in range(0, 6):
-						if pits[i].size() > 0:
-							pits[6].append_array(pits[i])
-							pits[i].clear()
-							print("913 refresh count label call")
-							_refresh_pit_count_label(i)
-					print("915 refresh count label call")
-					_refresh_pit_count_label(6)
-	
+			if player1_side_empty:
+				print("Player 1's side empty → animate stones from Player 2 pits to Store 13.")
+				await _animate_sweep([7, 8, 9, 10, 11, 12], 13)
+			elif player2_side_empty:
+				print("Player 2's side empty → animate stones from Player 1 pits to Store 6.")
+				await _animate_sweep([0, 1, 2, 3, 4, 5], 6)
+				print("915 refresh count label call")
+				_refresh_pit_count_label(6)
+
 	if is_game_over_condition_met and not game_over:
 		game_over = true
 
-		print("Final scores: Player 1 (store 6): ", pits[6].size(), ", Player 2 (store 13): ", pits[13].size())
-		var local_winner = -1
-		if pits[6].size() > pits[13].size():
-			local_winner = 1
-		elif pits[13].size() > pits[6].size():
-			local_winner = 2
-		winner_id = local_winner
+		var p1: int = pits[6].size()
+		var p2: int = pits[13].size()
+		print("Final scores: Player 1 (store 6): ", p1, ", Player 2 (store 13): ", p2)
 
-			
-	if game_over and winner_id != -1 and not disp_winner:
+		# winner_id: 1 = P1, 2 = P2, -1 = draw
+		if p1 > p2:
+			winner_id = 1
+		elif p2 > p1:
+			winner_id = 2
+		else:
+			winner_id = -1
+
+	if game_over and not disp_winner:
 		print("Setting Game_Over_State")
 		disp_winner = true
+
+		# Sanitize transient UI to avoid concurrent tweens/animations.
+		_stop_pit_highlights()
+		print("1035 Call")
+		if is_instance_valid(free_turn_label):
+			print("1037 Call")
+			free_turn_label.visible = false
+		print("1039 Call")
+		# Build the text/color based on outcome.
 		if winner_id == -1:
+			print("1042")
 			win_loss_label.text = "DRAW!"
+			print("1044")
 			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+			print("1046")
 			win_loss_state = "0"
+			print("DRAW!")
 		elif (player == 1 and winner_id == 1) or (player == 2 and winner_id == 2):
-			_show_win_burst(player_avatar_display)
+			#_show_win_burst(player_avatar_display)
 			if not spectator_mode:
+				print("1052")
 				win_loss_label.text = "YOU WIN!"
+				print("1054")
+				_show_win_burst(player_avatar_display)
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+				print("YOU WIN")
+				win_loss_state = "1"
 			else:
-				win_loss_label.text = "Player 1 Wins!"
+				print("1058")
+				win_loss_label.text = "Player {0} Wins!".format([winner_id])
+				print("1057")
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			win_loss_state = "1"
+				print("YOU LOSE 1055")
+			
 		else:
-			_show_win_burst(opp_avatar_display)
+			print("1065")
+			#_show_win_burst(opp_avatar_display)
+			print("1067")
 			if not spectator_mode:
+				print("1069")
 				win_loss_label.text = "YOU LOSE"
+				print("YOU LOSE 1061")
+				_show_win_burst(opp_avatar_display)
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+				win_loss_state = "-1"
 			else:
-				win_loss_label.text = "Player 2 Wins!"
+				print("1074")
+				win_loss_label.text = "Player {0} Wins!".format([winner_id])
+				print("1076")
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			win_loss_state = "-1"
+				print("YOU LOSE 1066")
+			
+
+		# Animate after the frame settles.
 		win_loss_label.visible = true
 		await get_tree().process_frame
 		win_loss_label.scale = Vector2.ZERO
 		win_loss_label.pivot_offset = win_loss_label.size / 2
 
-		var tween_in = create_tween()
-		tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
-				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		var tween_in := create_tween()
+		tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6)\
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 		await tween_in.finished
-		
-	return game_over
+
+	return game_over	
 	
+func _animate_sweep(pit_indices: Array, store_idx: int) -> void:
+	var store_node := pit_nodes[store_idx]
+	var store_container := store_node.get_node("StonesContainer") as Node2D
+
+	# This dictionary will store each stone node and its correct starting global position.
+	var visuals_to_animate: Dictionary = {}
+	var all_labels: Array[int] = []
+
+	# 1. Collect stone nodes and their starting positions BEFORE any movement.
+	for i in pit_indices:
+		if pits[i].is_empty():
+			continue
+
+		var pit_container := pit_nodes[i].get_node("StonesContainer") as Node2D
+		
+		for child in pit_container.get_children():
+			if child is Sprite2D and not child.name.begins_with("Shadow"):
+				var stone_visual = child as Sprite2D
+				# IMPORTANT: Store the node and its current global position.
+				visuals_to_animate[stone_visual] = stone_visual.global_position
+
+		# Handle the logical data for the pit (clear stones, update label).
+		all_labels.append_array(pits[i])
+		pits[i].clear()
+		_refresh_pit_count_label(i)
+
+	if visuals_to_animate.is_empty():
+		return # Nothing to animate
+
+	# 2. Prepare and run the animation tween for all collected stones.
+	var travel_tween := create_tween().set_parallel()
+	var travel_time := PILE_TRAVEL_TIME * 1.2
+	if _skip_replay_animation:
+		travel_time = 0.05
+	
+	var target_global_pos := store_node.global_position
+
+	for stone_visual in visuals_to_animate:
+		var start_global_pos = visuals_to_animate[stone_visual]
+		
+		# Perform the reparenting.
+		stone_visual.get_parent().remove_child(stone_visual)
+		self.add_child(stone_visual)
+		
+		# CRUCIAL FIX: Set its global position back to where it was.
+		# This prevents it from appearing at the top-left corner.
+		stone_visual.global_position = start_global_pos
+		
+		# Now, animate it from its correct starting position to the target store.
+		travel_tween.tween_property(stone_visual, "global_position", target_global_pos, travel_time)\
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	# Wait for all animations to finish.
+	await travel_tween.finished
+
+	# 3. Final placement inside the store's container.
+	for stone_visual in visuals_to_animate:
+		if not is_instance_valid(stone_visual): continue
+		
+		# Move the stone from the main scene into its final home.
+		self.remove_child(stone_visual)
+		store_container.add_child(stone_visual)
+		
+		# Set its final local position inside the store for a nice scattered look.
+		stone_visual.position = spawn_points[store_idx].position + Vector2(randf_range(-20, 20), randf_range(-20, 20))
+		stone_visual.rotation_degrees = randf_range(0, 360)
+
+		# Add a shadow for the new stone.
+		var shadow := Sprite2D.new()
+		shadow.name = "Shadow"
+		shadow.texture = (stone_visual as Sprite2D).texture
+		shadow.modulate = Color(0, 0, 0, 0.3)
+		shadow.scale = stone_visual.scale * 1.05
+		shadow.position = stone_visual.position + Vector2(5, 5)
+		shadow.z_index = -1
+		store_container.add_child(shadow)
+
+	# 4. Finalize the logical state of the board.
+	pits[store_idx].append_array(all_labels)
+	_refresh_pit_count_label(store_idx)
 	
 func _show_win_burst(avatar: Control) -> void:
-	var wrapper: Control = _ensure_avatar_wrapper(avatar)
-	if not is_instance_valid(wrapper):
+	if not is_instance_valid(avatar) or not is_instance_valid(avatar.get_parent()):
+		push_warning("Tried to show win burst on an invalid avatar or avatar with no parent.")
 		return
 
-	var existing: Node = wrapper.get_node_or_null("AvatarWinAnim")
-	if existing != null:
+	var parent = avatar.get_parent()
+
+	# Prevent running the animation multiple times.
+	if parent.get_node_or_null("%s_Wrapper/AvatarWinAnim" % avatar.name):
 		return
 
-	var anim_instance: Control = AvatarWinAnimScene.instantiate() as Control
+	# 1. Create a wrapper node.
+	var wrapper = Control.new()
+	wrapper.name = "%s_Wrapper" % avatar.name
+	
+	# Match the wrapper's layout properties to the avatar's.
+	wrapper.layout_mode = avatar.layout_mode
+	wrapper.size_flags_horizontal = avatar.size_flags_horizontal
+	wrapper.size_flags_vertical = avatar.size_flags_vertical
+	wrapper.position = avatar.position
+	wrapper.size = avatar.size
+	wrapper.rotation = avatar.rotation
+	wrapper.scale = avatar.scale
+	wrapper.pivot_offset = avatar.pivot_offset
+	# --- THE CRUCIAL FIX IS HERE ---
+	wrapper.custom_minimum_size = avatar.custom_minimum_size
+
+	# 2. Rearrange the scene tree: Parent -> Wrapper -> Avatar
+	var avatar_index = avatar.get_index()
+	parent.remove_child(avatar)
+	parent.add_child(wrapper)
+	parent.move_child(wrapper, avatar_index)
+	wrapper.add_child(avatar)
+	
+	# Reset the avatar's position since it's now inside the wrapper.
+	avatar.position = Vector2.ZERO
+	avatar.set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	# 3. Create and add the animation instance to the wrapper.
+	var anim_instance = AvatarWinAnimScene.instantiate() as Control
+	if not is_instance_valid(anim_instance):
+		push_error("Failed to instantiate AvatarWinAnimScene.")
+		return
 	anim_instance.name = "AvatarWinAnim"
 	wrapper.add_child(anim_instance)
-
-	var avatar_idx: int = avatar.get_index()
-	wrapper.move_child(anim_instance, avatar_idx)
-
-	anim_instance.z_as_relative = false
-	avatar.z_as_relative = false
-	anim_instance.z_index = 0
-	avatar.z_index = max(avatar.z_index, 1)
-
+	
+	# Place the animation BEHIND the avatar.
+	wrapper.move_child(anim_instance, 0)
+	
+	# 4. Configure and play the animation.
 	anim_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
 	anim_instance.offset_left = -52.0
 	anim_instance.offset_right = 52.0
 	anim_instance.offset_top = -43.0
 	anim_instance.offset_bottom = 43.0
 
-	(anim_instance as Node).call("set_color", Color(1.0, 0.84, 0.0))
-	(anim_instance as Node).call("play", 0.05)
-
-func _ensure_avatar_wrapper(avatar: Control) -> Control:
-	var parent: Node = avatar.get_parent()
-	if parent == null:
-		return null
-
-	if parent is Control and not (parent is Container):
-		return parent as Control
-
-	var wrapper: Control = Control.new()
-	wrapper.name = "%s_Wrap" % avatar.name
-	wrapper.size_flags_horizontal = avatar.size_flags_horizontal
-	wrapper.size_flags_vertical = avatar.size_flags_vertical
-	wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
-
-	var idx: int = avatar.get_index()
-	parent.add_child(wrapper)
-	parent.move_child(wrapper, idx)
-
-	avatar.reparent(wrapper)
-	avatar.set_anchors_preset(Control.PRESET_FULL_RECT)
-	avatar.offset_left = 0.0
-	avatar.offset_top = 0.0
-	avatar.offset_right = 0.0
-	avatar.offset_bottom = 0.0
-
-	avatar.item_rect_changed.connect(func():
-		if is_instance_valid(wrapper):
-			wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
-	)
-
-	return wrapper
+	if anim_instance.has_method("set_color"):
+		anim_instance.call("set_color", Color(1.0, 0.84, 0.0))
+	
+	if anim_instance.has_method("play"):
+		anim_instance.call("play", 0.05)
 	
 func _on_skip_button_pressed() -> void:
 	if in_replay:
@@ -1109,60 +1229,66 @@ func _on_skip_button_pressed() -> void:
 		_skip_replay_animation = true	
 
 func on_rules_button_pressed() -> void:
+	if not is_instance_valid(rules_button):
+		return
+
+	# Button press animation
 	rules_button.pivot_offset = rules_button.size / 2.0
-	var tween = create_tween()
-	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1)\
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3)\
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var tween := create_tween()
+	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
-	var popup = RULES_POPUP_SCENE.instantiate()
-	var dim = ColorRect.new()
+
+	# Create popup and dim background
+	var popup := RULES_POPUP_SCENE.instantiate()
+	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.5)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-	var root = get_tree().root
+	var root := get_tree().root
 	root.add_child(dim)
 	root.add_child(popup)
-
 	popup.z_index = 100
 	dim.z_index = 99
-
 	root.move_child(dim, root.get_child_count() - 2)
 
-	var close_btn = popup.get_node("MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/HBoxContainer/MarginContainer/CloseButton")
+	# Close button (optional if it exists)
+	var close_btn := popup.find_child("CloseButton", true, false)
 	if close_btn:
 		close_btn.pressed.connect(func():
 			dim.queue_free()
 			popup.queue_free()
 		)
 
-	var rules_label = popup.get_node("MarginContainer/PanelContainer/VBoxContainer/RulesLabel") as RichTextLabel
+	# --- POPULATE UNIQUE NODES ---
+	var title_label := popup.find_child("Title", true, false) as Label
+	if title_label:
+		title_label.text = "How to Play Dots & Boxes"
+
+	var rules_label := popup.find_child("RulesLabel", true, false) as RichTextLabel
 	if rules_label:
 		rules_label.bbcode_enabled = true
 		rules_label.visible = true
-		rules_label.fit_content_height = true
+		rules_label.fit_content = true
 		rules_label.scroll_active = false
 		rules_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rules_label.text = _get_rules_text_for_mode(mode)
 
+	# Show & animate popup
 	popup.set_as_top_level(true)
 	popup.visible = true
-
 	await get_tree().process_frame
 
-	var viewport_size = get_viewport_rect().size
-	var desired_width = viewport_size.x * 0.9
-	var desired_height = popup.get_combined_minimum_size().y
-	
+	var viewport_size := get_viewport_rect().size
+	var desired_width := viewport_size.x * 0.9
+	var desired_height: float = popup.get_combined_minimum_size().y
 	popup.size = Vector2(desired_width, desired_height)
 	popup.set_pivot_offset(popup.size / 2)
 	popup.position = (viewport_size / 2) - (popup.size / 2)
 	popup.scale = Vector2.ZERO
 
-	var popup_tween = create_tween()
+	var popup_tween := create_tween()
 	popup_tween.tween_property(popup, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
 	popup.grab_focus()
 	
 func _get_rules_text_for_mode(mode: String) -> String:

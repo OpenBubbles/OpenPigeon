@@ -4,8 +4,8 @@
 [ext_resource type="Texture2D" uid="uid://bje0kd0ednpdh" path="res://mancala/board.png" id="2_d7lhj"]
 [ext_resource type="Shader" uid="uid://dp420yt4x20py" path="res://mancala/vignette.gdshader" id="2_miqih"]
 [ext_resource type="Texture2D" uid="uid://jk4e6m7vh6ay" path="res://mancala/next.png" id="4_elfvu"]
-[ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://settings.png" id="4_miqih"]
-[ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://rules.png" id="5_elfvu"]
+[ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="4_miqih"]
+[ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="5_elfvu"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://avatar_textures/AvatarThumbnail.tscn" id="6_1ko3n"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_elfvu"]
@@ -230,6 +230,7 @@ vertical_alignment = 1
 
 [node name="SkipButton" type="TextureButton" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 texture_normal = ExtResource("4_elfvu")
 texture_pressed = ExtResource("4_elfvu")
@@ -243,7 +244,7 @@ size_flags_vertical = 4
 custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
 
-[node name="OppAvatarDisplay2" parent="MarginContainer/InfoHBoxContainer/VBoxContainer2" instance=ExtResource("6_1ko3n")]
+[node name="OppAvatarDisplay" parent="MarginContainer/InfoHBoxContainer/VBoxContainer2" instance=ExtResource("6_1ko3n")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1

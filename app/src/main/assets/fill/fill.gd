@@ -35,8 +35,8 @@ const COLOR_MAP = {
 }
 
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
-const RULES_POPUP_SCENE = preload("res://reversi/RulesPopup.tscn")
-const SETTINGS_POPUP_SCENE = preload("res://settings_popup.tscn")
+const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
+const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const AvatarWinAnimScene := preload("res://avatar_textures/avatar_win_anim.tscn")
 
 var board: Array = []
@@ -956,48 +956,79 @@ func _on_dot_timer_timeout():
 		dots += "."
 	waiting_label.text = BASE_WAIT_TEXT + dots
 	
-func on_rules_button_pressed():
+func on_rules_button_pressed() -> void:
+	if not is_instance_valid(rules_button):
+		return
+
+	# Button press animation
 	rules_button.pivot_offset = rules_button.size / 2.0
-	tween = create_tween()
-	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1)\
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3)\
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	var tween := create_tween()
+	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
-	var rules_popup_instance = RULES_POPUP_SCENE.instantiate()
 
-	var dim_background = ColorRect.new()
-	dim_background.color = Color(0, 0, 0, 0.5)
-	dim_background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Create popup and dim background
+	var popup := RULES_POPUP_SCENE.instantiate()
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-	get_tree().root.add_child(dim_background)
-	get_tree().root.add_child(rules_popup_instance)
+	var root := get_tree().root
+	root.add_child(dim)
+	root.add_child(popup)
+	popup.z_index = 100
+	dim.z_index = 99
+	root.move_child(dim, root.get_child_count() - 2)
 
-	var close_button = rules_popup_instance.get_node("MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/CloseButton")
-	if close_button:
-		close_button.pressed.connect(func():
-			if is_instance_valid(dim_background):
-				dim_background.queue_free()
-			if is_instance_valid(rules_popup_instance):
-				rules_popup_instance.queue_free()
+	# Close button (optional if it exists)
+	var close_btn := popup.find_child("CloseButton", true, false)
+	if close_btn:
+		close_btn.pressed.connect(func():
+			dim.queue_free()
+			popup.queue_free()
 		)
-	
+
+	# --- POPULATE UNIQUE NODES ---
+	var title_label := popup.find_child("Title", true, false) as Label
+	if title_label:
+		title_label.text = "How to Play Filler"
+
+	var rules_label := popup.find_child("RulesLabel", true, false) as RichTextLabel
+	if rules_label:
+		rules_label.bbcode_enabled = true
+		rules_label.visible = true
+		rules_label.fit_content = true
+		rules_label.scroll_active = false
+		rules_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		rules_label.text = _get_rules_text()
+
+
+	# Show & animate popup
+	popup.set_as_top_level(true)
+	popup.visible = true
 	await get_tree().process_frame
-	var screen_size = get_viewport_rect().size
-	var desired_width = screen_size.x * 0.9
-	var desired_height = rules_popup_instance.get_combined_minimum_size().y
+
+	var viewport_size := get_viewport_rect().size
+	var desired_width := viewport_size.x * 0.9
+	var desired_height: float = popup.get_combined_minimum_size().y
+	popup.size = Vector2(desired_width, desired_height)
+	popup.set_pivot_offset(popup.size / 2)
+	popup.position = (viewport_size / 2) - (popup.size / 2)
+	popup.scale = Vector2.ZERO
+
+	var popup_tween := create_tween()
+	popup_tween.tween_property(popup, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	popup.grab_focus()
 	
-	rules_popup_instance.size = Vector2(desired_width, desired_height)
-	rules_popup_instance.pivot_offset = rules_popup_instance.size / 2
-	rules_popup_instance.position = (screen_size - rules_popup_instance.size) / 2
-	rules_popup_instance.scale = Vector2.ZERO
-
-
-	var popup_tween = create_tween()
-	popup_tween.tween_property(rules_popup_instance, "scale", Vector2.ONE, 0.4)\
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-	rules_popup_instance.grab_focus()
+func _get_rules_text() -> String:
+	return """
+[font_size={18px}]
+1. Each player is assigned a corner tile at the start of the game.
+2. Players take turns filling their tiles with one of 6 colors in an attempt to capture adjacent tiles of the same color.
+3. You are not allowed to change the color of your tiles into the color of your opponents tiles.
+4. The game ends when there are no more tiles to occupy
+[/font_size]
+"""
 
 func _on_settings_button_pressed() -> void:
 	settings_button.pivot_offset = settings_button.size / 2.0
