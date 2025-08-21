@@ -29,14 +29,13 @@ var sent_tween: Tween
 var dot_count: int = 0
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 
-# session state
-var _turn_lines: Array = []   # each: [p,x1,y1,x2,y2]
-var _turn_squares: Array = []  # each: [p,x_bl,y_bl]
+var _turn_lines: Array = [] 
+var _turn_squares: Array = []
 var has_connected: bool = false
-var _turn_steps: Array = []    # each step: { "line": [p,x1,y1,x2,y2], "squares": Array[[p,x,y], ...] }
+var _turn_steps: Array = []
 var game_settings_category: String = ""
 var player: int = 1
-var turn_owner: int = 1        # <- whose turn the server says it is (1 or 2)
+var turn_owner: int = 1
 var winner_id: String = "-1"
 var is_your_turn: bool = false
 var is_my_turn: bool = false : set = _set_is_my_turn
@@ -52,10 +51,9 @@ var my_score
 var opp_score
 var my_id: String
 
-var prev_lines_cache: Array = []       # last known committed lines [[p,x1,y1,x2,y2], ...]
-var last_replay_sent: String = ""      # debug: what we last sent
+var prev_lines_cache: Array = []
+var last_replay_sent: String = ""
 
-# where the Send button rests when visible
 var send_button_home: Vector2 = Vector2.ZERO
 
 @export var board_size: int = 4 : set = set_board_size # 4, 5, or 6
@@ -63,7 +61,6 @@ var blue_marker_tex: Texture2D = preload("res://dots/blue_marker.png")
 var red_marker_tex: Texture2D = preload("res://dots/red_marker.png")
 
 func _ready() -> void:
-	# Paper style
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(1, 1, 1, 1)
 	sb.corner_radius_top_left = 2
@@ -78,7 +75,6 @@ func _ready() -> void:
 	resized.connect(_on_resized)
 	_on_resized()
 
-	# Grid events
 	if is_instance_valid(grid):
 		grid.connect("turn_changed", Callable(self, "_on_turn"))
 		grid.connect("score_changed", Callable(self, "_on_score"))
@@ -93,7 +89,6 @@ func _ready() -> void:
 		else:
 			push_warning("[Grid] temp_line_changed signal missing")
 
-	# UI buttons
 	if is_instance_valid(rules_button):
 		rules_button.pressed.connect(on_rules_button_pressed)
 	if is_instance_valid(settings_button):
@@ -109,7 +104,6 @@ func _ready() -> void:
 	else:
 		push_warning("No %SendButton in scene")
 
-	# Initialize color icons until _set_game_data arrives
 	_apply_player_color_icons()
 	var appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin: 
@@ -130,21 +124,17 @@ func _set_game_data(raw_text: String) -> void:
 	if typeof(res) != TYPE_DICTIONARY:
 		return
 	print("RAW INCOMING DATA: ", res)
-	# IDs (may be empty on a brand-new invite)
 	my_id = res.get("myPlayerId", "")
 	var p1_id: String = res.get("player1", "")
 	var p2_id: String = res.get("player2", "")
 	var opponent_avatar_key = ""
 
-	# Server "player" means TURN OWNER (1|2), not identity
 	var turn_owner: int = clamp(int(res.get("player", 1)), 1, 2)
 	var iyt: bool = bool(res.get("isYourTurn", false))
 
-	# --- STRICT per your note: infer our identity when IDs are missing ---
 	if my_id != "" and p1_id != "" and p2_id != "":
 		player = (1 if my_id == p1_id else (2 if my_id == p2_id else 1))
 	else:
-		# If it's your turn and server says player=2 (they sent it), you are 1; else you match turn_owner
 		player = (3 - turn_owner) if iyt else turn_owner
 		
 	if player == 1:
@@ -159,14 +149,8 @@ func _set_game_data(raw_text: String) -> void:
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
 	_apply_player_color_icons()
-
-	# Optional: store turn owner if you keep it as a field
-	# self.turn_owner = turn_owner
-
-	# This will clear _turn_steps() if you wired the custom setter
 	is_my_turn = iyt
 
-	# Size + board load (unchanged)
 	board_size = clamp(int(res.get("size", board_size)), 4, 6)
 	if is_instance_valid(grid) and grid.has_method("set_grid"):
 		grid.call("set_grid", board_size)
@@ -183,40 +167,33 @@ func _set_game_data(raw_text: String) -> void:
 
 func _load_pre_state_and_replay(replay_str: String) -> void:
 	var parsed := _parse_replay_dnb(replay_str)
-	
-	# Store both raw board strings for later use in send_game
+
 	pre_board_str = parsed.get("pre_board_str", "")
 	post_board_str_from_opponent = parsed.get("post_board_str", "")
 
 	var pre_lines: Array = parsed.get("pre_lines", [])
 	var moves: Array = parsed.get("moves", [])
 	
-	# Store the opponent's final board state in our new variables
 	opponent_post_lines = parsed.get("post_lines", [])
 	opponent_post_squares = parsed.get("post_squares", [])
 
-	# Load base (pre) state
 	if is_instance_valid(grid) and grid.has_method("load_lines_state"):
 		grid.call("load_lines_state", pre_lines)
 
-	# Animate opponent's moves
 	if not moves.is_empty() and is_instance_valid(grid) and grid.has_method("replay_line_move"):
 		for move in moves:
 			await grid.call("replay_line_move", move)
 			await get_tree().create_timer(0.3).timeout
 
-	# If the sender included explicit squares on the post board, apply them to guarantee parity.
 	if is_instance_valid(grid) and grid.has_method("load_lines_and_squares_state") and (not opponent_post_squares.is_empty()):
 		grid.call("load_lines_and_squares_state", opponent_post_lines, opponent_post_squares)
 
-	# refresh caches/UI
 	prev_lines_cache = _get_committed_lines()
 	if is_instance_valid(player_score_label) and is_instance_valid(opp_score_label):
 		if player_score_label.text == "" and opp_score_label.text == "":
 			player_score_label.text = "0"
 			opp_score_label.text = "0"
 
-# Custom setter so whenever is_my_turn becomes true, clear steps
 func _set_is_my_turn(v: bool) -> void:
 	is_my_turn = v
 	if v:
@@ -224,9 +201,7 @@ func _set_is_my_turn(v: bool) -> void:
 	_apply_turn_state()
 	
 func _apply_turn_state() -> void:
-	# Sync grid + UI to the current turn
 	if is_instance_valid(grid):
-		# who should the grid think is acting *now*?
 		var grid_player := player if is_my_turn else (3 - player)
 		grid.set("player", grid_player)
 		grid.call_deferred("set_input_enabled", is_my_turn and not spectator_mode)
@@ -248,11 +223,11 @@ func _parse_replay_dnb(raw: String) -> Dictionary:
 			var b := p.substr(6)
 			var br := _parse_board_string(b)
 			if is_first_board:
-				out["pre_board_str"] = b # Store the raw pre-board string
+				out["pre_board_str"] = b
 				out["pre_lines"] = br["lines"]
 				is_first_board = false
 			else:
-				out["post_board_str"] = b # Store the raw post-board string
+				out["post_board_str"] = b
 				out["post_lines"] = br["lines"]
 				out["post_squares"] = br["squares"]
 		elif p.begins_with("line:"):
@@ -261,7 +236,6 @@ func _parse_replay_dnb(raw: String) -> Dictionary:
 	return out
 
 func _parse_board_string(b: String) -> Dictionary:
-	# Returns { "lines": Array[[p,x1,y1,x2,y2]], "squares": Array[[p,x_bl,y_bl]] }
 	var lines: Array = []; var squares: Array = []
 	for chunk in b.split("#"):
 		var s := chunk.strip_edges()
@@ -280,8 +254,6 @@ func _csv_to_ints(s: String) -> Array:
 		if tt != "":
 			out.append(int(tt))
 	return out
-
-# ---- Avatar parsing (copied from Mancala) ----
 func _parse_avatar_string(data_string: String) -> Dictionary:
 	var hair_map := ["Spiky", "Long", "Bun", "Bald"]
 	var body_map := ["Default", "Smiling", "Winking", "Surprised", "Frowning", "Tongue Out", "Cute"]
@@ -319,7 +291,6 @@ func _parse_avatar_string(data_string: String) -> Dictionary:
 					data[color_key] = Color(float(values[0]), float(values[1]), float(values[2]))
 	return data
 
-# ---- Colors / icons ----
 func _get_grid_colors() -> Array[Color]:
 	var cols: Array[Color] = []
 	if is_instance_valid(grid) and grid.has_method("get"):
@@ -339,25 +310,21 @@ func _apply_player_color_icons() -> void:
 	var my_col: Color = cols[player - 1]
 	var opp_col: Color = cols[2 - player]
 
-	# Color chips
 	if is_instance_valid(player_color_icon):
 		player_color_icon.modulate = my_col
 	if is_instance_valid(opp_color_icon):
 		opp_color_icon.modulate = opp_col
 
-	# Score label colors
 	if is_instance_valid(player_score_label):
 		player_score_label.add_theme_color_override("font_color", my_col)
 	if is_instance_valid(opp_score_label):
 		opp_score_label.add_theme_color_override("font_color", opp_col)
 
-	# Markers (blue/red)
 	if is_instance_valid(player_marker):
 		player_marker.texture = (blue_marker_tex if player == 1 else red_marker_tex)
 	if is_instance_valid(opp_marker):
 		opp_marker.texture = (red_marker_tex if player == 1 else blue_marker_tex)
 
-# ---- Background / layout ----
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
 		background.color = Color("#261a19") if is_dark else Color("#202526")
@@ -372,13 +339,10 @@ func set_board_size(n: int) -> void:
 	if is_instance_valid(grid) and grid.has_method("set_grid"):
 		grid.call("set_grid", board_size)
 
-# ---- Grid event handlers ----
 func _on_turn(p: int) -> void:
-	# You could reflect "Your Turn" / "Their Turn" here if desired.
 	pass
 
 func _on_score(p0: int, p1: int) -> void:
-	# Map grid scores to UI labels based on which color is "me"
 	my_score = p0 if player == 1 else p1
 	opp_score = p1 if player == 1 else p0
 	if is_instance_valid(player_score_label):
@@ -387,10 +351,8 @@ func _on_score(p0: int, p1: int) -> void:
 		opp_score_label.text = str(opp_score)
 
 func _on_game_over(p0: int, p1: int) -> void:
-	# Stub for end-game burst/label if you want parity with Mancala
 	pass
 
-# ---- Temp line UI (Send button) ----
 func _on_temp_line_changed(has_line: bool) -> void:
 	if not is_instance_valid(send_button):
 		print("[SendButton] missing node")
@@ -399,15 +361,12 @@ func _on_temp_line_changed(has_line: bool) -> void:
 	var should_show := has_line
 	print("[SendButton] temp_line_changed has_line=", has_line, " -> should_show=", should_show)
 
-	# Ensure we can position the button freely even if it's inside a Container.
 	send_button.set_as_top_level(true)
 
-	# Cache the home position once (where the button sits when visible)
 	if not send_button.has_meta("home_pos"):
 		send_button.set_meta("home_pos", send_button.global_position)
 		print("[SendButton] home cached: ", send_button.get_meta("home_pos"))
 
-	# Kill any previous tween to avoid conflicts
 	if send_button.has_meta("sb_tween"):
 		var old_tw: Variant = send_button.get_meta("sb_tween")
 		if old_tw is Tween and (old_tw as Tween).is_running():
@@ -502,7 +461,6 @@ func send_game() -> void:
 		print("[Send] No committed steps this turn; abort")
 		return
 
-	# 1. Get the new lines and squares from this turn's steps.
 	var new_lines: Array = []
 	var new_squares: Array = []
 	for step in _turn_steps:
@@ -511,25 +469,20 @@ func send_game() -> void:
 		if step.has("squares"):
 			new_squares.append_array(step["squares"])
 
-	# 2. Build the final lists by appending new items to the opponent's last state.
 	var final_lines: Array = opponent_post_lines.duplicate(true)
 	final_lines.append_array(new_lines)
 
 	var final_squares: Array = opponent_post_squares.duplicate(true)
 	final_squares.append_array(new_squares)
 
-	# 3. The pre-board for our message is the post-board from the opponent's message.
 	var final_pre_board_str: String = post_board_str_from_opponent if post_board_str_from_opponent != "" else pre_board_str
 
-	# 4. The post-board is composed from our carefully constructed final lists.
 	var final_post_board_str: String = _compose_board_string(final_lines, final_squares)
 
-	# 5. Assemble the final replay string.
 	var parts: Array[String] = []
 	parts.append("board:" + final_pre_board_str)
 	for step2 in _turn_steps:
 		var mv: Array = step2["line"]
-		# No normalization needed here anymore.
 		parts.append("line:%d,%d,%d,%d,%d" % [int(mv[0]), int(mv[1]), int(mv[2]), int(mv[3]), int(mv[4])])
 		
 		for sq in (step2["squares"] as Array):
@@ -568,31 +521,26 @@ func send_game() -> void:
 	
 func _on_line_committed_bl(p: int, x1: int, y1: int, x2: int, y2: int) -> void:
 	var mv := [p, x1, y1, x2, y2]
-	# de-dupe within this turn (just in case)
 	for step in _turn_steps:
 		if step.has("line") and step["line"] == mv:
 			return
 	_turn_steps.append({ "line": mv, "squares": [] })
 
 func _on_square_completed_bl(p: int, x_bl: int, y_bl: int) -> void:
-	# Attach squares to the most recent line step (same ordering as emitted from grid).
 	if _turn_steps.size() > 0:
 		_turn_steps[_turn_steps.size() - 1]["squares"].append([p, x_bl, y_bl])
 
-# FIXED: Renamed and updated to find an array of all new moves, not just one.
 func _find_new_moves(current_lines: Array, prev_lines: Array) -> Array:
 	var new_moves: Array = []
 	var prev_set := _lines_to_set(prev_lines)
 	
 	for l in current_lines:
-		# Create a unique key for each line to check for its existence.
 		var k := str(l[0]) + ":" + str(l[1]) + "," + str(l[2]) + "," + str(l[3]) + "," + str(l[4])
 		if not prev_set.has(k):
 			new_moves.append([int(l[0]), int(l[1]), int(l[2]), int(l[3]), int(l[4])])
 			
 	return new_moves
 
-# This helper function is used by _find_new_moves.
 func _lines_to_set(lines: Array) -> Dictionary:
 	var d: Dictionary = {}
 	for l in lines:
@@ -601,14 +549,11 @@ func _lines_to_set(lines: Array) -> Dictionary:
 			d[k] = true
 	return d
 
-# This helper function is used by send_game.
 func _compose_move_string(move: Array) -> String:
-	# "p,x1,y1,x2,y2"
 	var p := int(move[0]); var x1 := int(move[1]); var y1 := int(move[2]); var x2 := int(move[3]); var y2 := int(move[4])
 	return str(p) + "," + str(x1) + "," + str(y1) + "," + str(x2) + "," + str(y2)
 	
 func _get_committed_lines() -> Array:
-	# Prefer asking the grid; fall back to our cached pre-state if grid doesn't expose it.
 	if is_instance_valid(grid) and grid.has_method("get_all_committed_lines"):
 		var lines: Variant = grid.call("get_all_committed_lines")
 		if typeof(lines) == TYPE_ARRAY:
@@ -618,7 +563,6 @@ func _get_committed_lines() -> Array:
 func _compose_board_string(lines: Array, squares: Array = []) -> String:
 	var parts: Array[String] = []
 
-	# Helper to serialize an array into a string.
 	var _ser = func(a: Array) -> String:
 		if a.size() == 5:
 			return "%d,%d,%d,%d,%d" % [int(a[0]), int(a[1]), int(a[2]), int(a[3]), int(a[4])]
@@ -626,14 +570,11 @@ func _compose_board_string(lines: Array, squares: Array = []) -> String:
 			return "%d,%d,%d" % [int(a[0]), int(a[1]), int(a[2])]
 		return ""
 
-	# Append all lines in order, with no normalization needed.
 	for l in lines:
 		if typeof(l) == TYPE_ARRAY and (l as Array).size() == 5:
 			var k: String = _ser.call(l)
 			if k != "":
 				parts.append(k)
-
-	# Append all squares in order.
 	for s in squares:
 		if typeof(s) == TYPE_ARRAY and (s as Array).size() == 3:
 			var k2: String = _ser.call(s)
@@ -641,20 +582,17 @@ func _compose_board_string(lines: Array, squares: Array = []) -> String:
 				parts.append(k2)
 	
 	return String("#").join(parts)
-	
-# ---- Rules popup ----
+
 func on_rules_button_pressed() -> void:
 	if not is_instance_valid(rules_button):
 		return
 
-	# Button press animation
 	rules_button.pivot_offset = rules_button.size / 2.0
 	var tween := create_tween()
 	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
 
-	# Create popup and dim background
 	var popup := RULES_POPUP_SCENE.instantiate()
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.5)
@@ -666,8 +604,7 @@ func on_rules_button_pressed() -> void:
 	popup.z_index = 100
 	dim.z_index = 99
 	root.move_child(dim, root.get_child_count() - 2)
-
-	# Close button (optional if it exists)
+ 
 	var close_btn := popup.find_child("CloseButton", true, false)
 	if close_btn:
 		close_btn.pressed.connect(func():
@@ -675,7 +612,6 @@ func on_rules_button_pressed() -> void:
 			popup.queue_free()
 		)
 
-	# --- POPULATE UNIQUE NODES ---
 	var title_label := popup.find_child("Title", true, false) as Label
 	if title_label:
 		title_label.text = "How to Play Dots & Boxes"
@@ -689,7 +625,6 @@ func on_rules_button_pressed() -> void:
 		rules_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rules_label.text = _get_rules_text()
 
-	# Show & animate popup
 	popup.set_as_top_level(true)
 	popup.visible = true
 	await get_tree().process_frame
@@ -737,9 +672,7 @@ func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
 		print("Warning: sent_label is not valid for play_sent_animation.")
 		return
-	#if game_over:
-		#return
-
+	
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()
 
@@ -921,7 +854,6 @@ func _on_dot_timer_timeout():
 		dots += "."
 	waiting_label.text = BASE_WAIT_TEXT + dots
 
-# ---- Settings popup ----
 func _on_settings_button_pressed() -> void:
 	if not is_instance_valid(settings_button):
 		return
@@ -1007,7 +939,6 @@ func _on_settings_button_pressed() -> void:
 	popup_instance.grab_focus()
 
 func _on_theme_changed(new_theme_name: String) -> void:
-	# placeholder for theme swaps
 	pass
 
 func _load_game_specific_settings() -> void:
