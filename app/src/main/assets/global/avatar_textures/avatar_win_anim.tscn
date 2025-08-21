@@ -1,7 +1,7 @@
 [gd_scene load_steps=4 format=3 uid="uid://cggdqwgf1m1e4"]
 
-[ext_resource type="Shader" uid="uid://bwcsswf5yq6l3" path="res://avatar_textures/avatar_win_anim.gdshader" id="1_onnus"]
-[ext_resource type="Script" uid="uid://1lbatcong42w" path="res://avatar_textures/avatar_win_anim.gd" id="1_qyfaf"]
+[ext_resource type="Shader" uid="uid://bwcsswf5yq6l3" path="res://global/avatar_textures/avatar_win_anim.gdshader" id="1_onnus"]
+[ext_resource type="Script" uid="uid://1lbatcong42w" path="res://global/avatar_textures/avatar_win_anim.gd" id="1_qyfaf"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_qyfaf"]
 shader = ExtResource("1_onnus")

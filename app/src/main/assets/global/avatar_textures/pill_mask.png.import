@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dbhkx40ppw68m"
-path="res://.godot/imported/moon.svg-dadc103513cf70c36e60c61c34be321d.ctex"
+uid="uid://bdrmqf2xjgbe1"
+path="res://.godot/imported/pill_mask.png-273134e4e88750a654569814a628a073.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://avatar_textures/moon.svg"
-dest_files=["res://.godot/imported/moon.svg-dadc103513cf70c36e60c61c34be321d.ctex"]
+source_file="res://global/avatar_textures/pill_mask.png"
+dest_files=["res://.godot/imported/pill_mask.png-273134e4e88750a654569814a628a073.ctex"]
 
 [params]
 
@@ -32,6 +32,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

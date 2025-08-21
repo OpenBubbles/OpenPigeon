@@ -37,7 +37,7 @@ const COLOR_MAP = {
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
-const AvatarWinAnimScene := preload("res://avatar_textures/avatar_win_anim.tscn")
+const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 
 var board: Array = []
 var color_board: Array = []

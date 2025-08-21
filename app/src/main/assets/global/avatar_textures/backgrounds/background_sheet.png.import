@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bm1ilxvwi1ay"
-path="res://.godot/imported/avatar_bodies.png-2e4cceb4530aab9042f266abfe044a4f.ctex"
+uid="uid://dnnx027hf4n8t"
+path="res://.godot/imported/background_sheet.png-9050fc2980232a7ed614ea16a0ba4418.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://avatar_textures/body/avatar_bodies.png"
-dest_files=["res://.godot/imported/avatar_bodies.png-2e4cceb4530aab9042f266abfe044a4f.ctex"]
+source_file="res://global/avatar_textures/backgrounds/background_sheet.png"
+dest_files=["res://.godot/imported/background_sheet.png-9050fc2980232a7ed614ea16a0ba4418.ctex"]
 
 [params]
 

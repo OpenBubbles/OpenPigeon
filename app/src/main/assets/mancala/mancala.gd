@@ -9,7 +9,7 @@ var spectator_mode: bool = false
 var mode: String = ""
 var my_player: String = ""
 const PIT_COUNT: int = 14
-var avatar_key = 0
+var avatar_key: String = "0"
 var _last_sown_pit: int = -1
 var has_connected: bool = false
 var offsets: Array[Vector2]
@@ -18,9 +18,9 @@ var game_over: bool = false
 var in_replay: bool = false
 const BASE_STONE_SCALE := Vector2(0.1, 0.1)
 var win_loss_state: String = ""
-var winner_id = -1
-var disp_winner = false
-var _skip_replay_animation = false
+var winner_id: int = -1
+var disp_winner: bool = false
+var _skip_replay_animation: bool = false
 var pits: Array = []
 var pit_nodes: Array[Area2D] = []
 var spawn_points: Array[Marker2D] = []
@@ -30,7 +30,7 @@ var replay_moves: Array = []
 var PitScene    : PackedScene = preload("res://mancala/pit.tscn")
 var StoreScene  : PackedScene = preload("res://mancala/store.tscn")
 var StoneScene : PackedScene = preload("res://mancala/stone.tscn")
-const AvatarWinAnimScene := preload("res://avatar_textures/avatar_win_anim.tscn")
+const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 
@@ -50,11 +50,11 @@ const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 @onready var spec_label = %SpecLabel
 
 var _carrying_stones_container: Node2D = Node2D.new()
-const STONE_DROP_DELAY = 0.1 # Time to pause after dropping each stone
-const PIT_PICKUP_TIME = 0.3 # How long it takes for the pit to lift
-const PILE_TRAVEL_TIME = 0.35 # Time for the entire pile to move between pits
-const BOUNCE_SCALE_FACTOR = 1.3 # Stones will scale to 120% of their base size
-const BOUNCE_DURATION = 0.01 # Duration for the initial bounce at pickup (for the very first pickup)
+const STONE_DROP_DELAY: float = 0.1 # Time to pause after dropping each stone
+const PIT_PICKUP_TIME: float = 0.3 # How long it takes for the pit to lift
+const PILE_TRAVEL_TIME: float = 0.35 # Time for the entire pile to move between pits
+const BOUNCE_SCALE_FACTOR: float = 1.3 # Stones will scale to 120% of their base size
+const BOUNCE_DURATION: float = 0.01 # Duration for the initial bounce at pickup (for the very first pickup)
 var dot_count: int = 0
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 var sent_tween: Tween
@@ -166,13 +166,9 @@ func _set_game_data(raw_text: String) -> void:
 			print("Opp is avatar1")
 	
 	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
-		print("168 Called")
 		var avatar_string = res[opponent_avatar_key]
-		print("170 Called")
 		var opponent_data = _parse_avatar_string(avatar_string)
-		print("172 Called")
 		if is_instance_valid(opp_avatar_display):
-			print("174 Called")
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 	player_str = int(res.get("player", player))
 	mode = String(res.get("mode", mode))
@@ -181,17 +177,20 @@ func _set_game_data(raw_text: String) -> void:
 	winner_id = res.get("winner", "")
 	
 	is_your_turn = res.get("isYourTurn", false)
-	if (my_player == p1_id or my_player == p2_id or p1_id == ""):
-		player = 1 if (player_str == 2 and is_my_turn) else 2
-		print("193 Setting Player to ", player)
-		if is_your_turn:
-			is_my_turn = true	
+	if my_player != "" and p1_id != "" and my_player == p1_id:
+		player = 1
+		is_my_turn = is_your_turn
+		spectator_mode = false
+	elif my_player != "" and p2_id != "" and my_player == p2_id:
+		player = 2
+		is_my_turn = is_your_turn
+		spectator_mode = false
 	else:
 		spectator_mode = true
 		print("Spectator Mode Enabled!")
 		spec_label.visible = true
+		is_my_turn = false
 		player = 1
-		print("199 Setting Player to ", player)
 
 	print("YOUR TURN?: ", is_your_turn, " MY TURN?: ", is_my_turn, " Spectator Mode: ", spectator_mode)
 	

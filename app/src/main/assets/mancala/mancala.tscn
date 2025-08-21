@@ -6,7 +6,7 @@
 [ext_resource type="Texture2D" uid="uid://jk4e6m7vh6ay" path="res://mancala/next.png" id="4_elfvu"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="4_miqih"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="5_elfvu"]
-[ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://avatar_textures/AvatarThumbnail.tscn" id="6_1ko3n"]
+[ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="6_1ko3n"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_elfvu"]
 shader = ExtResource("2_miqih")

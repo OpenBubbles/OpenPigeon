@@ -34,7 +34,6 @@ var replay_symbol
 var replay: String = ""
 var replay_played: bool = false
 var my_player
-var player_val
 var my_moves: Array[Array]
 var pre_board_data: Array[int] = []
 var post_board_data: Array[int] = []
@@ -63,7 +62,7 @@ const BUTTON_OFFSCREEN_OFFSET = 100
 const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const STAR_POINT_SCENE = preload("res://reversi/StarPoint.tscn")
-const AvatarWinAnimScene := preload("res://avatar_textures/avatar_win_anim.tscn")
+const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 
 func _ready():
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
@@ -144,26 +143,7 @@ func setup_ui_elements_style_and_signals():
 	if send_button:
 		send_button.pressed.connect(on_send_button_pressed)
 		send_button.text = "Send"
-		var button_style_normal = StyleBoxFlat.new()
-		button_style_normal.bg_color = Color("#2148af")
-		button_style_normal.corner_radius_top_left = 8
-		button_style_normal.corner_radius_top_right = 8
-		button_style_normal.corner_radius_bottom_left = 8
-		button_style_normal.corner_radius_bottom_right = 8
-		button_style_normal.set_border_width_all(2)
-		button_style_normal.border_color = Color("#42A5F5")
-
 		var button_style_hover = StyleBoxFlat.new()
-		button_style_hover.bg_color = Color("#283593")
-		button_style_hover.corner_radius_top_left = 8
-		button_style_hover.corner_radius_top_right = 8
-		button_style_hover.corner_radius_bottom_left = 8
-		button_style_hover.corner_radius_bottom_right = 8
-		button_style_hover.set_border_width_all(2)
-		button_style_hover.border_color = Color("#64B5F6")
-
-		send_button.add_theme_stylebox_override("normal", button_style_normal)
-		send_button.add_theme_stylebox_override("hover", button_style_hover)
 		send_button.add_theme_font_override("font", SystemFont.new())
 		send_button.add_theme_color_override("font_color", Color.WHITE)
 		send_button.add_theme_font_size_override("font_size", 24)
@@ -202,15 +182,13 @@ func setup_score_labels():
 		var player_score_style = StyleBoxFlat.new()
 		if player == 1:
 			player_score_style.bg_color = Color.BLACK
+			player_count_label.add_theme_color_override("font_color", Color.WHITE)
 		else:
 			player_score_style.bg_color = Color.WHITE
+			player_count_label.add_theme_color_override("font_color", Color.BLACK)
 		player_score_style.set_border_width_all(2)
 		player_score_style.border_color = Color.GRAY
 		player_count_label.add_theme_stylebox_override("normal", player_score_style)
-		if player == 1:
-			player_count_label.add_theme_color_override("font_color", Color.WHITE)
-		else:
-			player_count_label.add_theme_color_override("font_color", Color.BLACK)
 		player_count_label.add_theme_font_size_override("font_size", 24)
 		player_count_label.set_custom_minimum_size(Vector2(100, 40))
 		player_count_label.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
@@ -221,15 +199,13 @@ func setup_score_labels():
 		var opp_score_style = StyleBoxFlat.new()
 		if player == 1:
 			opp_score_style.bg_color = Color.WHITE
+			opp_count_label.add_theme_color_override("font_color", Color.BLACK)
 		else:
 			opp_score_style.bg_color = Color.BLACK
+			opp_count_label.add_theme_color_override("font_color", Color.WHITE)
 		opp_score_style.set_border_width_all(2)
 		opp_score_style.border_color = Color.DARK_GRAY
 		opp_count_label.add_theme_stylebox_override("normal", opp_score_style)
-		if player == 1:
-			opp_count_label.add_theme_color_override("font_color", Color.BLACK)
-		else:
-			opp_count_label.add_theme_color_override("font_color", Color.WHITE)
 		opp_count_label.add_theme_font_size_override("font_size", 24)
 		opp_count_label.set_custom_minimum_size(Vector2(100, 40))
 		opp_count_label.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
@@ -375,36 +351,51 @@ func _set_game_data(new_game_data_json: String):
 	var parsed_data = JSON.parse_string(new_game_data_json)
 	if parsed_data is Dictionary:
 		
-		var player_num_array = int(parsed_data.get("player", -1))
-		player_val = 1 if player_num_array == 2 and is_my_turn else 2
-		var sender_id = parsed_data.get("sender", "")
 		var player1_id = parsed_data.get("player1", "")
 		var player2_id = parsed_data.get("player2", "")
-		var my_player = parsed_data.get("myPlayerId", "")
-		var opponent_avatar_key = ""
-		my_player  = parsed_data.get("myPlayerId", my_player)
+		my_player = parsed_data.get("myPlayerId", "")
 		is_your_turn = parsed_data.get("isYourTurn", false)
-		if (my_player == player1_id or my_player == player2_id or player1_id == ""):
+		var opponent_avatar_key = ""
+		print("My Player: ", my_player, " Player 1 ID: ", player1_id, " Player 2 ID: ", player2_id)
+		if replay.is_empty():
 			if is_your_turn:
-				is_my_turn = true	
+				player = 1
+				player_symbol = "⚫"
+				opponent_avatar_key = "avatar2"
+				is_my_turn = true
+				spectator_mode = false
+			else:
+				player = 2
+				player_symbol = "⚪"
+				opponent_avatar_key = "avatar1"
+				is_my_turn = false
+				spectator_mode = false
 		else:
-			spectator_mode = true
-			print("Spectator Mode Enabled!")
-			spec_label.visible = true
-			player = 1
-			print("199 Setting Player to ", player)
-			
-		if player_val == 1:
-			player_symbol = "⚫"
-		elif player_val == 2:
-			player_symbol = "⚪"
-		else:
-			player_symbol = "⚫"
-			
-		print("My Device ID (my_player): ", my_player)
-		print("My Numerical Player (player_val): ", player_val)
-		print("My Player Symbol: ", player_symbol)
+			if my_player != "" and player1_id != "" and my_player == player1_id:
+				player = 1
+				player_symbol = "⚫"
+				opponent_avatar_key = "avatar2"
+				is_my_turn = is_your_turn
+				spectator_mode = false
+			elif my_player != "" and player2_id != "" and my_player == player2_id:
+				player = 2
+				player_symbol = "⚪"
+				opponent_avatar_key = "avatar1"
+				is_my_turn = is_your_turn
+				spectator_mode = false
+			else:
+				spectator_mode = true
+				print("Spectator Mode Enabled!")
+				spec_label.visible = true
+				is_my_turn = false
+				player = 1 # Default view for spectator is from Player 1's perspective
+		setup_score_labels()
 		
+		print("My Device ID (my_player): ", my_player)
+		print("Is My Turn: ", is_my_turn)
+		print("My Numerical Player (1=Black, 2=White): ", player)
+		print("My Player Symbol: ", player_symbol)
+
 		if my_player != "" and player1_id != "" and player2_id != "":
 			if my_player == player1_id:
 				opponent_avatar_key = "avatar2"
@@ -455,12 +446,13 @@ func _set_game_data(new_game_data_json: String):
 		highlight_valid_moves()
 		
 func _parse_avatar_string(data_string: String) -> Dictionary:
-	var hair_map = ["Spiky", "Long", "Bun", "Bald"]
+	var hair_map = ["Spiky", "Long", "Bun", "Bald", "Hair5", "Hair6", "Hair7"]
 	var body_map = ["Default", "Smiling", "Winking", "Surprised", "Frowning", "Tongue Out", "Cute"]
 	var eyes_map = ["Open", "Closed", "Winking"]
-	var mouth_map = ["Plain", "Smile", "Frown"]
+	var mouth_map = ["Plain", "Smile", "Frown", "Mouth4", "Mouth5", "Mouth6", "Grin"]
 	var clothing_map = ["T-Shirt", "Sweater", "Tank Top"]
 	var backdrop_map = ["Plain", "Pattern 1", "Pattern 2", "Pattern 3", "Pattern 4", "Pattern 5", "Pattern 6", "Pattern 7", "Pattern 8", "Pattern 9"]
+
 
 	var data = {}
 	var parts = data_string.split("|")
@@ -574,8 +566,8 @@ func check_win() -> bool:
 
 	if not game_over and not current_has_moves and not opponent_has_moves:
 		set_cells_interactable(false)
-		print("Valid, player: ", player_val, " White Score: ", white_score, " Black Score: ", black_score)
-		if (player_val == 2 and white_score > black_score) or (player_val == 1 and black_score > white_score):
+		print("Valid, player: ", player, " White Score: ", white_score, " Black Score: ", black_score)
+		if (player == 2 and white_score > black_score) or (player == 1 and black_score > white_score):
 			_show_win_burst(player_avatar_display)
 			if not spectator_mode:
 				win_loss_label.text = "YOU WIN!"
@@ -935,7 +927,7 @@ func on_send_button_pressed():
 	print("Post board data: ", post_board_data)
 	
 	
-	var move_arr = [int(temp_piece_x), int(7-temp_piece_y), int(player_val)]
+	var move_arr = [temp_piece_x, 7 - temp_piece_y, player]
 	my_moves.append(move_arr)
 	
 	var moves_str = ""

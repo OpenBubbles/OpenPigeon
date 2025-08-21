@@ -15,13 +15,13 @@ class_name AvatarThumbnail
 @onready var avatar_head_accessories: Sprite2D = %AvatarHeadAccessories
 @onready var avatar_face_accessories: Sprite2D = %AvatarFaceAccessories
 
-const AVATAR_BG_MAP_PATH = "res://avatar_textures/backgrounds/background_sheet.png"
-const AVATAR_BODY_MAP_PATH = "res://avatar_textures/body/avatar_bodies.png"
-const AVATAR_HAIR_MAP_PATH = "res://avatar_textures/hair/avatar_hair.png"
-const AVATAR_EYES_MAP_PATH = "res://avatar_textures/face/avatar_eyes.png"
-const AVATAR_MOUTH_MAP_PATH = "res://avatar_textures/face/avatar_mouth.png"
-const AVATAR_CLOTHING_MAP_PATH = "res://avatar_textures/clothing/avatar_clothing.png"
-const AVATAR_ACCESSORIES_MAP_PATH = "res://avatar_textures/accessories/avatar_accessories.png"
+const AVATAR_BG_MAP_PATH = "res://global/avatar_textures/backgrounds/background_sheet.png"
+const AVATAR_BODY_MAP_PATH = "res://global/avatar_textures/body/avatar_bodies.png"
+const AVATAR_HAIR_MAP_PATH = "res://global/avatar_textures/hair/avatar_hair.png"
+const AVATAR_EYES_MAP_PATH = "res://global/avatar_textures/face/avatar_eyes.png"
+const AVATAR_MOUTH_MAP_PATH = "res://global/avatar_textures/face/avatar_mouth.png"
+const AVATAR_CLOTHING_MAP_PATH = "res://global/avatar_textures/clothing/avatar_clothing.png"
+const AVATAR_ACCESSORIES_MAP_PATH = "res://global/avatar_textures/accessories/avatar_accessories.png"
 
 var avatar_background_regions = { "Pattern 1": Rect2(0, 0, 128, 128), "Pattern 2": Rect2(128, 0, 128, 128), "Pattern 3": Rect2(256, 0, 128, 128), "Pattern 4": Rect2(384, 0, 128, 128), "Pattern 5": Rect2(0, 128, 128, 128), "Pattern 6": Rect2(128, 128, 128, 128), "Pattern 7": Rect2(256, 128, 128, 128), "Pattern 8": Rect2(384, 128, 128, 128), "Pattern 9": Rect2(0, 256, 128, 128) }
 var avatar_body_regions = { "Default": Rect2(0, 0, 96, 64), "body1": Rect2(96, 0, 96, 64), "body2": Rect2(192, 0, 96, 64), "body3": Rect2(288, 0, 96, 64), "body4": Rect2(384, 0, 96, 64), "body5": Rect2(0, 64, 96, 64), "body6": Rect2(96, 64, 96, 64) }
