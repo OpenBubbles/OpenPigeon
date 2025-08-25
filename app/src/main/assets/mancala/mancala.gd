@@ -13,7 +13,11 @@ var avatar_key: String = "0"
 var _last_sown_pit: int = -1
 var has_connected: bool = false
 var offsets: Array[Vector2]
-var _board_initialized: bool = false
+const GOLDEN_ANGLE := TAU * (1.0 - 1.0/1.61803398875)
+const PIT_PADDING := 12.0
+const STORE_PADDING := 12.0
+const SAFETY_SCALE_PIT := 0.90
+const SAFETY_SCALE_STORE := 0.92
 var game_over: bool = false
 var in_replay: bool = false
 const BASE_STONE_SCALE := Vector2(0.1, 0.1)
@@ -26,6 +30,7 @@ var pit_nodes: Array[Area2D] = []
 var spawn_points: Array[Marker2D] = []
 var board_labels: Array = []
 var replay_moves: Array = []
+
 
 var PitScene    : PackedScene = preload("res://mancala/pit.tscn")
 var StoreScene  : PackedScene = preload("res://mancala/store.tscn")
@@ -103,7 +108,7 @@ func _ready() -> void:
 			#"mode": "n",
 			#"player": "1",
 			#"myPlayerId": "7482724F-12A2-4917-9EB3-8857DD4D44EAP3AIzX",
-			#"replay": "board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&13,12,13,13,13&12&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1|move:2,6|board:2,3,2,3&&&&&&1,2,3,1,2,3,11,12,13,11,12,13,1,2,3,1,2,3,11,12,13,11,12,13&12,13,13,13&12,13&&&&13,11,11,13&1,2,3,1,2,3,11,12,13,1",
+			#"replay": "board:&2,2&2&&3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&1,13,12&13,11,12,11,13,12,11,1,13,3,11,2&13,13,11,12,2|move:2,4|board:12&2,2&2&&3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&&13,11,12,11,13,12,11,1,13,3,11,2,1&13,13,11,12,2,13",
 			#"player2": "7482724F-12A2-4917-9EB3-8857DD4D44EAP3AIzX",
 			#"player1": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX",
 			#"avatar1": "body,1|eyes,2|mouth,1|hair,1|clothes,2|bg_color,0.42,0.94,0.86|body_color,0.79,0.70,0.66|hair_color,0.43,0.25,0.12|clothes_color,0.22,0.80,0.69",
@@ -117,8 +122,8 @@ func _ready() -> void:
 			#"id": "ziadBSjDYgc4ruev"
 		#}
 		#"""		
-		var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:&&&11&2&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13&&&&&&12&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2|move:2,5|board:&&&&&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13,11,2&&&&&&&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2,12","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
-		#var dev_data = "{'myPlayerId': , 'isYourTurn': true,'sender': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f'], 'version': ['0'], 'tver': ['5'], 'ios': ['18.5'], 'game': ['mancala'], 'id': ['9rPZettmFiDTt/eI\n'], 'size': ['4'], 'player': ['2'], 'player1': ['7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX'], 'player2': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f'], 'mode': ['n'], 'avatar1': ['body,0|eyes,1|mouth,0|acc,0|wins,0|bg_color,1.000000,0.928034,0.515868|body_color,1.000000,0.745098,0.600000|glasses,0|stache,0|backdrop,0|hair,3|clothes,0|hair_color,0.431373,0.254902,0.121569|clothes_color,0.225965,0.805188,0.692411'], 'avatar2': ['body,0|body_color,1.000000,0.741176,0.603922|hair,2|hair_color,0.941176,0.901961,0.549020|eyes,0|mouth,0|clothes,0|clothes_color,0.627451,0.235294,0.627451|bg_color,0.619608,0.270588,0.752941|backdrop,8'], 'replay': ['board:&&&11&2&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13&&&&&&12&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2|move:2,5|board:&&&&&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13,11,2&&&&&&&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2,12'], 'num': ['29'], 'build': ['XSaldMy'], 'winner': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f|-1'], 'caption': ['You Won!']}"
+		var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:&2,2&2&&3,3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&1,13,12&13,11,12,11,13,12,11,1,13,3,11,2&13,13,11,12,2|move:2,4|board:12&2,2&2&&3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&&13,11,12,11,13,12,11,1,13,3,11,2,1&13,13,11,12,2,13","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+		#var dev_data = "{'isYourTurn': true,'sender': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f'], 'version': ['0'], 'tver': ['5'], 'ios': ['18.5'], 'game': ['mancala'], 'id': ['9rPZettmFiDTt/eI\n'], 'size': ['4'], 'player': ['2'], 'player1': ['7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX'], 'player2': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f'], 'mode': ['n'], 'avatar1': ['body,0|eyes,1|mouth,0|acc,0|wins,0|bg_color,1.000000,0.928034,0.515868|body_color,1.000000,0.745098,0.600000|glasses,0|stache,0|backdrop,0|hair,3|clothes,0|hair_color,0.431373,0.254902,0.121569|clothes_color,0.225965,0.805188,0.692411'], 'avatar2': ['body,0|body_color,1.000000,0.741176,0.603922|hair,2|hair_color,0.941176,0.901961,0.549020|eyes,0|mouth,0|clothes,0|clothes_color,0.627451,0.235294,0.627451|bg_color,0.619608,0.270588,0.752941|backdrop,8'], 'replay': ['board:&&&11&2&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13&&&&&&12&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2|move:2,5|board:&&&&&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13,11,2&&&&&&&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2,12'], 'num': ['29'], 'build': ['XSaldMy'], 'winner': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f|-1'], 'caption': ['You Won!']}"
 		_set_game_data(dev_data)
 	for pit in pit_nodes:
 		for node in pit.get_children():
@@ -134,7 +139,7 @@ func _ready() -> void:
 	add_child(_carrying_stones_container)
 	_carrying_stones_container.z_index = 90
 	
-func _apply_bg_for_dark(is_dark: bool, mode: String) -> void:
+func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
 		if is_dark:
 			if mode == "an" or mode == "ah":
@@ -173,15 +178,14 @@ func _set_game_data(raw_text: String) -> void:
 	player_str = int(res.get("player", player))
 	mode = String(res.get("mode", mode))
 	my_player = my_id
-	var sender_id = res.get("sender", "")
-	winner_id = res.get("winner", "")
-	
+	winner_id = int(res.get("winner", ""))
 	is_your_turn = res.get("isYourTurn", false)
-	if my_player != "" and p1_id != "" and my_player == p1_id:
+	
+	if my_player == p1_id or (p1_id == "" and is_your_turn):
 		player = 1
 		is_my_turn = is_your_turn
 		spectator_mode = false
-	elif my_player != "" and p2_id != "" and my_player == p2_id:
+	elif my_player == p2_id or (p1_id == "" and not is_your_turn):
 		player = 2
 		is_my_turn = is_your_turn
 		spectator_mode = false
@@ -194,7 +198,7 @@ func _set_game_data(raw_text: String) -> void:
 
 	print("YOUR TURN?: ", is_your_turn, " MY TURN?: ", is_my_turn, " Spectator Mode: ", spectator_mode)
 	
-	_apply_bg_for_dark(is_dark, mode)
+	_apply_bg_for_dark(is_dark)
 
 	var replay_str: String = String(res.get("replay", ""))
 	_apply_board_layout(is_my_turn)
@@ -224,6 +228,7 @@ func _set_game_data(raw_text: String) -> void:
 		skip_button.visible = true
 		for i in range(replay_moves.size()):
 			if _skip_replay_animation:
+				print("Skipped 230")
 				break
 			var move_data = replay_moves[i]
 			var replay_player = int(move_data[0])
@@ -461,7 +466,6 @@ func _on_pit_clicked(idx: int) -> void:
 		print("Not your turn.")
 		return
 
-	var my_store_pit_idx = 6 if player_str == 1 else 13
 	if ((player == 1 and (idx < 0 or idx > 5)) or (player == 2 and (idx < 7 or idx > 12))):
 		print("Cannot click opponent's pit or a store pit.")
 		_start_pit_highlights()
@@ -523,6 +527,120 @@ func _on_pit_clicked(idx: int) -> void:
 	_is_animating = false
 	if is_my_turn:
 		_start_pit_highlights()
+		
+func _add_stone_to_pit(pit_idx: int, stone_node: Node2D, stone_label: int) -> void:
+	var pit_container := pit_nodes[pit_idx].get_node("StonesContainer") as Node2D
+	pit_container.add_child(stone_node)
+	pits[pit_idx].append(stone_label)
+	var n_stones: int = pits[pit_idx].size()
+	var stone_half_size := 8.0
+
+	var cr := _get_pit_center_and_radii(pit_idx, stone_half_size)
+	var center: Vector2 = cr[0]
+	var radii: Vector2 = cr[1]
+	var k = n_stones - 1
+	var t := float(k + 0.5) / float(n_stones)
+	var r := sqrt(t)
+	var a := GOLDEN_ANGLE * float(k)
+	var new_pos := center + Vector2(cos(a) * radii.x * r, sin(a) * radii.y * r)
+	
+	stone_node.position = new_pos
+	if stone_node.rotation_degrees == 0.0:
+		stone_node.rotation_degrees = randf_range(0, 360)
+	if stone_node is Sprite2D:
+		var sh := Sprite2D.new()
+		sh.name = "Shadow"
+		sh.texture = (stone_node as Sprite2D).texture
+		sh.modulate = Color(0, 0, 0, 0.3)
+		sh.scale = stone_node.scale * 1.05
+		sh.position = new_pos + Vector2(5, 5)
+		sh.z_index = -1
+		pit_container.add_child(sh)
+	_refresh_pit_count_label(pit_idx)
+		
+func _get_pit_center_and_radii(i: int, stone_half: float) -> Array:
+	var pit := pit_nodes[i]
+	var pad := STORE_PADDING if (i == 6 or i == 13) else PIT_PADDING
+	var safety := SAFETY_SCALE_STORE if (i == 6 or i == 13) else SAFETY_SCALE_PIT
+	var center := spawn_points[i].position
+	var radii := (Vector2(64, 40) if (i == 6 or i == 13) else Vector2(34, 34))
+
+	var col := pit.find_child("CollisionShape2D", true, false) as CollisionShape2D
+	if col and col.shape:
+		center = col.position
+
+		match col.shape:
+			CircleShape2D:
+				var r: float = (col.shape as CircleShape2D).radius - pad - stone_half
+				radii = Vector2(max(6.0, r), max(6.0, r))
+
+			RectangleShape2D:
+				var half := (col.shape as RectangleShape2D).size * 0.5 - Vector2(pad + stone_half, pad + stone_half)
+				radii = Vector2(max(6.0, half.x), max(6.0, half.y))
+
+			CapsuleShape2D:
+				var cap := col.shape as CapsuleShape2D
+				var half := Vector2(cap.radius, cap.height * 0.5 + cap.radius) - Vector2(pad + stone_half, pad + stone_half)
+				radii = Vector2(max(6.0, half.x), max(6.0, half.y))
+
+			_:
+				pass
+
+	radii *= safety
+	return [center, radii]
+
+
+func _layout_pit_stones(i: int) -> void:
+	var pit := pit_nodes[i]
+	if not pit: return
+	var container := pit.get_node("StonesContainer") as Node2D
+	if not container: return
+	for child in container.get_children():
+		if child is Node2D and child.name == "Shadow":
+			child.queue_free()
+	var stones: Array[Node2D] = []
+	for child in container.get_children():
+		if child is Node2D and child.name != "Shadow":
+			stones.append(child)
+	var n := stones.size()
+	if n == 0: return
+	var stone_half := 8.0
+	if stones[0] is Sprite2D and (stones[0] as Sprite2D).texture:
+		var tex := (stones[0] as Sprite2D).texture
+		var sz := tex.get_size() * stones[0].scale
+		stone_half = max(sz.x, sz.y) * 0.5
+
+	var cr := _get_pit_center_and_radii(i, stone_half)
+	var center: Vector2 = cr[0]
+	var radii:  Vector2 = cr[1]
+
+	for k in range(n):
+		var t := float(k + 0.5) / float(n)
+		var r := sqrt(t)
+		var a := GOLDEN_ANGLE * float(k)
+		var pos := center + Vector2(cos(a) * radii.x * r, sin(a) * radii.y * r)
+		var v := pos - center
+		var nx := v.x / radii.x
+		var ny := v.y / radii.y
+		var d := sqrt(nx * nx + ny * ny)
+		if d > 1.0:
+			var inv := 1.0 / d
+			v = Vector2(nx * inv * radii.x, ny * inv * radii.y)
+			pos = center + v
+
+		var s := stones[k]
+		s.position = pos
+		if s.rotation_degrees == 0.0:
+			s.rotation_degrees = randf_range(0, 360)
+		if s is Sprite2D:
+			var sh := Sprite2D.new()
+			sh.name = "Shadow"
+			sh.texture = (s as Sprite2D).texture
+			sh.modulate = Color(0, 0, 0, 0.3)
+			sh.scale = s.scale * 1.05
+			sh.position = pos + Vector2(5, 5)
+			sh.z_index = -1
+			container.add_child(sh)
 
 func _sow_from(start_idx: int) -> void:
 	var current_sowing_pit_idx = start_idx
@@ -606,7 +724,7 @@ func _sow_from(start_idx: int) -> void:
 				for c in _carrying_stones_container.get_children():
 					c.queue_free()
 				return
-				
+								
 			current_idx = (current_idx + 1) % PIT_COUNT
 
 			if (current_sow_player == 1 and current_idx == 13) or (current_sow_player == 2 and current_idx == 6):
@@ -638,23 +756,7 @@ func _sow_from(start_idx: int) -> void:
 
 			if stone_to_drop_visual:
 				_carrying_stones_container.remove_child(stone_to_drop_visual)
-				
-				var drop_target_local_pos = spawn_points[current_idx].position + Vector2(randf_range(-15, 15), randf_range(-15, 15))
-				
-				target_pit_node.get_node("StonesContainer").add_child(stone_to_drop_visual)
-				stone_to_drop_visual.position = drop_target_local_pos
-				stone_to_drop_visual.rotation_degrees = randf_range(0, 360)
-
-				var shadow = Sprite2D.new()
-				shadow.texture = stone_to_drop_visual.texture
-				shadow.modulate = Color(0, 0, 0, 0.3)
-				shadow.position = drop_target_local_pos + Vector2(5, 5)
-				shadow.z_index = -1
-				target_pit_node.get_node("StonesContainer").add_child(shadow)
-
-				pits[current_idx].append(dropped_stone_label)
-				print("564 refresh count label call")
-				_refresh_pit_count_label(current_idx)
+				_add_stone_to_pit(current_idx, stone_to_drop_visual, dropped_stone_label)
 
 				if carried_visual_stones.size() > 0:
 					await get_tree().create_timer(STONE_DROP_DELAY / 2.0).timeout
@@ -665,7 +767,7 @@ func _sow_from(start_idx: int) -> void:
 						return
 
 		_last_sown_pit = current_idx
-
+		
 		# Avalanche Mode Logic
 		if mode == "an" or mode == "ah":
 			print("Avalanche mode active. Last stone landed in pit: ", _last_sown_pit)
@@ -685,7 +787,6 @@ func _sow_from(start_idx: int) -> void:
 				break
 			current_sowing_pit_idx = _last_sown_pit
 		else:
-			var last_sown_pit_is_non_store = (_last_sown_pit >= 0 and _last_sown_pit <= 5) or (_last_sown_pit >= 7 and _last_sown_pit <= 12)
 			var should_capture = false
 			if not in_replay:
 				if current_sow_player == 1 and _last_sown_pit >= 0 and _last_sown_pit <= 5 and pits[_last_sown_pit].size() == 1:
@@ -829,36 +930,22 @@ func _refresh_pit(i: int) -> void:
 
 	for c in container.get_children():
 		c.queue_free()
-	
+
 	for stone_label in pits[i]:
 		var s = StoneScene.instantiate() as Node2D
 		s.scale = BASE_STONE_SCALE
 		s.modulate = _get_color_from_label(stone_label)
-		s.rotation_degrees = randf_range(0, 360) 
-
-		s.position = spawn_points[i].position + Vector2(
-			randf_range(-20, 20),
-			randf_range(-20, 20)
-		)
-		
+		s.rotation_degrees = randf_range(0, 360)
 		container.add_child(s)
 
-		var shadow = Sprite2D.new()
-		shadow.texture = s.texture
-		shadow.modulate = Color(0, 0, 0, 0.3)
-		shadow.scale = s.scale * 1.05
-		shadow.position = s.position + Vector2(5, 5)
-		shadow.z_index = s.z_index - 1
-		container.add_child(shadow)
-
-	print("772 refresh count label call")
 	_refresh_pit_count_label(i)
+	_layout_pit_stones(i)
 
 func _get_color_from_label(label: int) -> Color:
 	match label:
-		1, 11: return Color("#fffcf2") # Creamy white
-		2, 12: return Color("#414851") # Jet gray
-		3, 13: return Color("#176cab") # Bright blue (Google blue)
+		1, 11: return Color("#fffcf2")
+		2, 12: return Color("#414851") 
+		3, 13: return Color("#176cab")
 		_: return Color(randf_range(0.9, 1.0), randf_range(0.9, 1.0), randf_range(0.9, 1.0))
 
 func _refresh_pit_count_label(i: int) -> void:
@@ -1194,7 +1281,10 @@ func _show_win_burst(avatar: Control) -> void:
 func _on_skip_button_pressed() -> void:
 	if in_replay:
 		print("Skip button pressed during replay!")
-		_skip_replay_animation = true	
+		_skip_replay_animation = true
+		var active_tweens = get_tree().get_processed_tweens()
+		for tween in active_tweens:
+			tween.kill()
 
 func on_rules_button_pressed() -> void:
 	if not is_instance_valid(rules_button):
@@ -1236,7 +1326,7 @@ func on_rules_button_pressed() -> void:
 		rules_label.fit_content = true
 		rules_label.scroll_active = false
 		rules_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		rules_label.text = _get_rules_text_for_mode(mode)
+		rules_label.text = _get_rules_text_for_mode()
 
 	popup.set_as_top_level(true)
 	popup.visible = true
@@ -1254,7 +1344,7 @@ func on_rules_button_pressed() -> void:
 	popup_tween.tween_property(popup, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	popup.grab_focus()
 	
-func _get_rules_text_for_mode(mode: String) -> String:
+func _get_rules_text_for_mode() -> String:
 	match mode:
 		"n", "h":
 			return """
@@ -1393,40 +1483,40 @@ func _on_settings_button_pressed() -> void:
 
 	settings_popup_script.setup_popup(dim)
 
-	var volume_setting_hbox = HBoxContainer.new()
-	volume_setting_hbox.add_child(Label.new())
-	volume_setting_hbox.get_child(0).text = "Game Volume:"
-	volume_setting_hbox.get_child(0).set_h_size_flags(Control.SIZE_EXPAND_FILL)
-
-	var volume_slider = HSlider.new()
-	volume_slider.min_value = 0.0
-	volume_slider.max_value = 1.0
-	volume_slider.step = 0.05
-	
-	var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
-	volume_slider.value = saved_volume
-
-	volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	volume_slider.value_changed.connect(func(value):
-		AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
-		print("Master Volume: ", value)
-		SettingsManager.set_setting(game_settings_category, "master_volume", value)
-	)
-	volume_setting_hbox.add_child(volume_slider)
-
-	settings_popup_script.add_custom_setting(volume_setting_hbox)
-	
-	var toggle_debug_checkbox = CheckBox.new()
-	toggle_debug_checkbox.text = "Show Debug Info"
-	
-	var saved_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
-	toggle_debug_checkbox.button_pressed = saved_debug_info
-
-	toggle_debug_checkbox.pressed.connect(func():
-		print("Debug Info Toggled: ", toggle_debug_checkbox.button_pressed)
-		SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
-	)
-	settings_popup_script.add_custom_setting(toggle_debug_checkbox)
+	#var volume_setting_hbox = HBoxContainer.new()
+	#volume_setting_hbox.add_child(Label.new())
+	#volume_setting_hbox.get_child(0).text = "Game Volume:"
+	#volume_setting_hbox.get_child(0).set_h_size_flags(Control.SIZE_EXPAND_FILL)
+#
+	#var volume_slider = HSlider.new()
+	#volume_slider.min_value = 0.0
+	#volume_slider.max_value = 1.0
+	#volume_slider.step = 0.05
+	#
+	#var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
+	#volume_slider.value = saved_volume
+#
+	#volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	#volume_slider.value_changed.connect(func(value):
+		#AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
+		#print("Master Volume: ", value)
+		#SettingsManager.set_setting(game_settings_category, "master_volume", value)
+	#)
+	#volume_setting_hbox.add_child(volume_slider)
+#
+	#settings_popup_script.add_custom_setting(volume_setting_hbox)
+	#
+	#var toggle_debug_checkbox = CheckBox.new()
+	#toggle_debug_checkbox.text = "Show Debug Info"
+	#
+	#var saved_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
+	#toggle_debug_checkbox.button_pressed = saved_debug_info
+#
+	#toggle_debug_checkbox.pressed.connect(func():
+		#print("Debug Info Toggled: ", toggle_debug_checkbox.button_pressed)
+		#SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
+	#)
+	#settings_popup_script.add_custom_setting(toggle_debug_checkbox)
 
 	var custom_settings_title = popup_instance.find_child("CustomSettingsTitleLabel", true)
 	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:

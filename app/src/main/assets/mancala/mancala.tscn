@@ -1,4 +1,4 @@
-[gd_scene load_steps=22 format=3 uid="uid://b5cgft50kgoc8"]
+[gd_scene load_steps=23 format=3 uid="uid://b5cgft50kgoc8"]
 
 [ext_resource type="Script" uid="uid://dh7rsnax7enhf" path="res://mancala/mancala.gd" id="1_wkq4n"]
 [ext_resource type="Texture2D" uid="uid://bje0kd0ednpdh" path="res://mancala/board.png" id="2_d7lhj"]
@@ -7,6 +7,7 @@
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="4_miqih"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="5_elfvu"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="6_1ko3n"]
+[ext_resource type="Texture2D" uid="uid://3wlutur5yw1f" path="res://mancala/next_pressed.png" id="6_xpj4b"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_elfvu"]
 shader = ExtResource("2_miqih")
@@ -14,8 +15,7 @@ shader_parameter/vignette_intensity = 0.1
 shader_parameter/vignette_opacity = 0.412
 shader_parameter/vignette_rgb = Color(0, 0, 0, 1)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_elfvu"]
-bg_color = Color(0.533037, 0.533037, 0.533037, 1)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_xpj4b"]
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -42,7 +42,8 @@ shadow_color = Color(0, 0, 0, 0.647059)
 shadow_size = 4
 shadow_offset = Vector2(-1, 4)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_xpj4b"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_elfvu"]
+bg_color = Color(0.533037, 0.533037, 0.533037, 1)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -66,29 +67,29 @@ expand_margin_top = 10.0
 expand_margin_right = 20.0
 expand_margin_bottom = 10.0
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8oayu"]
-bg_color = Color(0.6, 0.6, 0.6, 0)
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_0pvrk"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_qrx05"]
 texture = ExtResource("5_elfvu")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_u2n3q"]
 texture = ExtResource("5_elfvu")
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_qrx05"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_0pvrk"]
 texture = ExtResource("5_elfvu")
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0pvrk"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8oayu"]
 bg_color = Color(0.6, 0.6, 0.6, 0)
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_miqih"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_8aurd"]
 texture = ExtResource("4_miqih")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_elfvu"]
 texture = ExtResource("4_miqih")
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_8aurd"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_miqih"]
 texture = ExtResource("4_miqih")
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0pvrk"]
+bg_color = Color(0.6, 0.6, 0.6, 0)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_miqih"]
 bg_color = Color(0, 0, 0, 0.788235)
@@ -190,9 +191,9 @@ visible = false
 layout_mode = 2
 mouse_filter = 2
 theme_override_font_sizes/font_size = 30
-theme_override_styles/hover = SubResource("StyleBoxFlat_elfvu")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_8aurd")
 theme_override_styles/normal = SubResource("StyleBoxFlat_xpj4b")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_8aurd")
+theme_override_styles/hover = SubResource("StyleBoxFlat_elfvu")
 
 [node name="ReplayButtonWrapper" type="Control" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
 visible = false
@@ -230,10 +231,9 @@ vertical_alignment = 1
 
 [node name="SkipButton" type="TextureButton" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
 unique_name_in_owner = true
-visible = false
 layout_mode = 2
 texture_normal = ExtResource("4_elfvu")
-texture_pressed = ExtResource("4_elfvu")
+texture_pressed = ExtResource("6_xpj4b")
 texture_hover = ExtResource("4_elfvu")
 
 [node name="VBoxContainer2" type="VBoxContainer" parent="MarginContainer/InfoHBoxContainer"]
@@ -288,10 +288,10 @@ layout_mode = 2
 size_flags_horizontal = 0
 size_flags_vertical = 8
 theme_override_font_sizes/font_size = 32
-theme_override_styles/focus = SubResource("StyleBoxFlat_8oayu")
-theme_override_styles/hover = SubResource("StyleBoxTexture_0pvrk")
-theme_override_styles/pressed = SubResource("StyleBoxTexture_u2n3q")
 theme_override_styles/normal = SubResource("StyleBoxTexture_qrx05")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_u2n3q")
+theme_override_styles/hover = SubResource("StyleBoxTexture_0pvrk")
+theme_override_styles/focus = SubResource("StyleBoxFlat_8oayu")
 
 [node name="SettingsButton" type="Button" parent="BottomItemHBoxContainer/MarginContainer"]
 unique_name_in_owner = true
@@ -300,10 +300,10 @@ layout_mode = 2
 size_flags_horizontal = 10
 size_flags_vertical = 8
 theme_override_font_sizes/font_size = 32
-theme_override_styles/focus = SubResource("StyleBoxFlat_0pvrk")
-theme_override_styles/hover = SubResource("StyleBoxTexture_miqih")
-theme_override_styles/pressed = SubResource("StyleBoxTexture_elfvu")
 theme_override_styles/normal = SubResource("StyleBoxTexture_8aurd")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_elfvu")
+theme_override_styles/hover = SubResource("StyleBoxTexture_miqih")
+theme_override_styles/focus = SubResource("StyleBoxFlat_0pvrk")
 
 [node name="WaitBlur" type="ColorRect" parent="."]
 unique_name_in_owner = true
@@ -317,20 +317,14 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 
-[node name="WaitingContainer" type="MarginContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-theme_override_constants/margin_bottom = 185
-
-[node name="WaitForOpponentLabel" type="Label" parent="WaitingContainer"]
+[node name="WaitForOpponentLabel" type="Label" parent="."]
 unique_name_in_owner = true
 visible = false
-layout_mode = 2
+layout_mode = 0
+offset_left = 161.0
+offset_top = 558.0
+offset_right = 487.0
+offset_bottom = 593.0
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_miqih")

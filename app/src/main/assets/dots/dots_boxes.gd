@@ -21,6 +21,7 @@ extends Control
 @onready var opp_marker: TextureRect = %OppMarker
 @onready var you_label: Label = %YouLabel
 
+
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
@@ -29,8 +30,6 @@ var sent_tween: Tween
 var dot_count: int = 0
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 
-var _turn_lines: Array = [] 
-var _turn_squares: Array = []
 var has_connected: bool = false
 var _turn_steps: Array = []
 var game_settings_category: String = ""
@@ -62,6 +61,9 @@ var red_marker_tex: Texture2D = preload("res://dots/red_marker.png")
 
 func _ready() -> void:
 	var sb := StyleBoxFlat.new()
+	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
+	print("Dark Mode: ", is_dark)
+	_apply_bg_for_dark(is_dark)
 	sb.bg_color = Color(1, 1, 1, 1)
 	sb.corner_radius_top_left = 2
 	sb.corner_radius_top_right = 2
@@ -70,11 +72,9 @@ func _ready() -> void:
 	sb.shadow_color = Color(0, 0, 0, 0.18)
 	sb.shadow_size = 16
 	%Paper.add_theme_stylebox_override("panel", sb)
-
 	set_board_size(board_size)
 	resized.connect(_on_resized)
 	_on_resized()
-
 	if is_instance_valid(grid):
 		grid.connect("turn_changed", Callable(self, "_on_turn"))
 		grid.connect("score_changed", Callable(self, "_on_score"))
@@ -115,8 +115,8 @@ func _ready() -> void:
 			print("AppPlugin Connected")
 	else:
 		print("[DEV] Editor hint active, loading sample game data")
-		#var dev_data = '{"isYourTurn": true,"size": "4","player": "2","replay": "board:1,0,2,0,3#2,0,1,0,2#1,0,0,0,1#2,2,1,2,2#1,3,0,3,1#2,2,0,2,1#1,1,1,1,2#2,1,0,1,1#1,3,2,3,3#2,1,2,1,3#1,3,1,3,2#2,2,2,2,3#1,1,0,2,0|line:2,1,1,2,1|square:2,1,0|line:2,1,2,2,2|square:2,1,1|line:2,1,3,2,3|square:2,1,2|line:2,2,0,3,0|board:1,0,2,0,3#2,0,1,0,2#1,0,0,0,1#2,2,1,2,2#1,3,0,3,1#2,2,0,2,1#1,1,1,1,2#2,1,0,1,1#1,3,2,3,3#2,1,2,1,3#1,3,1,3,2#2,2,2,2,3#1,1,0,2,0#2,1,1,2,1#2,1,2,2,2#2,1,3,2,3#2,2,0,3,0#2,1,0#2,1,1#2,1,2","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
-		var dev_data = '{"isYourTurn": true,"size": "4","player": "2","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+		var dev_data = '{"isYourTurn": true,"size": "4","player": "2","replay": "board:1,0,2,0,3#2,0,1,0,2#1,0,0,0,1#2,2,1,2,2#1,3,0,3,1#2,2,0,2,1#1,1,1,1,2#2,1,0,1,1#1,3,2,3,3#2,1,2,1,3#1,3,1,3,2#2,2,2,2,3#1,1,0,2,0|line:2,1,1,2,1|square:2,1,0|line:2,1,2,2,2|square:2,1,1|line:2,1,3,2,3|square:2,1,2|line:2,2,0,3,0|board:1,0,2,0,3#2,0,1,0,2#1,0,0,0,1#2,2,1,2,2#1,3,0,3,1#2,2,0,2,1#1,1,1,1,2#2,1,0,1,1#1,3,2,3,3#2,1,2,1,3#1,3,1,3,2#2,2,2,2,3#1,1,0,2,0#2,1,1,2,1#2,1,2,2,2#2,1,3,2,3#2,2,0,3,0#2,1,0#2,1,1#2,1,2","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+		#var dev_data = '{"isYourTurn": true,"size": "6","player": "2","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
 		_set_game_data(dev_data)
 
 func _set_game_data(raw_text: String) -> void:
@@ -129,13 +129,13 @@ func _set_game_data(raw_text: String) -> void:
 	var p2_id: String = res.get("player2", "")
 	var opponent_avatar_key = ""
 
-	var turn_owner: int = clamp(int(res.get("player", 1)), 1, 2)
-	var iyt: bool = bool(res.get("isYourTurn", false))
+	turn_owner = clamp(int(res.get("player", 1)), 1, 2)
+	is_your_turn = bool(res.get("isYourTurn", false))
 
 	if my_id != "" and p1_id != "" and p2_id != "":
 		player = (1 if my_id == p1_id else (2 if my_id == p2_id else 1))
 	else:
-		player = (3 - turn_owner) if iyt else turn_owner
+		player = (3 - turn_owner) if is_your_turn else turn_owner
 		
 	if player == 1:
 		opponent_avatar_key = "avatar2"
@@ -149,7 +149,7 @@ func _set_game_data(raw_text: String) -> void:
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
 	_apply_player_color_icons()
-	is_my_turn = iyt
+	is_my_turn = is_your_turn
 
 	board_size = clamp(int(res.get("size", board_size)), 4, 6)
 	if is_instance_valid(grid) and grid.has_method("set_grid"):
@@ -164,6 +164,8 @@ func _set_game_data(raw_text: String) -> void:
 	if game_ended:
 		stop_waiting_animation()
 		game_over = true
+	if not is_my_turn:
+		start_waiting_animation()
 
 func _load_pre_state_and_replay(replay_str: String) -> void:
 	var parsed := _parse_replay_dnb(replay_str)
@@ -183,11 +185,11 @@ func _load_pre_state_and_replay(replay_str: String) -> void:
 	if not moves.is_empty() and is_instance_valid(grid) and grid.has_method("replay_line_move"):
 		for move in moves:
 			await grid.call("replay_line_move", move)
-			await get_tree().create_timer(0.3).timeout
+			await get_tree().create_timer(0.7).timeout
 
-	if is_instance_valid(grid) and grid.has_method("load_lines_and_squares_state") and (not opponent_post_squares.is_empty()):
-		grid.call("load_lines_and_squares_state", opponent_post_lines, opponent_post_squares)
-
+	#if is_instance_valid(grid) and grid.has_method("load_lines_and_squares_state") and (not opponent_post_squares.is_empty()):
+		#grid.call("load_lines_and_squares_state", opponent_post_lines, opponent_post_squares)
+	#print("192 Call")
 	prev_lines_cache = _get_committed_lines()
 	if is_instance_valid(player_score_label) and is_instance_valid(opp_score_label):
 		if player_score_label.text == "" and opp_score_label.text == "":
@@ -205,7 +207,6 @@ func _apply_turn_state() -> void:
 		var grid_player := player if is_my_turn else (3 - player)
 		grid.set("player", grid_player)
 		grid.call_deferred("set_input_enabled", is_my_turn and not spectator_mode)
-		
 	if not spectator_mode:
 		if is_my_turn: stop_waiting_animation()
 
@@ -327,7 +328,8 @@ func _apply_player_color_icons() -> void:
 
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
-		background.color = Color("#261a19") if is_dark else Color("#202526")
+		print("Is Dark: ", is_dark)
+		background.color = Color("#261a19") if is_dark else Color("#947972")
 
 func _on_resized() -> void:
 	var s := get_viewport_rect().size
@@ -339,7 +341,7 @@ func set_board_size(n: int) -> void:
 	if is_instance_valid(grid) and grid.has_method("set_grid"):
 		grid.call("set_grid", board_size)
 
-func _on_turn(p: int) -> void:
+func _on_turn() -> void:
 	pass
 
 func _on_score(p0: int, p1: int) -> void:
@@ -357,7 +359,7 @@ func _on_score(p0: int, p1: int) -> void:
 		game_over = true
 		send_game()
 
-func _on_game_over(p0: int, p1: int) -> void:
+func _on_game_over() -> void:
 	pass
 
 func _on_temp_line_changed(has_line: bool) -> void:
@@ -383,10 +385,10 @@ func _on_temp_line_changed(has_line: bool) -> void:
 	var vp := get_viewport_rect()
 	var off_y: float = vp.size.y + send_button.size.y + 30.0
 	var start_pos := Vector2(home.x, off_y)
-	var is_visible := send_button.visible
+	var is_send_visible = send_button.visible
 
 	if should_show:
-		if not is_visible:
+		if not is_send_visible:
 			send_button.global_position = start_pos
 			send_button.visible = true
 			send_button.modulate.a = 1.0
@@ -399,7 +401,7 @@ func _on_temp_line_changed(has_line: bool) -> void:
 		t_in.tween_property(send_button, "global_position", home, 0.35)\
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	else:
-		if is_visible:
+		if is_send_visible:
 			var end_pos := Vector2(home.x, off_y)
 			print("[SendButton] fly-out from ", send_button.global_position, " to ", end_pos)
 			var t_out := create_tween()
@@ -856,33 +858,33 @@ func _on_settings_button_pressed() -> void:
 
 	settings_popup_script.setup_popup(dim)
 
-	var volume_setting_hbox := HBoxContainer.new()
-	volume_setting_hbox.add_child(Label.new())
-	(volume_setting_hbox.get_child(0) as Label).text = "Game Volume:"
-	(volume_setting_hbox.get_child(0) as Label).set_h_size_flags(Control.SIZE_EXPAND_FILL)
-
-	var volume_slider := HSlider.new()
-	volume_slider.min_value = 0.0
-	volume_slider.max_value = 1.0
-	volume_slider.step = 0.05
-	var saved_volume: float = float(SettingsManager.get_setting(game_settings_category, "master_volume", 0.75))
-	volume_slider.value = saved_volume
-	volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	volume_slider.value_changed.connect(func(value):
-		AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
-		SettingsManager.set_setting(game_settings_category, "master_volume", value)
-	)
-	volume_setting_hbox.add_child(volume_slider)
-	settings_popup_script.add_custom_setting(volume_setting_hbox)
-
-	var toggle_debug_checkbox := CheckBox.new()
-	toggle_debug_checkbox.text = "Show Debug Info"
-	var saved_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
-	toggle_debug_checkbox.button_pressed = saved_debug_info
-	toggle_debug_checkbox.pressed.connect(func():
-		SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
-	)
-	settings_popup_script.add_custom_setting(toggle_debug_checkbox)
+	#var volume_setting_hbox := HBoxContainer.new()
+	#volume_setting_hbox.add_child(Label.new())
+	#(volume_setting_hbox.get_child(0) as Label).text = "Game Volume:"
+	#(volume_setting_hbox.get_child(0) as Label).set_h_size_flags(Control.SIZE_EXPAND_FILL)
+#
+	#var volume_slider := HSlider.new()
+	#volume_slider.min_value = 0.0
+	#volume_slider.max_value = 1.0
+	#volume_slider.step = 0.05
+	#var saved_volume: float = float(SettingsManager.get_setting(game_settings_category, "master_volume", 0.75))
+	#volume_slider.value = saved_volume
+	#volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	#volume_slider.value_changed.connect(func(value):
+		#AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
+		#SettingsManager.set_setting(game_settings_category, "master_volume", value)
+	#)
+	#volume_setting_hbox.add_child(volume_slider)
+	#settings_popup_script.add_custom_setting(volume_setting_hbox)
+#
+	#var toggle_debug_checkbox := CheckBox.new()
+	#toggle_debug_checkbox.text = "Show Debug Info"
+	#var saved_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
+	#toggle_debug_checkbox.button_pressed = saved_debug_info
+	#toggle_debug_checkbox.pressed.connect(func():
+		#SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
+	#)
+	#settings_popup_script.add_custom_setting(toggle_debug_checkbox)
 
 	var custom_settings_title := popup_instance.find_child("CustomSettingsTitleLabel", true)
 	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:

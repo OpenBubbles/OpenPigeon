@@ -29,29 +29,29 @@ expand_margin_top = 10.0
 expand_margin_right = 20.0
 expand_margin_bottom = 10.0
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_a4icl"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_feg08"]
 texture = ExtResource("4_xoh6u")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_c8si1"]
 texture = ExtResource("4_xoh6u")
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_feg08"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_a4icl"]
 texture = ExtResource("4_xoh6u")
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_vpag6"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_dllis"]
 texture = ExtResource("5_f1idx")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_l1x53"]
 texture = ExtResource("5_f1idx")
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_dllis"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_vpag6"]
 texture = ExtResource("5_f1idx")
 
 [sub_resource type="SystemFont" id="SystemFont_ac22s"]
 font_weight = 600
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_f1idx"]
-bg_color = Color(0.200916, 0.379772, 0.83122, 1)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_oiv88"]
+bg_color = Color(0.129412, 0.282353, 0.686275, 1)
 border_color = Color(0.8, 0.8, 0.8, 0)
 corner_radius_top_left = 16
 corner_radius_top_right = 16
@@ -78,8 +78,8 @@ expand_margin_bottom = 6.0
 shadow_size = 2
 shadow_offset = Vector2(0, 2)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_oiv88"]
-bg_color = Color(0.129412, 0.282353, 0.686275, 1)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_f1idx"]
+bg_color = Color(0.200916, 0.379772, 0.83122, 1)
 border_color = Color(0.8, 0.8, 0.8, 0)
 corner_radius_top_left = 16
 corner_radius_top_right = 16
@@ -310,9 +310,9 @@ size_flags_horizontal = 10
 size_flags_vertical = 8
 focus_mode = 0
 theme_override_font_sizes/font_size = 32
-theme_override_styles/hover = SubResource("StyleBoxTexture_a4icl")
-theme_override_styles/pressed = SubResource("StyleBoxTexture_c8si1")
 theme_override_styles/normal = SubResource("StyleBoxTexture_feg08")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_c8si1")
+theme_override_styles/hover = SubResource("StyleBoxTexture_a4icl")
 
 [node name="RulesButton" type="Button" parent="VBoxContainer/BottomItemHBoxContainer/MarginContainer"]
 unique_name_in_owner = true
@@ -322,14 +322,14 @@ size_flags_horizontal = 0
 size_flags_vertical = 8
 focus_mode = 0
 theme_override_font_sizes/font_size = 32
-theme_override_styles/hover = SubResource("StyleBoxTexture_vpag6")
-theme_override_styles/pressed = SubResource("StyleBoxTexture_l1x53")
 theme_override_styles/normal = SubResource("StyleBoxTexture_dllis")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_l1x53")
+theme_override_styles/hover = SubResource("StyleBoxTexture_vpag6")
 
 [node name="SendButton" type="Button" parent="."]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(70, 50)
-layout_mode = 2
+layout_mode = 0
 offset_left = 289.0
 offset_top = 1009.28
 offset_right = 359.0
@@ -339,16 +339,16 @@ grow_vertical = 2
 size_flags_horizontal = 4
 size_flags_vertical = 8
 focus_mode = 0
-theme_override_colors/icon_hover_color = Color(0.129412, 0.282353, 0.686275, 1)
-theme_override_colors/icon_pressed_color = Color(0.129412, 0.282353, 0.686275, 1)
-theme_override_colors/icon_focus_color = Color(0.129412, 0.282353, 0.686275, 1)
-theme_override_colors/icon_normal_color = Color(0.129412, 0.282353, 0.686275, 1)
 theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/icon_normal_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_colors/icon_focus_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_colors/icon_pressed_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_colors/icon_hover_color = Color(0.129412, 0.282353, 0.686275, 1)
 theme_override_fonts/font = SubResource("SystemFont_ac22s")
 theme_override_font_sizes/font_size = 28
-theme_override_styles/hover = SubResource("StyleBoxFlat_f1idx")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_a4icl")
 theme_override_styles/normal = SubResource("StyleBoxFlat_oiv88")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_a4icl")
+theme_override_styles/hover = SubResource("StyleBoxFlat_f1idx")
 text = "Send"
 
 [node name="WaitBlur" type="ColorRect" parent="."]
@@ -366,7 +366,7 @@ color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 [node name="WaitForOpponentLabel" type="Label" parent="."]
 unique_name_in_owner = true
 visible = false
-layout_mode = 2
+layout_mode = 0
 offset_left = 161.0
 offset_top = 579.0
 offset_right = 487.0
@@ -385,7 +385,7 @@ wait_time = 0.75
 [node name="SpecLabel" type="Label" parent="."]
 unique_name_in_owner = true
 visible = false
-layout_mode = 2
+layout_mode = 0
 offset_top = 165.0
 offset_right = 648.0
 offset_bottom = 234.0

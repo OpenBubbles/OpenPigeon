@@ -556,12 +556,14 @@ func setup_tween():
 		tween.kill()
 	tween = create_tween()
 
-func create_radial_gradient_texture(size: int) -> Texture2D:
-	var img = Image.create(size, size, false, Image.FORMAT_RGBA8)
-	var center = Vector2(size / 2, size / 2)
+func create_radial_gradient_texture(gradsize: int) -> Texture2D:
+	var img = Image.create(gradsize, gradsize, false, Image.FORMAT_RGBA8)
+	@warning_ignore("integer_division")
+	var center = Vector2(gradsize / 2, gradsize / 2)
 	for y in range(size):
 		for x in range(size):
-			var dist = center.distance_to(Vector2(x, y)) / (size / 2)
+			@warning_ignore("integer_division")
+			var dist = center.distance_to(Vector2(x, y)) / (gradsize / 2)
 			var alpha = clamp(1.0 - dist, 0.0, 1.0)
 			img.set_pixel(x, y, Color(1, 1, 1, alpha))
 	var tex = ImageTexture.create_from_image(img)
@@ -963,7 +965,7 @@ func on_rules_button_pressed() -> void:
 		return
 
 	rules_button.pivot_offset = rules_button.size / 2.0
-	var tween := create_tween()
+	tween = create_tween()
 	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
@@ -1050,40 +1052,40 @@ func _on_settings_button_pressed() -> void:
 	root.move_child(dim, root.get_child_count() - 2)
 	settings_popup_script.setup_popup(dim)
 
-	var volume_setting_hbox = HBoxContainer.new()
-	volume_setting_hbox.add_child(Label.new())
-	volume_setting_hbox.get_child(0).text = "Game Volume:"
-	volume_setting_hbox.get_child(0).set_h_size_flags(Control.SIZE_EXPAND_FILL)
-
-	var volume_slider = HSlider.new()
-	volume_slider.min_value = 0.0
-	volume_slider.max_value = 1.0
-	volume_slider.step = 0.05
-	
-	var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
-	volume_slider.value = saved_volume
-
-	volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	volume_slider.value_changed.connect(func(value):
-		AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
-		print("Master Volume: ", value)
-		SettingsManager.set_setting(game_settings_category, "master_volume", value)
-	)
-	volume_setting_hbox.add_child(volume_slider)
-
-	settings_popup_script.add_custom_setting(volume_setting_hbox)
-	
-	var toggle_debug_checkbox = CheckBox.new()
-	toggle_debug_checkbox.text = "Show Debug Info"
-	
-	var saved_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
-	toggle_debug_checkbox.button_pressed = saved_debug_info
-
-	toggle_debug_checkbox.pressed.connect(func():
-		print("Debug Info Toggled: ", toggle_debug_checkbox.button_pressed)
-		SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
-	)
-	settings_popup_script.add_custom_setting(toggle_debug_checkbox)
+	#var volume_setting_hbox = HBoxContainer.new()
+	#volume_setting_hbox.add_child(Label.new())
+	#volume_setting_hbox.get_child(0).text = "Game Volume:"
+	#volume_setting_hbox.get_child(0).set_h_size_flags(Control.SIZE_EXPAND_FILL)
+#
+	#var volume_slider = HSlider.new()
+	#volume_slider.min_value = 0.0
+	#volume_slider.max_value = 1.0
+	#volume_slider.step = 0.05
+	#
+	#var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
+	#volume_slider.value = saved_volume
+#
+	#volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	#volume_slider.value_changed.connect(func(value):
+		#AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
+		#print("Master Volume: ", value)
+		#SettingsManager.set_setting(game_settings_category, "master_volume", value)
+	#)
+	#volume_setting_hbox.add_child(volume_slider)
+#
+	#settings_popup_script.add_custom_setting(volume_setting_hbox)
+	#
+	#var toggle_debug_checkbox = CheckBox.new()
+	#toggle_debug_checkbox.text = "Show Debug Info"
+	#
+	#var saved_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
+	#toggle_debug_checkbox.button_pressed = saved_debug_info
+#
+	#toggle_debug_checkbox.pressed.connect(func():
+		#print("Debug Info Toggled: ", toggle_debug_checkbox.button_pressed)
+		#SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
+	#)
+	#settings_popup_script.add_custom_setting(toggle_debug_checkbox)
 
 	var custom_settings_title = popup_instance.find_child("CustomSettingsTitleLabel", true)
 	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:

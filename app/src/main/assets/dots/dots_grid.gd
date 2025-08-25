@@ -23,6 +23,8 @@ var v_edges: Array = []
 var boxes: Array = []
 var input_enabled: bool = true
 var last_completed_boxes_bl: Array = []
+var _temp_line_pulse_tween: Tween
+var _temp_line_base_color: Color = Color.WHITE
 
 var player: int = 1
 var score: Array[int] = [0, 0]
@@ -115,7 +117,8 @@ func get_temp_line() -> Array:
 func clear_temp_line() -> void:
 	if is_instance_valid($AnimationLine):
 		$AnimationLine.visible = false
-		
+	_stop_temp_pulse()
+
 	temp_mode = false
 	temp_edge = {"kind":"", "r":-1, "c":-1}
 	emit_signal("temp_line_changed", false)
@@ -300,6 +303,31 @@ func _check_boxes_from_edge(kind: String, r: int, c: int) -> int:
 			emit_signal("square_completed_bl", player, int(bl4[0]), int(bl4[1]))
 			won += 1
 	return won
+	
+func _start_temp_pulse(anim_line: Line2D) -> void:
+	_stop_temp_pulse()
+	if not is_instance_valid(anim_line): return
+
+	var hi_col := _temp_line_base_color.lerp(Color.WHITE, 0.4)
+	var lo_col := _temp_line_base_color
+
+	var w0 := line_width
+	var w1 := line_width * 1.2
+
+	_temp_line_pulse_tween = create_tween().set_loops()
+	_temp_line_pulse_tween.parallel().tween_property(anim_line, "default_color", hi_col, 0.6)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_temp_line_pulse_tween.parallel().tween_property(anim_line, "width", w1, 0.6)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_temp_line_pulse_tween.tween_property(anim_line, "default_color", lo_col, 0.6)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_temp_line_pulse_tween.parallel().tween_property(anim_line, "width", w0, 0.6)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+func _stop_temp_pulse() -> void:
+	if _temp_line_pulse_tween and _temp_line_pulse_tween.is_running():
+		_temp_line_pulse_tween.kill()
+	_temp_line_pulse_tween = null
 	
 func _x_endpoints_for_box(br: int, bc: int) -> Dictionary:
 	var tl: Vector2 = _dot_pos(bc,   br)
@@ -575,26 +603,36 @@ func _play_line_animation(kind: String, r: int, c: int, owner: int, is_temp: boo
 	var start_pos: Vector2 = endpoints[0]
 	var end_pos: Vector2 = endpoints[1]
 	var anim_line: Line2D = $AnimationLine
+
 	if anim_line.has_meta("tween"):
 		var old_tween: Tween = anim_line.get_meta("tween")
 		if is_instance_valid(old_tween):
 			old_tween.kill()
+	_stop_temp_pulse()
 
 	anim_line.points = [start_pos, start_pos]
-	anim_line.default_color = p_colors[owner - 1]
+	var base_col := p_colors[owner - 1]
+	anim_line.default_color = base_col
 	anim_line.width = line_width
 	anim_line.visible = true
+
+	_temp_line_base_color = base_col
+
 	var tween := create_tween()
 	tween.tween_method(
-		func(p): 
+		func(p):
 			if is_instance_valid(anim_line): anim_line.points[1] = p,
-		start_pos,
-		end_pos,
-		animation_duration
+		start_pos, end_pos, animation_duration
 	).set_ease(Tween.EASE_OUT)
 
 	anim_line.set_meta("tween", tween)
-	if not is_temp:
+
+	if is_temp:
+		tween.tween_callback(func():
+			if is_instance_valid(anim_line):
+				_start_temp_pulse(anim_line)
+		)
+	else:
 		tween.tween_callback(func():
 			if is_instance_valid(anim_line):
 				anim_line.visible = false

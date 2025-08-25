@@ -27,8 +27,7 @@ void fragment() {
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_fprbq"]
 shader = SubResource("Shader_cobdr")
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_fprbq"]
-bg_color = Color(0.533037, 0.533037, 0.533037, 1)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_nn5xc"]
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -55,7 +54,8 @@ shadow_color = Color(0, 0, 0, 0.647059)
 shadow_size = 4
 shadow_offset = Vector2(-1, 4)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_nn5xc"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_fprbq"]
+bg_color = Color(0.533037, 0.533037, 0.533037, 1)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -79,22 +79,22 @@ expand_margin_top = 10.0
 expand_margin_right = 20.0
 expand_margin_bottom = 10.0
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_q50tp"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_ad4vd"]
 texture = ExtResource("3_cobdr")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_bwi04"]
 texture = ExtResource("3_cobdr")
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_ad4vd"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_q50tp"]
 texture = ExtResource("3_cobdr")
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_cobdr"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_fprbq"]
 texture = ExtResource("2_jykyx")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_kqrkf"]
 texture = ExtResource("2_jykyx")
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_fprbq"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_cobdr"]
 texture = ExtResource("2_jykyx")
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cobdr"]
@@ -306,9 +306,9 @@ layout_mode = 2
 visible = false
 layout_mode = 2
 theme_override_font_sizes/font_size = 30
-theme_override_styles/hover = SubResource("StyleBoxFlat_fprbq")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_1gr0b")
 theme_override_styles/normal = SubResource("StyleBoxFlat_nn5xc")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_1gr0b")
+theme_override_styles/hover = SubResource("StyleBoxFlat_fprbq")
 
 [node name="ReplayButtonWrapper" type="Control" parent="MainVBoxContainer/GameAreaCenterContainer"]
 visible = false
@@ -363,9 +363,9 @@ size_flags_horizontal = 0
 size_flags_vertical = 8
 focus_mode = 0
 theme_override_font_sizes/font_size = 32
-theme_override_styles/hover = SubResource("StyleBoxTexture_q50tp")
-theme_override_styles/pressed = SubResource("StyleBoxTexture_bwi04")
 theme_override_styles/normal = SubResource("StyleBoxTexture_ad4vd")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_bwi04")
+theme_override_styles/hover = SubResource("StyleBoxTexture_q50tp")
 
 [node name="SettingsButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer"]
 unique_name_in_owner = true
@@ -375,9 +375,9 @@ size_flags_horizontal = 10
 size_flags_vertical = 8
 focus_mode = 0
 theme_override_font_sizes/font_size = 32
-theme_override_styles/hover = SubResource("StyleBoxTexture_cobdr")
-theme_override_styles/pressed = SubResource("StyleBoxTexture_kqrkf")
 theme_override_styles/normal = SubResource("StyleBoxTexture_fprbq")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_kqrkf")
+theme_override_styles/hover = SubResource("StyleBoxTexture_cobdr")
 
 [node name="WaitBlur" type="ColorRect" parent="."]
 unique_name_in_owner = true
@@ -391,20 +391,14 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 
-[node name="WaitingContainer" type="MarginContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-theme_override_constants/margin_bottom = 185
-
-[node name="WaitForOpponentLabel" type="Label" parent="WaitingContainer"]
+[node name="WaitForOpponentLabel" type="Label" parent="."]
 unique_name_in_owner = true
 visible = false
-layout_mode = 2
+layout_mode = 0
+offset_left = 161.0
+offset_top = 496.0
+offset_right = 487.0
+offset_bottom = 531.0
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_cobdr")
@@ -419,7 +413,7 @@ wait_time = 0.75
 [node name="SpecLabel" type="Label" parent="."]
 unique_name_in_owner = true
 visible = false
-layout_mode = 2
+layout_mode = 0
 offset_top = 129.0
 offset_right = 648.0
 offset_bottom = 198.0

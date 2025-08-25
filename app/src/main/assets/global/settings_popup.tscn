@@ -4,8 +4,10 @@
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_meppk"]
 bg_color = Color(0.6, 0.6, 0.6, 0.611765)
-corner_radius_top_left = 10
-corner_radius_top_right = 10
+corner_radius_top_left = 25
+corner_radius_top_right = 25
+corner_radius_bottom_right = 25
+corner_radius_bottom_left = 25
 
 [node name="SettingsPopup" type="PanelContainer"]
 anchors_preset = 15
@@ -26,7 +28,7 @@ theme_override_constants/margin_bottom = 20
 [node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
 layout_mode = 2
 
-[node name="VSeparator2" type="VSeparator" parent="MarginContainer/VBoxContainer"]
+[node name="VSeparator2" type="Control" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
 
 [node name="AvatarCustomizerContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer"]
@@ -39,11 +41,17 @@ custom_minimum_size = Vector2(0, 64)
 layout_mode = 2
 size_flags_vertical = 6
 
+[node name="HSeparator" type="Control" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer"]
+custom_minimum_size = Vector2(0, 15)
+layout_mode = 2
+
 [node name="AvatarTabContainer" type="TabBar" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(500, 50)
 layout_mode = 2
 size_flags_vertical = 6
+theme_override_constants/h_separation = 4
+theme_override_constants/tab_separation = 20
 tab_alignment = 1
 
 [node name="PropertiesBox" type="VBoxContainer" parent="MarginContainer/VBoxContainer/AvatarCustomizerContainer"]
@@ -53,7 +61,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 alignment = 1
 
-[node name="VSeparator3" type="VSeparator" parent="MarginContainer/VBoxContainer"]
+[node name="VSeparator3" type="Control" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
 
 [node name="GlobalSettingsTitleLabel" type="Label" parent="MarginContainer/VBoxContainer"]
@@ -68,7 +76,7 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 2
 
-[node name="VSeparator4" type="VSeparator" parent="MarginContainer/VBoxContainer"]
+[node name="VSeparator4" type="Control" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
 
 [node name="CustomSettingsTitleLabel" type="Label" parent="MarginContainer/VBoxContainer"]
@@ -79,7 +87,7 @@ theme_override_font_sizes/font_size = 20
 text = "Game Specific Settings"
 horizontal_alignment = 1
 
-[node name="VSeparator" type="VSeparator" parent="MarginContainer/VBoxContainer"]
+[node name="VSeparator" type="Control" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
 
 [node name="HBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer"]

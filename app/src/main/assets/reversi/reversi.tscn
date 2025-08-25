@@ -17,8 +17,7 @@ shadow_color = Color(0, 0, 0, 0.54902)
 shadow_size = 7
 shadow_offset = Vector2(0, 10)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0y82s"]
-bg_color = Color(0.533037, 0.533037, 0.533037, 1)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_2damg"]
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -45,7 +44,8 @@ shadow_color = Color(0, 0, 0, 0.647059)
 shadow_size = 4
 shadow_offset = Vector2(-1, 4)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_2damg"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0y82s"]
+bg_color = Color(0.533037, 0.533037, 0.533037, 1)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -69,29 +69,29 @@ expand_margin_top = 10.0
 expand_margin_right = 20.0
 expand_margin_bottom = 10.0
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_m5bvx"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_31pxf"]
 texture = ExtResource("2_by1w1")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_gybti"]
 texture = ExtResource("2_by1w1")
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_31pxf"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_m5bvx"]
 texture = ExtResource("2_by1w1")
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_on1mr"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_yb6cj"]
 texture = ExtResource("3_cwv3m")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_an3or"]
 texture = ExtResource("3_cwv3m")
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_yb6cj"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_on1mr"]
 texture = ExtResource("3_cwv3m")
 
 [sub_resource type="SystemFont" id="SystemFont_ig7tw"]
 font_weight = 600
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cwv3m"]
-bg_color = Color(0.222736, 0.405094, 0.858522, 1)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0xm2m"]
+bg_color = Color(0.133333, 0.282353, 0.686275, 1)
 border_width_left = 2
 border_width_top = 2
 border_width_right = 2
@@ -126,8 +126,8 @@ expand_margin_bottom = 6.0
 shadow_size = 2
 shadow_offset = Vector2(0, 2)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0xm2m"]
-bg_color = Color(0.133333, 0.282353, 0.686275, 1)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cwv3m"]
+bg_color = Color(0.222736, 0.405094, 0.858522, 1)
 border_width_left = 2
 border_width_top = 2
 border_width_right = 2
@@ -284,9 +284,9 @@ unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_font_sizes/font_size = 30
-theme_override_styles/hover = SubResource("StyleBoxFlat_0y82s")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_by1w1")
 theme_override_styles/normal = SubResource("StyleBoxFlat_2damg")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_by1w1")
+theme_override_styles/hover = SubResource("StyleBoxFlat_0y82s")
 
 [node name="ReplayButtonWrapper" type="Control" parent="MainVBoxContainer/GameAreaCenterContainer"]
 layout_mode = 2
@@ -336,9 +336,9 @@ size_flags_horizontal = 10
 size_flags_vertical = 8
 focus_mode = 0
 theme_override_font_sizes/font_size = 32
-theme_override_styles/hover = SubResource("StyleBoxTexture_m5bvx")
-theme_override_styles/pressed = SubResource("StyleBoxTexture_gybti")
 theme_override_styles/normal = SubResource("StyleBoxTexture_31pxf")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_gybti")
+theme_override_styles/hover = SubResource("StyleBoxTexture_m5bvx")
 
 [node name="RulesButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer"]
 unique_name_in_owner = true
@@ -348,9 +348,9 @@ size_flags_horizontal = 0
 size_flags_vertical = 8
 focus_mode = 0
 theme_override_font_sizes/font_size = 32
-theme_override_styles/hover = SubResource("StyleBoxTexture_on1mr")
-theme_override_styles/pressed = SubResource("StyleBoxTexture_an3or")
 theme_override_styles/normal = SubResource("StyleBoxTexture_yb6cj")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_an3or")
+theme_override_styles/hover = SubResource("StyleBoxTexture_on1mr")
 
 [node name="SendButton" type="Button" parent="."]
 unique_name_in_owner = true
@@ -366,15 +366,15 @@ grow_vertical = 2
 size_flags_horizontal = 4
 size_flags_vertical = 8
 focus_mode = 0
-theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_focus_color = Color(1, 1, 1, 1)
 theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
 theme_override_fonts/font = SubResource("SystemFont_ig7tw")
 theme_override_font_sizes/font_size = 40
-theme_override_styles/hover = SubResource("StyleBoxFlat_cwv3m")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_m5bvx")
 theme_override_styles/normal = SubResource("StyleBoxFlat_0xm2m")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_m5bvx")
+theme_override_styles/hover = SubResource("StyleBoxFlat_cwv3m")
 
 [node name="WaitBlur" type="ColorRect" parent="."]
 unique_name_in_owner = true
@@ -388,20 +388,14 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 
-[node name="WaitingContainer" type="MarginContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-theme_override_constants/margin_bottom = 185
-
-[node name="WaitForOpponentLabel" type="Label" parent="WaitingContainer"]
+[node name="WaitForOpponentLabel" type="Label" parent="."]
 unique_name_in_owner = true
 visible = false
-layout_mode = 2
+layout_mode = 0
+offset_left = 161.0
+offset_top = 496.0
+offset_right = 487.0
+offset_bottom = 531.0
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_h2yge")
@@ -416,7 +410,7 @@ wait_time = 0.75
 [node name="SpecLabel" type="Label" parent="."]
 unique_name_in_owner = true
 visible = false
-layout_mode = 2
+layout_mode = 0
 offset_top = 129.0
 offset_right = 648.0
 offset_bottom = 198.0

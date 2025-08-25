@@ -2,6 +2,7 @@
 extends Node
 class_name GlobalSettings
 
+@warning_ignore("unused_signal")
 signal avatar_changed
 
 const SETTINGS_FILE_PATH = "user://settings.cfg"

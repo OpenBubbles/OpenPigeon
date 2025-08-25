@@ -337,18 +337,24 @@ func _apply_dark_mode_visuals(enabled: bool, instant: bool) -> void:
 	if dark_mode_button == null: return
 	dark_mode_button.set_pressed_no_signal(enabled)
 	_update_switch_visual(dark_mode_button, enabled, instant)
+	
+	var sb := get_theme_stylebox("panel") as StyleBoxFlat
+	if sb == null:
+		sb = StyleBoxFlat.new()
+		add_theme_stylebox_override("panel", sb)
+
+	var target := Color(0.3,0.3,0.3,0.5) if enabled else Color(0.7,0.7,0.7,0.5)
+
+	if instant:
+		sb.bg_color = target
+	else:
+		var tw := create_tween()
+		tw.tween_property(sb, "bg_color", target, 0.25)
 		
 func _add_dark_mode_toggle():
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var card_style := StyleBoxFlat.new()
-	card_style.bg_color = Color(1, 1, 1, 0.1)
-	card_style.border_width_left = 1; card_style.border_width_top = 1; card_style.border_width_right = 1; card_style.border_width_bottom = 1
-	card_style.border_color = Color(1, 1, 1, 0.2)
-	card_style.corner_radius_top_left = 5; card_style.corner_radius_top_right = 5
-	card_style.corner_radius_bottom_left = 5; card_style.corner_radius_bottom_right = 5
-	card_style.set_content_margin_all(8)
-	card.add_theme_stylebox_override("panel", card_style)
+	card.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 
 	var row := CenterContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -1,7 +1,7 @@
 [gd_scene load_steps=8 format=3 uid="uid://cd1xporemieyg"]
 
 [ext_resource type="Script" uid="uid://b2uoho8muw6c" path="res://global/rules_popup.gd" id="1_vu5r7"]
-[ext_resource type="Texture2D" uid="uid://f32p6cvtxkp" path="res://reversi/close.png" id="2_j450f"]
+[ext_resource type="Texture2D" uid="uid://dvv4nosdnn54" path="res://global/close.png" id="2_e46ch"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4gcu8"]
 border_width_left = 4
@@ -18,14 +18,14 @@ bg_color = Color(0.298039, 0.298039, 0.298039, 1)
 corner_radius_top_left = 10
 corner_radius_top_right = 10
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_l8ihy"]
-texture = ExtResource("2_j450f")
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_gj8jg"]
+texture = ExtResource("2_e46ch")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_xt2m2"]
-texture = ExtResource("2_j450f")
+texture = ExtResource("2_e46ch")
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_gj8jg"]
-texture = ExtResource("2_j450f")
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_l8ihy"]
+texture = ExtResource("2_e46ch")
 
 [node name="Control" type="Control"]
 top_level = true
@@ -100,9 +100,9 @@ layout_mode = 2
 size_flags_horizontal = 8
 size_flags_vertical = 4
 focus_mode = 0
-theme_override_styles/hover = SubResource("StyleBoxTexture_l8ihy")
-theme_override_styles/pressed = SubResource("StyleBoxTexture_xt2m2")
 theme_override_styles/normal = SubResource("StyleBoxTexture_gj8jg")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_xt2m2")
+theme_override_styles/hover = SubResource("StyleBoxTexture_l8ihy")
 
 [node name="Control" type="Control" parent="MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/HBoxContainer/MarginContainer"]
 custom_minimum_size = Vector2(5, 0)

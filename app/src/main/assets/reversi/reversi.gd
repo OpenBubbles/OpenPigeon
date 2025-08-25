@@ -86,7 +86,7 @@ func _ready():
 			appPlugin.onReady()
 			print("AppPlugin Connected")
 	else:
-		_set_game_data('{ "isYourTurn": true, "player": "2", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,0,2,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0|move:0,3,1|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,2,2,2,0,0,1,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
+		_set_game_data('{ "isYourTurn": true, "player": "2", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,0,2,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0|move:0,3,1|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,2,2,2,0,0,1,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
 		#_set_game_data('{ "isYourTurn": true, "player": "1", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0|move:3,1,2|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
 		print("No AppPlugin Available, Setting Debug Data")
 		
@@ -146,7 +146,6 @@ func setup_ui_elements_style_and_signals():
 	if send_button:
 		send_button.pressed.connect(on_send_button_pressed)
 		send_button.text = "Send"
-		var button_style_hover = StyleBoxFlat.new()
 		send_button.add_theme_font_override("font", SystemFont.new())
 		send_button.add_theme_color_override("font_color", Color.WHITE)
 		send_button.add_theme_font_size_override("font_size", 24)
@@ -157,8 +156,10 @@ func setup_ui_elements_style_and_signals():
 	if player_count_label:
 		var player_score_style = StyleBoxFlat.new()
 		player_score_style.bg_color = Color.BLACK
-		player_score_style.set_border_width_all(2)
-		player_score_style.border_color = Color.GRAY
+		player_score_style.corner_radius_top_left = 20 # NEW: Individual corner
+		player_score_style.corner_radius_top_right = 20 # NEW: Individual corner
+		player_score_style.corner_radius_bottom_left = 20 # NEW: Individual corner
+		player_score_style.corner_radius_bottom_right = 20 # NEW: Individual corner
 		player_count_label.add_theme_stylebox_override("normal", player_score_style)
 		player_count_label.add_theme_color_override("font_color", Color.WHITE)
 		player_count_label.add_theme_font_size_override("font_size", 24)
@@ -183,20 +184,24 @@ func setup_ui_elements_style_and_signals():
 func setup_score_labels():
 	if player_count_label:
 		var player_score_style = StyleBoxFlat.new()
-		if player == 1:
+		if player == 1 or spectator_mode:
 			player_score_style.bg_color = Color.BLACK
 			player_count_label.add_theme_color_override("font_color", Color.WHITE)
 		else:
 			player_score_style.bg_color = Color.WHITE
 			player_count_label.add_theme_color_override("font_color", Color.BLACK)
-		player_score_style.set_border_width_all(2)
-		player_score_style.border_color = Color.GRAY
 		player_count_label.add_theme_stylebox_override("normal", player_score_style)
 		player_count_label.add_theme_font_size_override("font_size", 24)
-		player_count_label.set_custom_minimum_size(Vector2(100, 40))
+		player_count_label.set_custom_minimum_size(Vector2(60, 60))
 		player_count_label.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
 		player_count_label.set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER)
 		player_count_label.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
+		player_score_style.set_border_width_all(2)
+		player_score_style.border_color = Color.GRAY
+		player_score_style.corner_radius_top_left = 30
+		player_score_style.corner_radius_top_right = 30
+		player_score_style.corner_radius_bottom_left = 30
+		player_score_style.corner_radius_bottom_right = 30
 
 	if opp_count_label:
 		var opp_score_style = StyleBoxFlat.new()
@@ -206,14 +211,18 @@ func setup_score_labels():
 		else:
 			opp_score_style.bg_color = Color.BLACK
 			opp_count_label.add_theme_color_override("font_color", Color.WHITE)
-		opp_score_style.set_border_width_all(2)
-		opp_score_style.border_color = Color.DARK_GRAY
 		opp_count_label.add_theme_stylebox_override("normal", opp_score_style)
 		opp_count_label.add_theme_font_size_override("font_size", 24)
-		opp_count_label.set_custom_minimum_size(Vector2(100, 40))
+		opp_count_label.set_custom_minimum_size(Vector2(60, 60))
 		opp_count_label.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
 		opp_count_label.set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER)
 		opp_count_label.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
+		opp_score_style.set_border_width_all(2)
+		opp_score_style.border_color = Color.GRAY
+		opp_score_style.corner_radius_top_left = 30
+		opp_score_style.corner_radius_top_right = 30
+		opp_score_style.corner_radius_bottom_left = 30
+		opp_score_style.corner_radius_bottom_right = 30
 
 func setup_sent_label():
 	if sent_label:
@@ -230,6 +239,7 @@ func initialize_board_pieces():
 		for x in range(BOARD_SIZE):
 			set_piece(x, y, "", true)
 
+	@warning_ignore("integer_division")
 	var center = BOARD_SIZE / 2
 	set_piece(center - 1, center -1, "⚫", true)
 	set_piece(center, center, "⚫", true)
@@ -282,7 +292,6 @@ func get_piece(x: int, y: int) -> String:
 		return ""
 
 func place_star_points():
-	var star_layer = $MainVBoxContainer/GameAreaCenterContainer/StarPointLayer
 	for child in star_layer.get_children():
 		child.queue_free()
 
@@ -300,6 +309,7 @@ func place_star_points():
 		var star_size = star.get_size()
 
 		var offset = Vector2(-8, -7)
+		@warning_ignore("integer_division")
 		if pos.x >= BOARD_SIZE / 2:
 			offset = Vector2(cell_size.x - star_size.x + 8, -7)
 
@@ -360,25 +370,28 @@ func _set_game_data(new_game_data_json: String):
 		is_your_turn = parsed_data.get("isYourTurn", false)
 		var opponent_avatar_key = ""
 		print("My Player: ", my_player_id, " Player 1 ID: ", player1_id, " Player 2 ID: ", player2_id)
+		print("Pre Player Your Turn: ", is_your_turn, " Pre Player My Turn: ", is_my_turn)
 		if my_player_id == player1_id or my_player_id == player2_id or player1_id == "":
-			if my_player_id == player1_id or player1_id == "":
+			if my_player_id == player1_id or (player1_id == "" and is_your_turn):
 				player = 1
 				player_symbol = "⚫"
 				opponent_avatar_key = "avatar2"
-				is_my_turn = true
+				is_my_turn = is_your_turn
 				spectator_mode = false
-			elif my_player_id == player2_id:
+				print("Set Player to 1")			
+			elif my_player_id == player2_id or (player1_id == "" and not is_your_turn):
 				player = 2
 				player_symbol = "⚪"
 				opponent_avatar_key = "avatar1"
-				is_my_turn = true
+				is_my_turn = is_your_turn
 				spectator_mode = false
-			else:
-				spectator_mode = true
-				print("Spectator Mode Enabled!")
-				spec_label.visible = true
-				is_my_turn = false
-				player = 1 # Default view for spectator is from Player 1's perspective
+				print("Set Player to 2")
+		else:
+			spectator_mode = true
+			print("Spectator Mode Enabled!")
+			spec_label.visible = true
+			is_my_turn = false
+			player = 1
 		setup_score_labels()
 		
 		print("My Device ID (my_player): ", my_player_id)
@@ -425,7 +438,7 @@ func _set_game_data(new_game_data_json: String):
 			
 			await check_win()
 
-			if not is_my_turn and not game_over:
+			if not is_my_turn and not game_over and not spectator_mode:
 				start_waiting_animation()
 			else:
 				stop_waiting_animation()
@@ -478,6 +491,7 @@ func _parse_avatar_string(data_string: String) -> Dictionary:
 		
 func reset_board_to_pre_data():
 	for idx in range(BOARD_SIZE * BOARD_SIZE):
+		@warning_ignore("integer_division")
 		var y = BOARD_SIZE - 1 - int(idx / BOARD_SIZE)
 		var x = idx % BOARD_SIZE
 		var piece_val = pre_board_data[idx]
@@ -731,6 +745,7 @@ func play_replay(replay_string: String):
 			for i in range(replay_pre_board_data.size()):
 				var piece_value = replay_pre_board_data[i]
 				var replay_x = i % BOARD_SIZE
+				@warning_ignore("integer_division")
 				var replay_y = i / BOARD_SIZE
 				
 				var godot_x = replay_x
@@ -752,6 +767,8 @@ func play_replay(replay_string: String):
 
 	print("617 Call Update Count")
 	update_piece_counts()
+	
+	await get_tree().create_timer(0.4).timeout
 
 	if "move" in parsed and parsed["move"] is Array:
 		print("Parsed contains move data")
@@ -1121,6 +1138,7 @@ func is_in_bounds(pos: Vector2i) -> bool:
 
 func create_radial_gradient_texture(size: int = 64) -> Texture2D:
 	var image = Image.create(size, size, false, Image.FORMAT_RGBA8)
+	@warning_ignore("integer_division")
 	var center = Vector2(size / 2, size / 2)
 	var max_dist = center.length()
 	for y in size:
@@ -1233,40 +1251,40 @@ func _on_settings_button_pressed() -> void:
 
 	settings_popup_script.setup_popup(dim)
 
-	var volume_setting_hbox = HBoxContainer.new()
-	volume_setting_hbox.add_child(Label.new())
-	volume_setting_hbox.get_child(0).text = "Game Volume:"
-	volume_setting_hbox.get_child(0).set_h_size_flags(Control.SIZE_EXPAND_FILL)
-
-	var volume_slider = HSlider.new()
-	volume_slider.min_value = 0.0
-	volume_slider.max_value = 1.0
-	volume_slider.step = 0.05
-	
-	var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
-	volume_slider.value = saved_volume
-
-	volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	volume_slider.value_changed.connect(func(value):
-		AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
-		print("Master Volume: ", value)
-		SettingsManager.set_setting(game_settings_category, "master_volume", value)
-	)
-	volume_setting_hbox.add_child(volume_slider)
-
-	settings_popup_script.add_custom_setting(volume_setting_hbox)
-	
-	var toggle_debug_checkbox = CheckBox.new()
-	toggle_debug_checkbox.text = "Show Debug Info"
-	
-	var saved_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
-	toggle_debug_checkbox.button_pressed = saved_debug_info
-
-	toggle_debug_checkbox.pressed.connect(func():
-		print("Debug Info Toggled: ", toggle_debug_checkbox.button_pressed)
-		SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
-	)
-	settings_popup_script.add_custom_setting(toggle_debug_checkbox)
+	#var volume_setting_hbox = HBoxContainer.new()
+	#volume_setting_hbox.add_child(Label.new())
+	#volume_setting_hbox.get_child(0).text = "Game Volume:"
+	#volume_setting_hbox.get_child(0).set_h_size_flags(Control.SIZE_EXPAND_FILL)
+#
+	#var volume_slider = HSlider.new()
+	#volume_slider.min_value = 0.0
+	#volume_slider.max_value = 1.0
+	#volume_slider.step = 0.05
+	#
+	#var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
+	#volume_slider.value = saved_volume
+#
+	#volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	#volume_slider.value_changed.connect(func(value):
+		#AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
+		#print("Master Volume: ", value)
+		#SettingsManager.set_setting(game_settings_category, "master_volume", value)
+	#)
+	#volume_setting_hbox.add_child(volume_slider)
+#
+	#settings_popup_script.add_custom_setting(volume_setting_hbox)
+	#
+	#var toggle_debug_checkbox = CheckBox.new()
+	#toggle_debug_checkbox.text = "Show Debug Info"
+	#
+	#var saved_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
+	#toggle_debug_checkbox.button_pressed = saved_debug_info
+#
+	#toggle_debug_checkbox.pressed.connect(func():
+		#print("Debug Info Toggled: ", toggle_debug_checkbox.button_pressed)
+		#SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
+	#)
+	#settings_popup_script.add_custom_setting(toggle_debug_checkbox)
 
 	var custom_settings_title = popup_instance.find_child("CustomSettingsTitleLabel", true)
 	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:
@@ -1311,10 +1329,3 @@ func _on_theme_changed(new_theme_name: String):
 func _load_game_specific_settings():
 	var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))
-
-	var show_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
-
-	
-	print("Loaded game-specific settings for ", game_settings_category, ":")
-	print("  Master Volume: ", saved_volume)
-	print("  Show Debug Info: ", show_debug_info)
