@@ -343,12 +343,19 @@ func _on_turn(p: int) -> void:
 	pass
 
 func _on_score(p0: int, p1: int) -> void:
+	# Map grid scores to UI labels based on which color is "me"
 	my_score = p0 if player == 1 else p1
 	opp_score = p1 if player == 1 else p0
 	if is_instance_valid(player_score_label):
 		player_score_label.text = str(my_score)
 	if is_instance_valid(opp_score_label):
 		opp_score_label.text = str(opp_score)
+	
+	game_ended = await check_win()
+	if game_ended:
+		stop_waiting_animation()
+		game_over = true
+		send_game()
 
 func _on_game_over(p0: int, p1: int) -> void:
 	pass
@@ -379,13 +386,11 @@ func _on_temp_line_changed(has_line: bool) -> void:
 	var is_visible := send_button.visible
 
 	if should_show:
-		# Force a proper starting state: move below screen FIRST, then make visible, then tween in.
 		if not is_visible:
 			send_button.global_position = start_pos
 			send_button.visible = true
 			send_button.modulate.a = 1.0
 		elif send_button.global_position.y > vp.size.y:
-			# If it's already off-screen from a previous hide, reset start pos.
 			send_button.global_position = start_pos
 
 		var t_in := create_tween()
@@ -421,37 +426,8 @@ func _on_send_pressed() -> void:
 	if is_instance_valid(send_button):
 		send_button.visible = false
 	
-	# --- TESTING ---
-	# Temporarily call the test function instead of the real one.
-	#call_deferred("send_test_payload")
 	if has_method("send_game"):
 		call_deferred("send_game")
-		
-func send_test_payload() -> void:
-	print("--- [TESTING] Bypassing send_game and sending a hardcoded payload. ---")
-
-	# This is the known-good replay string you provided.
-	var test_replay_string := "board:1,0,2,0,3#2,0,1,0,2#1,0,0,0,1#2,2,1,2,2#1,3,0,3,1#2,2,0,2,1#1,1,1,1,2#2,1,0,1,1#1,3,2,3,3#2,1,2,1,3#1,3,1,3,2#2,2,2,2,3#1,1,0,2,0#2,1,1,2,1#2,1,2,2,2#2,1,3,2,3#2,2,0,3,0#2,1,0#2,1,1#2,1,2|line:1,2,1,3,1|square:1,2,0|line:1,2,2,3,2|square:1,2,1|line:1,2,3,3,3|square:1,2,2|line:1,0,1,1,1|board:1,0,2,0,3#2,0,1,0,2#1,0,0,0,1#2,2,1,2,2#1,3,0,3,1#2,2,0,2,1#1,1,1,1,2#2,1,0,1,1#1,3,2,3,3#2,1,2,1,3#1,3,1,3,2#2,2,2,2,3#1,1,0,2,0#2,1,1,2,1#2,1,2,2,2#2,1,3,2,3#2,2,0,3,0#1,2,1,3,1#1,2,2,3,2#1,2,3,3,3#1,0,1,1,1#2,1,0#2,1,1#2,1,2#1,2,0#1,2,1#1,2,2"
-
-	var payload: Dictionary = { "replay": test_replay_string }
-
-	print("[Send] TEST PAYLOAD: ", payload)
-	var appPlugin := Engine.get_singleton("AppPlugin")
-	if appPlugin:
-		appPlugin.updateGameData(JSON.stringify(payload))
-	else:
-		print("AppPlugin is null. Cannot send game data.")
-
-	# --- UI Cleanup (copied from send_game) ---
-	is_my_turn = false
-	if is_instance_valid(grid) and grid.has_method("clear_temp_line"):
-		grid.call("clear_temp_line")
-	if is_instance_valid(send_button):
-		send_button.visible = false
-	play_sent_animation()
-
-	# Clear steps so the game doesn't think we have a turn to send
-	_turn_steps.clear()
 		
 func send_game() -> void:
 	print("[Send] send_game() called")
@@ -514,7 +490,8 @@ func send_game() -> void:
 		grid.call("clear_temp_line")
 	if is_instance_valid(send_button):
 		send_button.visible = false
-	play_sent_animation()
+	if not game_over:
+		play_sent_animation()
 
 	prev_lines_cache = final_lines
 	_turn_steps.clear()

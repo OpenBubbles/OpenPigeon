@@ -167,6 +167,7 @@ grow_vertical = 2
 color = Color(0.898039, 0.898039, 0.898039, 1)
 
 [node name="MainVBoxContainer" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -255,6 +256,7 @@ is_display_only = true
 controlled_by_data = true
 
 [node name="GameAreaCenterContainer" type="CenterContainer" parent="MainVBoxContainer"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
@@ -309,6 +311,7 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="StarPointLayer" type="Control" parent="MainVBoxContainer/GameAreaCenterContainer"]
+unique_name_in_owner = true
 layout_mode = 2
 mouse_filter = 2
 

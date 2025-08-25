@@ -556,7 +556,6 @@ func _sow_from(start_idx: int) -> void:
 			var pits_to_take = [7, 8, 9, 10, 11, 12] if current_sow_player == 1 else [0, 1, 2, 3, 4, 5]
 			await _animate_sweep(pits_to_take, opponent_store_idx)
 			break
-		# ------------------------------------------------------------
 
 		if pits[current_sowing_pit_idx].size() == 0:
 			last_stone_landed_in_empty_pit = true
@@ -1002,7 +1001,6 @@ func _check_game_over_and_winner() -> bool:
 		var p2: int = pits[13].size()
 		print("Final scores: Player 1 (store 6): ", p1, ", Player 2 (store 13): ", p2)
 
-		# winner_id: 1 = P1, 2 = P2, -1 = draw
 		if p1 > p2:
 			winner_id = 1
 		elif p2 > p1:
@@ -1014,14 +1012,13 @@ func _check_game_over_and_winner() -> bool:
 		print("Setting Game_Over_State")
 		disp_winner = true
 
-		# Sanitize transient UI to avoid concurrent tweens/animations.
 		_stop_pit_highlights()
 		print("1035 Call")
 		if is_instance_valid(free_turn_label):
 			print("1037 Call")
 			free_turn_label.visible = false
 		print("1039 Call")
-		# Build the text/color based on outcome.
+
 		if winner_id == -1:
 			print("1042")
 			win_loss_label.text = "DRAW!"
@@ -1031,7 +1028,6 @@ func _check_game_over_and_winner() -> bool:
 			win_loss_state = "0"
 			print("DRAW!")
 		elif (player == 1 and winner_id == 1) or (player == 2 and winner_id == 2):
-			#_show_win_burst(player_avatar_display)
 			if not spectator_mode:
 				print("1052")
 				win_loss_label.text = "YOU WIN!"
@@ -1049,7 +1045,6 @@ func _check_game_over_and_winner() -> bool:
 			
 		else:
 			print("1065")
-			#_show_win_burst(opp_avatar_display)
 			print("1067")
 			if not spectator_mode:
 				print("1069")
@@ -1065,8 +1060,6 @@ func _check_game_over_and_winner() -> bool:
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 				print("YOU LOSE 1066")
 			
-
-		# Animate after the frame settles.
 		win_loss_label.visible = true
 		await get_tree().process_frame
 		win_loss_label.scale = Vector2.ZERO
@@ -1083,11 +1076,9 @@ func _animate_sweep(pit_indices: Array, store_idx: int) -> void:
 	var store_node := pit_nodes[store_idx]
 	var store_container := store_node.get_node("StonesContainer") as Node2D
 
-	# This dictionary will store each stone node and its correct starting global position.
 	var visuals_to_animate: Dictionary = {}
 	var all_labels: Array[int] = []
 
-	# 1. Collect stone nodes and their starting positions BEFORE any movement.
 	for i in pit_indices:
 		if pits[i].is_empty():
 			continue
@@ -1097,18 +1088,15 @@ func _animate_sweep(pit_indices: Array, store_idx: int) -> void:
 		for child in pit_container.get_children():
 			if child is Sprite2D and not child.name.begins_with("Shadow"):
 				var stone_visual = child as Sprite2D
-				# IMPORTANT: Store the node and its current global position.
 				visuals_to_animate[stone_visual] = stone_visual.global_position
 
-		# Handle the logical data for the pit (clear stones, update label).
 		all_labels.append_array(pits[i])
 		pits[i].clear()
 		_refresh_pit_count_label(i)
 
 	if visuals_to_animate.is_empty():
-		return # Nothing to animate
+		return
 
-	# 2. Prepare and run the animation tween for all collected stones.
 	var travel_tween := create_tween().set_parallel()
 	var travel_time := PILE_TRAVEL_TIME * 1.2
 	if _skip_replay_animation:
@@ -1118,35 +1106,26 @@ func _animate_sweep(pit_indices: Array, store_idx: int) -> void:
 
 	for stone_visual in visuals_to_animate:
 		var start_global_pos = visuals_to_animate[stone_visual]
-		
-		# Perform the reparenting.
+
 		stone_visual.get_parent().remove_child(stone_visual)
 		self.add_child(stone_visual)
-		
-		# CRUCIAL FIX: Set its global position back to where it was.
-		# This prevents it from appearing at the top-left corner.
+
 		stone_visual.global_position = start_global_pos
-		
-		# Now, animate it from its correct starting position to the target store.
+
 		travel_tween.tween_property(stone_visual, "global_position", target_global_pos, travel_time)\
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
-	# Wait for all animations to finish.
 	await travel_tween.finished
 
-	# 3. Final placement inside the store's container.
 	for stone_visual in visuals_to_animate:
 		if not is_instance_valid(stone_visual): continue
-		
-		# Move the stone from the main scene into its final home.
+
 		self.remove_child(stone_visual)
 		store_container.add_child(stone_visual)
-		
-		# Set its final local position inside the store for a nice scattered look.
+
 		stone_visual.position = spawn_points[store_idx].position + Vector2(randf_range(-20, 20), randf_range(-20, 20))
 		stone_visual.rotation_degrees = randf_range(0, 360)
 
-		# Add a shadow for the new stone.
 		var shadow := Sprite2D.new()
 		shadow.name = "Shadow"
 		shadow.texture = (stone_visual as Sprite2D).texture
@@ -1156,7 +1135,6 @@ func _animate_sweep(pit_indices: Array, store_idx: int) -> void:
 		shadow.z_index = -1
 		store_container.add_child(shadow)
 
-	# 4. Finalize the logical state of the board.
 	pits[store_idx].append_array(all_labels)
 	_refresh_pit_count_label(store_idx)
 	
@@ -1167,15 +1145,12 @@ func _show_win_burst(avatar: Control) -> void:
 
 	var parent = avatar.get_parent()
 
-	# Prevent running the animation multiple times.
 	if parent.get_node_or_null("%s_Wrapper/AvatarWinAnim" % avatar.name):
 		return
 
-	# 1. Create a wrapper node.
 	var wrapper = Control.new()
 	wrapper.name = "%s_Wrapper" % avatar.name
-	
-	# Match the wrapper's layout properties to the avatar's.
+
 	wrapper.layout_mode = avatar.layout_mode
 	wrapper.size_flags_horizontal = avatar.size_flags_horizontal
 	wrapper.size_flags_vertical = avatar.size_flags_vertical
@@ -1184,21 +1159,17 @@ func _show_win_burst(avatar: Control) -> void:
 	wrapper.rotation = avatar.rotation
 	wrapper.scale = avatar.scale
 	wrapper.pivot_offset = avatar.pivot_offset
-	# --- THE CRUCIAL FIX IS HERE ---
 	wrapper.custom_minimum_size = avatar.custom_minimum_size
 
-	# 2. Rearrange the scene tree: Parent -> Wrapper -> Avatar
 	var avatar_index = avatar.get_index()
 	parent.remove_child(avatar)
 	parent.add_child(wrapper)
 	parent.move_child(wrapper, avatar_index)
 	wrapper.add_child(avatar)
-	
-	# Reset the avatar's position since it's now inside the wrapper.
+
 	avatar.position = Vector2.ZERO
 	avatar.set_anchors_preset(Control.PRESET_FULL_RECT)
 
-	# 3. Create and add the animation instance to the wrapper.
 	var anim_instance = AvatarWinAnimScene.instantiate() as Control
 	if not is_instance_valid(anim_instance):
 		push_error("Failed to instantiate AvatarWinAnimScene.")
@@ -1206,10 +1177,8 @@ func _show_win_burst(avatar: Control) -> void:
 	anim_instance.name = "AvatarWinAnim"
 	wrapper.add_child(anim_instance)
 	
-	# Place the animation BEHIND the avatar.
 	wrapper.move_child(anim_instance, 0)
-	
-	# 4. Configure and play the animation.
+
 	anim_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
 	anim_instance.offset_left = -52.0
 	anim_instance.offset_right = 52.0
@@ -1231,14 +1200,12 @@ func on_rules_button_pressed() -> void:
 	if not is_instance_valid(rules_button):
 		return
 
-	# Button press animation
 	rules_button.pivot_offset = rules_button.size / 2.0
 	var tween := create_tween()
 	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
 
-	# Create popup and dim background
 	var popup := RULES_POPUP_SCENE.instantiate()
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.5)
@@ -1251,7 +1218,6 @@ func on_rules_button_pressed() -> void:
 	dim.z_index = 99
 	root.move_child(dim, root.get_child_count() - 2)
 
-	# Close button (optional if it exists)
 	var close_btn := popup.find_child("CloseButton", true, false)
 	if close_btn:
 		close_btn.pressed.connect(func():
@@ -1259,7 +1225,6 @@ func on_rules_button_pressed() -> void:
 			popup.queue_free()
 		)
 
-	# --- POPULATE UNIQUE NODES ---
 	var title_label := popup.find_child("Title", true, false) as Label
 	if title_label:
 		title_label.text = "How to Play Dots & Boxes"
@@ -1273,7 +1238,6 @@ func on_rules_button_pressed() -> void:
 		rules_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rules_label.text = _get_rules_text_for_mode(mode)
 
-	# Show & animate popup
 	popup.set_as_top_level(true)
 	popup.visible = true
 	await get_tree().process_frame

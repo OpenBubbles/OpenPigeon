@@ -16,6 +16,9 @@ extends Control
 @onready var rules_button = %RulesButton
 @onready var settings_button = %SettingsButton
 @onready var spec_label = %SpecLabel
+@onready var board_root: Control = %GameAreaCenterContainer
+@onready var star_layer: Control = %StarPointLayer
+@onready var main_vbox: Control = %MainVBoxContainer
 
 const BOARD_SIZE = 8
 
@@ -33,7 +36,7 @@ var replay_val
 var replay_symbol
 var replay: String = ""
 var replay_played: bool = false
-var my_player
+var my_player_id
 var my_moves: Array[Array]
 var pre_board_data: Array[int] = []
 var post_board_data: Array[int] = []
@@ -83,7 +86,7 @@ func _ready():
 			appPlugin.onReady()
 			print("AppPlugin Connected")
 	else:
-		_set_game_data('{ "isYourTurn": true, "player": "1", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,0,2,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0|move:0,3,1|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,2,2,2,0,0,1,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
+		_set_game_data('{ "isYourTurn": true, "player": "2", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,0,2,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0|move:0,3,1|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,2,2,2,0,0,1,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
 		#_set_game_data('{ "isYourTurn": true, "player": "1", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0|move:3,1,2|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
 		print("No AppPlugin Available, Setting Debug Data")
 		
@@ -353,35 +356,22 @@ func _set_game_data(new_game_data_json: String):
 		
 		var player1_id = parsed_data.get("player1", "")
 		var player2_id = parsed_data.get("player2", "")
-		my_player = parsed_data.get("myPlayerId", "")
+		my_player_id = parsed_data.get("myPlayerId", "")
 		is_your_turn = parsed_data.get("isYourTurn", false)
 		var opponent_avatar_key = ""
-		print("My Player: ", my_player, " Player 1 ID: ", player1_id, " Player 2 ID: ", player2_id)
-		if replay.is_empty():
-			if is_your_turn:
+		print("My Player: ", my_player_id, " Player 1 ID: ", player1_id, " Player 2 ID: ", player2_id)
+		if my_player_id == player1_id or my_player_id == player2_id or player1_id == "":
+			if my_player_id == player1_id or player1_id == "":
 				player = 1
 				player_symbol = "⚫"
 				opponent_avatar_key = "avatar2"
 				is_my_turn = true
 				spectator_mode = false
-			else:
+			elif my_player_id == player2_id:
 				player = 2
 				player_symbol = "⚪"
 				opponent_avatar_key = "avatar1"
-				is_my_turn = false
-				spectator_mode = false
-		else:
-			if my_player != "" and player1_id != "" and my_player == player1_id:
-				player = 1
-				player_symbol = "⚫"
-				opponent_avatar_key = "avatar2"
-				is_my_turn = is_your_turn
-				spectator_mode = false
-			elif my_player != "" and player2_id != "" and my_player == player2_id:
-				player = 2
-				player_symbol = "⚪"
-				opponent_avatar_key = "avatar1"
-				is_my_turn = is_your_turn
+				is_my_turn = true
 				spectator_mode = false
 			else:
 				spectator_mode = true
@@ -391,16 +381,16 @@ func _set_game_data(new_game_data_json: String):
 				player = 1 # Default view for spectator is from Player 1's perspective
 		setup_score_labels()
 		
-		print("My Device ID (my_player): ", my_player)
+		print("My Device ID (my_player): ", my_player_id)
 		print("Is My Turn: ", is_my_turn)
 		print("My Numerical Player (1=Black, 2=White): ", player)
 		print("My Player Symbol: ", player_symbol)
 
-		if my_player != "" and player1_id != "" and player2_id != "":
-			if my_player == player1_id:
+		if my_player_id != "" and player1_id != "" and player2_id != "":
+			if my_player_id == player1_id:
 				opponent_avatar_key = "avatar2"
 				print("Opp is avatar2")
-			elif my_player == player2_id:
+			elif my_player_id == player2_id:
 				opponent_avatar_key = "avatar1"
 				print("Opp is avatar1")
 		
@@ -948,9 +938,9 @@ func on_send_button_pressed():
 	print("Type of replay field: ", typeof(result["replay"]))
 	
 	if await check_win():
-		print("Check Win 773 my_player: ", my_player, " win_loss_state: ", win_loss_state)
+		print("Check Win 773 my_player: ", my_player_id, " win_loss_state: ", win_loss_state)
 		if win_loss_state != "":
-			result["winner"] = my_player + "|" + win_loss_state
+			result["winner"] = my_player_id + "|" + win_loss_state
 	else:
 		play_sent_animation()
 		print("play sent 783 on send button pressed")

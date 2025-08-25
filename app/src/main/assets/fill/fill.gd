@@ -615,7 +615,7 @@ func _set_game_data(new_game_data_json: String):
 		apply_colors_to_cells()
 		update_ui_from_board_state()
 		
-	if not spectator_mode and is_my_turn:
+	if not spectator_mode and is_my_turn and not game_over:
 		call_deferred("show_color_selector")
 		
 	if is_my_turn:
@@ -626,6 +626,7 @@ func _set_game_data(new_game_data_json: String):
 	game_ended = await check_win()
 	if game_ended:
 		stop_waiting_animation()
+		hide_color_selector()
 		game_over = true
 		
 func init_color_selector_collapsed():
@@ -767,6 +768,7 @@ func check_win() -> bool:
 	
 	var was_over = game_over
 	game_over = true
+	hide_color_selector()
 	if not was_over:
 		print("-> Evaluating final scores. My score: %d, Opponent's score: %d" % [my_count, op_count])
 		if my_count > op_count:
@@ -960,14 +962,12 @@ func on_rules_button_pressed() -> void:
 	if not is_instance_valid(rules_button):
 		return
 
-	# Button press animation
 	rules_button.pivot_offset = rules_button.size / 2.0
 	var tween := create_tween()
 	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
 
-	# Create popup and dim background
 	var popup := RULES_POPUP_SCENE.instantiate()
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.5)
@@ -980,7 +980,6 @@ func on_rules_button_pressed() -> void:
 	dim.z_index = 99
 	root.move_child(dim, root.get_child_count() - 2)
 
-	# Close button (optional if it exists)
 	var close_btn := popup.find_child("CloseButton", true, false)
 	if close_btn:
 		close_btn.pressed.connect(func():
@@ -988,7 +987,6 @@ func on_rules_button_pressed() -> void:
 			popup.queue_free()
 		)
 
-	# --- POPULATE UNIQUE NODES ---
 	var title_label := popup.find_child("Title", true, false) as Label
 	if title_label:
 		title_label.text = "How to Play Filler"
@@ -1002,8 +1000,6 @@ func on_rules_button_pressed() -> void:
 		rules_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rules_label.text = _get_rules_text()
 
-
-	# Show & animate popup
 	popup.set_as_top_level(true)
 	popup.visible = true
 	await get_tree().process_frame

@@ -418,6 +418,7 @@ wait_time = 0.75
 
 [node name="SpecLabel" type="Label" parent="."]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 offset_top = 129.0
 offset_right = 648.0
