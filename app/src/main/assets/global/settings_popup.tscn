@@ -90,17 +90,19 @@ horizontal_alignment = 1
 [node name="VSeparator" type="Control" parent="MarginContainer/VBoxContainer"]
 layout_mode = 2
 
-[node name="HBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer"]
+[node name="ThemeDropdownContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
 layout_mode = 2
+mouse_filter = 2
 
-[node name="Label" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="Label" type="Label" parent="MarginContainer/VBoxContainer/ThemeDropdownContainer"]
 layout_mode = 2
 size_flags_horizontal = 4
 text = "Theme: "
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="ThemeOptionButton" type="OptionButton" parent="MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="ThemeOptionButton" type="OptionButton" parent="MarginContainer/VBoxContainer/ThemeDropdownContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
@@ -114,6 +116,13 @@ popup/item_2/text = "Penguin"
 popup/item_2/id = 2
 popup/item_3/text = "Penguin (Dark)"
 popup/item_3/id = 3
+
+[node name="PreviewBox" type="HBoxContainer" parent="MarginContainer/VBoxContainer/ThemeDropdownContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
 
 [node name="CustomSettingsContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer"]
 unique_name_in_owner = true

@@ -764,8 +764,6 @@ func play_replay(replay_string: String):
 	else:
 		print("Parsed has no valid pre_board. Initializing default board.")
 		initialize_board_pieces()
-
-	print("617 Call Update Count")
 	update_piece_counts()
 	
 	await get_tree().create_timer(0.4).timeout
@@ -801,8 +799,6 @@ func play_replay(replay_string: String):
 					set_piece(col, row, replay_symbol, false)
 
 					await get_tree().create_timer(0.5).timeout
-
-					print("652 Call Update Count")
 					update_piece_counts()
 				else:
 					print("No pieces to flip for this move")
@@ -955,12 +951,10 @@ func on_send_button_pressed():
 	print("Type of replay field: ", typeof(result["replay"]))
 	
 	if await check_win():
-		print("Check Win 773 my_player: ", my_player_id, " win_loss_state: ", win_loss_state)
 		if win_loss_state != "":
 			result["winner"] = my_player_id + "|" + win_loss_state
 	else:
 		play_sent_animation()
-		print("play sent 783 on send button pressed")
 
 	var game_data = JSON.stringify(result)
 

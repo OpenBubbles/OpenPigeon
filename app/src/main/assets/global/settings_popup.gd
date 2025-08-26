@@ -5,13 +5,14 @@ signal closed
 signal settings_theme_selected(new_theme_name: String)
 signal dark_mode_changed(is_dark: bool)
 
-var dark_mode_enabled: bool = false              # canonical state you can read
-var dark_mode_auto_apply_theme: bool = true      # set false to NOT sync theme automatically
+var dark_mode_enabled: bool = false
+var dark_mode_auto_apply_theme: bool = true
 var dark_mode_button: Button = null
+var theme_previews_enabled: bool = false
 
 const AvatarThumbnailScene = preload("res://global/avatar_textures/AvatarThumbnail.tscn")
 const MOON_TEX: Texture2D = preload("res://global/avatar_textures/moon.svg")
-const SUN_TEX: Texture2D  = preload("res://global/avatar_textures/sun.svg")
+const SUN_TEX: Texture2D = preload("res://global/avatar_textures/sun.svg")
 
 
 @onready var settings_label = %SettingsLabel as Label
@@ -21,6 +22,9 @@ const SUN_TEX: Texture2D  = preload("res://global/avatar_textures/sun.svg")
 @onready var properties_box = %PropertiesBox as VBoxContainer
 @onready var custom_settings_container = %CustomSettingsContainer as VBoxContainer
 @onready var global_settings_container = %GlobalSettingsContainer as VBoxContainer
+@onready var theme_dropdown_container = %ThemeDropdownContainer
+@onready var theme_preview_picker = %ThemePreviewPicker
+@onready var preview_box = %PreviewBox
 
 var dim_rect: ColorRect
 var main_avatar_preview: Node
@@ -51,25 +55,174 @@ func close_popup():
 	)
 
 func _setup_theme_button():
-	if theme_option_button:
-		theme_option_button.clear()
-		theme_option_button.item_selected.connect(_on_theme_option_button_item_selected)
-		theme_option_button.add_item("Default", 0)
-		theme_option_button.add_item("Default (Dark)", 1)
-		theme_option_button.add_item("Penguin", 2)
-		theme_option_button.add_item("Penguin (Dark)", 3)
-		var saved_theme = SettingsManager.get_setting("global", "theme", "Default")
-		for i in range(theme_option_button.item_count):
-			if theme_option_button.get_item_text(i) == saved_theme:
-				theme_option_button.select(i)
-				break
+	if theme_previews_enabled:
+		theme_option_button.hide()
+		preview_box.show()
 	else:
+		theme_option_button.show()
+		preview_box.hide()
+		_populate_theme_dropdown()
+
+func _populate_theme_dropdown():
+	if not is_instance_valid(theme_option_button):
 		printerr("SettingsPopup: ERROR! ThemeOptionButton not found.")
+		return
+	
+	theme_option_button.clear()
+	theme_option_button.item_selected.connect(_on_theme_option_button_item_selected)
+	
+	# The dropdown uses a simple hardcoded list of themes
+	theme_option_button.add_item("Default", 0)
+	theme_option_button.add_item("Default (Dark)", 1)
+	theme_option_button.add_item("Penguin", 2)
+	theme_option_button.add_item("Penguin (Dark)", 3)
+	
+	var saved_theme = SettingsManager.get_setting("global", "theme", "Default")
+	for i in range(theme_option_button.item_count):
+		if theme_option_button.get_item_text(i) == saved_theme:
+			theme_option_button.select(i)
+			break
+			
+func _populate_theme_previews():
+	# First, clear any old buttons from the preview box
+	for child in preview_box.get_children():
+		child.queue_free()
+	
+	var all_themes = _get_all_themes()
+	var saved_theme = SettingsManager.get_setting("global", "theme", "Default")
+	
+	for theme_name in all_themes.keys():
+		# 1. Create the button
+		var btn = TextureButton.new()
+		var preview_data = all_themes[theme_name]
+		
+		# Create a dummy texture (we'll replace this with real images next)
+		var image = Image.create(64, 64, false, Image.FORMAT_RGBA8)
+		image.fill(preview_data.preview_color)
+		var texture = ImageTexture.create_from_image(image)
+		
+		btn.texture_normal = texture
+		btn.stretch_mode = TextureButton.STRETCH_KEEP_CENTERED
+		btn.custom_minimum_size = Vector2(64, 64)
+		
+		# 2. Add a border to the currently selected theme
+		if theme_name == saved_theme:
+			var style_box = StyleBoxFlat.new()
+			style_box.bg_color = Color(0, 0, 0, 0)
+			style_box.border_width_left = 4; style_box.border_width_top = 4; style_box.border_width_right = 4; style_box.border_width_bottom = 4
+			style_box.border_color = Color(0.2, 0.8, 0.2, 0.9)
+			btn.add_theme_stylebox_override("normal", style_box)
+		
+		# 3. Connect its pressed signal
+		btn.pressed.connect(func(): _on_theme_preview_selected(theme_name))
+		
+		# 4. Add it DIRECTLY to the preview_box
+		preview_box.add_child(btn)
+		
+func populate_theme_previews(themes_data: Dictionary) -> void:
+	# Constants for interaction feel
+	const HOVER_SCALE := 1.08
+	const PRESS_SCALE := 0.95
+	const TWEEN_TIME := 0.08
+
+	# Clear any old buttons first
+	for child in preview_box.get_children():
+		child.queue_free()
+
+	if themes_data.is_empty():
+		print("No theme data provided to populate previews.")
+		return
+
+	var saved_theme: String = str(SettingsManager.get_setting("global", "theme", "Default"))
+
+	for key in themes_data.keys():
+		var theme_name: String = str(key)
+		var btn: TextureButton = TextureButton.new()
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		btn.custom_minimum_size = Vector2(60, 60)
+		btn.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+		btn.scale = Vector2.ONE
+		btn.resized.connect(func(): btn.pivot_offset = btn.size * 0.5)
+
+		var preview_path: String = str(themes_data[theme_name].get("preview_path", ""))
+
+		# Load or create placeholder
+		var texture: Texture2D
+		if FileAccess.file_exists(preview_path):
+			texture = (load(preview_path) as Texture2D)
+		else:
+			push_warning("Theme preview image missing: " + preview_path)
+			var placeholder := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+			placeholder.fill(Color.MAGENTA)
+			texture = ImageTexture.create_from_image(placeholder)
+
+		# Scale to 40x40 once
+		var img: Image = texture.get_image()
+		if img:
+			img.resize(40, 40, Image.INTERPOLATE_LANCZOS)
+			btn.texture_normal = ImageTexture.create_from_image(img)
+		else:
+			btn.texture_normal = texture
+
+		# Highlight the currently selected theme
+		if theme_name == saved_theme:
+			var style_box := StyleBoxFlat.new()
+			style_box.bg_color = Color.TRANSPARENT
+			style_box.border_width_left = 3
+			style_box.border_width_top = 3
+			style_box.border_width_right = 3
+			style_box.border_width_bottom = 3
+			style_box.border_color = Color(0.2, 0.8, 0.2, 0.9)
+			btn.add_theme_stylebox_override("normal", style_box)
+
+		# --- Interaction: hover/press scale animation ---
+		var tween_to := func(target: float) -> void:
+			# Kill any prior tween stored on the button
+			if btn.has_meta("preview_tween"):
+				var old = btn.get_meta("preview_tween")
+				if old: old.kill()
+			var tw = create_tween()
+			btn.set_meta("preview_tween", tw)
+			tw.tween_property(btn, "scale", Vector2(target, target), TWEEN_TIME)\
+				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+		btn.mouse_entered.connect(func(): tween_to.call(HOVER_SCALE))
+		btn.mouse_exited.connect(func(): tween_to.call(1.0))
+		btn.button_down.connect(func(): tween_to.call(PRESS_SCALE))
+		btn.button_up.connect(func():
+			var hovered := btn.get_rect().has_point(btn.get_local_mouse_position())
+			tween_to.call(HOVER_SCALE if hovered else 1.0)
+		)
+		btn.pivot_offset = btn.custom_minimum_size * 0.5
+		# --- End interaction ---
+
+		var captured_name := theme_name
+		btn.pressed.connect(func(): _on_theme_preview_selected(captured_name))
+
+		preview_box.add_child(btn)
+
+# This function centralizes theme data, making it easy to add more themes later
+func _get_all_themes() -> Dictionary:
+	return {
+		"Default": { "path": "res://themes/default.tres", "preview_color": Color("#e0e0e0") },
+		"Default (Dark)": { "path": "res://themes/default_dark.tres", "preview_color": Color("#2c2c2c") },
+		"Penguin": { "path": "res://themes/penguin.tres", "preview_color": Color("#9e45c0") },
+		"Penguin (Dark)": { "path": "res://themes/penguin_dark.tres", "preview_color": Color("#3a1949") },
+	}
+
+func _on_theme_preview_selected(selected_theme_name: String):
+	print("Theme preview button clicked: ", selected_theme_name)
+	SettingsManager.set_setting("global", "theme", selected_theme_name)
+	settings_theme_selected.emit(selected_theme_name)
 
 func _on_theme_option_button_item_selected(index: int):
 	var selected_theme_name = theme_option_button.get_item_text(index)
-	settings_theme_selected.emit(selected_theme_name)
+	# ADDED: Log statement for the dropdown menu
+	print("Theme dropdown item selected: ", selected_theme_name)
 	SettingsManager.set_setting("global", "theme", selected_theme_name)
+	settings_theme_selected.emit(selected_theme_name)
 
 func _setup_avatar_customizer():
 	main_avatar_preview = AvatarThumbnailScene.instantiate()
@@ -497,7 +650,7 @@ func _update_switch_visual(btn: Button, on: bool, instant: bool):
 	if instant:
 		knob_wrap.position.x = target_x
 		if is_instance_valid(moon): moon.modulate = icon_color
-		if is_instance_valid(sun):  sun.modulate  = icon_color
+		if is_instance_valid(sun): sun.modulate = icon_color
 	else:
 		var tw := create_tween().set_parallel(true)
 		tw.tween_property(knob_wrap, "position:x", target_x, 0.2)\

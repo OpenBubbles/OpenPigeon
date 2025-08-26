@@ -1427,7 +1427,12 @@ func _on_settings_button_pressed() -> void:
 
 	var popup_instance = SETTINGS_POPUP_SCENE.instantiate()
 	var settings_popup_script = popup_instance as SettingsPopup
-
+	
+	settings_popup_script.theme_previews_enabled = true
+	var mancala_themes = _get_mancala_themes()
+	popup_instance.ready.connect(func():
+			settings_popup_script.populate_theme_previews(mancala_themes)
+	)
 	var root = get_tree().root
 	root.add_child(dim)
 	root.add_child(popup_instance)
@@ -1511,6 +1516,35 @@ func _on_settings_button_pressed() -> void:
 func _on_theme_changed(new_theme_name: String):
 	print("Game scene received theme change: ", new_theme_name)
 	pass
+	
+func _get_mancala_themes() -> Dictionary:
+	var themes_data = {}
+	var dir_path = "res://mancala/themes"
+	var dir = DirAccess.open(dir_path)
+	
+	if dir:
+		print("Successfully opened theme directory: " + dir_path)
+		dir.list_dir_begin()
+		var file_name = dir.get_next()
+		while file_name != "":
+			# KEY CHANGE: Look for .png files instead of .tres files
+			if file_name.ends_with(".png"):
+				# The theme's name is now the name of the image file
+				var theme_name = file_name.trim_suffix(".png")
+				var full_path = dir_path.path_join(file_name)
+				
+				themes_data[theme_name] = {
+					"preview_path": full_path
+				}
+				print("Found theme preview: " + theme_name)
+			file_name = dir.get_next()
+		dir.list_dir_end()
+	else:
+		push_error("Could not open Mancala theme directory: " + dir_path)
+		print("Make sure the folder 'mancala/themes' exists in your project's res:// directory.")
+
+	print("Theme data loaded:", themes_data)
+	return themes_data
 	
 func _load_game_specific_settings():
 	var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
