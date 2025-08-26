@@ -560,8 +560,8 @@ func create_radial_gradient_texture(gradsize: int) -> Texture2D:
 	var img = Image.create(gradsize, gradsize, false, Image.FORMAT_RGBA8)
 	@warning_ignore("integer_division")
 	var center = Vector2(gradsize / 2, gradsize / 2)
-	for y in range(size):
-		for x in range(size):
+	for y in range(gradsize):
+		for x in range(gradsize):
 			@warning_ignore("integer_division")
 			var dist = center.distance_to(Vector2(x, y)) / (gradsize / 2)
 			var alpha = clamp(1.0 - dist, 0.0, 1.0)

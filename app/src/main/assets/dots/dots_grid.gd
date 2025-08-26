@@ -81,7 +81,7 @@ func _reset(n: int) -> void:
 	emit_signal("temp_line_changed", false)
 
 	_on_resized()
-	emit_signal("turn_changed", player)
+	emit_signal("turn_changed")
 	emit_signal("score_changed", score[0], score[1])
 	queue_redraw()
 	
@@ -111,8 +111,8 @@ func get_temp_line() -> Array:
 	var r: int = int(temp_edge["r"])
 	var c: int = int(temp_edge["c"])
 	var seg: Array = _edge_to_segment_bl(kind, r, c)
-	var owner: int = int(temp_edge.get("owner", player))
-	return [owner, int(seg[0]), int(seg[1]), int(seg[2]), int(seg[3])]
+	var line_owner: int = int(temp_edge.get("owner", player))
+	return [line_owner, int(seg[0]), int(seg[1]), int(seg[2]), int(seg[3])]
 
 func clear_temp_line() -> void:
 	if is_instance_valid($AnimationLine):
@@ -257,7 +257,7 @@ func _claim_edge(kind: String, r: int, c: int) -> void:
 
 	if made_box == 0:
 		player = 3 - player
-		emit_signal("turn_changed", player)
+		emit_signal("turn_changed")
 	else:
 		emit_signal("score_changed", score[0], score[1])
 
@@ -330,9 +330,9 @@ func _stop_temp_pulse() -> void:
 	_temp_line_pulse_tween = null
 	
 func _x_endpoints_for_box(br: int, bc: int) -> Dictionary:
-	var tl: Vector2 = _dot_pos(bc,   br)
-	var tr: Vector2 = _dot_pos(bc+1, br)
-	var bl: Vector2 = _dot_pos(bc,   br+1)
+	var tl: Vector2 = _dot_pos(bc,    br)
+	var top_right: Vector2 = _dot_pos(bc+1, br)
+	var bl: Vector2 = _dot_pos(bc,    br+1)
 	var brp: Vector2 = _dot_pos(bc+1, br+1)
 
 	var shrink: float = min(step.x, step.y) * 0.22
@@ -340,7 +340,7 @@ func _x_endpoints_for_box(br: int, bc: int) -> Dictionary:
 
 	var a0: Vector2 = _shrink_toward(center, tl,  shrink)
 	var a1: Vector2 = _shrink_toward(center, brp, shrink)
-	var b0: Vector2 = _shrink_toward(center, tr,  shrink)
+	var b0: Vector2 = _shrink_toward(center, top_right,  shrink)
 	var b1: Vector2 = _shrink_toward(center, bl,  shrink)
 
 	return {"a0": a0, "a1": a1, "b0": b0, "b1": b1}
@@ -351,14 +351,14 @@ func _make_temp_line2d(col: Color, width: float) -> Line2D:
 	ln.default_color = col
 	ln.width = width
 	ln.antialiased = true
-	ln.z_index = 9999
+	ln.z_index = 128
 	add_child(ln)
 	return ln
 
 
-func _play_box_x_animation(br: int, bc: int, owner: int) -> void:
+func _play_box_x_animation(br: int, bc: int, box_owner: int) -> void:
 	var ends := _x_endpoints_for_box(br, bc)
-	var col := p_colors[owner - 1]
+	var col := p_colors[box_owner - 1]
 	col.a = 0.8
 	var w := line_width * 0.75
 
@@ -433,7 +433,7 @@ func commit_temp_line_now() -> bool:
 
 	if made_box == 0:
 		player = 3 - player
-		emit_signal("turn_changed", player)
+		emit_signal("turn_changed")
 	else:
 		emit_signal("score_changed", score[0], score[1])
 
@@ -477,9 +477,9 @@ func _draw() -> void:
 				_draw_edge("v", r3, c3, p_colors[o2 - 1], line_width)
 	for r4: int in range(N - 1):
 		for c4: int in range(N - 1):
-			var owner: int = boxes[r4][c4]
-			if owner != -1 and not _is_box_animating(r4, c4):
-				_draw_box_x(r4, c4, p_colors[owner - 1])
+			var box_owner: int = boxes[r4][c4]
+			if box_owner != -1 and not _is_box_animating(r4, c4):
+				_draw_box_x(r4, c4, p_colors[box_owner - 1])
 	for r: int in range(N):
 		for c: int in range(N):
 			var p: Vector2 = _dot_pos(c, r)
@@ -490,7 +490,7 @@ func _dot_pos(c: int, r: int) -> Vector2:
 
 func _edge_endpoints(kind: String, r: int, c: int) -> Array[Vector2]:
 	if kind == "h":
-		var p0: Vector2 = _dot_pos(c,   r)
+		var p0: Vector2 = _dot_pos(c,    r)
 		var p1: Vector2 = _dot_pos(c+1, r)
 		return [p0, p1]
 	else:
@@ -508,22 +508,22 @@ func _draw_edge(kind: String, r: int, c: int, col: Color, width: float) -> void:
 
 func _shrink_toward(center: Vector2, p: Vector2, shrink: float) -> Vector2:
 	var v: Vector2 = p - center
-	var len: float = v.length()
-	if len <= 0.0001:
+	var vec_len: float = v.length()
+	if vec_len <= 0.0001:
 		return p
-	return center + v.normalized() * max(0.0, len - shrink)
+	return center + v.normalized() * max(0.0, vec_len - shrink)
 
 func _draw_box_x(br: int, bc: int, col: Color) -> void:
-	var tl: Vector2 = _dot_pos(bc,   br)
-	var tr: Vector2 = _dot_pos(bc+1, br)
-	var bl: Vector2 = _dot_pos(bc,   br+1)
+	var tl: Vector2 = _dot_pos(bc,    br)
+	var top_right: Vector2 = _dot_pos(bc+1, br)
+	var bl: Vector2 = _dot_pos(bc,    br+1)
 	var brp: Vector2 = _dot_pos(bc+1, br+1)
 	var shrink: float = min(step.x, step.y) * 0.22
 	var center: Vector2 = (tl + brp) * 0.5
 
 	var a0: Vector2 = _shrink_toward(center, tl,  shrink)
 	var a1: Vector2 = _shrink_toward(center, brp, shrink)
-	var b0: Vector2 = _shrink_toward(center, tr,  shrink)
+	var b0: Vector2 = _shrink_toward(center, top_right,  shrink)
 	var b1: Vector2 = _shrink_toward(center, bl,  shrink)
 
 	draw_line(a0, a1, col, line_width * 0.75, true)
@@ -533,7 +533,22 @@ func load_lines_and_squares_state(lines: Array, squares: Array) -> void:
 	_reset(N)
 	for l in lines:
 		if typeof(l) == TYPE_ARRAY and l.size() >= 5:
-			_apply_committed_line(int(l[0]), int(l[1]), int(l[2]), int(l[3]), int(l[4]))
+			var p_owner12: int = clamp(int(l[0]), 1, 2)
+			var x1: int = int(l[1])
+			var y1: int = int(l[2])
+			var x2: int = int(l[3])
+			var y2: int = int(l[4])
+			var m: Dictionary = _segment_to_edge(x1, y1, x2, y2)
+			if bool(m.get("ok", false)):
+				var kind: String = String(m["kind"])
+				var r: int = int(m["r"])
+				var c: int = int(m["c"])
+				if kind == "h":
+					h_edges[r][c] = p_owner12
+				elif kind == "v":
+					v_edges[r][c] = p_owner12
+				edges_claimed += 1
+
 	for s in squares:
 		if typeof(s) == TYPE_ARRAY and s.size() >= 3:
 			var p: int = clampi(int(s[0]), 1, 2)
@@ -541,11 +556,9 @@ func load_lines_and_squares_state(lines: Array, squares: Array) -> void:
 			var br: int = br_bc[0]
 			var bc: int = br_bc[1]
 			if br >= 0 and br < (N - 1) and bc >= 0 and bc < (N - 1):
-				if boxes[br][bc] == -1:
-					boxes[br][bc] = p
-					score[p - 1] += 1
-					var bl: Array[int] = _box_topdown_to_bl(br, bc)
-					emit_signal("square_completed_bl", p, bl[0], bl[1])
+				boxes[br][bc] = p
+				score[p - 1] += 1
+	
 	emit_signal("score_changed", score[0], score[1])
 	queue_redraw()
 
@@ -559,7 +572,30 @@ func load_lines_state(lines: Array) -> void:
 		var y1: int = int(l[2])
 		var x2: int = int(l[3])
 		var y2: int = int(l[4])
-		_apply_committed_line(p_owner12, x1, y1, x2, y2)
+		var m: Dictionary = _segment_to_edge(x1, y1, x2, y2)
+		if bool(m.get("ok", false)):
+			var kind: String = String(m["kind"])
+			var r: int = int(m["r"])
+			var c: int = int(m["c"])
+			if kind == "h":
+				h_edges[r][c] = p_owner12
+			elif kind == "v":
+				v_edges[r][c] = p_owner12
+			edges_claimed += 1
+
+	for r in range(N-1):
+		for c in range(N-1):
+			if boxes[r][c] == -1 and _is_box_complete(r, c):
+				var p_owner: int = -1
+				if h_edges[r][c] != -1: p_owner = h_edges[r][c]
+				elif h_edges[r+1][c] != -1: p_owner = h_edges[r+1][c]
+				elif v_edges[r][c] != -1: p_owner = v_edges[r][c]
+				elif v_edges[r][c+1] != -1: p_owner = v_edges[r][c+1]
+				
+				if p_owner != -1:
+					boxes[r][c] = p_owner
+					score[p_owner - 1] += 1
+	
 	emit_signal("score_changed", score[0], score[1])
 	queue_redraw()
 
@@ -583,11 +619,12 @@ func replay_line_move(move: Array) -> void:
 	_apply_committed_line(p_owner12, x1, y1, x2, y2)
 
 	emit_signal("score_changed", score[0], score[1])
-	emit_signal("turn_changed", player)
+	emit_signal("turn_changed")
 	queue_redraw()
 	
 func _square_bl_to_topdown(br_bl_x: int, br_bl_y: int) -> Array[int]:
 	return [(N - 2) - br_bl_y, br_bl_x]
+
 func get_all_claimed_squares() -> Array:
 	var out: Array = []
 	for br in range(N - 1):
@@ -598,7 +635,7 @@ func get_all_claimed_squares() -> Array:
 				out.append([o, int(bl[0]), int(bl[1])])
 	return out
 
-func _play_line_animation(kind: String, r: int, c: int, owner: int, is_temp: bool) -> void:
+func _play_line_animation(kind: String, r: int, c: int, line_owner: int, is_temp: bool) -> void:
 	var endpoints: Array[Vector2] = _edge_endpoints(kind, r, c)
 	var start_pos: Vector2 = endpoints[0]
 	var end_pos: Vector2 = endpoints[1]
@@ -611,7 +648,7 @@ func _play_line_animation(kind: String, r: int, c: int, owner: int, is_temp: boo
 	_stop_temp_pulse()
 
 	anim_line.points = [start_pos, start_pos]
-	var base_col := p_colors[owner - 1]
+	var base_col := p_colors[line_owner - 1]
 	anim_line.default_color = base_col
 	anim_line.width = line_width
 	anim_line.visible = true

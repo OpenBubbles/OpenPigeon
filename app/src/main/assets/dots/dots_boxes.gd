@@ -169,27 +169,22 @@ func _set_game_data(raw_text: String) -> void:
 
 func _load_pre_state_and_replay(replay_str: String) -> void:
 	var parsed := _parse_replay_dnb(replay_str)
+	var pre_lines: Array = parsed.get("pre_lines", [])
+	var pre_squares: Array = parsed.get("pre_squares", [])
+	var moves: Array = parsed.get("moves", [])
 
 	pre_board_str = parsed.get("pre_board_str", "")
 	post_board_str_from_opponent = parsed.get("post_board_str", "")
-
-	var pre_lines: Array = parsed.get("pre_lines", [])
-	var moves: Array = parsed.get("moves", [])
-	
 	opponent_post_lines = parsed.get("post_lines", [])
 	opponent_post_squares = parsed.get("post_squares", [])
 
-	if is_instance_valid(grid) and grid.has_method("load_lines_state"):
-		grid.call("load_lines_state", pre_lines)
-
+	if is_instance_valid(grid) and grid.has_method("load_lines_and_squares_state"):
+		grid.call("load_lines_and_squares_state", pre_lines, pre_squares)
 	if not moves.is_empty() and is_instance_valid(grid) and grid.has_method("replay_line_move"):
 		for move in moves:
 			await grid.call("replay_line_move", move)
 			await get_tree().create_timer(0.7).timeout
 
-	#if is_instance_valid(grid) and grid.has_method("load_lines_and_squares_state") and (not opponent_post_squares.is_empty()):
-		#grid.call("load_lines_and_squares_state", opponent_post_lines, opponent_post_squares)
-	#print("192 Call")
 	prev_lines_cache = _get_committed_lines()
 	if is_instance_valid(player_score_label) and is_instance_valid(opp_score_label):
 		if player_score_label.text == "" and opp_score_label.text == "":
@@ -211,12 +206,11 @@ func _apply_turn_state() -> void:
 		if is_my_turn: stop_waiting_animation()
 
 func _parse_replay_dnb(raw: String) -> Dictionary:
-	var out := { 
-		"pre_board_str": "", "post_board_str": "", 
-		"pre_lines": [], "moves": [], "post_lines": [], "post_squares": [] 
+	var out := {
+		"pre_board_str": "", "post_board_str": "", "pre_lines": [], "pre_squares": [], 
+		"moves": [], "post_lines": [], "post_squares": []
 	}
 	if raw.strip_edges() == "": return out
-
 	var parts := raw.split("|")
 	var is_first_board := true
 	for p in parts:
@@ -226,6 +220,7 @@ func _parse_replay_dnb(raw: String) -> Dictionary:
 			if is_first_board:
 				out["pre_board_str"] = b
 				out["pre_lines"] = br["lines"]
+				out["pre_squares"] = br["squares"]
 				is_first_board = false
 			else:
 				out["post_board_str"] = b

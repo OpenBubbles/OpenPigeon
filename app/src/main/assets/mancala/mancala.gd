@@ -1,8 +1,8 @@
 extends Control
 
-var player_str: int     = 2
+var player_str: int      = 2
 var game_settings_category: String
-var player: int     = 1
+var player: int      = 1
 var is_your_turn: bool = false
 var is_my_turn: bool = false
 var spectator_mode: bool = false
@@ -93,7 +93,7 @@ func _ready() -> void:
 	_load_game_specific_settings()
 	_init_mancala_board_structure()
 	var appPlugin = Engine.get_singleton("AppPlugin")
-	if appPlugin: 
+	if appPlugin:
 		print("AppPlugin Available")
 		if not has_connected:
 			appPlugin.connect("set_game_data", _set_game_data)
@@ -121,7 +121,7 @@ func _ready() -> void:
 			#"subcaption": "Capture Mode",
 			#"id": "ziadBSjDYgc4ruev"
 		#}
-		#"""		
+		#"""
 		var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:&2,2&2&&3,3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&1,13,12&13,11,12,11,13,12,11,1,13,3,11,2&13,13,11,12,2|move:2,4|board:12&2,2&2&&3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&&13,11,12,11,13,12,11,1,13,3,11,2,1&13,13,11,12,2,13","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
 		#var dev_data = "{'isYourTurn': true,'sender': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f'], 'version': ['0'], 'tver': ['5'], 'ios': ['18.5'], 'game': ['mancala'], 'id': ['9rPZettmFiDTt/eI\n'], 'size': ['4'], 'player': ['2'], 'player1': ['7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX'], 'player2': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f'], 'mode': ['n'], 'avatar1': ['body,0|eyes,1|mouth,0|acc,0|wins,0|bg_color,1.000000,0.928034,0.515868|body_color,1.000000,0.745098,0.600000|glasses,0|stache,0|backdrop,0|hair,3|clothes,0|hair_color,0.431373,0.254902,0.121569|clothes_color,0.225965,0.805188,0.692411'], 'avatar2': ['body,0|body_color,1.000000,0.741176,0.603922|hair,2|hair_color,0.941176,0.901961,0.549020|eyes,0|mouth,0|clothes,0|clothes_color,0.627451,0.235294,0.627451|bg_color,0.619608,0.270588,0.752941|backdrop,8'], 'replay': ['board:&&&11&2&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13&&&&&&12&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2|move:2,5|board:&&&&&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13,11,2&&&&&&&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2,12'], 'num': ['29'], 'build': ['XSaldMy'], 'winner': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f|-1'], 'caption': ['You Won!']}"
 		_set_game_data(dev_data)
@@ -380,7 +380,7 @@ func _init_mancala_board_structure() -> void:
 	print("Mancala board structure initialized.")
 	dot_timer.timeout.connect(_on_dot_timer_timeout)
 
-func _apply_board_layout(is_current_turn: bool) -> void:
+func _apply_board_layout(_is_current_turn: bool) -> void:
 	print("YOU ARE PLAYER: ", player)
 	if player == 1:
 		offsets = [
@@ -447,9 +447,7 @@ func _start_pit_highlights() -> void:
 func _stop_pit_highlights() -> void:
 	print("Stopped Pit Highlights!!")
 	for pit in pit_nodes:
-		print("437 Call 15")
 		var hl = pit.get_node("HighlightCircle") as ColorRect
-		print("439 Call 16")
 		hl.visible = false
 
 func _on_pit_clicked(idx: int) -> void:
@@ -499,7 +497,6 @@ func _on_pit_clicked(idx: int) -> void:
 	if game_over:
 		_is_animating = false
 		_stop_pit_highlights()
-		free_turn_label.visible
 		_end_turn()
 		return
 
@@ -507,7 +504,7 @@ func _on_pit_clicked(idx: int) -> void:
 	if _last_sown_pit != -1:
 		if _last_sown_pit == 6 or _last_sown_pit == 13:
 			give_free_turn = true
-			print("DEBUG: Last stone landed in own store pit → free turn!")
+			print("DEBUG: Last stone landed in own store pit -> free turn!")
 		else:
 			print("DEBUG: Last stone landed in pit ", _last_sown_pit, " (not a store pit for free turn).")
 	else:
@@ -644,7 +641,6 @@ func _layout_pit_stones(i: int) -> void:
 
 func _sow_from(start_idx: int) -> void:
 	var current_sowing_pit_idx = start_idx
-	var last_stone_landed_in_empty_pit = false
 	
 	while true:
 		if _skip_replay_animation:
@@ -676,12 +672,10 @@ func _sow_from(start_idx: int) -> void:
 			break
 
 		if pits[current_sowing_pit_idx].size() == 0:
-			last_stone_landed_in_empty_pit = true
 			break
 		
 		var stones_to_sow = pits[current_sowing_pit_idx].size()
 		if stones_to_sow == 0:
-			last_stone_landed_in_empty_pit = true
 			break
 			
 		var start_pit_node = pit_nodes[current_sowing_pit_idx]
@@ -691,7 +685,6 @@ func _sow_from(start_idx: int) -> void:
 		for c in start_container.get_children():
 			c.queue_free()
 		pits[current_sowing_pit_idx].clear()
-		print("502 refresh count label call")
 		_refresh_pit_count_label(current_sowing_pit_idx)
 		var current_idx = current_sowing_pit_idx
 		var carried_visual_stones: Array[Node2D] = []
@@ -779,7 +772,6 @@ func _sow_from(start_idx: int) -> void:
 			
 			if pits[_last_sown_pit].size() == 1:
 				print("Avalanche ends: Last stone landed in an empty pit (now 1 stone).")
-				last_stone_landed_in_empty_pit = true
 				break
 			
 			print("Avalanche continues: Picking up stones from pit ", _last_sown_pit)
@@ -831,7 +823,6 @@ func _sow_from(start_idx: int) -> void:
 						print("Capture animation interrupted by skip button.")
 						return
 					pits[player_store_idx].append_array(captured_stones)
-					print("626 refresh count label call")
 					_refresh_pit_count_label(_last_sown_pit)
 					_refresh_pit_count_label(opposite_pit_idx)
 					_refresh_pit_count_label(player_store_idx)
@@ -841,7 +832,6 @@ func _sow_from(start_idx: int) -> void:
 	for child in _carrying_stones_container.get_children():
 		child.queue_free()
 	_carrying_stones_container.scale = Vector2(1.0, 1.0)
-	print("735 CALLED GAME OVER")
 	await _check_game_over_and_winner()
 
 func _animate_capture(stones_to_capture: Array, last_sown_pit_idx: int, opposite_pit_idx: int, player_store_idx: int) -> void:
@@ -874,7 +864,6 @@ func _animate_capture(stones_to_capture: Array, last_sown_pit_idx: int, opposite
 		_carrying_stones_container.add_child(s_visual)
 		s_visual.global_position = opposite_pit_node.global_position
 	
-	print("681 refresh count label call")
 	_refresh_pit_count_label(last_sown_pit_idx)
 	_refresh_pit_count_label(opposite_pit_idx)
 	var capture_tween = create_tween()
@@ -884,8 +873,7 @@ func _animate_capture(stones_to_capture: Array, last_sown_pit_idx: int, opposite
 			s_visual.queue_free()
 		return
 	var target_global_pos_for_capture = store_node.global_position
-	target_global_pos_for_capture.y
-
+	
 	capture_tween.tween_property(
 		_carrying_stones_container, "global_position",
 		target_global_pos_for_capture,
@@ -900,8 +888,9 @@ func _animate_capture(stones_to_capture: Array, last_sown_pit_idx: int, opposite
 			s_visual.position = spawn_points[player_store_idx].position + Vector2(randf_range(-20, 20), randf_range(-20, 20))
 			s_visual.rotation_degrees = randf_range(0, 360)
 
-			var shadow = Sprite2D.new()
-			shadow.texture = s_visual.texture
+			var shadow := Sprite2D.new()
+			shadow.name = "Shadow"
+			shadow.texture = (s_visual as Sprite2D).texture
 			shadow.modulate = Color(0, 0, 0, 0.3)
 			shadow.scale = s_visual.scale * 1.05
 			shadow.position = s_visual.position + Vector2(5, 5)
@@ -944,30 +933,22 @@ func _refresh_pit(i: int) -> void:
 func _get_color_from_label(label: int) -> Color:
 	match label:
 		1, 11: return Color("#fffcf2")
-		2, 12: return Color("#414851") 
+		2, 12: return Color("#414851")  
 		3, 13: return Color("#176cab")
 		_: return Color(randf_range(0.9, 1.0), randf_range(0.9, 1.0), randf_range(0.9, 1.0))
 
 func _refresh_pit_count_label(i: int) -> void:
 	var pit = pit_nodes[i]
-	print("865 Call 6")
 	var lbl = pit.get_node("CountLabel") as Label
-	print("867 Call 7")
 	lbl.text = str(pits[i].size())
-	print("869 Call 8")
 	lbl.get_parent().force_update_transform()
-	print("871 Call 9")
 	var lw = lbl.get_minimum_size().x
-	print("873 Call 10")
 	var lh = lbl.get_minimum_size().y
-	print("875 Call 11")
 	var base = spawn_points[i].position
-	print("877 Call 12")
 	const OFFX = 40
 	const OFFY = 10
 	const Mx = 50
 	const My = 50
-	print("882 Call 13")
 	print("REFRESH COUNT:: PLAYER: ", player, " Pit Number: ", i, " In Replay?: ", in_replay)
 	if player == 1:
 		if i == 6 or i == 13:
@@ -996,7 +977,7 @@ func _refresh_pit_count_label(i: int) -> void:
 	else:
 		print("Shouldn't Update Label as it is not my turn")
 
-func _place_stone(container: Node2D, base_pos: Vector2, label: int) -> void:
+func _place_stone(_container: Node2D, _base_pos: Vector2, _label: int) -> void:
 	pass
 	
 func send_game() -> void:
@@ -1029,9 +1010,7 @@ func send_game() -> void:
 		print("Adding my avatar data to payload with key '", avatar_key, "'")
 	
 	print("PAYLOAD: ", payload)
-	print("938 CALLED GAME OVER")
 	if await _check_game_over_and_winner():
-		print("Check Win 863 my_player: ", my_player, " win_loss_state: ", win_loss_state)
 		if game_over == true and not spectator_mode:
 			payload["winner"] = my_player + "|" + win_loss_state
 	var game_data = JSON.stringify(payload)
@@ -1073,12 +1052,11 @@ func _check_game_over_and_winner() -> bool:
 			is_game_over_condition_met = true
 
 			if player1_side_empty:
-				print("Player 1's side empty → animate stones from Player 2 pits to Store 13.")
+				print("Player 1's side empty -> animate stones from Player 2 pits to Store 13.")
 				await _animate_sweep([7, 8, 9, 10, 11, 12], 13)
 			elif player2_side_empty:
-				print("Player 2's side empty → animate stones from Player 1 pits to Store 6.")
+				print("Player 2's side empty -> animate stones from Player 1 pits to Store 6.")
 				await _animate_sweep([0, 1, 2, 3, 4, 5], 6)
-				print("915 refresh count label call")
 				_refresh_pit_count_label(6)
 
 	if is_game_over_condition_met and not game_over:
@@ -1100,52 +1078,33 @@ func _check_game_over_and_winner() -> bool:
 		disp_winner = true
 
 		_stop_pit_highlights()
-		print("1035 Call")
+
 		if is_instance_valid(free_turn_label):
-			print("1037 Call")
 			free_turn_label.visible = false
-		print("1039 Call")
 
 		if winner_id == -1:
-			print("1042")
 			win_loss_label.text = "DRAW!"
-			print("1044")
 			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
-			print("1046")
 			win_loss_state = "0"
-			print("DRAW!")
 		elif (player == 1 and winner_id == 1) or (player == 2 and winner_id == 2):
 			if not spectator_mode:
-				print("1052")
 				win_loss_label.text = "YOU WIN!"
-				print("1054")
 				_show_win_burst(player_avatar_display)
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-				print("YOU WIN")
 				win_loss_state = "1"
 			else:
-				print("1058")
 				win_loss_label.text = "Player {0} Wins!".format([winner_id])
-				print("1057")
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-				print("YOU LOSE 1055")
 			
 		else:
-			print("1065")
-			print("1067")
 			if not spectator_mode:
-				print("1069")
 				win_loss_label.text = "YOU LOSE"
-				print("YOU LOSE 1061")
 				_show_win_burst(opp_avatar_display)
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
 				win_loss_state = "-1"
 			else:
-				print("1074")
 				win_loss_label.text = "Player {0} Wins!".format([winner_id])
-				print("1076")
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-				print("YOU LOSE 1066")
 			
 		win_loss_label.visible = true
 		await get_tree().process_frame
@@ -1292,8 +1251,10 @@ func on_rules_button_pressed() -> void:
 
 	rules_button.pivot_offset = rules_button.size / 2.0
 	var tween := create_tween()
-	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1)\
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3)\
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
 
 	var popup := RULES_POPUP_SCENE.instantiate()
@@ -1332,9 +1293,9 @@ func on_rules_button_pressed() -> void:
 	popup.visible = true
 	await get_tree().process_frame
 
-	var viewport_size := get_viewport_rect().size
-	var desired_width := viewport_size.x * 0.9
-	var desired_height: float = popup.get_combined_minimum_size().y
+	var viewport_size = get_viewport_rect().size
+	var desired_width = viewport_size.x * 0.9
+	var desired_height = popup.get_combined_minimum_size().y
 	popup.size = Vector2(desired_width, desired_height)
 	popup.set_pivot_offset(popup.size / 2)
 	popup.position = (viewport_size / 2) - (popup.size / 2)
@@ -1364,7 +1325,7 @@ func _get_rules_text_for_mode() -> String:
 [/font_size]
 [font_size={24px}][b]Goal:[/b][/font_size]
 [font_size={18px}]
-Player with the most stones in thir store wins. 
+Player with the most stones in thir store wins.  
 [/font_size]
 """
 		"an", "ah":

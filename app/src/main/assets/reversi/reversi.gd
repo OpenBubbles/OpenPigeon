@@ -715,10 +715,10 @@ func on_replay_pressed():
 	replay_button.visible = false
 	print("NEED TO IMPLEMENT!!!!!")
 
-func has_any_valid_moves(player_to_check: String) -> bool:
+func has_any_valid_moves(player_symbol_to_check: String) -> bool:
 	for y in range(BOARD_SIZE):
 		for x in range(BOARD_SIZE):
-			if get_piece(x, y) == "" and is_valid_move(x, y, player_to_check):
+			if get_piece(x, y) == "" and is_valid_move(x, y, player_symbol_to_check):
 				return true
 	return false
 
@@ -824,10 +824,10 @@ func play_replay(replay_string: String):
 		set_highlight_visibility(false)
 		send_button.visible = false
 
-func parse_replay(replay: String) -> Dictionary:
+func parse_replay(replay_string: String) -> Dictionary:
 	var result = {"move": []}
 
-	var elements = replay.split("|")
+	var elements = replay_string.split("|")
 
 	for i in range(elements.size()):
 		var elem = elements[i]
@@ -871,12 +871,12 @@ func parse_replay(replay: String) -> Dictionary:
 			print("parse_replay: Unknown type: '", type, "'. Skipping.")
 	return result
 	
-func preview_flip_pieces(x: int, y: int, player: String):
-	var directions = get_flippable_directions(x, y, player)
+func preview_flip_pieces(x: int, y: int, player_symbol_to_check: String):
+	var directions = get_flippable_directions(x, y, player_symbol_to_check)
 	for dir in directions:
 		var pos = Vector2i(x, y) + dir
-		while is_in_bounds(pos) and get_piece(pos.x, pos.y) != player:
-			set_piece(pos.x, pos.y, player, false)
+		while is_in_bounds(pos) and get_piece(pos.x, pos.y) != player_symbol_to_check:
+			set_piece(pos.x, pos.y, player_symbol_to_check, false)
 			pos += dir
 
 
@@ -1060,14 +1060,14 @@ func animate_button_slide_down():
 		await check_win()
 	)
 
-func set_highlight_visibility(visible: bool):
+func set_highlight_visibility(_visible: bool):
 	for y in range(BOARD_SIZE):
 		for x in range(BOARD_SIZE):
 			var cell = board[y][x]
 			if cell:
 				var highlight = cell.find_child("Highlight")
 				if highlight:
-					highlight.visible = visible
+					highlight.visible = _visible
 
 func place_temp_piece_visual(x: int, y: int, symbol: String):
 	if is_in_bounds(Vector2i(x, y)):
@@ -1099,18 +1099,18 @@ func handle_turn_transition():
 		highlight_valid_moves()
 		return
 
-func is_valid_move(x: int, y: int, player: String) -> bool:
-	return get_flippable_directions(x, y, player).size() > 0
+func is_valid_move(x: int, y: int, player_symbol_to_check: String) -> bool:
+	return get_flippable_directions(x, y, player_symbol_to_check).size() > 0
 
-func flip_pieces(x: int, y: int, player: String, directions: Array) -> void:
+func flip_pieces(x: int, y: int, player_symbol_to_check: String, directions: Array) -> void:
 	for dir in directions:
 		var pos = Vector2i(x, y) + dir
-		while is_in_bounds(pos) and get_piece(pos.x, pos.y) != player:
-			set_piece(pos.x, pos.y, player, true)
+		while is_in_bounds(pos) and get_piece(pos.x, pos.y) != player_symbol_to_check:
+			set_piece(pos.x, pos.y, player_symbol_to_check, true)
 			pos += dir
 
-func get_flippable_directions(x: int, y: int, player: String) -> Array:
-	var opponent = "⚪" if player == "⚫" else "⚫"
+func get_flippable_directions(x: int, y: int, player_symbol_to_check: String) -> Array:
+	var opponent = "⚪" if player_symbol_to_check == "⚫" else "⚫"
 	var directions = []
 	if get_piece(x, y) != "":
 		return directions
@@ -1125,7 +1125,7 @@ func get_flippable_directions(x: int, y: int, player: String) -> Array:
 			pos += dir
 			while is_in_bounds(pos):
 				var piece = get_piece(pos.x, pos.y)
-				if piece == player:
+				if piece == player_symbol_to_check:
 					directions.append(dir)
 					break
 				elif piece == "":
@@ -1136,13 +1136,13 @@ func get_flippable_directions(x: int, y: int, player: String) -> Array:
 func is_in_bounds(pos: Vector2i) -> bool:
 	return pos.x >= 0 and pos.x < BOARD_SIZE and pos.y >= 0 and pos.y < BOARD_SIZE
 
-func create_radial_gradient_texture(size: int = 64) -> Texture2D:
-	var image = Image.create(size, size, false, Image.FORMAT_RGBA8)
+func create_radial_gradient_texture(_size: int = 64) -> Texture2D:
+	var image = Image.create(_size, _size, false, Image.FORMAT_RGBA8)
 	@warning_ignore("integer_division")
-	var center = Vector2(size / 2, size / 2)
+	var center = Vector2(_size / 2, _size / 2)
 	var max_dist = center.length()
-	for y in size:
-		for x in size:
+	for y in _size:
+		for x in _size:
 			var pos = Vector2(x, y)
 			var dist = pos.distance_to(center) / max_dist
 			var alpha = clamp(pow(dist,1.5), 0.0, 0.4)
