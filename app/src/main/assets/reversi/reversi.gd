@@ -156,10 +156,10 @@ func setup_ui_elements_style_and_signals():
 	if player_count_label:
 		var player_score_style = StyleBoxFlat.new()
 		player_score_style.bg_color = Color.BLACK
-		player_score_style.corner_radius_top_left = 20 # NEW: Individual corner
-		player_score_style.corner_radius_top_right = 20 # NEW: Individual corner
-		player_score_style.corner_radius_bottom_left = 20 # NEW: Individual corner
-		player_score_style.corner_radius_bottom_right = 20 # NEW: Individual corner
+		player_score_style.corner_radius_top_left = 20
+		player_score_style.corner_radius_top_right = 20
+		player_score_style.corner_radius_bottom_left = 20
+		player_score_style.corner_radius_bottom_right = 20
 		player_count_label.add_theme_stylebox_override("normal", player_score_style)
 		player_count_label.add_theme_color_override("font_color", Color.WHITE)
 		player_count_label.add_theme_font_size_override("font_size", 24)
@@ -1153,14 +1153,12 @@ func on_rules_button_pressed() -> void:
 	if not is_instance_valid(rules_button):
 		return
 
-	# Button press animation
 	rules_button.pivot_offset = rules_button.size / 2.0
 	var tween := create_tween()
 	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
 
-	# Create popup and dim background
 	var popup := RULES_POPUP_SCENE.instantiate()
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.5)
@@ -1173,7 +1171,6 @@ func on_rules_button_pressed() -> void:
 	dim.z_index = 99
 	root.move_child(dim, root.get_child_count() - 2)
 
-	# Close button (optional if it exists)
 	var close_btn := popup.find_child("CloseButton", true, false)
 	if close_btn:
 		close_btn.pressed.connect(func():
@@ -1181,7 +1178,6 @@ func on_rules_button_pressed() -> void:
 			popup.queue_free()
 		)
 
-	# --- POPULATE UNIQUE NODES ---
 	var title_label := popup.find_child("Title", true, false) as Label
 	if title_label:
 		title_label.text = "How to Play Reversi"
@@ -1195,8 +1191,6 @@ func on_rules_button_pressed() -> void:
 		rules_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rules_label.text = _get_rules_text()
 
-
-	# Show & animate popup
 	popup.set_as_top_level(true)
 	popup.visible = true
 	await get_tree().process_frame

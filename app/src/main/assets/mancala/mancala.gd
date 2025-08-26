@@ -592,15 +592,19 @@ func _layout_pit_stones(i: int) -> void:
 	if not pit: return
 	var container := pit.get_node("StonesContainer") as Node2D
 	if not container: return
+
 	for child in container.get_children():
 		if child is Node2D and child.name == "Shadow":
 			child.queue_free()
+
 	var stones: Array[Node2D] = []
 	for child in container.get_children():
 		if child is Node2D and child.name != "Shadow":
 			stones.append(child)
+
 	var n := stones.size()
 	if n == 0: return
+
 	var stone_half := 8.0
 	if stones[0] is Sprite2D and (stones[0] as Sprite2D).texture:
 		var tex := (stones[0] as Sprite2D).texture
@@ -609,26 +613,19 @@ func _layout_pit_stones(i: int) -> void:
 
 	var cr := _get_pit_center_and_radii(i, stone_half)
 	var center: Vector2 = cr[0]
-	var radii:  Vector2 = cr[1]
-
-	for k in range(n):
-		var t := float(k + 0.5) / float(n)
-		var r := sqrt(t)
-		var a := GOLDEN_ANGLE * float(k)
-		var pos := center + Vector2(cos(a) * radii.x * r, sin(a) * radii.y * r)
-		var v := pos - center
-		var nx := v.x / radii.x
-		var ny := v.y / radii.y
-		var d := sqrt(nx * nx + ny * ny)
-		if d > 1.0:
-			var inv := 1.0 / d
-			v = Vector2(nx * inv * radii.x, ny * inv * radii.y)
-			pos = center + v
-
-		var s := stones[k]
+	var radii: Vector2 = cr[1]
+	const AREA_SCALE = 0.85
+	for s in stones:
+		var angle = randf_range(0, TAU)
+		var distance_factor = sqrt(randf()) * AREA_SCALE
+		var random_offset = Vector2(cos(angle) * radii.x * distance_factor, sin(angle) * radii.y * distance_factor)
+		
+		var pos = center + random_offset
 		s.position = pos
+
 		if s.rotation_degrees == 0.0:
 			s.rotation_degrees = randf_range(0, 360)
+
 		if s is Sprite2D:
 			var sh := Sprite2D.new()
 			sh.name = "Shadow"
@@ -1241,9 +1238,6 @@ func _on_skip_button_pressed() -> void:
 	if in_replay:
 		print("Skip button pressed during replay!")
 		_skip_replay_animation = true
-		var active_tweens = get_tree().get_processed_tweens()
-		for tween in active_tweens:
-			tween.kill()
 
 func on_rules_button_pressed() -> void:
 	if not is_instance_valid(rules_button):
