@@ -39,7 +39,7 @@ func _ready():
 	_setup_avatar_customizer()
 	
 	var saved_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
-	set_dark_mode(saved_dark, dark_mode_auto_apply_theme, true)
+	set_dark_mode(saved_dark, true)
 
 func close_popup():
 	SettingsManager.avatar_changed.emit()
@@ -70,12 +70,11 @@ func _populate_theme_dropdown():
 	
 	theme_option_button.clear()
 	theme_option_button.item_selected.connect(_on_theme_option_button_item_selected)
-	
-	# The dropdown uses a simple hardcoded list of themes
-	theme_option_button.add_item("Default", 0)
-	theme_option_button.add_item("Default (Dark)", 1)
-	theme_option_button.add_item("Penguin", 2)
-	theme_option_button.add_item("Penguin (Dark)", 3)
+
+	#theme_option_button.add_item("Default", 0)
+	#theme_option_button.add_item("Default (Dark)", 1)
+	#theme_option_button.add_item("Penguin", 2)
+	#theme_option_button.add_item("Penguin (Dark)", 3)
 	
 	var saved_theme = SettingsManager.get_setting("global", "theme", "Default")
 	for i in range(theme_option_button.item_count):
@@ -84,7 +83,6 @@ func _populate_theme_dropdown():
 			break
 			
 func _populate_theme_previews():
-	# First, clear any old buttons from the preview box
 	for child in preview_box.get_children():
 		child.queue_free()
 	
@@ -92,11 +90,9 @@ func _populate_theme_previews():
 	var saved_theme = SettingsManager.get_setting("global", "theme", "Default")
 	
 	for theme_name in all_themes.keys():
-		# 1. Create the button
 		var btn = TextureButton.new()
 		var preview_data = all_themes[theme_name]
 		
-		# Create a dummy texture (we'll replace this with real images next)
 		var image = Image.create(64, 64, false, Image.FORMAT_RGBA8)
 		image.fill(preview_data.preview_color)
 		var texture = ImageTexture.create_from_image(image)
@@ -105,7 +101,6 @@ func _populate_theme_previews():
 		btn.stretch_mode = TextureButton.STRETCH_KEEP_CENTERED
 		btn.custom_minimum_size = Vector2(64, 64)
 		
-		# 2. Add a border to the currently selected theme
 		if theme_name == saved_theme:
 			var style_box = StyleBoxFlat.new()
 			style_box.bg_color = Color(0, 0, 0, 0)
@@ -113,19 +108,15 @@ func _populate_theme_previews():
 			style_box.border_color = Color(0.2, 0.8, 0.2, 0.9)
 			btn.add_theme_stylebox_override("normal", style_box)
 		
-		# 3. Connect its pressed signal
 		btn.pressed.connect(func(): _on_theme_preview_selected(theme_name))
 		
-		# 4. Add it DIRECTLY to the preview_box
 		preview_box.add_child(btn)
 		
 func populate_theme_previews(themes_data: Dictionary) -> void:
-	# Constants for interaction feel
 	const HOVER_SCALE := 1.08
 	const PRESS_SCALE := 0.95
 	const TWEEN_TIME := 0.08
 
-	# Clear any old buttons first
 	for child in preview_box.get_children():
 		child.queue_free()
 
@@ -135,8 +126,7 @@ func populate_theme_previews(themes_data: Dictionary) -> void:
 
 	var saved_theme: String = str(SettingsManager.get_setting("global", "theme", "Default"))
 
-	for key in themes_data.keys():
-		var theme_name: String = str(key)
+	for theme_name in themes_data.keys():
 		var btn: TextureButton = TextureButton.new()
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -145,20 +135,43 @@ func populate_theme_previews(themes_data: Dictionary) -> void:
 		btn.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 		btn.scale = Vector2.ONE
 		btn.resized.connect(func(): btn.pivot_offset = btn.size * 0.5)
+		
+		var bg_style := StyleBoxFlat.new()
+		# --- MODIFIED LINES ---
+		bg_style.bg_color = Color("#FFD700", 0.4) # A nice translucent gold/yellow
+		bg_style.border_color = Color("#DAA520", 0.6) # A darker goldenrod for the border
+		# --- END MODIFIED LINES ---
+		bg_style.border_width_left = 1
+		bg_style.border_width_top = 1
+		bg_style.border_width_right = 1
+		bg_style.border_width_bottom = 1
+		bg_style.corner_radius_bottom_left = 5
+		bg_style.corner_radius_bottom_right = 5
+		bg_style.corner_radius_top_left = 5
+		bg_style.corner_radius_top_right = 5
+		btn.add_theme_stylebox_override("normal", bg_style)
+		btn.add_theme_stylebox_override("hover", bg_style)
+		btn.add_theme_stylebox_override("pressed", bg_style)
+		btn.add_theme_stylebox_override("focus", bg_style)
 
-		var preview_path: String = str(themes_data[theme_name].get("preview_path", ""))
-
-		# Load or create placeholder
 		var texture: Texture2D
-		if FileAccess.file_exists(preview_path):
-			texture = (load(preview_path) as Texture2D)
+		
+		# MODIFICATION START: Prioritize generated texture, fall back to path
+		if themes_data[theme_name].has("texture") and themes_data[theme_name]["texture"] is Texture2D:
+			texture = themes_data[theme_name]["texture"]
 		else:
-			push_warning("Theme preview image missing: " + preview_path)
-			var placeholder := Image.create(64, 64, false, Image.FORMAT_RGBA8)
-			placeholder.fill(Color.MAGENTA)
-			texture = ImageTexture.create_from_image(placeholder)
+			var preview_path: String = str(themes_data[theme_name].get("preview_path", ""))
+			if FileAccess.file_exists(preview_path):
+				texture = load(preview_path) as Texture2D
+			else:
+				push_warning("Theme preview image missing: " + preview_path)
+				var placeholder := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+				placeholder.fill(Color.MAGENTA)
+				texture = ImageTexture.create_from_image(placeholder)
+		# MODIFICATION END
 
-		# Scale to 40x40 once
+		if not is_instance_valid(texture): continue
+
 		var img: Image = texture.get_image()
 		if img:
 			img.resize(40, 40, Image.INTERPOLATE_LANCZOS)
@@ -166,20 +179,21 @@ func populate_theme_previews(themes_data: Dictionary) -> void:
 		else:
 			btn.texture_normal = texture
 
-		# Highlight the currently selected theme
 		if theme_name == saved_theme:
-			var style_box := StyleBoxFlat.new()
-			style_box.bg_color = Color.TRANSPARENT
-			style_box.border_width_left = 3
-			style_box.border_width_top = 3
-			style_box.border_width_right = 3
-			style_box.border_width_bottom = 3
-			style_box.border_color = Color(0.2, 0.8, 0.2, 0.9)
-			btn.add_theme_stylebox_override("normal", style_box)
+			# Get the background style we just created and duplicate it.
+			var selected_style_box := bg_style.duplicate() as StyleBoxFlat
+			
+			# Now, ONLY modify the border to show it's selected.
+			selected_style_box.border_width_left = 3
+			selected_style_box.border_width_top = 3
+			selected_style_box.border_width_right = 3
+			selected_style_box.border_width_bottom = 3
+			selected_style_box.border_color = Color(0.2, 0.8, 0.2, 0.9)
+			
+			# This override now includes the background AND the green border.
+			btn.add_theme_stylebox_override("normal", selected_style_box)
 
-		# --- Interaction: hover/press scale animation ---
 		var tween_to := func(target: float) -> void:
-			# Kill any prior tween stored on the button
 			if btn.has_meta("preview_tween"):
 				var old = btn.get_meta("preview_tween")
 				if old: old.kill()
@@ -196,14 +210,11 @@ func populate_theme_previews(themes_data: Dictionary) -> void:
 			tween_to.call(HOVER_SCALE if hovered else 1.0)
 		)
 		btn.pivot_offset = btn.custom_minimum_size * 0.5
-		# --- End interaction ---
-
-		var captured_name := theme_name
+		var captured_name : String = theme_name
 		btn.pressed.connect(func(): _on_theme_preview_selected(captured_name))
 
 		preview_box.add_child(btn)
-
-# This function centralizes theme data, making it easy to add more themes later
+		
 func _get_all_themes() -> Dictionary:
 	return {
 		"Default": { "path": "res://themes/default.tres", "preview_color": Color("#e0e0e0") },
@@ -215,13 +226,16 @@ func _get_all_themes() -> Dictionary:
 func _on_theme_preview_selected(selected_theme_name: String):
 	print("Theme preview button clicked: ", selected_theme_name)
 	SettingsManager.set_setting("global", "theme", selected_theme_name)
+	if SettingsManager.has_method("save"):
+		SettingsManager.save()
 	settings_theme_selected.emit(selected_theme_name)
 
 func _on_theme_option_button_item_selected(index: int):
 	var selected_theme_name = theme_option_button.get_item_text(index)
-	# ADDED: Log statement for the dropdown menu
 	print("Theme dropdown item selected: ", selected_theme_name)
 	SettingsManager.set_setting("global", "theme", selected_theme_name)
+	if SettingsManager.has_method("save"):
+		SettingsManager.save()
 	settings_theme_selected.emit(selected_theme_name)
 
 func _setup_avatar_customizer():
@@ -456,16 +470,15 @@ func setup_popup(dimmer: ColorRect):
 	if is_instance_valid(dim_rect):
 		dim_rect.gui_input.connect(_on_dim_rect_gui_input)
 		
-func set_dark_mode(enabled: bool, apply_theme: bool = true, instant: bool = false) -> void:
+func set_dark_mode(enabled: bool, instant: bool = false) -> void:
 	if dark_mode_enabled == enabled:
 		_apply_dark_mode_visuals(enabled, instant)
 		return
 	dark_mode_enabled = enabled
 	SettingsManager.set_setting("global", "dark_mode", enabled)
 	_apply_dark_mode_visuals(enabled, instant)
-	if apply_theme:
-		_sync_theme_dropdown_from_dark(enabled)
 	emit_signal("dark_mode_changed", enabled)
+
 
 func get_dark_mode() -> bool:
 	return dark_mode_enabled
@@ -523,7 +536,7 @@ func _add_dark_mode_toggle():
 		printerr("SettingsPopup: GlobalSettingsContainer not found; cannot add dark mode toggle.")
 
 	dark_mode_button.toggled.connect(func(pressed: bool):
-		set_dark_mode(pressed, dark_mode_auto_apply_theme, false)
+		set_dark_mode(pressed, false)
 	)
 	
 func _make_switch_button() -> Button:

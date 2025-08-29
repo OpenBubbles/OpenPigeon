@@ -30,6 +30,7 @@ var pit_nodes: Array[Area2D] = []
 var spawn_points: Array[Marker2D] = []
 var board_labels: Array = []
 var replay_moves: Array = []
+var current_theme_name: String = "Default"
 
 
 var PitScene    : PackedScene = preload("res://mancala/pit.tscn")
@@ -53,6 +54,7 @@ const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 @onready var free_turn_label = %FreeTurnLabel
 @onready var skip_button = %SkipButton
 @onready var spec_label = %SpecLabel
+@onready var board_sprite := %BoardSprite as TextureRect
 
 var _carrying_stones_container: Node2D = Node2D.new()
 const STONE_DROP_DELAY: float = 0.1 # Time to pause after dropping each stone
@@ -91,6 +93,12 @@ func _ready() -> void:
 	game_settings_category = SettingsManager.get_game_name_from_path(get_tree().current_scene.scene_file_path)
 	print("Current game scene for settings: ", game_settings_category)
 	_load_game_specific_settings()
+	var saved_theme: String = str(SettingsManager.get_setting("global", "theme", current_theme_name))
+	current_theme_name = saved_theme
+	current_palette     = _get_palette_for_theme(saved_theme)
+	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
+	_apply_board_sprite_modulate()
+	_apply_bg_for_dark(is_dark)
 	_init_mancala_board_structure()
 	var appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin:
@@ -138,19 +146,26 @@ func _ready() -> void:
 
 	add_child(_carrying_stones_container)
 	_carrying_stones_container.z_index = 90
+	_apply_board_sprite_modulate()
 	
 func _apply_bg_for_dark(is_dark: bool) -> void:
-	if is_instance_valid(background):
-		if is_dark:
-			if mode == "an" or mode == "ah":
-				background.color = Color("#261a19")
-			else:
-				background.color = Color("#202526")
-		else:
-			if mode == "an" or mode == "ah":
-				background.color = Color("#704b4a")
-			else:
-				background.color = Color("#6d7c82")
+	if not is_instance_valid(background):
+		return
+
+	var base_color: Color = (current_palette.get("board_dark", Color(0.13, 0.14, 0.15)) as Color)
+	if not is_dark:
+		base_color = (current_palette.get("board_light", Color(0.43, 0.49, 0.51)) as Color)
+
+	var color: Color = base_color
+	if mode == "an" or mode == "ah":
+		color = color.darkened(0.15) if is_dark else color.lightened(0.15)
+
+	var tint: Color = (current_palette.get("board_tint", Color(1, 1, 1)) as Color)
+	var strength: float = float(current_palette.get("board_tint_strength", 0.0))
+	if strength > 0.0:
+		color = color.lerp(tint, clamp(strength, 0.0, 1.0))
+
+	background.color = color
 
 func _set_game_data(raw_text: String) -> void:
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
@@ -929,10 +944,10 @@ func _refresh_pit(i: int) -> void:
 
 func _get_color_from_label(label: int) -> Color:
 	match label:
-		1, 11: return Color("#fffcf2")
-		2, 12: return Color("#414851")  
-		3, 13: return Color("#176cab")
-		_: return Color(randf_range(0.9, 1.0), randf_range(0.9, 1.0), randf_range(0.9, 1.0))
+		1, 11: return _palette_color("primary")
+		2, 12: return _palette_color("secondary")
+		3, 13: return _palette_color("accent")
+		_:     return Color(1, 1, 1)
 
 func _refresh_pit_count_label(i: int) -> void:
 	var pit = pit_nodes[i]
@@ -1427,9 +1442,9 @@ func _on_settings_button_pressed() -> void:
 
 	var popup_instance = SETTINGS_POPUP_SCENE.instantiate()
 	var settings_popup_script = popup_instance as SettingsPopup
-	
 	settings_popup_script.theme_previews_enabled = true
-	var mancala_themes = _get_mancala_themes()
+	
+	var mancala_themes = await _get_mancala_themes()
 	popup_instance.ready.connect(func():
 			settings_popup_script.populate_theme_previews(mancala_themes)
 	)
@@ -1514,37 +1529,148 @@ func _on_settings_button_pressed() -> void:
 	popup_instance.grab_focus()
 
 func _on_theme_changed(new_theme_name: String):
-	print("Game scene received theme change: ", new_theme_name)
-	pass
+	current_theme_name = new_theme_name
+	current_palette    = _get_palette_for_theme(new_theme_name)
+	
+	SettingsManager.set_setting("global", "theme", new_theme_name)
+	if SettingsManager.has_method("save"):
+		SettingsManager.save()
+
+	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
+	_apply_bg_for_dark(is_dark)
+	_apply_board_sprite_modulate()
+	_refresh_all_pits()
+	
+func _palette_color(key: String) -> Color:
+	var v = current_palette.get(key)
+	if v == null and key == "primary":
+		var variants = current_palette.get("primary_variants")
+		if variants is Array and variants.size() > 0 and variants[0] is Color:
+			return variants[randi() % variants.size()]
+	if v is Color:
+		return v
+	return Color(1, 1, 1)
+
+func _generate_theme_preview(theme_palette: Dictionary) -> Texture2D:
+	var preview_size := Vector2i(64, 64)
+
+	var vp := SubViewport.new()
+	vp.size = preview_size
+	vp.set_update_mode(SubViewport.UpdateMode.UPDATE_ONCE)
+	# --- ADD THIS LINE ---
+	vp.transparent_bg = true # Makes the viewport corners transparent
+	# --- END ADDITION ---
+
+	# Use a Panel with StyleBoxFlat for rounded corners
+	var bg_panel := Panel.new()
+	bg_panel.size = Vector2(preview_size)
+	bg_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var bg_style := StyleBoxFlat.new()
+	var bg_color: Color = theme_palette.get("board_light", Color.GRAY)
+	bg_color.a = 0.4 # Set opacity to 40%
+	bg_style.bg_color = bg_color
+	bg_style.corner_radius_bottom_left = 8
+	bg_style.corner_radius_bottom_right = 8
+	bg_style.corner_radius_top_left = 8
+	bg_style.corner_radius_top_right = 8
+	
+	bg_panel.add_theme_stylebox_override("panel", bg_style)
+	vp.add_child(bg_panel)
+
+	var temp_pit := PitScene.instantiate()
+	var debug_label = temp_pit.find_child("Debug_num", true, false)
+	if debug_label: debug_label.visible = false
+	var count_label = temp_pit.find_child("CountLabel", true, false)
+	if count_label: count_label.visible = false
+	
+	var collision_shape_node := temp_pit.get_node("CollisionShape2D") as CollisionShape2D
+	var pit_local_center := collision_shape_node.position
+	var preview_scale := 0.75
+	
+	temp_pit.scale = Vector2.ONE * preview_scale
+	temp_pit.position = (Vector2(preview_size) * 0.5) - (pit_local_center * preview_scale)
+	vp.add_child(temp_pit)
+	
+	var all_stone_colors: Array[Color] = []
+	if theme_palette.has("primary_variants") and theme_palette["primary_variants"] is Array:
+		all_stone_colors.append_array(theme_palette["primary_variants"])
+	elif theme_palette.has("primary") and theme_palette["primary"] is Color:
+		all_stone_colors.append(theme_palette["primary"])
+	if theme_palette.has("secondary") and theme_palette["secondary"] is Color:
+		all_stone_colors.append(theme_palette["secondary"])
+	if theme_palette.has("accent") and theme_palette["accent"] is Color:
+		all_stone_colors.append(theme_palette["accent"])
+	if all_stone_colors.is_empty():
+		all_stone_colors.append(Color.WHITE)
+
+	var final_colors_to_render: Array[Color] = []
+	final_colors_to_render.append_array(all_stone_colors)
+	
+	var total_stone_count := randi_range(8, 12)
+	var remaining_stones_needed = total_stone_count - final_colors_to_render.size()
+
+	if remaining_stones_needed > 0 and not all_stone_colors.is_empty():
+		for i in range(remaining_stones_needed):
+			final_colors_to_render.append(all_stone_colors.pick_random())
+
+	final_colors_to_render.shuffle()
+
+	var stone_container := temp_pit.get_node("StonesContainer")
+	var pit_radius := (collision_shape_node.shape as CircleShape2D).radius
+	var layout_radius := pit_radius * SAFETY_SCALE_PIT
+	
+	for i in range(final_colors_to_render.size()):
+		var stone_color = final_colors_to_render[i]
+		var stone := StoneScene.instantiate() as Node2D
+		stone.scale = BASE_STONE_SCALE * 1.0
+		stone.modulate = stone_color
+		
+		var angle := float(i) * GOLDEN_ANGLE
+		var radius_factor := sqrt(float(i + 1) / float(final_colors_to_render.size()))
+		var radius := layout_radius * radius_factor * 0.9
+		stone.position = Vector2(cos(angle), sin(angle)) * radius
+		stone.rotation = randf_range(0, TAU)
+		
+		stone_container.add_child(stone)
+
+	add_child(vp)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	var vp_tex := vp.get_texture()
+	var out_tex: Texture2D
+
+	if vp_tex == null:
+		var fallback_img := Image.create(preview_size.x, preview_size.y, false, Image.FORMAT_RGBA8)
+		fallback_img.fill(Color.MAGENTA)
+		out_tex = ImageTexture.create_from_image(fallback_img)
+	else:
+		var img := vp_tex.get_image()
+		out_tex = ImageTexture.create_from_image(img)
+	
+	vp.queue_free()
+	
+	return out_tex
 	
 func _get_mancala_themes() -> Dictionary:
-	var themes_data = {}
-	var dir_path = "res://mancala/themes"
-	var dir = DirAccess.open(dir_path)
-	
-	if dir:
-		print("Successfully opened theme directory: " + dir_path)
-		dir.list_dir_begin()
-		var file_name = dir.get_next()
-		while file_name != "":
-			# KEY CHANGE: Look for .png files instead of .tres files
-			if file_name.ends_with(".png"):
-				# The theme's name is now the name of the image file
-				var theme_name = file_name.trim_suffix(".png")
-				var full_path = dir_path.path_join(file_name)
-				
-				themes_data[theme_name] = {
-					"preview_path": full_path
-				}
-				print("Found theme preview: " + theme_name)
-			file_name = dir.get_next()
-		dir.list_dir_end()
-	else:
-		push_error("Could not open Mancala theme directory: " + dir_path)
-		print("Make sure the folder 'mancala/themes' exists in your project's res:// directory.")
+	var themes_data := {}
+	var theme_names := ["Default", "Retro", "Penguin", "Sakura Ink", "Emerald Brass", "Desert Dusk"]
 
-	print("Theme data loaded:", themes_data)
+	for theme_name in theme_names:
+		var palette := _get_palette_for_theme(theme_name)
+		# Generate each preview image and wait for it to finish
+		var preview_tex := await _generate_theme_preview(palette)
+		# Store the generated texture object directly in the dictionary
+		themes_data[theme_name] = {"texture": preview_tex}
+	
+	print("Dynamic theme previews generated:", themes_data.keys())
 	return themes_data
+	
+func _apply_board_sprite_modulate() -> void:
+	if not is_instance_valid(board_sprite): return
+	var c: Color = current_palette.get("board_sprite_modulate", Color(1, 1, 1)) as Color
+	board_sprite.modulate = c
 	
 func _load_game_specific_settings():
 	var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
@@ -1555,3 +1681,108 @@ func _load_game_specific_settings():
 	print("Loaded game-specific settings for ", game_settings_category, ":")
 	print("  Master Volume: ", saved_volume)
 	print("  Show Debug Info: ", show_debug_info)
+	
+var current_palette := {
+	"primary": Color("#fffcf2"),
+	"secondary": Color("#414851"),
+	"accent": Color("#176cab"),
+	"board_light": Color("#6d7c82"),
+	"board_dark": Color("#202526"),
+	"board_sprite_modulate": Color(1, 1, 1)
+}
+
+func _get_palette_for_theme(themename: String) -> Dictionary:
+	match themename:
+		"Default":
+			return {
+				"primary": Color("#fffcf2"),
+				"secondary": Color("#414851"),
+				"accent": Color("#176cab"),
+				"board_light": Color("#6d7c82"),
+				"board_dark": Color("#202526"),
+				"board_sprite_modulate": Color(1, 1, 1)
+			}
+		"Retro":
+			return {
+				"primary_variants": [
+					Color("e80038ff"),  # apricot
+				],
+				"secondary": Color("ffb900ff"),   # umber (stones 2/12)
+				"accent":    Color("#2FA5A0"),   # turquoise (stones 3/13)
+
+				# board
+				"board_light": Color("#F1E5D1"), # pale sand
+				"board_dark":  Color("#2C1F1A"), # dusk
+				"board_sprite_modulate": Color("dbdfdeff"), # warm peach tint
+				"board_tint": Color("f6f5f1ff"),
+				"board_tint_strength": 0.07
+			}
+		"Penguin":
+			return {
+				#"primary": Color("#00e603"),
+				"primary_variants": [
+					Color("#00e603"),  # neon green
+					Color("#00c6cf"),  # punchy red
+					Color("#0083e3")   # electric purple
+				],
+				"secondary": Color("#e90008"),
+				"accent": Color("#c303c1"),
+				"board_light": Color("#00529b"),
+				"board_dark": Color("#00254dff"),
+				# bright yellow tint for the board image
+				"board_sprite_modulate": Color("#fdd22b")
+			}
+		"Sakura Ink":
+			return {
+				# blossom tones for stones 1/11
+				"primary_variants": [
+					Color("#F7BFCF"),  # rose
+				],
+				"secondary": Color("#2A2E34"),   # ink charcoal (stones 2/12)
+				"accent":    Color("#4F65A3"),   # indigo (stones 3/13)
+
+				# board
+				"board_light": Color("#F3EDE8"), # warm parchment
+				"board_dark":  Color("#191C22"), # deep ink
+				"board_sprite_modulate": Color("#FFE8D1"), # ivory tint
+				"board_tint": Color("#FFFAF5"),           # feather-light warm overlay
+				"board_tint_strength": 0.05
+			}
+
+		"Emerald Brass":
+			return {
+				# lush greens for stones 1/11
+				"primary_variants": [
+					Color("#2FAF74"),  # emerald
+					Color("#1D8F5A"),  # forest
+					Color("#66C79E")   # jade
+				],
+				"secondary": Color("#8C6B32"),   # brass (stones 2/12)
+				"accent":    Color("#2B8C7B"),   # teal (stones 3/13)
+
+				# board
+				"board_light": Color("#E7E3DA"), # linen
+				"board_dark":  Color("#13281F"), # evergreen
+				"board_sprite_modulate": Color("#D8B269"), # soft brass tint
+				"board_tint": Color("#F6F2E7"),
+				"board_tint_strength": 0.06
+			}
+
+		"Desert Dusk":
+			return {
+				# desert minerals for stones 1/11
+				"primary_variants": [
+					Color("#E8A66A"),  # apricot
+				],
+				"secondary": Color("#3A2C27"),   # umber (stones 2/12)
+				"accent":    Color("#2FA5A0"),   # turquoise (stones 3/13)
+
+				# board
+				"board_light": Color("#F1E5D1"), # pale sand
+				"board_dark":  Color("#2C1F1A"), # dusk
+				"board_sprite_modulate": Color("#FFD7A1"), # warm peach tint
+				"board_tint": Color("#FFF3E1"),
+				"board_tint_strength": 0.07
+			}
+		_:
+			return current_palette
