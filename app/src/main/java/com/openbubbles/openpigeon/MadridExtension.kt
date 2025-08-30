@@ -65,6 +65,7 @@ import com.openbubbles.openpigeon.darts.DartsGame
 import com.openbubbles.openpigeon.dots.DotsGame
 import com.openbubbles.openpigeon.fill.FillerGame
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.knockout.KnockoutGame
 import com.openbubbles.openpigeon.mancala.MancalaGame
 import com.openbubbles.openpigeon.pong.PongGame
 import com.openbubbles.openpigeon.pool.PoolGame
@@ -99,7 +100,8 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             ReversiGame(),
             FillerGame(),
             MancalaGame(),
-            DotsGame()
+            DotsGame(),
+            KnockoutGame()
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {
