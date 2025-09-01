@@ -197,19 +197,6 @@ grow_vertical = 2
 texture = ExtResource("3_4i852")
 expand_mode = 4
 
-[node name="LeftScore" type="Label" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer/LeftPlayer"]
-unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-size_flags_horizontal = 4
-theme_override_font_sizes/font_size = 20
-horizontal_alignment = 1
-vertical_alignment = 1
-
 [node name="Separation" type="Control" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -233,19 +220,6 @@ grow_horizontal = 2
 grow_vertical = 2
 texture = ExtResource("4_8y6pv")
 expand_mode = 4
-
-[node name="RightScore" type="Label" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer/RightPlayer"]
-unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-size_flags_horizontal = 4
-theme_override_font_sizes/font_size = 20
-horizontal_alignment = 1
-vertical_alignment = 1
 
 [node name="Separation2" type="Control" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer"]
 custom_minimum_size = Vector2(8, 0)
@@ -274,20 +248,29 @@ size_flags_horizontal = 4
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="Paper" type="PanelContainer" parent="VBoxContainer/Center"]
+[node name="GameBoard" type="PanelContainer" parent="VBoxContainer/Center"]
 unique_name_in_owner = true
 layout_mode = 2
+mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_10rnd")
 
-[node name="TextureRect" type="TextureRect" parent="VBoxContainer/Center/Paper"]
-custom_minimum_size = Vector2(600, 500)
+[node name="TextureRect" type="TextureRect" parent="VBoxContainer/Center/GameBoard"]
+custom_minimum_size = Vector2(600, 600)
 layout_mode = 2
+mouse_filter = 2
 texture = ExtResource("3_8y6pv")
 expand_mode = 3
+
+[node name="IcebergBounds" type="Polygon2D" parent="VBoxContainer/Center/GameBoard"]
+visible = false
+
+[node name="PieceContainer" type="Node2D" parent="VBoxContainer/Center"]
+unique_name_in_owner = true
 
 [node name="WinLossLabel" type="Label" parent="VBoxContainer/Center"]
 unique_name_in_owner = true
 visible = false
+z_index = 2
 layout_mode = 2
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_7lvb6")
@@ -297,15 +280,13 @@ vertical_alignment = 1
 [node name="SentLabel" type="Label" parent="VBoxContainer/Center"]
 unique_name_in_owner = true
 visible = false
+z_index = 2
 layout_mode = 2
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_7lvb6")
 text = "SENT"
 horizontal_alignment = 1
 vertical_alignment = 1
-
-[node name="PieceContainer" type="Node2D" parent="VBoxContainer/Center"]
-unique_name_in_owner = true
 
 [node name="BottomItemHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
 custom_minimum_size = Vector2(0, 120)
@@ -372,6 +353,7 @@ text = "Launch"
 [node name="WaitBlur" type="ColorRect" parent="."]
 unique_name_in_owner = true
 visible = false
+z_index = 2
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -384,6 +366,7 @@ color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 [node name="WaitForOpponentLabel" type="Label" parent="."]
 unique_name_in_owner = true
 visible = false
+z_index = 2
 layout_mode = 0
 offset_left = 161.0
 offset_top = 579.0

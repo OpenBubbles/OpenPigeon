@@ -11,7 +11,9 @@ const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 
+
 # --- UI and Game Node References ---
+@onready var game_board := %GameBoard
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var background = %Background
@@ -29,6 +31,17 @@ const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_ani
 @onready var left_preserver := %LeftPreserver   # TextureRect for player 1 status
 @onready var right_preserver := %RightPreserver  # TextureRect for player 2 status
 
+# --- Replay state ---
+var last_pre_round: Dictionary = {}      # {"round": int, "pieces": Array[Dictionary]}
+var last_post_round: Dictionary = {}     # same shape; board #2 (or #3) snapshot after physics
+var current_round_index: int = 0
+
+const POWER_TO_IMPULSE: float = 6.0      # must match piece.gd feel
+const ROUND_SNAP_AFTER: float = 1.4      # seconds: snap to post board after physics play (optional)
+const PIECE_RADIUS: float = 24.0  # must match your piece CollisionShape2D
+
+var _water_kill_areas: Array[Area2D] = []
+var _safe_polys_global: Array[PackedVector2Array] = [] # shrunken iceberg polygons in global coords
 
 # --- Game State Variables ---
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
@@ -36,6 +49,7 @@ var game_settings_category: String
 
 var game_ended = false
 var game_over = false
+var _replay_in_progress: bool = false
 var tween: Tween
 var win_loss_state = ""
 var has_connected: bool = false
@@ -52,12 +66,152 @@ var dot_count = 0
 var pre_board_data: Array = []
 var post_board_data: Array = []
 
+const AUTO_BOUNDS_GROUP := "board_bounds_auto" # for easy cleanup of generated nodes
+
+func _poly_area(poly: PackedVector2Array) -> float:
+	var n := poly.size()
+	if n < 3:
+		return 0.0
+	var sum: float = 0.0
+	for i in n:
+		var p: Vector2 = poly[i]
+		var q: Vector2 = poly[(i + 1) % n]
+		sum += p.x * q.y - q.x * p.y
+	return absf(sum) * 0.5
+
+
+# Where the texture is actually drawn inside the TextureRect (accounts for keep-aspect modes)
+func _texrect_draw_rect(texr: TextureRect, img: Image) -> Rect2:
+	var tex_size: Vector2 = Vector2.ZERO
+	if img and not img.is_empty():
+		tex_size = Vector2(img.get_width(), img.get_height())
+	elif texr.texture:
+		# Ensure Vector2 (Texture2D.get_size() may be Vector2i)
+		tex_size = Vector2(texr.texture.get_size())
+
+	# No texture? Just say it fills the control.
+	if tex_size == Vector2.ZERO:
+		return Rect2(Vector2.ZERO, texr.size)
+
+	var draw_pos: Vector2 = Vector2.ZERO
+	var draw_size: Vector2 = texr.size
+
+	match texr.stretch_mode:
+		TextureRect.STRETCH_SCALE:
+			draw_pos = Vector2.ZERO
+			draw_size = texr.size
+
+		TextureRect.STRETCH_TILE:
+			# Tiled over control; for our mapping treat like fill.
+			draw_pos = Vector2.ZERO
+			draw_size = texr.size
+
+		TextureRect.STRETCH_KEEP:
+			draw_pos = Vector2.ZERO
+			draw_size = tex_size
+
+		TextureRect.STRETCH_KEEP_CENTERED:
+			draw_size = tex_size
+			draw_pos = (texr.size - draw_size) * 0.5
+
+		TextureRect.STRETCH_KEEP_ASPECT, TextureRect.STRETCH_KEEP_ASPECT_CENTERED:
+			var img_aspect: float = tex_size.x / max(1.0, tex_size.y)
+			var rect_aspect: float = texr.size.x / max(1.0, texr.size.y)
+
+			if img_aspect > rect_aspect:
+				draw_size.x = texr.size.x
+				draw_size.y = texr.size.x / img_aspect
+			else:
+				draw_size.y = texr.size.y
+				draw_size.x = texr.size.y * img_aspect
+
+			draw_pos = Vector2.ZERO
+			if texr.stretch_mode == TextureRect.STRETCH_KEEP_ASPECT_CENTERED:
+				draw_pos = (texr.size - draw_size) * 0.5
+
+		TextureRect.STRETCH_KEEP_ASPECT_COVERED:
+			# Fill (may crop), centered.
+			var img_aspect: float = tex_size.x / max(1.0, tex_size.y)
+			var rect_aspect: float = texr.size.x / max(1.0, texr.size.y)
+
+			if img_aspect > rect_aspect:
+				draw_size.y = texr.size.y
+				draw_size.x = texr.size.y * img_aspect
+			else:
+				draw_size.x = texr.size.x
+				draw_size.y = texr.size.x / img_aspect
+
+			draw_pos = (texr.size - draw_size) * 0.5
+
+		_:
+			draw_pos = Vector2.ZERO
+			draw_size = texr.size
+
+	return Rect2(draw_pos, draw_size)
+
+# Build safe polygon(s) by tracing the iceberg PNG inside GameBoard/TextureRect
+func _build_safe_poly_from_png(alpha_threshold: float = 0.1, simplify_epsilon: float = 1.5, shrink_px: float = 0.0) -> void:
+	_safe_polys_global.clear()
+
+	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
+	if texrect == null or texrect.texture == null:
+		push_warning("TextureRect with iceberg texture not found under %GameBoard.")
+		return
+
+	var tex: Texture2D = texrect.texture
+	var img: Image = tex.get_image()
+	if img.is_empty():
+		return
+
+	# Alpha >= threshold == solid (ICE)
+	var bm := BitMap.new()
+	bm.create_from_image_alpha(img, alpha_threshold)
+
+	# Contours in image space
+	var rect_img := Rect2i(Vector2i.ZERO, img.get_size())
+	var contours: Array[PackedVector2Array] = bm.opaque_to_polygons(rect_img, simplify_epsilon)
+	if contours.is_empty():
+		push_warning("No opaque (alpha) region found in iceberg PNG.")
+		return
+
+	# Pick largest by area (shoelace)
+	var best: PackedVector2Array = contours[0]
+	var best_area: float = _poly_area(best)
+	for poly: PackedVector2Array in contours:
+		var a: float = _poly_area(poly)
+		if a > best_area:
+			best = poly
+			best_area = a
+
+	# Map image pixels -> where the tex is drawn inside the TextureRect
+	var tex_draw_rect: Rect2 = _texrect_draw_rect(texrect, img)
+	var img_size: Vector2 = Vector2(float(img.get_width()), float(img.get_height()))
+	var tex_scale: Vector2 = tex_draw_rect.size / img_size
+	var xf: Transform2D = texrect.get_global_transform()
+
+	# Build global-space polygon (so it matches your kill test)
+	var gpoly := PackedVector2Array()
+	for v_img: Vector2 in best:
+		var local_in_tr: Vector2 = tex_draw_rect.position + (v_img * tex_scale)
+		gpoly.append(xf * local_in_tr)
+
+	# No shrink: use silhouette exactly as drawn. (shrink_px stays 0.0)
+	var final_polys: Array = [gpoly]
+	if absf(shrink_px) > 0.001:
+		var off := Geometry2D.offset_polygon(gpoly, -shrink_px) # negative shrinks; positive expands
+		if off is Array and not off.is_empty():
+			final_polys = off
+
+	for sub: PackedVector2Array in final_polys:
+		if sub.size() >= 3:
+			_safe_polys_global.append(sub)
+	
 # --- Godot Lifecycle & Setup ---
 
 func _ready():
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_bg_for_dark(is_dark)
-	
+
 	randomize()
 	print("Knockout Scene ready!")
 
@@ -73,25 +227,44 @@ func _ready():
 			appPlugin.onReady()
 			print("AppPlugin Connected")
 	else:
-		# Dev data for testing in the editor
-		var dev_data = '{ "isYourTurn": true, "player": "1", "myPlayerId": "player1_id", "player1": "player1_id", "replay": "board:-123.16,12.25,1,187.68,0.0,0.0#-4.49,98.56,1,150.14,0.0,0.0#-128.79,126.11,1,132.96,0.0,0.0#-39.62,-31.23,1,352.37,0.0,0.0#-128.49,90.65,2,224.98,0.0,0.0#37.30,-82.72,2,130.87,0.0,0.0#52.55,-38.66,2,188.42,0.0,0.0#47.67,20.40,2,292.87,0.0,0.0"}'
+		var dev_data = '{ "isYourTurn": true, "player": "1", "myPlayerId": "player1_id", "player1": "player1_id", "replay": "board:3#64.290634,-6.814140,2,-0.272487,1.906639,43.372223#22.490519,-81.948463,2,2.664457,1.825102,79.211861#-33.966293,-1.493407,2,1.201969,0.854556,49.784225#50.797119,68.486916,2,0.031407,-1.832990,21.633646#68.963905,51.039120,1,-0.956223,0.877263,112.225693|shoot:1|board:4#44.753342,27.813044,2,3.476813,1.906639,0.000000#-6.200705,27.998833,2,3.395898,1.825102,0.000000#12.654635,48.524792,2,2.425352,0.854556,0.000000#31.692930,69.601021,2,0.901690,-1.832990,0.000000"}'
 		call_deferred("_set_game_data", dev_data)
-	
+
 	if is_instance_valid(send_button):
 		send_button.visible = true
 		send_button.pressed.connect(send_game)
 	else:
 		push_warning("No %SendButton in scene")
-		
+
 	if rules_button:
 		rules_button.pressed.connect(on_rules_button_pressed)
 	if settings_button:
 		settings_button.pressed.connect(_on_settings_button_pressed)
 
+	_wire_water_kill_areas()
+
+	# Wait for containers (CenterContainer, etc.) to place children.
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	# Build from the PNG with a shrink equal to (piece radius - small tolerance)
+	_build_safe_poly_from_png(0.1, 1.5, -PIECE_RADIUS/2)
+
+	# Rebuild the poly when TextureRect or viewport size changes.
+	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
+	if texrect:
+		texrect.resized.connect(func():
+			_build_safe_poly_from_png(0.1, 1.5, -PIECE_RADIUS/2.0)
+		)
+
+	get_viewport().size_changed.connect(func():
+		_build_safe_poly_from_png(0.1, 1.5, PIECE_RADIUS - 2.0)
+	)
+
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
 		background.color = Color(0.08, 0.08, 0.08) if is_dark else Color("#68d4f6")
-		
+
 # --- Game Data Handling ---
 
 func _set_game_data(new_game_data_json: String):
@@ -99,6 +272,7 @@ func _set_game_data(new_game_data_json: String):
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return
 
+	_stop_all_highlights()
 	stop_waiting_animation()
 
 	var data: Dictionary = parsed
@@ -118,20 +292,19 @@ func _set_game_data(new_game_data_json: String):
 		elif my_player_id == player2_id:
 			player = 2
 			opponent_avatar_key = "avatar1"
-		else: # Default case if myPlayerId is not specified
+		else:
 			player = 1
 	else:
 		spectator_mode = true
 		you_label.text = ""
-		is_my_turn = false # Spectators can't take turns
+		is_my_turn = false
 		spec_label.show()
-		player = 1 # Default view
-	
-	# Set player preserver textures
+		player = 1
+
 	if player == 1:
 		left_preserver.texture = BLACK_PRESERVER_TEX
 		right_preserver.texture = GRAY_PRESERVER_TEX
-	else: # Player 2
+	else:
 		left_preserver.texture = GRAY_PRESERVER_TEX
 		right_preserver.texture = BLACK_PRESERVER_TEX
 
@@ -140,39 +313,41 @@ func _set_game_data(new_game_data_json: String):
 		var opponent_data = _parse_avatar_string(avatar_string)
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
-	
+
 	if replay_str != "":
 		print("Parsing Replay String")
 		parse_replay_string(replay_str)
 	else:
 		print("New Game - No replay string found.")
-		
-	if not spectator_mode and is_my_turn and not game_over:
-		print("It's your turn!")
-		
+	print("Starting Highlight")
+	call_deferred("_apply_turn_highlights_based_on_arrows")
+	_update_piece_interactivity()  # <<< make only your pieces draggable/touchable
+
 	if not is_my_turn and not game_over and not spectator_mode:
 		start_waiting_animation()
 
-	game_ended = check_win()
+	game_ended = await check_win()
 	if game_ended:
 		stop_waiting_animation()
 		game_over = true
+		send_game()
 
 func send_game() -> void:
 	print("[Send] send_game() called")
+	_stop_all_highlights()
 	await get_tree().process_frame
 
 	var replay_string_to_send = "board:0#47.671448,20.402176,2,292.878235,0.000000,0.000000#52.552505,-38.661270,2,188.420181,0.000000,0.000000#37.309402,-82.729164,2,130.874207,0.000000,0.000000#-128.491425,90.655441,2,224.981232,0.000000,0.000000#-39.626404,-31.231033,1,352.372589,3.139531,146.271362#-128.793274,126.112091,1,132.961517,-1.549612,150.000000#-4.496841,98.564392,1,150.148392,1.542944,150.000000#-123.164268,12.253189,1,187.688141,-0.018010,150.000000|board:0#47.671448,20.402176,2,292.878235,0.000000,150.000000#52.552505,-38.661270,2,188.420181,90.000000,20.000000#37.309402,-82.729164,2,130.874207,180.000000,60.00000#-128.491425,90.655441,2,224.981232,270.000000,150.000000#-39.626404,-31.231033,1,352.372589,0.000000,0.000000#-128.793274,126.112091,1,132.961517,0.000000,0.000000#-4.496841,98.564392,1,150.148392,0.000000,0.000000#-123.164268,12.253189,1,187.688141,0.000000,0.000000"
 	var payload: Dictionary = { "replay": replay_string_to_send }
-	
+
 	avatar_key = ("avatar1" if player == 1 else "avatar2")
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
 
-	game_ended = check_win()
+	game_ended = await check_win()
 	if game_ended and win_loss_state != "":
 		payload["winner"] = my_player_id + "|" + win_loss_state
-		
+
 	print("[Send] PAYLOAD: ", payload)
 	var appPlugin := Engine.get_singleton("AppPlugin")
 	if appPlugin:
@@ -181,38 +356,116 @@ func send_game() -> void:
 		print("AppPlugin is null. Cannot send game data.")
 
 	is_my_turn = false
+	_update_piece_interactivity()   # <<< disable dragging while waiting
 	if not game_over:
 		play_sent_animation()
 
 # --- Replay Parsing & Board Setup ---
 
-func parse_replay_string(replay: String) -> void:
-	var board_strings: Array = replay.split("|")
+func _update_piece_interactivity() -> void:
+	for piece in piece_container.get_children():
+		if piece.has_method("set_controlled_by_me"):
+			var owner_id: int = int(piece.get_meta("player", -1))
+			var can_control: bool = (owner_id == player) and is_my_turn and (not spectator_mode) and (not game_over)
+			piece.set_controlled_by_me(can_control)
 
-	if board_strings.is_empty():
-		push_warning("Replay string is empty.")
+func parse_replay_string(replay: String) -> void:
+	var chunks: PackedStringArray = replay.split("|", false)
+	var boards: Array[Dictionary] = []
+	var shoot_flag := false
+
+	for raw in chunks:
+		var tok := raw.strip_edges()
+		if tok.begins_with("board:"):
+			var body := tok.substr(6)
+			var bd := _parse_board_chunk(body)
+			if bd.has("pieces") and (bd["pieces"] as Array).size() > 0:
+				boards.append(bd)
+		elif tok.begins_with("shoot:"):
+			shoot_flag = int(tok.substr(6).strip_edges()) == 1
+
+	if boards.is_empty():
+		push_warning("Replay had no valid boards.")
 		return
 
-	# Process the first (or only) board state
-	if board_strings[0].begins_with("board:"):
-		var board_data_string = board_strings[0].substr(6)
-		pre_board_data = _parse_board_data(board_data_string)
-		_setup_board_from_data(pre_board_data)
+	# Always set the board from the FIRST board only
+	last_pre_round = boards[0]
+	_setup_board_from_board_dict(last_pre_round)
 
-		# Check for a "shoot" action in the initial board state
-		for piece_data in pre_board_data:
-			var shoot_dir: float = piece_data.get("shoot_dir", 0.0)
-			var power: float = piece_data.get("power", 0.0)
-			if shoot_dir != 0.0 or power != 0.0:
-				print("Shooting (Temp)")
-				# We only need to see it once
-				break
+	# If shoot:1 is present, *play* from the pre-board (no snapping to post)
+	if shoot_flag:
+		await _play_round_from_replay(last_pre_round)
+	
+# Parse "<round>#x,y,player,rot,dir,power#..." into {"round":int, "pieces":[...]}
+func _parse_board_chunk(body: String) -> Dictionary:
+	var round_num: int = 0
+	var rest: String = body
 
-	# If there's a second board, parse and store it for later
-	if board_strings.size() > 1 and board_strings[1].begins_with("board:"):
-		var second_board_data_string = board_strings[1].substr(6)
-		post_board_data = _parse_board_data(second_board_data_string)
-		print("Stored post-move board data for future animation.")
+	var hash_idx: int = body.find("#")
+	if hash_idx >= 0:
+		var maybe_round: String = body.substr(0, hash_idx)
+		if maybe_round.is_valid_int():
+			round_num = int(maybe_round)
+			rest = body.substr(hash_idx + 1)
+	else:
+		rest = body
+
+	var parsed_pieces: Array[Dictionary] = []
+	var piece_strings: PackedStringArray = rest.split("#", false)  # <- use PackedStringArray
+	for pstr in piece_strings:
+		var params: PackedStringArray = pstr.split(",", false)      # <- use PackedStringArray
+		if params.size() == 6:
+			var d: Dictionary = {
+				"pos": Vector2(params[0].to_float(), params[1].to_float()),
+				"player": params[2].to_int(),
+				"rotation": params[3].to_float(),
+				"shoot_dir": params[4].to_float(),
+				"power": params[5].to_float()
+			}
+			parsed_pieces.append(d)
+
+	return { "round": round_num, "pieces": parsed_pieces }
+
+func _board_center_offset() -> Vector2:
+	if game_board is Control:
+		return (game_board as Control).position + (game_board as Control).size / 2.0
+	return game_board.position
+
+func _setup_board_if_needed_for_pre(pre_board: Dictionary) -> void:
+	# If we already spawned the right number of pieces, we can just update pose.
+	var _pieces: Array = pre_board.get("pieces", [])
+	if piece_container.get_child_count() == 0:
+		_setup_board_from_board_dict(pre_board)
+	else:
+		_apply_pre_board_pose(pre_board)
+
+func _setup_board_from_board_dict(bd: Dictionary) -> void:
+	var arr: Array = bd.get("pieces", [])
+	_setup_board_from_data(arr)
+
+func _apply_pre_board_pose(bd: Dictionary) -> void:
+	var arr: Array = bd.get("pieces", [])
+	var off: Vector2 = _board_center_offset()
+	var children: Array[Node] = piece_container.get_children()
+	var count: int = min(children.size(), arr.size())
+	for i in count:
+		var piece_node := children[i]
+		var pd: Dictionary = arr[i]
+		var target_pos: Vector2 = off + (pd["pos"] as Vector2)
+		var target_rot: float = float(pd["rotation"])  # radians
+
+		# RigidBody2D or Node2D safe set (no forces here)
+		if piece_node is RigidBody2D:
+			var rb := piece_node as RigidBody2D
+			rb.freeze = true
+			rb.global_position = target_pos
+			rb.rotation = target_rot
+			rb.linear_velocity = Vector2.ZERO
+			rb.angular_velocity = 0.0
+			rb.freeze = false
+		else:
+			piece_node.global_position = target_pos
+			piece_node.rotation = target_rot
 
 func _parse_board_data(board_string: String) -> Array[Dictionary]:
 	var parsed_pieces: Array[Dictionary] = []
@@ -240,35 +493,549 @@ func _parse_board_data(board_string: String) -> Array[Dictionary]:
 	return parsed_pieces
 
 func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
-	# Clear any existing pieces from the container
 	for child in piece_container.get_children():
 		child.queue_free()
 
-	# Instantiate new pieces based on the data
+	var board_center_offset: Vector2
+	if game_board is Control:
+		board_center_offset = game_board.position + game_board.size / 2.0
+	else:
+		board_center_offset = game_board.position
+
 	for piece_data in board_data:
 		var piece_instance = PieceScene.instantiate()
-		piece_instance.position = piece_data["pos"]
-		piece_instance.rotation_degrees = piece_data["rotation"]
-		
 		var player_num = piece_data["player"]
-		# Assuming the sprite node inside piece.tscn is named "Sprite2D"
+
+		# Store player info in the piece's metadata
+		piece_instance.set_meta("player", player_num)
+
+		piece_instance.position = board_center_offset + piece_data["pos"]
+		piece_instance.rotation = piece_data["rotation"]
+
 		var sprite = piece_instance.find_child("Sprite2D", true, false)
 		if sprite:
-			if player_num == 1:
-				sprite.texture = P1_PIECE_TEX
-			else: # Player 2
-				sprite.texture = P2_PIECE_TEX
+			sprite.texture = P1_PIECE_TEX if player_num == 1 else P2_PIECE_TEX
+			var texture_size: Vector2 = sprite.texture.get_size() # e.g., 1024×1024
+			var desired_size := Vector2(48.0, 48.0)
+
+			# DO NOT scale piece_instance. Scale only the sprite:
+			if texture_size.x > 0.0 and texture_size.y > 0.0:
+				piece_instance.scale = Vector2.ONE
+				sprite.scale = desired_size / texture_size
 		else:
 			push_warning("Could not find a 'Sprite2D' node in the PieceScene instance.")
-			
+
+		# Setup Collision Shape
+		var collision_shape = piece_instance.find_child("CollisionShape2D", true, false) as CollisionShape2D
+		if collision_shape and collision_shape.shape is CircleShape2D:
+			(collision_shape.shape as CircleShape2D).radius = 24.0 # Half of 48px
+		else:
+			push_warning("Could not find a 'CollisionShape2D' with a CircleShape2D in the PieceScene instance.")
+
 		piece_container.add_child(piece_instance)
+		call_deferred("_try_watch_arrow_for_piece", piece_instance)
+
+		# --- NEW: enable dragging only for my pieces while it's my turn (and not spectating/game over)
+		if piece_instance.has_method("set_controlled_by_me"):
+			piece_instance.set_controlled_by_me(player_num == player and is_my_turn and not spectator_mode and not game_over)
+
+		# Optional: listen to aim updates (already stored in piece metadata)
+		if piece_instance.has_signal("aim_changed"):
+			piece_instance.connect("aim_changed", func(_angle_deg: float, _pow: float):
+				# You can react here if you want to mirror the value in your own state
+				# For now, piece.gd keeps it in metadata keys "shoot_dir" and "power"
+				pass
+			)
+			
+func _set_piece_arrow_from_data(piece: Node, shoot_dir_rad: float, pow_px: float, fade_sec: float) -> void:
+	var angle_deg: float = rad_to_deg(shoot_dir_rad)
+	if piece.has_method("show_arrow_from_replay"):
+		piece.call("show_arrow_from_replay", angle_deg, pow_px, fade_sec)
+	else:
+		# Fallback: at least store meta so your arrow code can pick it up
+		piece.set_meta("shoot_dir", angle_deg)
+		piece.set_meta("power", pow_px)
+		# If the piece scene exposes an "Arrow" CanvasItem, make it visible
+		var arrow := piece.get_node_or_null("Arrow") as CanvasItem
+		if arrow:
+			arrow.modulate.a = 1.0
+			arrow.visible = true
+
+func _rotate_piece_to_dir(piece: Node, shoot_dir_rad: float, dur: float) -> void:
+	if piece is Node2D:
+		var n2d := piece as Node2D
+		var tw := create_tween()
+		tw.tween_property(n2d, "rotation", shoot_dir_rad, dur).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+func _fire_piece_from_arrow(piece: Node, shoot_dir_rad: float, pow_px: float) -> void:
+	if pow_px <= 0.5:
+		return
+	if piece.has_method("fire_from_meta"):
+		piece.set_meta("shoot_dir", rad_to_deg(shoot_dir_rad))
+		piece.set_meta("power", pow_px)
+		piece.call("fire_from_meta")
+	elif piece is RigidBody2D:
+		# fallback (kept for safety)
+		var impulse := Vector2(cos(shoot_dir_rad), sin(shoot_dir_rad)) * (pow_px * 1.29)
+		(piece as RigidBody2D).apply_impulse(impulse)
+	
+func _hide_all_arrows_and_refresh_highlights() -> void:
+	for piece in piece_container.get_children():
+		# Prefer the piece API if present
+		if piece.has_method("hide_arrow"):
+			piece.hide_arrow()
+		else:
+			var arrow := piece.get_node_or_null("Arrow") as CanvasItem
+			if arrow:
+				arrow.visible = false
+		# Optional: normalize metadata
+		piece.set_meta("power", 0.0)
+		piece.set_meta("shoot_dir", 0.0)
+		
+
+	# Re-apply the “your-turn” pulsing rings for pieces that have no arrow
+	call_deferred("_apply_turn_highlights_based_on_arrows")
+
+func _physics_process(_delta: float) -> void:
+	# If we have water kill-areas, body_entered() will handle kills.
+	# Use polygon fallback only when there are NO water kill-areas.
+	if _water_kill_areas.is_empty() and not _safe_polys_global.is_empty():
+		for n in piece_container.get_children():
+			if n is RigidBody2D:
+				var rb := n as RigidBody2D
+				if not rb.has_meta("dying") and not _point_in_any_safe_poly(rb.global_position):
+					_kill_piece(rb)
+	
+func _wire_water_kill_areas() -> void:
+	_water_kill_areas.clear()
+	for n in get_tree().get_nodes_in_group("water_kill"):
+		if n is Area2D:
+			var a := n as Area2D
+			_water_kill_areas.append(a)
+			var cb := Callable(self, "_on_water_kill_body_entered")
+			if not a.body_entered.is_connected(cb):
+				a.body_entered.connect(cb)
+
+func _on_water_kill_body_entered(body: Node) -> void:
+	# Only kill our pieces
+	if body is RigidBody2D and body.get_parent() == piece_container:
+		_kill_piece(body as RigidBody2D)
+
+func _refresh_board_bounds() -> void:
+	_safe_polys_global.clear()
+	# Collect every polygon tagged as the iceberg outline
+	for n in get_tree().get_nodes_in_group("board_bounds"):
+		var poly: PackedVector2Array = []
+		var xform: Transform2D
+		if n is Polygon2D:
+			var p2d := n as Polygon2D
+			poly = p2d.polygon
+			xform = p2d.get_global_transform()
+		elif n is CollisionPolygon2D:
+			var cp := n as CollisionPolygon2D
+			poly = cp.polygon
+			xform = cp.get_global_transform()
+		else:
+			continue
+		if poly.size() >= 3:
+			# transform to global coords
+			var gpoly := PackedVector2Array()
+			for v in poly:
+				gpoly.append(xform * v)
+			# shrink by piece radius so death happens when circle leaves ice
+			# Geometry2D.offset_polygon returns Array[PackedVector2Array]
+			var shrunk := Geometry2D.offset_polygon(gpoly, -PIECE_RADIUS)
+			if shrunk is Array:
+				for sub in shrunk:
+					if sub.size() >= 3:
+						_safe_polys_global.append(sub)
+
+func _point_in_any_safe_poly(pt: Vector2) -> bool:
+	for poly in _safe_polys_global:
+		if Geometry2D.is_point_in_polygon(pt, poly):
+			return true
+	return false
+
+func _kill_piece(rb: RigidBody2D) -> void:
+	if not is_instance_valid(rb):
+		return
+	# prevent double-kill from multiple signals/overlaps
+	if rb.has_meta("dying"):
+		return
+	rb.set_meta("dying", true)
+
+	# stop future triggers & physics
+	rb.collision_layer = 0
+	rb.collision_mask = 0
+	rb.freeze = true
+	rb.linear_velocity = Vector2.ZERO
+	rb.angular_velocity = 0.0
+
+	# hide visuals/arrow/highlights if present
+	var arrow := rb.get_node_or_null("Arrow") as CanvasItem
+	if arrow: arrow.visible = false
+	var ring := rb.get_node_or_null("HighlightRing") as CanvasItem
+	if ring: ring.visible = false
+	var aim_area := rb.get_node_or_null("Area2D") as Area2D
+	if aim_area:
+		aim_area.monitoring = false
+		aim_area.monitorable = false
+
+	# fade sprite, then free safely
+	var spr := rb.get_node_or_null("Sprite2D") as Sprite2D
+	if spr:
+		var tw := create_tween()
+		tw.tween_property(spr, "modulate:a", 0.0, 0.25)
+		tw.finished.connect(func():
+			if is_instance_valid(rb):
+				rb.queue_free()
+		)
+	else:
+		rb.queue_free()
+
+# Call this when your replay round (movement) is complete
+func _on_replay_round_finished() -> void:
+	# Hide arrows & restore highlights AFTER everything has settled
+	_hide_all_arrows_and_refresh_highlights()
+
+	# Mark replay done before checking win so a manual call elsewhere won’t get blocked
+	_replay_in_progress = false
+
+	# Small grace to let any fade-out queue_frees complete
+	await get_tree().create_timer(0.05).timeout
+
+	var ended := await check_win()
+	if ended:
+		stop_waiting_animation()
+		game_over = true
+		# Keep your existing behavior of notifying the host by sending once the game ends.
+		# (This mirrors what you were doing in _set_game_data after a win.)
+		send_game()
+
+	print("Round finished. Win check => ", ended)
+
+func _any_piece_moving(speed_threshold: float = 8.0, ang_threshold: float = 0.25) -> bool:
+	for n in piece_container.get_children():
+		if not (n is RigidBody2D):
+			continue
+		if n.has_meta("dying") and n.get_meta("dying"):
+			continue
+		var rb := n as RigidBody2D
+		# Prefer actual velocities; sleeping can be false during brief contacts
+		if rb.linear_velocity.length() > speed_threshold or absf(rb.angular_velocity) > ang_threshold:
+			return true
+	return false
+
+func _wait_for_pieces_to_settle(timeout_sec: float = 5.0, still_frames_needed: int = 6, speed_threshold: float = 8.0, ang_threshold: float = 0.25) -> void:
+	var start_ms := Time.get_ticks_msec()
+	var still_frames := 0
+	while (Time.get_ticks_msec() - start_ms) < int(timeout_sec * 1000.0):
+		await get_tree().physics_frame
+		if _any_piece_moving(speed_threshold, ang_threshold):
+			still_frames = 0
+		else:
+			still_frames += 1
+			if still_frames >= still_frames_needed:
+				break
+	# Give Area2D body_entered and fade-out/queue_free a moment to run
+	await get_tree().create_timer(0.35).timeout
+
+func _apply_post_round_snapshot(post_board: Dictionary) -> void:
+	var arr: Array = post_board.get("pieces", [])
+	var off: Vector2 = _board_center_offset()
+	var children: Array[Node] = piece_container.get_children()
+	var count: int = min(children.size(), arr.size())
+	for i in count:
+		var piece_node := children[i]
+		var pd: Dictionary = arr[i]
+		var pos: Vector2 = off + (pd["pos"] as Vector2)
+		var rot: float = float(pd["rotation"])
+
+		if piece_node is RigidBody2D:
+			var rb := piece_node as RigidBody2D
+			rb.freeze = true
+			rb.global_position = pos
+			rb.rotation = rot
+			rb.linear_velocity = Vector2.ZERO
+			rb.angular_velocity = 0.0
+			rb.freeze = false
+		else:
+			piece_node.global_position = pos
+			piece_node.rotation = rot
+
+# Main round flow
+func _play_round_from_replay(pre_board: Dictionary) -> void:
+	_replay_in_progress = true
+
+	var pre_arr: Array = pre_board.get("pieces", [])
+	var children: Array[Node] = piece_container.get_children()
+	var count: int = min(children.size(), pre_arr.size())
+
+	# 1) show arrows (fade)
+	for i in count:
+		var piece := children[i]
+		var pd: Dictionary = pre_arr[i]
+		_set_piece_arrow_from_data(piece, float(pd["shoot_dir"]), float(pd["power"]), 0.18)
+
+	# 2) rotate to arrow
+	await get_tree().process_frame
+	for i in count:
+		var piece := children[i]
+		var pd: Dictionary = pre_arr[i]
+		_rotate_piece_to_dir(piece, float(pd["shoot_dir"]), 0.18)
+
+	# 3) fire all pieces together
+	await get_tree().create_timer(0.20).timeout
+	for i in count:
+		var piece := children[i]
+		var pd: Dictionary = pre_arr[i]
+		_fire_piece_from_arrow(piece, float(pd["shoot_dir"]), float(pd["power"]))
+
+	# 4) wait for physics + kill signals to settle, then finish
+	await _wait_for_pieces_to_settle(5.0, 6, 8.0, 0.25)
+	_on_replay_round_finished()
+
+# --- Piece Highlighting ---
+func _apply_turn_highlights_based_on_arrows() -> void:
+	if not is_my_turn or spectator_mode or game_over:
+		_stop_all_highlights()
+		return
+
+	for piece in piece_container.get_children():
+		var owner_id: int = int(piece.get_meta("player", -1))
+		var ring := piece.get_node_or_null("HighlightRing") as TextureRect
+		var anim := piece.get_node_or_null("HighlightAnimator") as AnimationPlayer
+
+		# non-owned -> no highlight
+		if owner_id != player:
+			if anim: anim.stop()
+			if ring: ring.visible = false
+			continue
+
+		# owned piece: pulse only if Arrow is not visible
+		var arrow := piece.get_node_or_null("Arrow") as CanvasItem
+		var arrow_visible := (arrow != null and arrow.visible)
+
+		if arrow_visible:
+			if anim: anim.stop()
+			if ring: ring.visible = false
+		else:
+			if ring and anim:
+				ring.visible = true
+				if anim.has_animation("ring_anim"):
+					anim.play("ring_anim")
+
+func _stop_all_highlights() -> void:
+	for piece in piece_container.get_children():
+		var ring := piece.get_node_or_null("HighlightRing") as TextureRect
+		var anim := piece.get_node_or_null("HighlightAnimator") as AnimationPlayer
+		if anim:
+			anim.stop()
+		if ring:
+			ring.visible = false
+			
+func _stop_highlight_for_piece(piece: Node) -> void:
+	var ring := piece.get_node_or_null("HighlightRing") as TextureRect
+	var anim := piece.get_node_or_null("HighlightAnimator") as AnimationPlayer
+	if anim:
+		anim.stop()
+	if ring:
+		ring.visible = false
+
+func _on_arrow_visibility_changed(piece: Node) -> void:
+	var arrow := piece.get_node_or_null("Arrow") as CanvasItem
+	if not arrow:
+		return
+	if arrow.visible:
+		# Arrow appeared -> stop the pulsing ring on this piece
+		_stop_highlight_for_piece(piece)
+	else:
+		# Arrow was hidden -> (optional) restart ring if it's your turn & it's your piece
+		if is_my_turn and not spectator_mode and not game_over and int(piece.get_meta("player", -1)) == player:
+			var ring := piece.get_node_or_null("HighlightRing") as TextureRect
+			var anim := piece.get_node_or_null("HighlightAnimator") as AnimationPlayer
+			if ring and anim:
+				ring.visible = true
+				if anim.has_animation("ring_anim"):
+					anim.play("ring_anim")
+
+func _try_watch_arrow_for_piece(piece: Node) -> void:
+	# Wait one frame so the piece scene finishes _ready() and creates the Arrow node.
+	await get_tree().process_frame
+	var arrow := piece.get_node_or_null("Arrow") as CanvasItem
+	if not arrow:
+		return
+	# Avoid duplicate connections
+	if not piece.has_meta("arrow_watch_connected"):
+		arrow.connect("visibility_changed", Callable(self, "_on_arrow_visibility_changed").bind(piece))
+		piece.set_meta("arrow_watch_connected", true)
+	# Apply current state immediately
+	_on_arrow_visibility_changed(piece)
+
+
+# If you ever toggle turn state locally, call this to refresh highlight state.
+func set_my_turn(value: bool) -> void:
+	is_my_turn = value
+	call_deferred("_apply_turn_highlights_based_on_arrows")
 
 # --- UI Animations & State ---
 
 func check_win() -> bool:
-	# Placeholder for win condition logic
-	return false
+	# If a replay is running, defer the decision
+	if _replay_in_progress:
+		print("--- CHECKING WIN CONDITION --- (deferred; replay in progress)")
+		return false
 
+	print("--- CHECKING WIN CONDITION ---")
+
+	# Count live pieces per player (skip anything already flagged as dying)
+	var p1_count := 0
+	var p2_count := 0
+	for n in piece_container.get_children():
+		if not (n is RigidBody2D):
+			continue
+		if n.has_meta("dying") and n.get_meta("dying"):
+			continue
+		var owner_id := int(n.get_meta("player", -1))
+		if owner_id == 1:
+			p1_count += 1
+		elif owner_id == 2:
+			p2_count += 1
+
+	var unique_colors := 0
+	if p1_count > 0: unique_colors += 1
+	if p2_count > 0: unique_colors += 1
+
+	var my_count := p1_count if (player == 1) else p2_count
+	var op_count := p2_count if (player == 1) else p1_count
+
+	if unique_colors > 1:
+		print("-> RESULT: Game Continues. Both colors still present. P1=%d, P2=%d" % [p1_count, p2_count])
+		return false
+
+	var was_over: bool = game_over
+	game_over = true
+
+	if unique_colors == 0:
+		print("-> No pieces remain. Declaring draw.")
+		if not was_over:
+			win_loss_label.text = "DRAW!"
+			win_loss_state = "0"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+			win_loss_label.visible = true
+			await get_tree().process_frame
+			win_loss_label.scale = Vector2.ZERO
+			win_loss_label.pivot_offset = win_loss_label.size / 2
+			var tween_draw := create_tween()
+			tween_draw.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		else:
+			print("-> Game was already marked as over. No new result displayed.")
+		return true
+
+	# Exactly one color remains: decide winner
+	print("-> WIN CONDITION MET: only one color remains. My:%d, Opp:%d (P1=%d, P2=%d)" % [my_count, op_count, p1_count, p2_count])
+
+	if not was_over:
+		if my_count > 0 and op_count == 0:
+			print("-> FINAL TALLY: YOU WIN!")
+			_show_win_burst(player_avatar_display)
+			if not spectator_mode:
+				win_loss_label.text = "YOU WIN!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			else:
+				win_loss_label.text = "Player 1 Wins!" if (p1_count > 0) else "Player 2 Wins!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			win_loss_state = "1"
+		elif op_count > 0 and my_count == 0:
+			print("-> FINAL TALLY: YOU LOSE")
+			_show_win_burst(opp_avatar_display)
+			if not spectator_mode:
+				win_loss_label.text = "YOU LOSE"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+			else:
+				win_loss_label.text = "Player 1 Wins!" if (p1_count > 0) else "Player 2 Wins!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			win_loss_state = "-1"
+		else:
+			print("-> Edge case: counts ambiguous. Declaring draw.")
+			win_loss_label.text = "DRAW!"
+			win_loss_state = "0"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+
+		win_loss_label.visible = true
+		await get_tree().process_frame
+		win_loss_label.scale = Vector2.ZERO
+		win_loss_label.pivot_offset = win_loss_label.size / 2
+		var tween_in := create_tween()
+		tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	else:
+		print("-> Game was already marked as over. No new result displayed.")
+
+	return true
+	
+func _show_win_burst(avatar: Control) -> void:
+	var wrapper: Control = _ensure_avatar_wrapper(avatar)
+	if not is_instance_valid(wrapper):
+		return
+
+	var existing: Node = wrapper.get_node_or_null("AvatarWinAnim")
+	if existing != null:
+		return
+
+	var anim_instance: Control = AvatarWinAnimScene.instantiate() as Control
+	anim_instance.name = "AvatarWinAnim"
+	wrapper.add_child(anim_instance)
+
+	var avatar_idx: int = avatar.get_index()
+	wrapper.move_child(anim_instance, avatar_idx)
+
+	anim_instance.z_as_relative = false
+	avatar.z_as_relative = false
+	anim_instance.z_index = 0
+	avatar.z_index = max(avatar.z_index, 1)
+
+	anim_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
+	anim_instance.offset_left = -52.0
+	anim_instance.offset_right = 52.0
+	anim_instance.offset_top = -43.0
+	anim_instance.offset_bottom = 43.0
+
+	(anim_instance as Node).call("set_color", Color(1.0, 0.84, 0.0))
+	(anim_instance as Node).call("play", 0.05)
+	
+func _ensure_avatar_wrapper(avatar: Control) -> Control:
+	var parent: Node = avatar.get_parent()
+	if parent == null:
+		return null
+
+	if parent is Control and not (parent is Container):
+		return parent as Control
+
+	var wrapper: Control = Control.new()
+	wrapper.name = "%s_Wrap" % avatar.name
+	wrapper.size_flags_horizontal = avatar.size_flags_horizontal
+	wrapper.size_flags_vertical = avatar.size_flags_vertical
+	wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
+
+	var idx: int = avatar.get_index()
+	parent.add_child(wrapper)
+	parent.move_child(wrapper, idx)
+
+	avatar.reparent(wrapper)
+	avatar.set_anchors_preset(Control.PRESET_FULL_RECT)
+	avatar.offset_left = 0.0
+	avatar.offset_top = 0.0
+	avatar.offset_right = 0.0
+	avatar.offset_bottom = 0.0
+
+	avatar.item_rect_changed.connect(func():
+		if is_instance_valid(wrapper):
+			wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
+	)
+
+	return wrapper
+
+# ... (rest of your existing functions: play_sent_animation, start_waiting_animation, etc.)
 func play_sent_animation():
 	if not is_instance_valid(sent_label) or game_over:
 		return
@@ -297,7 +1064,7 @@ func play_sent_animation():
 			sent_label.modulate.a = 1.0
 			start_waiting_animation()
 	)
-	
+
 func start_waiting_animation():
 	if not is_instance_valid(waiting_label) or spectator_mode:
 		return
@@ -326,7 +1093,7 @@ func _on_dot_timer_timeout():
 	var dots = ""
 	for i in range(dot_count): dots += "."
 	if is_instance_valid(waiting_label): waiting_label.text = BASE_WAIT_TEXT + dots
-	
+
 # --- Popups & Settings ---
 func on_rules_button_pressed() -> void:
 	if not is_instance_valid(rules_button):
@@ -359,7 +1126,7 @@ func on_rules_button_pressed() -> void:
 
 	var title_label := popup.find_child("Title", true, false) as Label
 	if title_label:
-		title_label.text = "How to Play Filler"
+		title_label.text = "How to Play Knockout"
 
 	var rules_label := popup.find_child("RulesLabel", true, false) as RichTextLabel
 	if rules_label:
@@ -385,14 +1152,27 @@ func on_rules_button_pressed() -> void:
 	var popup_tween := create_tween()
 	popup_tween.tween_property(popup, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	popup.grab_focus()
-	
+
 func _get_rules_text() -> String:
 	return """
 [font_size={18px}]
-1. Each player is assigned a corner tile at the start of the game.
-2. Players take turns filling their tiles with one of 6 colors in an attempt to capture adjacent tiles of the same color.
-3. You are not allowed to change the color of your tiles into the color of your opponents tiles.
-4. The game ends when there are no more tiles to occupy
+[b]Goal[/b]
+Knock your opponent’s penguins off the iceberg. The last color with any pieces left wins.
+
+[b]How to Play[/b]
+1) On your turn, select one of [b]your[/b] penguins. Press/drag from the penguin to show the aim arrow.  
+   • Arrow direction = shot direction.  
+   • Arrow length = shot power.
+2) When you’re satisfied, press [b]Send[/b] to lock in your turn. Then wait for your opponent.
+3) Once both players have selected their moves the round will start.
+4) Any penguin that leaves the iceberg is eliminated from the game.
+
+[b]End of Game[/b]
+• The game ends [b]immediately[/b] when only one color remains on the board → that color wins.  
+• If no pieces remain, it’s a [b]draw[/b].
+
+[b]Tips[/b]
+Higher power slides farther but is harder to control; edges are risky!
 [/font_size]
 """
 
@@ -481,41 +1261,6 @@ func _on_settings_button_pressed() -> void:
 	root.move_child(dim, root.get_child_count() - 2)
 	settings_popup_script.setup_popup(dim)
 
-	#var volume_setting_hbox = HBoxContainer.new()
-	#volume_setting_hbox.add_child(Label.new())
-	#volume_setting_hbox.get_child(0).text = "Game Volume:"
-	#volume_setting_hbox.get_child(0).set_h_size_flags(Control.SIZE_EXPAND_FILL)
-#
-	#var volume_slider = HSlider.new()
-	#volume_slider.min_value = 0.0
-	#volume_slider.max_value = 1.0
-	#volume_slider.step = 0.05
-	#
-	#var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
-	#volume_slider.value = saved_volume
-#
-	#volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	#volume_slider.value_changed.connect(func(value):
-		#AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
-		#print("Master Volume: ", value)
-		#SettingsManager.set_setting(game_settings_category, "master_volume", value)
-	#)
-	#volume_setting_hbox.add_child(volume_slider)
-#
-	#settings_popup_script.add_custom_setting(volume_setting_hbox)
-	#
-	#var toggle_debug_checkbox = CheckBox.new()
-	#toggle_debug_checkbox.text = "Show Debug Info"
-	#
-	#var saved_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
-	#toggle_debug_checkbox.button_pressed = saved_debug_info
-#
-	#toggle_debug_checkbox.pressed.connect(func():
-		#print("Debug Info Toggled: ", toggle_debug_checkbox.button_pressed)
-		#SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
-	#)
-	#settings_popup_script.add_custom_setting(toggle_debug_checkbox)
-
 	var custom_settings_title = popup_instance.find_child("CustomSettingsTitleLabel", true)
 	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:
 		custom_settings_title.visible = true
@@ -538,10 +1283,10 @@ func _on_settings_button_pressed() -> void:
 	var viewport_size = get_viewport_rect().size
 	var desired_width = viewport_size.x * 0.95
 	var desired_height = popup_instance.get_combined_minimum_size().y
-	
+
 	popup_instance.size = Vector2(desired_width, desired_height)
 	popup_instance.position = Vector2((viewport_size.x - desired_width) / 2, viewport_size.y)
-	
+
 	var bottom_offset = 50
 	var target_y_position = viewport_size.y - desired_height - bottom_offset
 	var target_position = Vector2((viewport_size.x - desired_width) / 2, target_y_position)
@@ -550,16 +1295,16 @@ func _on_settings_button_pressed() -> void:
 	popup_tween.tween_property(popup_instance, "position", target_position, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 
 	popup_instance.grab_focus()
-	
+
 func _on_theme_changed(new_theme_name: String):
 	print("Game scene received theme change: ", new_theme_name)
 	pass
-	
+
 func _load_game_specific_settings():
 	var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))
 	var show_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
-	
+
 	print("Loaded game-specific settings for ", game_settings_category, ":")
 	print("  Master Volume: ", saved_volume)
 	print("  Show Debug Info: ", show_debug_info)
