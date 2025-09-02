@@ -9,11 +9,12 @@ func _dbg(msg: String) -> void:
 
 # --- Aim / UI tunables ---
 const MAX_POWER: float = 150.0
+const MAX_ARROW_LENGTH: float = 240.0
 const ANGLE_STEP_DEG: float = 2.0
 const POWER_STEP: float = 3.0
 const INTERACT_RADIUS: float = 24.0
 const HEAD_LEN: float = 18.0
-const HEAD_W: float = 16.0
+const HEAD_W: float = 24.0
 const HANDLE_RADIUS: float = 40.0
 const HEAD_GRAB_EXTRA_LEN: float = 28.0
 const HEAD_GRAB_EXTRA_W: float = 28.0
@@ -162,7 +163,7 @@ func _end_drag() -> void:
 # Show/refresh arrow from replay (angle in degrees, power in pixels)
 func show_arrow_from_replay(angle_deg: float, pow_px: float, fade_sec: float = 0.18) -> void:
 	aim_dir = Vector2.RIGHT.rotated(deg_to_rad(angle_deg))
-	power = clamp(pow_px, 0.0, MAX_POWER)
+	power = remap(pow_px, 0.0, MAX_ARROW_LENGTH,0.0, MAX_POWER)
 	_update_arrow_visuals()
 	if arrow_root:
 		arrow_root.visible = true
@@ -192,7 +193,7 @@ func fire_current_arrow(power_to_impulse: float = 1.29) -> void:
 
 func _update_aim_from_global_pos(global_pos: Vector2) -> void:
 	var local: Vector2 = to_local(global_pos)
-	var tip_local: Vector2 = local.limit_length(MAX_POWER)
+	var tip_local: Vector2 = local.limit_length(MAX_ARROW_LENGTH)
 
 	var local_len: float = tip_local.length()
 	var dir: Vector2 = tip_local / max(local_len, 0.0001)
