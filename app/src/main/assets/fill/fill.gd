@@ -599,8 +599,8 @@ func _set_game_data(new_game_data_json: String):
 		else:
 			player = 1
 	else:
-		#spectator_mode = true
-		is_my_turn = is_your_turn
+		spectator_mode = true
+		#is_my_turn = is_your_turn
 		you_label.text = ""
 		spec_label.show()
 		player = 1
