@@ -61,6 +61,7 @@ libraries = {
 }
 
 [node name="HighlightRing" type="TextureRect" parent="."]
+visible = false
 custom_minimum_size = Vector2(56, 56)
 anchors_preset = 8
 anchor_left = 0.5

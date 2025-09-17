@@ -112,6 +112,16 @@ func _populate_theme_previews():
 		
 		preview_box.add_child(btn)
 		
+# Write settings for a category (hair duplicates to front/back + legacy)
+func _set_avatar_value(category: String, key: String, value) -> void:
+	if category == "hair":
+		SettingsManager.set_setting("avatar_hair_front", key, value)
+		SettingsManager.set_setting("avatar_hair_back", key, value)
+		# keep old single-layer key in sync for older scenes
+		SettingsManager.set_setting("avatar_hair", key, value)
+	else:
+		SettingsManager.set_setting("avatar_" + category, key, value)
+		
 func populate_theme_previews(themes_data: Dictionary) -> void:
 	const HOVER_SCALE := 1.08
 	const PRESS_SCALE := 0.95
@@ -217,10 +227,7 @@ func populate_theme_previews(themes_data: Dictionary) -> void:
 		
 func _get_all_themes() -> Dictionary:
 	return {
-		"Default": { "path": "res://themes/default.tres", "preview_color": Color("#e0e0e0") },
-		"Default (Dark)": { "path": "res://themes/default_dark.tres", "preview_color": Color("#2c2c2c") },
-		"Penguin": { "path": "res://themes/penguin.tres", "preview_color": Color("#9e45c0") },
-		"Penguin (Dark)": { "path": "res://themes/penguin_dark.tres", "preview_color": Color("#3a1949") },
+		"Default": { "path": "res://themes/default.tres", "preview_color": Color("#e0e0e0") }
 	}
 
 func _on_theme_preview_selected(selected_theme_name: String):
@@ -271,13 +278,20 @@ func _on_avatar_tab_changed(tab_index: int):
 		"Accessories": _populate_accessories_properties()
 
 func _on_avatar_preview_setting_changed(value, category: String, key: String):
-	SettingsManager.set_setting("avatar_" + category, key, value)
-	main_avatar_preview.update_display_from_settings()
+	_set_avatar_value(category, key, value)
+	if is_instance_valid(main_avatar_preview):
+		main_avatar_preview.update_display_from_settings()
 
 func _on_avatar_setting_changed(category: String, key: String, value):
-	SettingsManager.set_setting("avatar_" + category, key, value)
+	_set_avatar_value(category, key, value)
 
-	var saved_value = SettingsManager.get_setting("avatar_" + category, key)
+	var saved_value
+	if category == "hair":
+		# Treat front as source of truth
+		saved_value = SettingsManager.get_setting("avatar_hair_front", key)
+	else:
+		saved_value = SettingsManager.get_setting("avatar_" + category, key)
+
 	print("--- SETTING CHANGED ---")
 	print("Saved '", key, "' for '", category, "' with new value: '", saved_value, "'")
 	print("-----------------------")
@@ -303,13 +317,25 @@ func _populate_body_properties():
 	_create_color_and_brightness_control("body", "color", "brightness", skin_tones, default_tone, initial_brightness)
 
 func _populate_hair_properties():
-	var hair_styles = ["Spiky", "Long", "Bun", "Bald"]
-	_create_image_presets_scrollbar("hair", "style", hair_styles)
-	var hair_colors = [ Color("#f8cf55"), Color("#e1872f"), Color("#d24325"), Color("#6d411d"), Color("#572c1f"), Color("#000000"), Color("#e1e1e1"), Color("#ee67a4"), Color("#a348c7"), Color("#699bff"), Color("#82b941") ]
-	var default_color = SettingsManager.get_setting("avatar_hair", "color", Color("#2c232b"))
-	var initial_brightness = SettingsManager.get_setting("avatar_hair", "brightness", 0.0)
-	_create_color_and_brightness_control("hair", "color", "brightness", hair_colors, default_color, initial_brightness)
+	var hair_styles := []
+	for i in range(1, 16):
+		hair_styles.append("hair" + str(i))
 
+	# thumbnails – selecting a style updates BOTH layers via _on_avatar_setting_changed
+	_create_image_presets_scrollbar("hair", "style", hair_styles)
+
+	var hair_colors = [
+		Color("#f8cf55"), Color("#e1872f"), Color("#d24325"), Color("#6d411d"), Color("#572c1f"),
+		Color("#000000"), Color("#e1e1e1"), Color("#ee67a4"), Color("#a348c7"), Color("#699bff"), Color("#82b941")
+	]
+	var default_color = SettingsManager.get_setting("avatar_hair_front", "color",
+		SettingsManager.get_setting("avatar_hair", "color", Color("#2c232b")))
+	var initial_brightness = SettingsManager.get_setting("avatar_hair_front", "brightness",
+		SettingsManager.get_setting("avatar_hair", "brightness", 0.0))
+
+	# color/brightness controls – will write to BOTH layers
+	_create_color_and_brightness_control("hair", "color", "brightness", hair_colors, default_color, initial_brightness)
+	
 func _populate_face_properties():
 	var eye_styles = ["Open", "Closed", "Winking"]
 	_create_image_presets_scrollbar("face", "eyes", eye_styles)
@@ -432,32 +458,82 @@ func _update_brightness_slider_gradient(color: Color):
 	current_brightness_slider.add_theme_icon_override("grabber_pressed", grabber_icon)
 
 func _get_current_avatar_settings() -> Dictionary:
+	var hair_color  = SettingsManager.get_setting("avatar_hair_front", "color",
+		SettingsManager.get_setting("avatar_hair", "color", Color("#2c232b")))
+	var hair_bright = SettingsManager.get_setting("avatar_hair_front", "brightness",
+		SettingsManager.get_setting("avatar_hair", "brightness", 0.0))
+	var hair_style  = SettingsManager.get_setting("avatar_hair_front", "style",
+		SettingsManager.get_setting("avatar_hair", "style", "hair1"))
+
 	return {
-		"background": { "color": SettingsManager.get_setting("avatar_background", "color", Color("#4e5d89")), "brightness": SettingsManager.get_setting("avatar_background", "brightness", 0.0), "style": SettingsManager.get_setting("avatar_background", "style", "Plain"), },
-		"body": { "color": SettingsManager.get_setting("avatar_body", "color", Color("#e0ac69")), "brightness": SettingsManager.get_setting("avatar_body", "brightness", 0.0), "head_style": SettingsManager.get_setting("avatar_body", "head_style", "Default"), },
-		"hair": { "color": SettingsManager.get_setting("avatar_hair", "color", Color("#2c232b")), "brightness": SettingsManager.get_setting("avatar_hair", "brightness", 0.0), "style": SettingsManager.get_setting("avatar_hair", "style", "Spiky"), },
-		"face": { "eyes": SettingsManager.get_setting("avatar_face", "eyes", "Open"), "mouth": SettingsManager.get_setting("avatar_face", "mouth", "Plain"), },
-		"clothing": { "color": SettingsManager.get_setting("avatar_clothing", "color", Color("#a03c3c")), "brightness": SettingsManager.get_setting("avatar_clothing", "brightness", 0.0), "style": SettingsManager.get_setting("avatar_clothing", "style", "T-Shirt"), },
-		"accessories": { "color": SettingsManager.get_setting("avatar_accessories", "color", Color("#ffffff")), "brightness": SettingsManager.get_setting("avatar_accessories", "brightness", 0.0), "head_style": SettingsManager.get_setting("avatar_accessories", "head_style", "None"), "face_style": SettingsManager.get_setting("avatar_accessories", "face_style", "None"), }
+		"background": {
+			"color": SettingsManager.get_setting("avatar_background", "color", Color("#4e5d89")),
+			"brightness": SettingsManager.get_setting("avatar_background", "brightness", 0.0),
+			"style": SettingsManager.get_setting("avatar_background", "style", "Plain"),
+		},
+		"body": {
+			"color": SettingsManager.get_setting("avatar_body", "color", Color("#e0ac69")),
+			"brightness": SettingsManager.get_setting("avatar_body", "brightness", 0.0),
+			"head_style": SettingsManager.get_setting("avatar_body", "head_style", "Default"),
+		},
+		# New: both layers carry same values by default
+		"hair_front": { "color": hair_color, "brightness": hair_bright, "style": hair_style },
+		"hair_back":  { "color": hair_color, "brightness": hair_bright, "style": hair_style },
+		# Face / Clothing / Accessories unchanged
+		"face": {
+			"eyes": SettingsManager.get_setting("avatar_face", "eyes", "Open"),
+			"mouth": SettingsManager.get_setting("avatar_face", "mouth", "Plain"),
+		},
+		"clothing": {
+			"color": SettingsManager.get_setting("avatar_clothing", "color", Color("#a03c3c")),
+			"brightness": SettingsManager.get_setting("avatar_clothing", "brightness", 0.0),
+			"style": SettingsManager.get_setting("avatar_clothing", "style", "T-Shirt"),
+		},
+		"accessories": {
+			"color": SettingsManager.get_setting("avatar_accessories", "color", Color("#ffffff")),
+			"brightness": SettingsManager.get_setting("avatar_accessories", "brightness", 0.0),
+			"head_style": SettingsManager.get_setting("avatar_accessories", "head_style", "None"),
+			"face_style": SettingsManager.get_setting("avatar_accessories", "face_style", "None"),
+		}
 	}
 
 func _create_image_presets_scrollbar(category: String, key: String, style_options: Array):
 	var scroll_container = ScrollContainer.new()
 	scroll_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll_container.custom_minimum_size = Vector2(0, 80)
+
 	var hbox = HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 10)
 	scroll_container.add_child(hbox)
+
 	var current_settings = _get_current_avatar_settings()
-	var current_style_value = SettingsManager.get_setting("avatar_" + category, key, style_options[0])
+
+	# Read current selection from the right section
+	# Read current selection from the right section
+	var cfg_section := "avatar_hair_front" if category == "hair" else "avatar_" + category
+	var current_style_value = SettingsManager.get_setting(cfg_section, key, style_options[0])
+
 	for style_name in style_options:
 		var thumbnail = AvatarThumbnailScene.instantiate()
 		thumbnail.custom_minimum_size = Vector2(96, 64)
 		hbox.add_child(thumbnail)
-		thumbnail.call_deferred("update_preview", current_settings, category, key, style_name)
+
+		# For hair thumbnails, preview both layers using the same style
+		if category == "hair":
+			var preview_settings = current_settings.duplicate(true)
+			preview_settings["hair_front"]["style"] = style_name
+			preview_settings["hair_back"]["style"]  = style_name
+			thumbnail.call_deferred("update_preview", preview_settings, "hair_front", "style", style_name)
+		else:
+			thumbnail.call_deferred("update_preview", current_settings, category, key, style_name)
+
 		if style_name == current_style_value:
 			thumbnail.set_selected(true)
-		thumbnail.pressed.connect(_on_avatar_setting_changed.bind(category, key, style_name))
+
+		thumbnail.pressed.connect(func():
+			_on_avatar_setting_changed(category, key, style_name) # writes to both layers for hair
+		)
+
 	_add_property_to_box(scroll_container)
 
 func _exit_tree():

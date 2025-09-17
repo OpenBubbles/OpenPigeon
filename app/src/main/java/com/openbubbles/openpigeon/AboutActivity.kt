@@ -29,10 +29,11 @@ class AboutActivity : Activity() {
                 8 Ball - Copper
                 Cup Pong - jakecrowley
                 Archery - jakecrowley
-				Reversi - ty8447
-				Filler - ty8447
+                Reversi - ty8447
+                Filler - ty8447
                 Mancala - ty8447
                 Dots & Boxes - ty8447
+                Knockout - ty8447
 
                 Are you a developer? Add your favorite game on GitHub!
             """.trimIndent())

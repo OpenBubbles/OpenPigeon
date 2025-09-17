@@ -62,6 +62,9 @@ position = Vector2(48, 35)
 scale = Vector2(1, 1.01429)
 texture = ExtResource("3_s26kx")
 
+[node name="AvatarHairBack" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
+unique_name_in_owner = true
+
 [node name="AvatarBaseBody" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
 unique_name_in_owner = true
 
@@ -71,7 +74,7 @@ unique_name_in_owner = true
 [node name="AvatarMouth" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
 unique_name_in_owner = true
 
-[node name="AvatarHair" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
+[node name="AvatarHairFront" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
 unique_name_in_owner = true
 
 [node name="AvatarClothing" type="Sprite2D" parent="SubViewportContainer/SubViewport"]

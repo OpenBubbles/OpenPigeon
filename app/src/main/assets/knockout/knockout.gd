@@ -6,8 +6,13 @@ const P1_PIECE_TEX := preload("res://knockout/bw_penguin.png")
 const P2_PIECE_TEX := preload("res://knockout/gw_penguin.png")
 const BLACK_PRESERVER_TEX := preload("res://knockout/life_prev_black.png")
 const GRAY_PRESERVER_TEX := preload("res://knockout/life_prev_gray.png")
+const MAP1_TEX := preload("res://knockout/ko_map1.png")
+const MAP2_TEX := preload("res://knockout/ko_map2.png")
+const MAP3_TEX := preload("res://knockout/ko_map3.png")
+
 
 const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
+const MUSHROOM_SCENE := preload("res://knockout/mushroom.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 
@@ -28,14 +33,26 @@ const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_ani
 @onready var settings_button = %SettingsButton
 @onready var spec_label = %SpecLabel
 @onready var you_label = %YouLabel
-@onready var piece_container := %PieceContainer # Container for penguin pieces
-@onready var left_preserver := %LeftPreserver   # TextureRect for player 1 status
-@onready var right_preserver := %RightPreserver  # TextureRect for player 2 status
+@onready var piece_container := %PieceContainer
+@onready var left_preserver := %LeftPreserver
+@onready var right_preserver := %RightPreserver
+@onready var safe_zone_polygon := %SafeZonePolygon
 
-const LOGICAL_BOARD_SIZE := Vector2(300, 300) # protocol / replay space
-const ZOOM_AIM   := 2.0  # how large to look when aiming (tweak)
-const ZOOM_PLAY  := 1.5  # how large to look during physics (tweak)
+const LOGICAL_BOARD_SIZE := Vector2(327.01, 327.01)
+const ZOOM_AIM   := 1.835  # how large to look when aiming (tweak)
+const ZOOM_PLAY  := 1.4678  # how large to look during physics (tweak)
 const ZOOM_DUR   := 0.22 # seconds
+const PIECE_HEADING_OFFSET: float = -PI * 0.5
+
+const ARROW_COLOR_MAP1 := Color(0,0,0,1)
+const ARROW_COLOR_MAP2 := Color(0.95, 0.95, 0.95, 1.0)
+const ARROW_COLOR_MAP3 := Color(0.92, 0.92, 0.92, 1.0)
+const SEND_RED := Color("#d62828")
+const SEND_GREEN := Color("#14532d")
+
+const SHRINK_STEP := ZOOM_AIM - ZOOM_PLAY
+var current_scale: float = ZOOM_AIM
+
 
 # --- Replay state ---
 var last_pre_round: Dictionary = {}      # {"round": int, "pieces": Array[Dictionary]}
@@ -43,18 +60,22 @@ var last_post_round: Dictionary = {}     # same shape; board #2 (or #3) snapshot
 var current_round_index: int = 0
 
 const POWER_TO_IMPULSE: float = 6.0      # must match piece.gd feel
-const ROUND_SNAP_AFTER: float = 1.4      # seconds: snap to post board after physics play (optional)
-const PIECE_RADIUS: float = 24.0  # must match your piece CollisionShape2D
-const DEV_REPLAY_STRING := "board:2#77.861351,66.122459,1,-0.876164,-2.354301,104.423691#23.355244,93.006905,2,1.830075,-1.580594,61.118755#-4.830564,36.334606,2,2.219335,0.272333,38.293098#-18.615202,-35.732677,2,2.316064,0.583284,79.135498#99.505798,94.505386,2,2.833030,-1.843283,72.001610|shoot:1|board:3#68.967499,51.041775,1,-0.956223,-2.354301,0.000000#50.799763,68.490479,2,0.031407,-1.832990,21.633646#-33.968060,-1.493485,2,1.201969,0.854556,49.784225#22.491690,-81.952728,2,2.664457,1.825102,79.211861#64.293983,-6.814495,2,-0.272487,1.906639,43.372223|board:3#68.967499,51.041775,1,-0.956223,-2.354301,0.000000#50.799763,68.490479,2,0.031407,-1.832990,21.633646#-33.968060,-1.493485,2,1.201969,0.854556,49.784225#22.491690,-81.952728,2,2.664457,1.825102,79.211861#64.293983,-6.814495,2,-0.272487,1.906639,43.372223"
+const ROUND_SNAP_AFTER: float = 1.4      # seconds: snap to post board after physics play
+const PIECE_RADIUS: float = 24.0  # must match piece CollisionShape2D
+#const DEV_REPLAY_STRING := "board:2#77.861351,66.122459,1,-0.876164,-2.354301,104.423691#23.355244,93.006905,2,1.830075,-1.580594,61.118755#-4.830564,36.334606,2,2.219335,0.272333,38.293098#-18.615202,-35.732677,2,2.316064,0.583284,79.135498#99.505798,94.505386,2,2.833030,-1.843283,72.001610|shoot:1|board:3#68.967499,51.041775,1,-0.956223,-2.354301,0.000000#50.799763,68.490479,2,0.031407,-1.832990,21.633646#-33.968060,-1.493485,2,1.201969,0.854556,49.784225#22.491690,-81.952728,2,2.664457,1.825102,79.211861#64.293983,-6.814495,2,-0.272487,1.906639,43.372223|board:3#68.967499,51.041775,1,-0.956223,-2.354301,0.000000#50.799763,68.490479,2,0.031407,-1.832990,21.633646#-33.968060,-1.493485,2,1.201969,0.854556,49.784225#22.491690,-81.952728,2,2.664457,1.825102,79.211861#64.293983,-6.814495,2,-0.272487,1.906639,43.372223"
 
 var _water_kill_areas: Array[Area2D] = []
 var _safe_polys_global: Array[PackedVector2Array] = [] # shrunken iceberg polygons in global coords
-var _base_iceberg_poly: PackedVector2Array = [] # Add this line to store the original shape
+var _base_iceberg_poly: PackedVector2Array = []
+var _base_hole_polys: Array[PackedVector2Array] = []     # holes in image space
+var _unsafe_holes_global: Array[PackedVector2Array] = [] # holes in global space
+var _mushroom_layer: Node2D
 
 
 # --- Game State Variables ---
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 var game_settings_category: String
+var map_mode: int = 1
 
 var game_ended = false
 var game_over = false
@@ -79,7 +100,7 @@ var dot_count = 0
 var pre_board_data: Array = []
 var post_board_data: Array = []
 
-const AUTO_BOUNDS_GROUP := "board_bounds_auto" # for easy cleanup of generated nodes
+const AUTO_BOUNDS_GROUP := "board_bounds_auto"
 
 func _poly_area(poly: PackedVector2Array) -> float:
 	var n := poly.size()
@@ -92,17 +113,12 @@ func _poly_area(poly: PackedVector2Array) -> float:
 		sum += p.x * q.y - q.x * p.y
 	return absf(sum) * 0.5
 
-
-# Where the texture is actually drawn inside the TextureRect (accounts for keep-aspect modes)
 func _texrect_draw_rect(texr: TextureRect, img: Image) -> Rect2:
 	var tex_size: Vector2 = Vector2.ZERO
 	if img and not img.is_empty():
 		tex_size = Vector2(img.get_width(), img.get_height())
 	elif texr.texture:
-		# Ensure Vector2 (Texture2D.get_size() may be Vector2i)
 		tex_size = Vector2(texr.texture.get_size())
-
-	# No texture? Just say it fills the control.
 	if tex_size == Vector2.ZERO:
 		return Rect2(Vector2.ZERO, texr.size)
 
@@ -115,7 +131,6 @@ func _texrect_draw_rect(texr: TextureRect, img: Image) -> Rect2:
 			draw_size = texr.size
 
 		TextureRect.STRETCH_TILE:
-			# Tiled over control; for our mapping treat like fill.
 			draw_pos = Vector2.ZERO
 			draw_size = texr.size
 
@@ -143,7 +158,6 @@ func _texrect_draw_rect(texr: TextureRect, img: Image) -> Rect2:
 				draw_pos = (texr.size - draw_size) * 0.5
 
 		TextureRect.STRETCH_KEEP_ASPECT_COVERED:
-			# Fill (may crop), centered.
 			var img_aspect: float = tex_size.x / max(1.0, tex_size.y)
 			var rect_aspect: float = texr.size.x / max(1.0, texr.size.y)
 
@@ -161,11 +175,46 @@ func _texrect_draw_rect(texr: TextureRect, img: Image) -> Rect2:
 			draw_size = texr.size
 
 	return Rect2(draw_pos, draw_size)
+	
+func _style_button(btn: Button, base: Color) -> void:
+	if not is_instance_valid(btn): return
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = base
+	normal.corner_radius_top_left = 10
+	normal.corner_radius_top_right = 10
+	normal.corner_radius_bottom_left = 10
+	normal.corner_radius_bottom_right = 10
+	var hover := normal.duplicate()
+	hover.bg_color = base.lerp(Color.WHITE, 0.08)
+	var pressed := normal.duplicate()
+	pressed.bg_color = base.darkened(0.12)
+	var disabled := normal.duplicate()
+	disabled.bg_color = base.darkened(0.35)
+	btn.add_theme_stylebox_override("normal", normal)
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", pressed)
+	btn.add_theme_stylebox_override("disabled", disabled)
+	btn.add_theme_color_override("font_color", Color.WHITE)
 
-# This function now ONLY calculates the base shape of the iceberg once.
+func _apply_arrow_color_for_current_map() -> void:
+	var c := ARROW_COLOR_MAP1
+	if map_mode == 2: c = ARROW_COLOR_MAP2
+	elif map_mode == 3: c = ARROW_COLOR_MAP3
+	for piece in piece_container.get_children():
+		var arrow := piece.get_node_or_null("Arrow") as CanvasItem
+		if arrow: arrow.modulate = c
+
+func _apply_send_button_color_for_current_map() -> void:
+	if not is_instance_valid(send_button): return
+	if map_mode == 2:
+		_style_button(send_button, SEND_RED)
+	elif map_mode == 3:
+		_style_button(send_button, SEND_GREEN)
+
+	
 func _build_safe_poly_from_png(alpha_threshold: float = 0.1, simplify_epsilon: float = 1.5) -> void:
-	# This function now ONLY calculates the base shape of the iceberg.
 	_base_iceberg_poly.clear()
+	_base_hole_polys.clear()
 
 	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
 	if not is_instance_valid(texrect) or not is_instance_valid(texrect.texture): return
@@ -180,24 +229,137 @@ func _build_safe_poly_from_png(alpha_threshold: float = 0.1, simplify_epsilon: f
 	var contours: Array[PackedVector2Array] = bm.opaque_to_polygons(rect_img, simplify_epsilon)
 	if contours.is_empty(): return
 
+	# pick largest as outer
 	var best := contours[0]
 	var best_area := _poly_area(best)
 	for poly in contours:
-		var current_area := _poly_area(poly)
-		if current_area > best_area:
+		var a := _poly_area(poly)
+		if a > best_area:
 			best = poly
-			best_area = current_area # FIX: Was "best_area = a"
-	
+			best_area = a
 	_base_iceberg_poly = best
+
+	# holes are transparent islands *inside* the iceberg (map 2)
+	if map_mode == 2:
+		_base_hole_polys = _extract_holes_from_transparency(img, best, alpha_threshold, simplify_epsilon)
+
+	var bounding_rect: Rect2 = _get_poly_bounds(best)
+	print("BASE POLYGON BUILT (Image Coords): %s ; holes=%d" % [bounding_rect, _base_hole_polys.size()])
+
+func _rebuild_safe_polys() -> void:
+	_build_safe_poly_from_png(0.1, 1.5)
 	
-	# Use the new helper function to print the bounds
-	var bounding_rect := _get_poly_bounds(best)
-	print("BASE POLYGON BUILT (Image Coords): %s" % bounding_rect)
-	
+func _poly_centroid(poly: PackedVector2Array) -> Vector2:
+	var s := Vector2.ZERO
+	for p in poly: s += p
+	return s / max(1.0, float(poly.size()))
+
+func _physics_process(_delta: float) -> void:
+	if not is_instance_valid(board_zoom) or not is_instance_valid(safe_zone_polygon):
+		return
+	if not _board_initialized or _base_iceberg_poly.is_empty():
+		safe_zone_polygon.polygon = PackedVector2Array()
+		return
+
+	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
+	if not is_instance_valid(texrect): return
+
+	# Transform from TextureRect space into BoardZoom local
+	var xf: Transform2D = board_zoom.get_global_transform().affine_inverse() * texrect.get_global_transform()
+	var tex_draw_rect: Rect2 = _texrect_draw_rect(texrect, null)
+	var img_size := Vector2(texrect.texture.get_size())
+	var tex_scale := tex_draw_rect.size / img_size if img_size.x > 0 and img_size.y > 0 else Vector2.ONE
+
+	# --- Outer poly → BoardZoom local
+	var local_poly := PackedVector2Array()
+	for v_img in _base_iceberg_poly:
+		var point_in_texrect = tex_draw_rect.position + (v_img * tex_scale)
+		local_poly.append(xf * point_in_texrect)
+
+	# --- Hole polys → BoardZoom local (map 2 only)
+	var hole_locals: Array[PackedVector2Array] = []
+	if map_mode == 2 and not _base_hole_polys.is_empty():
+		for hole_img in _base_hole_polys:
+			var hl := PackedVector2Array()
+			for v_img in hole_img:
+				var p = tex_draw_rect.position + (v_img * tex_scale)
+				hl.append(xf * p)
+			hole_locals.append(hl)
+
+	# Expand outer for visuals
+	var expansion_amount := 1
+	var final_poly_array: Array = Geometry2D.offset_polygon(local_poly, expansion_amount)
+
+	_safe_polys_global.clear()
+	_unsafe_holes_global.clear()
+
+	if not final_poly_array.is_empty():
+		# Draw/preview the safe zone
+		safe_zone_polygon.polygon = final_poly_array[0]
+		if DEBUG_DRAW_ZONES:
+			safe_zone_polygon.visible = true
+			safe_zone_polygon.color = Color(0.2, 1.0, 0.2, 0.18)  # green translucent
+
+		# Convert to global
+		var global_xf = board_zoom.get_global_transform()
+
+		# Outer → global
+		for poly_local in final_poly_array:
+			var poly_global := PackedVector2Array()
+			for p_local in poly_local:
+				poly_global.append(global_xf * p_local)
+			_safe_polys_global.append(poly_global)
+
+		var hole_locals_for_kill: Array[PackedVector2Array] = []
+		if map_mode == 2:
+			for hl in hole_locals:
+				var expanded := Geometry2D.offset_polygon(hl, -PIECE_RADIUS * 0.05)
+				if expanded is Array and expanded.size() > 0:
+					hole_locals_for_kill.append(expanded[0])
+				else:
+					hole_locals_for_kill.append(hl)
+
+			# Debug draw the holes (BoardZoom-local)
+			if DEBUG_DRAW_ZONES:
+				_set_hole_debug_polys(hole_locals_for_kill)
+
+			# Holes → global
+			_unsafe_holes_global.clear()
+			var src_locals := (hole_locals_for_kill if not hole_locals_for_kill.is_empty() else hole_locals)
+			for hl in src_locals:
+				var hg := PackedVector2Array()
+				for p_local in hl:
+					hg.append(global_xf * p_local)
+				_unsafe_holes_global.append(hg)
+	else:
+		safe_zone_polygon.polygon = PackedVector2Array()
+
+	# Kill check: outside outer OR inside a hole (map 2)
+	if not _safe_polys_global.is_empty():
+		for n in piece_container.get_children():
+			if n is RigidBody2D:
+				var rb := n as RigidBody2D
+				if rb.has_meta("dying") and rb.get_meta("dying"): continue
+				var pos := rb.global_position
+
+				var inside_safe := _point_in_any_safe_poly(pos)
+
+				var in_hole := false
+				if map_mode == 2 and not _unsafe_holes_global.is_empty():
+					for h in _unsafe_holes_global:
+						if Geometry2D.is_point_in_polygon(pos, h):
+							in_hole = true
+							break
+
+				if (not inside_safe) or in_hole:
+					_kill_piece(rb)
+					
+const DEBUG_DRAW_ZONES := false   # set false to disable all zone debug drawing
+					
 func _get_poly_bounds(poly: PackedVector2Array) -> Rect2:
 	if poly.is_empty():
 		return Rect2()
-	
+
 	var min_pos := poly[0]
 	var max_pos := poly[0]
 	for i in range(1, poly.size()):
@@ -206,70 +368,75 @@ func _get_poly_bounds(poly: PackedVector2Array) -> Rect2:
 		min_pos.y = min(min_pos.y, p.y)
 		max_pos.x = max(max_pos.x, p.x)
 		max_pos.y = max(max_pos.y, p.y)
-	
+
 	return Rect2(min_pos, max_pos - min_pos)
-
-# This function is now simpler and just triggers the base shape calculation.
-func _rebuild_safe_polys() -> void:
-	_build_safe_poly_from_png(0.1, 1.5)
-
-
-# This function now handles everything in real-time, ensuring perfect sync.
-func _physics_process(_delta: float) -> void:
-	# --- Top-level guards ---
-	if not _board_initialized: return
-	if Time.get_ticks_msec() < _kill_guard_until_msec: return
 	
-	# Pause kill checks during zoom animations.
-	if _is_zooming: return
+func _poly_inside_other(inner: PackedVector2Array, outer: PackedVector2Array) -> bool:
+	for p in inner:
+		if not Geometry2D.is_point_in_polygon(p, outer):
+			return false
+	return true
 
-	# If we haven't traced the base shape yet, we can't do anything.
-	if _base_iceberg_poly.is_empty(): return
-		
-	# --- Real-time Polygon Generation for This Frame ---
-	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
-	if not is_instance_valid(texrect): return
+func _extract_holes_from_transparency(img: Image, outer: PackedVector2Array, alpha_threshold := 0.1, simplify_epsilon := 1.5) -> Array[PackedVector2Array]:
+	var holes: Array[PackedVector2Array] = []
 
-	# 1. Get the texture's current transform for this frame
-	var tex_draw_rect: Rect2 = _texrect_draw_rect(texrect, null)
-	var img_size := Vector2(texrect.texture.get_size())
-	var tex_scale := tex_draw_rect.size / img_size
-	var xf: Transform2D = texrect.get_global_transform()
+	# 1) Build alpha mask of the *iceberg* (opaque)
+	var bm_alpha := BitMap.new()
+	bm_alpha.create_from_image_alpha(img, alpha_threshold)
 
-	# 2. Build the polygon's visual shape based on the current transform
-	var gpoly := PackedVector2Array()
-	for v_img in _base_iceberg_poly:
-		var local_in_tr := tex_draw_rect.position + (v_img * tex_scale)
-		gpoly.append(xf * local_in_tr)
-	
-	# 3. Calculate the offset to align the visual polygon with the physics container
-	var offset: Vector2 = piece_container.global_position - game_board.global_position
-	var translated_poly := PackedVector2Array()
-	for point in gpoly:
-		translated_poly.append(point + offset)
-		
-	# 4. Expand the aligned polygon by the piece radius
-	var expansion_amount := PIECE_RADIUS * _current_zoom()
-	var final_poly_array: Array = Geometry2D.offset_polygon(translated_poly, expansion_amount)
-	
-	if not final_poly_array.is_empty():
-		_safe_polys_global = final_poly_array
-			
-	# --- Kill Check Logic (using the freshly generated polygon) ---
-	if not _safe_polys_global.is_empty():
-		for n in piece_container.get_children():
-			if n is RigidBody2D:
-				var rb := n as RigidBody2D
-				if not rb.has_meta("dying") and not _point_in_any_safe_poly(rb.global_position):
-					print("KILLING PIECE: %s at global_pos %s" % [rb.name, rb.global_position])
-					_kill_piece(rb)
-# --- Godot Lifecycle & Setup ---
+	# 2) Invert to get a mask where *transparent* is true
+	var bm_trans := _invert_bitmap(bm_alpha)
+
+	# 3) Polygons from the transparent regions
+	var rect_img := Rect2i(Vector2i.ZERO, img.get_size())
+	var transparent_polys: Array[PackedVector2Array] = bm_trans.opaque_to_polygons(rect_img, simplify_epsilon)
+
+	# 4) Keep only transparent islands fully inside the iceberg
+	for poly in transparent_polys:
+		if poly.size() >= 3 and _poly_inside_other(poly, outer):
+			holes.append(poly)
+
+	return holes
+
+var _hole_debug_nodes: Array[Polygon2D] = []
+
+func _invert_bitmap(src: BitMap) -> BitMap:
+	var sz := src.get_size()        # Vector2i
+	var dst := BitMap.new()
+	dst.create(sz)
+	for y in sz.y:
+		for x in sz.x:
+			var p := Vector2i(x, y)
+			dst.set_bitv(p, not src.get_bitv(p))
+	return dst
+
+func _set_hole_debug_polys(hole_locals: Array[PackedVector2Array]) -> void:
+	# grow/reuse nodes
+	while _hole_debug_nodes.size() < hole_locals.size():
+		var p := Polygon2D.new()
+		p.z_index = 100
+		p.color = Color(1, 0, 0, 0.35)  # red translucent
+		board_zoom.add_child(p)         # BoardZoom-local coords
+		_hole_debug_nodes.append(p)
+
+	# update current
+	for i in hole_locals.size():
+		_hole_debug_nodes[i].visible = true
+		_hole_debug_nodes[i].polygon = hole_locals[i]
+
+	# hide extras
+	for j in range(hole_locals.size(), _hole_debug_nodes.size()):
+		if is_instance_valid(_hole_debug_nodes[j]):
+			_hole_debug_nodes[j].visible = false
+
+
 
 func _ready():
-	# --- Initial Setup (UI, Timers, Buttons) ---
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
+	_apply_map_theme(map_mode)
 	_apply_bg_for_dark(is_dark)
-	background.z_index = -10 # Add this line
+	background.z_index = -10
+	self.z_index = 10 
 	randomize()
 	print("Knockout Scene ready!")
 
@@ -277,58 +444,43 @@ func _ready():
 		dot_timer.connect("timeout", _on_dot_timer_timeout)
 
 	if is_instance_valid(send_button):
-		send_button.visible = true
+		send_button.visible = false
 		send_button.pressed.connect(send_game)
 	else:
 		push_warning("No %SendButton in scene")
-
+		
+	_recompute_send_button_visibility()
 	if rules_button:    rules_button.pressed.connect(on_rules_button_pressed)
 	if settings_button: settings_button.pressed.connect(_on_settings_button_pressed)
 
 	_wire_water_kill_areas()
 
-	# --- Board Initialization Sequence ---
 	if is_instance_valid(board_zoom):
-		# 1. Prevent parent containers from resizing this node.
 		board_zoom.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		board_zoom.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-
-		# 2. Set a stable base size for the board.
 		board_zoom.custom_minimum_size = LOGICAL_BOARD_SIZE
-
-		# 3. Disable content clipping to make scaling visible.
 		board_zoom.clip_contents = false
-
-		# 4. Apply the initial scale and pivot.
 		board_zoom.scale = Vector2.ONE * ZOOM_AIM
+		current_scale = ZOOM_AIM
 		board_zoom.pivot_offset = board_zoom.custom_minimum_size * 0.5
 		board_zoom.resized.connect(func():
 			board_zoom.pivot_offset = board_zoom.size * 0.5
 		)
 	
 	piece_container.position = board_zoom.custom_minimum_size * 0.5
-	
-	# 5. Wait for one frame for all visual changes to be processed by the engine.
 	await get_tree().process_frame
-
-	# 6. Now that the board is visually stable, build dependent elements.
 	_rebuild_safe_polys()
 
 	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
 	if texrect:
 		texrect.resized.connect(func(): _rebuild_safe_polys())
 	get_viewport().size_changed.connect(func(): _rebuild_safe_polys())
-
-	# 7. The board is officially ready. It's now safe to add pieces.
 	_board_initialized = true
 	print("Board initialized and scaled.")
-
-	# 8. If any data arrived very early, process it now.
 	if _pending_replay_str != "":
 		parse_replay_string(_pending_replay_str)
 		_pending_replay_str = ""
-
-	# 9. Finally, connect to the data source to get piece information.
+		
 	var appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin:
 		print("AppPlugin Available")
@@ -338,13 +490,13 @@ func _ready():
 			appPlugin.onReady()
 			print("AppPlugin Connected")
 	else:
-		# The dev payload is also loaded only AFTER the board is fully initialized.
 		var dev_payload := {
 			"isYourTurn": true,
 			"player": "1",
 			"myPlayerId": "player1_id",
 			"player1": "player1_id",
-			"replay": DEV_REPLAY_DOWN
+			"mode": "3",
+			"replay": "board:0#-123.164268,12.253189,1,187.688141,-1.385261,17.847954#-4.496841,98.564392,1,150.148392,-1.958740,30.476469#-128.793274,126.112091,1,132.961517,-1.525080,19.882833#-39.626404,-31.231033,1,352.372589,-1.908161,19.720287#-128.491425,90.655441,2,224.981232,270.000000,150.000000#37.309402,-82.729164,2,130.874207,180.000000,60.000000#52.552505,-38.661270,2,188.420181,90.000000,20.000000#47.671448,20.402176,2,292.878235,0.000000,150.000000|shoot:1|board:1#-107.245102,-11.783591,1,0.185535,1.068582,62.991386#95.616051,78.460869,1,0.211298,-2.598553,52.906605#-115.448547,88.224197,1,0.045716,-0.761526,42.157124#-44.425999,-52.628483,1,-0.337365,1.551364,59.530804#-34.058250,20.246990,2,272.170044,270.000000,0.000000#-13.993504,-138.885513,2,181.570801,180.000000,0.000000#35.868378,-11.620506,2,91.570793,90.000000,0.000000|board:1#-107.245102,-11.783591,1,0.185535,1.068582,62.991386#95.616051,78.460869,1,0.211298,-2.598553,52.906605#-115.448547,88.224197,1,0.045716,-0.761526,42.157124#-44.425999,-52.628483,1,-0.337365,1.551364,59.530804#-34.058250,20.246990,2,272.170044,270.000000,0.000000#-13.993504,-138.885513,2,181.570801,180.000000,0.000000#35.868378,-11.620506,2,91.570793,90.000000,0.000000"
 		}
 		_set_game_data(JSON.stringify(dev_payload))
 
@@ -353,19 +505,8 @@ func _update_all_piece_visuals() -> void:
 	
 	for piece in piece_container.get_children():
 		if not piece is RigidBody2D: continue
-		
-		# Get the piece's logical position (which we'll store in metadata)
 		var logical_pos = piece.get_meta("logical_pos", piece.position)
-		
-		# Update the actual position by scaling the logical position
 		piece.position = logical_pos
-		
-		# Update the visual scale of the sprite
-		#var sprite = piece.find_child("Sprite2D", true, false)
-		#if sprite and sprite.texture:
-			#var texture_size = sprite.texture.get_size()
-			#var desired_visual_size = Vector2(48.0, 48.0) * current_scale
-			#sprite.scale = desired_visual_size / texture_size
 
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
@@ -389,8 +530,9 @@ func _set_game_data(new_game_data_json: String):
 	var player2_id: String = data.get("player2", "")
 	my_player_id = data.get("myPlayerId", "")
 	var opponent_avatar_key = ""
+	map_mode = int(data.get("map", data.get("mode", map_mode)))
+	_apply_map_theme(map_mode)
 
-	# ownership/spectator logic (unchanged)
 	if my_player_id == player1_id or my_player_id == player2_id or player1_id == "":
 		is_my_turn = is_your_turn
 		if my_player_id == player1_id:
@@ -419,7 +561,6 @@ func _set_game_data(new_game_data_json: String):
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
-	# 🔒 Gate piece spawning until the board has finished building.
 	if replay_str != "":
 		if _board_initialized:
 			parse_replay_string(replay_str)
@@ -433,6 +574,7 @@ func _set_game_data(new_game_data_json: String):
 
 	if not is_my_turn and not game_over and not spectator_mode:
 		start_waiting_animation()
+		_recompute_send_button_visibility()
 
 func send_game() -> void:
 	print("[Send] send_game() called")
@@ -440,28 +582,27 @@ func send_game() -> void:
 	await get_tree().process_frame
 
 	var replay_string_to_send := ""
-	if DEV_USE_HARDCODED_REPLAY:
-		match DEV_REPLAY_MODE:
-			"corners":
-				replay_string_to_send = DEV_REPLAY_CORNERS
-			"down":
-				replay_string_to_send = DEV_REPLAY_DOWN
-			"right":
-				replay_string_to_send = DEV_REPLAY_RIGHT
-			"left":
-				replay_string_to_send = DEV_REPLAY_LEFT
-			"up":
-				replay_string_to_send = DEV_REPLAY_UP
-			"all_dirs":
-				replay_string_to_send = DEV_REPLAY_ALL_DIRS
-			_:
-				# default backstop
-				replay_string_to_send = DEV_REPLAY_CORNERS
-		print("[Send][DEV] Using DEV_REPLAY_MODE='%s'." % DEV_REPLAY_MODE)
-	else:
-		# Use your real game-state serialization (assumes you added this helper earlier).
-		# If you don't have it yet, you can keep your previous builder here.
-		replay_string_to_send = _build_replay_string()
+	#if DEV_USE_HARDCODED_REPLAY:
+		#match DEV_REPLAY_MODE:
+			#"corners":
+				#replay_string_to_send = DEV_REPLAY_CORNERS
+			#"down":
+				#replay_string_to_send = DEV_REPLAY_DOWN
+			#"right":
+				#replay_string_to_send = DEV_REPLAY_RIGHT
+			#"left":
+				#replay_string_to_send = DEV_REPLAY_LEFT
+			#"up":
+				#replay_string_to_send = DEV_REPLAY_UP
+			#"all_dirs":
+				#replay_string_to_send = DEV_REPLAY_ALL_DIRS
+			#_:
+				#replay_string_to_send = DEV_REPLAY_CORNERS
+		#print("[Send][DEV] Using DEV_REPLAY_MODE='%s'." % DEV_REPLAY_MODE)
+	#else:
+	replay_string_to_send = _build_replay_string()
+	#replay_string_to_send = "board:1#-130,138,1,0,-1.57079632679,0.0#-90,138,2,0,-1.57079632679,1#-50,138,2,0,-1.57079632679,10.0#-10,138,2,0,-1.57079632679,25.0#50,138,2,0,-1.57079632679,50#90,138,2,1,-1.57079632679,100#130,138,2,0,-1.57079632679,100"
+
 
 	var payload: Dictionary = { "replay": replay_string_to_send }
 
@@ -469,7 +610,6 @@ func send_game() -> void:
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
 
-	# Evaluate end state (optional; you can keep as-is)
 	game_ended = await check_win()
 	if game_ended and win_loss_state != "":
 		payload["winner"] = my_player_id + "|" + win_loss_state
@@ -498,8 +638,6 @@ func _build_replay_string() -> String:
 	if last_pre_round.has("round"):
 		round_num = int(last_pre_round["round"]) + 1
 
-	# Pre-board with current aim/power, then instruct to simulate,
-	# then a post "stub" board (same positions format, power=0)
 	var pre_board := _serialize_current_board(round_num, false)
 	var post_board := _serialize_current_board(round_num + 1, true)
 	return "%s|shoot:1|%s" % [pre_board, post_board]
@@ -513,7 +651,7 @@ func _serialize_current_board(round_num: int, zero_power: bool) -> String:
 		if n.has_meta("dying") and n.get_meta("dying"): continue
 
 		var b := n as Node2D
-		var pos: Vector2 = b.position  # <-- no / current_scale
+		var pos: Vector2 = b.position
 		var owner_id := int(n.get_meta("player", -1))
 
 		var rot_rad := b.rotation
@@ -541,6 +679,7 @@ func _update_piece_interactivity() -> void:
 			var owner_id: int = int(piece.get_meta("player", -1))
 			var can_control: bool = (owner_id == player) and is_my_turn and (not spectator_mode) and (not game_over)
 			piece.set_controlled_by_me(can_control)
+	_recompute_send_button_visibility()
 
 func parse_replay_string(replay: String) -> void:
 	var chunks: PackedStringArray = replay.split("|", false)
@@ -561,15 +700,14 @@ func parse_replay_string(replay: String) -> void:
 		push_warning("Replay had no valid boards.")
 		return
 
-	# Always set the board from the FIRST board only
 	last_pre_round = boards[0]
 	_setup_board_from_board_dict(last_pre_round)
 
-	# If shoot:1 is present, *play* from the pre-board (no snapping to post)
 	if shoot_flag:
-		await _play_round_from_replay(last_pre_round)
-	
-# Parse "<round>#x,y,player,rot,dir,power#..." into {"round":int, "pieces":[...]}
+		await get_tree().process_frame
+		_stop_all_highlights()
+		_play_round_from_replay(last_pre_round)
+
 func _parse_board_chunk(body: String) -> Dictionary:
 	var round_num: int = 0
 	var rest: String = body
@@ -584,21 +722,95 @@ func _parse_board_chunk(body: String) -> Dictionary:
 		rest = body
 
 	var parsed_pieces: Array[Dictionary] = []
-	var piece_strings: PackedStringArray = rest.split("#", false)  # <- use PackedStringArray
+	var piece_strings: PackedStringArray = rest.split("#", false)
 	for pstr in piece_strings:
-		var params: PackedStringArray = pstr.split(",", false)      # <- use PackedStringArray
+		var params: PackedStringArray = pstr.split(",", false)
 		if params.size() == 6:
-			# Convert from external (Y-up) to Godot's internal (Y-down) coordinates
 			var d: Dictionary = {
-				"pos": Vector2(params[0].to_float(), -params[1].to_float()), # Negate Y position
+				"pos": Vector2(params[0].to_float(), -params[1].to_float()),
 				"player": params[2].to_int(),
-				"rotation": -params[3].to_float(), # Negate rotation angle
-				"shoot_dir": -params[4].to_float(), # Negate shoot direction angle
+				"rotation": -params[3].to_float(),
+				"shoot_dir": -params[4].to_float(),
 				"power": params[5].to_float()
 			}
 			parsed_pieces.append(d)
 
 	return { "round": round_num, "pieces": parsed_pieces }
+	
+func _owned_live_pieces() -> Array:
+	var out: Array = []
+	for n in piece_container.get_children():
+		if not (n is RigidBody2D):
+			continue
+		if n.has_meta("dying") and n.get_meta("dying"):
+			continue
+		if int(n.get_meta("player", -1)) != player:
+			continue
+		out.append(n)
+	return out
+
+func _all_my_arrows_visible() -> bool:
+	var mine := _owned_live_pieces()
+	if mine.is_empty():
+		return false
+	for p in mine:
+		var arrow := p.get_node_or_null("Arrow") as CanvasItem
+		if arrow == null or not arrow.visible:
+			return false
+	return true
+
+func _animate_send_button(should_show: bool) -> void:
+	if not is_instance_valid(send_button):
+		return
+	send_button.set_as_top_level(true)
+
+	if not send_button.has_meta("home_pos"):
+		send_button.set_meta("home_pos", send_button.global_position)
+
+	if send_button.has_meta("sb_tween"):
+		var old_tw: Variant = send_button.get_meta("sb_tween")
+		if old_tw is Tween and (old_tw as Tween).is_running():
+			(old_tw as Tween).kill()
+
+	var home: Vector2 = send_button.get_meta("home_pos")
+	var vp := get_viewport_rect()
+	var off_y: float = vp.size.y + send_button.size.y + 30.0
+	var start_pos := Vector2(home.x, off_y)
+	var is_send_visible := send_button.visible
+
+	if should_show:
+		if not is_send_visible:
+			send_button.global_position = start_pos
+			send_button.visible = true
+			send_button.modulate.a = 1.0
+		elif send_button.global_position.y > vp.size.y:
+			send_button.global_position = start_pos
+
+		var t_in := create_tween()
+		send_button.set_meta("sb_tween", t_in)
+		t_in.tween_property(send_button, "global_position", home, 0.35)\
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	else:
+		if is_send_visible:
+			var end_pos := Vector2(home.x, off_y)
+			var t_out := create_tween()
+			send_button.set_meta("sb_tween", t_out)
+			t_out.tween_property(send_button, "global_position", end_pos, 0.25)\
+				.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+			t_out.tween_callback(func():
+				if is_instance_valid(send_button):
+					send_button.visible = false
+			)
+
+func _recompute_send_button_visibility() -> void:
+	var should_show := (
+		is_my_turn
+		and not spectator_mode
+		and not game_over
+		and not _replay_in_progress
+		and _all_my_arrows_visible()
+	)
+	_animate_send_button(should_show)
 	
 func _current_zoom() -> float:
 	if is_instance_valid(board_zoom):
@@ -610,24 +822,46 @@ func _apply_zoom(target_scale: float, dur: float = ZOOM_DUR) -> void:
 	if not is_instance_valid(board_zoom): return
 	if game_over: return
 
-	_is_zooming = true # START zooming
+	_is_zooming = true
 	var tw := create_tween()
 	tw.tween_property(board_zoom, "scale", Vector2.ONE * target_scale, dur)\
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	await tw.finished
-	_is_zooming = false # STOP zooming
+	_is_zooming = false
 
 	_rebuild_safe_polys()
+	
+func _apply_map_theme(mode: int) -> void:
+	if is_instance_valid(background):
+		match mode:
+			2: background.color = Color("#ffd938")
+			3: background.color = Color("#34f671")
+			_: _apply_bg_for_dark(bool(SettingsManager.get_setting("global", "dark_mode", false)))
+	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
+	if texrect:
+		var new_tex: Texture2D = MAP1_TEX
+		match mode:
+			2: new_tex = MAP2_TEX
+			3: new_tex = MAP3_TEX
+			_: new_tex = MAP1_TEX
+		if texrect.texture != new_tex:
+			texrect.texture = new_tex
+			_rebuild_safe_polys()
+	if mode == 3:
+		_spawn_mushrooms_for_map3()
+	else:
+		_clear_mushrooms()
+	_apply_arrow_color_for_current_map()
+	_apply_send_button_color_for_current_map()
+
 
 func enter_aim_view() -> void:
-	print("581 Call")
-	await _apply_zoom(ZOOM_AIM)
+	pass
 
 func enter_play_view() -> void:
-	await _apply_zoom(ZOOM_PLAY)
+	pass
 
 func _setup_board_if_needed_for_pre(pre_board: Dictionary) -> void:
-	# If we already spawned the right number of pieces, we can just update pose.
 	var _pieces: Array = pre_board.get("pieces", [])
 	if piece_container.get_child_count() == 0:
 		_setup_board_from_board_dict(pre_board)
@@ -640,19 +874,22 @@ func _setup_board_from_board_dict(bd: Dictionary) -> void:
 
 func _apply_pre_board_pose(bd: Dictionary) -> void:
 	var arr: Array = bd.get("pieces", [])
-	var children: Array[Node] = piece_container.get_children()
-	var count: int = min(children.size(), arr.size())
+	# Collect only piece bodies
+	var children_pieces: Array[Node] = []
+	for c in piece_container.get_children():
+		if c is RigidBody2D and c.has_meta("player"):
+			children_pieces.append(c)
+
+	var count: int = min(children_pieces.size(), arr.size())
 	for i in count:
-		var piece_node := children[i]
+		var piece_node := children_pieces[i]
 		var pd: Dictionary = arr[i]
-		# The piece's local position is now just its data position. No offsets needed.
-		var target_pos: Vector2 = pd["pos"] as Vector2
-		var target_rot: float = float(pd["rotation"])  # radians
+		var target_pos: Vector2 = pd["pos"]
+		var target_rot: float = float(pd["rotation"])
 
 		if piece_node is RigidBody2D:
 			var rb := piece_node as RigidBody2D
 			rb.freeze = true
-			# We set the local position, not the global_position.
 			rb.position = target_pos
 			rb.rotation = target_rot
 			rb.linear_velocity = Vector2.ZERO
@@ -687,32 +924,25 @@ func _parse_board_data(board_string: String) -> Array[Dictionary]:
 
 	return parsed_pieces
 
-
-
 func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
-	# Guard: never spawn before board is ready.
 	if not _board_initialized:
-		await get_tree().process_frame  # just in case we got here early
-
-	# Clear old pieces
+		await get_tree().process_frame
 	for child in piece_container.get_children():
-		child.queue_free()
-	await get_tree().process_frame  # ensure frees land before we add new ones
-
-	# Temporarily disable water-kill checks for a few frames after we place.
+		if child == _mushroom_layer:
+			continue
+		if child is RigidBody2D and child.has_meta("player"):
+			child.queue_free()
+	await get_tree().process_frame
 	_kill_guard_until_msec = Time.get_ticks_msec() + 500
-
 	for piece_data in board_data:
 		var piece_instance = PieceScene.instantiate()
 		var player_num = piece_data["player"]
-
 		piece_instance.set_meta("player", player_num)
-
-		# Local pose (child of BoardZoom) – safe now that the board is scaled.
 		piece_instance.position = piece_data["pos"]
 		piece_instance.rotation = piece_data["rotation"]
-
-		# Sprite size: 2*PIECE_RADIUS at 1x zoom; parent zoom scales it visually.
+		piece_instance.collision_layer = 1
+		piece_instance.collision_mask  = 1
+		piece_instance.add_to_group("pieces")
 		var sprite = piece_instance.find_child("Sprite2D", true, false)
 		if sprite:
 			sprite.texture = P1_PIECE_TEX if player_num == 1 else P2_PIECE_TEX
@@ -720,40 +950,47 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 			var desired_visual_size = Vector2(PIECE_RADIUS * 2.0, PIECE_RADIUS * 2.0)
 			if texture_size.x > 0.0:
 				sprite.scale = desired_visual_size / texture_size
-
-		# Physics radius in local space (global size follows parent scale).
 		var collision_shape = piece_instance.find_child("CollisionShape2D", true, false) as CollisionShape2D
 		if collision_shape and collision_shape.shape is CircleShape2D:
 			(collision_shape.shape as CircleShape2D).radius = PIECE_RADIUS
-
 		piece_container.add_child(piece_instance)
 		call_deferred("_try_watch_arrow_for_piece", piece_instance)
-
+		var arrow := piece_instance.get_node_or_null("Arrow") as CanvasItem
+		if arrow:
+			if map_mode == 1: arrow.modulate = ARROW_COLOR_MAP1
+			elif map_mode == 2: arrow.modulate = ARROW_COLOR_MAP2
+			elif map_mode == 3: arrow.modulate = ARROW_COLOR_MAP3
 		if piece_instance.has_method("set_controlled_by_me"):
 			piece_instance.set_controlled_by_me(player_num == player and is_my_turn and not spectator_mode and not game_over)
-
 		if piece_instance.has_signal("aim_changed"):
-			piece_instance.connect("aim_changed", func(_angle_deg: float, _pow: float): pass)
+			piece_instance.connect("aim_changed", Callable(self, "_on_piece_aim_changed"))
+
+func _on_piece_aim_changed(_angle_deg: float, _pow: float) -> void:
+	_recompute_send_button_visibility()
 
 func _set_piece_arrow_from_data(piece: Node, shoot_dir_rad: float, pow_px: float, fade_sec: float) -> void:
 	var angle_deg: float = rad_to_deg(shoot_dir_rad)
 	if piece.has_method("show_arrow_from_replay"):
 		piece.call("show_arrow_from_replay", angle_deg, pow_px, fade_sec)
 	else:
-		# Fallback: at least store meta so your arrow code can pick it up
 		piece.set_meta("shoot_dir", angle_deg)
 		piece.set_meta("power", pow_px)
-		# If the piece scene exposes an "Arrow" CanvasItem, make it visible
 		var arrow := piece.get_node_or_null("Arrow") as CanvasItem
 		if arrow:
 			arrow.modulate.a = 1.0
 			arrow.visible = true
 
-func _rotate_piece_to_dir(piece: Node, shoot_dir_rad: float, dur: float) -> void:
-	if piece is Node2D:
-		var n2d := piece as Node2D
-		var tw := create_tween()
-		tw.tween_property(n2d, "rotation", shoot_dir_rad, dur).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+func _rotate_piece_to_dir(tw: Tween, piece: Node, shoot_dir_rad: float, dur: float) -> void:
+	if not (piece is Node2D):
+		return
+	var n := piece as Node2D
+	var start  := n.rotation
+	var target := shoot_dir_rad + PIECE_HEADING_OFFSET
+	tw.tween_method(
+		func(t: float) -> void:
+			n.rotation = lerp_angle(start, target, t),
+		0.0, 1.0, dur
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 func _fire_piece_from_arrow(piece: Node, shoot_dir_rad: float, pow_px: float) -> void:
 	if pow_px <= 0.5:
@@ -763,26 +1000,24 @@ func _fire_piece_from_arrow(piece: Node, shoot_dir_rad: float, pow_px: float) ->
 		piece.set_meta("power", pow_px)
 		piece.call("fire_from_meta")
 	elif piece is RigidBody2D:
-		# fallback (kept for safety)
 		var impulse := Vector2(cos(shoot_dir_rad), sin(shoot_dir_rad)) * (pow_px * 1.29)
 		(piece as RigidBody2D).apply_impulse(impulse)
+	if piece.has_method("fade_out_arrow_for_shot"):
+		piece.call("fade_out_arrow_for_shot", 0.18)
 	
 func _hide_all_arrows_and_refresh_highlights() -> void:
 	for piece in piece_container.get_children():
-		# Prefer the piece API if present
 		if piece.has_method("hide_arrow"):
 			piece.hide_arrow()
 		else:
 			var arrow := piece.get_node_or_null("Arrow") as CanvasItem
 			if arrow:
 				arrow.visible = false
-		# Optional: normalize metadata
 		piece.set_meta("power", 0.0)
 		piece.set_meta("shoot_dir", 0.0)
 		
-
-	# Re-apply the “your-turn” pulsing rings for pieces that have no arrow
 	call_deferred("_apply_turn_highlights_based_on_arrows")
+	_recompute_send_button_visibility()
 	
 func _wire_water_kill_areas() -> void:
 	_water_kill_areas.clear()
@@ -795,13 +1030,11 @@ func _wire_water_kill_areas() -> void:
 				a.body_entered.connect(cb)
 
 func _on_water_kill_body_entered(body: Node) -> void:
-	# Only kill our pieces
 	if body is RigidBody2D and body.get_parent() == piece_container:
 		_kill_piece(body as RigidBody2D)
 
 func _refresh_board_bounds() -> void:
 	_safe_polys_global.clear()
-	# Collect every polygon tagged as the iceberg outline
 	for n in get_tree().get_nodes_in_group("board_bounds"):
 		var poly: PackedVector2Array = []
 		var xform: Transform2D
@@ -816,12 +1049,9 @@ func _refresh_board_bounds() -> void:
 		else:
 			continue
 		if poly.size() >= 3:
-			# transform to global coords
 			var gpoly := PackedVector2Array()
 			for v in poly:
 				gpoly.append(xform * v)
-			# shrink by piece radius so death happens when circle leaves ice
-			# Geometry2D.offset_polygon returns Array[PackedVector2Array]
 			var shrunk := Geometry2D.offset_polygon(gpoly, -PIECE_RADIUS)
 			if shrunk is Array:
 				for sub in shrunk:
@@ -837,19 +1067,14 @@ func _point_in_any_safe_poly(pt: Vector2) -> bool:
 func _kill_piece(rb: RigidBody2D) -> void:
 	if not is_instance_valid(rb):
 		return
-	# prevent double-kill from multiple signals/overlaps
 	if rb.has_meta("dying"):
 		return
 	rb.set_meta("dying", true)
-
-	# stop future triggers & physics
 	rb.collision_layer = 0
 	rb.collision_mask = 0
 	rb.freeze = true
 	rb.linear_velocity = Vector2.ZERO
 	rb.angular_velocity = 0.0
-
-	# hide visuals/arrow/highlights if present
 	var arrow := rb.get_node_or_null("Arrow") as CanvasItem
 	if arrow: arrow.visible = false
 	var ring := rb.get_node_or_null("HighlightRing") as CanvasItem
@@ -858,8 +1083,6 @@ func _kill_piece(rb: RigidBody2D) -> void:
 	if aim_area:
 		aim_area.monitoring = false
 		aim_area.monitorable = false
-
-	# fade sprite, then free safely
 	var spr := rb.get_node_or_null("Sprite2D") as Sprite2D
 	if spr:
 		var tw := create_tween()
@@ -870,124 +1093,136 @@ func _kill_piece(rb: RigidBody2D) -> void:
 		)
 	else:
 		rb.queue_free()
-
-# Call this when your replay round (movement) is complete
+		
 func _on_replay_round_finished() -> void:
-	# Hide arrows & restore highlights AFTER everything has settled
 	_hide_all_arrows_and_refresh_highlights()
 
-	# Mark replay done before checking win so a manual call elsewhere won’t get blocked
 	_replay_in_progress = false
+	_recompute_send_button_visibility()
 
-	# Small grace to let any fade-out queue_frees complete
 	await get_tree().create_timer(0.05).timeout
 
 	#var ended := await check_win()
 	#if ended:
 		#stop_waiting_animation()
 		#game_over = true
-		## Keep your existing behavior of notifying the host by sending once the game ends.
-		## (This mirrors what you were doing in _set_game_data after a win.)
 		#send_game()
-		
-	# If the match continues and it's your turn next, zoom back in for aiming.
-	if not game_over and is_my_turn and not spectator_mode:
-		await enter_aim_view()
-#
-#
 	#print("Round finished. Win check => ", ended)
+	
+	var next_scale := current_scale - SHRINK_STEP
+	current_scale = next_scale
+	await _apply_zoom(current_scale, 0.18)
 
-func _any_piece_moving(speed_threshold: float = 8.0, ang_threshold: float = 0.25) -> bool:
-	for n in piece_container.get_children():
-		if not (n is RigidBody2D):
-			continue
-		if n.has_meta("dying") and n.get_meta("dying"):
-			continue
-		var rb := n as RigidBody2D
-		# Prefer actual velocities; sleeping can be false during brief contacts
-		if rb.linear_velocity.length() > speed_threshold or absf(rb.angular_velocity) > ang_threshold:
-			return true
-	return false
 
-func _wait_for_pieces_to_settle(timeout_sec: float = 5.0, still_frames_needed: int = 6, speed_threshold: float = 8.0, ang_threshold: float = 0.25) -> void:
+func _piece_is_moving(rb: RigidBody2D, v_thresh := 1.8, w_thresh := 0.10) -> bool:
+	if rb.has_meta("dying") and rb.get_meta("dying"):
+		return false
+	if rb.sleeping:
+		return false
+	return rb.linear_velocity.length() > v_thresh or absf(rb.angular_velocity) > w_thresh
+
+func _wait_for_pieces_to_settle(timeout_sec: float = 10.0, still_frames_needed: int = 8, v_thresh: float = 1.8, w_thresh: float = 0.10) -> void:
 	var start_ms := Time.get_ticks_msec()
 	var still_frames := 0
+
 	while (Time.get_ticks_msec() - start_ms) < int(timeout_sec * 1000.0):
 		await get_tree().physics_frame
-		if _any_piece_moving(speed_threshold, ang_threshold):
+
+		var any_moving := false
+		for n in piece_container.get_children():
+			if n is RigidBody2D and is_instance_valid(n):
+				var rb := n as RigidBody2D
+				if _piece_is_moving(rb, v_thresh, w_thresh):
+					any_moving = true
+					break
+
+		if any_moving:
 			still_frames = 0
 		else:
 			still_frames += 1
 			if still_frames >= still_frames_needed:
 				break
-	# Give Area2D body_entered and fade-out/queue_free a moment to run
+
 	await get_tree().create_timer(0.35).timeout
 
 func _apply_post_round_snapshot(post_board: Dictionary) -> void:
 	var arr: Array = post_board.get("pieces", [])
-	# The 'off' variable is no longer needed and has been removed.
-	var children: Array[Node] = piece_container.get_children()
-	var count: int = min(children.size(), arr.size())
 
+	# Collect only piece bodies
+	var children_pieces: Array[Node] = []
+	for c in piece_container.get_children():
+		if c is RigidBody2D and c.has_meta("player"):
+			children_pieces.append(c)
+
+	var count: int = min(children_pieces.size(), arr.size())
 	for i in count:
-		var piece_node := children[i]
+		var piece_node := children_pieces[i]
 		var pd: Dictionary = arr[i]
-		# The target position is now just the piece's data position.
-		var pos: Vector2 = pd["pos"] as Vector2
+		var pos: Vector2 = pd["pos"]
 		var rot: float = float(pd["rotation"])
 
 		if piece_node is RigidBody2D:
 			var rb := piece_node as RigidBody2D
 			rb.freeze = true
-			# We set the local 'position' instead of 'global_position'.
 			rb.position = pos
 			rb.rotation = rot
 			rb.linear_velocity = Vector2.ZERO
 			rb.angular_velocity = 0.0
 			rb.freeze = false
 		else:
-			# Also set local 'position' here.
 			piece_node.position = pos
 			piece_node.rotation = rot
 
-# Main round flow
 func _play_round_from_replay(pre_board: Dictionary) -> void:
+	print("[REPLAY] Starting round playback.")
 	_replay_in_progress = true
-	
+	_recompute_send_button_visibility()
 	var pre_arr: Array = pre_board.get("pieces", [])
-	var children: Array[Node] = piece_container.get_children()
-	var count: int = min(children.size(), pre_arr.size())
-	await enter_play_view()
 
-	# 1) show arrows (fade)
+	# Only gather actual piece bodies (have the "player" meta)
+	var pieces: Array[RigidBody2D] = []
+	for child in piece_container.get_children():
+		if child is RigidBody2D and child.has_meta("player"):
+			pieces.append(child)
+
+	var count: int = min(pieces.size(), pre_arr.size())
+	if count == 0:
+		_on_replay_round_finished()
+		return
+
+	await enter_play_view()
 	for i in count:
-		var piece := children[i]
+		var piece := pieces[i]
+		if not is_instance_valid(piece): continue
 		var pd: Dictionary = pre_arr[i]
 		_set_piece_arrow_from_data(piece, float(pd["shoot_dir"]), float(pd["power"]), 0.18)
 
-	# 2) rotate to arrow
-	await get_tree().process_frame
-	for i in count:
-		var piece := children[i]
-		var pd: Dictionary = pre_arr[i]
-		_rotate_piece_to_dir(piece, float(pd["shoot_dir"]), 0.18)
+	await get_tree().create_timer(0.5).timeout
 
-	# 3) fire all pieces together
-	await get_tree().create_timer(0.20).timeout
+	var rotation_tween := create_tween().set_parallel()
 	for i in count:
-		var piece := children[i]
-		if not is_instance_valid(piece):
-			continue
+		var piece := pieces[i]
+		if not is_instance_valid(piece): continue
+		var pd: Dictionary = pre_arr[i]
+		_rotate_piece_to_dir(rotation_tween, piece, float(pd["shoot_dir"]), 0.5)
+
+	if rotation_tween.is_running():
+		await rotation_tween.finished
+
+	await get_tree().create_timer(0.5).timeout
+	for i in count:
+		var piece := pieces[i]
+		if not is_instance_valid(piece): continue
 		var pd: Dictionary = pre_arr[i]
 		_fire_piece_from_arrow(piece, float(pd["shoot_dir"]), float(pd["power"]))
 
-	# 4) wait for physics + kill signals to settle, then finish
-	await _wait_for_pieces_to_settle(5.0, 6, 8.0, 0.25)
+	await _wait_for_pieces_to_settle(10.0, 8, 1.8, 0.10)
+	await enter_aim_view()
 	_on_replay_round_finished()
 
 # --- Piece Highlighting ---
 func _apply_turn_highlights_based_on_arrows() -> void:
-	if not is_my_turn or spectator_mode or game_over:
+	if not is_my_turn or spectator_mode or game_over or _replay_in_progress:
 		_stop_all_highlights()
 		return
 
@@ -995,14 +1230,10 @@ func _apply_turn_highlights_based_on_arrows() -> void:
 		var owner_id: int = int(piece.get_meta("player", -1))
 		var ring := piece.get_node_or_null("HighlightRing") as TextureRect
 		var anim := piece.get_node_or_null("HighlightAnimator") as AnimationPlayer
-
-		# non-owned -> no highlight
 		if owner_id != player:
 			if anim: anim.stop()
 			if ring: ring.visible = false
 			continue
-
-		# owned piece: pulse only if Arrow is not visible
 		var arrow := piece.get_node_or_null("Arrow") as CanvasItem
 		var arrow_visible := (arrow != null and arrow.visible)
 
@@ -1037,10 +1268,8 @@ func _on_arrow_visibility_changed(piece: Node) -> void:
 	if not arrow:
 		return
 	if arrow.visible:
-		# Arrow appeared -> stop the pulsing ring on this piece
 		_stop_highlight_for_piece(piece)
 	else:
-		# Arrow was hidden -> (optional) restart ring if it's your turn & it's your piece
 		if is_my_turn and not spectator_mode and not game_over and int(piece.get_meta("player", -1)) == player:
 			var ring := piece.get_node_or_null("HighlightRing") as TextureRect
 			var anim := piece.get_node_or_null("HighlightAnimator") as AnimationPlayer
@@ -1048,37 +1277,32 @@ func _on_arrow_visibility_changed(piece: Node) -> void:
 				ring.visible = true
 				if anim.has_animation("ring_anim"):
 					anim.play("ring_anim")
+	_recompute_send_button_visibility()
 
 func _try_watch_arrow_for_piece(piece: Node) -> void:
-	# Wait one frame so the piece scene finishes _ready() and creates the Arrow node.
 	await get_tree().process_frame
 	var arrow := piece.get_node_or_null("Arrow") as CanvasItem
 	if not arrow:
 		return
-	# Avoid duplicate connections
 	if not piece.has_meta("arrow_watch_connected"):
 		arrow.connect("visibility_changed", Callable(self, "_on_arrow_visibility_changed").bind(piece))
 		piece.set_meta("arrow_watch_connected", true)
-	# Apply current state immediately
 	_on_arrow_visibility_changed(piece)
 
-
-# If you ever toggle turn state locally, call this to refresh highlight state.
 func set_my_turn(value: bool) -> void:
 	is_my_turn = value
 	call_deferred("_apply_turn_highlights_based_on_arrows")
+	_recompute_send_button_visibility()
 
 # --- UI Animations & State ---
 
 func check_win() -> bool:
-	# If a replay is running, defer the decision
 	if _replay_in_progress:
 		print("--- CHECKING WIN CONDITION --- (deferred; replay in progress)")
 		return false
 
 	print("--- CHECKING WIN CONDITION ---")
 
-	# Count live pieces per player (skip anything already flagged as dying)
 	var p1_count := 0
 	var p2_count := 0
 	for n in piece_container.get_children():
@@ -1122,7 +1346,6 @@ func check_win() -> bool:
 			print("-> Game was already marked as over. No new result displayed.")
 		return true
 
-	# Exactly one color remains: decide winner
 	print("-> WIN CONDITION MET: only one color remains. My:%d, Opp:%d (P1=%d, P2=%d)" % [my_count, op_count, p1_count, p2_count])
 
 	if not was_over:
@@ -1224,8 +1447,7 @@ func _ensure_avatar_wrapper(avatar: Control) -> Control:
 	)
 
 	return wrapper
-
-# ... (rest of your existing functions: play_sent_animation, start_waiting_animation, etc.)
+	
 func play_sent_animation():
 	if not is_instance_valid(sent_label) or game_over:
 		return
@@ -1498,95 +1720,116 @@ func _load_game_specific_settings():
 	print("Loaded game-specific settings for ", game_settings_category, ":")
 	print("  Master Volume: ", saved_volume)
 	print("  Show Debug Info: ", show_debug_info)
+	
+func _clear_mushrooms() -> void:
+	if is_instance_valid(_mushroom_layer):
+		_mushroom_layer.queue_free()
+		_mushroom_layer = null
 
+func _spawn_mushrooms_for_map3() -> void:
+	_clear_mushrooms()
+	if not is_instance_valid(piece_container):
+		return
 
+	_mushroom_layer = Node2D.new()
+	_mushroom_layer.name = "MushroomLayer"
+	piece_container.add_child(_mushroom_layer)
 
+	var half := LOGICAL_BOARD_SIZE * 0.5
+	var inset := 75.0
 
-#DEV CODE
+	var positions := [
+		Vector2(-half.x + inset, -half.y + inset),
+		Vector2( half.x - inset, -half.y + inset),
+		Vector2(-half.x + inset,  half.y - inset),
+		Vector2( half.x - inset,  half.y - inset)
+	]
 
-# --- Dev replay override (for visual verification) ---
-const DEV_USE_HARDCODED_REPLAY := true  # set true to force one of the dev strings below
-var _debug_draw_kill_zone := true # Set to false to hide the kill zone
-const DEV_REPLAY_MODE := "corners"      # "corners" | "down" | "right" | "left" | "up" | "all_dirs"
+	for pos in positions:
+		var m := MUSHROOM_SCENE.instantiate()
+		m.position = pos
+		_mushroom_layer.add_child(m)
 
-# Corner anchors (relative to board center). Tweak if your board is larger/smaller.
-const DEV_CORNER_UL := Vector2(-150, -150)
-const DEV_CORNER_UR := Vector2( 150, -150)
-const DEV_CORNER_LR := Vector2( 150,  150)
-const DEV_CORNER_LL := Vector2(-150,  150)
-const DEV_CORNER_CC := Vector2(0,  0)
+		# purely visual: align draw depth with pieces
+		var spr := m.get_node_or_null("Sprite2D") as Sprite2D
+		if spr:
+			spr.z_index = 0
 
-# Convenience (radians)
-const RAD_RIGHT := 0.0
-const RAD_DOWN := -PI * 0.5
-const RAD_LEFT := PI
-const RAD_UP := PI * 0.5
+		# give each mushroom access to the pieces for a guaranteed overlap check
+		if m.has_method("set_piece_container"):
+			m.set_piece_container(piece_container)
 
-# Base layout used by all tests (two P1, two P2)
-const _DEV_BASE_LAYOUT := [
-	{ "pos": DEV_CORNER_UL, "player": 1 },
-	{ "pos": DEV_CORNER_UR, "player": 2 },
-	{ "pos": DEV_CORNER_LR, "player": 1 },
-	{ "pos": DEV_CORNER_LL, "player": 2 },
-]
-
-# 1) Corners only (no shooting) — place pieces, verify positions
-var DEV_REPLAY_CORNERS := "board:1#" \
-+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0,0.0,0.0#" \
-+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0,0.0,0.0#" \
-+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0,0.0,0.0#" \
-+ str(DEV_CORNER_CC.x)  + "," + str(DEV_CORNER_CC.y)  + ",1,0.0,0.0,0.0#" \
-+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0,0.0,0.0" \
-+ "|shoot:0"
-
-# 2) Cardinal movement helpers (same starting layout, different shot dirs)
-const _DEV_POWER := 60.0  # moderate power for clear motion without insta-fall
-
-var DEV_REPLAY_DOWN  := "board:2#" \
-+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) \
-+ "|shoot:1"
-
-var DEV_REPLAY_RIGHT := "board:2#" \
-+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) \
-+ "|shoot:1"
-
-var DEV_REPLAY_LEFT  := "board:2#" \
-+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) \
-+ "|shoot:1"
-
-var DEV_REPLAY_UP    := "board:2#" \
-+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) \
-+ "|shoot:1"
-
-# Optional: one-shot where each piece moves a different cardinal direction
-var DEV_REPLAY_ALL_DIRS := "board:2#" \
-+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) \
-+ "|shoot:1"
-
-func _draw() -> void:
-	# Only draw the polygon if our debug flag is turned on.
-	if _debug_draw_kill_zone:
-		if not _safe_polys_global.is_empty():
-			# Define a color for the debug shape (semi-transparent red is good).
-			var debug_color = Color(1.0, 0.0, 0.0, 0.4)
-			
-			# Loop through all safe polygons (usually just one) and draw them.
-			# Note: This works because the script is on the root Control node,
-			# whose local coordinates match the global coordinates of the polygon.
-			for poly in _safe_polys_global:
-				draw_polygon(poly, PackedColorArray([debug_color]))
+##DEV CODE
+#
+## --- Dev replay override (for visual verification) ---
+#const DEV_USE_HARDCODED_REPLAY := true  # set true to force one of the dev strings below
+#const DEV_REPLAY_MODE := "corners"      # "corners" | "down" | "right" | "left" | "up" | "all_dirs"
+#
+## Corner anchors (relative to board center). Tweak if the board is larger/smaller.
+#const DEV_CORNER_UL := Vector2(-138, -138)
+#const DEV_CORNER_UR := Vector2( 138, -138)
+#const DEV_CORNER_LR := Vector2( 138,  138)
+#const DEV_CORNER_LL := Vector2(-138,  138)
+#const DEV_CORNER_CC := Vector2(0,  0)
+#
+## Convenience (radians)
+#const RAD_RIGHT := 0.0
+#const RAD_DOWN := -PI * 0.5
+#const RAD_LEFT := PI
+#const RAD_UP := PI * 0.5
+#
+## Base layout used by all tests (two P1, two P2)
+#const _DEV_BASE_LAYOUT := [
+	#{ "pos": DEV_CORNER_UL, "player": 1 },
+	#{ "pos": DEV_CORNER_UR, "player": 2 },
+	#{ "pos": DEV_CORNER_LR, "player": 1 },
+	#{ "pos": DEV_CORNER_LL, "player": 2 },
+#]
+#
+## 1) Corners only (no shooting) — place pieces, verify positions
+#var DEV_REPLAY_CORNERS := "board:1#" \
+#+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0,0.0,0.0#" \
+#+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0,0.0,0.0#" \
+#+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0,0.0,0.0#" \
+#+ str(DEV_CORNER_CC.x)  + "," + str(DEV_CORNER_CC.y)  + ",1,0.0,0.0,0.0#" \
+#+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0,0.0,0.0" \
+#+ "|shoot:0"
+#
+## 2) Cardinal movement helpers (same starting layout, different shot dirs)
+#const _DEV_POWER := 60.0  # moderate power for clear motion without insta-fall
+#
+#var DEV_REPLAY_DOWN  := "board:2#" \
+#+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) \
+#+ "|shoot:1"
+#
+#var DEV_REPLAY_RIGHT := "board:2#" \
+#+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) \
+#+ "|shoot:1"
+#
+#var DEV_REPLAY_LEFT  := "board:2#" \
+#+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) \
+#+ "|shoot:1"
+#
+#var DEV_REPLAY_UP    := "board:2#" \
+#+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) \
+#+ "|shoot:1"
+#
+## Optional: one-shot where each piece moves a different cardinal direction
+#var DEV_REPLAY_ALL_DIRS := "board:2#" \
+#+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
+#+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) \
+#+ "|shoot:1"

@@ -1,15 +1,29 @@
-[gd_scene load_steps=21 format=3 uid="uid://b313cajxw7qus"]
+[gd_scene load_steps=23 format=3 uid="uid://b313cajxw7qus"]
 
 [ext_resource type="Script" uid="uid://dbbc5e5naoqvn" path="res://knockout/knockout.gd" id="1_u0hb5"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_4i852"]
+[ext_resource type="Shader" uid="uid://c8dbl1i5nmdde" path="res://knockout/knockout.gdshader" id="2_8y6pv"]
 [ext_resource type="Texture2D" uid="uid://bcrougehluf84" path="res://knockout/life_prev_gray.png" id="3_4i852"]
-[ext_resource type="Texture2D" uid="uid://dvnbqteof630k" path="res://dots/paper_tex.png" id="3_8y6pv"]
 [ext_resource type="Texture2D" uid="uid://bhqs73vb225di" path="res://knockout/life_prev_black.png" id="4_8y6pv"]
+[ext_resource type="Texture2D" uid="uid://pre0vgo3tb8l" path="res://knockout/ko_map1.png" id="5_4i852"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="5_l2dra"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="6_8yq3x"]
 
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_it53s"]
+shader = ExtResource("2_8y6pv")
+shader_parameter/speed = 0.25
+shader_parameter/scale = 14.0
+shader_parameter/octaves = 4
+shader_parameter/lacunarity = 2.0
+shader_parameter/gain = 0.5
+shader_parameter/warp = 0.7
+shader_parameter/refract_px = 1.0
+shader_parameter/alpha_mix = 1.0
+shader_parameter/shade_strength = 0.18
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_10rnd"]
-bg_color = Color(1, 1, 1, 1)
+bg_color = Color(1, 1, 1, 0)
+shadow_color = Color(0, 0, 0, 0)
 shadow_size = 8
 shadow_offset = Vector2(0.47, 5.075)
 
@@ -116,6 +130,16 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.40784314, 0.83137256, 0.9647059, 1)
+
+[node name="WaterFX" type="ColorRect" parent="."]
+unique_name_in_owner = true
+material = SubResource("ShaderMaterial_it53s")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 
 [node name="VBoxContainer" type="VBoxContainer" parent="."]
 layout_mode = 1
@@ -254,17 +278,17 @@ layout_mode = 2
 
 [node name="BoardZoom" type="Control" parent="VBoxContainer/Center/BoardInt"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(150, 150)
+custom_minimum_size = Vector2(163.505, 163.505)
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -150.0
-offset_top = -150.0
-offset_right = 150.0
-offset_bottom = 150.0
+offset_left = -163.505
+offset_top = -163.505
+offset_right = 163.505
+offset_bottom = 163.505
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -276,13 +300,13 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -150.0
-offset_top = -150.0
-offset_right = 150.0
-offset_bottom = 150.0
+offset_left = -163.505
+offset_top = -163.505
+offset_right = 163.505
+offset_bottom = 163.505
 grow_horizontal = 2
 grow_vertical = 2
-pivot_offset = Vector2(150, 150)
+pivot_offset = Vector2(163.505, 165.505)
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_10rnd")
 
@@ -290,14 +314,18 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_10rnd")
 custom_minimum_size = Vector2(150, 150)
 layout_mode = 2
 mouse_filter = 2
-texture = ExtResource("3_8y6pv")
+texture = ExtResource("5_4i852")
 expand_mode = 3
-
-[node name="IcebergBounds" type="Polygon2D" parent="VBoxContainer/Center/BoardInt/BoardZoom/GameBoard"]
-visible = false
+stretch_mode = 4
 
 [node name="PieceContainer" type="Node2D" parent="VBoxContainer/Center/BoardInt/BoardZoom"]
 unique_name_in_owner = true
+
+[node name="SafeZonePolygon" type="Polygon2D" parent="VBoxContainer/Center/BoardInt/BoardZoom"]
+unique_name_in_owner = true
+visible = false
+z_index = 1695
+color = Color(0.12156863, 0.24705882, 1, 0.44313726)
 
 [node name="WinLossLabel" type="Label" parent="VBoxContainer/Center"]
 unique_name_in_owner = true
