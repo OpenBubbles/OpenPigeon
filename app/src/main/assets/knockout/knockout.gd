@@ -59,9 +59,21 @@ var last_pre_round: Dictionary = {}      # {"round": int, "pieces": Array[Dictio
 var last_post_round: Dictionary = {}     # same shape; board #2 (or #3) snapshot after physics
 var current_round_index: int = 0
 
-const POWER_TO_IMPULSE: float = 6.0      # must match piece.gd feel
+# --- Physics (ONE source of truth) ---
+const PPM                 := 32.0          # pixels-per-meter (only used for mass estimate)
+const PIECE_RADIUS_PX     := 24.0          # collision radius used everywhere
+const FRICTION            := 0.02          # PhysicsMaterial.friction
+const RESTITUTION         := 0.30          # PhysicsMaterial.bounce
+const LINEAR_DAMP         := 0.25
+const ANGULAR_DAMP        := 0.45
+const DENSITY             := 1.0           # for mass approximation (optional)
+const POWER_TO_IMPULSE    := 1.29          # unified “pixels of arrow” -> impulse scale
+const GRAVITY_SCALE       := 0.0
+const CCD_MODE            := RigidBody2D.CCD_MODE_CAST_RAY
+const LOCK_ROTATION       := false
+
+var PIECE_RADIUS := PIECE_RADIUS_PX
 const ROUND_SNAP_AFTER: float = 1.4      # seconds: snap to post board after physics play
-const PIECE_RADIUS: float = 24.0  # must match piece CollisionShape2D
 #const DEV_REPLAY_STRING := "board:2#77.861351,66.122459,1,-0.876164,-2.354301,104.423691#23.355244,93.006905,2,1.830075,-1.580594,61.118755#-4.830564,36.334606,2,2.219335,0.272333,38.293098#-18.615202,-35.732677,2,2.316064,0.583284,79.135498#99.505798,94.505386,2,2.833030,-1.843283,72.001610|shoot:1|board:3#68.967499,51.041775,1,-0.956223,-2.354301,0.000000#50.799763,68.490479,2,0.031407,-1.832990,21.633646#-33.968060,-1.493485,2,1.201969,0.854556,49.784225#22.491690,-81.952728,2,2.664457,1.825102,79.211861#64.293983,-6.814495,2,-0.272487,1.906639,43.372223|board:3#68.967499,51.041775,1,-0.956223,-2.354301,0.000000#50.799763,68.490479,2,0.031407,-1.832990,21.633646#-33.968060,-1.493485,2,1.201969,0.854556,49.784225#22.491690,-81.952728,2,2.664457,1.825102,79.211861#64.293983,-6.814495,2,-0.272487,1.906639,43.372223"
 
 var _water_kill_areas: Array[Area2D] = []
@@ -925,45 +937,88 @@ func _parse_board_data(board_string: String) -> Array[Dictionary]:
 	return parsed_pieces
 
 func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
+	# Ensure scene is ready
 	if not _board_initialized:
 		await get_tree().process_frame
+
+	# Remove existing pieces (keep the mushroom layer if present)
 	for child in piece_container.get_children():
 		if child == _mushroom_layer:
 			continue
 		if child is RigidBody2D and child.has_meta("player"):
 			child.queue_free()
 	await get_tree().process_frame
+
+	# Brief kill guard so freshly spawned pieces don't get culled by zones immediately
 	_kill_guard_until_msec = Time.get_ticks_msec() + 500
+
 	for piece_data in board_data:
-		var piece_instance = PieceScene.instantiate()
-		var player_num = piece_data["player"]
+		var piece_instance: RigidBody2D = PieceScene.instantiate()
+
+		# Ownership / pose
+		var player_num: int = int(piece_data.get("player", 1))
 		piece_instance.set_meta("player", player_num)
-		piece_instance.position = piece_data["pos"]
-		piece_instance.rotation = piece_data["rotation"]
+		piece_instance.position = piece_data.get("pos", Vector2.ZERO)
+		piece_instance.rotation = float(piece_data.get("rotation", 0.0))
+
+		# Collisions
 		piece_instance.collision_layer = 1
 		piece_instance.collision_mask  = 1
 		piece_instance.add_to_group("pieces")
-		var sprite = piece_instance.find_child("Sprite2D", true, false)
+
+		# Visuals (penguin texture + scale to match collision radius)
+		var sprite := piece_instance.find_child("Sprite2D", true, false) as Sprite2D
 		if sprite:
 			sprite.texture = P1_PIECE_TEX if player_num == 1 else P2_PIECE_TEX
-			var texture_size = sprite.texture.get_size()
-			var desired_visual_size = Vector2(PIECE_RADIUS * 2.0, PIECE_RADIUS * 2.0)
-			if texture_size.x > 0.0:
-				sprite.scale = desired_visual_size / texture_size
-		var collision_shape = piece_instance.find_child("CollisionShape2D", true, false) as CollisionShape2D
+			var tex_size: Vector2 = sprite.texture.get_size() if sprite.texture else Vector2.ZERO
+			var desired_px := Vector2(PIECE_RADIUS_PX * 2.0, PIECE_RADIUS_PX * 2.0)
+			if tex_size.x > 0.0 and tex_size.y > 0.0:
+				sprite.scale = desired_px / tex_size
+			sprite.z_index = 1
+
+		# Ensure the body shape exists and uses the unified radius
+		var collision_shape := piece_instance.find_child("CollisionShape2D", true, false) as CollisionShape2D
 		if collision_shape and collision_shape.shape is CircleShape2D:
-			(collision_shape.shape as CircleShape2D).radius = PIECE_RADIUS
+			(collision_shape.shape as CircleShape2D).radius = PIECE_RADIUS_PX
+
+		# Push unified physics parameters from knockout.gd into the piece
+		if piece_instance.has_method("set_physics_params"):
+			piece_instance.set_physics_params({
+				"PPM": PPM,
+				"PIECE_RADIUS_PX": PIECE_RADIUS_PX,
+				"FRICTION": FRICTION,
+				"RESTITUTION": RESTITUTION,
+				"LINEAR_DAMP": LINEAR_DAMP,
+				"ANGULAR_DAMP": ANGULAR_DAMP,
+				"DENSITY": DENSITY,
+				"POWER_TO_IMPULSE": POWER_TO_IMPULSE,
+				"GRAVITY_SCALE": GRAVITY_SCALE,
+				"CCD_MODE": CCD_MODE,
+				"LOCK_ROTATION": LOCK_ROTATION
+			})
+
+		# Add to scene
 		piece_container.add_child(piece_instance)
-		call_deferred("_try_watch_arrow_for_piece", piece_instance)
+
+		# Arrow theme color per map
 		var arrow := piece_instance.get_node_or_null("Arrow") as CanvasItem
 		if arrow:
-			if map_mode == 1: arrow.modulate = ARROW_COLOR_MAP1
-			elif map_mode == 2: arrow.modulate = ARROW_COLOR_MAP2
-			elif map_mode == 3: arrow.modulate = ARROW_COLOR_MAP3
+			match map_mode:
+				2: arrow.modulate = ARROW_COLOR_MAP2
+				3: arrow.modulate = ARROW_COLOR_MAP3
+				_: arrow.modulate = ARROW_COLOR_MAP1
+
+		# Interactivity (only my pieces on my turn)
 		if piece_instance.has_method("set_controlled_by_me"):
-			piece_instance.set_controlled_by_me(player_num == player and is_my_turn and not spectator_mode and not game_over)
+			var can_control := (player_num == player) and is_my_turn and (not spectator_mode) and (not game_over)
+			piece_instance.set_controlled_by_me(can_control)
+
+		# Aim-change → recompute Send button visibility
 		if piece_instance.has_signal("aim_changed"):
 			piece_instance.connect("aim_changed", Callable(self, "_on_piece_aim_changed"))
+
+		# Watch arrow visibility for highlighting/Send button logic
+		call_deferred("_try_watch_arrow_for_piece", piece_instance)
 
 func _on_piece_aim_changed(_angle_deg: float, _pow: float) -> void:
 	_recompute_send_button_visibility()
@@ -1000,7 +1055,7 @@ func _fire_piece_from_arrow(piece: Node, shoot_dir_rad: float, pow_px: float) ->
 		piece.set_meta("power", pow_px)
 		piece.call("fire_from_meta")
 	elif piece is RigidBody2D:
-		var impulse := Vector2(cos(shoot_dir_rad), sin(shoot_dir_rad)) * (pow_px * 1.29)
+		var impulse := Vector2(cos(shoot_dir_rad), sin(shoot_dir_rad)) * (pow_px * POWER_TO_IMPULSE)
 		(piece as RigidBody2D).apply_impulse(impulse)
 	if piece.has_method("fade_out_arrow_for_shot"):
 		piece.call("fade_out_arrow_for_shot", 0.18)
