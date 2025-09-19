@@ -44,6 +44,20 @@ const ZOOM_PLAY  := 1.4678  # how large to look during physics (tweak)
 const ZOOM_DUR   := 0.22 # seconds
 const PIECE_HEADING_OFFSET: float = -PI * 0.5
 
+# --- Board size & piece inset by board index ---
+const BOARD0_SIZE_PX := 180.0         # board:0 => 180x180
+const BOARD_DELTA_PER_LEVEL := 20.0    # each +1 index shrinks ~20px
+const BOARD_MAX_INDEX := 7             # board:7 => 40x40
+const PIECE_INSET_PER_LEVEL := 5.0     # each +1 index pulls pieces 5px toward center (x and y)
+# How big board:0 should look on-screen (in real pixels), regardless of texture/layout.
+const BOARD_BASE_PHYSICAL_SIZE_PX := 400.0
+
+# Computed multiplier that scales the TextureRect so board:0 ≈ BOARD_BASE_PHYSICAL_SIZE_PX.
+var _board_base_scale_factor: float = 1.0
+
+
+var _current_board_index: int = 0
+
 const ARROW_COLOR_MAP1 := Color(0,0,0,1)
 const ARROW_COLOR_MAP2 := Color(0.95, 0.95, 0.95, 1.0)
 const ARROW_COLOR_MAP3 := Color(0.92, 0.92, 0.92, 1.0)
@@ -102,17 +116,11 @@ var is_my_turn: bool = false
 var _is_zooming: bool = false
 var my_player
 var my_player_id
-var _kill_guard_until_msec: int = 0
 var spectator_mode: bool = false
 var avatar_key = 0
 var player = 1
 var sent_tween: Tween
 var dot_count = 0
-
-var pre_board_data: Array = []
-var post_board_data: Array = []
-
-const AUTO_BOUNDS_GROUP := "board_bounds_auto"
 
 func _poly_area(poly: PackedVector2Array) -> float:
 	var n := poly.size()
@@ -261,10 +269,24 @@ func _build_safe_poly_from_png(alpha_threshold: float = 0.1, simplify_epsilon: f
 func _rebuild_safe_polys() -> void:
 	_build_safe_poly_from_png(0.1, 1.5)
 	
-func _poly_centroid(poly: PackedVector2Array) -> Vector2:
-	var s := Vector2.ZERO
-	for p in poly: s += p
-	return s / max(1.0, float(poly.size()))
+func _recalc_board_base_scale_factor() -> void:
+	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
+	if not texrect or not is_instance_valid(texrect):
+		_board_base_scale_factor = 1.0
+		return
+
+	# The size of the image *inside* the TextureRect at node scale = 1.
+	# Use the shorter side so the board remains square-consistent.
+	var draw_rect := _texrect_draw_rect(texrect, null)
+	var base_dim := minf(draw_rect.size.x, draw_rect.size.y)
+	if base_dim <= 0.0:
+		_board_base_scale_factor = 1.0
+	else:
+		_board_base_scale_factor = BOARD_BASE_PHYSICAL_SIZE_PX / base_dim
+
+func _target_scale_for_index(i: int) -> float:
+	return _board_base_scale_factor * _board_scale_for_index(i)  # ratio*(base visual)
+
 
 func _physics_process(_delta: float) -> void:
 	if not is_instance_valid(board_zoom) or not is_instance_valid(safe_zone_polygon):
@@ -480,15 +502,27 @@ func _ready():
 		)
 	
 	piece_container.position = board_zoom.custom_minimum_size * 0.5
+
 	await get_tree().process_frame
+	_recalc_board_base_scale_factor()
+	_apply_board_index_immediate(_current_board_index)
 	_rebuild_safe_polys()
 
 	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
 	if texrect:
-		texrect.resized.connect(func(): _rebuild_safe_polys())
-	get_viewport().size_changed.connect(func(): _rebuild_safe_polys())
+		texrect.resized.connect(func():
+			_recalc_board_base_scale_factor()
+			_apply_board_index_immediate(_current_board_index)
+		)
+
+	get_viewport().size_changed.connect(func():
+		_recalc_board_base_scale_factor()
+		_apply_board_index_immediate(_current_board_index)
+	)
+
 	_board_initialized = true
 	print("Board initialized and scaled.")
+
 	if _pending_replay_str != "":
 		parse_replay_string(_pending_replay_str)
 		_pending_replay_str = ""
@@ -512,13 +546,6 @@ func _ready():
 		}
 		_set_game_data(JSON.stringify(dev_payload))
 
-func _update_all_piece_visuals() -> void:
-	if not is_instance_valid(board_zoom): return
-	
-	for piece in piece_container.get_children():
-		if not piece is RigidBody2D: continue
-		var logical_pos = piece.get_meta("logical_pos", piece.position)
-		piece.position = logical_pos
 
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
@@ -554,9 +581,10 @@ func _set_game_data(new_game_data_json: String):
 		else:
 			player = 1
 	else:
-		spectator_mode = true
+		#spectator_mode = true
 		you_label.text = ""
-		is_my_turn = false
+		#is_my_turn = false
+		is_my_turn = is_your_turn
 		spec_label.show()
 		player = 1
 
@@ -594,25 +622,27 @@ func send_game() -> void:
 	await get_tree().process_frame
 
 	var replay_string_to_send := ""
-	#if DEV_USE_HARDCODED_REPLAY:
-		#match DEV_REPLAY_MODE:
-			#"corners":
-				#replay_string_to_send = DEV_REPLAY_CORNERS
-			#"down":
-				#replay_string_to_send = DEV_REPLAY_DOWN
-			#"right":
-				#replay_string_to_send = DEV_REPLAY_RIGHT
-			#"left":
-				#replay_string_to_send = DEV_REPLAY_LEFT
-			#"up":
-				#replay_string_to_send = DEV_REPLAY_UP
-			#"all_dirs":
-				#replay_string_to_send = DEV_REPLAY_ALL_DIRS
-			#_:
-				#replay_string_to_send = DEV_REPLAY_CORNERS
-		#print("[Send][DEV] Using DEV_REPLAY_MODE='%s'." % DEV_REPLAY_MODE)
-	#else:
-	replay_string_to_send = _build_replay_string()
+	if DEV_USE_HARDCODED_REPLAY:
+		match DEV_REPLAY_MODE:
+			"corners":
+				replay_string_to_send = DEV_REPLAY_CORNERS
+			"line":
+				replay_string_to_send = DEV_REPLAY_LINE_X
+			"down":
+				replay_string_to_send = DEV_REPLAY_DOWN
+			"right":
+				replay_string_to_send = DEV_REPLAY_RIGHT
+			"left":
+				replay_string_to_send = DEV_REPLAY_LEFT
+			"up":
+				replay_string_to_send = DEV_REPLAY_UP
+			"all_dirs":
+				replay_string_to_send = DEV_REPLAY_ALL_DIRS
+			_:
+				replay_string_to_send = DEV_REPLAY_CORNERS
+		print("[Send][DEV] Using DEV_REPLAY_MODE='%s'." % DEV_REPLAY_MODE)
+	else:
+		replay_string_to_send = _build_replay_string()
 	#replay_string_to_send = "board:1#-130,138,1,0,-1.57079632679,0.0#-90,138,2,0,-1.57079632679,1#-50,138,2,0,-1.57079632679,10.0#-10,138,2,0,-1.57079632679,25.0#50,138,2,0,-1.57079632679,50#90,138,2,1,-1.57079632679,100#130,138,2,0,-1.57079632679,100"
 
 
@@ -637,13 +667,6 @@ func send_game() -> void:
 	_update_piece_interactivity()
 	if not game_over:
 		play_sent_animation()
-		
-func _log_replay_preview(label: String, s: String) -> void:
-	var preview := s
-	if preview.length() > 220:
-		preview = preview.substr(0, 220) + "..."
-	print("[%s] replay (%d chars): %s" % [label, s.length(), preview])
-
 		
 func _build_replay_string() -> String:
 	var round_num := 1
@@ -713,6 +736,11 @@ func parse_replay_string(replay: String) -> void:
 		return
 
 	last_pre_round = boards[0]
+	last_post_round = boards[1] if (boards.size() > 1) else {}
+
+	var pre_idx := int(last_pre_round.get("round", 0))
+	_apply_board_index_immediate(pre_idx)
+
 	_setup_board_from_board_dict(last_pre_round)
 
 	if shoot_flag:
@@ -824,12 +852,6 @@ func _recompute_send_button_visibility() -> void:
 	)
 	_animate_send_button(should_show)
 	
-func _current_zoom() -> float:
-	if is_instance_valid(board_zoom):
-		var s := board_zoom.get_global_transform().get_scale()
-		return (s.x + s.y) * 0.5
-	return 1.0
-	
 func _apply_zoom(target_scale: float, dur: float = ZOOM_DUR) -> void:
 	if not is_instance_valid(board_zoom): return
 	if game_over: return
@@ -849,6 +871,7 @@ func _apply_map_theme(mode: int) -> void:
 			2: background.color = Color("#ffd938")
 			3: background.color = Color("#34f671")
 			_: _apply_bg_for_dark(bool(SettingsManager.get_setting("global", "dark_mode", false)))
+
 	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
 	if texrect:
 		var new_tex: Texture2D = MAP1_TEX
@@ -858,90 +881,26 @@ func _apply_map_theme(mode: int) -> void:
 			_: new_tex = MAP1_TEX
 		if texrect.texture != new_tex:
 			texrect.texture = new_tex
+			_recalc_board_base_scale_factor()
+			_apply_board_index_immediate(_current_board_index)
 			_rebuild_safe_polys()
+
 	if mode == 3:
 		_spawn_mushrooms_for_map3()
 	else:
 		_clear_mushrooms()
+
 	_apply_arrow_color_for_current_map()
 	_apply_send_button_color_for_current_map()
-
-
-func enter_aim_view() -> void:
-	pass
-
-func enter_play_view() -> void:
-	pass
-
-func _setup_board_if_needed_for_pre(pre_board: Dictionary) -> void:
-	var _pieces: Array = pre_board.get("pieces", [])
-	if piece_container.get_child_count() == 0:
-		_setup_board_from_board_dict(pre_board)
-	else:
-		_apply_pre_board_pose(pre_board)
 
 func _setup_board_from_board_dict(bd: Dictionary) -> void:
 	var arr: Array = bd.get("pieces", [])
 	_setup_board_from_data(arr)
 
-func _apply_pre_board_pose(bd: Dictionary) -> void:
-	var arr: Array = bd.get("pieces", [])
-	# Collect only piece bodies
-	var children_pieces: Array[Node] = []
-	for c in piece_container.get_children():
-		if c is RigidBody2D and c.has_meta("player"):
-			children_pieces.append(c)
-
-	var count: int = min(children_pieces.size(), arr.size())
-	for i in count:
-		var piece_node := children_pieces[i]
-		var pd: Dictionary = arr[i]
-		var target_pos: Vector2 = pd["pos"]
-		var target_rot: float = float(pd["rotation"])
-
-		if piece_node is RigidBody2D:
-			var rb := piece_node as RigidBody2D
-			rb.freeze = true
-			rb.position = target_pos
-			rb.rotation = target_rot
-			rb.linear_velocity = Vector2.ZERO
-			rb.angular_velocity = 0.0
-			rb.freeze = false
-		else:
-			piece_node.position = target_pos
-			piece_node.rotation = target_rot
-
-func _parse_board_data(board_string: String) -> Array[Dictionary]:
-	var parsed_pieces: Array[Dictionary] = []
-	if board_string.is_empty() or board_string == "0":
-		return parsed_pieces
-
-	var piece_strings: Array = board_string.split("#")
-	for piece_str in piece_strings:
-		if piece_str.is_empty():
-			continue
-
-		var params: Array = piece_str.split(",")
-		if params.size() == 6:
-			var piece_data := {
-				"pos": Vector2(params[0].to_float(), params[1].to_float()),
-				"player": params[2].to_int(),
-				"rotation": params[3].to_float(),
-				"shoot_dir": params[4].to_float(),
-				"power": params[5].to_float()
-			}
-			parsed_pieces.append(piece_data)
-		else:
-			push_warning("Invalid piece data format, expected 6 params: " + piece_str)
-
-	return parsed_pieces
-
 func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
-	# Ensure scene is ready
 	if not _board_initialized:
 		await get_tree().process_frame
 
-	# Remove existing pieces (keep the mushroom layer if present)
 	for child in piece_container.get_children():
 		if child == _mushroom_layer:
 			continue
@@ -949,8 +908,7 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 			child.queue_free()
 	await get_tree().process_frame
 
-	# Brief kill guard so freshly spawned pieces don't get culled by zones immediately
-	_kill_guard_until_msec = Time.get_ticks_msec() + 500
+	var use_idx := _current_board_index
 
 	for piece_data in board_data:
 		var piece_instance: RigidBody2D = PieceScene.instantiate()
@@ -958,7 +916,9 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 		# Ownership / pose
 		var player_num: int = int(piece_data.get("player", 1))
 		piece_instance.set_meta("player", player_num)
-		piece_instance.position = piece_data.get("pos", Vector2.ZERO)
+
+		var raw_pos: Vector2 = piece_data.get("pos", Vector2.ZERO)
+		piece_instance.position = _inset_pos_for_board(raw_pos, use_idx)
 		piece_instance.rotation = float(piece_data.get("rotation", 0.0))
 
 		# Collisions
@@ -1088,31 +1048,6 @@ func _on_water_kill_body_entered(body: Node) -> void:
 	if body is RigidBody2D and body.get_parent() == piece_container:
 		_kill_piece(body as RigidBody2D)
 
-func _refresh_board_bounds() -> void:
-	_safe_polys_global.clear()
-	for n in get_tree().get_nodes_in_group("board_bounds"):
-		var poly: PackedVector2Array = []
-		var xform: Transform2D
-		if n is Polygon2D:
-			var p2d := n as Polygon2D
-			poly = p2d.polygon
-			xform = p2d.get_global_transform()
-		elif n is CollisionPolygon2D:
-			var cp := n as CollisionPolygon2D
-			poly = cp.polygon
-			xform = cp.get_global_transform()
-		else:
-			continue
-		if poly.size() >= 3:
-			var gpoly := PackedVector2Array()
-			for v in poly:
-				gpoly.append(xform * v)
-			var shrunk := Geometry2D.offset_polygon(gpoly, -PIECE_RADIUS)
-			if shrunk is Array:
-				for sub in shrunk:
-					if sub.size() >= 3:
-						_safe_polys_global.append(sub)
-
 func _point_in_any_safe_poly(pt: Vector2) -> bool:
 	for poly in _safe_polys_global:
 		if Geometry2D.is_point_in_polygon(pt, poly):
@@ -1157,16 +1092,18 @@ func _on_replay_round_finished() -> void:
 
 	await get_tree().create_timer(0.05).timeout
 
-	#var ended := await check_win()
-	#if ended:
-		#stop_waiting_animation()
-		#game_over = true
-		#send_game()
-	#print("Round finished. Win check => ", ended)
-	
+	# If we received a post-board, apply it now (snap pieces first, then tween the board shrink)
+	var next_idx := _current_board_index + 1
+	if not last_post_round.is_empty():
+		next_idx = int(last_post_round.get("round", _current_board_index + 1))
+		_apply_post_round_snapshot(last_post_round, next_idx)
+
+	# Keep the existing zoom feel (optional), then shrink the board itself as a tween
 	var next_scale := current_scale - SHRINK_STEP
 	current_scale = next_scale
 	await _apply_zoom(current_scale, 0.18)
+
+	await _tween_board_index_to(next_idx, 0.18)
 
 
 func _piece_is_moving(rb: RigidBody2D, v_thresh := 1.8, w_thresh := 0.10) -> bool:
@@ -1200,8 +1137,9 @@ func _wait_for_pieces_to_settle(timeout_sec: float = 10.0, still_frames_needed: 
 
 	await get_tree().create_timer(0.35).timeout
 
-func _apply_post_round_snapshot(post_board: Dictionary) -> void:
+func _apply_post_round_snapshot(post_board: Dictionary, board_idx: int = -1) -> void:
 	var arr: Array = post_board.get("pieces", [])
+	var use_idx := _clamp_board_index(board_idx) if (board_idx >= 0) else _current_board_index
 
 	# Collect only piece bodies
 	var children_pieces: Array[Node] = []
@@ -1213,7 +1151,7 @@ func _apply_post_round_snapshot(post_board: Dictionary) -> void:
 	for i in count:
 		var piece_node := children_pieces[i]
 		var pd: Dictionary = arr[i]
-		var pos: Vector2 = pd["pos"]
+		var pos: Vector2 = _inset_pos_for_board(pd["pos"], use_idx)
 		var rot: float = float(pd["rotation"])
 
 		if piece_node is RigidBody2D:
@@ -1245,7 +1183,6 @@ func _play_round_from_replay(pre_board: Dictionary) -> void:
 		_on_replay_round_finished()
 		return
 
-	await enter_play_view()
 	for i in count:
 		var piece := pieces[i]
 		if not is_instance_valid(piece): continue
@@ -1272,8 +1209,45 @@ func _play_round_from_replay(pre_board: Dictionary) -> void:
 		_fire_piece_from_arrow(piece, float(pd["shoot_dir"]), float(pd["power"]))
 
 	await _wait_for_pieces_to_settle(10.0, 8, 1.8, 0.10)
-	await enter_aim_view()
 	_on_replay_round_finished()
+	
+func _clamp_board_index(i: int) -> int:
+	return clamp(i, 0, BOARD_MAX_INDEX)
+
+func _board_size_for_index(i: int) -> float:
+	var idx := _clamp_board_index(i)
+	return BOARD0_SIZE_PX - BOARD_DELTA_PER_LEVEL * float(idx)
+
+func _board_scale_for_index(i: int) -> float:
+	return _board_size_for_index(i) / BOARD0_SIZE_PX
+
+func _apply_board_index_immediate(i: int) -> void:
+	_current_board_index = _clamp_board_index(i)
+	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
+	if texrect:
+		texrect.pivot_offset = texrect.size * 0.5
+		texrect.scale = Vector2.ONE * _target_scale_for_index(_current_board_index)
+	_rebuild_safe_polys()
+
+func _tween_board_index_to(i: int, dur: float = 0.18) -> void:
+	var target_idx := _clamp_board_index(i)
+	if target_idx == _current_board_index:
+		return
+	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
+	if texrect:
+		var tw := create_tween()
+		tw.tween_property(texrect, "scale", Vector2.ONE * _target_scale_for_index(target_idx), dur)\
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		await tw.finished
+	_current_board_index = target_idx
+	_rebuild_safe_polys()
+
+func _inset_pos_for_board(pos: Vector2, board_idx: int) -> Vector2:
+	# Move each piece toward (0,0) by 5px * board_idx on both axes.
+	var inset: float = PIECE_INSET_PER_LEVEL * float(_clamp_board_index(board_idx))
+	var x: float = move_toward(pos.x, 0.0, inset)
+	var y: float = move_toward(pos.y, 0.0, inset)
+	return Vector2(x, y)
 
 # --- Piece Highlighting ---
 func _apply_turn_highlights_based_on_arrows() -> void:
@@ -1814,77 +1788,103 @@ func _spawn_mushrooms_for_map3() -> void:
 		if m.has_method("set_piece_container"):
 			m.set_piece_container(piece_container)
 
-##DEV CODE
-#
-## --- Dev replay override (for visual verification) ---
-#const DEV_USE_HARDCODED_REPLAY := true  # set true to force one of the dev strings below
-#const DEV_REPLAY_MODE := "corners"      # "corners" | "down" | "right" | "left" | "up" | "all_dirs"
-#
-## Corner anchors (relative to board center). Tweak if the board is larger/smaller.
-#const DEV_CORNER_UL := Vector2(-138, -138)
-#const DEV_CORNER_UR := Vector2( 138, -138)
-#const DEV_CORNER_LR := Vector2( 138,  138)
-#const DEV_CORNER_LL := Vector2(-138,  138)
-#const DEV_CORNER_CC := Vector2(0,  0)
-#
-## Convenience (radians)
-#const RAD_RIGHT := 0.0
-#const RAD_DOWN := -PI * 0.5
-#const RAD_LEFT := PI
-#const RAD_UP := PI * 0.5
-#
-## Base layout used by all tests (two P1, two P2)
-#const _DEV_BASE_LAYOUT := [
-	#{ "pos": DEV_CORNER_UL, "player": 1 },
-	#{ "pos": DEV_CORNER_UR, "player": 2 },
-	#{ "pos": DEV_CORNER_LR, "player": 1 },
-	#{ "pos": DEV_CORNER_LL, "player": 2 },
-#]
-#
-## 1) Corners only (no shooting) — place pieces, verify positions
-#var DEV_REPLAY_CORNERS := "board:1#" \
-#+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0,0.0,0.0#" \
-#+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0,0.0,0.0#" \
-#+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0,0.0,0.0#" \
-#+ str(DEV_CORNER_CC.x)  + "," + str(DEV_CORNER_CC.y)  + ",1,0.0,0.0,0.0#" \
-#+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0,0.0,0.0" \
-#+ "|shoot:0"
-#
-## 2) Cardinal movement helpers (same starting layout, different shot dirs)
-#const _DEV_POWER := 60.0  # moderate power for clear motion without insta-fall
-#
-#var DEV_REPLAY_DOWN  := "board:2#" \
-#+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) \
-#+ "|shoot:1"
-#
-#var DEV_REPLAY_RIGHT := "board:2#" \
-#+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) \
-#+ "|shoot:1"
-#
-#var DEV_REPLAY_LEFT  := "board:2#" \
-#+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) \
-#+ "|shoot:1"
-#
-#var DEV_REPLAY_UP    := "board:2#" \
-#+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) \
-#+ "|shoot:1"
-#
-## Optional: one-shot where each piece moves a different cardinal direction
-#var DEV_REPLAY_ALL_DIRS := "board:2#" \
-#+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
-#+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) \
-#+ "|shoot:1"
+#DEV CODE
+
+# --- Dev replay override (for visual verification) ---
+const DEV_USE_HARDCODED_REPLAY := false  # set true to force one of the dev strings below
+const DEV_REPLAY_MODE := "line"      # "corners" | "down" | "right" | "left" | "up" | "all_dirs"
+
+# Corner anchors (relative to board center). Tweak if the board is larger/smaller.
+const DEV_CORNER_UL := Vector2(-140, -140)
+const DEV_CORNER_UR := Vector2( 140, -140)
+const DEV_CORNER_LR := Vector2( 140,  140)
+const DEV_CORNER_LL := Vector2(-150,  150)
+const DEV_CORNER_CC := Vector2(0,  0)
+
+# Convenience (radians)
+const RAD_RIGHT := 0.0
+const RAD_DOWN := -PI * 0.5
+const RAD_LEFT := PI
+const RAD_UP := PI * 0.5
+
+# Base layout used by all tests (two P1, two P2)
+const _DEV_BASE_LAYOUT := [
+	{ "pos": DEV_CORNER_UL, "player": 1 },
+	{ "pos": DEV_CORNER_UR, "player": 2 },
+	{ "pos": DEV_CORNER_LR, "player": 1 },
+	{ "pos": DEV_CORNER_LL, "player": 2 },
+]
+
+# 1) Corners only (no shooting) — place pieces, verify positions
+var DEV_REPLAY_CORNERS := "board:2#" \
++ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0,0.0,0.0#" \
++ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0,0.0,0.0#" \
++ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0,0.0,0.0#" \
++ str(DEV_CORNER_CC.x)  + "," + str(DEV_CORNER_CC.y)  + ",1,0.0,0.0,0.0#" \
++ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0,0.0,0.0" \
++ "|shoot:0"
+
+var DEV_REPLAY_LINE_X := "board:6#" \
++ "-210,210"  + ",2,0.0,0.0,0.0#" \
++ "-200,-200"  + ",1,0.0,0.0,0.0#" \
++ "-180,-180"  + ",2,0.0,0.0,0.0#" \
++ "-160,-160"  + ",1,0.0,0.0,0.0#" \
++ "-140,-140"  + ",2,0.0,0.0,0.0#" \
++ "-120,-120"  + ",1,0.0,0.0,0.0#" \
++ "-100,-100"  + ",2,0.0,0.0,0.0#" \
++ "-80,-80"  + ",1,0.0,0.0,0.0#" \
++ "-60,-60"  + ",2,0.0,0.0,0.0#" \
++ "-40,-40"  + ",1,0.0,0.0,0.0#" \
++ "-20,-20"  + ",2,0.0,0.0,0.0#" \
++ "0,0"  + ",1,0.0,0.0,0.0#" \
++ "20,20"  + ",1,0.0,0.0,0.0#" \
++ "40,40"  + ",1,0.0,0.0,0.0#" \
++ "60,60"  + ",2,0.0,0.0,0.0#" \
++ "80,80"  + ",1,0.0,0.0,0.0#" \
++ "100,100"  + ",2,0.0,0.0,0.0#" \
++ "120,120"  + ",1,0.0,0.0,0.0#" \
++ "140,140"  + ",2,0.0,0.0,0.0#" \
++ "160,160"  + ",1,0.0,0.0,0.0#" \
++ "180,180"  + ",2,0.0,0.0,0.0#" \
++ "200,200"  + ",2,0.0,0.0,0.0#" \
++ "210,-210"  + ",1,0.0,0.0,0.0#" \
++ "|shoot:0"
+
+# 2) Cardinal movement helpers (same starting layout, different shot dirs)
+const _DEV_POWER := 60.0  # moderate power for clear motion without insta-fall
+
+var DEV_REPLAY_DOWN  := "board:0#" \
++ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) \
++ "|shoot:1"
+
+var DEV_REPLAY_RIGHT := "board:2#" \
++ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) \
++ "|shoot:1"
+
+var DEV_REPLAY_LEFT  := "board:2#" \
++ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) \
++ "|shoot:1"
+
+var DEV_REPLAY_UP    := "board:2#" \
++ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) \
++ "|shoot:1"
+
+# Optional: one-shot where each piece moves a different cardinal direction
+var DEV_REPLAY_ALL_DIRS := "board:2#" \
++ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
++ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) \
++ "|shoot:1"
