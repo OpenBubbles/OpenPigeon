@@ -55,6 +55,7 @@ const BOARD_BASE_PHYSICAL_SIZE_PX := 400.0
 # Computed multiplier that scales the TextureRect so board:0 ≈ BOARD_BASE_PHYSICAL_SIZE_PX.
 var _board_base_scale_factor: float = 1.0
 
+const DEBUG_DRAW_ZONES := false
 
 var _current_board_index: int = 0
 
@@ -97,6 +98,13 @@ var _base_hole_polys: Array[PackedVector2Array] = []     # holes in image space
 var _unsafe_holes_global: Array[PackedVector2Array] = [] # holes in global space
 var _mushroom_layer: Node2D
 
+# Cached, transformed bounds to early-out polygon tests
+var _safe_bounds_global: Rect2 = Rect2()
+var _hole_bounds_global: Array[Rect2] = []
+
+# Throttle kill checks to reduce per-frame cost
+const KILL_CHECK_INTERVAL := 0.05
+var _kill_check_accum: float = 0.0
 
 # --- Game State Variables ---
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
@@ -231,8 +239,8 @@ func _apply_send_button_color_for_current_map() -> void:
 	elif map_mode == 3:
 		_style_button(send_button, SEND_GREEN)
 
-	
-func _build_safe_poly_from_png(alpha_threshold: float = 0.1, simplify_epsilon: float = 1.5) -> void:
+# Rebuild base polygons from the image ONCE (or when the texture/map changes).
+func _rebuild_base_polys_from_png(alpha_threshold: float = 0.1, simplify_epsilon: float = 1.5) -> void:
 	_base_iceberg_poly.clear()
 	_base_hole_polys.clear()
 
@@ -266,37 +274,21 @@ func _build_safe_poly_from_png(alpha_threshold: float = 0.1, simplify_epsilon: f
 	var bounding_rect: Rect2 = _get_poly_bounds(best)
 	print("BASE POLYGON BUILT (Image Coords): %s ; holes=%d" % [bounding_rect, _base_hole_polys.size()])
 
-func _rebuild_safe_polys() -> void:
-	_build_safe_poly_from_png(0.1, 1.5)
-	
-func _recalc_board_base_scale_factor() -> void:
-	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
-	if not texrect or not is_instance_valid(texrect):
-		_board_base_scale_factor = 1.0
-		return
+# Recompute transformed (BoardZoom-local & global) polygons when transforms/layout change.
+func _refresh_safe_polys_for_transform() -> void:
+	_safe_polys_global.clear()
+	_unsafe_holes_global.clear()
+	_safe_bounds_global = Rect2()
+	_hole_bounds_global.clear()
 
-	# The size of the image *inside* the TextureRect at node scale = 1.
-	# Use the shorter side so the board remains square-consistent.
-	var draw_rect := _texrect_draw_rect(texrect, null)
-	var base_dim := minf(draw_rect.size.x, draw_rect.size.y)
-	if base_dim <= 0.0:
-		_board_base_scale_factor = 1.0
-	else:
-		_board_base_scale_factor = BOARD_BASE_PHYSICAL_SIZE_PX / base_dim
-
-func _target_scale_for_index(i: int) -> float:
-	return _board_base_scale_factor * _board_scale_for_index(i)  # ratio*(base visual)
-
-
-func _physics_process(_delta: float) -> void:
-	if not is_instance_valid(board_zoom) or not is_instance_valid(safe_zone_polygon):
-		return
-	if not _board_initialized or _base_iceberg_poly.is_empty():
-		safe_zone_polygon.polygon = PackedVector2Array()
+	if _base_iceberg_poly.is_empty():
+		if is_instance_valid(safe_zone_polygon):
+			safe_zone_polygon.polygon = PackedVector2Array()
 		return
 
 	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
-	if not is_instance_valid(texrect): return
+	if not is_instance_valid(board_zoom) or not is_instance_valid(texrect):
+		return
 
 	# Transform from TextureRect space into BoardZoom local
 	var xf: Transform2D = board_zoom.get_global_transform().affine_inverse() * texrect.get_global_transform()
@@ -324,28 +316,33 @@ func _physics_process(_delta: float) -> void:
 	var expansion_amount := 1
 	var final_poly_array: Array = Geometry2D.offset_polygon(local_poly, expansion_amount)
 
-	_safe_polys_global.clear()
-	_unsafe_holes_global.clear()
+	# Draw/preview the safe zone (BoardZoom-local)
+	if is_instance_valid(safe_zone_polygon):
+		if not final_poly_array.is_empty():
+			safe_zone_polygon.polygon = final_poly_array[0]
+			if DEBUG_DRAW_ZONES:
+				safe_zone_polygon.visible = true
+				safe_zone_polygon.color = Color(0.2, 1.0, 0.2, 0.18)  # green translucent
+		else:
+			safe_zone_polygon.polygon = PackedVector2Array()
 
+	# Convert to global (for kill checks)
 	if not final_poly_array.is_empty():
-		# Draw/preview the safe zone
-		safe_zone_polygon.polygon = final_poly_array[0]
-		if DEBUG_DRAW_ZONES:
-			safe_zone_polygon.visible = true
-			safe_zone_polygon.color = Color(0.2, 1.0, 0.2, 0.18)  # green translucent
+		var global_xf := board_zoom.get_global_transform()
 
-		# Convert to global
-		var global_xf = board_zoom.get_global_transform()
-
-		# Outer → global
+		# Outer → global & bounds
 		for poly_local in final_poly_array:
 			var poly_global := PackedVector2Array()
 			for p_local in poly_local:
 				poly_global.append(global_xf * p_local)
 			_safe_polys_global.append(poly_global)
+			# Keep a broad-phase AABB for early-out
+			var r := _get_poly_bounds(poly_global)
+			_safe_bounds_global = r if _safe_bounds_global == Rect2() else _safe_bounds_global.merge(r)
 
-		var hole_locals_for_kill: Array[PackedVector2Array] = []
+		# Holes (map 2) → global & bounds
 		if map_mode == 2:
+			var hole_locals_for_kill: Array[PackedVector2Array] = []
 			for hl in hole_locals:
 				var expanded := Geometry2D.offset_polygon(hl, -PIECE_RADIUS * 0.05)
 				if expanded is Array and expanded.size() > 0:
@@ -353,42 +350,75 @@ func _physics_process(_delta: float) -> void:
 				else:
 					hole_locals_for_kill.append(hl)
 
-			# Debug draw the holes (BoardZoom-local)
 			if DEBUG_DRAW_ZONES:
 				_set_hole_debug_polys(hole_locals_for_kill)
 
-			# Holes → global
-			_unsafe_holes_global.clear()
-			var src_locals := (hole_locals_for_kill if not hole_locals_for_kill.is_empty() else hole_locals)
-			for hl in src_locals:
+			for hl in hole_locals_for_kill:
 				var hg := PackedVector2Array()
 				for p_local in hl:
 					hg.append(global_xf * p_local)
 				_unsafe_holes_global.append(hg)
+				_hole_bounds_global.append(_get_poly_bounds(hg))
+
+	
+func _recalc_board_base_scale_factor() -> void:
+	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
+	if not texrect or not is_instance_valid(texrect):
+		_board_base_scale_factor = 1.0
+		return
+
+	# The size of the image *inside* the TextureRect at node scale = 1.
+	# Use the shorter side so the board remains square-consistent.
+	var draw_rect := _texrect_draw_rect(texrect, null)
+	var base_dim := minf(draw_rect.size.x, draw_rect.size.y)
+	if base_dim <= 0.0:
+		_board_base_scale_factor = 1.0
 	else:
-		safe_zone_polygon.polygon = PackedVector2Array()
+		_board_base_scale_factor = BOARD_BASE_PHYSICAL_SIZE_PX / base_dim
 
-	# Kill check: outside outer OR inside a hole (map 2)
-	if not _safe_polys_global.is_empty():
-		for n in piece_container.get_children():
-			if n is RigidBody2D:
-				var rb := n as RigidBody2D
-				if rb.has_meta("dying") and rb.get_meta("dying"): continue
-				var pos := rb.global_position
+func _target_scale_for_index(i: int) -> float:
+	return _board_base_scale_factor * _board_scale_for_index(i)  # ratio*(base visual)
 
-				var inside_safe := _point_in_any_safe_poly(pos)
 
-				var in_hole := false
-				if map_mode == 2 and not _unsafe_holes_global.is_empty():
-					for h in _unsafe_holes_global:
-						if Geometry2D.is_point_in_polygon(pos, h):
+func _physics_process(delta: float) -> void:
+	if not _board_initialized:
+		return
+	if _safe_polys_global.is_empty():
+		# Nothing to test yet
+		return
+
+	_kill_check_accum += delta
+	if _kill_check_accum < KILL_CHECK_INTERVAL:
+		return
+	_kill_check_accum = 0.0
+
+	# Broad-phase AABB first, polygon only if necessary
+	for n in piece_container.get_children():
+		if n is RigidBody2D:
+			var rb := n as RigidBody2D
+			if rb.has_meta("dying") and rb.get_meta("dying"): continue
+
+			var pos := rb.global_position
+
+			# If outside the broad outer bounds → instant kill
+			if _safe_bounds_global != Rect2() and not _safe_bounds_global.has_point(pos):
+				_kill_piece(rb)
+				continue
+
+			# Precise outer containment
+			var inside_safe := _point_in_any_safe_poly(pos)
+
+			var in_hole := false
+			if inside_safe and map_mode == 2 and not _unsafe_holes_global.is_empty():
+				# Optional faster early-out using hole AABBs
+				for i in _hole_bounds_global.size():
+					if _hole_bounds_global[i].has_point(pos):
+						if Geometry2D.is_point_in_polygon(pos, _unsafe_holes_global[i]):
 							in_hole = true
 							break
 
-				if (not inside_safe) or in_hole:
-					_kill_piece(rb)
-					
-const DEBUG_DRAW_ZONES := false   # set false to disable all zone debug drawing
+			if (not inside_safe) or in_hole:
+				_kill_piece(rb)
 					
 func _get_poly_bounds(poly: PackedVector2Array) -> Rect2:
 	if poly.is_empty():
@@ -505,19 +535,23 @@ func _ready():
 
 	await get_tree().process_frame
 	_recalc_board_base_scale_factor()
+	_rebuild_base_polys_from_png() 
 	_apply_board_index_immediate(_current_board_index)
-	_rebuild_safe_polys()
+	_refresh_safe_polys_for_transform()
+
 
 	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
 	if texrect:
 		texrect.resized.connect(func():
 			_recalc_board_base_scale_factor()
 			_apply_board_index_immediate(_current_board_index)
+			_refresh_safe_polys_for_transform()
 		)
 
 	get_viewport().size_changed.connect(func():
 		_recalc_board_base_scale_factor()
 		_apply_board_index_immediate(_current_board_index)
+		_refresh_safe_polys_for_transform()
 	)
 
 	_board_initialized = true
@@ -712,7 +746,13 @@ func _update_piece_interactivity() -> void:
 	for piece in piece_container.get_children():
 		if piece.has_method("set_controlled_by_me"):
 			var owner_id: int = int(piece.get_meta("player", -1))
-			var can_control: bool = (owner_id == player) and is_my_turn and (not spectator_mode) and (not game_over)
+			var can_control: bool = (
+				owner_id == player
+				and is_my_turn
+				and not spectator_mode
+				and not game_over
+				and not _replay_in_progress            # <-- add
+			)
 			piece.set_controlled_by_me(can_control)
 	_recompute_send_button_visibility()
 
@@ -744,8 +784,10 @@ func parse_replay_string(replay: String) -> void:
 	_setup_board_from_board_dict(last_pre_round)
 
 	if shoot_flag:
-		await get_tree().process_frame
+		_replay_in_progress = true
+		_update_piece_interactivity()
 		_stop_all_highlights()
+		await get_tree().process_frame
 		_play_round_from_replay(last_pre_round)
 
 func _parse_board_chunk(body: String) -> Dictionary:
@@ -863,7 +905,8 @@ func _apply_zoom(target_scale: float, dur: float = ZOOM_DUR) -> void:
 	await tw.finished
 	_is_zooming = false
 
-	_rebuild_safe_polys()
+	_refresh_safe_polys_for_transform()
+
 	
 func _apply_map_theme(mode: int) -> void:
 	if is_instance_valid(background):
@@ -882,8 +925,10 @@ func _apply_map_theme(mode: int) -> void:
 		if texrect.texture != new_tex:
 			texrect.texture = new_tex
 			_recalc_board_base_scale_factor()
+			_rebuild_base_polys_from_png()
 			_apply_board_index_immediate(_current_board_index)
-			_rebuild_safe_polys()
+			_refresh_safe_polys_for_transform()
+
 
 	if mode == 3:
 		_spawn_mushrooms_for_map3()
@@ -970,7 +1015,7 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 
 		# Interactivity (only my pieces on my turn)
 		if piece_instance.has_method("set_controlled_by_me"):
-			var can_control := (player_num == player) and is_my_turn and (not spectator_mode) and (not game_over)
+			var can_control := (player_num == player) and is_my_turn and (not spectator_mode) and (not game_over) and (not _replay_in_progress)
 			piece_instance.set_controlled_by_me(can_control)
 
 		# Aim-change → recompute Send button visibility
@@ -1088,6 +1133,7 @@ func _on_replay_round_finished() -> void:
 	_hide_all_arrows_and_refresh_highlights()
 
 	_replay_in_progress = false
+	_update_piece_interactivity()
 	_recompute_send_button_visibility()
 
 	await get_tree().create_timer(0.05).timeout
@@ -1169,6 +1215,8 @@ func _apply_post_round_snapshot(post_board: Dictionary, board_idx: int = -1) -> 
 func _play_round_from_replay(pre_board: Dictionary) -> void:
 	print("[REPLAY] Starting round playback.")
 	_replay_in_progress = true
+	_update_piece_interactivity()
+	_stop_all_highlights()
 	_recompute_send_button_visibility()
 	var pre_arr: Array = pre_board.get("pieces", [])
 
@@ -1227,7 +1275,8 @@ func _apply_board_index_immediate(i: int) -> void:
 	if texrect:
 		texrect.pivot_offset = texrect.size * 0.5
 		texrect.scale = Vector2.ONE * _target_scale_for_index(_current_board_index)
-	_rebuild_safe_polys()
+	_refresh_safe_polys_for_transform()
+
 
 func _tween_board_index_to(i: int, dur: float = 0.18) -> void:
 	var target_idx := _clamp_board_index(i)
@@ -1240,7 +1289,8 @@ func _tween_board_index_to(i: int, dur: float = 0.18) -> void:
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 		await tw.finished
 	_current_board_index = target_idx
-	_rebuild_safe_polys()
+	_refresh_safe_polys_for_transform()
+
 
 func _inset_pos_for_board(pos: Vector2, board_idx: int) -> Vector2:
 	# Move each piece toward (0,0) by 5px * board_idx on both axes.
@@ -1295,6 +1345,8 @@ func _stop_highlight_for_piece(piece: Node) -> void:
 func _on_arrow_visibility_changed(piece: Node) -> void:
 	var arrow := piece.get_node_or_null("Arrow") as CanvasItem
 	if not arrow:
+		return
+	if _replay_in_progress:
 		return
 	if arrow.visible:
 		_stop_highlight_for_piece(piece)
