@@ -658,27 +658,17 @@ func send_game() -> void:
 	var replay_string_to_send := ""
 	if DEV_USE_HARDCODED_REPLAY:
 		match DEV_REPLAY_MODE:
-			"corners":
-				replay_string_to_send = DEV_REPLAY_CORNERS
-			"line":
-				replay_string_to_send = DEV_REPLAY_LINE_X
-			"down":
-				replay_string_to_send = DEV_REPLAY_DOWN
-			"right":
-				replay_string_to_send = DEV_REPLAY_RIGHT
-			"left":
-				replay_string_to_send = DEV_REPLAY_LEFT
-			"up":
-				replay_string_to_send = DEV_REPLAY_UP
-			"all_dirs":
-				replay_string_to_send = DEV_REPLAY_ALL_DIRS
-			_:
-				replay_string_to_send = DEV_REPLAY_CORNERS
+			"corners":  replay_string_to_send = DEV_REPLAY_CORNERS
+			"line":     replay_string_to_send = DEV_REPLAY_LINE_X
+			"down":     replay_string_to_send = DEV_REPLAY_DOWN
+			"right":    replay_string_to_send = DEV_REPLAY_RIGHT
+			"left":     replay_string_to_send = DEV_REPLAY_LEFT
+			"up":       replay_string_to_send = DEV_REPLAY_UP
+			"all_dirs": replay_string_to_send = DEV_REPLAY_ALL_DIRS
+			_:          replay_string_to_send = DEV_REPLAY_CORNERS
 		print("[Send][DEV] Using DEV_REPLAY_MODE='%s'." % DEV_REPLAY_MODE)
 	else:
 		replay_string_to_send = _build_replay_string()
-	#replay_string_to_send = "board:1#-130,138,1,0,-1.57079632679,0.0#-90,138,2,0,-1.57079632679,1#-50,138,2,0,-1.57079632679,10.0#-10,138,2,0,-1.57079632679,25.0#50,138,2,0,-1.57079632679,50#90,138,2,1,-1.57079632679,100#130,138,2,0,-1.57079632679,100"
-
 
 	var payload: Dictionary = { "replay": replay_string_to_send }
 
@@ -703,16 +693,32 @@ func send_game() -> void:
 		play_sent_animation()
 		
 func _build_replay_string() -> String:
-	var round_num := 1
-	if last_pre_round.has("round"):
-		round_num = int(last_pre_round["round"]) + 1
+	var have_prev := not last_pre_round.is_empty()
+	var idx := _current_board_index
+	var my_ready := _all_my_arrows_visible()
+	var opp_ready := _all_opponent_arrows_nonzero()
 
-	var pre_board := _serialize_current_board(round_num, false)
-	var post_board := _serialize_current_board(round_num + 1, true)
-	return "%s|shoot:1|%s" % [pre_board, post_board]
+	# 1) First ever send in a fresh game: one board, no index, no shoot
+	if not have_prev:
+		return _serialize_current_board(idx, false, false)  # include_index = false -> "board:"
 
+	# 2) Setup echo from the second player (initial placement, no arrows yet)
+	#    Use index 0 and duplicate the board, no shoot.
+	if idx == 0 and not my_ready and not opp_ready and last_post_round.is_empty():
+		var b0 := _serialize_current_board(0, false, true)
+		return "%s|%s" % [b0, b0]
 
-func _serialize_current_board(round_num: int, zero_power: bool) -> String:
+	# 3) Full round ready: everyone has arrows -> pre | shoot:1 | post | post
+	if my_ready and opp_ready:
+		var pre := _serialize_current_board(idx, false, true)
+		var next_idx: int = int(min(idx + 1, BOARD_MAX_INDEX))
+		var post := _serialize_current_board(next_idx, true, true) # zero powers in post
+		return "%s|shoot:1|%s|%s" % [pre, post, post]
+
+	# 4) Default hand-off: I’ve set my arrows, opponent hasn’t → send a single pre board (no shoot)
+	return _serialize_current_board(idx, false, true)
+
+func _serialize_current_board(board_idx: int, zero_power: bool, include_index: bool = true) -> String:
 	var parts := PackedStringArray()
 
 	for n in piece_container.get_children():
@@ -738,7 +744,19 @@ func _serialize_current_board(round_num: int, zero_power: bool) -> String:
 		])
 
 	var body := "#".join(parts)
-	return "board:%d%s%s" % [round_num, "#" if body.length() > 0 else "", body]
+	var header := "board:" + (str(board_idx) if include_index else "")
+	return "%s%s%s" % [header, "#" if body.length() > 0 else "", body]
+	
+func _all_opponent_arrows_nonzero() -> bool:
+	var any := false
+	for n in piece_container.get_children():
+		if not (n is RigidBody2D): continue
+		if n.has_meta("dying") and n.get_meta("dying"): continue
+		if int(n.get_meta("player", -1)) == player: continue
+		any = true
+		if float(n.get_meta("power", 0.0)) <= 0.0:
+			return false
+	return any  # true only if there was at least one opponent piece and none had zero power
 
 # --- Replay Parsing & Board Setup ---
 
@@ -966,12 +984,18 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 		piece_instance.position = _inset_pos_for_board(raw_pos, use_idx)
 		piece_instance.rotation = float(piece_data.get("rotation", 0.0))
 
+		# Cache arrows from incoming data (keep visuals hidden unless we’re replaying)
+		var sd_rad := float(piece_data.get("shoot_dir", 0.0))
+		var pow_px := float(piece_data.get("power", 0.0))
+		piece_instance.set_meta("shoot_dir", rad_to_deg(sd_rad))
+		piece_instance.set_meta("power", pow_px)
+
 		# Collisions
 		piece_instance.collision_layer = 1
 		piece_instance.collision_mask  = 1
 		piece_instance.add_to_group("pieces")
 
-		# Visuals (penguin texture + scale to match collision radius)
+		# Visuals
 		var sprite := piece_instance.find_child("Sprite2D", true, false) as Sprite2D
 		if sprite:
 			sprite.texture = P1_PIECE_TEX if player_num == 1 else P2_PIECE_TEX
@@ -981,12 +1005,10 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 				sprite.scale = desired_px / tex_size
 			sprite.z_index = 1
 
-		# Ensure the body shape exists and uses the unified radius
 		var collision_shape := piece_instance.find_child("CollisionShape2D", true, false) as CollisionShape2D
 		if collision_shape and collision_shape.shape is CircleShape2D:
 			(collision_shape.shape as CircleShape2D).radius = PIECE_RADIUS_PX
 
-		# Push unified physics parameters from knockout.gd into the piece
 		if piece_instance.has_method("set_physics_params"):
 			piece_instance.set_physics_params({
 				"PPM": PPM,
@@ -1002,27 +1024,24 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 				"LOCK_ROTATION": LOCK_ROTATION
 			})
 
-		# Add to scene
 		piece_container.add_child(piece_instance)
 
-		# Arrow theme color per map
 		var arrow := piece_instance.get_node_or_null("Arrow") as CanvasItem
 		if arrow:
 			match map_mode:
 				2: arrow.modulate = ARROW_COLOR_MAP2
 				3: arrow.modulate = ARROW_COLOR_MAP3
 				_: arrow.modulate = ARROW_COLOR_MAP1
+			# Keep arrows hidden unless we’re animating a replay
+			arrow.visible = false
 
-		# Interactivity (only my pieces on my turn)
 		if piece_instance.has_method("set_controlled_by_me"):
 			var can_control := (player_num == player) and is_my_turn and (not spectator_mode) and (not game_over) and (not _replay_in_progress)
 			piece_instance.set_controlled_by_me(can_control)
 
-		# Aim-change → recompute Send button visibility
 		if piece_instance.has_signal("aim_changed"):
 			piece_instance.connect("aim_changed", Callable(self, "_on_piece_aim_changed"))
 
-		# Watch arrow visibility for highlighting/Send button logic
 		call_deferred("_try_watch_arrow_for_piece", piece_instance)
 
 func _on_piece_aim_changed(_angle_deg: float, _pow: float) -> void:
