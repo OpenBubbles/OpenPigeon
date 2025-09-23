@@ -58,6 +58,10 @@ var _board_base_scale_factor: float = 1.0
 const DEBUG_DRAW_ZONES := false
 
 var _current_board_index: int = 0
+var _safe_area: Area2D
+var _safe_poly: CollisionPolygon2D
+var _hole_areas: Array[Area2D] = []
+var _hole_polys: Array[CollisionPolygon2D] = []
 
 const ARROW_COLOR_MAP1 := Color(0,0,0,1)
 const ARROW_COLOR_MAP2 := Color(0.95, 0.95, 0.95, 1.0)
@@ -276,91 +280,147 @@ func _rebuild_base_polys_from_png(alpha_threshold: float = 0.1, simplify_epsilon
 
 # Recompute transformed (BoardZoom-local & global) polygons when transforms/layout change.
 func _refresh_safe_polys_for_transform() -> void:
-	_safe_polys_global.clear()
-	_unsafe_holes_global.clear()
-	_safe_bounds_global = Rect2()
-	_hole_bounds_global.clear()
-
+	# Build/refresh BoardZoom-local polygons and wire them to Areas (no per-frame tests).
 	if _base_iceberg_poly.is_empty():
 		if is_instance_valid(safe_zone_polygon):
 			safe_zone_polygon.polygon = PackedVector2Array()
+		# Tear down old areas if any
+		_destroy_safe_hole_areas()
 		return
 
 	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
 	if not is_instance_valid(board_zoom) or not is_instance_valid(texrect):
 		return
 
-	# Transform from TextureRect space into BoardZoom local
+	# Map: Image space -> TextureRect draw space -> BoardZoom local
 	var xf: Transform2D = board_zoom.get_global_transform().affine_inverse() * texrect.get_global_transform()
 	var tex_draw_rect: Rect2 = _texrect_draw_rect(texrect, null)
 	var img_size := Vector2(texrect.texture.get_size())
-	var tex_scale := tex_draw_rect.size / img_size if img_size.x > 0 and img_size.y > 0 else Vector2.ONE
+	var tex_scale := tex_draw_rect.size / img_size if img_size.x > 0.0 and img_size.y > 0.0 else Vector2.ONE
 
-	# --- Outer poly → BoardZoom local
+	# Outer polygon in BoardZoom local
 	var local_poly := PackedVector2Array()
 	for v_img in _base_iceberg_poly:
-		var point_in_texrect = tex_draw_rect.position + (v_img * tex_scale)
-		local_poly.append(xf * point_in_texrect)
+		var p_tex := tex_draw_rect.position + (v_img * tex_scale)
+		local_poly.append(xf * p_tex)
 
-	# --- Hole polys → BoardZoom local (map 2 only)
+	# Optional tiny outward offset to avoid edge flicker
+	var final_poly := local_poly
+	var expanded := Geometry2D.offset_polygon(local_poly, 1.0) # small expansion
+	if expanded is Array and expanded.size() > 0:
+		final_poly = expanded[0]
+
+	# (Map 2) hole polygons in BoardZoom local
 	var hole_locals: Array[PackedVector2Array] = []
 	if map_mode == 2 and not _base_hole_polys.is_empty():
 		for hole_img in _base_hole_polys:
 			var hl := PackedVector2Array()
 			for v_img in hole_img:
-				var p = tex_draw_rect.position + (v_img * tex_scale)
-				hl.append(xf * p)
-			hole_locals.append(hl)
+				var p_tex := tex_draw_rect.position + (v_img * tex_scale)
+				hl.append(xf * p_tex)
+			# Slight inward offset so entering is detected a tad earlier
+			var shrunk := Geometry2D.offset_polygon(hl, -1.0)
+			hole_locals.append(shrunk[0] if (shrunk is Array and shrunk.size() > 0) else hl)
 
-	# Expand outer for visuals
-	var expansion_amount := 1
-	var final_poly_array: Array = Geometry2D.offset_polygon(local_poly, expansion_amount)
-
-	# Draw/preview the safe zone (BoardZoom-local)
+	# Debug/preview polygon
 	if is_instance_valid(safe_zone_polygon):
-		if not final_poly_array.is_empty():
-			safe_zone_polygon.polygon = final_poly_array[0]
-			if DEBUG_DRAW_ZONES:
-				safe_zone_polygon.visible = true
-				safe_zone_polygon.color = Color(0.2, 1.0, 0.2, 0.18)  # green translucent
-		else:
-			safe_zone_polygon.polygon = PackedVector2Array()
+		safe_zone_polygon.polygon = final_poly
+		safe_zone_polygon.visible = DEBUG_DRAW_ZONES
 
-	# Convert to global (for kill checks)
-	if not final_poly_array.is_empty():
-		var global_xf := board_zoom.get_global_transform()
+	# Build/update Areas
+	_build_safe_area(final_poly)
+	_build_hole_areas(hole_locals)
 
-		# Outer → global & bounds
-		for poly_local in final_poly_array:
-			var poly_global := PackedVector2Array()
-			for p_local in poly_local:
-				poly_global.append(global_xf * p_local)
-			_safe_polys_global.append(poly_global)
-			# Keep a broad-phase AABB for early-out
-			var r := _get_poly_bounds(poly_global)
-			_safe_bounds_global = r if _safe_bounds_global == Rect2() else _safe_bounds_global.merge(r)
-
-		# Holes (map 2) → global & bounds
-		if map_mode == 2:
-			var hole_locals_for_kill: Array[PackedVector2Array] = []
-			for hl in hole_locals:
-				var expanded := Geometry2D.offset_polygon(hl, -PIECE_RADIUS * 0.05)
-				if expanded is Array and expanded.size() > 0:
-					hole_locals_for_kill.append(expanded[0])
-				else:
-					hole_locals_for_kill.append(hl)
-
-			if DEBUG_DRAW_ZONES:
-				_set_hole_debug_polys(hole_locals_for_kill)
-
-			for hl in hole_locals_for_kill:
-				var hg := PackedVector2Array()
-				for p_local in hl:
-					hg.append(global_xf * p_local)
-				_unsafe_holes_global.append(hg)
-				_hole_bounds_global.append(_get_poly_bounds(hg))
-
+	# One-time cull after shape changes (cheap & infrequent)
+	_cull_pieces_after_shape_change(final_poly, hole_locals)
 	
+func _destroy_safe_hole_areas() -> void:
+	if is_instance_valid(_safe_area):
+		_safe_area.queue_free()
+	_safe_area = null
+	_safe_poly = null
+
+	for a in _hole_areas:
+		if is_instance_valid(a):
+			a.queue_free()
+	_hole_areas.clear()
+	_hole_polys.clear()
+
+func _build_safe_area(poly: PackedVector2Array) -> void:
+	if not is_instance_valid(board_zoom):
+		return
+	if not is_instance_valid(_safe_area):
+		_safe_area = Area2D.new()
+		_safe_area.name = "SafeArea"
+		_safe_area.collision_layer = 0
+		_safe_area.collision_mask = 1  # pieces are on layer 1
+		board_zoom.add_child(_safe_area)
+		_safe_area.body_exited.connect(_on_safe_area_body_exited)
+
+	if not is_instance_valid(_safe_poly):
+		_safe_poly = CollisionPolygon2D.new()
+		_safe_area.add_child(_safe_poly)
+
+	_safe_poly.polygon = poly
+
+func _build_hole_areas(hole_polys: Array[PackedVector2Array]) -> void:
+	# Shrink/grow node count to match holes
+	while _hole_areas.size() < hole_polys.size():
+		var a := Area2D.new()
+		a.collision_layer = 0
+		a.collision_mask = 1  # detect pieces
+		a.name = "HoleArea_%d" % _hole_areas.size()
+		board_zoom.add_child(a)
+
+		var cp := CollisionPolygon2D.new()
+		a.add_child(cp)
+
+		a.body_entered.connect(_on_hole_body_entered)
+		_hole_areas.append(a)
+		_hole_polys.append(cp)
+
+	for i in hole_polys.size():
+		_hole_areas[i].visible = DEBUG_DRAW_ZONES
+		_hole_polys[i].polygon = hole_polys[i]
+
+	for j in range(hole_polys.size(), _hole_areas.size()):
+		if is_instance_valid(_hole_areas[j]):
+			_hole_areas[j].queue_free()
+	if _hole_areas.size() > hole_polys.size():
+		_hole_areas = _hole_areas.slice(0, hole_polys.size())
+		_hole_polys = _hole_polys.slice(0, hole_polys.size())
+
+func _on_safe_area_body_exited(body: Node) -> void:
+	# Leaving the iceberg → die
+	if body is RigidBody2D and body.get_parent() == piece_container:
+		_kill_piece(body)
+
+func _on_hole_body_entered(body: Node) -> void:
+	# Entering a hole (map 2) → die
+	if body is RigidBody2D and body.get_parent() == piece_container:
+		_kill_piece(body)
+
+func _cull_pieces_after_shape_change(outer_poly: PackedVector2Array, hole_polys: Array[PackedVector2Array]) -> void:
+	# Run only when the board/map/zoom/size changes — NOT every frame.
+	for n in piece_container.get_children():
+		if not (n is RigidBody2D): continue
+		if n.has_meta("dying") and n.get_meta("dying"): continue
+
+		# Convert to BoardZoom local so we can test against our polygons directly
+		var p_local: Vector2 = board_zoom.to_local((n as RigidBody2D).global_position)
+
+		var inside := Geometry2D.is_point_in_polygon(p_local, outer_poly)
+		if not inside:
+			_kill_piece(n)
+			continue
+
+		if map_mode == 2:
+			for hp in hole_polys:
+				if Geometry2D.is_point_in_polygon(p_local, hp):
+					_kill_piece(n)
+					break
+
+
 func _recalc_board_base_scale_factor() -> void:
 	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
 	if not texrect or not is_instance_valid(texrect):
@@ -380,45 +440,9 @@ func _target_scale_for_index(i: int) -> float:
 	return _board_base_scale_factor * _board_scale_for_index(i)  # ratio*(base visual)
 
 
-func _physics_process(delta: float) -> void:
-	if not _board_initialized:
-		return
-	if _safe_polys_global.is_empty():
-		# Nothing to test yet
-		return
-
-	_kill_check_accum += delta
-	if _kill_check_accum < KILL_CHECK_INTERVAL:
-		return
-	_kill_check_accum = 0.0
-
-	# Broad-phase AABB first, polygon only if necessary
-	for n in piece_container.get_children():
-		if n is RigidBody2D:
-			var rb := n as RigidBody2D
-			if rb.has_meta("dying") and rb.get_meta("dying"): continue
-
-			var pos := rb.global_position
-
-			# If outside the broad outer bounds → instant kill
-			if _safe_bounds_global != Rect2() and not _safe_bounds_global.has_point(pos):
-				_kill_piece(rb)
-				continue
-
-			# Precise outer containment
-			var inside_safe := _point_in_any_safe_poly(pos)
-
-			var in_hole := false
-			if inside_safe and map_mode == 2 and not _unsafe_holes_global.is_empty():
-				# Optional faster early-out using hole AABBs
-				for i in _hole_bounds_global.size():
-					if _hole_bounds_global[i].has_point(pos):
-						if Geometry2D.is_point_in_polygon(pos, _unsafe_holes_global[i]):
-							in_hole = true
-							break
-
-			if (not inside_safe) or in_hole:
-				_kill_piece(rb)
+func _physics_process(_delta: float) -> void:
+	# Kill detection is event-driven now (Areas). Nothing to do per frame.
+	pass
 					
 func _get_poly_bounds(poly: PackedVector2Array) -> Rect2:
 	if poly.is_empty():
