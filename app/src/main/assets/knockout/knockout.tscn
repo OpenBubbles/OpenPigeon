@@ -321,12 +321,6 @@ stretch_mode = 4
 [node name="PieceContainer" type="Node2D" parent="VBoxContainer/Center/BoardInt/BoardZoom"]
 unique_name_in_owner = true
 
-[node name="SafeZonePolygon" type="Polygon2D" parent="VBoxContainer/Center/BoardInt/BoardZoom"]
-unique_name_in_owner = true
-visible = false
-z_index = 1695
-color = Color(0.12156863, 0.24705882, 1, 0.44313726)
-
 [node name="WinLossLabel" type="Label" parent="VBoxContainer/Center"]
 unique_name_in_owner = true
 visible = false
