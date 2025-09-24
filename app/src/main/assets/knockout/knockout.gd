@@ -37,7 +37,7 @@ const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_ani
 @onready var left_preserver := %LeftPreserver
 @onready var right_preserver := %RightPreserver
 @onready var safe_zone_polygon := %SafeZonePolygon
-@onready var _texrect: TextureRect = null
+@onready var _texrect := %TextureRect
 var _board_scale_node: Control = null   # our new, safe scaler parent for the board image
 
 # Debug/watch state
@@ -45,8 +45,7 @@ var _inside_our_scale_write := 0
 var _watch_prev_tr_scale := Vector2(-999, -999)
 var _watch_prev_sc_scale := Vector2(-999, -999)
 const LOGICAL_BOARD_SIZE := Vector2(360.0, 360.0)
-const ZOOM_AIM   := 1  # how large to look when aiming (tweak)
-const ZOOM_PLAY  := 1
+const ZOOM_START   := 1  # how large to look when aiming (tweak)
 const ZOOM_DUR   := 0.22 # seconds
 const PIECE_HEADING_OFFSET: float = -PI * 0.5
 
@@ -74,8 +73,7 @@ const ARROW_COLOR_MAP3 := Color(0.92, 0.92, 0.92, 1.0)
 const SEND_RED := Color("#d62828")
 const SEND_GREEN := Color("#14532d")
 
-const SHRINK_STEP := ZOOM_AIM - ZOOM_PLAY
-var current_scale: float = ZOOM_AIM
+var current_scale: float = ZOOM_START
 const DEBUG_KILL := true
 
 
@@ -156,6 +154,7 @@ func _apply_resize_refresh() -> void:
 	_target_physical_size = get_viewport_rect().size.x - 20.0
 	_recalc_board_base_scale_factor()
 	_apply_board_index_immediate(_current_board_index)
+	print("Call 157")
 	_refresh_safe_polys_for_transform()
 	_seed_area_overlaps()
 
@@ -272,19 +271,44 @@ func _apply_send_button_color_for_current_map() -> void:
 func _rebuild_base_polys_from_png(alpha_threshold: float = 0.1, simplify_epsilon: float = 1.5) -> void:
 	_base_iceberg_poly.clear()
 	_base_hole_polys.clear()
+	print("274 Call")
+	var texrect := _get_texrect()
+	if not is_instance_valid(texrect) or texrect.texture == null:
+		print("[POLY] No TextureRect/texture; skipping build")
+		return
 
-	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
-	if not is_instance_valid(texrect) or not is_instance_valid(texrect.texture): return
+	var img := _texture_to_image_or_fallback(texrect.texture)
 
-	var img: Image = texrect.texture.get_image()
-	if img.is_empty(): return
+	# Absolute last-resort fallback so debug/kill still work:
+	if img == null or img.is_empty():
+		var tex_px := Vector2(texrect.texture.get_size())  # renderer size is still known
+		if tex_px.x <= 0.0 or tex_px.y <= 0.0:
+			tex_px = LOGICAL_BOARD_SIZE
+		_base_iceberg_poly = PackedVector2Array([
+			Vector2(0, 0),
+			Vector2(tex_px.x, 0),
+			Vector2(tex_px.x, tex_px.y),
+			Vector2(0, tex_px.y),
+		])
+		print("[POLY] WARNING: get_image() empty; using full-rect fallback: ", tex_px)
+		return
 
+	# Build alpha mask and extract polygons
 	var bm := BitMap.new()
 	bm.create_from_image_alpha(img, alpha_threshold)
 
 	var rect_img := Rect2i(Vector2i.ZERO, img.get_size())
 	var contours: Array[PackedVector2Array] = bm.opaque_to_polygons(rect_img, simplify_epsilon)
-	if contours.is_empty(): return
+
+	if contours.is_empty():
+		print("[POLY] No opaque polygons found; using full-rect fallback.")
+		_base_iceberg_poly = PackedVector2Array([
+			Vector2(0, 0),
+			Vector2(img.get_width(), 0),
+			Vector2(img.get_width(), img.get_height()),
+			Vector2(0, img.get_height()),
+		])
+		return
 
 	# pick largest as outer
 	var best := contours[0]
@@ -296,27 +320,34 @@ func _rebuild_base_polys_from_png(alpha_threshold: float = 0.1, simplify_epsilon
 			best_area = a
 	_base_iceberg_poly = best
 
-	# holes are transparent islands *inside* the iceberg (map 2)
+	# Map 2: find transparent islands fully inside the iceberg
 	if map_mode == 2:
 		_base_hole_polys = _extract_holes_from_transparency(img, best, alpha_threshold, simplify_epsilon)
+	else:
+		_base_hole_polys.clear()
 
 	var bounding_rect: Rect2 = _get_poly_bounds(best)
 	print("BASE POLYGON BUILT (Image Coords): %s ; holes=%d" % [bounding_rect, _base_hole_polys.size()])
 
+
 # Recompute transformed (BoardZoom-local & global) polygons when transforms/layout change.
 func _refresh_safe_polys_for_transform() -> void:
 	# Build/refresh BoardZoom-local polygons and wire them to Areas (no per-frame tests).
+	_ensure_debug_preview_hosted_in_board_zoom()
 	if _base_iceberg_poly.is_empty():
 		if is_instance_valid(safe_zone_polygon):
 			safe_zone_polygon.polygon = PackedVector2Array()
+			print("311 Call")
 		# Tear down old areas if any
 		_destroy_safe_hole_areas()
+		print("313 CALL")
 		return
-
-	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
+	print("CALL 314")
+	var texrect := _get_texrect()
 	if not is_instance_valid(board_zoom) or not is_instance_valid(texrect) or not texrect.texture:
+		print("EXITING 316")
 		return
-
+	print("CALL 318")
 	# Map: Image space -> TextureRect draw space -> BoardZoom local
 	var xf: Transform2D = board_zoom.get_global_transform().affine_inverse() * texrect.get_global_transform()
 	var tex_draw_rect: Rect2 = _texrect_draw_rect(texrect, null)
@@ -380,6 +411,22 @@ func _refresh_safe_polys_for_transform() -> void:
 		_safe_debug_outline.points = final_poly
 		_set_hole_debug_polys(hole_locals)
 		_update_hole_outlines(hole_locals)
+		
+func _texture_to_image_or_fallback(tex: Texture2D) -> Image:
+	var img: Image = null
+	if tex:
+		img = tex.get_image()
+	# Fallback: load the source file directly (works even when VRAM-compressed)
+	if img == null or img.is_empty():
+		var path := tex.resource_path if tex else ""
+		if path != "":
+			var raw := Image.new()
+			var err := raw.load(path)
+			if err == OK and not raw.is_empty():
+				return raw
+		# Still nothing: return an empty Image so caller can decide what to do.
+		return Image.new()
+	return img
 	
 func _destroy_safe_hole_areas() -> void:
 	if is_instance_valid(_safe_area):
@@ -462,16 +509,19 @@ func _build_hole_areas(hole_polys: Array[PackedVector2Array]) -> void:
 		_hole_polys   = _hole_polys.slice(0, hole_polys.size())
 
 func _on_safe_area_body_exited(body: Node) -> void:
+	if not _kill_detection_enabled: return
 	if body is RigidBody2D and body.get_parent() == piece_container:
 		if DEBUG_KILL: print("[KILL] SafeArea.body_exited →", body.name)
 		_safe_kill(body)
 
 func _on_hole_body_entered(body: Node) -> void:
+	if not _kill_detection_enabled: return
 	if body is RigidBody2D and body.get_parent() == piece_container:
 		if DEBUG_KILL: print("[KILL] HoleArea.body_entered →", body.name)
 		_safe_kill(body)
 
 func _on_water_kill_body_entered(body: Node) -> void:
+	if not _kill_detection_enabled: return
 	if body is RigidBody2D and body.get_parent() == piece_container:
 		if DEBUG_KILL: print("[KILL] Water.body_entered →", body.name)
 		_safe_kill(body)
@@ -490,8 +540,8 @@ func _physics_process(delta: float) -> void:
 	_kill_check_accum += delta
 	if _kill_check_accum >= KILL_CHECK_INTERVAL:
 		_kill_check_accum = 0.0
-		_update_piece_center_debug_dots()  # <- always refresh when visible
-		if _replay_in_progress or _is_zooming or not _kill_detection_enabled:
+		_update_piece_center_debug_dots()  # only draws if debug is on
+		if not _kill_detection_enabled:
 			return
 		_fallback_kill_pass()
 
@@ -581,7 +631,7 @@ func _set_hole_debug_polys(hole_locals: Array[PackedVector2Array]) -> void:
 	# grow/reuse nodes
 	while _hole_debug_nodes.size() < hole_locals.size():
 		var p := Polygon2D.new()
-		p.z_index = 100
+		p.z_index = 502
 		p.color = Color(1, 0, 0, 0.35)  # red translucent
 		board_zoom.add_child(p)         # BoardZoom-local coords
 		_hole_debug_nodes.append(p)
@@ -597,19 +647,40 @@ func _set_hole_debug_polys(hole_locals: Array[PackedVector2Array]) -> void:
 			_hole_debug_nodes[j].visible = false
 			
 func _get_texrect() -> TextureRect:
-	if _texrect and is_instance_valid(_texrect):
+	if is_instance_valid(_texrect):
 		return _texrect
-	_texrect = game_board.get_node_or_null("TextureRect") as TextureRect
+
+	# If a BoardScaler already exists, prefer its child
+	var scaler := game_board.get_node_or_null("BoardScaler") as Control
+	if is_instance_valid(scaler):
+		_texrect = scaler.get_node_or_null("TextureRect") as TextureRect
+		if is_instance_valid(_texrect):
+			return _texrect
+
+	# Final fallback: recursive search
+	var any := game_board.find_child("TextureRect", true, false)
+	_texrect = any if (any is TextureRect) else null
 	return _texrect
 
 func _ensure_board_scaler() -> void:
 	if is_instance_valid(_board_scale_node):
 		return
-	var tex := _get_texrect()
-	if not is_instance_valid(tex):
+
+	# Use an existing BoardScaler if present
+	var existing := game_board.get_node_or_null("BoardScaler") as Control
+	if is_instance_valid(existing):
+		_board_scale_node = existing
+		_board_scale_node.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
+		if not is_instance_valid(_texrect):
+			_texrect = existing.get_node_or_null("TextureRect") as TextureRect
+		print("[SHRINK] Using existing BoardScaler.")
 		return
 
-	# Create a wrapper that we — and only we — will scale.
+	# Otherwise inject one
+	var tex := _get_texrect()
+	if not is_instance_valid(tex):
+		push_warning("[SHRINK] _ensure_board_scaler: no TextureRect to wrap.")
+		return
 	var wrapper := Control.new()
 	wrapper.name = "BoardScaler"
 	wrapper.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -618,14 +689,11 @@ func _ensure_board_scaler() -> void:
 	wrapper.pivot_offset          = LOGICAL_BOARD_SIZE * 0.5
 	game_board.add_child(wrapper)
 	game_board.move_child(wrapper, tex.get_index())
-
 	tex.reparent(wrapper)
 	tex.position = Vector2.ZERO
-	# keep the TextureRect itself at identity so outside code changing it is harmless
 	tex.scale = Vector2.ONE
-
 	_board_scale_node = wrapper
-	print("[SHRINK] BoardScaler injected. We'll scale this wrapper instead of TextureRect.")
+	print("[SHRINK] BoardScaler injected.")
 
 func _ready():
 	# Wait a single frame for the viewport size to be accurate before we do any calculations.
@@ -656,7 +724,7 @@ func _ready():
 	_wire_water_kill_areas()
 
 	# 3. Configure the TextureRect and BoardZoom nodes to use our logical size.
-	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
+	var texrect := _get_texrect()
 	if is_instance_valid(texrect):
 		texrect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		texrect.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -668,16 +736,17 @@ func _ready():
 		board_zoom.custom_minimum_size = LOGICAL_BOARD_SIZE
 		board_zoom.clip_contents = false
 		# BoardZoom's scale is now ONLY for gameplay zoom.
-		board_zoom.scale = Vector2.ONE * ZOOM_AIM
-		current_scale = ZOOM_AIM
+		board_zoom.scale = Vector2.ONE * ZOOM_START
+		current_scale = ZOOM_START
 		board_zoom.pivot_offset = board_zoom.custom_minimum_size * 0.5
 		board_zoom.resized.connect(func():
 			board_zoom.pivot_offset = board_zoom.size * 0.5
 		)
 	
 	piece_container.position = board_zoom.custom_minimum_size * 0.5
-	
-	_texrect = game_board.get_node_or_null("TextureRect") as TextureRect
+	_ensure_debug_preview_hosted_in_board_zoom()
+	_set_kill_debug_visible(true)
+	_ensure_kill_overlay()
 	_ensure_board_scaler()
 
 	
@@ -778,15 +847,16 @@ func _stage_after_local_play(next_idx: int) -> void:
 
 	_hide_all_arrows_and_refresh_highlights()
 
-	print("[SHRINK] staging: next_idx=", next_idx, " | step=", SHRINK_STEP)
-	current_scale = current_scale - SHRINK_STEP
-	print("[SHRINK] staging: calling _apply_zoom with target=", current_scale)
-	await _apply_zoom(current_scale, 0.18)
-	_dbg_board_state("staging after _apply_zoom")
+	# Do NOT zoom; only tween the board index (BoardScaler handles the image size)
+	var will_shrink := _clamp_board_index(next_idx) != _current_board_index
+	if will_shrink:
+		_set_kill_detection_enabled(false)
 
-	print("[SHRINK] staging: calling _tween_board_index_to -> ", next_idx)
-	await _tween_board_index_to(next_idx, 0.18)
-	_dbg_board_state("staging after _tween_board_index_to")
+	await _tween_board_index_to(next_idx, 0.18)  # re-enables inside
+
+	# Safety in case tween was a no-op (target == current)
+	if will_shrink and _kill_detection_enabled == false:
+		_set_kill_detection_enabled(true)
 
 	_staged_launch_mode = true
 	_staged_next_index = next_idx
@@ -1158,6 +1228,10 @@ func _set_kill_detection_enabled(on: bool) -> void:
 		if is_instance_valid(a):
 			a.set_deferred("monitoring", on)
 			a.set_deferred("monitorable", on)
+	for a in _water_kill_areas:
+		if is_instance_valid(a):
+			a.set_deferred("monitoring", on)
+			a.set_deferred("monitorable", on)
 
 func _recompute_send_button_visibility() -> void:
 	var should_show := (
@@ -1193,7 +1267,7 @@ func _apply_zoom(target_zoom_level: float, dur: float = ZOOM_DUR) -> void:
 
 	if DEBUG_SHRINK:
 		print("[SHRINK] _apply_zoom done  | bz.scale=", board_zoom.scale)
-
+	print("Call 1191")
 	_refresh_safe_polys_for_transform()
 	_seed_area_overlaps()
 	_set_kill_detection_enabled(true)
@@ -1205,7 +1279,7 @@ func _apply_map_theme(mode: int) -> void:
 			3: background.color = Color("#34f671")
 			_: _apply_bg_for_dark(bool(SettingsManager.get_setting("global", "dark_mode", false)))
 
-	var texrect := game_board.get_node_or_null("TextureRect") as TextureRect
+	var texrect := _get_texrect()
 	if texrect:
 		var new_tex: Texture2D = MAP1_TEX
 		match mode:
@@ -1216,6 +1290,7 @@ func _apply_map_theme(mode: int) -> void:
 			texrect.texture = new_tex
 			_rebuild_base_polys_from_png()
 			_apply_board_index_immediate(_current_board_index)
+			print("Call 1214")
 			_refresh_safe_polys_for_transform()
 
 
@@ -1417,37 +1492,30 @@ func _safe_kill(n: Node) -> void:
 		
 func _on_replay_round_finished() -> void:
 	_hide_all_arrows_and_refresh_highlights()
-
 	_replay_in_progress = false
 	_update_piece_interactivity()
 	_recompute_send_button_visibility()
 
-	# small delay to let physics/colliders settle
-	await get_tree().create_timer(0.05).timeout
-
-	# Determine next board index and snap pieces to the post snapshot if provided
 	var next_idx := _current_board_index + 1
 	if not last_post_round.is_empty():
-		print("[SHRINK] applying post snapshot for idx=", int(last_post_round.get("round", _current_board_index + 1)))
 		next_idx = int(last_post_round.get("round", _current_board_index + 1))
+
+	# Pause kills for the pre-shrink window
+	var will_shrink := _clamp_board_index(next_idx) != _current_board_index
+	if will_shrink:
+		_set_kill_detection_enabled(false)
+
+	await get_tree().create_timer(0.05).timeout
+
+	if not last_post_round.is_empty():
 		_apply_post_round_snapshot(last_post_round, next_idx)
 
-	# --- NEW: re-assert the correct baseline scale for the CURRENT index before any zoom ---
-	# This prevents the "grow" effect when something (layout/other code) reset the scaler to (1,1).
-	_apply_board_index_immediate(_current_board_index)
-	await get_tree().process_frame  # ensure transforms are up-to-date for accurate debug
-	_dbg_board_state("before zoom (post round)")
+	_dbg_board_state("before shrink tween")
+	await _tween_board_index_to(next_idx, 0.18)  # re-enables at the end
 
-	# Plan and apply gameplay zoom (AIM -> PLAY)
-	var target_zoom := current_scale - SHRINK_STEP
-	print("[SHRINK] planning zoom: current_scale ", current_scale, " -> ", target_zoom, " (step=", SHRINK_STEP, ")")
-	await _apply_zoom(target_zoom, 0.18)
-	_dbg_board_state("after _apply_zoom")
-
-	# Tween the actual board shrink (index change)
-	print("[SHRINK] tweening board index: ", _current_board_index, " -> ", next_idx, " (dur=0.18)")
-	await _tween_board_index_to(next_idx, 0.18)
-	_dbg_board_state("after _tween_board_index_to")
+	# Safety in case tween was a no-op
+	if will_shrink and _kill_detection_enabled == false:
+		_set_kill_detection_enabled(true)
 
 func _piece_is_moving(rb: RigidBody2D, v_thresh := 1.8, w_thresh := 0.10) -> bool:
 	if rb.has_meta("dying") and rb.get_meta("dying"):
@@ -1512,7 +1580,6 @@ func _apply_post_round_snapshot(post_board: Dictionary, board_idx: int = -1) -> 
 func _play_round_from_replay(pre_board: Dictionary) -> void:
 	print("[REPLAY] Starting round playback.")
 	_replay_in_progress = true
-	_set_kill_detection_enabled(false)
 	_update_piece_interactivity()
 	_stop_all_highlights()
 	_recompute_send_button_visibility()
@@ -1587,7 +1654,7 @@ func _apply_board_index_immediate(i: int) -> void:
 		print("[SHRINK] _apply_board_index_immediate | idx=", _current_board_index,
 			" | scaler.scale=", ( _board_scale_node.scale if is_instance_valid(_board_scale_node) else Vector2.ONE ),
 			" | texrect.scale=", ( texrect.scale if is_instance_valid(texrect) else Vector2.ONE ))
-
+	print("Call 1577")
 	_refresh_safe_polys_for_transform()
 
 func _tween_board_index_to(i: int, dur: float = 0.18) -> void:
@@ -1614,6 +1681,7 @@ func _tween_board_index_to(i: int, dur: float = 0.18) -> void:
 				_inside_our_scale_write += 1
 				scaler.scale = Vector2.ONE * lerp(s0, s1, t)
 				_inside_our_scale_write -= 1
+				print("Call 1604")
 				_refresh_safe_polys_for_transform(),
 			0.0, 1.0, dur
 		).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -1621,6 +1689,7 @@ func _tween_board_index_to(i: int, dur: float = 0.18) -> void:
 		_is_zooming = false
 
 	_current_board_index = target_idx
+	print("Call 1612")
 	_refresh_safe_polys_for_transform()
 	_seed_area_overlaps()
 	_set_kill_detection_enabled(true)
@@ -2284,20 +2353,20 @@ func _watch_board_nodes() -> void:
 	# BoardScaler.scale watcher (the one that actually drives board size)
 	if sc_s != _watch_prev_sc_scale:
 		if _inside_our_scale_write == 0:
+			# NEW: do not auto-restore while we are tweening/shrinking
+			if _is_zooming:
+				_watch_prev_sc_scale = sc_s
+				return
 			var expected := _target_scale_for_index(_current_board_index)
 			print("[WATCH-EXT] BoardScaler.scale changed EXTERNALLY -> ", sc_s,
 				" | expected=", expected, " | idx=", _current_board_index)
 			print_stack()
-			# Auto-restore to keep visuals correct
 			if absf(sc_s.x - expected) > 0.0005 or absf(sc_s.y - expected) > 0.0005:
 				print("[WATCH-EXT] Restoring BoardScaler.scale to expected: ", expected)
 				_inside_our_scale_write += 1
 				_board_scale_node.scale = Vector2.ONE * expected
 				_inside_our_scale_write -= 1
-				sc_s = _board_scale_node.scale
 		else:
-			# Likely our own tween/immediate set – quiet log (or comment this out)
-			# print("[WATCH] BoardScaler.scale changed -> ", sc_s, " (ours)")
 			pass
 
 		_watch_prev_sc_scale = sc_s
@@ -2315,13 +2384,14 @@ func _ensure_kill_overlay() -> void:
 	if not is_instance_valid(_kill_overlay_root):
 		_kill_overlay_root = Node2D.new()
 		_kill_overlay_root.name = "KillDebugOverlay"
-		_kill_overlay_root.z_index = 1000
+		_kill_overlay_root.z_index = 500     # <= always above everything
 		board_zoom.add_child(_kill_overlay_root)
 
 	if not is_instance_valid(_safe_debug_poly):
 		_safe_debug_poly = Polygon2D.new()
 		_safe_debug_poly.color = Color(0, 1, 0, 0.15)
 		_safe_debug_poly.visible = _kill_debug_showing
+		_safe_debug_poly.z_index = 501
 		_kill_overlay_root.add_child(_safe_debug_poly)
 
 	if not is_instance_valid(_safe_debug_outline):
@@ -2330,6 +2400,7 @@ func _ensure_kill_overlay() -> void:
 		_safe_debug_outline.default_color = Color(0, 1, 0, 0.8)
 		_safe_debug_outline.closed = true
 		_safe_debug_outline.visible = _kill_debug_showing
+		_safe_debug_outline.z_index = 502
 		_kill_overlay_root.add_child(_safe_debug_outline)
 
 func _set_kill_debug_visible(show: bool) -> void:
@@ -2407,3 +2478,18 @@ func _update_piece_center_debug_dots() -> void:
 	for j in range(idx, _center_debug_nodes.size()):
 		if is_instance_valid(_center_debug_nodes[j]):
 			_center_debug_nodes[j].visible = false
+
+func _ensure_debug_preview_hosted_in_board_zoom() -> void:
+	if is_instance_valid(safe_zone_polygon):
+		if safe_zone_polygon.get_parent() != board_zoom:
+			safe_zone_polygon.reparent(board_zoom)
+		if safe_zone_polygon is CanvasItem:
+			var ci := safe_zone_polygon as CanvasItem
+			ci.z_index = 999
+			ci.visible = DEBUG_DRAW_ZONES
+		# zero out local transforms so BoardZoom-local points line up
+		if safe_zone_polygon is Node2D:
+			var n2 := safe_zone_polygon as Node2D
+			n2.position = Vector2.ZERO
+			n2.rotation = 0.0
+			n2.scale = Vector2.ONE
