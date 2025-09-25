@@ -977,6 +977,13 @@ func send_game() -> void:
 		_recompute_send_button_visibility()
 		await _animate_and_fire_from_current_arrows()
 		_replay_in_progress = false
+		
+		if check_win():
+			_staged_launch_mode = false
+			_staged_pre_board_str = ""
+			_update_piece_interactivity()
+			_recompute_send_button_visibility()
+			return
 
 		# 3) Stage the "post" board at next index and let the player aim again.
 		var next_idx: int = int(min(_current_board_index + 1, BOARD_MAX_INDEX))
@@ -1491,8 +1498,18 @@ func _safe_kill(n: Node) -> void:
 		call_deferred("_kill_piece", n)
 		
 func _on_replay_round_finished() -> void:
+	# Hide arrows + drop replay flag
 	_hide_all_arrows_and_refresh_highlights()
 	_replay_in_progress = false
+
+	# NEW — check win BEFORE enabling re-aim or shrinking
+	if check_win():
+		# lock controls/UI because game_over is now true inside check_win()
+		_update_piece_interactivity()
+		_recompute_send_button_visibility()
+		return
+
+	# Not over → now allow interaction and continue with shrink
 	_update_piece_interactivity()
 	_recompute_send_button_visibility()
 
@@ -1500,7 +1517,6 @@ func _on_replay_round_finished() -> void:
 	if not last_post_round.is_empty():
 		next_idx = int(last_post_round.get("round", _current_board_index + 1))
 
-	# Pause kills for the pre-shrink window
 	var will_shrink := _clamp_board_index(next_idx) != _current_board_index
 	if will_shrink:
 		_set_kill_detection_enabled(false)
@@ -1513,7 +1529,6 @@ func _on_replay_round_finished() -> void:
 	_dbg_board_state("before shrink tween")
 	await _tween_board_index_to(next_idx, 0.18)  # re-enables at the end
 
-	# Safety in case tween was a no-op
 	if will_shrink and _kill_detection_enabled == false:
 		_set_kill_detection_enabled(true)
 
