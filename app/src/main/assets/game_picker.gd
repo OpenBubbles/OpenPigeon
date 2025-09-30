@@ -2,6 +2,7 @@ extends Control
 
 var games = {
 	"checkers": "res://checkers/checkers.tscn",
+	"chess": "res://chess/chess.tscn",
 	"connect": "res://connect/connect.tscn",
 	"basketball": "res://basketball/basketball.tscn",
 	"sea": "res://battleship/battleship.tscn",
@@ -23,6 +24,8 @@ func _ready() -> void:
 func _pressed() -> void:
 	if name == "CheckersButton":
 		get_tree().call_deferred("change_scene_to_file", games["checkers"])
+	elif name == "ChessButton":
+		get_tree().call_deferred("change_scene_to_file", games["chess"])
 	elif name == "ConnectFourButton":
 		get_tree().call_deferred("change_scene_to_file", games["connect"])
 	elif name == "BasketballButton":

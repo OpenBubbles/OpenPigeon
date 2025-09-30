@@ -59,6 +59,7 @@ import com.openbubbles.openpigeon.archery.ArcheryGame
 import com.openbubbles.openpigeon.basketball.BasketballGame
 import com.openbubbles.openpigeon.battleship.BattleshipGame
 import com.openbubbles.openpigeon.checkers.CheckersGame
+import com.openbubbles.openpigeon.chess.ChessGame
 import com.openbubbles.openpigeon.connect.ConnectGame
 import com.openbubbles.openpigeon.crazy8.Crazy8Game
 import com.openbubbles.openpigeon.darts.DartsGame
@@ -83,6 +84,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
         val games: List<Game> = listOf(
             CheckersGame(),
+            ChessGame(),
             WordHuntGame(),
             ConnectGame(),
             BasketballGame(),
