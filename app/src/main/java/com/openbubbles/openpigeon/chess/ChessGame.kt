@@ -13,7 +13,7 @@ class ChessGame : Game {
     override fun gameClass(): Class<*> = GodotGameActivity::class.java
 
     // Use a dedicated chess icon drawable for the poster shown in pickers/menus.
-    override fun gamePoster(config: Map<String, String>?): Int = R.drawable.chesssmall
+    override fun gamePoster(config: Map<String, String>?): Int = R.drawable.chess
     
     override fun getNewGameData(context: Context): MutableMap<String, String> {
         return super.getNewGameData(context).apply {
