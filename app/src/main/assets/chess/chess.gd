@@ -61,6 +61,8 @@ var king_overlays: Array = []        # 8x8 ColorRect overlays to highlight king-
 var highlighted: Array[Vector2i] = []          # list of positions being highlighted
 var selected: Vector2i = Vector2i(-1, -1)           # selected square or Vector2i(-1, -1) when none
 var legal_moves: Array[Vector2i] = []          # array of Vector2i targets for selected
+var opponent_last_move_from: Vector2i = Vector2i(-1, -1)  # opponent's last move origin square (for green highlight)
+var opponent_last_move_to: Vector2i = Vector2i(-1, -1)    # opponent's last move destination square (for green highlight)
 
 # Pulsing tween map for highlight overlays
 var pulse_tweens: Dictionary = {}  # Map[ColorRect, Tween]
@@ -110,6 +112,11 @@ var game_over_reason: String = ""  # "checkmate", "stalemate", "draw", etc.
 
 # Piece textures dictionary (maps piece codes to preloaded PNG textures)
 var PIECE_TEXTURES: Dictionary = {}
+
+# Animation constants and state
+const MOVE_ANIMATION_DURATION: float = 0.4  # seconds
+const MOVE_HOP_HEIGHT: float = 20.0         # pixels above board for hop arc (currently unused - flat slide animation)
+var is_animating: bool = false              # Blocks input during animation
 
 # ---------- Debug helpers ----------
 func _log(msg: String) -> void:
@@ -325,6 +332,7 @@ func _create_square_elements(r: int, f: int, rect: ColorRect, pieces_row: Array[
 	tex.size = board_piece_size
 	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tex.z_index = 10  # Pieces layer (above squares, below overlays)
 	add_child(tex)
 	pieces_row.append(tex)
 
@@ -336,6 +344,7 @@ func _create_square_elements(r: int, f: int, rect: ColorRect, pieces_row: Array[
 	ov.color = Color(0.2, 0.8, 0.2, 0.35)
 	ov.visible = false
 	ov.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ov.z_index = 20  # Overlays layer (above pieces)
 	add_child(ov)
 	move_overlays_row.append(ov)
 
@@ -346,6 +355,7 @@ func _create_square_elements(r: int, f: int, rect: ColorRect, pieces_row: Array[
 	k_ov.color = Color(0.9, 0.1, 0.1, 0.55)
 	k_ov.visible = false
 	k_ov.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	k_ov.z_index = 20  # Overlays layer (above pieces)
 	add_child(k_ov)
 	king_overlays_row.append(k_ov)
 
@@ -400,14 +410,16 @@ func _build_board_ui() -> void:
 	board_border.position = BOARD_ORIGIN - Vector2(BORDER_THICK, BORDER_THICK)
 	board_border.size = Vector2(board_w + 2.0 * BORDER_THICK, board_h + 2.0 * BORDER_THICK)
 	board_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	board_border.z_index = -2  # Bottom layer (below everything)
 	add_child(board_border)
-	
+
 	# Inner black border between brown border and board
 	black_border = ColorRect.new()
 	black_border.color = Color(0,0,0)
 	black_border.position = BOARD_ORIGIN - Vector2(BLACK_THICK, BLACK_THICK)
 	black_border.size = Vector2(board_w + 2.0 * BLACK_THICK, board_h + 2.0 * BLACK_THICK)
 	black_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	black_border.z_index = -1  # Second layer (above brown border, below squares)
 	add_child(black_border)
 	
 	# Build board squares, piece rects, move overlays, and king overlays
@@ -425,6 +437,7 @@ func _build_board_ui() -> void:
 			var light: Color = Color(240.0/255.0, 217.0/255.0, 181.0/255.0)
 			var dark: Color = Color(181.0/255.0, 136.0/255.0, 99.0/255.0)
 			rect.color = dark if ((f + r) % 2 == 0) else light
+			rect.z_index = 0  # Board squares layer (above borders, below pieces)
 			add_child(rect)
 			squares_row.append(rect)
 
@@ -439,14 +452,14 @@ func _build_board_ui() -> void:
 	# Coordinate labels: files and ranks inside the border gutter
 	
 	# File letters (a–h) along the bottom, centered within bottom border area
-	# When flip_board_ui is true (Player 2/White), reverse the file order (h-a)
+	# When flip_board_ui is true (Black player), reverse the file order (h-a)
 	var files_font_size: int = int(maxf(12.0, SQUARE_SIZE * 0.22))
 	var file_label_h: float = maxf(12.0, SQUARE_SIZE * 0.28)
 	var bottom_y: float = BOARD_ORIGIN.y + board_h
 	var file_y: float = bottom_y + (BORDER_THICK - file_label_h) * 0.5
 	for f_idx in range(8):
 		var fl: Label = Label.new()
-		# Flip file labels when board is flipped (Player 2/White views from bottom)
+		# Flip file labels when board is flipped (Black player views board from top, sees h-a left to right)
 		var file_index: int = (7 - f_idx) if flip_board_ui else f_idx
 		fl.text = FILE_RANKS[file_index]
 		fl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -460,14 +473,14 @@ func _build_board_ui() -> void:
 	_log("_build_board_ui: file labels created with flip_board_ui=%s (order: %s)" % [str(flip_board_ui), "h-a" if flip_board_ui else "a-h"])
 	
 	# Rank numbers (1–8) along the left, centered within left border area
-	# When flip_board_ui is false (Player 1/Black): 8 at top, 1 at bottom
-	# When flip_board_ui is true (Player 2/White): 1 at top, 8 at bottom
+	# When flip_board_ui is false (White player): 8 at top, 1 at bottom (standard chess orientation)
+	# When flip_board_ui is true (Black player): 1 at top, 8 at bottom (flipped orientation)
 	var ranks_font_size: int = int(maxf(12.0, SQUARE_SIZE * 0.22))
 	var rank_label_w: float = maxf(12.0, SQUARE_SIZE * 0.24)
 	var left_border_left: float = BOARD_ORIGIN.x - BORDER_THICK
 	for i in range(8):
 		var rl: Label = Label.new()
-		# Adjust rank numbering based on board orientation
+		# Adjust rank numbering based on board orientation (White: 8→1 top to bottom, Black: 1→8 top to bottom)
 		var rank_number: int = (i + 1) if flip_board_ui else (8 - i)
 		rl.text = str(rank_number)
 		rl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -662,6 +675,15 @@ func _refresh_board_ui() -> void:
 			var code: String = board[r][f]
 			var tex: Texture2D = _get_piece_texture(code)
 			pieces[r][f].texture = tex
+
+			# Reset piece position and scale (critical for undo and post-animation state)
+			# This ensures pieces are at their correct grid positions even if animation was interrupted
+			var square: ColorRect = squares[r][f]
+			var board_piece_size: Vector2 = Vector2(SQUARE_SIZE * 0.9, SQUARE_SIZE * 0.9)
+			var correct_pos: Vector2 = square.position + (square.size - board_piece_size) * 0.5 + Vector2(-SQUARE_SIZE * 0.25, -SQUARE_SIZE * 0.35)
+			pieces[r][f].position = correct_pos
+			pieces[r][f].scale = Vector2.ONE
+
 			# Reset default modulate
 			squares[r][f].modulate = Color(1,1,1)
 			# Hide overlays by default and stop pulsing
@@ -685,6 +707,19 @@ func _refresh_board_ui() -> void:
 		ov.color = (Color(0.9, 0.1, 0.1, 0.45) if is_capture else Color(0.2, 0.6, 1.0, 0.33))
 		ov.visible = true
 		_start_pulse(ov)
+
+	# Opponent's last move highlights (green with pulse)
+	if opponent_last_move_from != Vector2i(-1, -1):
+		var from_ov: ColorRect = move_overlays[opponent_last_move_from.y][opponent_last_move_from.x]
+		from_ov.color = Color(0.2, 0.8, 0.2, 0.4)  # Green for opponent's origin square
+		from_ov.visible = true
+		_start_pulse(from_ov)
+
+	if opponent_last_move_to != Vector2i(-1, -1):
+		var to_ov: ColorRect = move_overlays[opponent_last_move_to.y][opponent_last_move_to.x]
+		to_ov.color = Color(0.2, 0.8, 0.2, 0.4)  # Green for opponent's destination square
+		to_ov.visible = true
+		_start_pulse(to_ov)
 
 	# If the side-to-move is in check, highlight the king square and dim pieces without legal moves
 	var side_to_move: String = turn
@@ -844,6 +879,10 @@ func _on_promotion_choice(piece: String) -> void:
 		pending_snapshot = _snapshot()
 		pending_origin_square = promotion_pending_from
 		pending_destination_square = promotion_pending_to
+
+		# Animate the promotion move
+		await _animate_player_move(promotion_pending_from, promotion_pending_to)
+
 		_execute_move(promotion_pending_from, promotion_pending_to)
 		_show_undo_arrow(pending_origin_square)
 		# Send button enabled after move
@@ -912,6 +951,9 @@ func _can_interact() -> bool:
 	if game_over:
 		#_log("_can_interact -> false (game over)")
 		return false
+	if is_animating:
+		#_log("_can_interact -> false (animation in progress)")
+		return false
 	if local_mode:
 		# local mode: allow interacting with the board for both sides
 		#_log("_can_interact -> true (local_mode)")
@@ -922,7 +964,12 @@ func _can_interact() -> bool:
 
 func _on_tap(pos: Vector2) -> void:
 	_log("_on_tap at pos=%s" % str(pos))
-	
+
+	# Block all input during animation
+	if is_animating:
+		_log("_on_tap: blocked during animation")
+		return
+
 	# If awaiting promotion choice, check if user clicked on promotion pieces
 	if awaiting_promotion and is_instance_valid(promotion_dialog) and promotion_dialog.visible:
 		# Check if click is on promotion dialog pieces
@@ -1023,6 +1070,10 @@ func _on_tap(pos: Vector2) -> void:
 				pending_snapshot = _snapshot()
 				pending_origin_square = selected
 				pending_destination_square = Vector2i(f, r)
+
+				# Animate the move before executing it on the board
+				await _animate_player_move(selected, pending_destination_square)
+
 				_execute_move(selected, pending_destination_square)
 				_show_undo_arrow(pending_origin_square)
 				# Send button enabled after move (visible in all modes for testing)
@@ -1142,17 +1193,57 @@ func parse_gp_replay(replay: String) -> void:
 	_log("parse_gp_replay: '%s'" % replay)
 	var parts: PackedStringArray = replay.split("|")
 
-	# Find the last board state (current position)
+	# Extract previous board, move coordinates, and current board
+	var prev_board: String = ""
 	var current_board: String = ""
-	for i in range(parts.size() - 1, -1, -1):
-		if parts[i].begins_with("board:"):
-			current_board = parts[i].substr(6)
-			break
+	var move_coords: PackedStringArray = PackedStringArray()
+
+	for part in parts:
+		if part.begins_with("board:"):
+			var board_data: String = part.substr(6)
+			if prev_board == "":
+				prev_board = board_data
+			else:
+				current_board = board_data
+		elif part.begins_with("move:"):
+			var move_data: String = part.substr(5)
+			move_coords = move_data.split(",")
 
 	if current_board == "":
 		_log("parse_gp_replay: no board state found in replay")
 		return
 
+	# If we have move coordinates, animate the move
+	if move_coords.size() == 4 and prev_board != "":
+		var from_f: int = int(move_coords[0])
+		var from_r: int = int(move_coords[1])
+		var to_f: int = int(move_coords[2])
+		var to_r: int = int(move_coords[3])
+
+		# Store opponent's last move for green highlighting
+		opponent_last_move_from = Vector2i(from_f, from_r)
+		opponent_last_move_to = Vector2i(to_f, to_r)
+		_log("parse_gp_replay: stored opponent last move %s -> %s" % [
+			_square_name(opponent_last_move_from),
+			_square_name(opponent_last_move_to)
+		])
+
+		_log("parse_gp_replay: animating move %s -> %s" % [
+			_square_name(Vector2i(from_f, from_r)),
+			_square_name(Vector2i(to_f, to_r))
+		])
+
+		# Set board to previous state for animation
+		gp_array_to_board(prev_board)
+		if _ui_ready():
+			_refresh_board_ui()
+
+		# Animate the opponent's move
+		await _animate_opponent_move(Vector2i(from_f, from_r), Vector2i(to_f, to_r), current_board)
+	else:
+		_log("parse_gp_replay: no move data, just updating to current board (initial position)")
+
+	# Set final board state
 	gp_array_to_board(current_board)
 	# Note: We don't parse turn, castling, etc. from GamePigeon format
 	# These would need to be inferred or passed separately
@@ -1174,6 +1265,208 @@ func to_position_key() -> String:
 	Includes board state, turn, castling rights, and en passant target."""
 	var board_gp: String = board_to_gp_array()
 	return "%s %s %s %s" % [board_gp, turn, castling if castling != "" else "-", en_passant]
+
+# ---------- Animation Functions ----------
+
+func _create_piece_tween(from_rank: int, from_file: int, to_rank: int, to_file: int) -> Tween:
+	"""Create and return a Tween for animating a piece move with smooth sliding motion.
+	Does NOT await the tween - caller must await tween.finished.
+	Returns null if animation cannot be created."""
+
+	if not _ui_ready():
+		_log("_create_piece_tween: UI not ready, cannot create tween")
+		return null
+
+	var piece_tex: TextureRect = pieces[from_rank][from_file]
+	if piece_tex == null or piece_tex.texture == null:
+		_log("_create_piece_tween: no piece at source %s, cannot create tween" % _square_name(Vector2i(from_file, from_rank)))
+		return null
+
+	_log("_create_piece_tween: creating tween for %s -> %s" % [_square_name(Vector2i(from_file, from_rank)), _square_name(Vector2i(to_file, to_rank))])
+
+	# Store start and end positions
+	var start_pos: Vector2 = piece_tex.position
+	var end_pos: Vector2 = pieces[to_rank][to_file].position
+
+	# Create tween for the animation
+	var tween: Tween = create_tween()
+	tween.set_parallel(true)  # Run position and scale animations in parallel
+
+	# Smooth slide animation (flat, no arc) from start to end position
+	tween.tween_property(piece_tex, "position", end_pos, MOVE_ANIMATION_DURATION)\
+		.set_trans(Tween.TRANS_SINE)\
+		.set_ease(Tween.EASE_IN_OUT)
+
+	# Optional: Add slight scale bounce for polish
+	tween.tween_property(piece_tex, "scale", Vector2(1.1, 1.1), MOVE_ANIMATION_DURATION * 0.5)\
+		.set_trans(Tween.TRANS_BACK)\
+		.set_ease(Tween.EASE_OUT)
+
+	# Chain the scale-back animation after scale-up
+	tween.chain()
+	tween.tween_property(piece_tex, "scale", Vector2.ONE, MOVE_ANIMATION_DURATION * 0.5)\
+		.set_trans(Tween.TRANS_BACK)\
+		.set_ease(Tween.EASE_IN)
+
+	# Add cleanup callback when tween finishes
+	tween.finished.connect(func():
+		piece_tex.position = end_pos
+		piece_tex.scale = Vector2.ONE
+		_log("_create_piece_tween: tween finished for %s" % _square_name(Vector2i(to_file, to_rank)))
+	)
+
+	return tween
+
+func _animate_piece_move(from_rank: int, from_file: int, to_rank: int, to_file: int) -> void:
+	"""Animate a piece moving from one square to another with smooth sliding motion.
+	Sets is_animating flag during animation."""
+
+	var tween: Tween = _create_piece_tween(from_rank, from_file, to_rank, to_file)
+	if tween == null:
+		_log("_animate_piece_move: failed to create tween, skipping animation")
+		return
+
+	is_animating = true
+	_log("_animate_piece_move: animating %s -> %s" % [_square_name(Vector2i(from_file, from_rank)), _square_name(Vector2i(to_file, to_rank))])
+
+	# Wait for animation to complete
+	await tween.finished
+
+	is_animating = false
+	_log("_animate_piece_move: animation complete")
+
+func _animate_castling(king_from_rank: int, king_from_file: int, king_to_rank: int, king_to_file: int,
+                      rook_from_rank: int, rook_from_file: int, rook_to_rank: int, rook_to_file: int) -> void:
+	"""Animate both king and rook moving simultaneously during castling."""
+
+	if not _ui_ready():
+		_log("_animate_castling: UI not ready, skipping animation")
+		return
+
+	_log("_animate_castling: king %s->%s, rook %s->%s" % [
+		_square_name(Vector2i(king_from_file, king_from_rank)),
+		_square_name(Vector2i(king_to_file, king_to_rank)),
+		_square_name(Vector2i(rook_from_file, rook_from_rank)),
+		_square_name(Vector2i(rook_to_file, rook_to_rank))
+	])
+
+	is_animating = true
+
+	# Create both tweens (they start immediately and run in parallel)
+	var king_tween: Tween = _create_piece_tween(king_from_rank, king_from_file, king_to_rank, king_to_file)
+	var rook_tween: Tween = _create_piece_tween(rook_from_rank, rook_from_file, rook_to_rank, rook_to_file)
+
+	# Check if both tweens were created successfully
+	if king_tween == null or rook_tween == null:
+		_log("_animate_castling: failed to create one or both tweens, aborting")
+		is_animating = false
+		return
+
+	# Wait for both to complete (they run in parallel)
+	await king_tween.finished
+	await rook_tween.finished
+
+	is_animating = false
+	_log("_animate_castling: both animations complete")
+
+func _animate_player_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
+	"""Detect move type and animate appropriately for player moves.
+	Handles castling, en passant, captures, and normal moves."""
+
+	if not _ui_ready():
+		_log("_animate_player_move: UI not ready, skipping animation")
+		return
+
+	var moving: String = board[from_sq.y][from_sq.x]
+	var target: String = board[to_sq.y][to_sq.x]
+	var side: String = moving[0]
+	var piece_type: String = moving[1]
+
+	_log("_animate_player_move: %s from %s to %s" % [moving, _square_name(from_sq), _square_name(to_sq)])
+
+	# Detect castling (king moves 2 squares)
+	if piece_type == "K" and abs(to_sq.x - from_sq.x) == 2:
+		_log("_animate_player_move: detected castling")
+		var is_kingside: bool = (to_sq.x == 6)
+		var rook_from_file: int = 7 if is_kingside else 0
+		var rook_to_file: int = 5 if is_kingside else 3
+		await _animate_castling(from_sq.y, from_sq.x, to_sq.y, to_sq.x,
+		                        from_sq.y, rook_from_file, to_sq.y, rook_to_file)
+		return
+
+	# Detect en passant (pawn diagonal move to empty square)
+	var is_en_passant: bool = false
+	if piece_type == "P" and target == "" and from_sq.x != to_sq.x:
+		is_en_passant = true
+		_log("_animate_player_move: detected en passant")
+		# Hide the captured pawn (one rank behind destination)
+		var dir: int = 1 if side == "w" else -1
+		var captured_rank: int = to_sq.y - dir
+		if _ui_ready() and pieces[captured_rank][to_sq.x].texture != null:
+			pieces[captured_rank][to_sq.x].texture = null
+			_log("_animate_player_move: hid captured pawn at %s" % _square_name(Vector2i(to_sq.x, captured_rank)))
+
+	# Detect capture (hide captured piece before animation)
+	if target != "" and not is_en_passant:
+		_log("_animate_player_move: detected capture of %s" % target)
+		if _ui_ready():
+			pieces[to_sq.y][to_sq.x].texture = null
+			_log("_animate_player_move: hid captured piece at %s" % _square_name(to_sq))
+
+	# Animate the moving piece
+	await _animate_piece_move(from_sq.y, from_sq.x, to_sq.y, to_sq.x)
+
+func _animate_opponent_move(from_sq: Vector2i, to_sq: Vector2i, final_board_gp: String) -> void:
+	"""Animate opponent's move during replay.
+	Board is currently set to previous state. final_board_gp contains the state after the move."""
+
+	if not _ui_ready():
+		_log("_animate_opponent_move: UI not ready, skipping animation")
+		return
+
+	var moving: String = board[from_sq.y][from_sq.x]
+	var target: String = board[to_sq.y][to_sq.x]
+
+	if moving == "":
+		_log("_animate_opponent_move: ERROR - no piece at source square %s" % _square_name(from_sq))
+		return
+
+	var side: String = moving[0]
+	var piece_type: String = moving[1]
+
+	_log("_animate_opponent_move: %s from %s to %s" % [moving, _square_name(from_sq), _square_name(to_sq)])
+
+	# Detect castling (king moves 2 squares)
+	if piece_type == "K" and abs(to_sq.x - from_sq.x) == 2:
+		_log("_animate_opponent_move: detected castling")
+		var is_kingside: bool = (to_sq.x == 6)
+		var rook_from_file: int = 7 if is_kingside else 0
+		var rook_to_file: int = 5 if is_kingside else 3
+		await _animate_castling(from_sq.y, from_sq.x, to_sq.y, to_sq.x,
+		                        from_sq.y, rook_from_file, to_sq.y, rook_to_file)
+		return
+
+	# Detect en passant (pawn diagonal move to empty square)
+	var is_en_passant: bool = false
+	if piece_type == "P" and target == "" and from_sq.x != to_sq.x:
+		is_en_passant = true
+		_log("_animate_opponent_move: detected en passant")
+		# Hide the captured pawn (one rank behind destination)
+		var dir: int = 1 if side == "w" else -1
+		var captured_rank: int = to_sq.y - dir
+		if _ui_ready() and pieces[captured_rank][to_sq.x].texture != null:
+			pieces[captured_rank][to_sq.x].texture = null
+			_log("_animate_opponent_move: hid captured pawn at %s" % _square_name(Vector2i(to_sq.x, captured_rank)))
+
+	# Detect capture (hide captured piece before animation)
+	if target != "" and not is_en_passant:
+		_log("_animate_opponent_move: detected capture of %s" % target)
+		if _ui_ready():
+			pieces[to_sq.y][to_sq.x].texture = null
+			_log("_animate_opponent_move: hid captured piece at %s" % _square_name(to_sq))
+
+	# Animate the moving piece
+	await _animate_piece_move(from_sq.y, from_sq.x, to_sq.y, to_sq.x)
 
 func _in_bounds(f: int, r: int) -> bool:
 	return f >= 0 and f < 8 and r >= 0 and r < 8
@@ -1492,6 +1785,11 @@ func _commit_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 
 	_count_position()
 	_debug_state("after_commit")
+
+	# Clear opponent's last move highlights (player is making their move now)
+	opponent_last_move_from = Vector2i(-1, -1)
+	opponent_last_move_to = Vector2i(-1, -1)
+	_log("_commit_move: cleared opponent last move highlights")
 
 	# Determine game end conditions
 	var winner_decl = null
