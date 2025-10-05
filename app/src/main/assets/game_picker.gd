@@ -1,6 +1,6 @@
 extends Control
 
-var games = {
+var games: Dictionary = {
 	"checkers": "res://checkers/checkers.tscn",
 	"chess": "res://chess/chess.tscn",
 	"connect": "res://connect/connect.tscn",

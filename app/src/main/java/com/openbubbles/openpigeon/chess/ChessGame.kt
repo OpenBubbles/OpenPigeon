@@ -6,36 +6,30 @@ import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.godot.GodotGameActivity
 
 class ChessGame : Game {
-    override fun getVersion(): String {
-        return "5"
-    }
+    override fun getVersion(): String = "1"
+    override fun getName(): String = "chess"
+    override fun displayName(): String = "Chess"
 
-    override fun getName(): String {
-        return "chess"
-    }
+    override fun gameClass(): Class<*> = GodotGameActivity::class.java
 
-    override fun displayName(): String {
-        return "Chess"
-    }
-
-    override fun gameClass(): Class<*> {
-        return GodotGameActivity::class.java
-    }
-
-    // Reuse the checkers poster until a dedicated chess image is added
-    override fun gamePoster(config: Map<String, String>?): Int {
-        return R.drawable.chess
-    }
-
+    // Use a dedicated chess icon drawable for the poster shown in pickers/menus.
+    override fun gamePoster(config: Map<String, String>?): Int = R.drawable.chesssmall
+    
     override fun getNewGameData(context: Context): MutableMap<String, String> {
         return super.getNewGameData(context).apply {
-            // Placeholder options for parity with other games
-            putIfAbsent("mode", "n")
+            put("replay", getDefaultReplay())
         }
     }
-
+    
     override fun getDefaultReplay(): String {
-        // No predefined replay for Chess yet
-        return ""
+        // Initial chess position in GamePigeon format
+        // Board representation: 64-element flat array (index = file + rank*8)
+        // Piece encoding: 0=empty, white: 11=P,12=R,13=N,14=B,15=Q,16=K, black: 21=P,22=R,23=N,24=B,25=Q,26=K
+        // Rank 1: white back row (R,N,B,Q,K,B,N,R)
+        // Rank 2: white pawns
+        // Ranks 3-6: empty
+        // Rank 7: black pawns
+        // Rank 8: black back row (r,n,b,q,k,b,n,r)
+        return "board:12,13,14,15,16,14,13,12,11,11,11,11,11,11,11,11,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,21,21,21,21,21,21,21,21,22,23,24,25,26,24,23,22"
     }
 }
