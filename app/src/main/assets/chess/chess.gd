@@ -709,13 +709,14 @@ func _refresh_board_ui() -> void:
 		_start_pulse(ov)
 
 	# Opponent's last move highlights (green with pulse)
-	if opponent_last_move_from != Vector2i(-1, -1):
+	# Skip if the square is a legal destination (red/blue highlights take priority)
+	if opponent_last_move_from != Vector2i(-1, -1) and opponent_last_move_from not in highlighted:
 		var from_ov: ColorRect = move_overlays[opponent_last_move_from.y][opponent_last_move_from.x]
 		from_ov.color = Color(0.2, 0.8, 0.2, 0.4)  # Green for opponent's origin square
 		from_ov.visible = true
 		_start_pulse(from_ov)
 
-	if opponent_last_move_to != Vector2i(-1, -1):
+	if opponent_last_move_to != Vector2i(-1, -1) and opponent_last_move_to not in highlighted:
 		var to_ov: ColorRect = move_overlays[opponent_last_move_to.y][opponent_last_move_to.x]
 		to_ov.color = Color(0.2, 0.8, 0.2, 0.4)  # Green for opponent's destination square
 		to_ov.visible = true
