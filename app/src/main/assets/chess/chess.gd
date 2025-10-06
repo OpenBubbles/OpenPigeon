@@ -117,6 +117,7 @@ var PIECE_TEXTURES: Dictionary = {}
 const MOVE_ANIMATION_DURATION: float = 0.4  # seconds
 const MOVE_HOP_HEIGHT: float = 20.0         # pixels above board for hop arc (currently unused - flat slide animation)
 var is_animating: bool = false              # Blocks input during animation
+var is_processing_game_data: bool = false   # Prevents concurrent _set_game_data() calls
 
 # ---------- Debug helpers ----------
 func _log(msg: String) -> void:
@@ -143,6 +144,15 @@ func _ready() -> void:
 		if not appPlugin.is_connected("set_game_data", _set_game_data):
 			appPlugin.connect("set_game_data", _set_game_data)
 		my_player_id = appPlugin.getSenderUUID()
+		# Initialize board with starting position to ensure pieces show immediately
+		# This prevents empty board when creating a new game
+		gp_array_to_board("12,13,14,15,16,14,13,12,11,11,11,11,11,11,11,11,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,21,21,21,21,21,21,21,21,22,23,24,25,26,24,23,22")
+		turn = "w"
+		castling = "KQkq"
+		en_passant = "-"
+		halfmove = 0
+		fullmove = 1
+		_update_turn_flags()
 		appPlugin.onReady()
 	else:
 		_log("No AppPlugin (local debug). Setting local defaults.")
@@ -166,7 +176,15 @@ func _ready() -> void:
 
 func _set_game_data(raw: String) -> void:
 	_log("_set_game_data invoked; raw length=%d" % raw.length())
+
+	# Prevent concurrent executions to avoid race conditions with animations and UI rebuilds
+	if is_processing_game_data:
+		_log("_set_game_data: already processing, ignoring concurrent call")
+		return
+	is_processing_game_data = true
+
 	var orientation_changed: bool = false  # Track if board orientation changes
+	var ui_already_rebuilt: bool = false  # Track if we rebuilt UI early (before animation)
 	var data: Variant = JSON.parse_string(raw)
 	_log("_set_game_data parse result type=%s" % typeof(data))
 	if typeof(data) == TYPE_DICTIONARY:
@@ -201,17 +219,25 @@ func _set_game_data(raw: String) -> void:
 
 		_log("_set_game_data: PLAYER ASSIGNMENT -> my_player_index=%d enemy_player_index=%d my_color=%s flip_board_ui=%s" % [my_player_index, enemy_player_index, my_color, str(flip_board_ui)])
 		_log("_set_game_data: BOARD ORIENTATION -> %s pieces at bottom, %s pieces at top (changed: %s)" % ["Black" if flip_board_ui else "White", "White" if flip_board_ui else "Black", str(orientation_changed)])
-		
+
+		# If orientation changed, rebuild UI NOW (before animation) to prevent jarring flip
+		if orientation_changed and _ui_ready():
+			_log("_set_game_data: Rebuilding UI with new orientation BEFORE animation...")
+			_compute_sizes()
+			_build_board_ui()
+			_refresh_board_ui()
+			ui_already_rebuilt = true
+
 		my_player_id = str(data.get("myPlayerId", my_player_id))
 		_log("_set_game_data my_player_id=%s" % my_player_id)
-		
+
 		# Parse the game state - GamePigeon format only
 		var replay = str(data.get("replay", ""))
 		_log("_set_game_data replay='%s'" % replay)
 		if replay.begins_with("board:") or replay.find("|board:") != -1:
 			# GamePigeon format
 			_log("_set_game_data: detected GamePigeon format")
-			parse_gp_replay(replay)
+			await parse_gp_replay(replay)
 		else:
 			# If not provided, ensure at least initial state (GamePigeon format)
 			if board.is_empty():
@@ -234,8 +260,9 @@ func _set_game_data(raw: String) -> void:
 	_debug_state("_set_game_data end")
 
 	# If orientation changed AND UI already built, rebuild it with new orientation
+	# (Skip if we already rebuilt earlier before animation to prevent jarring flip)
 	# Otherwise, if UI already built, just refresh it. Otherwise, build for first time.
-	if orientation_changed and _ui_ready():
+	if orientation_changed and _ui_ready() and not ui_already_rebuilt:
 		_log("_set_game_data: Board orientation changed! Rebuilding UI with new orientation...")
 		_compute_sizes()
 		_build_board_ui()
@@ -252,6 +279,9 @@ func _set_game_data(raw: String) -> void:
 	# Update the waiting label to show/hide based on current state
 	_update_waiting_label()
 	_log("_set_game_data finished")
+
+	# Release the guard flag to allow next call
+	is_processing_game_data = false
 
 func _update_turn_flags() -> void:
 	# canonicalize interaction flags based on board 'turn' and local 'my_color'
@@ -361,6 +391,16 @@ func _create_square_elements(r: int, f: int, rect: ColorRect, pieces_row: Array[
 
 func _build_board_ui() -> void:
 	_log("_build_board_ui start")
+
+	# Stop all pulse animations before freeing UI elements to prevent tween warnings
+	var tween_count: int = pulse_tweens.size()
+	for ov in pulse_tweens.keys():
+		var tw: Tween = pulse_tweens[ov]
+		if is_instance_valid(tw):
+			tw.kill()
+	pulse_tweens.clear()
+	_log("_build_board_ui: stopped and cleared %d pulse tweens" % tween_count)
+
 	# free previous UI if needed
 	for r in squares:
 		for c in r:
@@ -510,18 +550,23 @@ func _build_board_ui() -> void:
 		game_over_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(game_over_label)
 
-	# Style / position labels (simple; adjust fonts in editor if desired)
-	check_label.position = Vector2(20, 10)
-	check_label.size = Vector2(400, 40)
+	# Style / position labels (positioned below board instead of top)
+	# Note: board_w is already declared earlier in this function (line 414)
+	var check_label_y: float = BOARD_ORIGIN.y + board_w + BORDER_THICK + 5.0
+	check_label.position = Vector2(BOARD_ORIGIN.x, check_label_y)
+	check_label.size = Vector2(board_w, 40)
 	check_label.add_theme_font_size_override("font_size", 28)
 	check_label.add_theme_color_override("font_color", Color(1,0.1,0.1))
+	check_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	check_label.text = ""
 	check_label.visible = false
 
-	game_over_label.position = Vector2(20, 50)
-	game_over_label.size = Vector2(800, 60)
+	var game_over_label_y: float = check_label_y + 45.0
+	game_over_label.position = Vector2(BOARD_ORIGIN.x - 100, game_over_label_y)
+	game_over_label.size = Vector2(board_w + 200, 60)
 	game_over_label.add_theme_font_size_override("font_size", 32)
 	game_over_label.add_theme_color_override("font_color", Color(0.9,0.2,0.2))
+	game_over_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	game_over_label.text = ""
 	game_over_label.visible = false
 
@@ -614,12 +659,13 @@ func _build_board_ui() -> void:
 	# Get the Send button from the scene and reposition it
 	send_button = get_node("SendButton")
 	if send_button:
-		# Calculate dynamic size and position based on board dimensions
-		var btn_w: float = maxf(96.0, SQUARE_SIZE * 1.8)
-		var btn_h: float = maxf(36.0, SQUARE_SIZE * 0.45)
+		# Calculate dynamic size and position based on board dimensions (increased for better visibility)
+		var btn_w: float = maxf(120.0, SQUARE_SIZE * 2.4)
+		var btn_h: float = maxf(48.0, SQUARE_SIZE * 0.6)
 		send_button.size = Vector2(btn_w, btn_h)
 		var btn_x: float = BOARD_ORIGIN.x + board_w * 0.5 - btn_w * 0.5
-		var btn_y: float = BOARD_ORIGIN.y + board_w + BORDER_THICK + 10.0
+		# Position send button below check label (check label is 40px tall)
+		var btn_y: float = BOARD_ORIGIN.y + board_w + BORDER_THICK + 50.0
 		send_button.position = Vector2(btn_x, btn_y)
 		send_button.disabled = true
 		send_button.visible = _has_pending()
@@ -857,9 +903,12 @@ func _show_promotion_dialog(side: String) -> void:
 		promotion_queen_button.texture = _get_piece_texture(queen_code)
 	if is_instance_valid(promotion_knight_button):
 		promotion_knight_button.texture = _get_piece_texture(knight_code)
+	# Ensure dialog is visible and brought to front
 	promotion_dialog.visible = true
+	promotion_dialog.z_index = 3000  # Ensure it's above everything, including check labels
+	move_child(promotion_dialog, get_child_count() - 1)  # Move to front of render order
 	awaiting_promotion = true
-	_log("_show_promotion_dialog: dialog shown, awaiting_promotion=true")
+	_log("_show_promotion_dialog: dialog shown and brought to front, awaiting_promotion=true")
 
 func _hide_promotion_dialog() -> void:
 	if is_instance_valid(promotion_dialog):
@@ -1058,12 +1107,14 @@ func _on_tap(pos: Vector2) -> void:
 				
 				if is_promotion:
 					# Show promotion dialog instead of executing move immediately
+					# This must happen regardless of check/checkmate state
 					promotion_pending_from = selected
 					promotion_pending_to = Vector2i(f, r)
-					_show_promotion_dialog(moving_piece[0])
 					selected = Vector2i(-1, -1)
 					highlighted.clear()
 					legal_moves.clear()
+					# Show promotion dialog AFTER clearing selection to prevent interference
+					_show_promotion_dialog(moving_piece[0])
 					move_made = true
 					break
 				
