@@ -25,7 +25,6 @@ const AVATAR_MOUTH_MAP_PATH       = "res://global/avatar_textures/face/avatar_mo
 const AVATAR_CLOTHING_MAP_PATH    = "res://global/avatar_textures/clothing/avatar_clothing.png"
 const AVATAR_ACCESSORIES_MAP_PATH = "res://global/avatar_textures/accessories/avatar_accessories.png"
 
-# ---- Absolute Z-ordering (Top to Bottom as requested) ----
 # Top
 const Z_FACE_ACCESSORIES := 80
 const Z_HEAD_ACCESSORIES := 70
@@ -37,6 +36,9 @@ const Z_BASE_BODY        := 20
 const Z_HAIR_BACK        := 10
 const Z_BACKGROUND       := 0
 # Bottom
+
+@export var AVATAR_FG_SCALE_RATIO := 1.4  # >1.0 makes the avatar larger inside the background
+@export var AVATAR_FG_BOTTOM_PAD  := -28   # +down / -up in pixels
 # ----------------------------------------------------------
 
 var avatar_background_regions = {
@@ -47,9 +49,17 @@ var avatar_background_regions = {
 	"Pattern 9": Rect2(0, 256, 128, 128)
 }
 var avatar_body_regions = {
-	"Default": Rect2(0, 0, 96, 64), "body1": Rect2(96, 0, 96, 64), "body2": Rect2(192, 0, 96, 64),
-	"body3": Rect2(288, 0, 96, 64), "body4": Rect2(384, 0, 96, 64), "body5": Rect2(0, 64, 96, 64),
-	"body6": Rect2(96, 64, 96, 64)
+	# First row (y = 0)
+	"Default": Rect2(0, 0, 2000, 2000),  # alias of body1 so the first option works
+	"body1":   Rect2(0, 0, 2000, 2000),
+	"body2":   Rect2(2000, 0, 2000, 2000),
+	"body3":   Rect2(4000, 0, 2000, 2000),
+	"body4":   Rect2(6000, 0, 2000, 2000),
+	"body5":   Rect2(8000, 0, 2000, 2000),
+
+	# Second row (y = 2000)
+	"body6":   Rect2(0, 2000, 2000, 2000),
+	"body7":   Rect2(2000, 2000, 2000, 2000),
 }
 # Shared regions for BOTH hair layers (front/back)
 var avatar_hair_regions = {
@@ -141,7 +151,7 @@ func update_display_from_settings():
 	var current_settings = _get_current_avatar_settings()
 	_draw_avatar(current_settings)
 
-func _draw_avatar(settings: Dictionary):
+func _draw_avatar(settings: Dictionary) -> void:
 	# Background
 	var bg_color = settings["background"]["color"]
 	var final_bg = calculate_final_color(bg_color, settings["background"]["brightness"])
@@ -162,10 +172,14 @@ func _draw_avatar(settings: Dictionary):
 	var tone_color = settings["body"]["color"]
 	avatar_base_body.self_modulate = calculate_final_color(tone_color, settings["body"]["brightness"])
 	avatar_base_body.texture = load(AVATAR_BODY_MAP_PATH)
-	var body_style = settings["body"]["head_style"]
-	if avatar_body_regions.has(body_style):
-		avatar_base_body.region_enabled = true
-		avatar_base_body.region_rect = avatar_body_regions[body_style]
+
+	var body_style: String = settings["body"]["head_style"]
+	if not avatar_body_regions.has(body_style):
+		body_style = "Default"
+
+	avatar_base_body.region_enabled = true
+	avatar_base_body.region_rect = avatar_body_regions[body_style]
+
 
 	# Hair Back
 	var hair_back_color = settings["hair_back"]["color"]
@@ -236,6 +250,8 @@ func _draw_avatar(settings: Dictionary):
 	else:
 		avatar_face_accessories.self_modulate.a = 0.0
 	
+	await get_tree().process_frame
+	
 	_center_and_scale_sprites()
 	_apply_layer_order()
 
@@ -259,7 +275,6 @@ func _get_current_avatar_settings() -> Dictionary:
 			"brightness": SettingsManager.get_setting("avatar_body", "brightness", 0.0),
 			"head_style": SettingsManager.get_setting("avatar_body", "head_style", "Default"),
 		},
-		# New: both layers carry same values by default
 		"hair_front": { "color": hair_color, "brightness": hair_bright, "style": hair_style },
 		"hair_back":  { "color": hair_color, "brightness": hair_bright, "style": hair_style },
 		"face": {
@@ -345,35 +360,41 @@ func set_selected(is_selected: bool):
 		remove_theme_stylebox_override("normal")
 
 func _center_and_scale_sprites():
-	var center_pos: Vector2 = size / 2.0
-	
-	# Background Scaling
-	var base_bg_size = 128.0
-	var bg_scale_x = size.x / base_bg_size
-	var bg_scale_y = size.y / base_bg_size
-	var bg_scale_factor = max(bg_scale_x, bg_scale_y)
+	var center_x: float = size.x * 0.5
+	var h: float = size.y
 
-	avatar_background.position = center_pos
+	# --- Background: fill ---
+	var base_bg_size := 128.0
+	var bg_scale_x := size.x / base_bg_size
+	var bg_scale_y := size.y / base_bg_size
+	var bg_scale_factor : float = max(bg_scale_x, bg_scale_y)
+	avatar_background.centered = true
+	avatar_background.position = Vector2(center_x, h * 0.5)
 	avatar_background.scale = Vector2(bg_scale_factor, bg_scale_factor)
 
-	# Character Scaling
-	var base_character_size = 64.0
-	var char_scale_factor = size.y / base_character_size
+	# --- Foreground (everything except background) ---
+	# We treat 2000x2000 sheets (body/hair) and 64x64 sheets (eyes/mouth/clothes/accessories)
+	# so they end up the same visual height and are bottom-aligned.
+	var s2000 := (h / 2000.0) * AVATAR_FG_SCALE_RATIO
+	var s64   := (h / 64.0)   * AVATAR_FG_SCALE_RATIO
 
-	# Scale standard sprites (based on 64x64)
-	for sprite in [ avatar_base_body, avatar_eyes, avatar_mouth, \
-					avatar_clothing, avatar_head_accessories, avatar_face_accessories ]:
-		sprite.centered = true
-		sprite.position = center_pos
-		sprite.scale = Vector2(char_scale_factor, char_scale_factor)
+	# After scaling, the visual height is h * AVATAR_FG_SCALE_RATIO for both groups.
+	var visual_h := h * AVATAR_FG_SCALE_RATIO
+	var base_y := h - (visual_h * 0.5) - AVATAR_FG_BOTTOM_PAD  # centers such that the bottom touches the bottom edge
 
-	# Scale high-res hair sprites separately (based on 2000x2000)
-	var base_hair_size = 2000.0
-	var hair_scale_factor = size.y / base_hair_size
-	for hair_sprite in [avatar_hair_back, avatar_hair_front]:
-		hair_sprite.centered = true
-		hair_sprite.position = center_pos
-		hair_sprite.scale = Vector2(hair_scale_factor, hair_scale_factor)
+	# 2000x2000 group (hair back, body, hair front)
+	for sprite in [avatar_hair_back, avatar_base_body, avatar_hair_front]:
+		if sprite:
+			sprite.centered = true
+			sprite.position = Vector2(center_x, base_y)
+			sprite.scale = Vector2(s2000, s2000)
+
+	# 64x64 group (face, clothing, accessories)
+	for sprite in [avatar_eyes, avatar_mouth, avatar_clothing, avatar_head_accessories, avatar_face_accessories]:
+		if sprite:
+			sprite.centered = true
+			sprite.position = Vector2(center_x, base_y)
+			sprite.scale = Vector2(s64, s64)
 
 func _apply_layer_order():
 	# Use absolute Z for predictable ordering

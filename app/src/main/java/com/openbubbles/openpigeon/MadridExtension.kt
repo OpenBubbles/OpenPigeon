@@ -101,7 +101,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             FillerGame(),
             MancalaGame(),
             DotsGame(),
-            KnockoutGame()
+//            KnockoutGame() **Unfinished
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {

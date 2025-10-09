@@ -12,9 +12,9 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -372.0
-offset_top = -608.0
+offset_top = -621.0
 offset_right = -276.0
-offset_bottom = -544.0
+offset_bottom = -541.0
 grow_horizontal = 2
 grow_vertical = 2
 size_flags_horizontal = 3
@@ -35,12 +35,12 @@ grow_vertical = 2
 unique_name_in_owner = true
 transparent_bg = true
 handle_input_locally = false
-size = Vector2i(96, 75)
+size = Vector2i(96, 90)
 render_target_update_mode = 4
 
 [node name="PillMask" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
 clip_children = 2
-position = Vector2(0, 5)
+position = Vector2(0, 20)
 texture = ExtResource("2_faxjs")
 centered = false
 
@@ -62,26 +62,29 @@ position = Vector2(48, 35)
 scale = Vector2(1, 1.01429)
 texture = ExtResource("3_s26kx")
 
-[node name="AvatarHairBack" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
+[node name="Foreground" type="Node2D" parent="SubViewportContainer/SubViewport"]
 unique_name_in_owner = true
 
-[node name="AvatarBaseBody" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
+[node name="AvatarHairBack" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
 unique_name_in_owner = true
 
-[node name="AvatarEyes" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
+[node name="AvatarBaseBody" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
 unique_name_in_owner = true
 
-[node name="AvatarMouth" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
+[node name="AvatarEyes" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
 unique_name_in_owner = true
 
-[node name="AvatarHairFront" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
+[node name="AvatarMouth" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
 unique_name_in_owner = true
 
-[node name="AvatarClothing" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
+[node name="AvatarHairFront" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
 unique_name_in_owner = true
 
-[node name="AvatarHeadAccessories" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
+[node name="AvatarClothing" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
 unique_name_in_owner = true
 
-[node name="AvatarFaceAccessories" type="Sprite2D" parent="SubViewportContainer/SubViewport"]
+[node name="AvatarHeadAccessories" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
+unique_name_in_owner = true
+
+[node name="AvatarFaceAccessories" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
 unique_name_in_owner = true

@@ -14,7 +14,6 @@ const AvatarThumbnailScene = preload("res://global/avatar_textures/AvatarThumbna
 const MOON_TEX: Texture2D = preload("res://global/avatar_textures/moon.svg")
 const SUN_TEX: Texture2D = preload("res://global/avatar_textures/sun.svg")
 
-
 @onready var settings_label = %SettingsLabel as Label
 @onready var theme_option_button = %ThemeOptionButton as OptionButton
 @onready var main_preview_container = %MainPreviewContainer as CenterContainer
@@ -147,10 +146,8 @@ func populate_theme_previews(themes_data: Dictionary) -> void:
 		btn.resized.connect(func(): btn.pivot_offset = btn.size * 0.5)
 		
 		var bg_style := StyleBoxFlat.new()
-		# --- MODIFIED LINES ---
 		bg_style.bg_color = Color("#FFD700", 0.4) # A nice translucent gold/yellow
 		bg_style.border_color = Color("#DAA520", 0.6) # A darker goldenrod for the border
-		# --- END MODIFIED LINES ---
 		bg_style.border_width_left = 1
 		bg_style.border_width_top = 1
 		bg_style.border_width_right = 1
@@ -166,7 +163,6 @@ func populate_theme_previews(themes_data: Dictionary) -> void:
 
 		var texture: Texture2D
 		
-		# MODIFICATION START: Prioritize generated texture, fall back to path
 		if themes_data[theme_name].has("texture") and themes_data[theme_name]["texture"] is Texture2D:
 			texture = themes_data[theme_name]["texture"]
 		else:
@@ -178,7 +174,6 @@ func populate_theme_previews(themes_data: Dictionary) -> void:
 				var placeholder := Image.create(64, 64, false, Image.FORMAT_RGBA8)
 				placeholder.fill(Color.MAGENTA)
 				texture = ImageTexture.create_from_image(placeholder)
-		# MODIFICATION END
 
 		if not is_instance_valid(texture): continue
 
@@ -190,17 +185,14 @@ func populate_theme_previews(themes_data: Dictionary) -> void:
 			btn.texture_normal = texture
 
 		if theme_name == saved_theme:
-			# Get the background style we just created and duplicate it.
 			var selected_style_box := bg_style.duplicate() as StyleBoxFlat
 			
-			# Now, ONLY modify the border to show it's selected.
 			selected_style_box.border_width_left = 3
 			selected_style_box.border_width_top = 3
 			selected_style_box.border_width_right = 3
 			selected_style_box.border_width_bottom = 3
 			selected_style_box.border_color = Color(0.2, 0.8, 0.2, 0.9)
 			
-			# This override now includes the background AND the green border.
 			btn.add_theme_stylebox_override("normal", selected_style_box)
 
 		var tween_to := func(target: float) -> void:
@@ -248,7 +240,7 @@ func _on_theme_option_button_item_selected(index: int):
 func _setup_avatar_customizer():
 	main_avatar_preview = AvatarThumbnailScene.instantiate()
 	main_avatar_preview.is_display_only = true
-	main_avatar_preview.custom_minimum_size = Vector2(96, 64)
+	main_avatar_preview.custom_minimum_size = Vector2(96, 75)
 	main_preview_container.add_child(main_avatar_preview)
 
 	avatar_tab_container.tab_changed.connect(_on_avatar_tab_changed)
@@ -287,7 +279,6 @@ func _on_avatar_setting_changed(category: String, key: String, value):
 
 	var saved_value
 	if category == "hair":
-		# Treat front as source of truth
 		saved_value = SettingsManager.get_setting("avatar_hair_front", key)
 	else:
 		saved_value = SettingsManager.get_setting("avatar_" + category, key)
@@ -298,6 +289,7 @@ func _on_avatar_setting_changed(category: String, key: String, value):
 
 	if is_instance_valid(main_avatar_preview):
 		main_avatar_preview.update_display_from_settings()
+
 	_on_avatar_tab_changed(avatar_tab_container.current_tab)
 
 func _populate_background_properties():
@@ -476,10 +468,10 @@ func _get_current_avatar_settings() -> Dictionary:
 			"brightness": SettingsManager.get_setting("avatar_body", "brightness", 0.0),
 			"head_style": SettingsManager.get_setting("avatar_body", "head_style", "Default"),
 		},
-		# New: both layers carry same values by default
+		# both layers carry same values by default
 		"hair_front": { "color": hair_color, "brightness": hair_bright, "style": hair_style },
 		"hair_back":  { "color": hair_color, "brightness": hair_bright, "style": hair_style },
-		# Face / Clothing / Accessories unchanged
+		
 		"face": {
 			"eyes": SettingsManager.get_setting("avatar_face", "eyes", "Open"),
 			"mouth": SettingsManager.get_setting("avatar_face", "mouth", "Plain"),
@@ -500,7 +492,7 @@ func _get_current_avatar_settings() -> Dictionary:
 func _create_image_presets_scrollbar(category: String, key: String, style_options: Array):
 	var scroll_container = ScrollContainer.new()
 	scroll_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll_container.custom_minimum_size = Vector2(0, 80)
+	scroll_container.custom_minimum_size = Vector2(0, 100)
 
 	var hbox = HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 10)
@@ -508,17 +500,15 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 
 	var current_settings = _get_current_avatar_settings()
 
-	# Read current selection from the right section
-	# Read current selection from the right section
 	var cfg_section := "avatar_hair_front" if category == "hair" else "avatar_" + category
 	var current_style_value = SettingsManager.get_setting(cfg_section, key, style_options[0])
 
 	for style_name in style_options:
 		var thumbnail = AvatarThumbnailScene.instantiate()
-		thumbnail.custom_minimum_size = Vector2(96, 64)
+		thumbnail.custom_minimum_size = Vector2(96, 75)
+		thumbnail.controlled_by_data = true
 		hbox.add_child(thumbnail)
 
-		# For hair thumbnails, preview both layers using the same style
 		if category == "hair":
 			var preview_settings = current_settings.duplicate(true)
 			preview_settings["hair_front"]["style"] = style_name
@@ -531,7 +521,7 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 			thumbnail.set_selected(true)
 
 		thumbnail.pressed.connect(func():
-			_on_avatar_setting_changed(category, key, style_name) # writes to both layers for hair
+			_on_avatar_setting_changed(category, key, style_name)
 		)
 
 	_add_property_to_box(scroll_container)
