@@ -33,7 +33,6 @@ class AboutActivity : Activity() {
                 Filler - ty8447
                 Mancala - ty8447
                 Dots & Boxes - ty8447
-                Knockout - ty8447
 
                 Are you a developer? Add your favorite game on GitHub!
             """.trimIndent())
