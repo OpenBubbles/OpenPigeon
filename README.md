@@ -20,6 +20,7 @@ OpenPigeon is fully open-source, and we're actively looking for game developers 
 - Mancala
 - Reversi
 - Filler
+- Dots & Boxes
 
 ## Contributing
 1. Git clone with Submodules. 
