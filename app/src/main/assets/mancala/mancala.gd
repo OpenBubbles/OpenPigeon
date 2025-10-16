@@ -100,6 +100,10 @@ func _ready() -> void:
 	_apply_board_sprite_modulate()
 	_apply_bg_for_dark(is_dark)
 	_init_mancala_board_structure()
+
+	if skip_button:
+		skip_button.visible = false
+
 	var appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin:
 		print("AppPlugin Available")
@@ -110,33 +114,14 @@ func _ready() -> void:
 			print("AppPlugin Connected")
 	else:
 		print("[DEV] Editor hint active, loading sample game data")
-		#var dev_data = """
-		#{
-			#"isYourTurn": true,
-			#"mode": "n",
-			#"player": "1",
-			#"myPlayerId": "7482724F-12A2-4917-9EB3-8857DD4D44EAP3AIzX",
-			#"replay": "board:&2,2&2&&3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&1,13,12&13,11,12,11,13,12,11,1,13,3,11,2&13,13,11,12,2|move:2,4|board:12&2,2&2&&3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&&13,11,12,11,13,12,11,1,13,3,11,2,1&13,13,11,12,2,13",
-			#"player2": "7482724F-12A2-4917-9EB3-8857DD4D44EAP3AIzX",
-			#"player1": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX",
-			#"avatar1": "body,1|eyes,2|mouth,1|hair,1|clothes,2|bg_color,0.42,0.94,0.86|body_color,0.79,0.70,0.66|hair_color,0.43,0.25,0.12|clothes_color,0.22,0.80,0.69",
-			#"avatar2": "body,3|eyes,1|mouth,1|hair,3|clothes,2|bg_color,0.42,0.94,0.86|body_color,0.79,0.70,0.66|hair_color,0.43,0.25,0.12|clothes_color,0.22,0.80,0.69",
-			#"replay": "board:4,4,4,4,4,4&&4,4,4,4,4,4&",
-			#"sender": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX",
-			#"version": "5",
-			#"tver": "5",
-			#"ios": "18.5",
-			#"subcaption": "Capture Mode",
-			#"id": "ziadBSjDYgc4ruev"
-		#}
-		#"""
 		var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:&2,2&2&&3,3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&1,13,12&13,11,12,11,13,12,11,1,13,3,11,2&13,13,11,12,2|move:2,4|board:12&2,2&2&&3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&&13,11,12,11,13,12,11,1,13,3,11,2,1&13,13,11,12,2,13","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
-		#var dev_data = "{'isYourTurn': true,'sender': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f'], 'version': ['0'], 'tver': ['5'], 'ios': ['18.5'], 'game': ['mancala'], 'id': ['9rPZettmFiDTt/eI\n'], 'size': ['4'], 'player': ['2'], 'player1': ['7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX'], 'player2': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f'], 'mode': ['n'], 'avatar1': ['body,0|eyes,1|mouth,0|acc,0|wins,0|bg_color,1.000000,0.928034,0.515868|body_color,1.000000,0.745098,0.600000|glasses,0|stache,0|backdrop,0|hair,3|clothes,0|hair_color,0.431373,0.254902,0.121569|clothes_color,0.225965,0.805188,0.692411'], 'avatar2': ['body,0|body_color,1.000000,0.741176,0.603922|hair,2|hair_color,0.941176,0.901961,0.549020|eyes,0|mouth,0|clothes,0|clothes_color,0.627451,0.235294,0.627451|bg_color,0.619608,0.270588,0.752941|backdrop,8'], 'replay': ['board:&&&11&2&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13&&&&&&12&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2|move:2,5|board:&&&&&&1,3,2,13,12,12,12,2,12,3,12,3,1,13,12,2,13,2,2,12,12,13,13,13,1,13,11,2&&&&&&&11,13,3,1,2,1,2,1,11,1,2,11,1,13,2,12,1,13,2,12'], 'num': ['29'], 'build': ['XSaldMy'], 'winner': ['0619c12b-dbb5-43e1-a225-cb5edc2b689f|-1'], 'caption': ['You Won!']}"
 		_set_game_data(dev_data)
+
 	for pit in pit_nodes:
 		for node in pit.get_children():
 			if node is Control and node.name != "DebugRect":
 				node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
 	if rules_button:
 		rules_button.pressed.connect(on_rules_button_pressed)
 	if settings_button:
@@ -172,6 +157,11 @@ func _set_game_data(raw_text: String) -> void:
 	var res = JSON.parse_string(raw_text)
 	print("[PARSE] Raw game data received:", res)
 
+	_skip_replay_animation = false
+	in_replay = false
+	if skip_button:
+		skip_button.visible = false
+
 	var my_id = res.get("myPlayerId", "")
 	var p1_id = res.get("player1", "")
 	var p2_id = res.get("player2", "")
@@ -190,6 +180,7 @@ func _set_game_data(raw_text: String) -> void:
 		var opponent_data = _parse_avatar_string(avatar_string)
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+
 	player_str = int(res.get("player", player))
 	mode = String(res.get("mode", mode))
 	my_player = my_id
@@ -217,6 +208,7 @@ func _set_game_data(raw_text: String) -> void:
 
 	var replay_str: String = String(res.get("replay", ""))
 	_apply_board_layout(is_my_turn)
+
 	var parsed = parse_game_data(replay_str)
 	var initial_board_for_replay_str = ""
 	var rb: Array = parsed.get("raw_boards", [])
@@ -237,10 +229,13 @@ func _set_game_data(raw_text: String) -> void:
 	else:
 		push_warning("_set_game_data: no previous board state found for replay, using default setup.")
 
+	replay_moves.clear()
 	if parsed.moves.size() > 0:
 		replay_moves = parsed.moves
 		_is_animating = true
-		skip_button.visible = true
+		in_replay = true
+		if skip_button:
+			skip_button.visible = true
 		for i in range(replay_moves.size()):
 			if _skip_replay_animation:
 				print("Skipped 230")
@@ -257,7 +252,7 @@ func _set_game_data(raw_text: String) -> void:
 			await _sow_from(actual_pit_idx)
 			in_replay = false
 			if game_over:
-				skip_button.visible = false
+				if skip_button: skip_button.visible = false
 				_is_animating = false
 				return
 			var current_sow_player_store_idx = 6 if player_str == 1 else 13
@@ -269,7 +264,7 @@ func _set_game_data(raw_text: String) -> void:
 				free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
 				await free_turn_tween.finished
 			player_str = original_player_str_for_sow
-		skip_button.visible = false
+		if skip_button: skip_button.visible = false
 		_is_animating = false
 		if rb.size() > 1:
 			var final_board_data = _parse_single_board(rb[rb.size() - 1])
@@ -283,6 +278,10 @@ func _set_game_data(raw_text: String) -> void:
 		prev_board_str = rb[rb.size() - 1] if rb.size() > 0 else ""
 	elif rb.size() > 0:
 		prev_board_str = rb[0]
+	else:
+		if skip_button:
+			skip_button.visible = false
+
 	print("258 CALLED GAME OVER")
 	await _check_game_over_and_winner()
 	if is_my_turn and not game_over:
