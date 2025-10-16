@@ -66,6 +66,37 @@ const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const STAR_POINT_SCENE = preload("res://reversi/StarPoint.tscn")
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
+const PIECE_TEX := preload("res://reversi/reversi_tile.png")
+const PIECE_PADDING := 6
+
+func _make_piece_material() -> ShaderMaterial:
+	var sh := Shader.new()
+	sh.code = """
+shader_type canvas_item;
+
+// Keeps highlights when modulating to black.
+uniform float preserve_highlight := 0.65;
+
+void fragment() {
+	vec4 base = texture(TEXTURE, UV);
+	// Apply node's modulate (COLOR) to the texture
+	vec4 tinted = base * COLOR;
+
+	// Luminance from the original texture (assumes white chip PNG with shading)
+	float lum = dot(base.rgb, vec3(0.2126, 0.7152, 0.0722));
+
+	// Specular-ish mask from bright areas, curved for punch
+	float spec = pow(smoothstep(0.55, 1.0, lum), 2.2);
+
+	// Mix some "white light" back in so highlights survive black tint
+	vec3 outc = mix(tinted.rgb, vec3(1.0), spec * preserve_highlight);
+
+	COLOR = vec4(outc, tinted.a);
+}
+"""
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	return mat
 
 func _ready():
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
@@ -109,9 +140,7 @@ func _apply_bg_for_dark(is_dark: bool) -> void:
 func setup_board_structure():
 	if not grid:
 		return
-
 	board.clear()
-
 	for y in range(BOARD_SIZE):
 		board.append([])
 		for x in range(BOARD_SIZE):
@@ -122,11 +151,16 @@ func setup_board_structure():
 				board[y].append(cell)
 				cell.set_meta("pos", Vector2i(x, y))
 				cell.pressed.connect(on_cell_pressed.bind(x, y))
-				
+
+				_ensure_piece_nodes(cell)
+
 				var highlight = cell.find_child("Highlight")
 				if highlight and highlight is TextureRect:
 					highlight.texture = create_radial_gradient_texture(64)
+					(highlight as TextureRect).mouse_filter = Control.MOUSE_FILTER_IGNORE
+					(highlight as TextureRect).z_index = 2
 					highlight.visible = false
+
 				var temp_label = cell.find_child("TempPieceLabel")
 				if temp_label:
 					temp_label.visible = false
@@ -231,6 +265,118 @@ func setup_sent_label():
 		sent_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		sent_label.add_theme_color_override("font_color", Color.WHITE)
 		sent_label.add_theme_font_size_override("font_size", 22)
+		
+func _ensure_piece_nodes(cell: Control) -> void:
+	var piece := cell.get_node_or_null("Piece") as TextureRect
+	if piece == null:
+		piece = TextureRect.new()
+		piece.name = "Piece"
+		piece.texture = PIECE_TEX
+		piece.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		piece.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		piece.z_index = 0
+		piece.material = _make_piece_material()
+
+		piece.ignore_texture_size = true
+		piece.custom_minimum_size = Vector2.ZERO
+		piece.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		piece.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+
+		cell.add_child(piece)
+		piece.set_anchors_preset(Control.PRESET_FULL_RECT)
+		piece.offset_left   = PIECE_PADDING
+		piece.offset_right  = -PIECE_PADDING
+		piece.offset_top    = PIECE_PADDING
+		piece.offset_bottom = -PIECE_PADDING
+		piece.modulate = Color.WHITE
+		piece.visible = false
+		piece.scale = Vector2.ONE
+
+	var tpiece := cell.get_node_or_null("TempPiece") as TextureRect
+	if tpiece == null:
+		tpiece = TextureRect.new()
+		tpiece.name = "TempPiece"
+		tpiece.texture = PIECE_TEX
+		tpiece.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tpiece.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tpiece.z_index = 1
+		tpiece.material = _make_piece_material()
+
+		tpiece.ignore_texture_size = true
+		tpiece.custom_minimum_size = Vector2.ZERO
+		tpiece.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tpiece.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+
+		cell.add_child(tpiece)
+		tpiece.set_anchors_preset(Control.PRESET_FULL_RECT)
+		tpiece.offset_left   = PIECE_PADDING
+		tpiece.offset_right  = -PIECE_PADDING
+		tpiece.offset_top    = PIECE_PADDING
+		tpiece.offset_bottom = -PIECE_PADDING
+		tpiece.visible = false
+		tpiece.scale = Vector2.ONE
+
+	var lbl := cell.find_child("Label")
+	if lbl and lbl is Label:
+		lbl.visible = false
+		(lbl as Control).custom_minimum_size = Vector2.ZERO
+	var tlbl := cell.find_child("TempPieceLabel")
+	if tlbl and tlbl is Label:
+		tlbl.visible = false
+		(tlbl as Control).custom_minimum_size = Vector2.ZERO
+		
+func _ghost_color_for(symbol: String) -> Color:
+	return Color(0.18, 0.18, 0.18, 0.70) if symbol == "⚫" else Color(0.90, 0.90, 0.90, 0.65)
+
+func _piece_color_for(symbol: String) -> Color:
+	return Color.BLACK if symbol == "⚫" else Color.WHITE
+
+func _show_piece(cell: Control, symbol: String) -> void:
+	_ensure_piece_nodes(cell)
+	var piece := cell.get_node("Piece") as TextureRect
+	piece.visible = symbol != ""
+	if symbol != "":
+		piece.modulate = _piece_color_for(symbol)
+
+func _show_temp_piece(cell: Control, symbol: String) -> void:
+	_ensure_piece_nodes(cell)
+	var tpiece := cell.get_node("TempPiece") as TextureRect
+	tpiece.visible = true
+	tpiece.modulate = _ghost_color_for(symbol)
+
+func _clear_temp_piece(cell: Control) -> void:
+	var t := cell.get_node_or_null("TempPiece") as TextureRect
+	if t:
+		t.visible = false
+
+func _clear_all_preview_overlays() -> void:
+	for y in range(BOARD_SIZE):
+		for x in range(BOARD_SIZE):
+			var cell: Control = board[y][x] as Control
+			if cell:
+				_clear_temp_piece(cell)
+
+func _show_preview_overlay_at(x: int, y: int, symbol: String) -> void:
+	if not is_in_bounds(Vector2i(x, y)): return
+	var cell: Control = board[y][x] as Control
+	_show_temp_piece(cell, symbol)
+
+func _flip_squash(cell: Control, to_symbol: String) -> void:
+	_ensure_piece_nodes(cell)
+	var piece := cell.get_node("Piece") as TextureRect
+	piece.visible = true
+	piece.pivot_offset = piece.size / 2.0
+
+	var tw := create_tween()
+	tw.tween_property(piece, "scale:y", 0.05, 0.16)\
+		.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	tw.tween_callback(func(): piece.modulate = _piece_color_for(to_symbol))
+	tw.tween_property(piece, "scale:y", 1.0, 0.18)\
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(piece, "scale:x", 1.08, 0.10)\
+		.set_ease(Tween.EASE_OUT)
+	tw.tween_property(piece, "scale:x", 1.0, 0.12)\
+		.set_ease(Tween.EASE_IN)
 
 func initialize_board_pieces():
 	print("initial pre_board", pre_board_data)
@@ -247,28 +393,19 @@ func initialize_board_pieces():
 	set_piece(center, center -1, "⚪", true)
 
 func set_piece(x: int, y: int, symbol: String, instant: bool = false) -> void:
-	if not is_in_bounds(Vector2i(x, y)):
-		return
-
-	if y >= board.size() or board[y] == null:
-		return
-
-	if x >= board[y].size() or board[y][x] == null:
-		return
+	if not is_in_bounds(Vector2i(x, y)): return
+	if y >= board.size() or board[y] == null: return
+	if x >= board[y].size() or board[y][x] == null: return
 
 	var cell = board[y][x]
-	
 	if cell:
 		var label = cell.find_child("Label")
 		if label:
-			label.text = symbol
-
-		if not instant and cell.has_method("flip_to"):
-			cell.flip_to(symbol)
-		elif not cell.has_method("flip_to"):
-			pass
-	else:
-		pass
+			(label as Label).text = symbol
+		if instant:
+			_show_piece(cell, symbol)
+		else:
+			_flip_squash(cell, symbol)
 
 func get_piece(x: int, y: int) -> String:
 	if not is_in_bounds(Vector2i(x, y)):
@@ -867,14 +1004,42 @@ func parse_replay(replay_string: String) -> Dictionary:
 			print("parse_replay: Unknown type: '", type, "'. Skipping.")
 	return result
 	
+func _preview_flip_visual(x: int, y: int, to_symbol: String) -> void:
+	var cell: Control = board[y][x] as Control
+	_ensure_piece_nodes(cell)
+	var piece := cell.get_node("Piece") as TextureRect
+	var current_symbol := get_piece(x, y)
+	if current_symbol != "":
+		piece.visible = true
+		piece.modulate = _piece_color_for(current_symbol)
+	else:
+		return
+	var target_color := _piece_color_for(to_symbol)
+	if piece.modulate == target_color:
+		return
+	piece.pivot_offset = piece.size / 2.0
+	var tw := create_tween()
+	tw.tween_property(piece, "scale:y", 0.06, 0.09).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	tw.tween_callback(func(): piece.modulate = target_color)
+	tw.tween_property(piece, "scale:y", 1.0, 0.11).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(piece, "scale:x", 1.06, 0.06).set_ease(Tween.EASE_OUT)
+	tw.tween_property(piece, "scale:x", 1.0, 0.08).set_ease(Tween.EASE_IN)
+	
 func preview_flip_pieces(x: int, y: int, player_symbol_to_check: String):
+	_clear_all_preview_overlays()
+	place_temp_piece_visual(x, y, player_symbol_to_check)
 	var directions = get_flippable_directions(x, y, player_symbol_to_check)
 	for dir in directions:
 		var pos = Vector2i(x, y) + dir
-		while is_in_bounds(pos) and get_piece(pos.x, pos.y) != player_symbol_to_check:
-			set_piece(pos.x, pos.y, player_symbol_to_check, false)
+		while is_in_bounds(pos):
+			var piece_symbol := get_piece(pos.x, pos.y)
+			if piece_symbol == player_symbol_to_check:
+				break
+			elif piece_symbol == "":
+				break
+			else:
+				_preview_flip_visual(pos.x, pos.y, player_symbol_to_check)
 			pos += dir
-
 
 func on_cell_pressed(x: int, y: int) -> void:
 	if not is_my_turn or game_over:
@@ -892,6 +1057,7 @@ func on_cell_pressed(x: int, y: int) -> void:
 		temp_piece_y = -1
 		if send_button.visible:
 			animate_button_slide_down()
+
 	var current_piece = get_piece(x, y)
 	var directions = get_flippable_directions(x, y, player_symbol)
 	if current_piece != "" or directions.size() == 0:
@@ -911,45 +1077,46 @@ func on_cell_pressed(x: int, y: int) -> void:
 func on_send_button_pressed():
 	if not temp_piece_active or temp_piece_x == -1:
 		return
+	set_highlight_visibility(false)
 	reset_board_to_pre_data()
+	clear_temp_piece_visual()
+	preview_flips_active = false
+
 	var directions_to_flip = get_flippable_directions(temp_piece_x, temp_piece_y, player_symbol)
 	if directions_to_flip.is_empty():
-		clear_temp_piece_visual()
 		temp_piece_active = false
 		send_button.visible = false
 		highlight_valid_moves()
 		return
 	flip_pieces(temp_piece_x, temp_piece_y, player_symbol, directions_to_flip)
-	set_piece(temp_piece_x, temp_piece_y, player_symbol,true)
+	set_piece(temp_piece_x, temp_piece_y, player_symbol, true)
 	print("Pre Avatar Assignment Number: ", player)
 	avatar_key = "avatar" + str(player)
 	print("Post Avatar Assignment Number: ", avatar_key)
 	post_board_data = get_current_board_as_array()
-	
+
 	print("Pre board data: ", pre_board_data)
 	print("Post board data: ", post_board_data)
-	
-	
+
 	var move_arr = [temp_piece_x, 7 - temp_piece_y, player]
 	my_moves.append(move_arr)
-	
+
 	var moves_str = ""
 	for move in my_moves:
-		moves_str += "move:" + str(move[0]) + "," + str(move[1]) + "," + str(move[2])	
+		moves_str += "move:" + str(move[0]) + "," + str(move[1]) + "," + str(move[2])
 
 	var result = {
 		"replay": "board:" + ",".join(pre_board_data) + "|" + moves_str + "|" + "board:" + ",".join(post_board_data)
 	}
-	
+
 	if player != 0 and is_instance_valid(player_avatar_display):
 		var avatar_string = player_avatar_display.get_avatar_data_string()
 		result[avatar_key] = avatar_string
 		print("Adding my avatar data to payload with key '", avatar_key, "'")
-	
-	
+
 	print("Replay string before JSON encode: ", result["replay"])
 	print("Type of replay field: ", typeof(result["replay"]))
-	
+
 	if await check_win():
 		if win_loss_state != "":
 			result["winner"] = my_player_id + "|" + win_loss_state
@@ -965,12 +1132,9 @@ func on_send_button_pressed():
 		appPlugin.updateGameData(game_data)
 	else:
 		print("AppPlugin is null. Cannot send game data.")
-	
-	clear_temp_piece_visual()
 	temp_piece_active = false
 	temp_piece_x = -1
 	temp_piece_y = -1
-
 	animate_button_slide_down()
 	is_my_turn = false
 
@@ -1066,18 +1230,13 @@ func set_highlight_visibility(_visible: bool):
 func place_temp_piece_visual(x: int, y: int, symbol: String):
 	if is_in_bounds(Vector2i(x, y)):
 		var cell = board[y][x]
-		var temp_label = cell.find_child("TempPieceLabel")
-		if temp_label:
-			temp_label.text = symbol
-			temp_label.modulate = Color(1, 1, 1, 0.5)
-			temp_label.visible = true
+		_show_temp_piece(cell, symbol)
 
 func clear_temp_piece_visual():
+	_clear_all_preview_overlays()
 	if temp_piece_x != -1 and is_in_bounds(Vector2i(temp_piece_x, temp_piece_y)):
 		var cell = board[temp_piece_y][temp_piece_x]
-		var temp_label = cell.find_child("TempPieceLabel")
-		if temp_label:
-			temp_label.visible = false
+		_clear_temp_piece(cell)
 
 func has_any_empty_cells() -> bool:
 	for y in range(BOARD_SIZE):
@@ -1100,7 +1259,7 @@ func flip_pieces(x: int, y: int, player_symbol_to_check: String, directions: Arr
 	for dir in directions:
 		var pos = Vector2i(x, y) + dir
 		while is_in_bounds(pos) and get_piece(pos.x, pos.y) != player_symbol_to_check:
-			set_piece(pos.x, pos.y, player_symbol_to_check, true)
+			set_piece(pos.x, pos.y, player_symbol_to_check, false)
 			pos += dir
 
 func get_flippable_directions(x: int, y: int, player_symbol_to_check: String) -> Array:
