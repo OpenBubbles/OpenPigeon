@@ -72,8 +72,24 @@ var avatar_hair_regions = {
 	"hair13": Rect2(4000, 4000, 2000, 2000),"hair14": Rect2(6000, 4000, 2000, 2000),
 	"hair15": Rect2(8000, 4000, 2000, 2000)
 }
-var avatar_eyes_regions  = { "Open": Rect2(0, 0, 64, 64), "Closed": Rect2(64, 0, 64, 64), "Winking": Rect2(128, 0, 64, 64) }
-var avatar_mouth_regions = { "Plain": Rect2(0, 0, 64, 64), "Smile": Rect2(64, 0, 64, 64), "Frown": Rect2(128, 0, 64, 64) }
+var avatar_eyes_regions  = { "eyes1": Rect2(0, 0, 2000, 2000),   "eyes2": Rect2(2000, 0, 2000, 2000),
+	"eyes3": Rect2(4000, 0, 2000, 2000),"eyes4": Rect2(6000, 0, 2000, 2000),
+	"eyes5": Rect2(8000, 0, 2000, 2000),"eyes6": Rect2(0, 2000, 2000, 2000),
+	"eyes7": Rect2(2000, 2000, 2000, 2000),"eyes8": Rect2(4000, 2000, 2000, 2000),
+	"eyes9": Rect2(6000, 2000, 2000, 2000),"eyes10": Rect2(8000, 2000, 2000, 2000),
+	"eyes11": Rect2(0, 4000, 2000, 2000),"eyes12": Rect2(2000, 4000, 2000, 2000),
+	"eyes13": Rect2(4000, 4000, 2000, 2000) }
+	
+var avatar_mouth_regions = { "mouth1": Rect2(0, 0, 2000, 2000),   "mouth2": Rect2(2000, 0, 2000, 2000),
+	"mouth3": Rect2(4000, 0, 2000, 2000),"mouth4": Rect2(6000, 0, 2000, 2000),
+	"mouth5": Rect2(8000, 0, 2000, 2000),"mouth6": Rect2(0, 2000, 2000, 2000),
+	"mouth7": Rect2(2000, 2000, 2000, 2000),"mouth8": Rect2(4000, 2000, 2000, 2000),
+	"mouth9": Rect2(6000, 2000, 2000, 2000),"mouth10": Rect2(8000, 2000, 2000, 2000),
+	"mouth11": Rect2(0, 4000, 2000, 2000),"mouth12": Rect2(2000, 4000, 2000, 2000),
+	"mouth13": Rect2(4000, 4000, 2000, 2000),"mouth14": Rect2(6000, 4000, 2000, 2000),
+	"mouth15": Rect2(8000, 4000, 2000, 2000),"mouth16": Rect2(6000, 4000, 2000, 2000),
+	"mouth17": Rect2(8000, 4000, 2000, 2000) }
+	
 var avatar_clothing_regions = { "T-Shirt": Rect2(0, 0, 64, 64), "Sweater": Rect2(64, 0, 64, 64), "Tank Top": Rect2(128, 0, 64, 64) }
 var avatar_head_accessories_regions = { "None": Rect2(0, 0, 1, 1), "Hat1": Rect2(0, 0, 64, 64), "Headband": Rect2(64, 0, 64, 64) }
 var avatar_face_accessories_regions = { "None": Rect2(0, 0, 1, 1), "Glasses": Rect2(128, 0, 64, 64), "Mask": Rect2(192, 0, 64, 64) }
@@ -376,25 +392,17 @@ func _center_and_scale_sprites():
 	# We treat 2000x2000 sheets (body/hair) and 64x64 sheets (eyes/mouth/clothes/accessories)
 	# so they end up the same visual height and are bottom-aligned.
 	var s2000 := (h / 2000.0) * AVATAR_FG_SCALE_RATIO
-	var s64   := (h / 64.0)   * AVATAR_FG_SCALE_RATIO
 
 	# After scaling, the visual height is h * AVATAR_FG_SCALE_RATIO for both groups.
 	var visual_h := h * AVATAR_FG_SCALE_RATIO
 	var base_y := h - (visual_h * 0.5) - AVATAR_FG_BOTTOM_PAD  # centers such that the bottom touches the bottom edge
 
 	# 2000x2000 group (hair back, body, hair front)
-	for sprite in [avatar_hair_back, avatar_base_body, avatar_hair_front]:
+	for sprite in [avatar_hair_back, avatar_base_body, avatar_hair_front, avatar_eyes, avatar_mouth, avatar_clothing, avatar_head_accessories, avatar_face_accessories]:
 		if sprite:
 			sprite.centered = true
 			sprite.position = Vector2(center_x, base_y)
 			sprite.scale = Vector2(s2000, s2000)
-
-	# 64x64 group (face, clothing, accessories)
-	for sprite in [avatar_eyes, avatar_mouth, avatar_clothing, avatar_head_accessories, avatar_face_accessories]:
-		if sprite:
-			sprite.centered = true
-			sprite.position = Vector2(center_x, base_y)
-			sprite.scale = Vector2(s64, s64)
 
 func _apply_layer_order():
 	# Use absolute Z for predictable ordering

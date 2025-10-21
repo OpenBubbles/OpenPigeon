@@ -329,9 +329,13 @@ func _populate_hair_properties():
 	_create_color_and_brightness_control("hair", "color", "brightness", hair_colors, default_color, initial_brightness)
 	
 func _populate_face_properties():
-	var eye_styles = ["Open", "Closed", "Winking"]
+	var eye_styles := []
+	for i in range(1, 14):
+		eye_styles.append("eyes" + str(i))
 	_create_image_presets_scrollbar("face", "eyes", eye_styles)
-	var mouth_styles = ["Plain", "Smile", "Frown"]
+	var mouth_styles := []
+	for i in range(1, 18):
+		mouth_styles.append("mouth" + str(i))
 	_create_image_presets_scrollbar("face", "mouth", mouth_styles)
 
 func _populate_clothing_properties():
@@ -473,7 +477,7 @@ func _get_current_avatar_settings() -> Dictionary:
 		"hair_back":  { "color": hair_color, "brightness": hair_bright, "style": hair_style },
 		
 		"face": {
-			"eyes": SettingsManager.get_setting("avatar_face", "eyes", "Open"),
+			"eyes": SettingsManager.get_setting("avatar_face", "eyes", "eyes1"),
 			"mouth": SettingsManager.get_setting("avatar_face", "mouth", "Plain"),
 		},
 		"clothing": {
