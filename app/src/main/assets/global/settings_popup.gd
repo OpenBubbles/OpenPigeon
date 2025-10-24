@@ -625,7 +625,7 @@ func _apply_dark_mode_visuals(enabled: bool, instant: bool) -> void:
 		sb = StyleBoxFlat.new()
 		add_theme_stylebox_override("panel", sb)
 
-	var target := Color(0.3,0.3,0.3,0.5) if enabled else Color(0.7,0.7,0.7,0.5)
+	var target := Color(0.3,0.3,0.3,0.9) if enabled else Color(0.7,0.7,0.7,0.9)
 
 	if instant:
 		sb.bg_color = target
