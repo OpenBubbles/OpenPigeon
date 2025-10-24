@@ -269,7 +269,7 @@ func _setup_avatar_customizer():
 	avatar_tab_container.add_tab("Hair")
 	avatar_tab_container.add_tab("Face")
 	avatar_tab_container.add_tab("Clothing")
-	avatar_tab_container.add_tab("Accessories")
+	#avatar_tab_container.add_tab("Accessories")
 	avatar_tab_container.current_tab = 0
 	_on_avatar_tab_changed(0)
 
