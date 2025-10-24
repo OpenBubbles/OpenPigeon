@@ -162,6 +162,10 @@ size_flags_horizontal = 4
 size_flags_vertical = 4
 is_display_only = true
 
+[node name="Control3" type="Control" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/PlayerContainer"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
 [node name="PlayerScorebox" type="HBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/PlayerContainer"]
 layout_mode = 2
 size_flags_horizontal = 4
@@ -222,6 +226,10 @@ size_flags_horizontal = 1
 size_flags_vertical = 4
 is_display_only = true
 controlled_by_data = true
+
+[node name="Control3" type="Control" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/OppContainer"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
 
 [node name="OppScorebox" type="HBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/OppContainer"]
 layout_mode = 2
