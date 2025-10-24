@@ -48,18 +48,18 @@ const Z_BACKGROUND       := 0
 @export var AVATAR_FG_BOTTOM_PAD  := -28   # +down / -up in pixels
 # ----------------------------------------------------------
 
-var avatar_background_regions = {
+const avatar_background_regions := {
 	"Pattern 1": Rect2(0, 0, 128, 128),   "Pattern 2": Rect2(128, 0, 128, 128),
 	"Pattern 3": Rect2(256, 0, 128, 128), "Pattern 4": Rect2(384, 0, 128, 128),
 	"Pattern 5": Rect2(0, 128, 128, 128), "Pattern 6": Rect2(128, 128, 128, 128),
 	"Pattern 7": Rect2(256, 128, 128, 128), "Pattern 8": Rect2(384, 128, 128, 128),
 	"Pattern 9": Rect2(0, 256, 128, 128)
 }
-var avatar_torso_regions = {
+const avatar_torso_regions := {
 	"Default": Rect2(0, 0, 2000, 2000)
 }
 
-var avatar_fshape_regions = {
+const avatar_fshape_regions := {
 	# First row (y = 0)
 	"Default": Rect2(0, 0, 2000, 2000),  # alias of fshape1 so the first option works
 	"fshape1":   Rect2(0, 0, 2000, 2000),
@@ -73,7 +73,7 @@ var avatar_fshape_regions = {
 	"fshape7":   Rect2(2000, 2000, 2000, 2000),
 }
 # Shared regions for BOTH hair layers (front/back)
-var avatar_hair_regions = {
+const avatar_hair_regions := {
 	"hair1": Rect2(0, 0, 2000, 2000),   "hair2": Rect2(2000, 0, 2000, 2000),
 	"hair3": Rect2(4000, 0, 2000, 2000),"hair4": Rect2(6000, 0, 2000, 2000),
 	"hair5": Rect2(8000, 0, 2000, 2000),"hair6": Rect2(0, 2000, 2000, 2000),
@@ -83,7 +83,7 @@ var avatar_hair_regions = {
 	"hair13": Rect2(4000, 4000, 2000, 2000),"hair14": Rect2(6000, 4000, 2000, 2000),
 	"hair15": Rect2(8000, 4000, 2000, 2000)
 }
-var avatar_eyes_regions  = { "eyes1": Rect2(0, 0, 2000, 2000),   "eyes2": Rect2(2000, 0, 2000, 2000),
+const avatar_eyes_regions  := { "eyes1": Rect2(0, 0, 2000, 2000),   "eyes2": Rect2(2000, 0, 2000, 2000),
 	"eyes3": Rect2(4000, 0, 2000, 2000),"eyes4": Rect2(6000, 0, 2000, 2000),
 	"eyes5": Rect2(8000, 0, 2000, 2000),"eyes6": Rect2(0, 2000, 2000, 2000),
 	"eyes7": Rect2(2000, 2000, 2000, 2000),"eyes8": Rect2(4000, 2000, 2000, 2000),
@@ -91,7 +91,7 @@ var avatar_eyes_regions  = { "eyes1": Rect2(0, 0, 2000, 2000),   "eyes2": Rect2(
 	"eyes11": Rect2(0, 4000, 2000, 2000),"eyes12": Rect2(2000, 4000, 2000, 2000),
 	"eyes13": Rect2(4000, 4000, 2000, 2000) }
 	
-var avatar_mouth_regions = { "mouth1": Rect2(0, 0, 2000, 2000),   "mouth2": Rect2(2000, 0, 2000, 2000),
+const avatar_mouth_regions := { "mouth1": Rect2(0, 0, 2000, 2000),   "mouth2": Rect2(2000, 0, 2000, 2000),
 	"mouth3": Rect2(4000, 0, 2000, 2000),"mouth4": Rect2(6000, 0, 2000, 2000),
 	"mouth5": Rect2(8000, 0, 2000, 2000),"mouth6": Rect2(0, 2000, 2000, 2000),
 	"mouth7": Rect2(2000, 2000, 2000, 2000),"mouth8": Rect2(4000, 2000, 2000, 2000),
@@ -105,10 +105,10 @@ const MOUTH_WITH_FACIAL_HAIR := {
 	"mouth13": true, "mouth14": true, "mouth15": true, "mouth16": true, "mouth17": true
 }
 	
-var avatar_clothing_regions = { "clothing1": Rect2(0, 0, 2000, 2000), "clothing2": Rect2(2000, 0, 2000, 2000), "clothing3": Rect2(4000, 0, 2000, 2000)}
+const avatar_clothing_regions := { "clothing1": Rect2(0, 0, 2000, 2000), "clothing2": Rect2(2000, 0, 2000, 2000), "clothing3": Rect2(4000, 0, 2000, 2000)}
 
-var avatar_head_accessories_regions = { "None": Rect2(0, 0, 1, 1), "Hat1": Rect2(0, 0, 64, 64), "Headband": Rect2(64, 0, 64, 64) }
-var avatar_face_accessories_regions = { "None": Rect2(0, 0, 1, 1), "Glasses": Rect2(128, 0, 64, 64), "Mask": Rect2(192, 0, 64, 64) }
+const avatar_head_accessories_regions := { "None": Rect2(0, 0, 1, 1), "Hat1": Rect2(0, 0, 64, 64), "Headband": Rect2(64, 0, 64, 64) }
+const avatar_face_accessories_regions := { "None": Rect2(0, 0, 1, 1), "Glasses": Rect2(128, 0, 64, 64), "Mask": Rect2(192, 0, 64, 64) }
 
 var _selection_stylebox: StyleBox = null
 
@@ -372,6 +372,9 @@ func get_avatar_data_string() -> String:
 	parts.append("fshape,%d" % fshape_map.get(fshape_style_name, 0))
 	var fshape_c = settings["fshape"]["color"]
 	parts.append("fshape_color,%.6f,%.6f,%.6f" % [fshape_c.r, fshape_c.g, fshape_c.b])
+	
+	parts.append("body,%d" % fshape_map.get(fshape_style_name, 0))
+	parts.append("body_color,%.6f,%.6f,%.6f" % [fshape_c.r, fshape_c.g, fshape_c.b])
 
 	# Hair (serialize from FRONT layer for backwards-compat)
 	var hair_style_name = settings["hair_front"]["style"]
