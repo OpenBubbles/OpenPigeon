@@ -1,4 +1,4 @@
-[gd_scene load_steps=27 format=3 uid="uid://cqobnjjddyewo"]
+[gd_scene load_steps=28 format=3 uid="uid://cqobnjjddyewo"]
 
 [ext_resource type="Texture2D" uid="uid://dicka3jn4dugu" path="res://connect/red_piece.png" id="2_ipfru"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_pdash"]
@@ -22,6 +22,17 @@ size = Vector2(7.44318, 589.208)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ipfru"]
 size = Vector2(74, 83)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_mg74y"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_mdy7o"]
 texture = ExtResource("8_mg74y")
@@ -395,6 +406,27 @@ texture = ExtResource("2_ipfru")
 position = Vector2(-0.125, -6.5)
 shape = SubResource("RectangleShape2D_ipfru")
 disabled = true
+
+[node name="WinLossLabel" type="Label" parent="VBoxContainer/CenterContainer"]
+unique_name_in_owner = true
+visible = false
+z_index = 2
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_mg74y")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SentLabel" type="Label" parent="VBoxContainer/CenterContainer"]
+unique_name_in_owner = true
+visible = false
+z_index = 2
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_mg74y")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="BottomItemHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
 custom_minimum_size = Vector2(0, 120)

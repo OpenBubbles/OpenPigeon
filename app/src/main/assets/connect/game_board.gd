@@ -101,6 +101,77 @@ func _ready() -> void:
 	if is_instance_valid(send_button):
 		send_button.disabled = true
 		_update_send_button_visibility(false)
+		send_button.pressed.connect(_on_send_pressed)
+		
+func _build_replay_payload() -> Dictionary:
+	# Safety: must have an active dropped piece
+	if droppedPiece == null:
+		return {}
+
+	var board_str := ""
+	for y in range(0, boardSizeY):
+		for x in range(0, boardSizeX):
+			if str(x) + "," + str(y) != droppedPiece.name:
+				board_str += getPositionInt(x, y) + ","
+			else:
+				board_str += "0,"
+	board_str = board_str.substr(0, board_str.length() - 1)
+
+	var move_x := int(droppedPiece.name.split(',')[0])
+	var move_y := int(droppedPiece.name.split(',')[1])
+	var move_color := getPositionInt(move_x, move_y)
+
+	var did_win := check_win()
+	var payload := {
+		"replay": "board:" + board_str + "|move:" + str(move_x) + "," + str(move_y) + "," + move_color
+	}
+
+	if did_win:
+		payload["winner"] = my_player + "|" + ("1" if didIWin else "-1")
+
+	return payload
+
+func _on_send_pressed() -> void:
+	await send_game()
+
+func send_game() -> void:
+	if droppedPiece == null:
+		print("[Send] No move to send.")
+		return
+
+	print("[Send] send_game() called")
+	await get_tree().process_frame
+
+	var payload := _build_replay_payload()
+	if payload.is_empty():
+		print("[Send] Payload empty; abort.")
+		return
+
+	# Remember what we sent (optional logging parity)
+	var replay: String = payload.get("replay", "")
+	print("[Send] PAYLOAD replay: ", replay)
+
+	# Include avatar data like the other game
+	var avatar_key := ("avatar1" if player == 1 else "avatar2")
+	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
+		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
+
+	# Ship it to host
+	var appPlugin := Engine.get_singleton("AppPlugin")
+	if appPlugin:
+		appPlugin.updateGameData(JSON.stringify(payload))
+	else:
+		print("AppPlugin is null. Cannot send game data.")
+
+	# UI: disable/hide send, play "Sent ✔", then go into waiting
+	if is_instance_valid(send_button):
+		send_button.disabled = true
+		_update_send_button_visibility(false)
+
+	play_sent_animation()
+
+	# Move to waiting state and clear the move
+	set_waiting(true)
 		
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
@@ -124,35 +195,8 @@ func set_waiting(enabled: bool):
 			_update_send_button_visibility(false)
 
 func export_replay() -> String:
-	var boardStr = ""
-	for y in range(0, boardSizeY):
-		for x in range(0, boardSizeX):
-			if str(x) + "," + str(y) != droppedPiece.name:
-				boardStr += getPositionInt(x, y) + ","
-			else:
-				boardStr += "0,"
-	boardStr = boardStr.substr(0, boardStr.length()-1)
-
-	var moveX = int(droppedPiece.name.split(',')[0])
-	var moveY = int(droppedPiece.name.split(',')[1])
-	var moveColor = getPositionInt(moveX, moveY)
-
-	var didWin = check_win()
-	if didWin == false:
-		set_waiting(true)
-
-	droppedPiece = null
-	if is_instance_valid(send_button):
-		send_button.disabled = true
-		_update_send_button_visibility(false)
-
-
-	var result = {
-		"replay": "board:" + boardStr + "|move:" + str(moveX) + "," + str(moveY) + "," + moveColor
-	}
-	if didWin:
-		result["winner"] = my_player + "|" + ("1" if didIWin else "-1")
-	return JSON.stringify(result)
+	var payload := _build_replay_payload()
+	return JSON.stringify(payload)
 
 var my_player
 func _set_game_data(new_replay: String):
@@ -277,37 +321,26 @@ func move_dropped_piece_to_column(new_x: int) -> void:
 	if droppedPiece == null:
 		return
 
-	var new_y: int = get_piece_y(new_x)
-	if new_y < 0:
-		return # column full
+	# If we’re moving to a different column, make sure there is space there first.
+	# If it's the SAME column, we allow it (we'll free then re-drop in the same column).
+	var current_x := int(droppedPiece.name.split(",")[0])
+	var moving_to_same_column := (current_x == new_x)
+	if not moving_to_same_column and get_piece_y(new_x) < 0:
+		# Target column full; keep current piece where it is.
+		return
 
-	# Temporarily turn off physics interaction so we can teleport safely
-	var col_shape := droppedPiece.get_node_or_null("PieceCollision") as CollisionShape2D
-	if col_shape:
-		col_shape.disabled = true
+	# Remember color, then remove the old piece.
+	var color : String = getPieceColor(droppedPiece)
+	droppedPiece.queue_free()
+	droppedPiece = null
 
-	droppedPiece.sleeping = true
-	droppedPiece.linear_velocity = Vector2.ZERO
-	droppedPiece.angular_velocity = 0.0
+	# Wait one frame so the freed piece is actually gone from the tree (and board naming).
+	await get_tree().process_frame
 
-	# Snap to the new column's X using the template as reference
-	var column_template := get_node_or_null("ConnectPiece" + str(new_x)) as Node2D
-	if column_template:
-		droppedPiece.global_position.x = column_template.global_position.x
+	# Now place a fresh one that will drop in the new column.
+	spawnPiece(new_x, color)
 
-	# Snap to the correct row Y and rename to its new logical cell
-	droppedPiece.position.y = yPoses[new_y]
-	droppedPiece.name = "%d,%d" % [new_x, new_y]
-
-	# Wait one physics tick so the new transform settles before re-enabling collisions
-	await get_tree().physics_frame
-
-	if col_shape:
-		col_shape.disabled = false
-
-	droppedPiece.sleeping = false
-	droppedPiece.set_freeze_enabled(false)
-
+	# Ensure Send is available/visible (spawnPiece already enables it when appropriate, but this is safe)
 	if is_instance_valid(send_button):
 		send_button.disabled = false
 		_update_send_button_visibility(true)
