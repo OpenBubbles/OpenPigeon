@@ -7,17 +7,19 @@ class_name AvatarThumbnail
 
 @onready var color_rect: ColorRect = %ColorRect
 @onready var avatar_background: Sprite2D = %AvatarBackground
-@onready var avatar_base_body: Sprite2D = %AvatarBaseBody
 @onready var avatar_hair_back: Sprite2D = %AvatarHairBack       # back layer
-@onready var avatar_hair_front: Sprite2D = %AvatarHairFront     # front layer
+@onready var avatar_torso: Sprite2D = %AvatarTorso
+@onready var avatar_clothing: Sprite2D = %AvatarClothing
+@onready var avatar_base_fshape: Sprite2D = %AvatarBaseFace
 @onready var avatar_eyes: Sprite2D = %AvatarEyes
 @onready var avatar_mouth: Sprite2D = %AvatarMouth
-@onready var avatar_clothing: Sprite2D = %AvatarClothing
+@onready var avatar_hair_front: Sprite2D = %AvatarHairFront     # front layer
 @onready var avatar_head_accessories: Sprite2D = %AvatarHeadAccessories
 @onready var avatar_face_accessories: Sprite2D = %AvatarFaceAccessories
 
 const AVATAR_BG_MAP_PATH          = "res://global/avatar_textures/backgrounds/background_sheet.png"
-const AVATAR_BODY_MAP_PATH        = "res://global/avatar_textures/body/avatar_bodies.png"
+const AVATAR_FSHAPE_MAP_PATH        = "res://global/avatar_textures/body/avatar_faces.png"
+const AVATAR_TORSO_MAP_PATH        = "res://global/avatar_textures/body/avatar_torso.png"
 const AVATAR_HAIR_FRONT_MAP_PATH  = "res://global/avatar_textures/hair/avatar_hair_front.png"
 const AVATAR_HAIR_BACK_MAP_PATH   = "res://global/avatar_textures/hair/avatar_hair_back.png"
 const AVATAR_EYES_MAP_PATH        = "res://global/avatar_textures/face/avatar_eyes.png"
@@ -28,11 +30,13 @@ const AVATAR_ACCESSORIES_MAP_PATH = "res://global/avatar_textures/accessories/av
 # Top
 const Z_FACE_ACCESSORIES := 80
 const Z_HEAD_ACCESSORIES := 70
-const Z_CLOTHING         := 60
-const Z_HAIR_FRONT       := 50
-const Z_MOUTH            := 40
-const Z_EYES             := 30
-const Z_BASE_BODY        := 20
+
+const Z_HAIR_FRONT       := 60
+const Z_MOUTH            := 50
+const Z_EYES             := 40
+const Z_BASE_FSHAPE      := 30
+const Z_CLOTHING         := 20
+const Z_TORSO            := 15
 const Z_HAIR_BACK        := 10
 const Z_BACKGROUND       := 0
 # Bottom
@@ -48,18 +52,22 @@ var avatar_background_regions = {
 	"Pattern 7": Rect2(256, 128, 128, 128), "Pattern 8": Rect2(384, 128, 128, 128),
 	"Pattern 9": Rect2(0, 256, 128, 128)
 }
-var avatar_body_regions = {
+var avatar_torso_regions = {
+	"Default": Rect2(0, 0, 2000, 2000)
+}
+
+var avatar_fshape_regions = {
 	# First row (y = 0)
-	"Default": Rect2(0, 0, 2000, 2000),  # alias of body1 so the first option works
-	"body1":   Rect2(0, 0, 2000, 2000),
-	"body2":   Rect2(2000, 0, 2000, 2000),
-	"body3":   Rect2(4000, 0, 2000, 2000),
-	"body4":   Rect2(6000, 0, 2000, 2000),
-	"body5":   Rect2(8000, 0, 2000, 2000),
+	"Default": Rect2(0, 0, 2000, 2000),  # alias of fshape1 so the first option works
+	"fshape1":   Rect2(0, 0, 2000, 2000),
+	"fshape2":   Rect2(2000, 0, 2000, 2000),
+	"fshape3":   Rect2(4000, 0, 2000, 2000),
+	"fshape4":   Rect2(6000, 0, 2000, 2000),
+	"fshape5":   Rect2(8000, 0, 2000, 2000),
 
 	# Second row (y = 2000)
-	"body6":   Rect2(0, 2000, 2000, 2000),
-	"body7":   Rect2(2000, 2000, 2000, 2000),
+	"fshape6":   Rect2(0, 2000, 2000, 2000),
+	"fshape7":   Rect2(2000, 2000, 2000, 2000),
 }
 # Shared regions for BOTH hair layers (front/back)
 var avatar_hair_regions = {
@@ -87,10 +95,15 @@ var avatar_mouth_regions = { "mouth1": Rect2(0, 0, 2000, 2000),   "mouth2": Rect
 	"mouth9": Rect2(6000, 2000, 2000, 2000),"mouth10": Rect2(8000, 2000, 2000, 2000),
 	"mouth11": Rect2(0, 4000, 2000, 2000),"mouth12": Rect2(2000, 4000, 2000, 2000),
 	"mouth13": Rect2(4000, 4000, 2000, 2000),"mouth14": Rect2(6000, 4000, 2000, 2000),
-	"mouth15": Rect2(8000, 4000, 2000, 2000),"mouth16": Rect2(6000, 4000, 2000, 2000),
-	"mouth17": Rect2(8000, 4000, 2000, 2000) }
+	"mouth15": Rect2(8000, 4000, 2000, 2000),"mouth16": Rect2(0, 6000, 2000, 2000),
+	"mouth17": Rect2(2000, 6000, 2000, 2000) }
 	
-var avatar_clothing_regions = { "T-Shirt": Rect2(0, 0, 64, 64), "Sweater": Rect2(64, 0, 64, 64), "Tank Top": Rect2(128, 0, 64, 64) }
+const MOUTH_WITH_FACIAL_HAIR := {
+	"mouth13": true, "mouth14": true, "mouth15": true, "mouth16": true, "mouth17": true
+}
+	
+var avatar_clothing_regions = { "clothing1": Rect2(0, 0, 2000, 2000)}
+
 var avatar_head_accessories_regions = { "None": Rect2(0, 0, 1, 1), "Hat1": Rect2(0, 0, 64, 64), "Headband": Rect2(64, 0, 64, 64) }
 var avatar_face_accessories_regions = { "None": Rect2(0, 0, 1, 1), "Glasses": Rect2(128, 0, 64, 64), "Mask": Rect2(192, 0, 64, 64) }
 
@@ -126,7 +139,7 @@ func update_preview(base_settings: Dictionary, category: String, key: String, ov
 func update_avatar_from_data(avatar_data: Dictionary):
 	print("SUCCESS: '", self.name, "' is updating from this external data: ", avatar_data)
 
-	# Use single hair values from data, apply to BOTH layers so body can sit between
+	# Use single hair values from data, apply to BOTH layers so fshape can sit between
 	var hair_color      = avatar_data.get("hair_color", Color.BLACK)
 	var hair_brightness = avatar_data.get("hair_brightness", 0.0)
 	var hair_style      = avatar_data.get("hair_style", "hair1")
@@ -137,10 +150,10 @@ func update_avatar_from_data(avatar_data: Dictionary):
 			"brightness": avatar_data.get("bg_brightness", 0.0),
 			"style": avatar_data.get("bg_style", "Plain")
 		},
-		"body": {
-			"color": avatar_data.get("body_color", Color.WHITE),
-			"brightness": avatar_data.get("body_brightness", 0.0),
-			"head_style": avatar_data.get("body_style", "Default")
+		"fshape": {
+			"color": avatar_data.get("fshape_color", Color.WHITE),
+			"brightness": avatar_data.get("fshape_brightness", 0.0),
+			"head_style": avatar_data.get("fshape_style", "Default")
 		},
 		# New front/back hair layers
 		"hair_front": { "color": hair_color, "brightness": hair_brightness, "style": hair_style },
@@ -152,7 +165,7 @@ func update_avatar_from_data(avatar_data: Dictionary):
 		"clothing": {
 			"color": avatar_data.get("clothing_color", Color.WHITE),
 			"brightness": avatar_data.get("clothing_brightness", 0.0),
-			"style": avatar_data.get("clothing_style", "T-Shirt")
+			"style": avatar_data.get("clothing_style", "clothing1")
 		},
 		"accessories": {
 			"color": avatar_data.get("acc_color", Color.WHITE),
@@ -184,18 +197,24 @@ func _draw_avatar(settings: Dictionary) -> void:
 		atlas.region = avatar_background_regions[bg_style]
 		avatar_background.texture = atlas
 		
-	# Body
-	var tone_color = settings["body"]["color"]
-	avatar_base_body.self_modulate = calculate_final_color(tone_color, settings["body"]["brightness"])
-	avatar_base_body.texture = load(AVATAR_BODY_MAP_PATH)
+	# fshape
+	var tone_color = settings["fshape"]["color"]
+	avatar_base_fshape.self_modulate = calculate_final_color(tone_color, settings["fshape"]["brightness"])
+	avatar_base_fshape.texture = load(AVATAR_FSHAPE_MAP_PATH)
 
-	var body_style: String = settings["body"]["head_style"]
-	if not avatar_body_regions.has(body_style):
-		body_style = "Default"
+	var fshape_style: String = settings["fshape"]["head_style"]
+	if not avatar_fshape_regions.has(fshape_style):
+		fshape_style = "Default"
 
-	avatar_base_body.region_enabled = true
-	avatar_base_body.region_rect = avatar_body_regions[body_style]
-
+	avatar_base_fshape.region_enabled = true
+	avatar_base_fshape.region_rect = avatar_fshape_regions[fshape_style]
+	
+	# Torso
+	if is_instance_valid(avatar_torso):
+		avatar_torso.texture = load(AVATAR_TORSO_MAP_PATH)
+		avatar_torso.self_modulate = avatar_base_fshape.self_modulate
+		avatar_torso.region_enabled = true
+		avatar_torso.region_rect = avatar_torso_regions.get("Default", Rect2(0,0,0,0))
 
 	# Hair Back
 	var hair_back_color = settings["hair_back"]["color"]
@@ -222,7 +241,8 @@ func _draw_avatar(settings: Dictionary) -> void:
 	if avatar_hair_regions.has(hair_style_front):
 		avatar_hair_front.region_enabled = true
 		avatar_hair_front.region_rect = avatar_hair_regions[hair_style_front]
-
+		
+	var hair_front_final := calculate_final_color(hair_front_color, settings["hair_front"]["brightness"])
 	# Face
 	avatar_eyes.texture = load(AVATAR_EYES_MAP_PATH)
 	avatar_mouth.texture = load(AVATAR_MOUTH_MAP_PATH)
@@ -234,6 +254,7 @@ func _draw_avatar(settings: Dictionary) -> void:
 	if avatar_mouth_regions.has(mouth_style):
 		avatar_mouth.region_enabled = true
 		avatar_mouth.region_rect = avatar_mouth_regions[mouth_style]
+	avatar_mouth.self_modulate = hair_front_final if MOUTH_WITH_FACIAL_HAIR.has(mouth_style) else Color(1,1,1,1)
 
 	# Clothing
 	var clothing_color = settings["clothing"]["color"]
@@ -286,10 +307,10 @@ func _get_current_avatar_settings() -> Dictionary:
 			"brightness": SettingsManager.get_setting("avatar_background", "brightness", 0.0),
 			"style": SettingsManager.get_setting("avatar_background", "style", "Plain"),
 		},
-		"body": {
-			"color": SettingsManager.get_setting("avatar_body", "color", Color("#e0ac69")),
-			"brightness": SettingsManager.get_setting("avatar_body", "brightness", 0.0),
-			"head_style": SettingsManager.get_setting("avatar_body", "head_style", "Default"),
+		"fshape": {
+			"color": SettingsManager.get_setting("avatar_fshape", "color", Color("#e0ac69")),
+			"brightness": SettingsManager.get_setting("avatar_fshape", "brightness", 0.0),
+			"head_style": SettingsManager.get_setting("avatar_fshape", "head_style", "Default"),
 		},
 		"hair_front": { "color": hair_color, "brightness": hair_bright, "style": hair_style },
 		"hair_back":  { "color": hair_color, "brightness": hair_bright, "style": hair_style },
@@ -300,7 +321,7 @@ func _get_current_avatar_settings() -> Dictionary:
 		"clothing": {
 			"color": SettingsManager.get_setting("avatar_clothing", "color", Color("#a03c3c")),
 			"brightness": SettingsManager.get_setting("avatar_clothing", "brightness", 0.0),
-			"style": SettingsManager.get_setting("avatar_clothing", "style", "T-Shirt"),
+			"style": SettingsManager.get_setting("avatar_clothing", "style", "clothing1"),
 		},
 		"accessories": {
 			"color": SettingsManager.get_setting("avatar_accessories", "color", Color("#ffffff")),
@@ -317,9 +338,9 @@ func get_avatar_data_string() -> String:
 	var hair_map = {}
 	for i in avatar_hair_regions.keys().size():
 		hair_map[avatar_hair_regions.keys()[i]] = i
-	var body_map = {}
-	for i in avatar_body_regions.keys().size():
-		body_map[avatar_body_regions.keys()[i]] = i
+	var fshape_map = {}
+	for i in avatar_fshape_regions.keys().size():
+		fshape_map[avatar_fshape_regions.keys()[i]] = i
 	var eyes_map = {}
 	for i in avatar_eyes_regions.keys().size():
 		eyes_map[avatar_eyes_regions.keys()[i]] = i
@@ -332,11 +353,11 @@ func get_avatar_data_string() -> String:
 	var backdrop_map = ["Plain", "Pattern 1", "Pattern 2", "Pattern 3", "Pattern 4", "Pattern 5", "Pattern 6", "Pattern 7", "Pattern 8", "Pattern 9"]
 
 	var parts = []
-	# Body
-	var body_style_name = settings["body"]["head_style"]
-	parts.append("body,%d" % body_map.get(body_style_name, 0))
-	var body_c = settings["body"]["color"]
-	parts.append("body_color,%.6f,%.6f,%.6f" % [body_c.r, body_c.g, body_c.b])
+	# fshape
+	var fshape_style_name = settings["fshape"]["head_style"]
+	parts.append("fshape,%d" % fshape_map.get(fshape_style_name, 0))
+	var fshape_c = settings["fshape"]["color"]
+	parts.append("fshape_color,%.6f,%.6f,%.6f" % [fshape_c.r, fshape_c.g, fshape_c.b])
 
 	# Hair (serialize from FRONT layer for backwards-compat)
 	var hair_style_name = settings["hair_front"]["style"]
@@ -389,7 +410,7 @@ func _center_and_scale_sprites():
 	avatar_background.scale = Vector2(bg_scale_factor, bg_scale_factor)
 
 	# --- Foreground (everything except background) ---
-	# We treat 2000x2000 sheets (body/hair) and 64x64 sheets (eyes/mouth/clothes/accessories)
+	# We treat 2000x2000 sheets (fshape/hair) and 64x64 sheets (eyes/mouth/clothes/accessories)
 	# so they end up the same visual height and are bottom-aligned.
 	var s2000 := (h / 2000.0) * AVATAR_FG_SCALE_RATIO
 
@@ -397,8 +418,8 @@ func _center_and_scale_sprites():
 	var visual_h := h * AVATAR_FG_SCALE_RATIO
 	var base_y := h - (visual_h * 0.5) - AVATAR_FG_BOTTOM_PAD  # centers such that the bottom touches the bottom edge
 
-	# 2000x2000 group (hair back, body, hair front)
-	for sprite in [avatar_hair_back, avatar_base_body, avatar_hair_front, avatar_eyes, avatar_mouth, avatar_clothing, avatar_head_accessories, avatar_face_accessories]:
+	# 2000x2000 group (hair back, fshape, hair front)
+	for sprite in [avatar_hair_back, avatar_base_fshape, avatar_torso, avatar_hair_front, avatar_eyes, avatar_mouth, avatar_clothing, avatar_head_accessories, avatar_face_accessories]:
 		if sprite:
 			sprite.centered = true
 			sprite.position = Vector2(center_x, base_y)
@@ -407,7 +428,7 @@ func _center_and_scale_sprites():
 func _apply_layer_order():
 	# Use absolute Z for predictable ordering
 	for n in [avatar_face_accessories, avatar_head_accessories, avatar_clothing, avatar_hair_front,
-			  avatar_mouth, avatar_eyes, avatar_base_body, avatar_hair_back, avatar_background]:
+			  avatar_mouth, avatar_eyes, avatar_base_fshape, avatar_torso, avatar_hair_back, avatar_background]:
 		if n:
 			n.z_as_relative = false
 	if color_rect:
@@ -416,11 +437,12 @@ func _apply_layer_order():
 	# Top -> Bottom
 	if avatar_face_accessories: avatar_face_accessories.z_index = Z_FACE_ACCESSORIES
 	if avatar_head_accessories: avatar_head_accessories.z_index = Z_HEAD_ACCESSORIES
-	if avatar_clothing:         avatar_clothing.z_index         = Z_CLOTHING
 	if avatar_hair_front:       avatar_hair_front.z_index       = Z_HAIR_FRONT
 	if avatar_mouth:            avatar_mouth.z_index            = Z_MOUTH
 	if avatar_eyes:             avatar_eyes.z_index             = Z_EYES
-	if avatar_base_body:        avatar_base_body.z_index        = Z_BASE_BODY
+	if avatar_base_fshape:        avatar_base_fshape.z_index        = Z_BASE_FSHAPE
+	if avatar_clothing:         avatar_clothing.z_index         = Z_CLOTHING
+	if avatar_torso:            avatar_torso.z_index         = Z_TORSO
 	if avatar_hair_back:        avatar_hair_back.z_index        = Z_HAIR_BACK
 	if avatar_background:       avatar_background.z_index       = Z_BACKGROUND
 	if color_rect:              color_rect.z_index              = Z_BACKGROUND  # same layer as background

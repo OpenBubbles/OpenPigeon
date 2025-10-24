@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bm1ilxvwi1ay"
-path="res://.godot/imported/avatar_bodies.png-681d9d44a29a90303264f902a1e70bec.ctex"
+uid="uid://c0s6qgp0pqupm"
+path="res://.godot/imported/avatar_clothing.png-1f9a721c6ab9fa39205bc0a5ac7fbac7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://global/avatar_textures/body/avatar_bodies.png"
-dest_files=["res://.godot/imported/avatar_bodies.png-681d9d44a29a90303264f902a1e70bec.ctex"]
+source_file="res://global/avatar_textures/clothing/avatar_clothing.png"
+dest_files=["res://.godot/imported/avatar_clothing.png-1f9a721c6ab9fa39205bc0a5ac7fbac7.ctex"]
 
 [params]
 

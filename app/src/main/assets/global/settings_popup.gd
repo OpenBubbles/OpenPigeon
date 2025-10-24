@@ -29,6 +29,26 @@ var dim_rect: ColorRect
 var main_avatar_preview: Node
 var current_brightness_slider: HSlider = null
 const GRABBER_IMAGE_PATH = "res://global/hollow_grabber.png"
+var _scroll_pos_by_tab: Dictionary[String, Vector2] = {}
+
+func _remember_scroll_positions() -> void:
+	for child in properties_box.get_children():
+		if child is ScrollContainer:
+			var key: String
+			if child.has_meta("list_key"):
+				key = String(child.get_meta("list_key"))
+			else:
+				key = String(avatar_tab_container.get_tab_title(avatar_tab_container.current_tab))
+			_scroll_pos_by_tab[key] = Vector2(child.scroll_horizontal, child.scroll_vertical)
+
+func _restore_scroll(sc: ScrollContainer) -> void:
+	var key: String = String(sc.get_meta("list_key")) \
+		if sc.has_meta("list_key") \
+		else String(avatar_tab_container.get_tab_title(avatar_tab_container.current_tab))
+	if _scroll_pos_by_tab.has(key):
+		var pos: Vector2 = _scroll_pos_by_tab[key] as Vector2
+		sc.call_deferred("set", "scroll_horizontal", int(pos.x))
+		sc.call_deferred("set", "scroll_vertical", int(pos.y))
 
 func _ready():
 	print("SettingsPopup: _ready() called.")
@@ -253,21 +273,32 @@ func _setup_avatar_customizer():
 	avatar_tab_container.current_tab = 0
 	_on_avatar_tab_changed(0)
 
-func _on_avatar_tab_changed(tab_index: int):
+func _on_avatar_tab_changed(tab_index: int, restored_scroll: Variant = null):
 	if not is_instance_valid(properties_box):
 		printerr("SettingsPopup: ERROR! properties_box is not valid.")
 		return
+
+	var tab_name := avatar_tab_container.get_tab_title(tab_index)
+
+	_remember_scroll_positions()
 	for child in properties_box.get_children():
 		child.queue_free()
+
 	current_brightness_slider = null
-	var tab_name = avatar_tab_container.get_tab_title(tab_index)
 	match tab_name:
 		"Background": _populate_background_properties()
-		"Body": _populate_body_properties()
+		"Body": _populate_fshape_properties()
 		"Hair": _populate_hair_properties()
 		"Face": _populate_face_properties()
 		"Clothing": _populate_clothing_properties()
 		"Accessories": _populate_accessories_properties()
+
+	if restored_scroll != null:
+		for child in properties_box.get_children():
+			if child is ScrollContainer:
+				child.call_deferred("set", "scroll_horizontal", int(restored_scroll.x))
+				child.call_deferred("set", "scroll_vertical", int(restored_scroll.y))
+				break
 
 func _on_avatar_preview_setting_changed(value, category: String, key: String):
 	_set_avatar_value(category, key, value)
@@ -289,8 +320,14 @@ func _on_avatar_setting_changed(category: String, key: String, value):
 
 	if is_instance_valid(main_avatar_preview):
 		main_avatar_preview.update_display_from_settings()
+		
+	var keep_pos: Variant = null
+	for child in properties_box.get_children():
+		if child is ScrollContainer:
+			keep_pos = Vector2(child.scroll_horizontal, child.scroll_vertical)
+			break
 
-	_on_avatar_tab_changed(avatar_tab_container.current_tab)
+	_on_avatar_tab_changed(avatar_tab_container.current_tab, keep_pos)
 
 func _populate_background_properties():
 	var preset_colors = [ Color("#7c7c7c"), Color("#e7639f"), Color("#9e45c0"), Color("#5798f6"), Color("#32d5c8"), Color("#7cb33e"), Color("#b1da1a"), Color("#f6d61a"), Color("#ee7c09"), Color("#f11f06"), Color("#d3292c") ]
@@ -300,13 +337,13 @@ func _populate_background_properties():
 	var style_options = ["Plain", "Pattern 1", "Pattern 2", "Pattern 3", "Pattern 4", "Pattern 5", "Pattern 6", "Pattern 7", "Pattern 8", "Pattern 9"]
 	_create_image_presets_scrollbar("background", "style", style_options)
 
-func _populate_body_properties():
-	var body_styles = ["Default", "body1", "body2", "body3", "body4", "body5", "body6"]
-	_create_image_presets_scrollbar("body", "head_style", body_styles)
+func _populate_fshape_properties():
+	var fshape_styles = ["Default", "fshape1", "fshape2", "fshape3", "fshape4", "fshape5", "fshape6"]
+	_create_image_presets_scrollbar("fshape", "head_style", fshape_styles)
 	var skin_tones = [ Color("#ffbd9a"), Color("#ffb070"), Color("#804734"), Color("#5f442f"), Color("#cccccc"), Color("#da73a2"), Color("#6394f1"), Color("#82b941"), Color("#f8cf55"), Color("#f6820c"), Color("#c34126") ]
-	var default_tone = SettingsManager.get_setting("avatar_body", "color", Color("#e0ac69"))
-	var initial_brightness = SettingsManager.get_setting("avatar_body", "brightness", 0.0)
-	_create_color_and_brightness_control("body", "color", "brightness", skin_tones, default_tone, initial_brightness)
+	var default_tone = SettingsManager.get_setting("avatar_fshape", "color", Color("#e0ac69"))
+	var initial_brightness = SettingsManager.get_setting("avatar_fshape", "brightness", 0.0)
+	_create_color_and_brightness_control("fshape", "color", "brightness", skin_tones, default_tone, initial_brightness)
 
 func _populate_hair_properties():
 	var hair_styles := []
@@ -339,7 +376,9 @@ func _populate_face_properties():
 	_create_image_presets_scrollbar("face", "mouth", mouth_styles)
 
 func _populate_clothing_properties():
-	var clothing_styles = ["T-Shirt", "Sweater", "Tank Top"]
+	var clothing_styles := []
+	for i in range(1, 2):
+		clothing_styles.append("clothing" + str(i))
 	_create_image_presets_scrollbar("clothing", "style", clothing_styles)
 	var clothing_colors = [ Color("#7c7c7c"), Color("#e7639f"), Color("#9e45c0"), Color("#5798f6"), Color("#32d5c8"), Color("#7cb33e"), Color("#b1da1a"), Color("#f6d61a"), Color("#ee7c09"), Color("#f11f06"), Color("#d3292c") ]
 	var default_color = SettingsManager.get_setting("avatar_clothing", "color", Color("#a03c3c"))
@@ -398,7 +437,6 @@ func _create_color_and_brightness_control(category: String, color_key: String, b
 	slider.min_value = -1.0; slider.max_value = 1.0; slider.step = 0.01
 	slider.value = initial_brightness
 	slider.value_changed.connect(_on_avatar_preview_setting_changed.bind(category, brightness_key))
-	slider.drag_ended.connect(func(_value_doesnt_matter): _on_avatar_tab_changed(avatar_tab_container.current_tab))
 	vbox.add_child(slider)
 	current_brightness_slider = slider
 	_update_brightness_slider_gradient(default_color)
@@ -467,10 +505,10 @@ func _get_current_avatar_settings() -> Dictionary:
 			"brightness": SettingsManager.get_setting("avatar_background", "brightness", 0.0),
 			"style": SettingsManager.get_setting("avatar_background", "style", "Plain"),
 		},
-		"body": {
-			"color": SettingsManager.get_setting("avatar_body", "color", Color("#e0ac69")),
-			"brightness": SettingsManager.get_setting("avatar_body", "brightness", 0.0),
-			"head_style": SettingsManager.get_setting("avatar_body", "head_style", "Default"),
+		"fshape": {
+			"color": SettingsManager.get_setting("avatar_fshape", "color", Color("#e0ac69")),
+			"brightness": SettingsManager.get_setting("avatar_fshape", "brightness", 0.0),
+			"head_style": SettingsManager.get_setting("avatar_fshape", "head_style", "Default"),
 		},
 		# both layers carry same values by default
 		"hair_front": { "color": hair_color, "brightness": hair_bright, "style": hair_style },
@@ -483,7 +521,7 @@ func _get_current_avatar_settings() -> Dictionary:
 		"clothing": {
 			"color": SettingsManager.get_setting("avatar_clothing", "color", Color("#a03c3c")),
 			"brightness": SettingsManager.get_setting("avatar_clothing", "brightness", 0.0),
-			"style": SettingsManager.get_setting("avatar_clothing", "style", "T-Shirt"),
+			"style": SettingsManager.get_setting("avatar_clothing", "style", "clothing1"),
 		},
 		"accessories": {
 			"color": SettingsManager.get_setting("avatar_accessories", "color", Color("#ffffff")),
@@ -497,6 +535,13 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 	var scroll_container = ScrollContainer.new()
 	scroll_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll_container.custom_minimum_size = Vector2(0, 100)
+	
+	var list_key: String = "%s/%s/%s" % [
+	avatar_tab_container.get_tab_title(avatar_tab_container.current_tab),
+	category,
+	key
+	]
+	scroll_container.set_meta("list_key", list_key)
 
 	var hbox = HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 10)
@@ -529,6 +574,7 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 		)
 
 	_add_property_to_box(scroll_container)
+	_restore_scroll(scroll_container)
 
 func _exit_tree():
 	print("SettingsPopup: _exit_tree() called.")
