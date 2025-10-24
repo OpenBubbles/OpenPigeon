@@ -586,44 +586,86 @@ func _set_game_data(new_game_data_json: String):
 		highlight_valid_moves()
 		
 func _parse_avatar_string(data_string: String) -> Dictionary:
-	var hair_map = ["Spiky", "Long", "Bun", "Bald", "Hair5", "Hair6", "Hair7"]
-	var body_map = ["Default", "Smiling", "Winking", "Surprised", "Frowning", "Tongue Out", "Cute"]
-	var eyes_map = ["Open", "Closed", "Winking"]
-	var mouth_map = ["Plain", "Smile", "Frown", "Mouth4", "Mouth5", "Mouth6", "Grin"]
-	var clothing_map = ["T-Shirt", "Sweater", "Tank Top"]
-	var backdrop_map = ["Plain", "Pattern 1", "Pattern 2", "Pattern 3", "Pattern 4", "Pattern 5", "Pattern 6", "Pattern 7", "Pattern 8", "Pattern 9"]
+	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
+	var body_map: Array     = AvatarThumbnail.avatar_fshape_regions.keys()
+	var eyes_map: Array     = AvatarThumbnail.avatar_eyes_regions.keys()
+	var mouth_map: Array    = AvatarThumbnail.avatar_mouth_regions.keys()
+	var clothing_map: Array = AvatarThumbnail.avatar_clothing_regions.keys()
+	var backdrop_map: Array = ["Plain"]
+	backdrop_map.append_array(AvatarThumbnail.avatar_background_regions.keys())
 
+	var data: Dictionary = {
+		"fshape_style":   body_map[0]     if body_map.size()     > 0 else "Default",
+		"hair_style":     hair_map[0]     if hair_map.size()     > 0 else "hair1",
+		"eyes_style":     eyes_map[0]     if eyes_map.size()     > 0 else "eyes1",
+		"mouth_style":    mouth_map[0]    if mouth_map.size()    > 0 else "mouth1",
+		"clothing_style": clothing_map[0] if clothing_map.size() > 0 else "clothing1",
+		"bg_style":       "Plain",
+		"fshape_color":   Color(0.88, 0.67, 0.41),
+		"hair_color":     Color(0.17, 0.14, 0.17),
+		"clothing_color": Color(0.63, 0.24, 0.24),
+		"bg_color":       Color(0.31, 0.36, 0.54),
+	}
 
-	var data = {}
-	var parts = data_string.split("|")
-	for part in parts:
-		var key_value = part.split(",")
+	if data_string.is_empty():
+		return data
+
+	var read_color = func(vals: Array) -> Color:
+		if vals.size() >= 3:
+			return Color(vals[0].to_float(), vals[1].to_float(), vals[2].to_float())
+		return Color.WHITE
+
+	for part in data_string.split("|", false):
+		var key_value := part.split(",", false)
 		if key_value.size() < 2:
 			continue
-
-		var key = key_value[0]
-		var values = key_value.slice(1)
+		var key := key_value[0]
 
 		match key:
-			"hair":
-				data["hair_style"] = hair_map[int(values[0])]
-			"body":
-				data["body_style"] = body_map[int(values[0])]
-			"eyes":
-				data["eyes_style"] = eyes_map[int(values[0])]
-			"mouth":
-				data["mouth_style"] = mouth_map[int(values[0])]
-			"clothes":
-				data["clothing_style"] = clothing_map[int(values[0])]
-			"backdrop":
-				var backdrop_index = int(values[0])
-				if backdrop_index >= 0 and backdrop_index < backdrop_map.size():
-					data["bg_style"] = backdrop_map[backdrop_index]
-			"bg_color", "body_color", "hair_color", "clothes_color":
-				if values.size() >= 3:
-					var color_key = key.replace("_color", "") + "_color"
-					data[color_key] = Color(float(values[0]), float(values[1]), float(values[2]))
+			"fshape", "body":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < body_map.size():
+					data["fshape_style"] = String(body_map[i])
 
+			# --- Skin color (accept both) ---
+			"fshape_color", "body_color":
+				data["fshape_color"] = read_color.call(key_value.slice(1))
+
+			"hair":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < hair_map.size():
+					data["hair_style"] = String(hair_map[i])
+
+			"hair_color":
+				data["hair_color"] = read_color.call(key_value.slice(1))
+
+			"eyes":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < eyes_map.size():
+					data["eyes_style"] = String(eyes_map[i])
+
+			"mouth":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < mouth_map.size():
+					data["mouth_style"] = String(mouth_map[i])
+
+			"clothes":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < clothing_map.size():
+					data["clothing_style"] = String(clothing_map[i])
+
+			"clothes_color":
+				data["clothing_color"] = read_color.call(key_value.slice(1))
+
+			"bg_color":
+				data["bg_color"] = read_color.call(key_value.slice(1))
+
+			"backdrop":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < backdrop_map.size():
+					data["bg_style"] = String(backdrop_map[i])
+			_:
+				pass
 	return data
 		
 func reset_board_to_pre_data():
