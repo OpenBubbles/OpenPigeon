@@ -377,7 +377,7 @@ func _populate_face_properties():
 
 func _populate_clothing_properties():
 	var clothing_styles := []
-	for i in range(1, 2):
+	for i in range(1, 4):
 		clothing_styles.append("clothing" + str(i))
 	_create_image_presets_scrollbar("clothing", "style", clothing_styles)
 	var clothing_colors = [ Color("#7c7c7c"), Color("#e7639f"), Color("#9e45c0"), Color("#5798f6"), Color("#32d5c8"), Color("#7cb33e"), Color("#b1da1a"), Color("#f6d61a"), Color("#ee7c09"), Color("#f11f06"), Color("#d3292c") ]

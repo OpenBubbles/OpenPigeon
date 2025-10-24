@@ -75,6 +75,9 @@ unique_name_in_owner = true
 [node name="AvatarClothing" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
 unique_name_in_owner = true
 
+[node name="AvatarClothingDetails" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
+unique_name_in_owner = true
+
 [node name="AvatarBaseFace" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
 unique_name_in_owner = true
 

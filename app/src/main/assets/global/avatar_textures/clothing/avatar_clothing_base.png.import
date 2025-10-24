@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c0s6qgp0pqupm"
-path="res://.godot/imported/avatar_clothing.png-1f9a721c6ab9fa39205bc0a5ac7fbac7.ctex"
+path="res://.godot/imported/avatar_clothing_base.png-980dbff07d0308362457cfb72a0c5919.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://global/avatar_textures/clothing/avatar_clothing.png"
-dest_files=["res://.godot/imported/avatar_clothing.png-1f9a721c6ab9fa39205bc0a5ac7fbac7.ctex"]
+source_file="res://global/avatar_textures/clothing/avatar_clothing_base.png"
+dest_files=["res://.godot/imported/avatar_clothing_base.png-980dbff07d0308362457cfb72a0c5919.ctex"]
 
 [params]
 
