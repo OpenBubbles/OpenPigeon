@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dicka3jn4dugu"
-path="res://.godot/imported/red_piece.png-0b8a2b57a05b6bbf5ed9d686e9aae2ef.ctex"
+uid="uid://faeektefadu1"
+path="res://.godot/imported/avatar_clothing_details.png-c5b5ca59d7767a467ef4ba64262163c9.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://connect/red_piece.png"
-dest_files=["res://.godot/imported/red_piece.png-0b8a2b57a05b6bbf5ed9d686e9aae2ef.ctex"]
+source_file="res://global/avatar_textures/clothing/avatar_clothing_details.png"
+dest_files=["res://.godot/imported/avatar_clothing_details.png-c5b5ca59d7767a467ef4ba64262163c9.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dicka3jn4dugu"
-path="res://.godot/imported/red_piece.png-0b8a2b57a05b6bbf5ed9d686e9aae2ef.ctex"
+uid="uid://c0lylxao0uoyy"
+path="res://.godot/imported/yellow_piece.png-a27c15e27168d7a47539d30ee3e36b14.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://connect/red_piece.png"
-dest_files=["res://.godot/imported/red_piece.png-0b8a2b57a05b6bbf5ed9d686e9aae2ef.ctex"]
+source_file="res://connect/yellow_piece.png"
+dest_files=["res://.godot/imported/yellow_piece.png-a27c15e27168d7a47539d30ee3e36b14.ctex"]
 
 [params]
 

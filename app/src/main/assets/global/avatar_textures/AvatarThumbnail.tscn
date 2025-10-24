@@ -30,6 +30,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+mouse_filter = 2
 
 [node name="SubViewport" type="SubViewport" parent="SubViewportContainer"]
 unique_name_in_owner = true
@@ -68,7 +69,16 @@ unique_name_in_owner = true
 [node name="AvatarHairBack" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
 unique_name_in_owner = true
 
-[node name="AvatarBaseBody" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
+[node name="AvatarTorso" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
+unique_name_in_owner = true
+
+[node name="AvatarClothing" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
+unique_name_in_owner = true
+
+[node name="AvatarClothingDetails" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
+unique_name_in_owner = true
+
+[node name="AvatarBaseFace" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
 unique_name_in_owner = true
 
 [node name="AvatarEyes" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
@@ -78,9 +88,6 @@ unique_name_in_owner = true
 unique_name_in_owner = true
 
 [node name="AvatarHairFront" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
-unique_name_in_owner = true
-
-[node name="AvatarClothing" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
 unique_name_in_owner = true
 
 [node name="AvatarHeadAccessories" type="Sprite2D" parent="SubViewportContainer/SubViewport/Foreground"]
