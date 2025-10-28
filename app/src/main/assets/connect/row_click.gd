@@ -1,12 +1,15 @@
 extends Panel
+@onready var board: ConnectGameBoard = %GameBoard
 
 func _input(event):
-	if event is InputEventMouseButton:
-		if event.pressed and event.button_index == 1:
-			var global_click_position = event.position
-			var board: ConnectGameBoard = get_node("../GameBoard")
-			if get_global_rect().has_point(global_click_position) and board.droppedPiece == null and board.waitingForOpponent == false:
-				var clicked: Panel = get_node(".")
-				var posX: int = int(clicked.name.replace("Row", ""))
-				var color: String = board.getPlayerColor()
-				board.spawnPiece(posX, color)
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if not get_global_rect().has_point(get_global_mouse_position()):
+			return
+		if board.waitingForOpponent:
+			return
+
+		var posX: int = int(name.replace("Row", ""))
+		if board.droppedPiece == null:
+			board.spawnPiece(posX, board.getPlayerColor())
+		else:
+			board.move_dropped_piece_to_column(posX)
