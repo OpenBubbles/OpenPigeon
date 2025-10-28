@@ -1,182 +1,327 @@
-[gd_scene load_steps=12 format=3 uid="uid://cnrr1hwlmd565"]
+[gd_scene load_steps=19 format=3 uid="uid://cnrr1hwlmd565"]
 
+[ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="1_4qhse"]
 [ext_resource type="Texture2D" uid="uid://d37tvmulfubj4" path="res://checkers/checkersboard_plain.png" id="1_ys403"]
 [ext_resource type="Script" uid="uid://ci8p3eom1mxpq" path="res://checkers/checkers_board_top.gd" id="2_3slu2"]
 [ext_resource type="Texture2D" uid="uid://duoyebvdp2m53" path="res://checkers/checker_black.png" id="2_nlcs0"]
 [ext_resource type="Texture2D" uid="uid://c8rkim5ojkkq8" path="res://checkers/checker_red.png" id="2_t0jlu"]
-[ext_resource type="Script" uid="uid://bcrbt7cq7jsjn" path="res://checkers/board_highlight.gd" id="5_1kvqq"]
-[ext_resource type="Script" uid="uid://cxttbx02xnll5" path="res://checkers/highlight_child.gd" id="6_srtqa"]
-[ext_resource type="Script" uid="uid://tmxho5e68hf7" path="res://checkers/button_click.gd" id="9_14sfn"]
+[ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="6_wk37g"]
+[ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="7_736no"]
 
-[sub_resource type="Gradient" id="Gradient_q1lfo"]
-interpolation_mode = 2
-offsets = PackedFloat32Array(0.461039, 1)
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_dd3h5"]
+texture = ExtResource("6_wk37g")
 
-[sub_resource type="GradientTexture2D" id="GradientTexture2D_2v7vs"]
-gradient = SubResource("Gradient_q1lfo")
-fill_from = Vector2(0.490826, 0.527523)
-fill_to = Vector2(0, 0)
-repeat = 2
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_kefgb"]
+texture = ExtResource("6_wk37g")
 
-[sub_resource type="GradientTexture2D" id="GradientTexture2D_xghwu"]
-gradient = SubResource("Gradient_q1lfo")
-fill_from = Vector2(0.495413, 0.522936)
-repeat = 2
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_f5lgo"]
+texture = ExtResource("6_wk37g")
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4qhse"]
-bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
-corner_radius_top_left = 25
-corner_radius_top_right = 25
-corner_radius_bottom_right = 25
-corner_radius_bottom_left = 25
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_nb76t"]
+texture = ExtResource("7_736no")
 
-[node name="Node2D" type="Node2D"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_pp1ql"]
+texture = ExtResource("7_736no")
 
-[node name="CheckersBoardTop" type="Sprite2D" parent="."]
-position = Vector2(324, 663)
-scale = Vector2(0.6, 0.6)
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_m3gju"]
+texture = ExtResource("7_736no")
+
+[sub_resource type="SystemFont" id="SystemFont_3w330"]
+font_weight = 600
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cs52g"]
+bg_color = Color(0.129412, 0.282353, 0.686275, 1)
+border_color = Color(0.8, 0.8, 0.8, 0)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+expand_margin_left = 20.0
+expand_margin_top = 6.0
+expand_margin_right = 20.0
+expand_margin_bottom = 6.0
+shadow_size = 2
+shadow_offset = Vector2(0, 2)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_b2wgh"]
+bg_color = Color(0.0884535, 0.210391, 0.534708, 1)
+border_color = Color(0.8, 0.8, 0.8, 0)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+expand_margin_left = 20.0
+expand_margin_top = 6.0
+expand_margin_right = 20.0
+expand_margin_bottom = 6.0
+shadow_size = 2
+shadow_offset = Vector2(0, 2)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_msgrm"]
+bg_color = Color(0.200916, 0.379772, 0.83122, 1)
+border_color = Color(0.8, 0.8, 0.8, 0)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+expand_margin_left = 20.0
+expand_margin_top = 6.0
+expand_margin_right = 20.0
+expand_margin_bottom = 6.0
+shadow_size = 2
+shadow_offset = Vector2(0, 2)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_uih6s"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[node name="Node2D" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Background" type="ColorRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.84786046, 0.77981114, 0.76212347, 1)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 0
+
+[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="VBoxContainer/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer"]
+layout_mode = 2
+
+[node name="PlayerContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="YouLabel" type="Label" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer/PlayerContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 18
+text = "You"
+horizontal_alignment = 1
+
+[node name="PlayerAvatarDisplay" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer/PlayerContainer" instance=ExtResource("1_4qhse")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+is_display_only = true
+
+[node name="PlayerPieceContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="Control" type="Control" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer/PlayerPieceContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+
+[node name="PlayerPiece" type="TextureRect" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer/PlayerPieceContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+texture = ExtResource("2_t0jlu")
+expand_mode = 3
+stretch_mode = 4
+
+[node name="Spacer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer"]
+layout_mode = 2
+
+[node name="OppPieceContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2"]
+layout_mode = 2
+
+[node name="Control" type="Control" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2/OppPieceContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+
+[node name="OppPiece" type="TextureRect" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2/OppPieceContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+texture = ExtResource("2_nlcs0")
+expand_mode = 3
+stretch_mode = 4
+
+[node name="OppContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2"]
+layout_mode = 2
+
+[node name="OppLabel" type="Control" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2/OppContainer"]
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
+
+[node name="OppAvatarDisplay" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2/OppContainer" instance=ExtResource("1_4qhse")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 1
+size_flags_vertical = 4
+is_display_only = true
+controlled_by_data = true
+
+[node name="CenterContainer" type="CenterContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Node2D" type="PanelContainer" parent="VBoxContainer/CenterContainer"]
+layout_mode = 2
+
+[node name="CheckersBoardTop" type="TextureRect" parent="VBoxContainer/CenterContainer/Node2D"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(625, 625)
+layout_mode = 2
 texture = ExtResource("1_ys403")
+expand_mode = 2
+stretch_mode = 5
 script = ExtResource("2_3slu2")
 
-[node name="CheckerPieceRed" type="Sprite2D" parent="CheckersBoardTop"]
-visible = false
-position = Vector2(-472.312, -472.312)
-scale = Vector2(0.05, 0.05)
-texture = ExtResource("2_t0jlu")
+[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 10
 
-[node name="CheckerPieceBlack" type="Sprite2D" parent="CheckersBoardTop"]
-visible = false
-position = Vector2(-472.312, -472.312)
-scale = Vector2(0.05, 0.05)
-texture = ExtResource("2_nlcs0")
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/BottomItemHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 30
 
-[node name="BoardHighlight" type="Node" parent="CheckersBoardTop"]
-script = ExtResource("5_1kvqq")
-metadata/Energy = 16.0
-metadata/Position = Vector2(40.5, 379.5)
-metadata/Visible = false
+[node name="SettingsButton" type="Button" parent="VBoxContainer/BottomItemHBoxContainer/MarginContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 10
+size_flags_vertical = 8
+focus_mode = 0
+theme_override_font_sizes/font_size = 32
+theme_override_styles/normal = SubResource("StyleBoxTexture_dd3h5")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_kefgb")
+theme_override_styles/hover = SubResource("StyleBoxTexture_f5lgo")
 
-[node name="HighlightX" type="PointLight2D" parent="CheckersBoardTop/BoardHighlight"]
-z_as_relative = false
-position = Vector2(40.5, 379.5)
-scale = Vector2(0.872845, 0.872845)
-energy = 5.0
-texture = SubResource("GradientTexture2D_2v7vs")
-texture_scale = 1.45
-height = 1000.0
-script = ExtResource("6_srtqa")
-
-[node name="HighlightY" type="PointLight2D" parent="CheckersBoardTop/BoardHighlight"]
-z_as_relative = false
-position = Vector2(40.5, 379.5)
-scale = Vector2(0.873, 0.873)
-energy = 5.0
-range_z_min = 0
-range_z_max = 0
-texture = SubResource("GradientTexture2D_xghwu")
-texture_scale = 1.45
-height = 1000.0
-script = ExtResource("6_srtqa")
-
-[node name="Player1Box" type="Panel" parent="CheckersBoardTop"]
-top_level = true
-offset_left = 413.0
-offset_top = 36.0
-offset_right = 559.0
-offset_bottom = 193.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
-
-[node name="P1Label" type="RichTextLabel" parent="CheckersBoardTop/Player1Box"]
-layout_mode = 0
-offset_left = 1.0
-offset_top = 90.2499
-offset_right = 148.0
-offset_bottom = 138.25
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]Player 2[/center]"
-
-[node name="PlayerCheckerBlack" type="Sprite2D" parent="CheckersBoardTop/Player1Box"]
-position = Vector2(74, 54.25)
-scale = Vector2(0.0319005, 0.0319005)
-texture = ExtResource("2_nlcs0")
-
-[node name="Player2Box" type="Panel" parent="CheckersBoardTop"]
-top_level = true
-offset_left = 87.0
-offset_top = 36.0
-offset_right = 233.0
-offset_bottom = 193.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
-
-[node name="P2Label" type="RichTextLabel" parent="CheckersBoardTop/Player2Box"]
-layout_mode = 0
-offset_left = 1.0
-offset_top = 90.2499
-offset_right = 148.0
-offset_bottom = 138.25
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]Player 1[/center]"
-
-[node name="PlayerCheckerRed" type="Sprite2D" parent="CheckersBoardTop/Player2Box"]
-position = Vector2(74, 54.25)
-scale = Vector2(0.0319005, 0.0319005)
-texture = ExtResource("2_t0jlu")
-
-[node name="waitingLabel" type="Panel" parent="CheckersBoardTop"]
-visible = false
-top_level = true
-offset_left = 116.0
-offset_top = 609.0
-offset_right = 546.0
-offset_bottom = 709.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
-
-[node name="RichTextLabel" type="RichTextLabel" parent="CheckersBoardTop/waitingLabel"]
-layout_mode = 0
-offset_left = 14.0
-offset_top = 29.2222
-offset_right = 417.0
-offset_bottom = 71.2222
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]WAITING FOR OPPONENT...[/center]"
-
-[node name="winLoseLabel" type="Panel" parent="CheckersBoardTop"]
-visible = false
-top_level = true
-offset_left = 116.0
-offset_top = 609.0
-offset_right = 546.0
-offset_bottom = 709.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
-
-[node name="RichTextLabel" type="RichTextLabel" parent="CheckersBoardTop/winLoseLabel"]
-layout_mode = 0
-offset_left = 16.0
-offset_top = 29.2222
-offset_right = 419.0
-offset_bottom = 71.2222
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]YOU WIN![/center]"
+[node name="RulesButton" type="Button" parent="VBoxContainer/BottomItemHBoxContainer/MarginContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 8
+focus_mode = 0
+theme_override_font_sizes/font_size = 32
+theme_override_styles/normal = SubResource("StyleBoxTexture_nb76t")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_pp1ql")
+theme_override_styles/hover = SubResource("StyleBoxTexture_m3gju")
 
 [node name="SendButton" type="Button" parent="."]
-offset_left = 112.0
-offset_top = 1068.0
-offset_right = 232.0
-offset_bottom = 1118.0
-disabled = true
-text = "Send
-"
-script = ExtResource("9_14sfn")
+unique_name_in_owner = true
+custom_minimum_size = Vector2(70, 50)
+layout_mode = 0
+offset_left = 289.0
+offset_top = 1009.28
+offset_right = 359.0
+offset_bottom = 1059.28
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+size_flags_vertical = 8
+focus_mode = 0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/icon_normal_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_colors/icon_focus_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_colors/icon_pressed_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_colors/icon_hover_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_fonts/font = SubResource("SystemFont_3w330")
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_cs52g")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_b2wgh")
+theme_override_styles/hover = SubResource("StyleBoxFlat_msgrm")
+text = "Send"
 
-[node name="UndoButton" type="Button" parent="."]
-offset_left = 415.0
-offset_top = 1068.0
-offset_right = 535.0
-offset_bottom = 1118.0
-disabled = true
-text = "Undo"
-script = ExtResource("9_14sfn")
+[node name="WaitBlur" type="ColorRect" parent="."]
+unique_name_in_owner = true
+visible = false
+z_index = 1
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.152941, 0.152941, 0.152941, 0.556863)
+
+[node name="WaitForOpponentLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+z_index = 2
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -163.0
+offset_top = -17.5
+offset_right = 163.0
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_uih6s")
+text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="DotTimer" type="Timer" parent="."]
+unique_name_in_owner = true
+wait_time = 0.75
+
+[node name="SpecLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 0
+offset_top = 165.0
+offset_right = 648.0
+offset_bottom = 234.0
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 50
+text = "Spectating..."
+horizontal_alignment = 1
+vertical_alignment = 1

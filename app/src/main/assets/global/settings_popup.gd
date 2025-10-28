@@ -29,6 +29,8 @@ var dim_rect: ColorRect
 var main_avatar_preview: Node
 var current_brightness_slider: HSlider = null
 const GRABBER_IMAGE_PATH = "res://global/hollow_grabber.png"
+const THUMB_PRESS_MODE := BaseButton.ACTION_MODE_BUTTON_PRESS
+const DEADZONE_PX := 4
 var _scroll_pos_by_tab: Dictionary[String, Vector2] = {}
 
 func _remember_scroll_positions() -> void:
@@ -119,6 +121,10 @@ func _populate_theme_previews():
 		btn.texture_normal = texture
 		btn.stretch_mode = TextureButton.STRETCH_KEEP_CENTERED
 		btn.custom_minimum_size = Vector2(64, 64)
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.mouse_filter = Control.MOUSE_FILTER_STOP
+		btn.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+		btn.button_mask = MOUSE_BUTTON_MASK_LEFT
 		
 		if theme_name == saved_theme:
 			var style_box = StyleBoxFlat.new()
@@ -131,12 +137,10 @@ func _populate_theme_previews():
 		
 		preview_box.add_child(btn)
 		
-# Write settings for a category (hair duplicates to front/back + legacy)
 func _set_avatar_value(category: String, key: String, value) -> void:
 	if category == "hair":
 		SettingsManager.set_setting("avatar_hair_front", key, value)
 		SettingsManager.set_setting("avatar_hair_back", key, value)
-		# keep old single-layer key in sync for older scenes
 		SettingsManager.set_setting("avatar_hair", key, value)
 	else:
 		SettingsManager.set_setting("avatar_" + category, key, value)
@@ -158,6 +162,9 @@ func populate_theme_previews(themes_data: Dictionary) -> void:
 	for theme_name in themes_data.keys():
 		var btn: TextureButton = TextureButton.new()
 		btn.focus_mode = Control.FOCUS_NONE
+		btn.mouse_filter = Control.MOUSE_FILTER_STOP
+		btn.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+		btn.button_mask = MOUSE_BUTTON_MASK_LEFT
 		btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		btn.custom_minimum_size = Vector2(60, 60)
@@ -166,8 +173,8 @@ func populate_theme_previews(themes_data: Dictionary) -> void:
 		btn.resized.connect(func(): btn.pivot_offset = btn.size * 0.5)
 		
 		var bg_style := StyleBoxFlat.new()
-		bg_style.bg_color = Color("#FFD700", 0.4) # A nice translucent gold/yellow
-		bg_style.border_color = Color("#DAA520", 0.6) # A darker goldenrod for the border
+		bg_style.bg_color = Color("#FFD700", 0.4)
+		bg_style.border_color = Color("#DAA520", 0.6)
 		bg_style.border_width_left = 1
 		bg_style.border_width_top = 1
 		bg_style.border_width_right = 1
@@ -532,30 +539,41 @@ func _get_current_avatar_settings() -> Dictionary:
 	}
 
 func _create_image_presets_scrollbar(category: String, key: String, style_options: Array):
-	var scroll_container = ScrollContainer.new()
+	var scroll_container := ScrollContainer.new()
 	scroll_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll_container.custom_minimum_size = Vector2(0, 100)
-	
+	scroll_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	scroll_container.scroll_horizontal = 0
+	scroll_container.scroll_vertical = 0
+	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll_container.scroll_deadzone = DEADZONE_PX
+
 	var list_key: String = "%s/%s/%s" % [
-	avatar_tab_container.get_tab_title(avatar_tab_container.current_tab),
-	category,
-	key
+		avatar_tab_container.get_tab_title(avatar_tab_container.current_tab),
+		category, key
 	]
 	scroll_container.set_meta("list_key", list_key)
 
-	var hbox = HBoxContainer.new()
+	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 10)
+	hbox.mouse_filter = Control.MOUSE_FILTER_PASS
 	scroll_container.add_child(hbox)
 
-	var current_settings = _get_current_avatar_settings()
-
+	var current_settings := _get_current_avatar_settings()
 	var cfg_section := "avatar_hair_front" if category == "hair" else "avatar_" + category
 	var current_style_value = SettingsManager.get_setting(cfg_section, key, style_options[0])
 
 	for style_name in style_options:
-		var thumbnail = AvatarThumbnailScene.instantiate()
+		var thumbnail := AvatarThumbnailScene.instantiate()
 		thumbnail.custom_minimum_size = Vector2(96, 75)
 		thumbnail.controlled_by_data = true
+		thumbnail.focus_mode = Control.FOCUS_NONE
+		thumbnail.mouse_filter = Control.MOUSE_FILTER_STOP
+		thumbnail.action_mode = THUMB_PRESS_MODE
+		thumbnail.button_mask = MOUSE_BUTTON_MASK_LEFT
+		thumbnail.toggle_mode = false
+
 		hbox.add_child(thumbnail)
 
 		if category == "hair":
@@ -573,8 +591,15 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 			_on_avatar_setting_changed(category, key, style_name)
 		)
 
+		thumbnail.gui_input.connect(func(e: InputEvent):
+			if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
+				_on_avatar_setting_changed(category, key, style_name)
+				get_viewport().set_input_as_handled()
+		)
+
 	_add_property_to_box(scroll_container)
 	_restore_scroll(scroll_container)
+
 
 func _exit_tree():
 	print("SettingsPopup: _exit_tree() called.")
