@@ -114,7 +114,7 @@ func _ready() -> void:
 	if is_instance_valid(send_button):
 		send_button.disabled = true
 		_update_send_button_visibility(false)
-		send_button.pressed.connect(_on_send_pressed)
+		send_button.pressed.connect(send_game)
 
 func _build_replay_payload() -> Dictionary:
 	if droppedPiece == null:
@@ -141,9 +141,6 @@ func _build_replay_payload() -> Dictionary:
 		payload["winner"] = winner_id + "|" + win_loss_state
 
 	return payload
-	
-func _on_send_pressed() -> void:
-	await send_game()
 
 func send_game() -> void:
 	if droppedPiece == null:
