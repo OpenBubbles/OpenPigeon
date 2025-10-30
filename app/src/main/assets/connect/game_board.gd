@@ -47,7 +47,7 @@ var has_connected = false
 var waitingForOpponent = true
 var win_loss_state: String = ""
 var replay = null
-var player = null # note; enemy player id, not my player id
+var player = null
 var game_over: bool = false
 var can_interact: bool = true
 var suppress_next_click: bool = false
@@ -58,6 +58,8 @@ var boardSizeY = 6
 
 func _ready() -> void:
 	var appPlugin := Engine.get_singleton("AppPlugin")
+	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
+	_apply_bg_for_dark(is_dark)
 	if appPlugin:
 		if not has_connected:
 			print("App plugin is available")
@@ -69,7 +71,7 @@ func _ready() -> void:
 
 	else:
 		if player == null or replay == null:
-			_set_game_data('{"isYourTurn":true,"player":"1","replay":"board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"}')
+			_set_game_data('{"isYourTurn":true,"player":"2","replay":"board:1,1,1,1,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"}')
 			print("App plugin is not available")
 			return
 		
@@ -230,15 +232,34 @@ func _pulse_nodes(nodes: Array[Node2D]) -> void:
 			if spr:
 				_pulse_sprite(spr)
 				
-func _find_winning_sequence() -> Array[Vector2i]:
-	var dirs: Array[Vector2i] = [Vector2i(1,0), Vector2i(0,1), Vector2i(1,1), Vector2i(1,-1)]
+func _find_winning_sequence() -> Dictionary:
+	var dirs: Array[Vector2i] = [Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1), Vector2i(1, -1)]
+
 	for y in range(0, boardSizeY):
 		for x in range(0, boardSizeX):
+			var base_col := _cell_color(x, y)
+			if base_col == "":
+				continue
+
 			for d in dirs:
-				var seq := _four_coords(x, y, d.x, d.y)
-				if seq.size() == 4 and _coords_same_color(seq):
-					return seq
-	return []
+				var px := x - d.x
+				var py := y - d.y
+				var prev_in_bounds := (px >= 0 and px < boardSizeX and py >= 0 and py < boardSizeY)
+				if prev_in_bounds and _cell_color(px, py) == base_col:
+					continue
+
+				var run: Array[Vector2i] = []
+				var cx := x
+				var cy := y
+				while cx >= 0 and cx < boardSizeX and cy >= 0 and cy < boardSizeY and _cell_color(cx, cy) == base_col:
+					run.append(Vector2i(cx, cy))
+					cx += d.x
+					cy += d.y
+
+				if run.size() >= 4:
+					return { "coords": run, "color": base_col }
+
+	return {}
 	
 func _apply_turn_state() -> void:
 	if game_over:
@@ -254,7 +275,7 @@ func _apply_turn_state() -> void:
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
 		print("Is Dark: ", is_dark)
-		background.color = Color("#261a19") if is_dark else Color("#947972")
+		background.color = Color("503f39ff") if is_dark else Color("#d8c7c2")
 
 func set_waiting(enabled: bool):
 	if game_over:
@@ -287,46 +308,55 @@ func export_replay() -> String:
 func _set_game_data(new_replay: String):
 	var data = JSON.parse_string(new_replay)
 	print("Incoming Game Data: ", data)
-	isTurn = data["isYourTurn"]
-	player = int(data["player"])
-	my_player = data.get("myPlayerId", "")
-	replay = data["replay"]
-	var p1_id: String = data.get("player1", "")
-	var p2_id: String = data.get("player2", "")
-	var opponent_avatar_key = ""
+
+	isTurn = bool(data.get("isYourTurn", false))
+	replay = String(data.get("replay", ""))
+	my_player = String(data.get("myPlayerId", ""))
+
+	var p1_id: String = String(data.get("player1", ""))
+	var p2_id: String = String(data.get("player2", ""))
 	turn_owner = clamp(int(data.get("player", 1)), 1, 2)
 
-	if my_player != "" and p1_id != "" and p2_id != "":
-		player = (1 if my_player == p1_id else (2 if my_player == p2_id else 0))
-		if player == 0:
-			spectator_mode = true
-			if is_instance_valid(spec_label):
-				spec_label.visible = spectator_mode
-			if is_instance_valid(you_label):
-				you_label.visible = not spectator_mode
-	else:
-		player = (3 - turn_owner) if isTurn else turn_owner
+	player = _resolve_my_side(my_player, p1_id, p2_id, turn_owner, isTurn)
+	spectator_mode = (player == 0)
 
+	if is_instance_valid(spec_label):
+		spec_label.visible = spectator_mode
+	if is_instance_valid(you_label):
+		you_label.visible = not spectator_mode
+		if not spectator_mode:
+			you_label.text = "You"
+
+	var opponent_avatar_key := ""
 	if player == 1:
 		opponent_avatar_key = "avatar2"
-	else:
+	elif player == 2:
 		opponent_avatar_key = "avatar1"
 
 	if opponent_avatar_key != "" and data.has(opponent_avatar_key):
-		var avatar_string = data[opponent_avatar_key]
-		var opponent_data = _parse_avatar_string(avatar_string)
+		var avatar_string: String = String(data[opponent_avatar_key])
+		var opponent_data: Dictionary = _parse_avatar_string(avatar_string)
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
-	if isTurn == false:
-		if not (player == 2 and p1_id == ""):
-			player = 2 if player == 1 else 1
-
-	print("Whoami" + str(player))
+	print("Whoami: ", str(player))
 	_apply_player_piece_icons()
+	game_over = check_win()
 	_apply_turn_state()
 	_ready()
 	
+func _resolve_my_side(my_player_id: String, p1_id: String, p2_id: String, turn_owner: int, is_turn: bool) -> int:
+	if my_player_id != "" and p1_id != "" and p2_id != "":
+		if my_player_id == p1_id:
+			return 1
+		elif my_player_id == p2_id:
+			return 2
+		else:
+			return 0
+	if p1_id == "" or p2_id == "":
+		return turn_owner if is_turn else (3 - turn_owner)
+	return 0
+
 func _apply_player_piece_icons() -> void:
 	if not is_instance_valid(player_piece) or not is_instance_valid(opp_piece):
 		return
@@ -342,7 +372,6 @@ func _player_id_to_color(pid: int) -> String:
 	return PIECE_YELLOW if pid == 1 else PIECE_RED
 	
 func getPlayerColor(other: bool = false) -> String:
-	# Player 1 = yellow, Player 2 = red
 	var my_color   := PIECE_YELLOW if player == 1 else PIECE_RED
 	var opp_color  := PIECE_RED    if player == 1 else PIECE_YELLOW
 	return opp_color if other else my_color
@@ -383,20 +412,13 @@ func spawnPiece(posX: int, color: String, posY: int = -1, from_replay: bool = fa
 	piece.name = str(posX) + "," + str(posY)
 
 	if from_replay:
-		_highlight_last(piece)
-		var opp_win := _find_winning_sequence()
-		if opp_win.size() == 4:
-			_clear_last_highlight()
-			_highlight_winning_pulse(opp_win)
-			_finalize_win(false)
+		_highlight_last(piece)	# visual only
+		if _check_and_finalize_from_board():
+			return
 		return
 
 	droppedPiece = piece
-	var win_seq := _find_winning_sequence()
-	if win_seq.size() == 4:
-		_clear_last_highlight()
-		_highlight_winning_pulse(win_seq)
-		_finalize_win(true)
+	if _check_and_finalize_from_board():
 		await get_tree().process_frame
 		await send_game()
 		return
@@ -677,8 +699,38 @@ func play_sent_animation() -> void:
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
 	)
+	
+func _cell_color(x: int, y: int) -> String:
+	var n: Node2D = get_node_or_null("%d,%d" % [x, y])
+	if n == null:
+		return ""
+	return getPieceColor(n as RigidBody2D)
+
+func _color_to_player_id(col: String) -> int:
+	# Player 1 = yellow, Player 2 = red
+	if col == PIECE_YELLOW:
+		return 1
+	elif col == PIECE_RED:
+		return 2
+	return 0
+
+func _check_and_finalize_from_board() -> bool:
+	var win := _find_winning_sequence()	# { "coords": Array[Vector2i], "color": String } or {}
+	if win.is_empty():
+		return false
+
+	var coords: Array[Vector2i] = win["coords"]
+	var col: String = win["color"]
+	_clear_last_highlight()
+	_highlight_winning_pulse(coords)
+
+	var winner_pid: int = _color_to_player_id(col)
+	var i_won_now: bool = (winner_pid == int(player)) and (not spectator_mode)
+	_finalize_win(i_won_now)
+	return true
 
 func _finalize_win(i_won: bool) -> void:
+	print("691 finalize_win called")
 	if game_over:
 		return
 	game_over = true
