@@ -1,4 +1,4 @@
-extends Node2D
+extends Control
 class_name ConnectGameBoard
 
 @onready var player_avatar_display	: Control		= %PlayerAvatarDisplay

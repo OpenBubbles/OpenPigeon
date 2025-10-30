@@ -226,11 +226,11 @@ controlled_by_data = true
 
 [node name="CenterContainer" type="CenterContainer" parent="VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 3
+size_flags_vertical = 6
 
-[node name="GameBoard" type="Node2D" parent="VBoxContainer/CenterContainer"]
+[node name="GameBoard" type="PanelContainer" parent="VBoxContainer/CenterContainer"]
 unique_name_in_owner = true
-position = Vector2(323.759, 480.5)
+layout_mode = 2
 script = ExtResource("4_utbov")
 
 [node name="TextureLayer1" type="Sprite2D" parent="VBoxContainer/CenterContainer/GameBoard"]
