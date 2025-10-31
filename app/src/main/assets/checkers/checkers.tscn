@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3 uid="uid://cnrr1hwlmd565"]
+[gd_scene load_steps=21 format=3 uid="uid://cnrr1hwlmd565"]
 
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="1_4qhse"]
 [ext_resource type="Texture2D" uid="uid://d37tvmulfubj4" path="res://checkers/checkersboard_plain.png" id="1_ys403"]
@@ -7,6 +7,12 @@
 [ext_resource type="Texture2D" uid="uid://c8rkim5ojkkq8" path="res://checkers/checker_red.png" id="2_t0jlu"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="6_wk37g"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="7_736no"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wk37g"]
+bg_color = Color(0.6, 0.6, 0.6, 0)
+shadow_size = 20
+shadow_offset = Vector2(0, 10)
+anti_aliasing_size = 0.01
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4qhse"]
 bg_color = Color(0, 0, 0, 0.788235)
@@ -212,6 +218,7 @@ size_flags_vertical = 3
 
 [node name="Node2D" type="PanelContainer" parent="VBoxContainer/CenterContainer"]
 layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_wk37g")
 
 [node name="CheckersBoardTop" type="TextureRect" parent="VBoxContainer/CenterContainer/Node2D"]
 unique_name_in_owner = true

@@ -12,10 +12,12 @@ class_name CheckersBoardTop
 @onready var sent_label: Label = %SentLabel
 @onready var waiting_label: Label = %WaitForOpponentLabel
 @onready var waiting_blur: Control = %WaitBlur
+@onready var win_loss_label: Label = %WinLossLabel
 @onready var dot_timer: Timer = %DotTimer
 @onready var player_piece_icon: TextureRect = %PlayerPiece
 @onready var opp_piece_icon: TextureRect = %OppPiece
 @onready var you_label: Label = %YouLabel
+@onready var background = %Background
 @onready var spec_label: Label = %SpecLabel
 @onready var board: TextureRect = %CheckersBoardTop
 var appPlugin: Node = null
@@ -26,6 +28,7 @@ const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 
 const RULES_POPUP_SCENE := preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE := preload("res://global/settings_popup.tscn")
+const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 
 var black_king_texture := preload("res://checkers/checker_black_king.png")
 var red_king_texture := preload("res://checkers/checker_red_king.png")
@@ -155,7 +158,7 @@ func _apply_player_piece_icons() -> void:
 	opp_piece_icon.texture = ui_piece_textures.get(opp_color, null)
 	if is_instance_valid(you_label):
 		you_label.text = "You"
-		you_label.visible = not spectator_mode
+		you_label.modulate.a = 1.0 if not spectator_mode else 0.0
 
 func _get_nth_board_str(src: String, n: int) -> String:
 	var i := 0
@@ -193,20 +196,33 @@ func _current_board_string() -> String:
 func _on_send_pressed() -> void:
 	if not has_moved or prev_moves.size() < 2:
 		return
+	var red_left := false
+	var black_left := false
+	for y in range(8):
+		for x in range(8):
+			var piece := get_node_or_null("PiecesRoot/%d,%d" % [x, y]) as Sprite2D
+			if piece == null:
+				continue
+			var col := get_piece_color(piece)
+			if col == "red":
+				red_left = true
+			elif col == "black":
+				black_left = true
+	var game_is_over_pre := (red_left and not black_left) or (black_left and not red_left)
 
 	isTurn = false
 	if is_instance_valid(send_button):
 		send_button.disabled = true
 		send_button.visible = false
 		send_button.modulate.a = 0
-
 	call_deferred("send_game_checkers")
+
 
 func send_game_checkers() -> void:
 	if prev_moves.size() < 2:
 		return
 
-	var steps: Array = []
+	var steps: Array = []	# each = { "kind": "move"/"attack", "A1": Vector2i, "A2": Vector2i }
 	for i in range(0, prev_moves.size(), 2):
 		var p1: Vector2 = prev_moves[i]
 		var p2: Vector2 = prev_moves[i + 1]
@@ -218,7 +234,35 @@ func send_game_checkers() -> void:
 	var pre_board_str: String = _get_nth_board_str(replay, 1)
 	if pre_board_str == "":
 		pre_board_str = _get_nth_board_str(replay, 0)
+
+	for y in range(8):
+		for x in range(8):
+			var piece := get_node_or_null("PiecesRoot/%d,%d" % [x, y]) as Sprite2D
+			if piece == null:
+				continue
+			var col := get_piece_color(piece)
+			if col == "unknown" or is_checker_king(piece):
+				continue
+			if (col == "red" and y == 0):
+				set_checker_king(piece, "red")
+			elif (col == "black" and y == 7):
+				set_checker_king(piece, "black")
+
 	var post_board_str: String = _current_board_string()
+
+	var red_left := false
+	var black_left := false
+	for yy in range(8):
+		for xx in range(8):
+			var pc := get_node_or_null("PiecesRoot/%d,%d" % [xx, yy]) as Sprite2D
+			if pc == null:
+				continue
+			var c := get_piece_color(pc)
+			if c == "red":
+				red_left = true
+			elif c == "black":
+				black_left = true
+	var game_is_over := (red_left and not black_left) or (black_left and not red_left)
 
 	var parts: Array[String] = []
 	if pre_board_str != "":
@@ -233,8 +277,8 @@ func send_game_checkers() -> void:
 
 	var new_replay := String("|").join(parts)
 	var payload: Dictionary = { "replay": new_replay }
-
 	var avatar_key := ("avatar1" if player == 1 else "avatar2")
+
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
 
@@ -246,6 +290,21 @@ func send_game_checkers() -> void:
 		appPlugin.updateGameData(JSON.stringify(payload))
 	else:
 		print("AppPlugin is null. Cannot send game data.")
+
+	if game_is_over or wl != "":
+		game_over = true
+		stop_waiting_animation()
+		if is_instance_valid(sent_label):
+			sent_label.visible = false
+			sent_label.modulate.a = 1.0
+		clear_highlights()
+		clicked_piece = null
+		has_moved = false
+		moves.clear()
+		chain_jump_piece = null
+		prev_jumps.clear()
+		prev_moves.clear()
+		return
 
 	play_sent_animation()
 	clear_highlights()
@@ -314,9 +373,6 @@ func _recalculate_board_layout_from_board() -> void:
 		+ Vector2((draw_size.x - total_grid_px.x) * 0.5, (draw_size.y - total_grid_px.y) * 0.5) \
 		+ Vector2(board_inset, board_inset)
 
-func _have_game_data() -> bool:
-	return player != 0 and replay != ""
-
 func _prepare_scene_once() -> void:
 	_recalculate_board_layout_from_board()
 	if is_instance_valid(board):
@@ -339,6 +395,8 @@ func _clear_pieces() -> void:
 	chain_jump_piece = null
 
 func _ready() -> void:
+	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
+	_apply_bg_for_dark(is_dark)
 	if is_instance_valid(board):
 		board.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		board.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -383,6 +441,10 @@ func _ready() -> void:
 	var playerBox := get_node_or_null("Player" + str(player) + "Box")
 	if playerBox != null and not spectator_mode:
 		playerBox.get_child(0).set_text("[center]You[/center]")	
+		
+func _apply_bg_for_dark(is_dark: bool) -> void:
+	if is_instance_valid(background):
+		background.color = Color(0.08, 0.08, 0.08) if is_dark else Color("#e5e5e5")
 	
 func _visual_to_logical(gx: int, gy: int) -> Vector2i:
 	var lx := gx if (player == 2 and not spectator_mode) else (7 - gx)
@@ -536,13 +598,14 @@ func _on_board_gui_input(event: InputEvent) -> void:
 			chain_jump_piece = piece_to_move
 		else:
 			chain_jump_piece = null
+
 		if was_jump:
 			clicked_piece = piece_to_move
 			gen_moves(true)
 		else:
-			_compute_mandatory_jumps()
 			clicked_piece = piece_to_move
-			gen_moves(must_jump)
+			moves.clear()
+			_clear_move_highlights()
 
 		if was_jump and moves.size() == 0:
 			chain_jump_piece = null
@@ -672,8 +735,6 @@ func _logical_to_abs(lx: int, ly: int) -> Vector2i:
 	return Vector2i(ax, ay)
 	
 func _rebuild_from_replay() -> void:
-	if not _have_game_data():
-		return
 
 	_prepare_scene_once()
 	_clear_pieces()
@@ -700,7 +761,7 @@ func _rebuild_from_replay() -> void:
 	if prevBoard.is_empty() and not initialBoard.is_empty():
 		prevBoard = initialBoard
 
-	if not waitingForOpponent and not initialBoard.is_empty():
+	if not initialBoard.is_empty():
 		for ay in range(8):
 			for ax in range(8):
 				var idx := ay * 8 + ax
@@ -712,10 +773,16 @@ func _rebuild_from_replay() -> void:
 
 	if replayMoves.size() > 0:
 		await get_tree().process_frame
-		_replay_tweens.clear()
+
 		for i in range(replayMoves.size()):
-			var kind := replayMoves[i].split(":")[0]
-			var p := replayMoves[i].split(":")[1].split(",")
+			var parts := replayMoves[i].split(":")
+			if parts.size() < 2:
+				continue
+			var kind := parts[0]
+			var p := parts[1].split(",")
+			if p.size() < 4:
+				continue
+
 			var src_l := _abs_to_logical(int(p[0]), int(p[1]))
 			var dst_l := _abs_to_logical(int(p[2]), int(p[3]))
 
@@ -725,24 +792,19 @@ func _rebuild_from_replay() -> void:
 
 			var vpos := _cell_pos(dst_l.x, dst_l.y)
 			var tw := _tween_for(moved)
-			_replay_tweens.append(tw)
 			tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 			tw.tween_property(moved, "position", vpos, 0.5)
 
 			if kind == "attack":
 				jump_piece(src_l.x, src_l.y, dst_l.x, dst_l.y, 0.0, true)
 
-			tw.tween_callback(func():
-				if not is_instance_valid(moved):
-					return
+			await tw.finished
+			if is_instance_valid(moved):
 				moved.name = "%d,%d" % [dst_l.x, dst_l.y]
 				var col := get_piece_color(moved)
 				if (col == "red" and dst_l.y == 0) or (col == "black" and dst_l.y == 7):
 					set_checker_king(moved, col)
-			)
 
-		await get_tree().process_frame
-		await _await_all_tweens(_replay_tweens)
 		await get_tree().process_frame
 
 		_compute_mandatory_jumps()
@@ -750,6 +812,21 @@ func _rebuild_from_replay() -> void:
 			_show_mandatory_jump_previews()
 		else:
 			_clear_move_highlights()
+
+	if mode == "n" and isTurn and not spectator_mode:
+		call_deferred("_post_replay_ready")
+
+	_apply_player_piece_icons()
+	_apply_board_orientation()
+	
+	var wl := check_win_loss()
+	if wl != "":
+		game_over_visual(wl)
+	else:
+		if isTurn:
+			stop_waiting_animation()
+		else:
+			start_waiting_animation()
 	
 func _make_radial_highlight_node() -> Sprite2D:
 	var spr := Sprite2D.new()
@@ -804,6 +881,7 @@ func _set_game_data(new_replay: String) -> void:
 		return
 	var data: Dictionary = data_raw
 	print("RAW GAME DATA: ", data_raw)
+
 	isTurn = bool(data.get("isYourTurn", false))
 	replay = String(data.get("replay", ""))
 	mode = String(data.get("mode", "n"))
@@ -832,11 +910,13 @@ func _set_game_data(new_replay: String) -> void:
 
 	spectator_mode = (my_side == 0)
 	if spectator_mode:
-		if is_instance_valid(spec_label): spec_label.visible = true
-		if is_instance_valid(you_label): you_label.visible = false
+		if is_instance_valid(spec_label):
+			spec_label.visible = true
+		if is_instance_valid(you_label):
+			you_label.modulate.a = 0.0
 
 	player = my_side
-	
+
 	var opponent_avatar_key := ""
 	if player == 1:
 		opponent_avatar_key = "avatar2"
@@ -850,13 +930,97 @@ func _set_game_data(new_replay: String) -> void:
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
 	waitingForOpponent = not isTurn
-	if isTurn:
-		stop_waiting_animation()
-	else:
-		start_waiting_animation()
-
 	_apply_player_piece_icons()
 	call_deferred("_rebuild_from_replay")
+	
+func game_over_visual(results: String) -> void:
+	if spectator_mode:
+		if results == "win":
+			win_loss_label.text = "Player 1 Wins!"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			_show_win_burst(player_avatar_display)
+		else:
+			win_loss_label.text = "Player 2 Wins!"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			_show_win_burst(opp_avatar_display)
+	else:
+		if results == "win":
+			_show_win_burst(player_avatar_display)
+			win_loss_label.text = "YOU WIN!"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+		else:
+			_show_win_burst(opp_avatar_display)
+			win_loss_label.text = "YOU LOSE"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
+	win_loss_label.visible = true
+	await get_tree().process_frame
+	win_loss_label.scale = Vector2.ZERO
+	win_loss_label.pivot_offset = win_loss_label.size / 2
+	var t_in: Tween = create_tween()
+	t_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	
+func _show_win_burst(avatar: Control) -> void:
+	var wrapper: Control = _ensure_avatar_wrapper(avatar)
+	if not is_instance_valid(wrapper):
+		return
+
+	var existing: Node = wrapper.get_node_or_null("AvatarWinAnim")
+	if existing != null:
+		return
+
+	var anim_instance: Control = AvatarWinAnimScene.instantiate() as Control
+	anim_instance.name = "AvatarWinAnim"
+	wrapper.add_child(anim_instance)
+
+	var avatar_idx: int = avatar.get_index()
+	wrapper.move_child(anim_instance, avatar_idx)
+
+	anim_instance.z_as_relative = false
+	avatar.z_as_relative = false
+	anim_instance.z_index = 0
+	avatar.z_index = max(avatar.z_index, 1)
+
+	anim_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
+	anim_instance.offset_left = -52.0
+	anim_instance.offset_right = 52.0
+	anim_instance.offset_top = -43.0
+	anim_instance.offset_bottom = 43.0
+
+	(anim_instance as Node).call("set_color", Color(1.0, 0.84, 0.0))
+	(anim_instance as Node).call("play", 0.05)
+	
+func _ensure_avatar_wrapper(avatar: Control) -> Control:
+	var parent: Node = avatar.get_parent()
+	if parent == null:
+		return null
+
+	if parent is Control and not (parent is Container):
+		return parent as Control
+
+	var wrapper: Control = Control.new()
+	wrapper.name = "%s_Wrap" % avatar.name
+	wrapper.size_flags_horizontal = avatar.size_flags_horizontal
+	wrapper.size_flags_vertical = avatar.size_flags_vertical
+	wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
+
+	var idx: int = avatar.get_index()
+	parent.add_child(wrapper)
+	parent.move_child(wrapper, idx)
+
+	avatar.reparent(wrapper)
+	avatar.set_anchors_preset(Control.PRESET_FULL_RECT)
+	avatar.offset_left = 0.0
+	avatar.offset_top = 0.0
+	avatar.offset_right = 0.0
+	avatar.offset_bottom = 0.0
+
+	avatar.item_rect_changed.connect(func():
+		if is_instance_valid(wrapper):
+			wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
+	)
+
+	return wrapper
 	
 func _parse_avatar_string(data_string: String) -> Dictionary:
 	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
@@ -966,7 +1130,6 @@ func export_replay() -> String:
 	var result: Dictionary = {
 		"replay": replay.split("|")[-1] + move_str + "board:" + boardStr
 	}
-
 	var wl := check_win_loss()
 	if wl != "":
 		result["winner"] = my_player + "|" + ("1" if wl == "win" else "-1")
@@ -975,18 +1138,25 @@ func export_replay() -> String:
 func check_win_loss() -> String:
 	var num_your_pieces := 0
 	var num_other_pieces := 0
+	var scanned_any := false
+
 	for y in range(0, 8):
 		for x in range(0, 8):
 			var piece := get_node_or_null("PiecesRoot/" + str(x) + "," + str(y)) as Sprite2D
 			if piece != null:
+				scanned_any = true
 				if check_player(piece):
 					num_your_pieces += 1
 				else:
 					num_other_pieces += 1
-	if num_your_pieces == 0:
+
+	if not scanned_any:
+		return ""
+	if num_your_pieces == 0 and num_other_pieces > 0:
 		return "lose"
-	if num_other_pieces == 0:
+	if num_other_pieces == 0 and num_your_pieces > 0:
 		return "win"
+
 	return ""
 	
 func jump_piece(prevX: int, prevY: int, newX: int, newY: int, anim_delay: float = 0.0, replay_mode: bool = false) -> void:
@@ -1015,7 +1185,8 @@ func move_piece(piece: Sprite2D, x: int, y: int, anim_delay: float = 0.0) -> voi
 	var color := get_piece_color(piece)
 	if (color == "red" and y == 0) or (color == "black" and y == 7):
 		tween.tween_callback(set_checker_king.bind(piece, color))
-	piece.name = "%d,%d" % [x, y]
+
+	piece.name = str(x) + "," + str(y)
 
 func set_checker_king(piece: Sprite2D, color: String, undo: bool = false) -> void:
 	if color == "red":
@@ -1057,6 +1228,9 @@ func gen_moves(jumps_only: bool = false) -> void:
 		return
 	moves.clear()
 
+	if has_moved and prev_jumps.size() == 0:
+		return
+
 	var pos := Vector2i(int(getPiecePos(clicked_piece).x), int(getPiecePos(clicked_piece).y))
 	var step_dirs := _move_dirs_for(clicked_piece)
 	var jump_dirs := _jump_dirs_for(clicked_piece)
@@ -1091,6 +1265,8 @@ func gen_moves(jumps_only: bool = false) -> void:
 
 func check_player(piece: Sprite2D) -> bool:
 	var color := get_piece_color(piece)
+	if spectator_mode and color == "red":
+		return true
 	if player == 1 and color == "red":
 		return true
 	if player == 2 and color == "black":
@@ -1231,7 +1407,7 @@ func _on_settings_button_pressed() -> void:
 
 	settings_popup_script.closed.connect(_on_settings_closed)
 	settings_popup_script.settings_theme_selected.connect(_on_settings_theme_selected)
-	settings_popup_script.dark_mode_changed.connect(_on_dark_mode_changed)
+	settings_popup_script.dark_mode_changed.connect(_apply_bg_for_dark)
 
 	popup_instance.set_as_top_level(true)
 	popup_instance.visible = true
@@ -1331,9 +1507,6 @@ func _on_dot_timer_timeout():
 	for i in range(dot_count):
 		dots += "."
 	waiting_label.text = BASE_WAIT_TEXT + dots
-
-func _on_dark_mode_changed(_is_dark: bool) -> void:
-	pass
 
 func _unhandled_input(event: InputEvent) -> void:
 	if suppress_next_click and event is InputEventMouseButton and event.pressed:
@@ -1452,11 +1625,22 @@ func _move_dirs_for(piece: Sprite2D) -> Array[Vector2i]:
 		dirs.append(Vector2i( 1,  1))
 	return dirs
 
-func _jump_dirs_for(_piece: Sprite2D) -> Array[Vector2i]:
-	return [
-		Vector2i(-1, -1), Vector2i( 1, -1),
-		Vector2i(-1,  1), Vector2i( 1,  1)
-	]
+func _jump_dirs_for(piece: Sprite2D) -> Array[Vector2i]:
+	var dirs: Array[Vector2i] = []
+	if piece == null or not is_instance_valid(piece):
+		return dirs
+
+	var col := get_piece_color(piece)
+	var king := is_checker_king(piece)
+
+	if king or col == "red":
+		dirs.append(Vector2i(-1, -1))
+		dirs.append(Vector2i( 1, -1))
+	if king or col == "black":
+		dirs.append(Vector2i(-1,  1))
+		dirs.append(Vector2i( 1,  1))
+
+	return dirs
 	
 func _sanity_check_any_jump_exists() -> void:
 	var found := false
