@@ -48,8 +48,11 @@ var moves: Dictionary[Vector2, Sprite2D] = {}
 var has_moved: bool = false
 var prev_moves: Array[Vector2] = []
 var prev_jumps: Array[Sprite2D] = []
+var _replay_tweens: Array[Tween] = []
+var chain_jump_piece: Sprite2D = null
 var checking_for_jumps: bool = false
 var must_jump: bool = false
+var jumping_pieces: Array[Sprite2D] = []
 var game_over: bool = false
 var has_connected: bool = false
 var mode: String = "n"
@@ -63,59 +66,63 @@ var suppress_next_click: bool = false
 
 @export_range(0.3, 1.0, 0.01) var piece_fill: float = 0.78
 @export var board_inset: int = 0
-
-var DEBUG_ON := true
-var DEBUG_CELLS := true
-func _dbg(tag: String, fields: Dictionary = {}) -> void:
-	if not DEBUG_ON:
-		return
-	var parts: Array[String] = []
-	for k in fields.keys():
-		parts.append(str(k) + "=" + str(fields[k]))
-	print("[DBG:%s] %s" % [tag, ", ".join(parts)])
 	
 func _tween_for(target: Object) -> Tween:
 	var tw := get_tree().create_tween()
 	if is_instance_valid(target):
 		tw.bind_node(target)
 	return tw
-	
-func _add_debug_cell_numbers() -> void:
-	if not DEBUG_CELLS:
-		return
-	for child in get_children():
-		if is_instance_valid(child) and child.name.begins_with("DebugLabel_"):
-			child.queue_free()
+			
+func _await_all_tweens(arr: Array[Tween]) -> void:
+	for t in arr:
+		if t and t.is_running():
+			await t.finished
+			
+func _get_piece_pos(piece: Sprite2D) -> Vector2i:
+	if piece == null or not is_instance_valid(piece):
+		return Vector2i(-1, -1)
+	var parts = piece.name.split(",")
+	if parts.size() == 2:
+		return Vector2i(int(parts[0]), int(parts[1]))
+	return Vector2i(-1, -1)
 
-	for gy in range(0, 8):
-		for gx in range(0, 8):
-			var label := Label.new()
-			label.name = "DebugLabel_%d_%d" % [gx, gy]
-			label.text = "%d,%d" % [gx, gy]
-			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			label.modulate = Color(1, 1, 0, 0.85)
-			label.add_theme_font_size_override("font_size", int(cell_px / 5.0))
-			var center: Vector2 = _cell_pos_visual(gx, gy)
-			label.size = Vector2(cell_px, cell_px)
-			label.position = center - Vector2(cell_px / 2.0, cell_px / 2.0)
-			add_child(label)
+func _select_piece(piece: Sprite2D) -> void:
+	if piece == null or not is_instance_valid(piece):
+		return
+
+	if not check_player(piece): 
+		return
+
+	clear_highlights()
+	clicked_piece = piece
+	moves.clear()
+	
+	var p_pos := _get_piece_pos(clicked_piece)
+	if p_pos == Vector2i(-1, -1):
+		clicked_piece = null
+		return
+		
+	_show_selected_highlight_at(p_pos.x, p_pos.y)
+	
+	var force_jumps_only := must_jump or (chain_jump_piece != null)
+	gen_moves(force_jumps_only)
+
+	if moves.size() == 0 and not checking_for_jumps:
+		clicked_piece = null
+		_clear_selected_highlight()
+		
+	if chain_jump_piece != null and piece != chain_jump_piece:
+		return
+
 
 func _apply_board_orientation() -> void:
 	if not is_instance_valid(board):
-		_dbg("_apply_board_orientation", {"board_valid": false})
 		return
 	if board.size == Vector2.ZERO:
-		_dbg("_apply_board_orientation", {"size_zero": true, "defer": true})
 		call_deferred("_apply_board_orientation")
 		return
 	board.pivot_offset = board.size / 2.0
 	board.rotation_degrees = 0.0 
-	_dbg("_apply_board_orientation", {
-		"size": board.size, "pos": board.position,
-		"pivot": board.pivot_offset,
-		"rotation": board.rotation_degrees
-	})
 
 func _apply_piece_scale(s: Sprite2D) -> void:
 	if s.texture == null:
@@ -149,12 +156,6 @@ func _apply_player_piece_icons() -> void:
 	if is_instance_valid(you_label):
 		you_label.text = "You"
 		you_label.visible = not spectator_mode
-	_dbg("_apply_player_piece_icons", {
-		"player": player,
-		"you_visible": is_instance_valid(you_label) and you_label.visible,
-		"player_icon": player_piece_icon.texture.resource_path if is_instance_valid(player_piece_icon) and player_piece_icon.texture else "none",
-		"opp_icon": opp_piece_icon.texture.resource_path if is_instance_valid(opp_piece_icon) and opp_piece_icon.texture else "none"
-	})
 
 func _get_nth_board_str(src: String, n: int) -> String:
 	var i := 0
@@ -172,24 +173,20 @@ func _current_board_string() -> String:
 	for k in range(64):
 		board[k] = "0"
 
-	for ly in range(0, 8):
-		for lx in range(0, 8):
+	for ly in range(8):
+		for lx in range(8):
 			var piece := get_node_or_null("PiecesRoot/%d,%d" % [lx, ly]) as Sprite2D
 			if piece != null:
-				var piece_value: String = "0"
 				var color := get_piece_color(piece)
+				var v := "0"
 				if color == "red":
-					piece_value = "3" if is_checker_king(piece) else "1"
+					v = "3" if is_checker_king(piece) else "1"
 				elif color == "black":
-					piece_value = "4" if is_checker_king(piece) else "2"
+					v = "4" if is_checker_king(piece) else "2"
 				var A := _logical_to_abs(lx, ly)
-				var ax := A.x
-				var ay := A.y
-				var idx := ay * 8 + ax
+				var idx := A.y * 8 + A.x
 				if idx >= 0 and idx < 64:
-					board[idx] = piece_value
-				else:
-					print("Error: Calculated board index out of bounds: ", idx)
+					board[idx] = v
 
 	return ",".join(board)
 
@@ -209,7 +206,7 @@ func send_game_checkers() -> void:
 	if prev_moves.size() < 2:
 		return
 
-	var steps: Array = []	# each = { "kind": "move"/"attack", "A1": Vector2i, "A2": Vector2i }
+	var steps: Array = []
 	for i in range(0, prev_moves.size(), 2):
 		var p1: Vector2 = prev_moves[i]
 		var p2: Vector2 = prev_moves[i + 1]
@@ -221,10 +218,9 @@ func send_game_checkers() -> void:
 	var pre_board_str: String = _get_nth_board_str(replay, 1)
 	if pre_board_str == "":
 		pre_board_str = _get_nth_board_str(replay, 0)
-
 	var post_board_str: String = _current_board_string()
-	var parts: Array[String] = []
 
+	var parts: Array[String] = []
 	if pre_board_str != "":
 		parts.append("board:" + pre_board_str)
 
@@ -237,6 +233,7 @@ func send_game_checkers() -> void:
 
 	var new_replay := String("|").join(parts)
 	var payload: Dictionary = { "replay": new_replay }
+
 	var avatar_key := ("avatar1" if player == 1 else "avatar2")
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
@@ -244,8 +241,7 @@ func send_game_checkers() -> void:
 	var wl := check_win_loss()
 	if wl != "":
 		payload["winner"] = my_player + "|" + ("1" if wl == "win" else "-1")
-	print("PRELOAD TO SEND: ", payload)
-	
+
 	if appPlugin:
 		appPlugin.updateGameData(JSON.stringify(payload))
 	else:
@@ -256,11 +252,11 @@ func send_game_checkers() -> void:
 	clicked_piece = null
 	has_moved = false
 	moves.clear()
+	chain_jump_piece = null
 	prev_jumps.clear()
 	prev_moves.clear()
 		
 func _on_board_resized() -> void:
-	_dbg("board_resized", {"size": board.size})
 	_recalculate_board_layout_from_board()
 	_apply_board_orientation()
 	if selected_highlight and selected_highlight.visible and clicked_piece:
@@ -296,13 +292,13 @@ func _spawn_piece(val: String, lx: int, ly: int) -> Sprite2D:
 
 	_apply_piece_scale(s)
 	s.position = _cell_pos(lx, ly)
-	s.name = str(lx) + "," + str(ly)
+	s.name = "%d,%d" % [lx, ly]
 	s.z_as_relative = false
 	s.z_index = 2
 	s.visible = true
 	pieces_root.add_child(s)
 	return s
-	
+
 func _recalculate_board_layout_from_board() -> void:
 	if board == null:
 		return
@@ -318,12 +314,6 @@ func _recalculate_board_layout_from_board() -> void:
 		+ Vector2((draw_size.x - total_grid_px.x) * 0.5, (draw_size.y - total_grid_px.y) * 0.5) \
 		+ Vector2(board_inset, board_inset)
 
-	_dbg("recalc_layout", {
-		"stretch_mode": board.stretch_mode,
-		"draw_pos": draw_pos, "draw_size": draw_size,
-		"cell_px": cell_px, "origin": board_origin
-	})
-
 func _have_game_data() -> bool:
 	return player != 0 and replay != ""
 
@@ -332,7 +322,6 @@ func _prepare_scene_once() -> void:
 	if is_instance_valid(board):
 		if not board.is_connected("resized", Callable(self, "_on_board_resized")):
 			board.resized.connect(_on_board_resized)
-			_dbg("connect_resized", {"connected": true})
 	if pieces_root == null:
 		pieces_root = Node2D.new()
 		pieces_root.name = "PiecesRoot"
@@ -347,18 +336,14 @@ func _clear_pieces() -> void:
 	prev_jumps.clear()
 	clicked_piece = null
 	has_moved = false
+	chain_jump_piece = null
 
 func _ready() -> void:
-	_dbg("_ready.begin", {
-		"os": OS.get_name(), "screen_size": get_viewport_rect().size,
-		"player": player, "spectator": spectator_mode, "isTurn": isTurn
-	})
 	if is_instance_valid(board):
 		board.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		board.mouse_filter = Control.MOUSE_FILTER_STOP
 		if not board.is_connected("resized", Callable(self, "_on_board_resized")):
 			board.resized.connect(_on_board_resized)
-			_dbg("connect_resized", {"connected": true})
 		if not board.gui_input.is_connected(Callable(self, "_on_board_gui_input")):
 			board.gui_input.connect(_on_board_gui_input)
 	_recalculate_board_layout_from_board()
@@ -377,13 +362,11 @@ func _ready() -> void:
 		send_button.visible = false
 		send_button.modulate.a = 0
 		send_button.scale = Vector2(1.0, 1.0)
-		print("[SendButton] ready; visible=", send_button.visible, " a=", send_button.modulate.a)
 		if not send_button.pressed.is_connected(Callable(self, "_on_send_pressed")):
 			send_button.pressed.connect(_on_send_pressed)
 			
 	appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin:
-		print("AppPlugin Available")
 		if not has_connected:
 			appPlugin.connect("set_game_data", _set_game_data)
 			has_connected = true
@@ -391,7 +374,7 @@ func _ready() -> void:
 			print("AppPlugin Connected")
 	else:
 		if player == 0 or replay == "":
-			_set_game_data('{"isYourTurn":1,"player":"1","replay":"board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|move:6,5,7,4|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,0,0,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0"}')
+			_set_game_data('{"isYourTurn":1,"player":"1","replay":"board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|move:6,5,7,4|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0"}')
 			print("App plugin is not available")
 
 	if player == 0 or replay == "":
@@ -420,6 +403,10 @@ func _make_move_highlight_node() -> Sprite2D:
 	spr.z_index = 1
 
 	var grad := Gradient.new()
+	grad.add_point(0.00, Color(1, 1, 1, 0.00))
+	grad.add_point(0.35, Color(1, 1, 1, 0.18))
+	grad.add_point(0.75, Color(1, 1, 1, 0.32))
+	grad.add_point(1.00, Color(1, 1, 1, 0.00))
 
 	var tex := GradientTexture2D.new()
 	tex.gradient = grad
@@ -430,8 +417,20 @@ func _make_move_highlight_node() -> Sprite2D:
 	tex.fill_to = Vector2(1.25, 0.5)
 
 	spr.texture = tex
-	_start_pulse(spr, 0.01, 0.3, 2)
+	_start_pulse(spr, 0.10, 0.60, 1.2)
 	return spr
+	
+func _post_replay_ready() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	_scan_row(3)
+	_scan_row(4)
+	_scan_row(5)
+
+	_compute_mandatory_jumps()
+	if must_jump and chain_jump_piece == null:
+		_show_mandatory_jump_previews()
 
 func _add_move_highlight(lx: int, ly: int) -> void:
 	var key := Vector2i(lx, ly)
@@ -452,17 +451,15 @@ func _add_move_highlight(lx: int, ly: int) -> void:
 	add_child(spr)
 	move_highlights[key] = spr
 
-
 func _clear_move_highlights() -> void:
 	for k in move_highlights.keys():
-		var n: Sprite2D = move_highlights[k]
-		if is_instance_valid(n):
-			if n.has_meta("_pulse_tween"):
-				var t: Tween = n.get_meta("_pulse_tween")
-				if t and t.is_running():
-					t.kill()
-				n.set_meta("_pulse_tween", null)
-			n.queue_free()
+		var n2: Sprite2D = move_highlights[k]
+		if is_instance_valid(n2):
+			if n2.has_meta("_pulse_tween"):
+				var t: Tween = n2.get_meta("_pulse_tween")
+				if t and t.is_running(): t.kill()
+				n2.set_meta("_pulse_tween", null)
+			n2.queue_free()
 	move_highlights.clear()
 
 func _revert_temp_move_if_any() -> void:
@@ -502,71 +499,86 @@ func _on_board_gui_input(event: InputEvent) -> void:
 	var L: Vector2i = _visual_to_logical(gx, gy)
 	var lx: int = L.x
 	var ly: int = L.y
-	print("[click] vis=(", gx, ",", gy, ") -> log=(", lx, ",", ly, ")  player=", player, " spectator=", spectator_mode)
-
+	
+	if isTurn and not spectator_mode and chain_jump_piece == null:
+		_compute_mandatory_jumps()
+		if must_jump:
+			_show_mandatory_jump_previews()
 	var key := Vector2(lx, ly)
 	var is_target := moves.has(key)
 	var clickedPiece := get_node_or_null("PiecesRoot/%d,%d" % [lx, ly]) as Sprite2D
-	if clicked_piece != null and is_target:
-		if prev_moves.is_empty():
-			var start_pos := getPiecePos(clicked_piece)
-			temp_start_pos = Vector2i(int(start_pos.x), int(start_pos.y))
+	
+	if chain_jump_piece != null and clickedPiece != null and clickedPiece != chain_jump_piece:
+		return
 
-		var prevPiecePos := getPiecePos(clicked_piece)
-		clicked_piece = moves[key]
-		move_piece(clicked_piece, lx, ly)
+	if is_target:
+		var piece_to_move := clicked_piece
+		_stop_all_jump_pulses(piece_to_move)
+		if piece_to_move == null:
+			piece_to_move = moves[key]
 
+		if piece_to_move == null:
+			return
+
+		var prevPiecePos: Vector2i = _get_piece_pos(piece_to_move)
+		if prevPiecePos == Vector2i(-1, -1):
+			return
+		
+		move_piece(piece_to_move, lx, ly)
+		var was_jump: bool = abs(prevPiecePos.x - lx) > 1
 		clear_highlights()
 		has_moved = true
-		prev_moves.append(prevPiecePos)
+		prev_moves.append(Vector2(prevPiecePos.x, prevPiecePos.y))
 		prev_moves.append(Vector2(lx, ly))
-		if abs(prev_moves[-2].x - prev_moves[-1].x) > 1:
+
+		if was_jump:
 			jump_piece(prev_moves[-2].x, prev_moves[-2].y, prev_moves[-1].x, prev_moves[-1].y)
-		gen_moves()
+			chain_jump_piece = piece_to_move
+		else:
+			chain_jump_piece = null
+		if was_jump:
+			clicked_piece = piece_to_move
+			gen_moves(true)
+		else:
+			_compute_mandatory_jumps()
+			clicked_piece = piece_to_move
+			gen_moves(must_jump)
+
+		if was_jump and moves.size() == 0:
+			chain_jump_piece = null
+			_update_send_button()
+			_auto_send_if_ready()
+			return
+
 		_update_send_button()
 		return
+
 	if clickedPiece == null and not is_target:
-		if clicked_piece != null and not has_moved:
-			clicked_piece = null
+		if self.clicked_piece != null and not has_moved:
+			self.clicked_piece = null
 			clear_highlights()
 			_clear_selected_highlight()
 		return
-		
-	if clickedPiece == null:
-		return
-
-	var color := get_piece_color(clickedPiece)
-	print("[click] piece at log(", lx, ",", ly, ") color=", color, " is_king=", is_checker_king(clickedPiece))
 
 	if not check_player(clickedPiece):
-		print("[click] not your piece — ignoring")
 		return
-		
+
+	if must_jump and not (clickedPiece in jumping_pieces):
+		for piece_to_pulse in jumping_pieces:
+			_start_pulse(piece_to_pulse, 0.1, 0.7, 1.0)
+		return
+	
 	if has_moved and prev_moves.size() >= 2:
 		var temp_cur := Vector2i(int(prev_moves[-1].x), int(prev_moves[-1].y))
-		if clickedPiece.name == "%d,%d" % [temp_cur.x, temp_cur.y] or clickedPiece != clicked_piece:
+		if clickedPiece.name == "%d,%d" % [temp_cur.x, temp_cur.y] or clickedPiece != self.clicked_piece:
 			_revert_temp_move_if_any()
 
-	if clickedPiece == clicked_piece and not has_moved:
-		clicked_piece = null
+	if clickedPiece == self.clicked_piece and not has_moved:
+		self.clicked_piece = null
 		clear_highlights()
 		_clear_selected_highlight()
 		return
-
-	clear_highlights()
-	clicked_piece = clickedPiece
-	moves.clear()
-	print("[select] trying piece at log(", lx, ",", ly, ") player=", player, " color=", color, " must_jump=", must_jump)
-
-	_show_selected_highlight_at(lx, ly)
-	gen_moves()
-	print("[select] gen_moves count=", moves.size())
-
-	if moves.size() == 0:
-		print("[select] no legal moves — cancel selection")
-		clicked_piece = null
-		_clear_selected_highlight()
-		return
+	_select_piece(clickedPiece)
 		
 func _start_pulse(node: CanvasItem, min_a: float = 0.35, max_a: float = 0.85, period: float = 1.2) -> void:
 	if node == null or not is_instance_valid(node):
@@ -595,6 +607,22 @@ func _start_pulse(node: CanvasItem, min_a: float = 0.35, max_a: float = 0.85, pe
 			tw.kill()
 		node.set_meta("_pulse_tween", null)
 	)
+
+func _stop_pulse(node: CanvasItem) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	if node.has_meta("_pulse_tween"):
+		var t: Tween = node.get_meta("_pulse_tween")
+		if t and t.is_running():
+			t.kill()
+		node.set_meta("_pulse_tween", null)
+	node.self_modulate.a = 1.0
+
+func _stop_all_jump_pulses(except: Sprite2D = null) -> void:
+	for p in jumping_pieces:
+		if p != null and is_instance_valid(p) and p != except:
+			_stop_pulse(p)
+
 
 func _get_board_draw_rect() -> Rect2:
 	if not is_instance_valid(board) or board.texture == null:
@@ -636,7 +664,6 @@ func _get_board_draw_rect() -> Rect2:
 func _abs_to_logical(ax: int, ay: int) -> Vector2i:
 	var lx := ax
 	var ly := ay
-	print("[abs_to_logical] ABS(", ax, ",", ay, ") -> LOG(", lx, ",", ly, ") p=", player)
 	return Vector2i(lx, ly)
 
 func _logical_to_abs(lx: int, ly: int) -> Vector2i:
@@ -644,25 +671,18 @@ func _logical_to_abs(lx: int, ly: int) -> Vector2i:
 	var ay := ly
 	return Vector2i(ax, ay)
 	
-func _probe(lx: int, ly: int) -> void:
-	var n := get_node_or_null("PiecesRoot/%d,%d" % [lx, ly]) as Sprite2D
-	print("[probe] LOG(", lx, ",", ly, ") exists=", n != null, " color=", (get_piece_color(n) if n != null else "none"))
-
 func _rebuild_from_replay() -> void:
-	_dbg("_rebuild_from_replay.begin")
 	if not _have_game_data():
-		_dbg("_rebuild_from_replay.no_data")
 		return
 
 	_prepare_scene_once()
 	_clear_pieces()
+	await get_tree().process_frame
+	await get_tree().process_frame
 
 	var initialBoard: PackedStringArray = PackedStringArray()
 	var prevBoard: PackedStringArray = PackedStringArray()
 	var replayMoves: Array[String] = []
-
-	print("[rebuild] player=", player, " spectator=", spectator_mode, " isTurn=", isTurn)
-	print("[rebuild] replay raw: ", replay)
 
 	for elem in replay.split("|"):
 		var spl := elem.split(":")
@@ -680,85 +700,56 @@ func _rebuild_from_replay() -> void:
 	if prevBoard.is_empty() and not initialBoard.is_empty():
 		prevBoard = initialBoard
 
-	print("[rebuild] boards  initial=", initialBoard.size(), "  final=", prevBoard.size(), "  moves=", replayMoves.size())
-	
 	if not waitingForOpponent and not initialBoard.is_empty():
-		for ay in range(0, 8):
-			for ax in range(0, 8):
+		for ay in range(8):
+			for ax in range(8):
 				var idx := ay * 8 + ax
 				if idx < initialBoard.size():
 					var v := initialBoard[idx]
 					if v != "0":
 						var L := _abs_to_logical(ax, ay)
-						print("[place] idx=", idx, " val=", v, " ABS(", ax, ",", ay, ") -> LOG(", L.x, ",", L.y, ")")
 						_spawn_piece(v, L.x, L.y)
-		print("[rebuild] initial board placed.")
-
-	_probe(1, 2)
-	_probe(0, 3)
 
 	if replayMoves.size() > 0:
-		var first_parts := replayMoves[0].split(":")[1].split(",")
-		var start_abs_x := int(first_parts[0])
-		var start_abs_y := int(first_parts[1])
-		var start_l := _abs_to_logical(start_abs_x, start_abs_y)
-		print("[rebuild] start ABS(", start_abs_x, ",", start_abs_y, ") -> LOG", start_l)
+		await get_tree().process_frame
+		_replay_tweens.clear()
+		for i in range(replayMoves.size()):
+			var kind := replayMoves[i].split(":")[0]
+			var p := replayMoves[i].split(":")[1].split(",")
+			var src_l := _abs_to_logical(int(p[0]), int(p[1]))
+			var dst_l := _abs_to_logical(int(p[2]), int(p[3]))
 
-		var moved := get_node_or_null("PiecesRoot/%d,%d" % [start_l.x, start_l.y]) as Sprite2D
-		print("[rebuild] moved node lookup at LOG ", start_l, "  found=", moved != null)
+			var moved := get_node_or_null("PiecesRoot/%d,%d" % [src_l.x, src_l.y]) as Sprite2D
+			if moved == null:
+				continue
 
-		if moved != null:
-			moved.position = _cell_pos(start_l.x, start_l.y)
-			var tw := moved.get_tree().create_tween()
-			tw.bind_node(moved)
-			tw.set_parallel(false)
+			var vpos := _cell_pos(dst_l.x, dst_l.y)
+			var tw := _tween_for(moved)
+			_replay_tweens.append(tw)
+			tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			tw.tween_property(moved, "position", vpos, 0.5)
 
-			for i in range(replayMoves.size()):
-				var kind := replayMoves[i].split(":")[0]
-				var p := replayMoves[i].split(":")[1].split(",")
-				var src_l := _abs_to_logical(int(p[0]), int(p[1]))
-				var dst_l := _abs_to_logical(int(p[2]), int(p[3]))
-				print("[move#", i, "] kind=", kind,
-					"  ABS(", p[0], ",", p[1], ")→(", p[2], ",", p[3], ")",
-					"  LOG", src_l, "→", dst_l)
+			if kind == "attack":
+				jump_piece(src_l.x, src_l.y, dst_l.x, dst_l.y, 0.0, true)
 
-				var vpos := _cell_pos(dst_l.x, dst_l.y)
-				tw.tween_property(moved, "position", vpos, 0.5).set_trans(Tween.TRANS_SINE)
-
+			tw.tween_callback(func():
+				if not is_instance_valid(moved):
+					return
 				moved.name = "%d,%d" % [dst_l.x, dst_l.y]
-				print("[move#", i, "] renamed to ", moved.name)
-
 				var col := get_piece_color(moved)
-				if (col == "black" and dst_l.y == 7) or (col == "red" and dst_l.y == 0):
-					print("[move#", i, "] crowning ", col, " at y=", dst_l.y)
-					tw.tween_callback(set_checker_king.bind(moved, col))
+				if (col == "red" and dst_l.y == 0) or (col == "black" and dst_l.y == 7):
+					set_checker_king(moved, col)
+			)
 
-				if kind == "attack":
-					print("[move#", i, "] jump from ", src_l, " to ", dst_l)
-					jump_piece(src_l.x, src_l.y, dst_l.x, dst_l.y, i * 0.5, true)
+		await get_tree().process_frame
+		await _await_all_tweens(_replay_tweens)
+		await get_tree().process_frame
 
-	if mode == "n":
-		must_jump = false
-		checking_for_jumps = true
-		for y in range(0, 8):
-			for x in range(0, 8):
-				var piece := get_node_or_null("PiecesRoot/%d,%d" % [x, y]) as Sprite2D
-				if piece != null and check_player(piece):
-					clicked_piece = piece
-					gen_moves(true)
-					if moves.size() > 0:
-						must_jump = true
-		checking_for_jumps = false
-		print("[rebuild] must_jump=", must_jump)
-
-	if (isTurn):
-		stop_waiting_animation()
-	else:
-		start_waiting_animation()
-	_apply_player_piece_icons()
-	_apply_board_orientation()
-	_add_debug_cell_numbers()
-	_dbg("_rebuild_from_replay.end", {"rotation": board.rotation_degrees if is_instance_valid(board) else -1})
+		_compute_mandatory_jumps()
+		if must_jump and chain_jump_piece == null:
+			_show_mandatory_jump_previews()
+		else:
+			_clear_move_highlights()
 	
 func _make_radial_highlight_node() -> Sprite2D:
 	var spr := Sprite2D.new()
@@ -806,18 +797,12 @@ func _show_selected_highlight_at(lx: int, ly: int) -> void:
 func _clear_selected_highlight() -> void:
 	if selected_highlight and is_instance_valid(selected_highlight):
 		selected_highlight.visible = false
-		print("[selHL] cleared")
-
+		
 func _set_game_data(new_replay: String) -> void:
 	var data_raw: Variant = JSON.parse_string(new_replay)
 	if typeof(data_raw) != TYPE_DICTIONARY:
 		return
 	var data: Dictionary = data_raw
-	_dbg("_set_game_data.raw", {
-		"has_p1": data.has("player1"), "has_p2": data.has("player2"),
-		"in_isTurn": isTurn, "in_player_field": data.get("player", "n/a"),
-		"myPlayerId": my_player
-	})
 	print("RAW GAME DATA: ", data_raw)
 	isTurn = bool(data.get("isYourTurn", false))
 	replay = String(data.get("replay", ""))
@@ -826,8 +811,6 @@ func _set_game_data(new_replay: String) -> void:
 
 	var data_sender: int = clamp(int(data.get("player", 0)), 0, 2)
 	turn_owner = clamp(int(data.get("player", 1)), 1, 2)
-	_dbg("_set_game_data.sender", {"data_sender": data_sender, "turn_owner": turn_owner})
-
 	var p1_id: String = String(data.get("player1", ""))
 	var p2_id: String = String(data.get("player2", ""))
 
@@ -853,7 +836,6 @@ func _set_game_data(new_replay: String) -> void:
 		if is_instance_valid(you_label): you_label.visible = false
 
 	player = my_side
-	_dbg("_set_game_data.final", {"player": player, "spectator": spectator_mode})
 	
 	var opponent_avatar_key := ""
 	if player == 1:
@@ -866,6 +848,12 @@ func _set_game_data(new_replay: String) -> void:
 		var opponent_data: Dictionary = _parse_avatar_string(avatar_string)
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+
+	waitingForOpponent = not isTurn
+	if isTurn:
+		stop_waiting_animation()
+	else:
+		start_waiting_animation()
 
 	_apply_player_piece_icons()
 	call_deferred("_rebuild_from_replay")
@@ -943,13 +931,8 @@ func export_replay() -> String:
 	for i in range(64):
 		board.append("0")
 
-	if DEBUG_CELLS:
-		for child in get_children():
-			if child.name.begins_with("DebugLabel_"):
-				child.queue_free()
-
-	for ly in range(0, 8):
-		for lx in range(0, 8):
+	for ly in range(8):
+		for lx in range(8):
 			var piece := get_node_or_null("PiecesRoot/%d,%d" % [lx, ly]) as Sprite2D
 			if piece != null:
 				var A := _logical_to_abs(lx, ly)
@@ -1012,14 +995,6 @@ func jump_piece(prevX: int, prevY: int, newX: int, newY: int, anim_delay: float 
 	var jx := prevX + x_step
 	var jy := prevY + y_step
 
-	_dbg("replay.jump", {
-		"prev": str(Vector2i(prevX, prevY)),
-		"new": str(Vector2i(newX, newY)),
-		"jumped_logical_x": jx,
-		"jumped_logical_y": jy,
-		"replay_mode": replay_mode, "player": player
-	})
-	
 	var jumpedPiece := get_node_or_null("PiecesRoot/" + str(jx) + "," + str(jy)) as Sprite2D
 	if jumpedPiece != null:
 		var tween := jumpedPiece.get_tree().create_tween()
@@ -1030,18 +1005,17 @@ func jump_piece(prevX: int, prevY: int, newX: int, newY: int, anim_delay: float 
 		jumpedPiece.name = str(jx) + "," + str(jy) + "_jumped"
 		if not replay_mode:
 			prev_jumps.append(jumpedPiece)
-	_dbg("replay.jump.fetch", {"node": "PiecesRoot/%d,%d" % [jx, jy], "found": jumpedPiece != null})
-
+	
 func move_piece(piece: Sprite2D, x: int, y: int, anim_delay: float = 0.0) -> void:
 	var newPos := _cell_pos(x, y)
 	var tween := piece.get_tree().create_tween()
 	tween.tween_interval(anim_delay)
 	tween.tween_property(piece, "position", newPos, 0.5).set_trans(Tween.TRANS_SINE)
+
 	var color := get_piece_color(piece)
-	
-	if (color == "black" and y == 7) or (color == "red" and y == 0):
+	if (color == "red" and y == 0) or (color == "black" and y == 7):
 		tween.tween_callback(set_checker_king.bind(piece, color))
-	piece.name = str(x) + "," + str(y)
+	piece.name = "%d,%d" % [x, y]
 
 func set_checker_king(piece: Sprite2D, color: String, undo: bool = false) -> void:
 	if color == "red":
@@ -1050,8 +1024,10 @@ func set_checker_king(piece: Sprite2D, color: String, undo: bool = false) -> voi
 		piece.texture = black_normal_texture if undo else black_king_texture
 	_apply_piece_scale(piece)
 
+
 func is_checker_king(piece: Sprite2D) -> bool:
-	return piece.texture.resource_path.contains("king")
+	return piece.texture != null and piece.texture.resource_path.contains("king")
+
 
 func getPiecePos(piece: Sprite2D) -> Vector2:
 	var posStr := piece.name.split(",")
@@ -1067,6 +1043,7 @@ func clear_highlights() -> void:
 	highlights.clear()
 	_clear_move_highlights()
 	_clear_selected_highlight()
+	_stop_all_jump_pulses()
 
 func get_piece_color(piece: Sprite2D) -> String:
 	if piece.texture.resource_path.contains("red"):
@@ -1075,39 +1052,42 @@ func get_piece_color(piece: Sprite2D) -> String:
 		return "black"
 	return "unknown"
 
-func gen_moves(first_move: bool = false) -> void:
-	if not first_move:
-		moves.clear()
+func gen_moves(jumps_only: bool = false) -> void:
+	if clicked_piece == null or not is_instance_valid(clicked_piece):
+		return
+	moves.clear()
 
-	var diagonals: Array[Vector2] = []
-	var color := get_piece_color(clicked_piece)
-	var isKing := is_checker_king(clicked_piece)
-	if color == "black" or isKing:
-		diagonals.append(Vector2(-1, 1))
-		diagonals.append(Vector2(1, 1))
-	if color == "red" or isKing:
-		diagonals.append(Vector2(1, -1))
-		diagonals.append(Vector2(-1, -1))
+	var pos := Vector2i(int(getPiecePos(clicked_piece).x), int(getPiecePos(clicked_piece).y))
+	var step_dirs := _move_dirs_for(clicked_piece)
+	var jump_dirs := _jump_dirs_for(clicked_piece)
 
-	for diagonal in diagonals:
-		var clickedPiecePos := getPiecePos(clicked_piece)
-		var pos := Vector2(clickedPiecePos.x + diagonal.x, clickedPiecePos.y + diagonal.y)
-		if (pos.x >= 0 and pos.x <= 7) and (pos.y >= 0 and pos.y <= 7):
-			var piece := get_node_or_null("PiecesRoot/" + str(int(pos.x)) + "," + str(int(pos.y))) as Sprite2D
-			if piece == null:
-				if not checking_for_jumps:
-					if prev_moves.size() > 0:
-						continue
-					moves[pos] = clicked_piece
-					_add_move_highlight(int(pos.x), int(pos.y))
-			elif not check_player(piece) and (prev_moves.size() / 2 == prev_jumps.size()):
-				var x_step := 1 if pos.x > clickedPiecePos.x else -1
-				var y_step := 1 if pos.y > clickedPiecePos.y else -1
-				var newPos2 := Vector2(pos.x + x_step, pos.y + y_step)
-				if (newPos2.x >= 0 and newPos2.x <= 7) and (newPos2.y >= 0 and newPos2.y <= 7):
-					if get_node_or_null("PiecesRoot/" + str(int(newPos2.x)) + "," + str(int(newPos2.y))) == null:
-						moves[newPos2] = clicked_piece
-						_add_move_highlight(int(newPos2.x), int(newPos2.y))
+	var continuing_jump := (prev_moves.size() >= 2 and prev_jumps.size() > 0 and clicked_piece == chain_jump_piece)
+	var require_jumps := jumps_only or continuing_jump or must_jump
+
+	if must_jump and not _any_jump_from(clicked_piece):
+		return
+	if chain_jump_piece != null and clicked_piece != chain_jump_piece:
+		return
+
+	for d in jump_dirs:
+		var mid := pos + d
+		var land := pos + (d * 2)
+		if land.x < 0 or land.x > 7 or land.y < 0 or land.y > 7:
+			continue
+		var mid_node := get_node_or_null("PiecesRoot/%d,%d" % [mid.x, mid.y]) as Sprite2D
+		if mid_node != null and not check_player(mid_node) \
+		and get_node_or_null("PiecesRoot/%d,%d" % [land.x, land.y]) == null:
+			moves[Vector2(land.x, land.y)] = clicked_piece
+			_add_move_highlight(land.x, land.y)
+
+	if not require_jumps and prev_moves.size() == 0:
+		for d in step_dirs:
+			var adj := pos + d
+			if adj.x < 0 or adj.x > 7 or adj.y < 0 or adj.y > 7:
+				continue
+			if get_node_or_null("PiecesRoot/%d,%d" % [adj.x, adj.y]) == null:
+				moves[Vector2(adj.x, adj.y)] = clicked_piece
+				_add_move_highlight(adj.x, adj.y)
 
 func check_player(piece: Sprite2D) -> bool:
 	var color := get_piece_color(piece)
@@ -1286,7 +1266,6 @@ func _on_settings_theme_selected(_name: String) -> void:
 	
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
-		print("Warning: sent_label is not valid for play_sent_animation.")
 		return
 	
 	if sent_tween and sent_tween.is_running():
@@ -1313,32 +1292,24 @@ func play_sent_animation() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
-			print("1343 CALLED!!!")
 			start_waiting_animation()
 	)
 	
 func start_waiting_animation():
 	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):
-		print("Warning: Waiting animation nodes are not valid.")
-		print("NOPE 1350")
 		return
 	if spectator_mode:
-		print("NOPE 1352")
 		return
-	print("call 1355")
 	dot_count = 0
 	waiting_label.text = BASE_WAIT_TEXT + "."
 	waiting_label.visible = true
 	waiting_blur.visible = true
-	print("call 1360")
 	waiting_label.modulate.a = 0.0
 	waiting_blur.modulate.a = 0.0
-	print("call 1363")
 	var tween_wait_in = create_tween().set_parallel(true)
 	tween_wait_in.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
 	tween_wait_in.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
 	tween_wait_in.tween_callback(func():
-		print("call 1368")
 		dot_timer.start()
 	)
 
@@ -1354,7 +1325,6 @@ func stop_waiting_animation():
 
 func _on_dot_timer_timeout():
 	if not is_instance_valid(waiting_label):
-		print("Warning: waiting_label is not valid in _on_dot_timer_timeout.")
 		return
 	dot_count = (dot_count % 3) + 1
 	var dots = ""
@@ -1377,3 +1347,144 @@ func _read_color(vals: Array) -> Color:
 
 func _process(_delta: float) -> void:
 	pass
+
+func _dump_pieces() -> void:
+	var names: Array[String] = []
+	if pieces_root:
+		for c in pieces_root.get_children():
+			if c is Sprite2D:
+				names.append((c as Sprite2D).name)
+	
+func _peek_cell(lx: int, ly: int) -> void:
+	var n := get_node_or_null("PiecesRoot/%d,%d" % [lx, ly])
+	
+func _scan_row(ly: int) -> void:
+	var row: Array[String] = []
+	for x in range(8):
+		var n := get_node_or_null("PiecesRoot/%d,%d" % [x, ly])
+		row.append(n.name if n else ".")
+	
+func _diagonal_dirs_for(piece: Sprite2D) -> Array:
+	var dirs: Array[Vector2i] = []
+	var col := get_piece_color(piece)
+	var king := is_checker_king(piece)
+	if col == "black" or king:
+		dirs.append(Vector2i(-1, -1))
+		dirs.append(Vector2i( 1, -1))
+	if col == "red" or king:
+		dirs.append(Vector2i(-1,  1))
+		dirs.append(Vector2i( 1,  1))
+	return dirs
+
+func _any_jump_from(piece: Sprite2D) -> bool:
+	if piece == null or not is_instance_valid(piece):
+		return false
+	var p := Vector2i(int(getPiecePos(piece).x), int(getPiecePos(piece).y))
+	for d in _jump_dirs_for(piece):
+		var mid := p + d
+		var land := p + (d * 2)
+		if land.x < 0 or land.x > 7 or land.y < 0 or land.y > 7:
+			continue
+		var mid_node := get_node_or_null("PiecesRoot/%d,%d" % [mid.x, mid.y]) as Sprite2D
+		if mid_node != null and not check_player(mid_node) \
+		and get_node_or_null("PiecesRoot/%d,%d" % [land.x, land.y]) == null:
+			return true
+	return false
+
+func _compute_mandatory_jumps() -> void:
+	must_jump = false
+	jumping_pieces.clear()
+	if spectator_mode or not isTurn:
+		return
+	for y in range(8):
+		for x in range(8):
+			var piece := get_node_or_null("PiecesRoot/%d,%d" % [x, y]) as Sprite2D
+			if piece and check_player(piece) and _any_jump_from(piece):
+				must_jump = true
+				jumping_pieces.append(piece)
+	if must_jump:
+		var names := []
+		for p in jumping_pieces: names.append(p.name)
+
+func _pos_str(v: Vector2i) -> String:
+	return "(%d,%d)" % [v.x, v.y]
+
+func _auto_send_if_ready() -> void:
+	if has_moved and prev_moves.size() >= 2:
+		_on_send_pressed()
+		
+func _collect_jump_landings(piece: Sprite2D) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if piece == null or not is_instance_valid(piece):
+		return out
+
+	var p := Vector2i(int(getPiecePos(piece).x), int(getPiecePos(piece).y))
+	for d: Vector2i in _jump_dirs_for(piece):
+		var mid := p + d
+		var land := p + (d * 2)
+		if land.x < 0 or land.x > 7 or land.y < 0 or land.y > 7:
+			continue
+		var mid_node := get_node_or_null("PiecesRoot/%d,%d" % [mid.x, mid.y]) as Sprite2D
+		if mid_node != null and not check_player(mid_node) \
+		and get_node_or_null("PiecesRoot/%d,%d" % [land.x, land.y]) == null:
+			out.append(land)
+	return out
+
+func _highlight_all_jump_targets() -> void:
+	_clear_move_highlights()
+	var c := 0
+	for jp in jumping_pieces:
+		if not is_instance_valid(jp): continue
+		_start_pulse(jp, 0.1, 0.7, 1.0)
+		for land in _collect_jump_landings(jp):
+			_add_move_highlight(land.x, land.y)
+			c += 1
+
+func _move_dirs_for(piece: Sprite2D) -> Array[Vector2i]:
+	var dirs: Array[Vector2i] = []
+	var col := get_piece_color(piece)
+	var king := is_checker_king(piece)
+	if king or col == "red":
+		dirs.append(Vector2i(-1, -1))
+		dirs.append(Vector2i( 1, -1))
+	if king or col == "black":
+		dirs.append(Vector2i(-1,  1))
+		dirs.append(Vector2i( 1,  1))
+	return dirs
+
+func _jump_dirs_for(_piece: Sprite2D) -> Array[Vector2i]:
+	return [
+		Vector2i(-1, -1), Vector2i( 1, -1),
+		Vector2i(-1,  1), Vector2i( 1,  1)
+	]
+	
+func _sanity_check_any_jump_exists() -> void:
+	var found := false
+	for y in range(8):
+		for x in range(8):
+			var p := get_node_or_null("PiecesRoot/%d,%d" % [x, y]) as Sprite2D
+			if p == null or not check_player(p):
+				continue
+			if _any_jump_from(p):
+				found = true
+				break
+		if found: break
+	
+func _show_mandatory_jump_previews() -> void:
+	_clear_move_highlights()
+	moves.clear()
+
+	var total := 0
+	var jumper_names: Array[String] = []
+
+	for jp in jumping_pieces:
+		if not is_instance_valid(jp):
+			continue
+		jumper_names.append(jp.name)
+		_start_pulse(jp, 0.10, 0.85, 1.0)
+
+		var lands := _collect_jump_landings(jp)
+		for land in lands:
+			moves[Vector2(land.x, land.y)] = jp
+			_add_move_highlight(land.x, land.y)
+			total += 1
