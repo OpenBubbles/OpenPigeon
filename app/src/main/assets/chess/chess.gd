@@ -1388,7 +1388,7 @@ func _animate_piece_move(from_rank: int, from_file: int, to_rank: int, to_file: 
 	_log("_animate_piece_move: animation complete")
 
 func _animate_castling(king_from_rank: int, king_from_file: int, king_to_rank: int, king_to_file: int,
-                      rook_from_rank: int, rook_from_file: int, rook_to_rank: int, rook_to_file: int) -> void:
+					  rook_from_rank: int, rook_from_file: int, rook_to_rank: int, rook_to_file: int) -> void:
 	"""Animate both king and rook moving simultaneously during castling."""
 
 	if not _ui_ready():
@@ -1443,7 +1443,7 @@ func _animate_player_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 		var rook_from_file: int = 7 if is_kingside else 0
 		var rook_to_file: int = 5 if is_kingside else 3
 		await _animate_castling(from_sq.y, from_sq.x, to_sq.y, to_sq.x,
-		                        from_sq.y, rook_from_file, to_sq.y, rook_to_file)
+								from_sq.y, rook_from_file, to_sq.y, rook_to_file)
 		return
 
 	# Detect en passant (pawn diagonal move to empty square)
@@ -1495,7 +1495,7 @@ func _animate_opponent_move(from_sq: Vector2i, to_sq: Vector2i, final_board_gp: 
 		var rook_from_file: int = 7 if is_kingside else 0
 		var rook_to_file: int = 5 if is_kingside else 3
 		await _animate_castling(from_sq.y, from_sq.x, to_sq.y, to_sq.x,
-		                        from_sq.y, rook_from_file, to_sq.y, rook_to_file)
+								from_sq.y, rook_from_file, to_sq.y, rook_to_file)
 		return
 
 	# Detect en passant (pawn diagonal move to empty square)
@@ -1630,30 +1630,47 @@ func _pseudo_legal_moves(from_sq: Vector2i) -> Array[Vector2i]:
 		# Pawns: GamePigeon orientation (board[0] is rank 1/white back rank, board[7] is rank 8/black back rank)
 		var dir = 1 if side == "w" else -1
 		var one_r = r + dir
+		var start_r = 1 if side == "w" else 6
 
 		# Forward moves (non-capturing)
 		if _in_bounds(f, one_r) and board[one_r][f] == "":
 			out.append(Vector2i(f, one_r))
 			# Double move from starting position
-			var start_r = 1 if side == "w" else 6
 			var two_r = r + dir * 2
 			if r == start_r and _in_bounds(f, two_r) and board[two_r][f] == "":
 				out.append(Vector2i(f, two_r))
-		
-		# Diagonal captures
+
+		# Diagonal captures (MUST capture an enemy piece - never allow diagonal to empty square)
 		for df in [-1, 1]:
 			var nf = f + df
 			var nr = r + dir
 			if _in_bounds(nf, nr):
-				if board[nr][nf] != "" and board[nr][nf][0] != side:
+				var target_piece: String = board[nr][nf]
+				# Defensive validation: target square MUST be occupied by enemy piece
+				if target_piece != "" and target_piece.length() >= 1 and target_piece[0] != side:
+					_log("_pseudo_legal_moves: pawn at %s can capture diagonally at %s (target=%s)" % [_square_name(from_sq), _square_name(Vector2i(nf, nr)), target_piece])
 					out.append(Vector2i(nf, nr))
+				elif target_piece == "" or target_piece.length() == 0:
+					# Explicitly log rejection of diagonal moves to empty squares
+					_log("_pseudo_legal_moves: REJECTED pawn diagonal move from %s to %s (empty square - not a capture)" % [_square_name(from_sq), _square_name(Vector2i(nf, nr))])
 		
-		# En passant capture
+		# En passant capture (diagonal move to empty square to capture enemy pawn)
+		# En passant ONLY valid from specific ranks: white from rank 5 (r=4), black from rank 4 (r=3)
 		if en_passant != "-":
 			var epf = FILE_RANKS.find(en_passant[0])
 			var epr = int(en_passant.substr(1)) - 1
-			if abs(epf - f) == 1 and epr == r + dir:
+			var en_passant_rank = 4 if side == "w" else 3
+
+			# Defensive validation: pawn MUST be on en passant rank (NOT starting rank)
+			# White: starting rank = 1, en passant rank = 4
+			# Black: starting rank = 6, en passant rank = 3
+			if r == start_r:
+				_log("_pseudo_legal_moves: REJECTED en passant for pawn at %s (still on starting rank %d, ep_rank=%d)" % [_square_name(from_sq), r, en_passant_rank])
+			elif abs(epf - f) == 1 and epr == r + dir and r == en_passant_rank:
+				_log("_pseudo_legal_moves: pawn at %s can capture en passant at %s (ep_target=%s)" % [_square_name(from_sq), _square_name(Vector2i(epf, epr)), en_passant])
 				out.append(Vector2i(epf, epr))
+			else:
+				_log("_pseudo_legal_moves: en passant check failed for pawn at %s: epf=%d f=%d epr=%d calc=%d r=%d ep_rank=%d" % [_square_name(from_sq), epf, f, epr, r + dir, r, en_passant_rank])
 				
 	elif p == "N":
 		var moves = [[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]]

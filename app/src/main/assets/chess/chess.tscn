@@ -1,6 +1,6 @@
-[gd_scene load_steps=5 format=3 uid="uid://b8k9jx2v3mn4p"]
+[gd_scene load_steps=5 format=3 uid="uid://b8lajx2v3mn4p"]
 
-[ext_resource type="Script" path="res://chess/chess.gd" id="1"]
+[ext_resource type="Script" uid="uid://c2tucuh4qvd1y" path="res://chess/chess.gd" id="1"]
 [ext_resource type="Texture2D" uid="uid://c5vnqtru5m53v" path="res://chess/pieces/chess_wK.png" id="2_wk"]
 [ext_resource type="Texture2D" uid="uid://bssq5dvr0wpwb" path="res://chess/pieces/chess_bK.png" id="3_bk"]
 
