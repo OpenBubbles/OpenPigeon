@@ -113,7 +113,7 @@ func _set_game_data(new_replay: String) -> void:
 	if is_instance_valid(spec_label):
 		spec_label.visible = spectator_mode
 	if is_instance_valid(you_label):
-		you_label.visible = not spectator_mode
+		you_label.modulate.a = 1.0 if not spectator_mode else 0.0
 		
 	_apply_turn_lock()
 
@@ -323,7 +323,7 @@ func _apply_player_piece_icons() -> void:
 	opp_piece.texture	= PIECE_TEX[getPlayerColor(true)]
 	if is_instance_valid(you_label):
 		you_label.text = "You"
-		you_label.visible = not spectator_mode
+		you_label.modulate.a = 1.0 if not spectator_mode else 0.0
 
 func getPieceColor(piece: RigidBody2D) -> String:
 	var p: String = piece.get_child(0).texture.resource_path
