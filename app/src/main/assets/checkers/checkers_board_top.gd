@@ -211,10 +211,7 @@ func _on_send_pressed() -> void:
 	var game_is_over_pre := (red_left and not black_left) or (black_left and not red_left)
 
 	isTurn = false
-	if is_instance_valid(send_button):
-		send_button.disabled = true
-		send_button.visible = false
-		send_button.modulate.a = 0
+	_animate_send_button(false)
 	call_deferred("send_game_checkers")
 
 
@@ -451,11 +448,37 @@ func _visual_to_logical(gx: int, gy: int) -> Vector2i:
 	var ly := (7 - gy) if (player == 2 and not spectator_mode) else gy
 	return Vector2i(lx, ly)
 	
-func _update_send_button() -> void:
-	if is_instance_valid(send_button):
-		send_button.visible = has_moved
-		send_button.modulate.a = 1.0 if has_moved else 0.0
-		send_button.disabled = not has_moved
+func _animate_send_button(show: bool) -> void:
+	if not is_instance_valid(send_button):
+		return
+	if not send_button.has_meta("sb_home_pos"):
+		send_button.set_meta("sb_home_pos", send_button.position)
+	var home_pos: Vector2 = send_button.get_meta("sb_home_pos")
+	var off_pos: Vector2 = Vector2(home_pos.x, get_viewport_rect().size.y + send_button.size.y + 24.0)
+	if send_button.has_meta("sb_tween"):
+		var old_tw: Variant = send_button.get_meta("sb_tween")
+		if old_tw is Tween and (old_tw as Tween).is_running():
+			(old_tw as Tween).kill()
+
+	var tw := create_tween()
+	send_button.set_meta("sb_tween", tw)
+
+	if show:
+		send_button.visible = true
+		send_button.disabled = false
+		send_button.position = off_pos
+		send_button.modulate.a = 0.0
+		tw.tween_property(send_button, "position", home_pos, 0.35).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		tw.parallel().tween_property(send_button, "modulate:a", 1.0, 0.35)
+	else:
+		send_button.disabled = true
+		tw.tween_property(send_button, "position", off_pos, 0.25).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		tw.parallel().tween_property(send_button, "modulate:a", 0.0, 0.25)
+		tw.tween_callback(func():
+			if is_instance_valid(send_button):
+				send_button.visible = false
+				send_button.position = home_pos
+		)
 
 func _make_move_highlight_node() -> Sprite2D:
 	var spr := Sprite2D.new()
@@ -544,10 +567,18 @@ func _revert_temp_move_if_any() -> void:
 	_update_send_button()
 	clear_highlights()
 	
+func _update_send_button() -> void:
+	if not is_instance_valid(send_button):
+		return
+	if has_moved:
+		_animate_send_button(true)
+	else:
+		_animate_send_button(false)
+	
 func _on_board_gui_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
-	if waitingForOpponent:
+	if spectator_mode or waitingForOpponent:
 		return
 	var draw: Rect2 = _get_board_draw_rect()
 	var p: Vector2 = event.position
