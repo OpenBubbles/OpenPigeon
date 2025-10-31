@@ -18,6 +18,7 @@ class_name CheckersBoardTop
 @onready var you_label: Label = %YouLabel
 @onready var spec_label: Label = %SpecLabel
 @onready var board: TextureRect = %CheckersBoardTop
+var appPlugin: Node = null
 
 var sent_tween: Tween
 var dot_count: int = 0
@@ -72,6 +73,12 @@ func _dbg(tag: String, fields: Dictionary = {}) -> void:
 	for k in fields.keys():
 		parts.append(str(k) + "=" + str(fields[k]))
 	print("[DBG:%s] %s" % [tag, ", ".join(parts)])
+	
+func _tween_for(target: Object) -> Tween:
+	var tw := get_tree().create_tween()
+	if is_instance_valid(target):
+		tw.bind_node(target)
+	return tw
 	
 func _add_debug_cell_numbers() -> void:
 	if not DEBUG_CELLS:
@@ -149,42 +156,108 @@ func _apply_player_piece_icons() -> void:
 		"opp_icon": opp_piece_icon.texture.resource_path if is_instance_valid(opp_piece_icon) and opp_piece_icon.texture else "none"
 	})
 
-func _connect_common_ui() -> void:
-	if is_instance_valid(rules_button) and not rules_button.pressed.is_connected(Callable(self, "_on_rules_button_pressed")):
-		rules_button.pressed.connect(_on_rules_button_pressed)
-	if is_instance_valid(settings_button) and not settings_button.pressed.is_connected(Callable(self, "_on_settings_button_pressed")):
-		settings_button.pressed.connect(_on_settings_button_pressed)
-	if is_instance_valid(send_button):
-		send_button.disabled = true
-		if not send_button.pressed.is_connected(Callable(self, "_on_send_pressed")):
-			send_button.pressed.connect(_on_send_pressed)
-			
+func _get_nth_board_str(src: String, n: int) -> String:
+	var i := 0
+	for elem in src.split("|"):
+		var p := elem.split(":")
+		if p.size() >= 2 and p[0] == "board":
+			if i == n:
+				return p[1]
+			i += 1
+	return ""
+
+func _current_board_string() -> String:
+	var board: Array[String] = []
+	board.resize(64)
+	for k in range(64):
+		board[k] = "0"
+
+	for ly in range(0, 8):
+		for lx in range(0, 8):
+			var piece := get_node_or_null("PiecesRoot/%d,%d" % [lx, ly]) as Sprite2D
+			if piece != null:
+				var piece_value: String = "0"
+				var color := get_piece_color(piece)
+				if color == "red":
+					piece_value = "3" if is_checker_king(piece) else "1"
+				elif color == "black":
+					piece_value = "4" if is_checker_king(piece) else "2"
+				var A := _logical_to_abs(lx, ly)
+				var ax := A.x
+				var ay := A.y
+				var idx := ay * 8 + ax
+				if idx >= 0 and idx < 64:
+					board[idx] = piece_value
+				else:
+					print("Error: Calculated board index out of bounds: ", idx)
+
+	return ",".join(board)
+
 func _on_send_pressed() -> void:
-	# Gate on having a staged temp move
-	if not has_moved:
+	if not has_moved or prev_moves.size() < 2:
 		return
 
-	var payload := export_replay()	# returns JSON string
-	_send_payload(payload)			# deliver to host or listeners
-
-	# UX: immediately show "Sent" then roll into "Waiting for Opponent"
-	play_sent_animation()
-	set_waiting(true)				# ensures visibility flags are set
-
-	# Prevent double-sends until next move is staged
+	isTurn = false
 	if is_instance_valid(send_button):
 		send_button.disabled = true
 		send_button.visible = false
+		send_button.modulate.a = 0
 
+	call_deferred("send_game_checkers")
 
-func _send_payload(payload: String) -> void:
-	# Preferred: AppPlugin (native bridge)
-	var app_plugin := Engine.get_singleton("AppPlugin")
-	if app_plugin and app_plugin.has_method("send_replay"):
-		app_plugin.send_replay(payload)
+func send_game_checkers() -> void:
+	if prev_moves.size() < 2:
+		return
+
+	var steps: Array = []	# each = { "kind": "move"/"attack", "A1": Vector2i, "A2": Vector2i }
+	for i in range(0, prev_moves.size(), 2):
+		var p1: Vector2 = prev_moves[i]
+		var p2: Vector2 = prev_moves[i + 1]
+		var A1: Vector2i = _logical_to_abs(int(p1.x), int(p1.y))
+		var A2: Vector2i = _logical_to_abs(int(p2.x), int(p2.y))
+		var kind: String = ("attack" if abs(int(p1.x - p2.x)) > 1 else "move")
+		steps.append({ "kind": kind, "A1": A1, "A2": A2 })
+
+	var pre_board_str: String = _get_nth_board_str(replay, 1)
+	if pre_board_str == "":
+		pre_board_str = _get_nth_board_str(replay, 0)
+
+	var post_board_str: String = _current_board_string()
+	var parts: Array[String] = []
+
+	if pre_board_str != "":
+		parts.append("board:" + pre_board_str)
+
+	for s in steps:
+		var a1: Vector2i = s["A1"]
+		var a2: Vector2i = s["A2"]
+		parts.append("%s:%d,%d,%d,%d" % [String(s["kind"]), a1.x, a1.y, a2.x, a2.y])
+
+	parts.append("board:" + post_board_str)
+
+	var new_replay := String("|").join(parts)
+	var payload: Dictionary = { "replay": new_replay }
+	var avatar_key := ("avatar1" if player == 1 else "avatar2")
+	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
+		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
+
+	var wl := check_win_loss()
+	if wl != "":
+		payload["winner"] = my_player + "|" + ("1" if wl == "win" else "-1")
+	print("PRELOAD TO SEND: ", payload)
+	
+	if appPlugin:
+		appPlugin.updateGameData(JSON.stringify(payload))
 	else:
-		# Fallback: emit a signal so parent/manager can forward it
-		emit_signal("replay_exported", payload)
+		print("AppPlugin is null. Cannot send game data.")
+
+	play_sent_animation()
+	clear_highlights()
+	clicked_piece = null
+	has_moved = false
+	moves.clear()
+	prev_jumps.clear()
+	prev_moves.clear()
 		
 func _on_board_resized() -> void:
 	_dbg("board_resized", {"size": board.size})
@@ -224,11 +297,8 @@ func _spawn_piece(val: String, lx: int, ly: int) -> Sprite2D:
 	_apply_piece_scale(s)
 	s.position = _cell_pos(lx, ly)
 	s.name = str(lx) + "," + str(ly)
-
-	# --- draw order: pieces above highlights ---
 	s.z_as_relative = false
 	s.z_index = 2
-
 	s.visible = true
 	pieces_root.add_child(s)
 	return s
@@ -296,41 +366,40 @@ func _ready() -> void:
 	pieces_root = Node2D.new()
 	pieces_root.name = "PiecesRoot"
 	add_child(pieces_root)
-
-	_connect_common_ui()
-
-	var appPlugin := Engine.get_singleton("AppPlugin")
+	if is_instance_valid(dot_timer):
+		dot_timer.connect("timeout", _on_dot_timer_timeout)
+	if is_instance_valid(rules_button) and not rules_button.pressed.is_connected(Callable(self, "_on_rules_button_pressed")):
+		rules_button.pressed.connect(_on_rules_button_pressed)
+	if is_instance_valid(settings_button) and not settings_button.pressed.is_connected(Callable(self, "_on_settings_button_pressed")):
+		settings_button.pressed.connect(_on_settings_button_pressed)
+	if is_instance_valid(send_button):
+		send_button.disabled = true
+		send_button.visible = false
+		send_button.modulate.a = 0
+		send_button.scale = Vector2(1.0, 1.0)
+		print("[SendButton] ready; visible=", send_button.visible, " a=", send_button.modulate.a)
+		if not send_button.pressed.is_connected(Callable(self, "_on_send_pressed")):
+			send_button.pressed.connect(_on_send_pressed)
+			
+	appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin:
+		print("AppPlugin Available")
 		if not has_connected:
-			print("App plugin is available")
 			appPlugin.connect("set_game_data", _set_game_data)
 			has_connected = true
 			appPlugin.onReady()
-			return
+			print("AppPlugin Connected")
 	else:
 		if player == 0 or replay == "":
 			_set_game_data('{"isYourTurn":1,"player":"1","replay":"board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|move:6,5,7,4|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,1,0,0,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0"}')
 			print("App plugin is not available")
-			return
 
 	if player == 0 or replay == "":
 		return
 
 	var playerBox := get_node_or_null("Player" + str(player) + "Box")
 	if playerBox != null and not spectator_mode:
-		playerBox.get_child(0).set_text("[center]You[/center]")
-	if is_instance_valid(dot_timer):
-		dot_timer.connect("timeout", _on_dot_timer_timeout)
-	if is_instance_valid(send_button):
-		send_button.visible = false
-		send_button.modulate.a = 0.0
-		send_button.scale = Vector2(1.0, 1.0)
-		send_button.pressed.connect(export_replay)
-		print("[SendButton] ready; visible=", send_button.visible, " a=", send_button.modulate.a)
-	else:
-		push_warning("No %SendButton in scene")
-	if _have_game_data():
-		_rebuild_from_replay()
+		playerBox.get_child(0).set_text("[center]You[/center]")	
 	
 func _visual_to_logical(gx: int, gy: int) -> Vector2i:
 	var lx := gx if (player == 2 and not spectator_mode) else (7 - gx)
@@ -340,20 +409,17 @@ func _visual_to_logical(gx: int, gy: int) -> Vector2i:
 func _update_send_button() -> void:
 	if is_instance_valid(send_button):
 		send_button.visible = has_moved
+		send_button.modulate.a = 1.0 if has_moved else 0.0
 		send_button.disabled = not has_moved
 
 func _make_move_highlight_node() -> Sprite2D:
 	var spr := Sprite2D.new()
 	spr.name = "MoveHighlight"
 	spr.centered = true
-
-	# --- draw order: below pieces ---
 	spr.z_as_relative = false
 	spr.z_index = 1
 
 	var grad := Gradient.new()
-	grad.add_point(0.0, Color(1.0, 1.0, 1.0, 0))
-	grad.add_point(1.0, Color(1.0, 1.0, 1.0, 0.1))
 
 	var tex := GradientTexture2D.new()
 	tex.gradient = grad
@@ -364,7 +430,7 @@ func _make_move_highlight_node() -> Sprite2D:
 	tex.fill_to = Vector2(1.25, 0.5)
 
 	spr.texture = tex
-	_start_pulse(spr, 0.28, 0.82, 1.25)
+	_start_pulse(spr, 0.01, 0.3, 2)
 	return spr
 
 func _add_move_highlight(lx: int, ly: int) -> void:
@@ -391,26 +457,27 @@ func _clear_move_highlights() -> void:
 	for k in move_highlights.keys():
 		var n: Sprite2D = move_highlights[k]
 		if is_instance_valid(n):
+			if n.has_meta("_pulse_tween"):
+				var t: Tween = n.get_meta("_pulse_tween")
+				if t and t.is_running():
+					t.kill()
+				n.set_meta("_pulse_tween", null)
 			n.queue_free()
 	move_highlights.clear()
 
 func _revert_temp_move_if_any() -> void:
-	# Revert even if clicked_piece is null; rely on prev_moves.
 	if not has_moved or prev_moves.size() < 2:
 		return
 
-	# The piece we temp-moved is currently at prev_moves[-1]
 	var cur: Vector2i = Vector2i(int(prev_moves[-1].x), int(prev_moves[-1].y))
 	var piece_to_revert: Sprite2D = get_node_or_null("PiecesRoot/%d,%d" % [cur.x, cur.y]) as Sprite2D
 	if piece_to_revert == null:
-		# Fallback to clicked_piece if still around
 		piece_to_revert = clicked_piece
 
 	if piece_to_revert != null:
 		var start: Vector2i = Vector2i(int(prev_moves[-2].x), int(prev_moves[-2].y))
 		move_piece(piece_to_revert, start.x, start.y)
 
-	# Clear temp-move state
 	clicked_piece = null
 	prev_moves.clear()
 	prev_jumps.clear()
@@ -419,28 +486,19 @@ func _revert_temp_move_if_any() -> void:
 	clear_highlights()
 	
 func _on_board_gui_input(event: InputEvent) -> void:
-	# Only handle left-clicks while it's your turn
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
 	if waitingForOpponent:
 		return
-
-	# Constrain clicks to the actually drawn board
 	var draw: Rect2 = _get_board_draw_rect()
 	var p: Vector2 = event.position
 	if not draw.has_point(p):
 		return
-
-	# Position relative to drawn board (account for inset)
 	var rel: Vector2 = p - draw.position - Vector2(board_inset, board_inset)
-
-	# Visual grid coords (0..7; origin = top-left of drawn board)
 	var gx: int = int(floor(rel.x / float(cell_px)))
 	var gy: int = int(floor(rel.y / float(cell_px)))
 	if gx < 0 or gx > 7 or gy < 0 or gy > 7:
 		return
-
-	# Convert to logical coords (origin = top-right)
 	var L: Vector2i = _visual_to_logical(gx, gy)
 	var lx: int = L.x
 	var ly: int = L.y
@@ -449,10 +507,7 @@ func _on_board_gui_input(event: InputEvent) -> void:
 	var key := Vector2(lx, ly)
 	var is_target := moves.has(key)
 	var clickedPiece := get_node_or_null("PiecesRoot/%d,%d" % [lx, ly]) as Sprite2D
-
-	# ===== Case 1: clicked a highlighted target → TEMP MOVE =====
 	if clicked_piece != null and is_target:
-		# Remember where this piece started for auto-revert
 		if prev_moves.is_empty():
 			var start_pos := getPiecePos(clicked_piece)
 			temp_start_pos = Vector2i(int(start_pos.x), int(start_pos.y))
@@ -465,52 +520,39 @@ func _on_board_gui_input(event: InputEvent) -> void:
 		has_moved = true
 		prev_moves.append(prevPiecePos)
 		prev_moves.append(Vector2(lx, ly))
-
-		# If it was a jump, fade the jumped piece
 		if abs(prev_moves[-2].x - prev_moves[-1].x) > 1:
 			jump_piece(prev_moves[-2].x, prev_moves[-2].y, prev_moves[-1].x, prev_moves[-1].y)
-
-		# After temp move, allow further jumps (if any)
 		gen_moves()
 		_update_send_button()
 		return
-
-	# ===== Case 2: clicked empty non-target → optionally clear selection =====
 	if clickedPiece == null and not is_target:
-		# Only clear if no temp move active
 		if clicked_piece != null and not has_moved:
 			clicked_piece = null
 			clear_highlights()
 			_clear_selected_highlight()
 		return
-
-	# If here, we clicked a piece (might be ours or opponent's)
+		
 	if clickedPiece == null:
 		return
 
 	var color := get_piece_color(clickedPiece)
 	print("[click] piece at log(", lx, ",", ly, ") color=", color, " is_king=", is_checker_king(clickedPiece))
 
-	# Only your pieces are selectable
 	if not check_player(clickedPiece):
 		print("[click] not your piece — ignoring")
 		return
-
-	# If a temp move exists, revert it first (whether clicking same or different piece)
+		
 	if has_moved and prev_moves.size() >= 2:
 		var temp_cur := Vector2i(int(prev_moves[-1].x), int(prev_moves[-1].y))
-		# If you clicked the temp-moved piece OR any other piece, revert first
 		if clickedPiece.name == "%d,%d" % [temp_cur.x, temp_cur.y] or clickedPiece != clicked_piece:
 			_revert_temp_move_if_any()
 
-	# Toggle off if you re-click the same piece with no temp move
 	if clickedPiece == clicked_piece and not has_moved:
 		clicked_piece = null
 		clear_highlights()
 		_clear_selected_highlight()
 		return
 
-	# Fresh selection
 	clear_highlights()
 	clicked_piece = clickedPiece
 	moves.clear()
@@ -520,7 +562,6 @@ func _on_board_gui_input(event: InputEvent) -> void:
 	gen_moves()
 	print("[select] gen_moves count=", moves.size())
 
-	# If no legal moves, cancel selection
 	if moves.size() == 0:
 		print("[select] no legal moves — cancel selection")
 		clicked_piece = null
@@ -531,19 +572,29 @@ func _start_pulse(node: CanvasItem, min_a: float = 0.35, max_a: float = 0.85, pe
 	if node == null or not is_instance_valid(node):
 		return
 
-	# Ensure the node is inside the scene tree before accessing get_tree()
+	if node.has_meta("_pulse_tween"):
+		var old: Tween = node.get_meta("_pulse_tween")
+		if old and old.is_running():
+			old.kill()
+		node.set_meta("_pulse_tween", null)
+
 	if not node.is_inside_tree():
 		await get_tree().process_frame
 		if node == null or not is_instance_valid(node) or not node.is_inside_tree():
 			return
 
-	var tw := node.get_tree().create_tween()
-	# 0 loops = infinite in Godot 4
+	var tw := _tween_for(node)
 	tw.set_loops(0)
 	tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	# Fade to min, then back to max (full period across both tweens)
 	tw.tween_property(node, "self_modulate:a", min_a, period * 0.5)
 	tw.tween_property(node, "self_modulate:a", max_a, period * 0.5)
+
+	node.set_meta("_pulse_tween", tw)
+	node.tree_exited.connect(func():
+		if is_instance_valid(tw):
+			tw.kill()
+		node.set_meta("_pulse_tween", null)
+	)
 
 func _get_board_draw_rect() -> Rect2:
 	if not is_instance_valid(board) or board.texture == null:
@@ -589,11 +640,8 @@ func _abs_to_logical(ax: int, ay: int) -> Vector2i:
 	return Vector2i(lx, ly)
 
 func _logical_to_abs(lx: int, ly: int) -> Vector2i:
-	var ly2 := ly
-	if player == 2 and not spectator_mode:
-		ly2 = 7 - ly
-	var ax := 7 - lx
-	var ay := ly2
+	var ax := lx
+	var ay := ly
 	return Vector2i(ax, ay)
 	
 func _probe(lx: int, ly: int) -> void:
@@ -660,7 +708,11 @@ func _rebuild_from_replay() -> void:
 		print("[rebuild] moved node lookup at LOG ", start_l, "  found=", moved != null)
 
 		if moved != null:
+			moved.position = _cell_pos(start_l.x, start_l.y)
 			var tw := moved.get_tree().create_tween()
+			tw.bind_node(moved)
+			tw.set_parallel(false)
+
 			for i in range(replayMoves.size()):
 				var kind := replayMoves[i].split(":")[0]
 				var p := replayMoves[i].split(":")[1].split(",")
@@ -699,7 +751,10 @@ func _rebuild_from_replay() -> void:
 		checking_for_jumps = false
 		print("[rebuild] must_jump=", must_jump)
 
-	set_waiting(not isTurn)
+	if (isTurn):
+		stop_waiting_animation()
+	else:
+		start_waiting_animation()
 	_apply_player_piece_icons()
 	_apply_board_orientation()
 	_add_debug_cell_numbers()
@@ -709,8 +764,6 @@ func _make_radial_highlight_node() -> Sprite2D:
 	var spr := Sprite2D.new()
 	spr.name = "SelectedCellHighlight"
 	spr.centered = true
-
-	# --- draw order: below pieces ---
 	spr.z_as_relative = false
 	spr.z_index = 1
 
@@ -728,7 +781,6 @@ func _make_radial_highlight_node() -> Sprite2D:
 	gt.fill_to = Vector2(1.25, 0.5)
 
 	spr.texture = gt
-	_start_pulse(spr, 0.30, 0.85, 1.3)
 	return spr
 
 func _show_selected_highlight_at(lx: int, ly: int) -> void:
@@ -738,9 +790,7 @@ func _show_selected_highlight_at(lx: int, ly: int) -> void:
 	if selected_highlight == null:
 		selected_highlight = _make_radial_highlight_node()
 		pieces_root.add_child(selected_highlight)
-
-	# Ensure steady alpha (no leftover tween effect if any existed)
-	selected_highlight.self_modulate = Color(1, 1, 1, 1)
+	selected_highlight.self_modulate = Color(1, 1, 1, 0.5)
 
 	var tex := selected_highlight.texture
 	if tex != null:
@@ -757,32 +807,6 @@ func _clear_selected_highlight() -> void:
 	if selected_highlight and is_instance_valid(selected_highlight):
 		selected_highlight.visible = false
 		print("[selHL] cleared")
-
-func set_waiting(enabled: bool) -> void:
-	if enabled:
-		waitingForOpponent = true
-		if is_instance_valid(waiting_label):
-			waiting_label.visible = true
-	else:
-		prev_jumps.clear()
-		prev_moves.clear()
-		waitingForOpponent = false
-		if is_instance_valid(waiting_label):
-			waiting_label.visible = false
-
-	var win_loss := check_win_loss()
-	if win_loss == "win":
-		var wl := get_node_or_null("winLoseLabel")
-		if wl:
-			wl.get_child(0).set_text("[center]YOU WIN![/center]")
-			wl.visible = true
-		if is_instance_valid(waiting_label):
-			waiting_label.visible = false
-	elif win_loss == "lose":
-		var wl2 := get_node_or_null("winLoseLabel")
-		if wl2:
-			wl2.get_child(0).set_text("[center]YOU LOSE :([/center]")
-			wl2.visible = true
 
 func _set_game_data(new_replay: String) -> void:
 	var data_raw: Variant = JSON.parse_string(new_replay)
@@ -947,7 +971,6 @@ func export_replay() -> String:
 		var moveType := "attack" if abs(p1.x - p2.x) > 1 else "move"
 		move_str += "%s:%d,%d,%d,%d|" % [moveType, A1.x, A1.y, A2.x, A2.y]
 
-	# Clear transient UI state – but do NOT animate here
 	clear_highlights()
 	clicked_piece = null
 	has_moved = false
@@ -964,13 +987,6 @@ func export_replay() -> String:
 	var wl := check_win_loss()
 	if wl != "":
 		result["winner"] = my_player + "|" + ("1" if wl == "win" else "-1")
-
-	# You can add other fields if your host expects them:
-	# result["isYourTurn"] = false
-	# result["player"] = player
-	# result["mode"] = mode
-	# result["myPlayerId"] = my_player
-
 	return JSON.stringify(result)
 
 func check_win_loss() -> String:
@@ -1093,32 +1109,6 @@ func gen_moves(first_move: bool = false) -> void:
 						moves[newPos2] = clicked_piece
 						_add_move_highlight(int(newPos2.x), int(newPos2.y))
 
-func undo_move() -> void:
-	clear_highlights()
-	for i in range(prev_moves.size(), 0, -2):
-		move_piece(clicked_piece, prev_moves[i - 2].x, prev_moves[i - 2].y, (prev_moves.size() - i) * 0.25)
-
-	var color := get_piece_color(clicked_piece)
-	if (color == "black" and prev_moves[-1].y == 7) or (color == "red" and prev_moves[-1].y == 0):
-		set_checker_king(clicked_piece, color, true)
-
-	for i in range(prev_jumps.size() - 1, -1, -1):
-		var prev_jump := prev_jumps[i]
-		var tween := prev_jump.get_tree().create_tween()
-		var modulate_color := prev_jump.self_modulate
-		modulate_color.a = 1.0
-		tween.tween_interval((prev_jumps.size() - 1 - i) * 0.5)
-		tween.tween_property(prev_jump, "self_modulate", modulate_color, 0.5).set_trans(Tween.TRANS_LINEAR)
-		prev_jump.name = prev_jump.name.split("_")[0]
-	clicked_piece = null
-	has_moved = false
-	prev_jumps.clear()
-	prev_moves.clear()
-	var undo_btn := get_node_or_null("../UndoButton") as Button
-	var send_btn := get_node_or_null("../SendButton") as Button
-	if undo_btn: undo_btn.disabled = true
-	if send_btn: send_btn.disabled = true
-
 func check_player(piece: Sprite2D) -> bool:
 	var color := get_piece_color(piece)
 	if player == 1 and color == "red":
@@ -1135,7 +1125,7 @@ func _on_rules_button_pressed() -> void:
 		return
 
 	rules_button.pivot_offset = rules_button.size / 2.0
-	var tween := create_tween()
+	var tween := _tween_for(rules_button)
 	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
@@ -1227,7 +1217,7 @@ func _on_settings_button_pressed() -> void:
 	if not is_instance_valid(settings_button):
 		return
 	settings_button.pivot_offset = settings_button.size / 2.0
-	var tween := create_tween()
+	var tween := _tween_for(rules_button)
 	tween.tween_property(settings_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(settings_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
@@ -1323,28 +1313,32 @@ func play_sent_animation() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
+			print("1343 CALLED!!!")
 			start_waiting_animation()
 	)
 	
 func start_waiting_animation():
 	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):
 		print("Warning: Waiting animation nodes are not valid.")
+		print("NOPE 1350")
 		return
 	if spectator_mode:
+		print("NOPE 1352")
 		return
-
+	print("call 1355")
 	dot_count = 0
 	waiting_label.text = BASE_WAIT_TEXT + "."
 	waiting_label.visible = true
 	waiting_blur.visible = true
-
+	print("call 1360")
 	waiting_label.modulate.a = 0.0
 	waiting_blur.modulate.a = 0.0
-
+	print("call 1363")
 	var tween_wait_in = create_tween().set_parallel(true)
 	tween_wait_in.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
 	tween_wait_in.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
 	tween_wait_in.tween_callback(func():
+		print("call 1368")
 		dot_timer.start()
 	)
 

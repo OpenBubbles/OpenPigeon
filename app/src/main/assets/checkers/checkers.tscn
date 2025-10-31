@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3 uid="uid://cnrr1hwlmd565"]
+[gd_scene load_steps=20 format=3 uid="uid://cnrr1hwlmd565"]
 
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="1_4qhse"]
 [ext_resource type="Texture2D" uid="uid://d37tvmulfubj4" path="res://checkers/checkersboard_plain.png" id="1_ys403"]
@@ -7,6 +7,17 @@
 [ext_resource type="Texture2D" uid="uid://c8rkim5ojkkq8" path="res://checkers/checker_red.png" id="2_t0jlu"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="6_wk37g"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="7_736no"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4qhse"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_dd3h5"]
 texture = ExtResource("6_wk37g")
@@ -211,6 +222,29 @@ expand_mode = 2
 stretch_mode = 5
 script = ExtResource("2_3slu2")
 
+[node name="WinLossLabel" type="Label" parent="VBoxContainer/CenterContainer/Node2D"]
+unique_name_in_owner = true
+visible = false
+z_index = 6
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_4qhse")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SentLabel" type="Label" parent="VBoxContainer/CenterContainer/Node2D"]
+unique_name_in_owner = true
+visible = false
+z_index = 6
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_4qhse")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
 [node name="BottomItemHBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
 custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
@@ -250,7 +284,7 @@ theme_override_styles/hover = SubResource("StyleBoxTexture_m3gju")
 
 [node name="SendButton" type="Button" parent="."]
 unique_name_in_owner = true
-visible = false
+z_index = 3
 custom_minimum_size = Vector2(70, 50)
 layout_mode = 0
 offset_left = 289.0
@@ -277,7 +311,7 @@ text = "Send"
 [node name="WaitBlur" type="ColorRect" parent="."]
 unique_name_in_owner = true
 visible = false
-z_index = 1
+z_index = 5
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -290,7 +324,7 @@ color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 [node name="WaitForOpponentLabel" type="Label" parent="."]
 unique_name_in_owner = true
 visible = false
-z_index = 2
+z_index = 6
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
