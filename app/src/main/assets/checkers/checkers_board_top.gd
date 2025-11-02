@@ -55,6 +55,7 @@ var _replay_tweens: Array[Tween] = []
 var chain_jump_piece: Sprite2D = null
 var checking_for_jumps: bool = false
 var must_jump: bool = false
+var rule_mandatory_jumps: bool = true
 var jumping_pieces: Array[Sprite2D] = []
 var game_over: bool = false
 var has_connected: bool = false
@@ -107,7 +108,7 @@ func _select_piece(piece: Sprite2D) -> void:
 		
 	_show_selected_highlight_at(p_pos.x, p_pos.y)
 	
-	var force_jumps_only := must_jump or (chain_jump_piece != null)
+	var force_jumps_only := ((rule_mandatory_jumps and must_jump) or (chain_jump_piece != null))
 	gen_moves(force_jumps_only)
 
 	if moves.size() == 0 and not checking_for_jumps:
@@ -514,7 +515,7 @@ func _post_replay_ready() -> void:
 	_scan_row(5)
 
 	_compute_mandatory_jumps()
-	if must_jump and chain_jump_piece == null:
+	if rule_mandatory_jumps and must_jump and chain_jump_piece == null:
 		_show_mandatory_jump_previews()
 
 func _add_move_highlight(lx: int, ly: int) -> void:
@@ -593,7 +594,11 @@ func _on_board_gui_input(event: InputEvent) -> void:
 	var lx: int = L.x
 	var ly: int = L.y
 	
-	if isTurn and not spectator_mode and chain_jump_piece == null:
+	if not rule_mandatory_jumps:
+		must_jump = false
+		jumping_pieces.clear()
+
+	if isTurn and not spectator_mode and chain_jump_piece == null and rule_mandatory_jumps:
 		_compute_mandatory_jumps()
 		if must_jump:
 			_show_mandatory_jump_previews()
@@ -657,7 +662,7 @@ func _on_board_gui_input(event: InputEvent) -> void:
 	if not check_player(clickedPiece):
 		return
 
-	if must_jump and not (clickedPiece in jumping_pieces):
+	if rule_mandatory_jumps and must_jump and not (clickedPiece in jumping_pieces):
 		for piece_to_pulse in jumping_pieces:
 			_start_pulse(piece_to_pulse, 0.1, 0.7, 1.0)
 		return
@@ -839,12 +844,12 @@ func _rebuild_from_replay() -> void:
 		await get_tree().process_frame
 
 		_compute_mandatory_jumps()
-		if must_jump and chain_jump_piece == null:
+		if rule_mandatory_jumps and must_jump and chain_jump_piece == null:
 			_show_mandatory_jump_previews()
 		else:
 			_clear_move_highlights()
 
-	if mode == "n" and isTurn and not spectator_mode:
+	if isTurn and not spectator_mode:
 		call_deferred("_post_replay_ready")
 
 	_apply_player_piece_icons()
@@ -916,13 +921,14 @@ func _set_game_data(new_replay: String) -> void:
 	isTurn = bool(data.get("isYourTurn", false))
 	replay = String(data.get("replay", ""))
 	mode = String(data.get("mode", "n"))
+	rule_mandatory_jumps = (mode == "n")
 	my_player = String(data.get("myPlayerId", ""))
 
 	var data_sender: int = clamp(int(data.get("player", 0)), 0, 2)
 	turn_owner = clamp(int(data.get("player", 1)), 1, 2)
 	var p1_id: String = String(data.get("player1", ""))
 	var p2_id: String = String(data.get("player2", ""))
-
+ 
 	var my_side := 0
 	if my_player != "" and p1_id != "" and p2_id != "":
 		if my_player == p1_id:
@@ -1267,12 +1273,14 @@ func gen_moves(jumps_only: bool = false) -> void:
 	var jump_dirs := _jump_dirs_for(clicked_piece)
 
 	var continuing_jump := (prev_moves.size() >= 2 and prev_jumps.size() > 0 and clicked_piece == chain_jump_piece)
-	var require_jumps := jumps_only or continuing_jump or must_jump
+	var effective_must := must_jump if rule_mandatory_jumps else false
+	var require_jumps := jumps_only or continuing_jump or effective_must
 
-	if must_jump and not _any_jump_from(clicked_piece):
+	if effective_must and not _any_jump_from(clicked_piece):
 		return
 	if chain_jump_piece != null and clicked_piece != chain_jump_piece:
 		return
+
 
 	for d in jump_dirs:
 		var mid := pos + d
@@ -1598,17 +1606,19 @@ func _any_jump_from(piece: Sprite2D) -> bool:
 func _compute_mandatory_jumps() -> void:
 	must_jump = false
 	jumping_pieces.clear()
+
+	if not rule_mandatory_jumps:
+		return
+
 	if spectator_mode or not isTurn:
 		return
+
 	for y in range(8):
 		for x in range(8):
 			var piece := get_node_or_null("PiecesRoot/%d,%d" % [x, y]) as Sprite2D
 			if piece and check_player(piece) and _any_jump_from(piece):
 				must_jump = true
 				jumping_pieces.append(piece)
-	if must_jump:
-		var names := []
-		for p in jumping_pieces: names.append(p.name)
 
 func _pos_str(v: Vector2i) -> String:
 	return "(%d,%d)" % [v.x, v.y]
