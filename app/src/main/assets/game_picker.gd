@@ -7,7 +7,12 @@ var games = {
 	"sea": "res://battleship/battleship.tscn",
 	"darts": "res://darts/DartsScene.tscn",
 	"beer": "res://pong/cuppong.tscn",
-	"archery": "res://archery/archery.tscn"
+	"archery": "res://archery/archery.tscn",
+	"reversi": "res://reversi/reversi.tscn",
+	"fill": "res://fill/fill.tscn",
+	"mancala": "res://mancala/mancala.tscn",
+	"dots": "res://dots/dots.tscn",
+	"knock": "res://knockout/knockout.tscn"
 }
 
 # Called when the node enters the scene tree for the first time.
@@ -33,3 +38,9 @@ func _pressed() -> void:
 		get_tree().call_deferred("change_scene_to_file", games["beer"])
 	elif name == "ArcheryButton":
 		get_tree().call_deferred("change_scene_to_file", games["archery"])
+	elif name == "ReversiButton":
+		get_tree().call_deferred("change_scene_to_file", games["reversi"])
+	elif name == "FillerButton":
+		get_tree().call_deferred("change_scene_to_file", games["fill"])
+	elif name == "MancalaButton":
+		get_tree().call_deferred("change_scene_to_file", games["mancala"])

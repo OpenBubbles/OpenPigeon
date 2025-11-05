@@ -19,9 +19,9 @@ class AboutActivity : Activity() {
                 OpenPigeon is fully open-source, and we're looking for game developers to contribute their favorite games. If you're interested, find out more on GitHub.
 
                 Thank you to our contributors!
-                Checkers - jakecrowley
+                Checkers - jakecrowley & ty8447
                 Word Hunt - npulse4
-                Four in a Row - jakecrowley
+                Four in a Row - jakecrowley & ty8447
                 Basketball - jakecrowley
                 Sea Battle - Copper
                 Crazy 8 - Copper
@@ -29,6 +29,10 @@ class AboutActivity : Activity() {
                 8 Ball - Copper
                 Cup Pong - jakecrowley
                 Archery - jakecrowley
+                Reversi - ty8447
+                Filler - ty8447
+                Mancala - ty8447
+                Dots & Boxes - ty8447
 
                 Are you a developer? Add your favorite game on GitHub!
             """.trimIndent())
