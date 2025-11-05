@@ -35,8 +35,8 @@ const Z_BACKGROUND       := 0
 
 const AVATAR_PART_SIZE = 256
 
-@export var AVATAR_FG_SCALE_RATIO := 1.4  # >1.0 makes the avatar larger inside the background
-@export var AVATAR_FG_BOTTOM_PAD  := -28   # +down / -up in pixels
+@export var AVATAR_FG_SCALE_RATIO := 1  # >1.0 makes the avatar larger inside the background
+@export var AVATAR_FG_BOTTOM_PAD  := -12   # +down / -up in pixels
 
 const TEMP_DISABLE_AVATAR_RENDER := false
 # ----------------------------------------------------------
