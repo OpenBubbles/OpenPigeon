@@ -1,0 +1,476 @@
+[gd_scene load_steps=30 format=3 uid="uid://b0pa50r0ro6gl"]
+
+[ext_resource type="Script" uid="uid://kiiu4bojif1i" path="res://questions/questions.gd" id="1_wbs8s"]
+[ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_v8hg5"]
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_wbs8s"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_v8hg5"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_f3wg7"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_f3wg7"]
+color = Color(1, 1, 1, 1)
+thickness = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sib42"]
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wbs8s"]
+bg_color = Color(0.7019608, 0.7019608, 0.7019608, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_color = Color(0, 0, 0, 0.3137255)
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_v8hg5"]
+bg_color = Color(0.49747366, 0.49747366, 0.49747366, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_color = Color(0, 0, 0, 0.3137255)
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_f3wg7"]
+bg_color = Color(0.8732984, 0.8732984, 0.8732984, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_color = Color(0, 0, 0, 0.3137255)
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_2kinu"]
+bg_color = Color(0.6, 0.6, 0.6, 0)
+border_color = Color(0.8, 0.8, 0.8, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_nj7t5"]
+bg_color = Color(0.101960786, 0.101960786, 0.101960786, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_color = Color(0, 0, 0, 0.3137255)
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_oltsb"]
+bg_color = Color(0.07284262, 0.072842635, 0.072842605, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_color = Color(0, 0, 0, 0.3137255)
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_nkuys"]
+bg_color = Color(0.27387288, 0.2738727, 0.27387273, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_color = Color(0, 0, 0, 0.3137255)
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_gbmx1"]
+bg_color = Color(0.6, 0.6, 0.6, 0)
+border_color = Color(0.8, 0.8, 0.8, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_gdax1"]
+bg_color = Color(0.4509804, 0.5019608, 0.7019608, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_color = Color(0, 0, 0, 0.3137255)
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tyxnk"]
+bg_color = Color(0.2735082, 0.31405592, 0.4834504, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_color = Color(0, 0, 0, 0.3137255)
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cq7dp"]
+bg_color = Color(0.60557187, 0.6511837, 0.8185529, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_color = Color(0, 0, 0, 0.3137255)
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4llm0"]
+bg_color = Color(0.6, 0.6, 0.6, 0)
+border_color = Color(0.8, 0.8, 0.8, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_q4cnl"]
+bg_color = Color(0.9490196, 0.7490196, 0.2, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_color = Color(0, 0, 0, 0.3137255)
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_861hc"]
+bg_color = Color(0.702015, 0.5450841, 0.086157866, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_color = Color(0, 0, 0, 0.3137255)
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kxftw"]
+bg_color = Color(0.99392015, 0.8634503, 0.55992025, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_color = Color(0, 0, 0, 0.3137255)
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_iobw7"]
+bg_color = Color(0.6, 0.6, 0.6, 0)
+border_color = Color(0.8, 0.8, 0.8, 0)
+
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_nj7t5"]
+color = Color(1, 1, 1, 1)
+thickness = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_26m2u"]
+bg_color = Color(0.90588236, 0.45490196, 0.24313726, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ddbvl"]
+bg_color = Color(0.9040676, 0.4552589, 0.24242604, 1)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_right = 15
+corner_radius_bottom_left = 15
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_igeed"]
+bg_color = Color(0.49946952, 0.2138147, 0.067855306, 1)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_right = 15
+corner_radius_bottom_left = 15
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_n0tly"]
+bg_color = Color(0.95909363, 0.5660999, 0.39273214, 1)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_right = 15
+corner_radius_bottom_left = 15
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_g0j6x"]
+bg_color = Color(0.69135684, 0.6913568, 0.69135684, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[node name="Questions" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_wbs8s")
+
+[node name="Background" type="ColorRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.021434616, 0.021434642, 0.021434627, 1)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="PlayerAvatarDisplay" parent="VBoxContainer/HBoxContainer" instance=ExtResource("2_v8hg5")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_wbs8s")
+texture_pressed = SubResource("ViewportTexture_v8hg5")
+texture_hover = SubResource("ViewportTexture_f3wg7")
+is_display_only = true
+
+[node name="Description" type="RichTextLabel" parent="VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
+theme_override_font_sizes/normal_font_size = 16
+bbcode_enabled = true
+text = "Your goal is to guess the answer in 20 questions or less."
+fit_content = true
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 22
+theme_override_styles/separator = SubResource("StyleBoxLine_f3wg7")
+
+[node name="QuestionsContainer" type="CenterContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="QuestionMark" type="RichTextLabel" parent="VBoxContainer/QuestionsContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(128, 128)
+layout_mode = 2
+theme_override_font_sizes/normal_font_size = 64
+text = "?"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/QuestionsContainer"]
+layout_mode = 2
+
+[node name="QuestionsScroll" type="ScrollContainer" parent="VBoxContainer/QuestionsContainer/MarginContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(600, 750)
+layout_mode = 2
+
+[node name="QuestionsList" type="VBoxContainer" parent="VBoxContainer/QuestionsContainer/MarginContainer/QuestionsScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="AnswerOverlay" type="PanelContainer" parent="VBoxContainer/QuestionsContainer"]
+unique_name_in_owner = true
+z_index = 10
+custom_minimum_size = Vector2(300, 150)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_sib42")
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/QuestionsContainer/AnswerOverlay"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer"]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+
+[node name="QuestionNumber" type="RichTextLabel" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+theme_override_colors/default_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/normal_font_size = 20
+bbcode_enabled = true
+fit_content = true
+vertical_alignment = 1
+
+[node name="QuestionText" type="RichTextLabel" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_colors/default_color = Color(0, 0, 0, 1)
+bbcode_enabled = true
+fit_content = true
+vertical_alignment = 1
+
+[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="YesButton" type="Button" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 50)
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_wbs8s")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_v8hg5")
+theme_override_styles/hover = SubResource("StyleBoxFlat_f3wg7")
+theme_override_styles/focus = SubResource("StyleBoxFlat_2kinu")
+text = "Yes"
+
+[node name="Control" type="Control" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(5, 5)
+layout_mode = 2
+
+[node name="NoButton" type="Button" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_nj7t5")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_oltsb")
+theme_override_styles/hover = SubResource("StyleBoxFlat_nkuys")
+theme_override_styles/focus = SubResource("StyleBoxFlat_gbmx1")
+text = "No"
+
+[node name="Control2" type="Control" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(5, 0)
+layout_mode = 2
+
+[node name="SometimesButton" type="Button" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7877635, 0.81435966, 0.9114928, 1)
+theme_override_colors/font_pressed_color = Color(0.7882353, 0.8156863, 0.9098039, 1)
+theme_override_colors/font_hover_color = Color(0.7882353, 0.8156863, 0.9098039, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_gdax1")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_tyxnk")
+theme_override_styles/hover = SubResource("StyleBoxFlat_cq7dp")
+theme_override_styles/focus = SubResource("StyleBoxFlat_4llm0")
+text = "Sometimes"
+
+[node name="Control" type="Control" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 5)
+layout_mode = 2
+
+[node name="CorrectButton" type="Button" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_q4cnl")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_861hc")
+theme_override_styles/hover = SubResource("StyleBoxFlat_kxftw")
+theme_override_styles/focus = SubResource("StyleBoxFlat_iobw7")
+text = "You've Guessed It!"
+
+[node name="HSeparator2" type="HSeparator" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 5)
+layout_mode = 2
+theme_override_styles/separator = SubResource("StyleBoxLine_nj7t5")
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="BottomItems" type="VBoxContainer" parent="VBoxContainer/MarginContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 9
+
+[node name="TextBoxContainer" type="PanelContainer" parent="VBoxContainer/MarginContainer/BottomItems"]
+custom_minimum_size = Vector2(0, 200)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_26m2u")
+
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/MarginContainer/BottomItems/TextBoxContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/BottomItems/TextBoxContainer/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+
+[node name="RichTextLabel" type="RichTextLabel" parent="VBoxContainer/MarginContainer/BottomItems/TextBoxContainer/MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(180, 60)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/default_color = Color(0, 0, 0, 1)
+bbcode_enabled = true
+text = "Ask a question or guess the answer:"
+fit_content = true
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="TextBox" type="TextEdit" parent="VBoxContainer/MarginContainer/BottomItems/TextBoxContainer/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(400, 100)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/search_result_color = Color(0, 0, 0, 1)
+theme_override_colors/caret_color = Color(0, 0, 0, 1)
+theme_override_colors/selection_color = Color(0, 0, 0, 1)
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/background_color = Color(1, 1, 1, 1)
+
+[node name="SendButton" type="Button" parent="VBoxContainer/MarginContainer/BottomItems"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 60)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_ddbvl")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_igeed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_n0tly")
+text = "Send"
+
+[node name="Container" type="Control" parent="VBoxContainer/MarginContainer/BottomItems"]
+layout_mode = 2
+
+[node name="WaitForLabel" type="Label" parent="VBoxContainer/MarginContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_g0j6x")
+text = "Waiting for an answer..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="DotTimer" type="Timer" parent="."]
+unique_name_in_owner = true
+wait_time = 0.75

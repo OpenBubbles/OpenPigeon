@@ -68,6 +68,7 @@ import com.openbubbles.openpigeon.godot.GodotGameActivity
 import com.openbubbles.openpigeon.mancala.MancalaGame
 import com.openbubbles.openpigeon.pong.PongGame
 import com.openbubbles.openpigeon.pool.PoolGame
+import com.openbubbles.openpigeon.questions.QuestionsGame
 import com.openbubbles.openpigeon.reversi.ReversiGame
 import com.openbubbles.openpigeon.wordhunt.WordHuntGame
 import kotlinx.coroutines.runBlocking
@@ -99,7 +100,8 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             ReversiGame(),
             FillerGame(),
             MancalaGame(),
-            DotsGame()
+            DotsGame(),
+            QuestionsGame()
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {
