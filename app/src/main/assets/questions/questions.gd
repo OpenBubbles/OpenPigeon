@@ -3,6 +3,7 @@ extends Control
 @onready var send_button: Button = %SendButton
 @onready var text_box: TextEdit = %TextBox
 @onready var questions_scroll: ScrollContainer = %QuestionsScroll
+@onready var questions_container: Control = %QuestionsContainer
 @onready var questions_list: VBoxContainer = %QuestionsList
 @onready var question_avatar_scene: Control		= %QuestionAvatarDisplay
 @onready var question_mark_filler: RichTextLabel		= %QuestionMark
@@ -54,7 +55,7 @@ func _ready() -> void:
 	else:
 		print("App plugin is not available")
 		my_uuid = "0a602920-2033-469d-aab8-5e832c5d4f6a"
-		_set_game_data('{"isYourTurn":true,"player":"2","game":"questions","questions":"[Is the word pee?^&*1^&*3|][A?^&*2^&*1|][B?^&*3^&*0]","game_name":"20 Questions","id":"TEST123","answer":"Poop","num":"1"}')
+		_set_game_data('{"isYourTurn":true,"player":"1","game":"questions","questions":"[Is the word pee?^&*1^&*3|][A?^&*2^&*1|][B?^&*3^&*0]","game_name":"20 Questions","id":"TEST123","answer":"Poop","num":"1"}')
 
 	_update_ui_interactivity()
 	
@@ -63,8 +64,6 @@ func _ready() -> void:
 			questions_scroll.get_v_scroll_bar().visible = false
 		if is_instance_valid(questions_scroll.get_h_scroll_bar()):
 			questions_scroll.get_h_scroll_bar().visible = false
-	if is_instance_valid(wait_for_label):
-		wait_for_label.visible = false
 	if is_instance_valid(dot_timer) and not dot_timer.timeout.is_connected(_on_dot_timer_timeout):
 		dot_timer.timeout.connect(_on_dot_timer_timeout)
 	if is_instance_valid(questions_list):
@@ -72,6 +71,15 @@ func _ready() -> void:
 		questions_list.child_entered_tree.connect(_on_questions_child_entered)
 	if is_instance_valid(overlay):
 		overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	if is_instance_valid(text_box):
+		# Hide the big list while typing so the IME isn't in the way
+		if not text_box.focus_entered.is_connected(_on_text_focus_entered):
+			text_box.focus_entered.connect(_on_text_focus_entered)
+		if not text_box.focus_exited.is_connected(_on_text_focus_exited):
+			text_box.focus_exited.connect(_on_text_focus_exited)
+		# Live-sanitize as user types (also strips Enters)
+		if not text_box.text_changed.is_connected(_on_text_changed_sanitize):
+			text_box.text_changed.connect(_on_text_changed_sanitize)
 
 		# NEW: make the existing overlay fill the whole scene and be on top
 		overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -92,6 +100,10 @@ func _ready() -> void:
 	await get_tree().process_frame
 	call_deferred("_maybe_show_answer_popup")
 	_make_scrollbars_invisible()
+	if (not is_my_turn) and (not game_over) and (not _waiting_active):
+		_start_waiting()
+	elif is_my_turn and (not game_over):
+		_stop_waiting()
 
 # ---------------------------
 # Safe getters for payloads
@@ -103,6 +115,59 @@ func _get_s(parsed_dict: Dictionary, key: String, def: String = "") -> String:
 	if typeof(v) == TYPE_ARRAY and v.size() > 0:
 		return str(v[0])
 	return str(v)
+	
+func _on_text_focus_entered() -> void:
+	if is_instance_valid(questions_container):
+		questions_container.visible = false
+
+func _on_text_focus_exited() -> void:
+	if is_instance_valid(questions_container):
+		questions_container.visible = true
+		
+func _flash_textbox_red() -> void:
+	if not is_instance_valid(text_box):
+		return
+	var t := create_tween()
+	# Subtle red tint, then back
+	text_box.modulate = Color(1, 0.6, 0.6, 1)
+	t.tween_property(text_box, "modulate", Color(1, 1, 1, 1), 0.25).set_delay(0.15)
+
+func _sanitize_input(raw: String) -> String:
+	var s := raw
+	# Remove newlines first
+	s = s.replace("\r", " ").replace("\n", " ")
+
+	# Collapse multiple whitespace to a single space
+	var re := RegEx.new()
+	re.compile("\\s+")
+	s = re.sub(s, " ", true)
+	s = s.strip_edges()
+
+	# Neutralize tokens that could break your wire format or UI
+	s = s.replace("^&*", "⋆")  # collapse multi-token to a harmless glyph
+	s = s.replace("|", "¦")
+	s = s.replace("[", "⟦")
+	s = s.replace("]", "⟧")
+	s = s.replace("<", "‹").replace(">", "›")
+	s = s.replace("[/","⟦/")
+	s = s.replace("\\", "⧵")
+
+	# Optional length cap
+	var MAX := 140
+	if s.length() > MAX:
+		s = s.substr(0, MAX).strip_edges()
+
+	return s
+	
+func _on_text_changed_sanitize() -> void:
+	if not is_instance_valid(text_box):
+		return
+	var caret := text_box.get_caret_column()  # best-effort caret preservation
+	var cleaned := _sanitize_input(text_box.text)
+	if cleaned != text_box.text:
+		text_box.text = cleaned
+		# keep caret roughly where it was
+		text_box.set_caret_column(min(caret, cleaned.length()))
 
 func _get_b(parsed_dict: Dictionary, key: String, def: bool = false) -> bool:
 	if not parsed_dict.has(key):
@@ -202,7 +267,11 @@ func _set_game_data(data_json: String) -> void:
 		dbg("set_game_data: unanswered=%d" % u)
 	dbg("set_game_data: secret_answer='%s', game_over=%s" % [secret_answer, str(game_over)])
 
-
+	if (not is_my_turn) and (not game_over) and (not _waiting_active):
+		_start_waiting()
+	elif is_my_turn and (not game_over):
+		_stop_waiting()
+		
 	_replay_from_state()
 	_render_all_questions()
 	_update_ui_interactivity()
@@ -275,20 +344,21 @@ func _replay_from_state() -> void:
 # Send (Player 1 asks / Player 2 can also send short replies)
 # -------------------------------------------------------
 func _on_send_pressed() -> void:
-	if game_over:
-		return
-	if not is_my_turn:
-		return
-	if not is_instance_valid(text_box):
+	if game_over or (not is_my_turn) or (not is_instance_valid(text_box)):
 		return
 
-	var raw: String = text_box.text.strip_edges()
-	if raw == "":
+	var raw := text_box.text
+	var cleaned := _sanitize_input(raw)
+
+	if cleaned == "":
+		_flash_textbox_red()
+		# also ensure the questions list comes back if we were hidden
+		_on_text_focus_exited()
 		return
 
-	var is_guess_correct: bool = (i_am_player == 1) and (raw.to_lower() == secret_answer.strip_edges().to_lower())
+	var is_guess_correct: bool = (i_am_player == 1) and (cleaned.to_lower() == secret_answer.strip_edges().to_lower())
 
-	var text_to_send: String = raw
+	var text_to_send := cleaned
 	if not is_guess_correct and not text_to_send.ends_with("?"):
 		text_to_send += "?"
 
@@ -299,11 +369,8 @@ func _on_send_pressed() -> void:
 	_render_all_questions()
 	_smooth_scroll_to_bottom()
 
-	# Enforce 20-question cap for P1 if still unsolved
 	if i_am_player == 1 and not is_guess_correct:
-		var asked_count: int = 0
-		for _q in questions:
-			asked_count += 1
+		var asked_count := questions.size()
 		if asked_count >= MAX_QUESTIONS:
 			game_over = true
 			_update_ui_interactivity()
@@ -311,7 +378,11 @@ func _on_send_pressed() -> void:
 
 	_send_game(text_to_send, next_idx, resp_code)
 	text_box.text = ""
+	_on_text_focus_exited()  # restore list if hidden
 	_start_waiting()
+	_update_description_fill()
+
+
 
 # -------------------------------------------------------
 # Player 2 answer buttons (hook these to your UI)
@@ -504,30 +575,34 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 	row.custom_minimum_size = Vector2(0, 72)
 	row.add_theme_constant_override("separation", 12)
 
-	# Left glyph (avatar or '?')
+	# Left glyph (avatar + "?" on latest; just "?" for older)
 	var left_holder := Control.new()
 	left_holder.custom_minimum_size = Vector2(48, 56)
 	left_holder.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	# Use a container so we can stack avatar + overlay "?"
+	var left_stack := Control.new()
+	left_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	left_stack.set_anchors_preset(Control.PRESET_FULL_RECT)
+	left_stack.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	left_holder.add_child(left_stack)
 	row.add_child(left_holder)
 
 	if is_latest and OpponentAvatarScene != null:
 		var opp_inst := OpponentAvatarScene.instantiate()
 		if opp_inst is Control:
 			opp_inst.name = "OpponentAvatar"
-			opp_inst.custom_minimum_size = Vector2(48, 56)
+			opp_inst.custom_minimum_size = Vector2(72, 56)
 			opp_inst.set_anchors_preset(Control.PRESET_CENTER)
 			opp_inst.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			# Slightly smaller than the cell so it feels like an icon
 			opp_inst.scale = Vector2(0.6, 0.6)
-			left_holder.add_child(opp_inst)
+			left_stack.add_child(opp_inst)
 
-			# Feed avatar data (deferred so the node is ready)
 			if _opponent_avatar_data.is_empty():
 				_opponent_avatar_data = _parse_avatar_string("")
 			opp_inst.call_deferred("update_avatar_from_data", _opponent_avatar_data)
 	else:
-		# Regular question mark for older questions
 		var qmark := Label.new()
+		qmark.name = "HistoryQuestionMark"
 		qmark.text = "?"
 		qmark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		qmark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -535,7 +610,7 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 		qmark.add_theme_color_override("font_color", col)
 		qmark.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		qmark.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		left_holder.add_child(qmark)
+		left_stack.add_child(qmark)
 
 	# Colored card
 	var card := PanelContainer.new()
@@ -930,6 +1005,18 @@ func _show_answer_overlay_for(idx: int, text: String, col: Color) -> void:
 	overlay.visible = true
 	print("VISIBLE OVERLAY")
 	overlay.move_to_front()
+		# Center the card and make it 80% of viewport width
+	var vp_w := get_viewport_rect().size.x
+	var card := overlay.get_node_or_null("Card") as Control
+	var target := card if card else overlay
+
+	target.set_anchors_preset(Control.PRESET_CENTER)
+	target.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	target.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	target.custom_minimum_size.x = vp_w * 0.8
+	# height wraps to content; if you want a max, uncomment:
+	# target.custom_minimum_size.y = min(target.custom_minimum_size.y, get_viewport_rect().size.y * 0.9)
+
 
 	var r := overlay.get_global_rect()
 	_dbg("overlay: SHOW idx=%d text='%s' unanswered=%d turn=%s p=%d rect=(%.1f,%.1f,%.1f,%.1f) visible=%s z=%d top_level=%s" % [
@@ -958,11 +1045,10 @@ func _update_description_fill() -> void:
 		_desc_rich.parse_bbcode(your_word + the_word)
 		_desc_rich.visible = true
 	else:
-		# Player 1 (or no answer yet): simple guidance (or whatever default you want)
-		var guide := "[font_size=20]Ask clear yes/no questions up to 20![/font_size]"
+		# Player 1 guidance — always show
+		var guide := "[font_size=18]Your goal is to guess the answer in 20 questions or less.[/font_size]"
 		_desc_rich.parse_bbcode(guide)
-		# Hide the filler once questions start appearing
-		_desc_rich.visible = (questions.size() == 0)
+		_desc_rich.visible = true
 
 var DEBUG_20Q := true
 
@@ -985,6 +1071,7 @@ func _set_wait_base_text() -> void:
 	BASE_WAIT_TEXT = "Waiting for an answer" if i_am_player == 1 else "Waiting for a question"
 
 func _start_waiting() -> void:
+	print("START WAITING")
 	_set_wait_base_text()
 	if is_instance_valid(wait_for_label):
 		wait_for_label.text = BASE_WAIT_TEXT
@@ -996,14 +1083,17 @@ func _start_waiting() -> void:
 		dot_timer.start()
 
 	_waiting_active = true
+	print("WAITING ACTIVE: ", _waiting_active)
 
 	# Hide BottomItems if we're Player 1 (question input)
 	if i_am_player == 1 and is_instance_valid(bottom_items):
 		bottom_items.visible = false
 
 func _stop_waiting() -> void:
+	print("STOP WAITING")
 	# Guard: avoid work (and potential loops) if already inactive
 	if not _waiting_active:
+		print("no waiting active")
 		return
 
 	if is_instance_valid(wait_for_label):
