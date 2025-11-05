@@ -55,6 +55,8 @@ func _restore_scroll(sc: ScrollContainer) -> void:
 func _ready():
 	print("SettingsPopup: _ready() called.")
 	self.custom_minimum_size.x = 400
+	if SettingsManager and SettingsManager.has_method("ensure_avatar_defaults"):
+		SettingsManager.ensure_avatar_defaults()
 	_setup_theme_button()
 	_add_dark_mode_toggle()
 	_setup_avatar_customizer()
@@ -276,7 +278,7 @@ func _setup_avatar_customizer():
 	avatar_tab_container.add_tab("Hair")
 	avatar_tab_container.add_tab("Face")
 	avatar_tab_container.add_tab("Clothing")
-	#avatar_tab_container.add_tab("Accessories")
+	# avatar_tab_container.add_tab("Accessories")
 	avatar_tab_container.current_tab = 0
 	_on_avatar_tab_changed(0)
 
@@ -309,8 +311,7 @@ func _on_avatar_tab_changed(tab_index: int, restored_scroll: Variant = null):
 
 func _on_avatar_preview_setting_changed(value, category: String, key: String):
 	_set_avatar_value(category, key, value)
-	if is_instance_valid(main_avatar_preview):
-		main_avatar_preview.update_display_from_settings()
+	main_avatar_preview.update_display_from_settings()
 
 func _on_avatar_setting_changed(category: String, key: String, value):
 	_set_avatar_value(category, key, value)
@@ -325,9 +326,8 @@ func _on_avatar_setting_changed(category: String, key: String, value):
 	print("Saved '", key, "' for '", category, "' with new value: '", saved_value, "'")
 	print("-----------------------")
 
-	if is_instance_valid(main_avatar_preview):
-		main_avatar_preview.update_display_from_settings()
-		
+	main_avatar_preview.update_display_from_settings()
+
 	var keep_pos: Variant = null
 	for child in properties_box.get_children():
 		if child is ScrollContainer:
@@ -523,7 +523,7 @@ func _get_current_avatar_settings() -> Dictionary:
 		
 		"face": {
 			"eyes": SettingsManager.get_setting("avatar_face", "eyes", "eyes1"),
-			"mouth": SettingsManager.get_setting("avatar_face", "mouth", "Plain"),
+			"mouth": SettingsManager.get_setting("avatar_face", "mouth", "mouth1"),
 		},
 		"clothing": {
 			"color": SettingsManager.get_setting("avatar_clothing", "color", Color("#a03c3c")),
@@ -543,11 +543,9 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 	scroll_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll_container.custom_minimum_size = Vector2(0, 100)
 	scroll_container.mouse_filter = Control.MOUSE_FILTER_PASS
-	scroll_container.scroll_horizontal = 0
-	scroll_container.scroll_vertical = 0
 	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll_container.scroll_deadzone = DEADZONE_PX
+	scroll_container.scroll_deadzone = 8
 
 	var list_key: String = "%s/%s/%s" % [
 		avatar_tab_container.get_tab_title(avatar_tab_container.current_tab),
@@ -564,13 +562,15 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 	var cfg_section := "avatar_hair_front" if category == "hair" else "avatar_" + category
 	var current_style_value = SettingsManager.get_setting(cfg_section, key, style_options[0])
 
+	const DRAG_THRESHOLD := 8.0
+
 	for style_name in style_options:
 		var thumbnail := AvatarThumbnailScene.instantiate()
 		thumbnail.custom_minimum_size = Vector2(96, 75)
 		thumbnail.controlled_by_data = true
 		thumbnail.focus_mode = Control.FOCUS_NONE
-		thumbnail.mouse_filter = Control.MOUSE_FILTER_STOP
-		thumbnail.action_mode = THUMB_PRESS_MODE
+		thumbnail.mouse_filter = Control.MOUSE_FILTER_PASS
+		thumbnail.action_mode = BaseButton.ACTION_MODE_BUTTON_RELEASE
 		thumbnail.button_mask = MOUSE_BUTTON_MASK_LEFT
 		thumbnail.toggle_mode = false
 
@@ -587,19 +587,29 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 		if style_name == current_style_value:
 			thumbnail.set_selected(true)
 
-		thumbnail.pressed.connect(func():
-			_on_avatar_setting_changed(category, key, style_name)
-		)
+		thumbnail.set_meta("tap_start", Vector2.ZERO)
+		thumbnail.set_meta("dragging", false)
 
-		thumbnail.gui_input.connect(func(e: InputEvent):
-			if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
-				_on_avatar_setting_changed(category, key, style_name)
-				get_viewport().set_input_as_handled()
+		thumbnail.gui_input.connect(func(e: InputEvent) -> void:
+			if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+				if e.pressed:
+					thumbnail.set_meta("tap_start", e.position)
+					thumbnail.set_meta("dragging", false)
+				else:
+					# Released: commit only if we didn't drag
+					if not bool(thumbnail.get_meta("dragging")):
+						_on_avatar_setting_changed(category, key, style_name)
+						get_viewport().set_input_as_handled()
+			elif e is InputEventMouseMotion:
+				if (e.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+					var tap_start: Vector2 = thumbnail.get_meta("tap_start")
+					var is_dragging: bool = bool(thumbnail.get_meta("dragging"))
+					if not is_dragging and e.position.distance_to(tap_start) > DRAG_THRESHOLD:
+						thumbnail.set_meta("dragging", true)
 		)
 
 	_add_property_to_box(scroll_container)
 	_restore_scroll(scroll_container)
-
 
 func _exit_tree():
 	print("SettingsPopup: _exit_tree() called.")

@@ -4,30 +4,19 @@ class_name AvatarThumbnail
 
 @export var is_display_only: bool = false
 @export var controlled_by_data: bool = false
-
-@onready var color_rect: ColorRect = %ColorRect
-@onready var avatar_background: Sprite2D = %AvatarBackground
-@onready var avatar_hair_back: Sprite2D = %AvatarHairBack       # back layer
-@onready var avatar_torso: Sprite2D = %AvatarTorso
-@onready var avatar_clothing: Sprite2D = %AvatarClothing
-@onready var avatar_clothing_details: Sprite2D = %AvatarClothingDetails
-@onready var avatar_base_fshape: Sprite2D = %AvatarBaseFace
-@onready var avatar_eyes: Sprite2D = %AvatarEyes
-@onready var avatar_mouth: Sprite2D = %AvatarMouth
-@onready var avatar_hair_front: Sprite2D = %AvatarHairFront     # front layer
-@onready var avatar_head_accessories: Sprite2D = %AvatarHeadAccessories
-@onready var avatar_face_accessories: Sprite2D = %AvatarFaceAccessories
-
-const AVATAR_BG_MAP_PATH          = "res://global/avatar_textures/backgrounds/background_sheet.png"
-const AVATAR_HAIR_BACK_MAP_PATH   = "res://global/avatar_textures/hair/avatar_hair_back.png"
-const AVATAR_TORSO_MAP_PATH        = "res://global/avatar_textures/body/avatar_torso.png"
-const AVATAR_CLOTHING_MAP_PATH    = "res://global/avatar_textures/clothing/avatar_clothing_base.png"
-const AVATAR_CLOTHING_DETAILS_MAP_PATH    = "res://global/avatar_textures/clothing/avatar_clothing_details.png"
-const AVATAR_FSHAPE_MAP_PATH        = "res://global/avatar_textures/body/avatar_faces.png"
-const AVATAR_EYES_MAP_PATH        = "res://global/avatar_textures/face/avatar_eyes.png"
-const AVATAR_MOUTH_MAP_PATH       = "res://global/avatar_textures/face/avatar_mouth.png"
-const AVATAR_HAIR_FRONT_MAP_PATH  = "res://global/avatar_textures/hair/avatar_hair_front.png"
-const AVATAR_ACCESSORIES_MAP_PATH = "res://global/avatar_textures/accessories/avatar_accessories.png"
+@onready var sub_viewport: SubViewport = %SubViewport
+@onready var color_rect: ColorRect = %SubViewport/PillMask/ColorRect
+@onready var avatar_background: Sprite2D = %SubViewport/PillMask/AvatarBackground
+@onready var avatar_hair_back: Sprite2D = %SubViewport/Foreground/AvatarHairBack
+@onready var avatar_torso: Sprite2D = %SubViewport/Foreground/AvatarTorso
+@onready var avatar_clothing: Sprite2D = %SubViewport/Foreground/AvatarClothing
+@onready var avatar_clothing_details: Sprite2D = %SubViewport/Foreground/AvatarClothingDetails
+@onready var avatar_base_fshape: Sprite2D = %SubViewport/Foreground/AvatarBaseFace
+@onready var avatar_eyes: Sprite2D = %SubViewport/Foreground/AvatarEyes
+@onready var avatar_mouth: Sprite2D = %SubViewport/Foreground/AvatarMouth
+@onready var avatar_hair_front: Sprite2D = %SubViewport/Foreground/AvatarHairFront     # front layer
+@onready var avatar_head_accessories: Sprite2D = %SubViewport/Foreground/AvatarHeadAccessories
+@onready var avatar_face_accessories: Sprite2D = %SubViewport/Foreground/AvatarFaceAccessories
 
 # Top
 const Z_FACE_ACCESSORIES := 80
@@ -44,8 +33,12 @@ const Z_HAIR_BACK        := 10
 const Z_BACKGROUND       := 0
 # Bottom
 
+const AVATAR_PART_SIZE = 256
+
 @export var AVATAR_FG_SCALE_RATIO := 1.4  # >1.0 makes the avatar larger inside the background
 @export var AVATAR_FG_BOTTOM_PAD  := -28   # +down / -up in pixels
+
+const TEMP_DISABLE_AVATAR_RENDER := false
 # ----------------------------------------------------------
 
 const avatar_background_regions := {
@@ -56,56 +49,56 @@ const avatar_background_regions := {
 	"Pattern 9": Rect2(0, 256, 128, 128)
 }
 const avatar_torso_regions := {
-	"Default": Rect2(0, 0, 2000, 2000)
+	"Default": Rect2(0, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE)
 }
 
 const avatar_fshape_regions := {
 	# First row (y = 0)
-	"Default": Rect2(0, 0, 2000, 2000),  # alias of fshape1 so the first option works
-	"fshape1":   Rect2(0, 0, 2000, 2000),
-	"fshape2":   Rect2(2000, 0, 2000, 2000),
-	"fshape3":   Rect2(4000, 0, 2000, 2000),
-	"fshape4":   Rect2(6000, 0, 2000, 2000),
-	"fshape5":   Rect2(8000, 0, 2000, 2000),
+	"Default": Rect2(0, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),  # alias of fshape1 so the first option works
+	"fshape1":   Rect2(0, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"fshape2":   Rect2(AVATAR_PART_SIZE, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"fshape3":   Rect2(AVATAR_PART_SIZE * 2, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"fshape4":   Rect2(AVATAR_PART_SIZE * 3, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"fshape5":   Rect2(AVATAR_PART_SIZE * 4, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
 
-	# Second row (y = 2000)
-	"fshape6":   Rect2(0, 2000, 2000, 2000),
-	"fshape7":   Rect2(2000, 2000, 2000, 2000),
+	# Second row (y = AVATAR_PART_SIZE)
+	"fshape6":   Rect2(0, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"fshape7":   Rect2(AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
 }
 # Shared regions for BOTH hair layers (front/back)
 const avatar_hair_regions := {
-	"hair1": Rect2(0, 0, 2000, 2000),   "hair2": Rect2(2000, 0, 2000, 2000),
-	"hair3": Rect2(4000, 0, 2000, 2000),"hair4": Rect2(6000, 0, 2000, 2000),
-	"hair5": Rect2(8000, 0, 2000, 2000),"hair6": Rect2(0, 2000, 2000, 2000),
-	"hair7": Rect2(2000, 2000, 2000, 2000),"hair8": Rect2(4000, 2000, 2000, 2000),
-	"hair9": Rect2(6000, 2000, 2000, 2000),"hair10": Rect2(8000, 2000, 2000, 2000),
-	"hair11": Rect2(0, 4000, 2000, 2000),"hair12": Rect2(2000, 4000, 2000, 2000),
-	"hair13": Rect2(4000, 4000, 2000, 2000),"hair14": Rect2(6000, 4000, 2000, 2000),
-	"hair15": Rect2(8000, 4000, 2000, 2000)
+	"hair1": Rect2(0, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),   "hair2": Rect2(AVATAR_PART_SIZE, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"hair3": Rect2(AVATAR_PART_SIZE * 2, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"hair4": Rect2(AVATAR_PART_SIZE * 3, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"hair5": Rect2(AVATAR_PART_SIZE * 4, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"hair6": Rect2(0, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"hair7": Rect2(AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"hair8": Rect2(AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"hair9": Rect2(AVATAR_PART_SIZE * 3, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"hair10": Rect2(AVATAR_PART_SIZE * 4, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"hair11": Rect2(0, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"hair12": Rect2(AVATAR_PART_SIZE, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"hair13": Rect2(AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"hair14": Rect2(AVATAR_PART_SIZE * 3, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"hair15": Rect2(AVATAR_PART_SIZE * 4, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE)
 }
-const avatar_eyes_regions  := { "eyes1": Rect2(0, 0, 2000, 2000),   "eyes2": Rect2(2000, 0, 2000, 2000),
-	"eyes3": Rect2(4000, 0, 2000, 2000),"eyes4": Rect2(6000, 0, 2000, 2000),
-	"eyes5": Rect2(8000, 0, 2000, 2000),"eyes6": Rect2(0, 2000, 2000, 2000),
-	"eyes7": Rect2(2000, 2000, 2000, 2000),"eyes8": Rect2(4000, 2000, 2000, 2000),
-	"eyes9": Rect2(6000, 2000, 2000, 2000),"eyes10": Rect2(8000, 2000, 2000, 2000),
-	"eyes11": Rect2(0, 4000, 2000, 2000),"eyes12": Rect2(2000, 4000, 2000, 2000),
-	"eyes13": Rect2(4000, 4000, 2000, 2000) }
+const avatar_eyes_regions  := { "eyes1": Rect2(0, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),   "eyes2": Rect2(AVATAR_PART_SIZE, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"eyes3": Rect2(AVATAR_PART_SIZE * 2, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"eyes4": Rect2(AVATAR_PART_SIZE * 3, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"eyes5": Rect2(AVATAR_PART_SIZE * 4, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"eyes6": Rect2(0, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"eyes7": Rect2(AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"eyes8": Rect2(AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"eyes9": Rect2(AVATAR_PART_SIZE * 3, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"eyes10": Rect2(AVATAR_PART_SIZE * 4, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"eyes11": Rect2(0, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"eyes12": Rect2(AVATAR_PART_SIZE, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"eyes13": Rect2(AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE) }
 	
-const avatar_mouth_regions := { "mouth1": Rect2(0, 0, 2000, 2000),   "mouth2": Rect2(2000, 0, 2000, 2000),
-	"mouth3": Rect2(4000, 0, 2000, 2000),"mouth4": Rect2(6000, 0, 2000, 2000),
-	"mouth5": Rect2(8000, 0, 2000, 2000),"mouth6": Rect2(0, 2000, 2000, 2000),
-	"mouth7": Rect2(2000, 2000, 2000, 2000),"mouth8": Rect2(4000, 2000, 2000, 2000),
-	"mouth9": Rect2(6000, 2000, 2000, 2000),"mouth10": Rect2(8000, 2000, 2000, 2000),
-	"mouth11": Rect2(0, 4000, 2000, 2000),"mouth12": Rect2(2000, 4000, 2000, 2000),
-	"mouth13": Rect2(4000, 4000, 2000, 2000),"mouth14": Rect2(6000, 4000, 2000, 2000),
-	"mouth15": Rect2(8000, 4000, 2000, 2000),"mouth16": Rect2(0, 6000, 2000, 2000),
-	"mouth17": Rect2(2000, 6000, 2000, 2000) }
+const avatar_mouth_regions := { "mouth1": Rect2(0, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),   "mouth2": Rect2(AVATAR_PART_SIZE, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"mouth3": Rect2(AVATAR_PART_SIZE * 2, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"mouth4": Rect2(AVATAR_PART_SIZE * 3, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"mouth5": Rect2(AVATAR_PART_SIZE * 4, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"mouth6": Rect2(0, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"mouth7": Rect2(AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"mouth8": Rect2(AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"mouth9": Rect2(AVATAR_PART_SIZE * 3, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"mouth10": Rect2(AVATAR_PART_SIZE * 4, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"mouth11": Rect2(0, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"mouth12": Rect2(AVATAR_PART_SIZE, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"mouth13": Rect2(AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"mouth14": Rect2(AVATAR_PART_SIZE * 3, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"mouth15": Rect2(AVATAR_PART_SIZE * 4, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),"mouth16": Rect2(0, AVATAR_PART_SIZE * 3, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"mouth17": Rect2(AVATAR_PART_SIZE, AVATAR_PART_SIZE * 3, AVATAR_PART_SIZE, AVATAR_PART_SIZE) }
 	
 const MOUTH_WITH_FACIAL_HAIR := {
 	"mouth13": true, "mouth14": true, "mouth15": true, "mouth16": true, "mouth17": true
 }
 	
-const avatar_clothing_regions := { "clothing1": Rect2(0, 0, 2000, 2000), "clothing2": Rect2(2000, 0, 2000, 2000), "clothing3": Rect2(4000, 0, 2000, 2000)}
+const avatar_clothing_regions := { "clothing1": Rect2(0, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE), "clothing2": Rect2(AVATAR_PART_SIZE, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE), "clothing3": Rect2(AVATAR_PART_SIZE * 2, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE)}
 
 const avatar_head_accessories_regions := { "None": Rect2(0, 0, 1, 1), "Hat1": Rect2(0, 0, 64, 64), "Headband": Rect2(64, 0, 64, 64) }
 const avatar_face_accessories_regions := { "None": Rect2(0, 0, 1, 1), "Glasses": Rect2(128, 0, 64, 64), "Mask": Rect2(192, 0, 64, 64) }
@@ -114,6 +107,9 @@ var _selection_stylebox: StyleBox = null
 
 func _ready():
 	print("AvatarThumbnail ready: '", self.name, "'. is_display_only: ", is_display_only, ", controlled_by_data: ", controlled_by_data)
+	
+	if SettingsManager and SettingsManager.has_method("ensure_avatar_defaults"):
+		SettingsManager.ensure_avatar_defaults()
 
 	var stylebox_flat = StyleBoxFlat.new()
 	stylebox_flat.bg_color = Color(0,0,0,0)
@@ -124,25 +120,34 @@ func _ready():
 
 	if is_display_only:
 		self.disabled = true
-		
+
+	if TEMP_DISABLE_AVATAR_RENDER:
+		visible = false
+		disabled = true
+		return
+
 	if controlled_by_data:
 		pass
 	else:
 		if SettingsManager:
 			SettingsManager.avatar_changed.connect(update_display_from_settings)
-		update_display_from_settings()
+		call_deferred("update_display_from_settings")
+
 
 func update_preview(base_settings: Dictionary, category: String, key: String, override_value):
+	if TEMP_DISABLE_AVATAR_RENDER:
+		return
 	var temp_settings = base_settings.duplicate(true)
 	if not temp_settings.has(category):
 		temp_settings[category] = {}
 	temp_settings[category][key] = override_value
 	_draw_avatar(temp_settings)
-	
+
 func update_avatar_from_data(avatar_data: Dictionary):
 	print("SUCCESS: '", self.name, "' is updating from this external data: ", avatar_data)
+	if TEMP_DISABLE_AVATAR_RENDER:
+		return
 
-	# Use single hair values from data, apply to BOTH layers so fshape can sit between
 	var hair_color      = avatar_data.get("hair_color", Color.BLACK)
 	var hair_brightness = avatar_data.get("hair_brightness", 0.0)
 	var hair_style      = avatar_data.get("hair_style", "hair1")
@@ -158,7 +163,6 @@ func update_avatar_from_data(avatar_data: Dictionary):
 			"brightness": avatar_data.get("fshape_brightness", 0.0),
 			"head_style": avatar_data.get("fshape_style", "Default")
 		},
-		# New front/back hair layers
 		"hair_front": { "color": hair_color, "brightness": hair_brightness, "style": hair_style },
 		"hair_back":  { "color": hair_color, "brightness": hair_brightness, "style": hair_style },
 		"face": {
@@ -180,11 +184,16 @@ func update_avatar_from_data(avatar_data: Dictionary):
 	_draw_avatar(settings)
 
 func update_display_from_settings():
+	if TEMP_DISABLE_AVATAR_RENDER:
+		return
 	var current_settings = _get_current_avatar_settings()
 	_draw_avatar(current_settings)
 
+
 func _draw_avatar(settings: Dictionary) -> void:
 	# Background
+	if TEMP_DISABLE_AVATAR_RENDER:
+		return
 	var bg_color = settings["background"]["color"]
 	var final_bg = calculate_final_color(bg_color, settings["background"]["brightness"])
 	color_rect.color = final_bg
@@ -196,14 +205,14 @@ func _draw_avatar(settings: Dictionary) -> void:
 		color_rect.visible = false
 		avatar_background.visible = true
 		var atlas = AtlasTexture.new()
-		atlas.atlas = load(AVATAR_BG_MAP_PATH)
+		atlas.atlas = AvatarResources.AVATAR_BG_MAP_PATH
 		atlas.region = avatar_background_regions[bg_style]
 		avatar_background.texture = atlas
 		
 	# fshape
 	var tone_color = settings["fshape"]["color"]
 	avatar_base_fshape.self_modulate = calculate_final_color(tone_color, settings["fshape"]["brightness"])
-	avatar_base_fshape.texture = load(AVATAR_FSHAPE_MAP_PATH)
+	avatar_base_fshape.texture = AvatarResources.AVATAR_FSHAPE_MAP_PATH
 
 	var fshape_style: String = settings["fshape"]["head_style"]
 	if not avatar_fshape_regions.has(fshape_style):
@@ -214,7 +223,7 @@ func _draw_avatar(settings: Dictionary) -> void:
 	
 	# Torso
 	if is_instance_valid(avatar_torso):
-		avatar_torso.texture = load(AVATAR_TORSO_MAP_PATH)
+		avatar_torso.texture = AvatarResources.AVATAR_TORSO_MAP_PATH
 		avatar_torso.self_modulate = avatar_base_fshape.self_modulate
 		avatar_torso.region_enabled = true
 		avatar_torso.region_rect = avatar_torso_regions.get("Default", Rect2(0,0,0,0))
@@ -222,11 +231,11 @@ func _draw_avatar(settings: Dictionary) -> void:
 	# Hair Back
 	var hair_back_color = settings["hair_back"]["color"]
 	avatar_hair_back.self_modulate = calculate_final_color(hair_back_color, settings["hair_back"]["brightness"])
-	var back_tex: Texture2D = load(AVATAR_HAIR_BACK_MAP_PATH)
+	var back_tex: Texture2D = AvatarResources.AVATAR_HAIR_BACK_MAP_PATH
 	if back_tex:
 		avatar_hair_back.texture = back_tex
-	else:
-		push_warning("Avatar hair BACK texture missing: " + AVATAR_HAIR_BACK_MAP_PATH)
+	#else:
+		#push_warning("Avatar hair BACK texture missing: " + AVATAR_HAIR_BACK_MAP_PATH)
 	var hair_style_back = settings["hair_back"]["style"]
 	if avatar_hair_regions.has(hair_style_back):
 		avatar_hair_back.region_enabled = true
@@ -235,11 +244,11 @@ func _draw_avatar(settings: Dictionary) -> void:
 	# Hair Front
 	var hair_front_color = settings["hair_front"]["color"]
 	avatar_hair_front.self_modulate = calculate_final_color(hair_front_color, settings["hair_front"]["brightness"])
-	var front_tex: Texture2D = load(AVATAR_HAIR_FRONT_MAP_PATH)
+	var front_tex: Texture2D = AvatarResources.AVATAR_HAIR_FRONT_MAP_PATH
 	if front_tex:
 		avatar_hair_front.texture = front_tex
-	else:
-		push_warning("Avatar hair FRONT texture missing: " + AVATAR_HAIR_FRONT_MAP_PATH)
+	#else:
+		#push_warning("Avatar hair FRONT texture missing: " + AVATAR_HAIR_FRONT_MAP_PATH)
 	var hair_style_front = settings["hair_front"]["style"]
 	if avatar_hair_regions.has(hair_style_front):
 		avatar_hair_front.region_enabled = true
@@ -247,8 +256,8 @@ func _draw_avatar(settings: Dictionary) -> void:
 		
 	var hair_front_final := calculate_final_color(hair_front_color, settings["hair_front"]["brightness"])
 	# Face
-	avatar_eyes.texture = load(AVATAR_EYES_MAP_PATH)
-	avatar_mouth.texture = load(AVATAR_MOUTH_MAP_PATH)
+	avatar_eyes.texture = AvatarResources.AVATAR_EYES_MAP_PATH
+	avatar_mouth.texture = AvatarResources.AVATAR_MOUTH_MAP_PATH
 	var eyes_style = settings["face"]["eyes"]
 	if avatar_eyes_regions.has(eyes_style):
 		avatar_eyes.region_enabled = true
@@ -262,7 +271,7 @@ func _draw_avatar(settings: Dictionary) -> void:
 	# Clothing
 	var clothing_color = settings["clothing"]["color"]
 	avatar_clothing.self_modulate = calculate_final_color(clothing_color, settings["clothing"]["brightness"])
-	avatar_clothing.texture = load(AVATAR_CLOTHING_MAP_PATH)
+	avatar_clothing.texture = AvatarResources.AVATAR_CLOTHING_MAP_PATH
 	var clothing_style = settings["clothing"]["style"]
 	if avatar_clothing_regions.has(clothing_style):
 		avatar_clothing.region_enabled = true
@@ -271,7 +280,7 @@ func _draw_avatar(settings: Dictionary) -> void:
 		
 	# Clothing Details
 	avatar_clothing_details.self_modulate = Color(1,1,1,1)
-	avatar_clothing_details.texture = load(AVATAR_CLOTHING_DETAILS_MAP_PATH)
+	avatar_clothing_details.texture = AvatarResources.AVATAR_CLOTHING_DETAILS_MAP_PATH
 	if avatar_clothing_regions.has(clothing_style):
 		avatar_clothing_details.region_enabled = true
 		avatar_clothing_details.region_rect = avatar_clothing_regions[clothing_style]
@@ -282,8 +291,8 @@ func _draw_avatar(settings: Dictionary) -> void:
 	# Accessories
 	var acc_color = settings["accessories"]["color"]
 	var final_acc_color = calculate_final_color(acc_color, settings["accessories"]["brightness"])
-	avatar_head_accessories.texture = load(AVATAR_ACCESSORIES_MAP_PATH)
-	avatar_face_accessories.texture = load(AVATAR_ACCESSORIES_MAP_PATH)
+	avatar_head_accessories.texture = AvatarResources.AVATAR_ACCESSORIES_MAP_PATH
+	avatar_face_accessories.texture = AvatarResources.AVATAR_ACCESSORIES_MAP_PATH
 	avatar_head_accessories.self_modulate = final_acc_color
 	avatar_face_accessories.self_modulate = final_acc_color
 	var head_acc_style = settings["accessories"]["head_style"]
@@ -301,13 +310,10 @@ func _draw_avatar(settings: Dictionary) -> void:
 	else:
 		avatar_face_accessories.self_modulate.a = 0.0
 	
-	await get_tree().process_frame
-	
 	_center_and_scale_sprites()
 	_apply_layer_order()
 
 func _get_current_avatar_settings() -> Dictionary:
-	# Pull hair from new keys, fall back to legacy single-layer if needed
 	var hair_color  = SettingsManager.get_setting("avatar_hair_front", "color",
 		SettingsManager.get_setting("avatar_hair", "color", Color("#2c232b")))
 	var hair_bright = SettingsManager.get_setting("avatar_hair_front", "brightness",
@@ -414,33 +420,24 @@ func set_selected(is_selected: bool):
 		remove_theme_stylebox_override("normal")
 
 func _center_and_scale_sprites():
-	var center_x: float = size.x * 0.5
-	var h: float = size.y
-
-	# --- Background: fill ---
+	var center_x: float = sub_viewport.size.x * 0.5
+	var h: float = sub_viewport.size.y
 	var base_bg_size := 128.0
-	var bg_scale_x := size.x / base_bg_size
-	var bg_scale_y := size.y / base_bg_size
+	var bg_scale_x := sub_viewport.size.x / base_bg_size
+	var bg_scale_y := sub_viewport.size.y / base_bg_size
 	var bg_scale_factor : float = max(bg_scale_x, bg_scale_y)
 	avatar_background.centered = true
 	avatar_background.position = Vector2(center_x, h * 0.5)
 	avatar_background.scale = Vector2(bg_scale_factor, bg_scale_factor)
-
-	# --- Foreground (everything except background) ---
-	# We treat 2000x2000 sheets (fshape/hair) and 64x64 sheets (eyes/mouth/clothes/accessories)
-	# so they end up the same visual height and are bottom-aligned.
-	var s2000 := (h / 2000.0) * AVATAR_FG_SCALE_RATIO
-
-	# After scaling, the visual height is h * AVATAR_FG_SCALE_RATIO for both groups.
+	var s256 := (h / 256.0) * AVATAR_FG_SCALE_RATIO
 	var visual_h := h * AVATAR_FG_SCALE_RATIO
-	var base_y := h - (visual_h * 0.5) - AVATAR_FG_BOTTOM_PAD  # centers such that the bottom touches the bottom edge
+	var base_y := h - (visual_h * 0.5) - AVATAR_FG_BOTTOM_PAD
 
-	# 2000x2000 group (hair back, fshape, hair front)
 	for sprite in [avatar_hair_back, avatar_base_fshape, avatar_torso, avatar_hair_front, avatar_eyes, avatar_mouth, avatar_clothing, avatar_clothing_details, avatar_head_accessories, avatar_face_accessories]:
 		if sprite:
 			sprite.centered = true
 			sprite.position = Vector2(center_x, base_y)
-			sprite.scale = Vector2(s2000, s2000)
+			sprite.scale = Vector2(s256, s256)
 
 func _apply_layer_order():
 	# Use absolute Z for predictable ordering

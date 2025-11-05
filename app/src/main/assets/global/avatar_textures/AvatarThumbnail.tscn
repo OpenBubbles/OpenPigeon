@@ -1,8 +1,17 @@
-[gd_scene load_steps=4 format=3 uid="uid://hknsjsntnvnb"]
+[gd_scene load_steps=7 format=3 uid="uid://hknsjsntnvnb"]
 
 [ext_resource type="Script" uid="uid://cioutleovop7t" path="res://global/avatar_textures/avatar_thumbnail.gd" id="1_fqlcb"]
 [ext_resource type="Texture2D" uid="uid://bdrmqf2xjgbe1" path="res://global/avatar_textures/pill_mask.png" id="2_faxjs"]
 [ext_resource type="Texture2D" uid="uid://8sv24n1pl0m8" path="res://global/avatar_textures/avatar_pill_empty.png" id="3_s26kx"]
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_s26kx"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_4rgqf"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_kevda"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [node name="AvatarThumbnail" type="TextureButton"]
 custom_minimum_size = Vector2(96, 75)
@@ -20,6 +29,9 @@ grow_vertical = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 mouse_filter = 1
+texture_normal = SubResource("ViewportTexture_s26kx")
+texture_pressed = SubResource("ViewportTexture_4rgqf")
+texture_hover = SubResource("ViewportTexture_kevda")
 script = ExtResource("1_fqlcb")
 
 [node name="SubViewportContainer" type="SubViewportContainer" parent="."]

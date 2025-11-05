@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 
 ChangeScene="*res://change_scene.gd"
 SettingsManager="*res://global/settings_manager.gd"
+AvatarResources="*res://global/avatar_textures/avatar_resources.gd"
 
 [display]
 
