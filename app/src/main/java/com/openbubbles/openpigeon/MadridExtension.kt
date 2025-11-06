@@ -63,9 +63,13 @@ import com.openbubbles.openpigeon.chess.ChessGame
 import com.openbubbles.openpigeon.connect.ConnectGame
 import com.openbubbles.openpigeon.crazy8.Crazy8Game
 import com.openbubbles.openpigeon.darts.DartsGame
+import com.openbubbles.openpigeon.dots.DotsGame
+import com.openbubbles.openpigeon.fill.FillerGame
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.mancala.MancalaGame
 import com.openbubbles.openpigeon.pong.PongGame
 import com.openbubbles.openpigeon.pool.PoolGame
+import com.openbubbles.openpigeon.reversi.ReversiGame
 import com.openbubbles.openpigeon.wordhunt.WordHuntGame
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
@@ -93,7 +97,11 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             DartsGame(),
             PoolGame(),
             PongGame(),
-            ArcheryGame()
+            ArcheryGame(),
+            ReversiGame(),
+            FillerGame(),
+            MancalaGame(),
+            DotsGame()
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {

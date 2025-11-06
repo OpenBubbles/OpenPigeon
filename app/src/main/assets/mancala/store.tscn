@@ -1,0 +1,79 @@
+[gd_scene load_steps=5 format=3 uid="uid://2l7n1neaaak5"]
+
+[ext_resource type="Script" uid="uid://c3l6ovhjgbbms" path="res://mancala/pit.gd" id="1_msrvb"]
+[ext_resource type="Shader" uid="uid://cl4gtk6xuuyaj" path="res://mancala/PitHighlight.gdshader" id="2_ihhwg"]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_msrvb"]
+radius = 40.0
+height = 160.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_4qope"]
+shader = ExtResource("2_ihhwg")
+shader_parameter/alpha_fade = 0.755
+shader_parameter/highlight_color = Color(0, 1, 1, 1)
+
+[node name="Pit" type="Area2D"]
+script = ExtResource("1_msrvb")
+
+[node name="DebugRect" type="ColorRect" parent="."]
+visible = false
+custom_minimum_size = Vector2(64, 64)
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -60.0
+offset_top = -40.0
+offset_right = 60.0
+offset_bottom = 40.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 0.235294, 0.121569, 0.160784)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+rotation = 1.5708
+shape = SubResource("CapsuleShape2D_msrvb")
+
+[node name="SpawnPoint" type="Marker2D" parent="."]
+
+[node name="StonesContainer" type="Node2D" parent="."]
+
+[node name="CountLabel" type="Label" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.487522, 0.371141, 0.182901, 1)
+theme_override_font_sizes/font_size = 18
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HighlightCircle" type="ColorRect" parent="."]
+visible = false
+material = SubResource("ShaderMaterial_4qope")
+custom_minimum_size = Vector2(64, 64)
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -40.0
+offset_top = -40.0
+offset_right = 40.0
+offset_bottom = 40.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0.289713, 0.481566, 1)
+
+[node name="Debug_num" type="Label" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+size_flags_vertical = 1
+horizontal_alignment = 1
+vertical_alignment = 1

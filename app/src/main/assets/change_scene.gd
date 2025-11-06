@@ -8,7 +8,7 @@ var games = {
 	"sea": "res://battleship/battleship.tscn",
 	"darts": "res://darts/DartsScene.tscn",
 	"beer": "res://pong/cuppong.tscn",
-	"archery": "res://archery/archery.tscn"
+	"archery": "res://archery/archery.tscn",
 }
 
 func _ready() -> void:

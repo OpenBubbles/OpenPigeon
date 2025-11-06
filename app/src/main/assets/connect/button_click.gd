@@ -17,6 +17,3 @@ func _pressed() -> void:
 		else:
 			print(board.export_replay())
 			print("App not connected!")
-	elif name == "UndoButton":
-		var board: ConnectGameBoard = get_node("../GameBoard")
-		board.undo_move()

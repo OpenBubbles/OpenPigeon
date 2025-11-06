@@ -1,0 +1,132 @@
+[gd_scene load_steps=3 format=3 uid="uid://26cml5813y0g"]
+
+[ext_resource type="Script" uid="uid://cf4q52tdua5y0" path="res://global/settings_popup.gd" id="1_7vpld"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_meppk"]
+bg_color = Color(0.6, 0.6, 0.6, 0.611765)
+corner_radius_top_left = 25
+corner_radius_top_right = 25
+corner_radius_bottom_right = 25
+corner_radius_bottom_left = 25
+
+[node name="SettingsPopup" type="PanelContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_meppk")
+script = ExtResource("1_7vpld")
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="MainVBox" type="VBoxContainer" parent="MarginContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="VSeparator2" type="Control" parent="MarginContainer/MainVBox"]
+layout_mode = 2
+
+[node name="AvatarCustomizerContainer" type="VBoxContainer" parent="MarginContainer/MainVBox"]
+layout_mode = 2
+size_flags_vertical = 6
+
+[node name="MainPreviewContainer" type="CenterContainer" parent="MarginContainer/MainVBox/AvatarCustomizerContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+size_flags_vertical = 6
+
+[node name="HSeparator" type="Control" parent="MarginContainer/MainVBox/AvatarCustomizerContainer"]
+custom_minimum_size = Vector2(0, 15)
+layout_mode = 2
+
+[node name="AvatarTabContainer" type="TabBar" parent="MarginContainer/MainVBox/AvatarCustomizerContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(500, 50)
+layout_mode = 2
+size_flags_vertical = 6
+theme_override_constants/h_separation = 4
+theme_override_constants/tab_separation = 20
+tab_alignment = 1
+
+[node name="PropertiesBox" type="VBoxContainer" parent="MarginContainer/MainVBox/AvatarCustomizerContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(500, 100)
+layout_mode = 2
+size_flags_horizontal = 3
+alignment = 1
+
+[node name="VSeparator3" type="Control" parent="MarginContainer/MainVBox"]
+layout_mode = 2
+
+[node name="GlobalSettingsTitleLabel" type="Label" parent="MarginContainer/MainVBox"]
+layout_mode = 2
+theme_override_colors/font_shadow_color = Color(0.2484, 0.2484, 0.2484, 1)
+theme_override_font_sizes/font_size = 20
+text = "Global Settings"
+horizontal_alignment = 1
+
+[node name="GlobalSettingsContainer" type="VBoxContainer" parent="MarginContainer/MainVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 2
+
+[node name="VSeparator4" type="Control" parent="MarginContainer/MainVBox"]
+layout_mode = 2
+
+[node name="CustomSettingsTitleLabel" type="Label" parent="MarginContainer/MainVBox"]
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_colors/font_shadow_color = Color(0.2484, 0.2484, 0.2484, 1)
+theme_override_font_sizes/font_size = 20
+text = "Game Specific Settings"
+horizontal_alignment = 1
+
+[node name="VSeparator" type="Control" parent="MarginContainer/MainVBox"]
+layout_mode = 2
+
+[node name="ThemeDropdownContainer" type="VBoxContainer" parent="MarginContainer/MainVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Label" type="Label" parent="MarginContainer/MainVBox/ThemeDropdownContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Theme: "
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ThemeOptionButton" type="OptionButton" parent="MarginContainer/MainVBox/ThemeDropdownContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+item_count = 4
+popup/item_0/text = "Default"
+popup/item_0/id = 0
+popup/item_1/text = "Default (Dark)"
+popup/item_1/id = 1
+popup/item_2/text = "Penguin"
+popup/item_2/id = 2
+popup/item_3/text = "Penguin (Dark)"
+popup/item_3/id = 3
+
+[node name="PreviewBox" type="HBoxContainer" parent="MarginContainer/MainVBox/ThemeDropdownContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="CustomSettingsContainer" type="VBoxContainer" parent="MarginContainer/MainVBox"]
+unique_name_in_owner = true
+layout_mode = 2

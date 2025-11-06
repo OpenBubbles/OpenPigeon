@@ -15,8 +15,8 @@ android {
     defaultConfig {
         applicationId = "com.openbubbles.openpigeon"
         minSdk = 26
-        targetSdk = 34
         versionCode = 1
+        targetSdk = 35
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
