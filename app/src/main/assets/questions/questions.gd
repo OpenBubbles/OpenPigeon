@@ -266,7 +266,7 @@ func _set_game_data(data_json: String) -> void:
 				u += 1
 		dbg("set_game_data: unanswered=%d" % u)
 	dbg("set_game_data: secret_answer='%s', game_over=%s" % [secret_answer, str(game_over)])
-
+	_renumber_from_one()
 	if (not is_my_turn) and (not game_over) and (not _waiting_active):
 		_start_waiting()
 	elif is_my_turn and (not game_over):
@@ -1106,3 +1106,13 @@ func _stop_waiting() -> void:
 	# If we're Player 1, restore the input row directly
 	if i_am_player == 1 and is_instance_valid(bottom_items):
 		bottom_items.visible = true
+
+func _renumber_from_one() -> void:
+	if questions.is_empty():
+		return
+	# Sort by current idx, then rewrite idx = 1..N
+	var arr := questions.duplicate()
+	arr.sort_custom(func(a, b): return int(a["idx"]) < int(b["idx"]))
+	for i in arr.size():
+		arr[i]["idx"] = i + 1
+	questions = arr

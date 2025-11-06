@@ -276,8 +276,9 @@ layout_mode = 2
 
 [node name="QuestionsScroll" type="ScrollContainer" parent="VBoxContainer/QuestionsContainer/MarginContainer"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(600, 750)
+custom_minimum_size = Vector2(600, 680)
 layout_mode = 2
+size_flags_vertical = 4
 
 [node name="QuestionsList" type="VBoxContainer" parent="VBoxContainer/QuestionsContainer/MarginContainer/QuestionsScroll"]
 unique_name_in_owner = true
@@ -331,11 +332,13 @@ size_flags_vertical = 3
 
 [node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer"]
 layout_mode = 2
+size_flags_vertical = 3
 
 [node name="YesButton" type="Button" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 50)
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
 theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
@@ -353,6 +356,7 @@ layout_mode = 2
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_styles/normal = SubResource("StyleBoxFlat_nj7t5")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_oltsb")
 theme_override_styles/hover = SubResource("StyleBoxFlat_nkuys")
@@ -367,6 +371,7 @@ layout_mode = 2
 unique_name_in_owner = true
 custom_minimum_size = Vector2(100, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.7877635, 0.81435966, 0.9114928, 1)
 theme_override_colors/font_pressed_color = Color(0.7882353, 0.8156863, 0.9098039, 1)
 theme_override_colors/font_hover_color = Color(0.7882353, 0.8156863, 0.9098039, 1)
@@ -384,6 +389,7 @@ layout_mode = 2
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 50)
 layout_mode = 2
+size_flags_vertical = 3
 theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
 theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
@@ -400,6 +406,10 @@ theme_override_styles/separator = SubResource("StyleBoxLine_nj7t5")
 
 [node name="MarginContainer" type="MarginContainer" parent="VBoxContainer"]
 layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
 
 [node name="BottomItems" type="VBoxContainer" parent="VBoxContainer/MarginContainer"]
 unique_name_in_owner = true
