@@ -13,7 +13,8 @@ var games = {
 	"mancala": "res://mancala/mancala.tscn",
 	"dots": "res://dots/dots.tscn",
 	"knock": "res://knockout/knockout.tscn",
-	"questions": "res://questions/questions.tscn"
+	"questions": "res://questions/questions.tscn",
+	"paintball": "res://paintball/paintball.tscn"
 }
 
 # Called when the node enters the scene tree for the first time.
