@@ -81,6 +81,10 @@ func _ready() -> void:
 	if is_instance_valid(questions_list):
 		questions_list.resized.connect(_on_questions_resized)
 		questions_list.child_entered_tree.connect(_on_questions_child_entered)
+		var sep := questions_list.get_theme_constant("separation", "VBoxContainer")
+		if sep == 0:
+			sep = 12
+		questions_list.add_theme_constant_override("separation", sep * 2)
 	if is_instance_valid(overlay):
 		overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	if is_instance_valid(text_box):
@@ -535,6 +539,10 @@ func _send_game(text: String, q_idx: int, resp_code: int) -> void:
 		"id": game_id,
 		"questions": questions_field
 	}
+	
+	var avatar_key := ("avatar1" if i_am_player == 1 else "avatar2")
+	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
+		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
 
 	if game_over and winner != 0:
 		payload["winner"] = str(winner)
@@ -657,7 +665,7 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 		if opp_inst is Control:
 			opp_inst.name = "OpponentAvatar"
 			opp_inst.set_anchors_preset(Control.PRESET_FULL_RECT, false)
-			opp_inst.offset_left = 25
+			opp_inst.offset_left = 24
 			opp_inst.offset_right = 0
 			opp_inst.offset_top = 15
 			opp_inst.offset_bottom = 0
@@ -691,6 +699,7 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 		qmark.add_theme_color_override("font_color", col)
 		qmark.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		qmark.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		qmark.set_anchors_preset(Control.PRESET_FULL_RECT)
 		left_stack.add_child(qmark)
 		
 	var card := PanelContainer.new()
@@ -730,6 +739,7 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 	q_lbl.text = str(q["text"])
 	q_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	q_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	q_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	q_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	q_lbl.add_theme_color_override("font_color", Color.BLACK)
 	q_lbl.add_theme_font_size_override("font_size", 20)
