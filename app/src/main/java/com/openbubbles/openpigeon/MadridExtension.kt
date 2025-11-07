@@ -66,6 +66,7 @@ import com.openbubbles.openpigeon.dots.DotsGame
 import com.openbubbles.openpigeon.fill.FillerGame
 import com.openbubbles.openpigeon.godot.GodotGameActivity
 import com.openbubbles.openpigeon.mancala.MancalaGame
+import com.openbubbles.openpigeon.paintball.PaintballGame
 import com.openbubbles.openpigeon.pong.PongGame
 import com.openbubbles.openpigeon.pool.PoolGame
 import com.openbubbles.openpigeon.questions.QuestionsGame
@@ -87,21 +88,23 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         val activeSessions: MutableMap<String, GameSession> = mutableMapOf()
 
         val games: List<Game> = listOf(
-            CheckersGame(),
-            WordHuntGame(),
-            ConnectGame(),
-            BasketballGame(),
-            BattleshipGame(),
-            Crazy8Game(),
-            DartsGame(),
             PoolGame(),
-            PongGame(),
+            BattleshipGame(),
+            BasketballGame(),
             ArcheryGame(),
-            ReversiGame(),
+            WordHuntGame(),
+            DartsGame(),
+            PongGame(),
+            Crazy8Game(),
+            ConnectGame(),
+            PaintballGame(),
             FillerGame(),
+            CheckersGame(),
             MancalaGame(),
             DotsGame(),
-            QuestionsGame()
+            ReversiGame(),
+            QuestionsGame(),
+
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {
