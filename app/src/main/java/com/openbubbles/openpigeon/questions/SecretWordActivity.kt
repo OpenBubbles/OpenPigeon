@@ -32,7 +32,6 @@ class SecretWordActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Transparent, dimmed “dialog”
         window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         @Suppress("DEPRECATION")
@@ -50,30 +49,23 @@ class SecretWordActivity : ComponentActivity() {
                             initial = initial,
                             onCancel = { finish() },
                             onSave = { value ->
-                                // 1) Persist the value on the game instance
-                                MadridExtension.findByName(gameName)
-                                    ?.setConfigOption("answer", value)
-
-                                // 2) Tell keyboard to show this game's config and repaint
-                                MadridExtensionService.extension?.let { ext ->
-                                    MadridExtension.findByName(gameName)?.let { game ->
-                                        ext.configuringGame = game
-                                    }
-                                    ext.updateKeyboard()
+                                val game = MadridExtension.findByName(gameName)
+                                game?.setConfigOption("answer", value)
+                                val ctx = applicationContext
+                                val data = game?.getNewGameData(ctx)
+                                if (data != null) {
+                                    val message = game.buildGameMessage(ctx, data, null)
+                                    MadridExtension.currentKeyboardHandle?.addMessage(message)
                                 }
-
-                                // 3) Hand focus back to host WITHOUT immediately finishing.
-                                //    Make this window non-focusable/invisible so the host regains focus
-                                //    (IME stays alive), then finish after a short delay.
+                                (game as? QuestionsGame)?.markSecretWordConsumed()
                                 window.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
                                 window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
                                 window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-                                // Nudge another couple of repaints to survive OEM transition timing.
+
                                 MadridExtensionService.extension?.updateKeyboard()
                                 ui.postDelayed({ MadridExtensionService.extension?.updateKeyboard() }, 120)
                                 ui.postDelayed({ MadridExtensionService.extension?.updateKeyboard() }, 250)
 
-                                // 4) Finally finish once the host should be back on top.
                                 ui.postDelayed({ finish() }, 300)
                             }
                         )
@@ -82,9 +74,6 @@ class SecretWordActivity : ComponentActivity() {
             }
         }
     }
-
-    // IMPORTANT: do NOT auto-finish on pause; that collapses the keyboard on some OEMs.
-    // override fun onPause() { super.onPause(); finish() }  // <-- leave this out
 }
 
 @Composable

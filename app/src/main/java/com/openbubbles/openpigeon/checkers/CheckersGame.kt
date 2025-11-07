@@ -55,8 +55,8 @@ class CheckersGame : Game {
         return R.drawable.checkers
     }
 
-    override fun getNewGameData(context: Context): MutableMap<String, String> {
-        return super.getNewGameData(context).apply {
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        return super.getNewGameData(context)?.apply {
             put("mode", if (mode == "Checkers") "n" else "h")
         }
     }

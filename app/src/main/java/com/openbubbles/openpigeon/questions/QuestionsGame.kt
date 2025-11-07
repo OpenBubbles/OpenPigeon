@@ -32,7 +32,7 @@ class QuestionsGame : Game {
 
     @Composable
     override fun Configuration(context: Context?) {
-        val current = if (secretWord.isBlank()) "Think of something" else secretWord
+        val current = if (secretWord.isBlank()) "" else secretWord
 
         val intent = Intent(context, SecretWordActivity::class.java)
             .putExtra("game_name", getName())
@@ -56,12 +56,9 @@ class QuestionsGame : Game {
                 )
             )
             Text(
-                text = current,
+                text = if (secretWord.isBlank()) "Think of something" else secretWord,
                 style = TextStyle(
-                    color = ColorProvider(Color(0xFFF0F0F0)),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium
-                ),
+                    color = ColorProvider(Color(0xFFF0F0F0))),
                 modifier = GlanceModifier.padding(top = 10.dp, bottom = 8.dp)
             )
             Text(
@@ -80,11 +77,24 @@ class QuestionsGame : Game {
 
     override fun gameClass(): Class<*> = GodotGameActivity::class.java
     override fun gamePoster(config: Map<String, String>?): Int = R.drawable.questions_preview
-
-    override fun getNewGameData(context: Context): MutableMap<String, String> =
-        super.getNewGameData(context).apply {
-            if (secretWord.isNotBlank()) put("answer", secretWord)
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        if (secretWord.isBlank()) {
+            val intent = Intent(context, SecretWordActivity::class.java)
+                .putExtra("game_name", getName())
+                .putExtra("initial", "")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            return null
         }
+
+        return super.getNewGameData(context)?.apply {
+            put("answer", secretWord)
+        }
+    }
+
+    fun markSecretWordConsumed() {
+        secretWord = ""
+    }
 
     override fun getDefaultReplay() = ""
 }

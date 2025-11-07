@@ -252,7 +252,7 @@ class ChooseGameCallback : ActionCallback {
             return
         }
 
-        val message = game.buildGameMessage(context, game.getNewGameData(context), null)
+        val message = game.buildGameMessage(context, game.getNewGameData(context) ?: return, null)
 
         MadridExtension.currentKeyboardHandle?.addMessage(message)
 
@@ -454,7 +454,7 @@ class ConfigureCallback : ActionCallback {
 
         game.setConfigOption(parameters[configName]!!, parameters[configVal]!!)
 
-        val message = game.buildGameMessage(context, game.getNewGameData(context), null)
+        val message = game.buildGameMessage(context, game.getNewGameData(context) ?: return, null)
         MadridExtension.currentKeyboardHandle?.addMessage(message)
 
         if (game.isConfigurable()) {

@@ -3,7 +3,7 @@ extends Control
 @onready var send_button: Button = %SendButton
 @onready var text_box: TextEdit = %TextBox
 @onready var questions_scroll: ScrollContainer = %QuestionsScroll
-@onready var questions_container: Control = %QuestionsContainer
+@onready var questions_container: CenterContainer = %QuestionsContainer
 @onready var questions_list: VBoxContainer = %QuestionsList
 @onready var question_avatar_scene: Control		= %QuestionAvatarDisplay
 @onready var question_mark_filler: RichTextLabel		= %QuestionMark
@@ -19,17 +19,19 @@ extends Control
 @onready var overlay_no				: Button = %NoButton
 @onready var overlay_some			: Button = %SometimesButton
 @onready var overlay_correct		: Button = %CorrectButton
+@onready var questions_text_container: PanelContainer = %QuestionsTextContainer
 
 var my_uuid: String = ""
 
 const OpponentAvatarScene: PackedScene = preload("res://global/avatar_textures/AvatarThumbnail.tscn")
+const AvatarWinAnimScene: PackedScene = preload("res://global/avatar_textures/avatar_win_anim.tscn")
 var _opponent_avatar_data: Dictionary = {}
 
-# ---- Game state ----
 var is_my_turn: bool = false
 var server_player_hint: int = 0
 var i_am_player: int = 1
 var secret_answer: String = ""
+var winner: int = 0	# 1 = Player 1 wins, -1 = Player 2 wins, 0 = undecided
 var questions: Array[Dictionary] = []    # [{text:String, idx:int, resp:int}]
 var game_id: String = ""
 var last_raw_payload: Dictionary = {}
@@ -39,11 +41,21 @@ var _scroll_tween: Tween = null
 var _overlay_idx: int = -1
 var BASE_WAIT_TEXT := ""
 var dot_count := 0
-const USE_OVERLAY := false	# set true to use overlay instead of PopupPanel
 var _waiting_active := false
+
+var _input_lifted := false
+var _input_orig_preset := -1
+var _input_orig_position := Vector2.ZERO
+var _kb_open := false
+var _kb_last_h := 0
+
 
 func _ready() -> void:
 	var appPlugin = Engine.get_singleton("AppPlugin")
+	if appPlugin and appPlugin.has_method("getSenderUUID"):
+		my_uuid = String(appPlugin.getSenderUUID() or "")
+	else:
+		my_uuid = ""
 	if is_instance_valid(send_button):
 		send_button.pressed.connect(_on_send_pressed)
 
@@ -55,7 +67,7 @@ func _ready() -> void:
 	else:
 		print("App plugin is not available")
 		my_uuid = "0a602920-2033-469d-aab8-5e832c5d4f6a"
-		_set_game_data('{"isYourTurn":true,"player":"1","game":"questions","questions":"[Is the word pee?^&*1^&*3|][A?^&*2^&*1|][B?^&*3^&*0]","game_name":"20 Questions","id":"TEST123","answer":"Poop","num":"1"}')
+		_set_game_data('{"isYourTurn":true,"player":"1","game":"questions","questions":"[Is the word pee?^&*1^&*3|][A?^&*2^&*1|][B?^&*3^&*4]","game_name":"20 Questions","id":"TEST123","answer":"Poop","num":"1"}')
 
 	_update_ui_interactivity()
 	
@@ -72,22 +84,17 @@ func _ready() -> void:
 	if is_instance_valid(overlay):
 		overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	if is_instance_valid(text_box):
-		# Hide the big list while typing so the IME isn't in the way
 		if not text_box.focus_entered.is_connected(_on_text_focus_entered):
 			text_box.focus_entered.connect(_on_text_focus_entered)
 		if not text_box.focus_exited.is_connected(_on_text_focus_exited):
 			text_box.focus_exited.connect(_on_text_focus_exited)
-		# Live-sanitize as user types (also strips Enters)
 		if not text_box.text_changed.is_connected(_on_text_changed_sanitize):
 			text_box.text_changed.connect(_on_text_changed_sanitize)
-
-		# NEW: make the existing overlay fill the whole scene and be on top
 		overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 		overlay.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		overlay.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		overlay.z_index = 1000
 
-		# connect buttons
 		if is_instance_valid(overlay_yes): overlay_yes.pressed.connect(func(): _overlay_click(1))
 		if is_instance_valid(overlay_no): overlay_no.pressed.connect(func(): _overlay_click(2))
 		if is_instance_valid(overlay_some): overlay_some.pressed.connect(func(): _overlay_click(3))
@@ -105,9 +112,6 @@ func _ready() -> void:
 	elif is_my_turn and (not game_over):
 		_stop_waiting()
 
-# ---------------------------
-# Safe getters for payloads
-# ---------------------------
 func _get_s(parsed_dict: Dictionary, key: String, def: String = "") -> String:
 	if not parsed_dict.has(key):
 		return def
@@ -117,34 +121,33 @@ func _get_s(parsed_dict: Dictionary, key: String, def: String = "") -> String:
 	return str(v)
 	
 func _on_text_focus_entered() -> void:
-	if is_instance_valid(questions_container):
-		questions_container.visible = false
-
+	if game_over:
+		return
+	print("Text Focus Entered")
+	questions_container.visible = false
+	
 func _on_text_focus_exited() -> void:
-	if is_instance_valid(questions_container):
-		questions_container.visible = true
+	print("Text Focus Exited")
+	questions_container.visible = true
+
 		
 func _flash_textbox_red() -> void:
 	if not is_instance_valid(text_box):
 		return
 	var t := create_tween()
-	# Subtle red tint, then back
 	text_box.modulate = Color(1, 0.6, 0.6, 1)
 	t.tween_property(text_box, "modulate", Color(1, 1, 1, 1), 0.25).set_delay(0.15)
 
 func _sanitize_input(raw: String) -> String:
 	var s := raw
-	# Remove newlines first
 	s = s.replace("\r", " ").replace("\n", " ")
 
-	# Collapse multiple whitespace to a single space
 	var re := RegEx.new()
 	re.compile("\\s+")
 	s = re.sub(s, " ", true)
 	s = s.strip_edges()
 
-	# Neutralize tokens that could break your wire format or UI
-	s = s.replace("^&*", "⋆")  # collapse multi-token to a harmless glyph
+	s = s.replace("^&*", "⋆")
 	s = s.replace("|", "¦")
 	s = s.replace("[", "⟦")
 	s = s.replace("]", "⟧")
@@ -152,7 +155,6 @@ func _sanitize_input(raw: String) -> String:
 	s = s.replace("[/","⟦/")
 	s = s.replace("\\", "⧵")
 
-	# Optional length cap
 	var MAX := 140
 	if s.length() > MAX:
 		s = s.substr(0, MAX).strip_edges()
@@ -162,11 +164,10 @@ func _sanitize_input(raw: String) -> String:
 func _on_text_changed_sanitize() -> void:
 	if not is_instance_valid(text_box):
 		return
-	var caret := text_box.get_caret_column()  # best-effort caret preservation
+	var caret := text_box.get_caret_column()
 	var cleaned := _sanitize_input(text_box.text)
 	if cleaned != text_box.text:
 		text_box.text = cleaned
-		# keep caret roughly where it was
 		text_box.set_caret_column(min(caret, cleaned.length()))
 
 func _get_b(parsed_dict: Dictionary, key: String, def: bool = false) -> bool:
@@ -178,10 +179,40 @@ func _get_b(parsed_dict: Dictionary, key: String, def: bool = false) -> bool:
 	if typeof(v) == TYPE_ARRAY and v.size() > 0:
 		return str(v[0]).to_lower() == "true"
 	return str(v).to_lower() == "true"
+	
+func _process(_delta: float) -> void:
+	if not DisplayServer.has_feature(DisplayServer.FEATURE_VIRTUAL_KEYBOARD):
+		return
+	var h := DisplayServer.virtual_keyboard_get_height()
+	if h != _kb_last_h:
+		_kb_last_h = h
+		var now_open := h > 0
+		if now_open != _kb_open:
+			_kb_open = now_open
+			if _kb_open:
+				_on_keyboard_open(h)
+			else:
+				_on_keyboard_closed()
+				
+func _on_keyboard_open(_height: int) -> void:
+	if is_instance_valid(questions_container):
+		questions_container.visible = false
 
-# -------------------------------------------------------
-# Incoming data -> parse -> compute role/turn -> replay
-# -------------------------------------------------------
+	if i_am_player == 1 and is_instance_valid(bottom_items):
+		bottom_items.set_anchors_preset(Control.PRESET_TOP_WIDE)
+		var target_y := 8.0 + (_desc_rich.get_rect().size.y if is_instance_valid(_desc_rich) else 32.0)
+		var t := create_tween()
+		t.tween_property(bottom_items, "position:y", target_y, 0.15).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+func _on_keyboard_closed() -> void:
+	if is_instance_valid(questions_container):
+		questions_container.visible = true
+	if is_instance_valid(bottom_items):
+		bottom_items.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+		var t := create_tween()
+		t.tween_property(bottom_items, "position:y", 0.0, 0.15).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+	
 func _set_game_data(data_json: String) -> void:
 	var parsed_v: Variant = JSON.parse_string(data_json)
 	if typeof(parsed_v) != TYPE_DICTIONARY:
@@ -199,29 +230,23 @@ func _set_game_data(data_json: String) -> void:
 	var player2: String = _get_s(parsed, "player2", "")
 
 	if player1 != "" or player2 != "":
-		# If the payload identifies players by UUID, trust that first.
 		if my_uuid == player1:
 			i_am_player = 1
 		elif my_uuid == player2:
 			i_am_player = 2
 		else:
-			# Fallback if our UUID isn't in the payload: use sender-is-player, we’re the opposite.
 			i_am_player = 2 if server_player_hint == 1 else 1
 	else:
-		# No UUIDs: the "player" field means the SENDER of this message.
-		# We are the OPPOSITE of that number.
 		i_am_player = 2 if server_player_hint == 1 else 1
 		
 	var opponent_avatar_key := "avatar2" if i_am_player == 1 else "avatar1"
-
+	print("opponent_avatar_key")
 	if parsed.has(opponent_avatar_key):
 		var avatar_string := _get_s(parsed, opponent_avatar_key, "")
 		_opponent_avatar_data = _parse_avatar_string(avatar_string)
 	else:
-		# Default/fallback avatar if the key is missing
 		_opponent_avatar_data = _parse_avatar_string("")
 
-	# Parse questions in new bracketed format
 	questions.clear()
 	if parsed.has("questions"):
 		var raw: Variant = parsed["questions"]
@@ -245,17 +270,9 @@ func _set_game_data(data_json: String) -> void:
 				elif chunk.strip_edges() != "":
 					questions.append({ "text": chunk, "idx": questions.size() + 1, "resp": 0 })
 
-	# Optional legacy "response" text
 	if parsed.has("response") and questions.size() > 0:
 		var resp_txt: String = _get_s(parsed, "response", "")
 		questions[-1]["response_text"] = resp_txt
-
-	# Detect end-state
-	game_over = false
-	for q in questions:
-		if int(q["resp"]) == 4:
-			game_over = true
-			break
 			
 	dbg("set_game_data: is_my_turn=%s, server_player_hint=%s, i_am_player(pre)=%s" % [str(is_my_turn), str(server_player_hint), str(i_am_player)])
 	dbg("set_game_data: parsed questions count=%d" % questions.size())
@@ -267,6 +284,8 @@ func _set_game_data(data_json: String) -> void:
 		dbg("set_game_data: unanswered=%d" % u)
 	dbg("set_game_data: secret_answer='%s', game_over=%s" % [secret_answer, str(game_over)])
 	_renumber_from_one()
+	_evaluate_game_over_and_winner()
+	_update_upcoming_input_chip_color()
 	if (not is_my_turn) and (not game_over) and (not _waiting_active):
 		_start_waiting()
 	elif is_my_turn and (not game_over):
@@ -278,20 +297,89 @@ func _set_game_data(data_json: String) -> void:
 	_update_description_fill()
 	_maybe_show_answer_popup()
 	
-# Add near the top (helpers) ---------------------------------------------
+func _evaluate_game_over_and_winner() -> void:
+	var was_over := game_over
 
+	var any_correct := false
+	var answered := 0
+	for q in questions:
+		var r := int(q.get("resp", 0))
+		if r > 0:
+			answered += 1
+		if r == 4:
+			any_correct = true
+
+	if any_correct:
+		game_over = true
+		winner = 1
+		print("[20Q] GAME OVER: Player 1 wins (guessed correctly).")
+	elif answered >= MAX_QUESTIONS:
+		game_over = true
+		winner = -1
+		print("[20Q] GAME OVER: Player 2 wins (no correct guess in 20).")
+	else:
+		game_over = false
+		winner = 0
+		
+	if game_over and not was_over:
+		_stop_waiting()
+		if is_instance_valid(bottom_items):
+			bottom_items.visible = false
+		if is_instance_valid(text_box):
+			text_box.editable = false
+
+		var p1_avatar := player_avatar_display
+		var p2_avatar := question_avatar_scene
+
+		if winner == 1:
+			if is_instance_valid(p1_avatar):
+				print("[20Q][win-burst] highlighting Player 1 avatar")
+				_show_win_burst(p1_avatar)
+			else:
+				print("[20Q][win-burst][WARN] player_avatar_display not valid")
+		elif winner == -1:
+			if is_instance_valid(p2_avatar):
+				print("[20Q][win-burst] highlighting Player 2 avatar")
+				_show_win_burst(p2_avatar)
+			else:
+				print("[20Q][win-burst][WARN] opponent avatar display (question_avatar_scene) not valid")
+	
 func _question_color_for_index(idx: int) -> Color:
-	# 1..20 maps around the wheel; 1 and 20 are both 0 deg
-	if idx <= 1:
-		return Color.from_hsv(0.0, 0.70, 0.95, 1.0)
-	var step: float = 1.0 / 19.0
-	var h: float = fposmod((idx - 1) * step, 1.0)
+	var deg := (360.0 / 20.0) * float(idx)
+	var h := fposmod(deg / 360.0, 1.0)
 	return Color.from_hsv(h, 0.70, 0.95, 1.0)
+
+func _update_upcoming_input_chip_color() -> void:
+	if not is_instance_valid(questions_text_container):
+		print("NO TEXT CONTINER")
+		return
+	var next_number := questions.size() + 1
+	var c := _question_color_for_index(next_number)
+	print("Next Color: ", c)
+
+	var sb := questions_text_container.get_theme_stylebox("panel")
+	print("SB: ", sb)
+	var sbf := sb as StyleBoxFlat
+	if sbf:
+		sbf.bg_color = c
+	else:
+		var newsb := StyleBoxFlat.new()
+		newsb.bg_color = c
+		newsb.corner_radius_top_left = 12
+		newsb.corner_radius_top_right = 12
+		newsb.corner_radius_bottom_left = 12
+		newsb.corner_radius_bottom_right = 12
+		newsb.content_margin_left = 12
+		newsb.content_margin_right = 12
+		newsb.content_margin_top = 10
+		newsb.content_margin_bottom = 10
+		questions_text_container.add_theme_stylebox_override("panel", newsb)
+
+	questions_text_container.queue_redraw()
 
 func _make_scrollbars_invisible() -> void:
 	if not is_instance_valid(questions_scroll):
 		return
-	# Transparent styleboxes for bars
 	var sb_trans := StyleBoxFlat.new()
 	sb_trans.bg_color = Color(1,1,1,0)
 	sb_trans.draw_center = true
@@ -324,15 +412,10 @@ func _scroll_to_bottom_smooth() -> void:
 	var vbar := questions_scroll.get_v_scroll_bar()
 	if not vbar:
 		return
-	# smooth tween to bottom
 	var target := vbar.max_value
 	var t := create_tween()
 	t.tween_property(questions_scroll, "scroll_vertical", target, 0.25).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
-
-# -------------------------------------------------------
-# Rebuild visible/logged state (replace prints with UI)
-# -------------------------------------------------------
 func _replay_from_state() -> void:
 	print("==== Replay 20Q ====")
 	print("I am P", i_am_player, " | turn=", is_my_turn, " | answer='", secret_answer, "'")
@@ -340,9 +423,6 @@ func _replay_from_state() -> void:
 		print("#", q["idx"], "  ", q["text"], "  resp=", int(q["resp"]))
 	print("====================")
 
-# -------------------------------------------------------
-# Send (Player 1 asks / Player 2 can also send short replies)
-# -------------------------------------------------------
 func _on_send_pressed() -> void:
 	if game_over or (not is_my_turn) or (not is_instance_valid(text_box)):
 		return
@@ -352,7 +432,6 @@ func _on_send_pressed() -> void:
 
 	if cleaned == "":
 		_flash_textbox_red()
-		# also ensure the questions list comes back if we were hidden
 		_on_text_focus_exited()
 		return
 
@@ -366,27 +445,25 @@ func _on_send_pressed() -> void:
 	var resp_code: int = 4 if is_guess_correct else 0
 
 	questions.append({ "text": text_to_send, "idx": next_idx, "resp": resp_code })
+	_evaluate_game_over_and_winner()
 	_render_all_questions()
+	_update_upcoming_input_chip_color()
 	_smooth_scroll_to_bottom()
 
 	if i_am_player == 1 and not is_guess_correct:
 		var asked_count := questions.size()
 		if asked_count >= MAX_QUESTIONS:
-			game_over = true
+			_evaluate_game_over_and_winner()
 			_update_ui_interactivity()
 			print("P1 reached 20 questions without correct guess. You lose.")
 
 	_send_game(text_to_send, next_idx, resp_code)
 	text_box.text = ""
-	_on_text_focus_exited()  # restore list if hidden
+	DisplayServer.virtual_keyboard_hide()
+	_on_text_focus_exited()
 	_start_waiting()
 	_update_description_fill()
 
-
-
-# -------------------------------------------------------
-# Player 2 answer buttons (hook these to your UI)
-# -------------------------------------------------------
 func _on_answer_yes() -> void:
 	_apply_answer_code_to_pending(1)
 
@@ -407,7 +484,6 @@ func _on_answer_correct() -> void:
 	var code: int = 4 if txt.find(target) != -1 else 1
 	_apply_answer_code_to_pending(code)
 
-# --- AUTO-ADVANCE: after answering, immediately show the next unanswered ---
 func _apply_answer_code_to_idx(target_idx: int, code: int) -> void:
 	if game_over or i_am_player != 2 or questions.size() == 0:
 		return
@@ -422,16 +498,12 @@ func _apply_answer_code_to_idx(target_idx: int, code: int) -> void:
 		dbg("apply_idx: NOT FOUND or already answered")
 		return
 
-
-	if code == 4:
-		game_over = true
-
 	_render_all_questions()
+	_evaluate_game_over_and_winner()
 	dbg("apply_idx: updated; calling _send_full_state & _maybe_show_answer_popup")
 	_send_full_state()
 	_update_ui_interactivity()
 
-	# move on to the next unanswered, or hide if none
 	if not game_over:
 		_maybe_show_answer_popup()
 		_start_waiting()
@@ -451,24 +523,21 @@ func _apply_answer_code_to_pending(code: int) -> void:
 				_apply_answer_code_to_idx(idx, code)
 			return
 
-# -------------------------------------------------------
-# Build outbound payloads
-# -------------------------------------------------------
 func _send_game(text: String, q_idx: int, resp_code: int) -> void:
 	var chunks: Array[String] = []
 	for q in questions:
-		var c := "[%s^&*%d^&*%d|]" % [q["text"], int(q["idx"]), int(q["resp"])]
+		var c := "%s^&*%d^&*%d" % [q["text"], int(q["idx"]), int(q["resp"])]
 		chunks.append(c)
-
-	var questions_field: String = ""
-	for c in chunks:
-		questions_field += c
+	var questions_field := "|".join(chunks)
 
 	var payload: Dictionary = {
 		"game": "questions",
 		"id": game_id,
 		"questions": questions_field
 	}
+
+	if game_over and winner != 0:
+		payload["winner"] = str(winner)
 
 	var json := JSON.stringify(payload)
 	print("Sending: ", json)
@@ -478,13 +547,9 @@ func _send_game(text: String, q_idx: int, resp_code: int) -> void:
 	else:
 		print("No app plugin (local test).")
 
-
 func _send_full_state() -> void:
 	_send_game("", 0, 0)
 
-# -------------------------------------------------------
-# UI gating
-# -------------------------------------------------------
 func _update_ui_interactivity() -> void:
 	var enable_input := (is_my_turn and not game_over and i_am_player == 1)
 
@@ -493,7 +558,6 @@ func _update_ui_interactivity() -> void:
 	if is_instance_valid(text_box):
 		text_box.editable = enable_input
 
-	# Player 1 sees the textbox/Send row unless we're in waiting mode
 	if is_instance_valid(bottom_items):
 		bottom_items.visible = (i_am_player == 1) and (not _waiting_active)
 
@@ -501,7 +565,6 @@ func _update_ui_interactivity() -> void:
 	if is_instance_valid(bottom_items):
 		dbg("ui: bottom_items.visible=%s" % str(bottom_items.visible))
 
-	# Drive waiting state *without* recursion
 	var should_wait := (not game_over) and (not is_my_turn)
 	if should_wait and not _waiting_active:
 		_start_waiting()
@@ -512,19 +575,14 @@ func _render_all_questions() -> void:
 	if not is_instance_valid(questions_list):
 		return
 	dbg("render: rebuilding list; questions=%d" % questions.size())
-	# wipe old rows
 	for c in questions_list.get_children():
 		c.queue_free()
-
-	# sort by idx
 	var sorted: Array[Dictionary] = []
 	for q in questions:
 		sorted.append(q)
 	var cmp := func(a: Dictionary, b: Dictionary) -> bool:
 		return int(a["idx"]) < int(b["idx"])
 	sorted.sort_custom(cmp)
-
-	# find most-recent idx
 	var latest_idx := 0
 	if sorted.size() > 0:
 		latest_idx = int(sorted[-1]["idx"])
@@ -540,7 +598,7 @@ func _render_all_questions() -> void:
 	if is_instance_valid(questions_scroll):
 		await get_tree().process_frame
 		_smooth_scroll_to_bottom()
-	
+	_update_upcoming_input_chip_color()
 	dbg("render: finished; latest_idx=%d" % latest_idx)
 	
 func _smooth_scroll_to_bottom() -> void:
@@ -549,7 +607,6 @@ func _smooth_scroll_to_bottom() -> void:
 	var bar := questions_scroll.get_v_scroll_bar()
 	if bar == null:
 		return
-	# ensure layout is finalized
 	await get_tree().process_frame
 	var target: float = bar.max_value
 	if _scroll_tween and _scroll_tween.is_running():
@@ -563,44 +620,68 @@ func _on_questions_resized() -> void:
 
 func _on_questions_child_entered(_node: Node) -> void:
 	_smooth_scroll_to_bottom()
-
-# --- QUESTION ROW: show only the single resolved response (chip), no inline answer buttons ---
+	
 func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 	var idx := int(q["idx"])
 	var col := _question_color_for_index(idx)
 	var resp_code := int(q.get("resp", 0))
+
+	print("[20Q][row] build idx=", idx, " latest=", is_latest, " resp=", resp_code)
 
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.custom_minimum_size = Vector2(0, 72)
 	row.add_theme_constant_override("separation", 12)
 
-	# Left glyph (avatar + "?" on latest; just "?" for older)
 	var left_holder := Control.new()
-	left_holder.custom_minimum_size = Vector2(48, 56)
+	left_holder.name = "LeftHolder"
+	left_holder.custom_minimum_size = Vector2(72, 56)
 	left_holder.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	# Use a container so we can stack avatar + overlay "?"
 	var left_stack := Control.new()
+	left_stack.name = "LeftStack"
 	left_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	left_stack.set_anchors_preset(Control.PRESET_FULL_RECT)
+	left_stack.set_anchors_preset(Control.PRESET_FULL_RECT, false)
+	left_stack.offset_left = 0
+	left_stack.offset_right = 0
+	left_stack.offset_top = 0
+	left_stack.offset_bottom = 0
 	left_stack.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	left_holder.add_child(left_stack)
 	row.add_child(left_holder)
 
 	if is_latest and OpponentAvatarScene != null:
+		print("[20Q][row] Will show opponent avatar. PackedScene ok? ", OpponentAvatarScene != null)
 		var opp_inst := OpponentAvatarScene.instantiate()
+		print("[20Q][row] Instantiated avatar. Type=", opp_inst.get_class())
+
 		if opp_inst is Control:
 			opp_inst.name = "OpponentAvatar"
+			opp_inst.set_anchors_preset(Control.PRESET_FULL_RECT, false)
+			opp_inst.offset_left = 25
+			opp_inst.offset_right = 0
+			opp_inst.offset_top = 15
+			opp_inst.offset_bottom = 0
 			opp_inst.custom_minimum_size = Vector2(72, 56)
-			opp_inst.set_anchors_preset(Control.PRESET_CENTER)
 			opp_inst.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			opp_inst.scale = Vector2(0.6, 0.6)
 			left_stack.add_child(opp_inst)
+			opp_inst.scale = Vector2(0.75, 0.75)
+			print("[20Q][row] Avatar added as child. left_stack size=", left_stack.get_rect().size)
 
 			if _opponent_avatar_data.is_empty():
+				print("[20Q][row] _opponent_avatar_data empty. Using defaults.")
 				_opponent_avatar_data = _parse_avatar_string("")
-			opp_inst.call_deferred("update_avatar_from_data", _opponent_avatar_data)
+			else:
+				print("[20Q][row] Using provided avatar data: ", _opponent_avatar_data)
+
+			if opp_inst.has_method("update_avatar_from_data"):
+				print("[20Q][row] Calling update_avatar_from_data on avatar...")
+				opp_inst.call_deferred("update_avatar_from_data", _opponent_avatar_data)
+			else:
+				print("[20Q][row][WARN] Avatar root lacks 'update_avatar_from_data'. Node=", opp_inst, " Script=", opp_inst.get_script())
+		else:
+			print("[20Q][row][WARN] Avatar instance is not Control. Got: ", opp_inst)
 	else:
+		print("[20Q][row] Showing history '?' instead of avatar (is_latest=", is_latest, ")")
 		var qmark := Label.new()
 		qmark.name = "HistoryQuestionMark"
 		qmark.text = "?"
@@ -611,9 +692,9 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 		qmark.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		qmark.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		left_stack.add_child(qmark)
-
-	# Colored card
+		
 	var card := PanelContainer.new()
+	card.name = "QuestionCard"
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.custom_minimum_size = Vector2(0, 56)
 
@@ -630,11 +711,13 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 	card.add_theme_stylebox_override("panel", sb)
 
 	var inner := HBoxContainer.new()
+	inner.name = "Inner"
 	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inner.add_theme_constant_override("separation", 12)
 	card.add_child(inner)
 
 	var num_lbl := Label.new()
+	num_lbl.name = "IdxLabel"
 	num_lbl.text = str(idx) + "."
 	num_lbl.add_theme_color_override("font_color", Color.BLACK)
 	num_lbl.add_theme_font_size_override("font_size", 22)
@@ -643,6 +726,7 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 	inner.add_child(num_lbl)
 
 	var q_lbl := Label.new()
+	q_lbl.name = "TextLabel"
 	q_lbl.text = str(q["text"])
 	q_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	q_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -651,13 +735,23 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 	q_lbl.add_theme_font_size_override("font_size", 20)
 	inner.add_child(q_lbl)
 
-	# If answered (1..4), show one inline chip to the right
 	if resp_code > 0:
 		var chip := _make_response_chip(resp_code)
 		inner.add_child(chip)
 
 	row.add_child(card)
+	call_deferred("_debug_print_row_layout", row)
 	return row
+
+
+func _debug_print_row_layout(row: HBoxContainer) -> void:
+	if not is_instance_valid(row):
+		return
+	var left_stack := row.get_node_or_null("LeftHolder/LeftStack") as Control
+	var avatar := left_stack.get_node_or_null("OpponentAvatar")
+	print("[20Q][rowdbg] row size=", row.get_rect().size, " left_stack size=", (left_stack.get_rect().size if left_stack else Vector2.ZERO))
+	if avatar:
+		print("[20Q][rowdbg] avatar rect=", (avatar as Control).get_rect(), " anchors=FULL? (", (avatar as Control).anchor_left, ",", (avatar as Control).anchor_top, ",", (avatar as Control).anchor_right, ",", (avatar as Control).anchor_bottom, ")")
 	
 func _parse_avatar_string(data_string: String) -> Dictionary:
 	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
@@ -700,8 +794,7 @@ func _parse_avatar_string(data_string: String) -> Dictionary:
 				var i := key_value[1].to_int()
 				if i >= 0 and i < body_map.size():
 					data["fshape_style"] = String(body_map[i])
-
-			# --- Skin color (accept both) ---
+					
 			"fshape_color", "body_color":
 				data["fshape_color"] = read_color.call(key_value.slice(1))
 
@@ -768,7 +861,6 @@ func _make_response_chip(code: int) -> Control:
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	lbl.add_theme_font_size_override("font_size", 16)
-	# keep label readable on black chip
 	if code == 2:
 		lbl.add_theme_color_override("font_color", Color(1,1,1,1))
 	holder.add_child(lbl)
@@ -777,6 +869,99 @@ func _make_response_chip(code: int) -> Control:
 			
 func _on_inline_answer_pressed(q_idx: int, code: int) -> void:
 	_apply_answer_code_to_idx(q_idx, code)
+	
+func _lift_input_row(up: bool) -> void:
+	if not is_instance_valid(bottom_items):
+		return
+
+	if is_instance_valid(bottom_items.get_tree()):
+		for t in get_tree().get_processed_tweens():
+			if t.is_running() and t.get_target() == bottom_items:
+				t.stop()
+
+	if up and not _input_lifted:
+		_input_lifted = true
+		_input_orig_position = bottom_items.position
+
+		bottom_items.set_anchors_preset(Control.PRESET_TOP_WIDE, false)
+		bottom_items.offset_left = 0
+		bottom_items.offset_right = 0
+		bottom_items.offset_top = 0
+		bottom_items.offset_bottom = 0
+		bottom_items.position = Vector2(bottom_items.position.x, 0)
+
+		var header_h := 0.0
+		if is_instance_valid(_desc_rich):
+			header_h = _desc_rich.get_rect().size.y
+		var target_y := 8.0 + header_h
+
+		var t := create_tween()
+		t.tween_property(bottom_items, "position:y", target_y, 0.18)\
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+	elif (not up) and _input_lifted:
+		_input_lifted = false
+		var t := create_tween()
+		t.tween_property(bottom_items, "position:y", 0.0, 0.12)\
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		await t.finished
+
+		bottom_items.set_anchors_preset(Control.PRESET_BOTTOM_WIDE, false)
+		bottom_items.offset_left = 0
+		bottom_items.offset_right = 0
+		bottom_items.offset_top = 0
+		bottom_items.offset_bottom = 0
+		bottom_items.position = Vector2.ZERO
+
+func _show_win_burst(avatar: Control) -> void:
+	if not is_instance_valid(avatar):
+		print("[20Q][win-burst][ERR] avatar invalid")
+		return
+	var parent := avatar.get_parent()
+	if not is_instance_valid(parent):
+		print("[20Q][win-burst][ERR] avatar has no parent")
+		return
+
+	var burst_name := "AvatarWinAnim_" + str(avatar.get_instance_id())
+	if parent.get_node_or_null(burst_name) != null:
+		print("[20Q][win-burst] animation already present for this avatar")
+		return
+
+	if AvatarWinAnimScene == null:
+		print("[20Q][win-burst][ERR] AvatarWinAnimScene preload is null!")
+		return
+
+	var anim_instance := AvatarWinAnimScene.instantiate() as Control
+	if not is_instance_valid(anim_instance):
+		print("[20Q][win-burst][ERR] could not instance AvatarWinAnimScene")
+		return
+	anim_instance.name = burst_name
+	parent.add_child(anim_instance)
+	parent.move_child(anim_instance, avatar.get_index())
+
+	anim_instance.anchor_left   = avatar.anchor_left
+	anim_instance.anchor_top    = avatar.anchor_top
+	anim_instance.anchor_right  = avatar.anchor_right
+	anim_instance.anchor_bottom = avatar.anchor_bottom
+	anim_instance.offset_left   = avatar.offset_left - 52.0
+	anim_instance.offset_right  = avatar.offset_right + 52.0
+	anim_instance.offset_top    = avatar.offset_top - 43.0
+	anim_instance.offset_bottom = avatar.offset_bottom + 43.0
+
+	anim_instance.z_as_relative = avatar.z_as_relative
+	avatar.z_as_relative        = avatar.z_as_relative
+	anim_instance.z_index       = avatar.z_index - 1
+	avatar.z_index              = max(avatar.z_index, 1)
+
+	parent.visible = true
+	avatar.visible = true
+
+	if anim_instance.has_method("set_color"):
+		anim_instance.call("set_color", Color(1.0, 0.84, 0.0))  # gold
+	if anim_instance.has_method("play"):
+		anim_instance.call("play", 0.05)
+
+	print("[20Q][win-burst] burst added as sibling and playing behind avatar")
 
 func _make_inline_btn(caption: String, bg: Color, fg: Color, q_idx: int, code: int) -> Button:
 	var b := Button.new()
@@ -852,12 +1037,9 @@ func _response_color(code: int) -> Color:
 	return Color(0.30, 0.30, 0.30, 1.0)
 
 func _badge_color_for_index(idx: int) -> Color:
-	# Q1 → hue 0.0, Q20 → hue 1.0 (wrapped back to 0.0)
-	# Equally spaced between (idx-1)/19 around the wheel.
 	var h := float(max(idx, 1) - 1) / 19.0
 	if h >= 1.0:
 		h = 0.0
-	# Tune S/V to taste; these give bright, readable cards behind black text.
 	var s := 0.70
 	var v := 0.95
 	return Color.from_hsv(h, s, v, 1.0)
@@ -893,7 +1075,6 @@ func _maybe_show_answer_popup() -> void:
 		i_am_player, str(is_my_turn), str(game_over), _count_unanswered()
 	])
 
-	# Only P2 answers, on our turn, and while game is live
 	if i_am_player != 2 or not is_my_turn or game_over:
 		_hide_answer_overlay()
 		return
@@ -921,14 +1102,11 @@ func _overlay_click(code: int) -> void:
 		_hide_answer_overlay()
 		return
 	_apply_answer_code_to_idx(_overlay_idx, code)
-	_hide_answer_overlay()  # hide after sending
-
-	# If still eligible to answer, auto-advance to next
+	_hide_answer_overlay()
 	if not game_over and i_am_player == 2 and is_my_turn:
 		_maybe_show_answer_popup()
 
 func _on_overlay_btn_pressed(code: int) -> void:
-	# funnels overlay button clicks
 	_apply_answer_code_to_pending(code)
 
 func _make_overlay_btn(caption: String, bg: Color, fg: Color, code: int) -> Button:
@@ -949,8 +1127,6 @@ func _make_overlay_btn(caption: String, bg: Color, fg: Color, code: int) -> Butt
 	b.add_theme_stylebox_override("pressed", s)
 	b.add_theme_stylebox_override("disabled", s)
 	b.add_theme_color_override("font_color", fg)
-
-	# Avoid standalone lambda; use Callable.bind instead
 	b.pressed.connect(Callable(self, "_on_overlay_btn_pressed").bind(code))
 	return b
 
@@ -963,7 +1139,6 @@ func _count_unanswered() -> int:
 
 func _set_overlay_style_color(c: Color) -> void:
 	if not is_instance_valid(overlay): return
-	# If your “card” is a child, e.g. %AnswerOverlay/Card
 	var card := overlay.get_node_or_null("Card") as PanelContainer
 	var target := card if card else overlay
 
@@ -988,8 +1163,6 @@ func _show_answer_overlay_for(idx: int, text: String, col: Color) -> void:
 	if not is_instance_valid(overlay):
 		_dbg("overlay: node missing; cannot show")
 		return
-
-	# Make sure it's stretched every time (defensive)
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.z_index = 1000
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -1005,7 +1178,6 @@ func _show_answer_overlay_for(idx: int, text: String, col: Color) -> void:
 	overlay.visible = true
 	print("VISIBLE OVERLAY")
 	overlay.move_to_front()
-		# Center the card and make it 80% of viewport width
 	var vp_w := get_viewport_rect().size.x
 	var card := overlay.get_node_or_null("Card") as Control
 	var target := card if card else overlay
@@ -1014,8 +1186,6 @@ func _show_answer_overlay_for(idx: int, text: String, col: Color) -> void:
 	target.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	target.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	target.custom_minimum_size.x = vp_w * 0.8
-	# height wraps to content; if you want a max, uncomment:
-	# target.custom_minimum_size.y = min(target.custom_minimum_size.y, get_viewport_rect().size.y * 0.9)
 
 
 	var r := overlay.get_global_rect()
@@ -1039,13 +1209,12 @@ func _update_description_fill() -> void:
 
 	_desc_rich.bbcode_enabled = true
 
-	if i_am_player == 2 and secret_answer.strip_edges() != "":
+	if i_am_player == 2 or game_over:
 		var your_word := "[font_size=20]Your word:[/font_size]\n"
 		var the_word  := "[font_size=34][b]%s[/b][/font_size]" % secret_answer
 		_desc_rich.parse_bbcode(your_word + the_word)
 		_desc_rich.visible = true
 	else:
-		# Player 1 guidance — always show
 		var guide := "[font_size=18]Your goal is to guess the answer in 20 questions or less.[/font_size]"
 		_desc_rich.parse_bbcode(guide)
 		_desc_rich.visible = true
@@ -1067,7 +1236,6 @@ func _on_dot_timer_timeout() -> void:
 	wait_for_label.text = BASE_WAIT_TEXT + dots
 
 func _set_wait_base_text() -> void:
-	# P1 waits for an answer, P2 waits for a question
 	BASE_WAIT_TEXT = "Waiting for an answer" if i_am_player == 1 else "Waiting for a question"
 
 func _start_waiting() -> void:
@@ -1084,14 +1252,11 @@ func _start_waiting() -> void:
 
 	_waiting_active = true
 	print("WAITING ACTIVE: ", _waiting_active)
-
-	# Hide BottomItems if we're Player 1 (question input)
 	if i_am_player == 1 and is_instance_valid(bottom_items):
 		bottom_items.visible = false
 
 func _stop_waiting() -> void:
 	print("STOP WAITING")
-	# Guard: avoid work (and potential loops) if already inactive
 	if not _waiting_active:
 		print("no waiting active")
 		return
@@ -1102,15 +1267,12 @@ func _stop_waiting() -> void:
 		dot_timer.stop()
 
 	_waiting_active = false
-
-	# If we're Player 1, restore the input row directly
 	if i_am_player == 1 and is_instance_valid(bottom_items):
 		bottom_items.visible = true
 
 func _renumber_from_one() -> void:
 	if questions.is_empty():
 		return
-	# Sort by current idx, then rewrite idx = 1..N
 	var arr := questions.duplicate()
 	arr.sort_custom(func(a, b): return int(a["idx"]) < int(b["idx"]))
 	for i in arr.size():

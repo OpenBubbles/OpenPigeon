@@ -1,4 +1,4 @@
-[gd_scene load_steps=30 format=3 uid="uid://b0pa50r0ro6gl"]
+[gd_scene load_steps=32 format=3 uid="uid://b0pa50r0ro6gl"]
 
 [ext_resource type="Script" uid="uid://kiiu4bojif1i" path="res://questions/questions.gd" id="1_wbs8s"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_v8hg5"]
@@ -21,6 +21,8 @@ corner_radius_top_left = 20
 corner_radius_top_right = 20
 corner_radius_bottom_right = 20
 corner_radius_bottom_left = 20
+
+[sub_resource type="FontVariation" id="FontVariation_wbs8s"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wbs8s"]
 bg_color = Color(0.7019608, 0.7019608, 0.7019608, 1)
@@ -190,6 +192,9 @@ corner_radius_top_right = 15
 corner_radius_bottom_right = 15
 corner_radius_bottom_left = 15
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_k70bj"]
+bg_color = Color(0.6, 0.6, 0.6, 0)
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_g0j6x"]
 bg_color = Color(0.69135684, 0.6913568, 0.69135684, 1)
 corner_radius_top_left = 8
@@ -244,7 +249,7 @@ is_display_only = true
 
 [node name="Description" type="RichTextLabel" parent="VBoxContainer/HBoxContainer"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(260, 0)
+custom_minimum_size = Vector2(280, 0)
 layout_mode = 2
 theme_override_font_sizes/normal_font_size = 16
 bbcode_enabled = true
@@ -259,6 +264,7 @@ theme_override_constants/separation = 22
 theme_override_styles/separator = SubResource("StyleBoxLine_f3wg7")
 
 [node name="QuestionsContainer" type="CenterContainer" parent="VBoxContainer"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
@@ -312,7 +318,8 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(60, 0)
 layout_mode = 2
 theme_override_colors/default_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/normal_font_size = 20
+theme_override_fonts/normal_font = SubResource("FontVariation_wbs8s")
+theme_override_font_sizes/normal_font_size = 24
 bbcode_enabled = true
 fit_content = true
 vertical_alignment = 1
@@ -321,7 +328,9 @@ vertical_alignment = 1
 unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_colors/default_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/normal_font_size = 24
 bbcode_enabled = true
 fit_content = true
 vertical_alignment = 1
@@ -416,25 +425,26 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 9
 
-[node name="TextBoxContainer" type="PanelContainer" parent="VBoxContainer/MarginContainer/BottomItems"]
+[node name="QuestionsTextContainer" type="PanelContainer" parent="VBoxContainer/MarginContainer/BottomItems"]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
 theme_override_styles/panel = SubResource("StyleBoxFlat_26m2u")
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/MarginContainer/BottomItems/TextBoxContainer"]
+[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/MarginContainer/BottomItems/QuestionsTextContainer"]
 layout_mode = 2
 theme_override_constants/margin_left = 20
 theme_override_constants/margin_right = 20
 theme_override_constants/margin_bottom = 20
 
-[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/BottomItems/TextBoxContainer/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/BottomItems/QuestionsTextContainer/MarginContainer"]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
 
-[node name="RichTextLabel" type="RichTextLabel" parent="VBoxContainer/MarginContainer/BottomItems/TextBoxContainer/MarginContainer/VBoxContainer"]
+[node name="RichTextLabel" type="RichTextLabel" parent="VBoxContainer/MarginContainer/BottomItems/QuestionsTextContainer/MarginContainer/VBoxContainer"]
 custom_minimum_size = Vector2(180, 60)
 layout_mode = 2
 size_flags_horizontal = 4
@@ -445,7 +455,7 @@ fit_content = true
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="TextBox" type="TextEdit" parent="VBoxContainer/MarginContainer/BottomItems/TextBoxContainer/MarginContainer/VBoxContainer"]
+[node name="TextBox" type="TextEdit" parent="VBoxContainer/MarginContainer/BottomItems/QuestionsTextContainer/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(400, 100)
 layout_mode = 2
@@ -466,6 +476,7 @@ theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_styles/normal = SubResource("StyleBoxFlat_ddbvl")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_igeed")
 theme_override_styles/hover = SubResource("StyleBoxFlat_n0tly")
+theme_override_styles/focus = SubResource("StyleBoxFlat_k70bj")
 text = "Send"
 
 [node name="Container" type="Control" parent="VBoxContainer/MarginContainer/BottomItems"]
@@ -473,6 +484,7 @@ layout_mode = 2
 
 [node name="WaitForLabel" type="Label" parent="VBoxContainer/MarginContainer"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 25
