@@ -67,7 +67,7 @@ func _ready() -> void:
 	else:
 		print("App plugin is not available")
 		my_uuid = "0a602920-2033-469d-aab8-5e832c5d4f6a"
-		_set_game_data('{"isYourTurn":true,"player":"1","game":"questions","questions":"[Is the word pee?^&*1^&*3|][A?^&*2^&*1|][B?^&*3^&*4]","game_name":"20 Questions","id":"TEST123","answer":"Poop","num":"1"}')
+		_set_game_data('{"player":"2","game":"questions","questions":"[Is the word pee?^&*1^&*3|][A?^&*2^&*1|][B?^&*3^&*0]","game_name":"20 Questions","id":"TEST123","answer":"Poop","num":"1"}')
 
 	_update_ui_interactivity()
 	
@@ -285,6 +285,13 @@ func _set_game_data(data_json: String) -> void:
 		for q in questions:
 			if int(q.get("resp", 0)) == 0:
 				u += 1
+		if u == 0 and i_am_player == 1:
+			is_my_turn = true
+		elif u != 0 and i_am_player == 2:
+			is_my_turn = true
+		else:
+			is_my_turn = false
+			
 		dbg("set_game_data: unanswered=%d" % u)
 	dbg("set_game_data: secret_answer='%s', game_over=%s" % [secret_answer, str(game_over)])
 	_renumber_from_one()
