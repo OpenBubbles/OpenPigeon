@@ -65,6 +65,7 @@ import com.openbubbles.openpigeon.darts.DartsGame
 import com.openbubbles.openpigeon.dots.DotsGame
 import com.openbubbles.openpigeon.fill.FillerGame
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.gomoku.GomokuGame
 import com.openbubbles.openpigeon.mancala.MancalaGame
 import com.openbubbles.openpigeon.paintball.PaintballGame
 import com.openbubbles.openpigeon.pong.PongGame
@@ -102,6 +103,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             CheckersGame(),
             MancalaGame(),
             DotsGame(),
+            GomokuGame(),
             ReversiGame(),
             QuestionsGame(),
 
