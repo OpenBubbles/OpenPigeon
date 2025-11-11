@@ -22,7 +22,7 @@ class GomokuGame : Game {
     }
 
     override fun gamePoster(config: Map<String, String>?): Int {
-        return R.drawable.reversi
+        return R.drawable.gomoku
     }
 
     override fun getDefaultReplay(): String {
