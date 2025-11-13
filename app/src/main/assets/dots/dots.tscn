@@ -67,6 +67,7 @@ texture = ExtResource("5_f1idx")
 
 [sub_resource type="SystemFont" id="SystemFont_ac22s"]
 font_weight = 600
+subpixel_positioning = 0
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_oiv88"]
 bg_color = Color(0.129412, 0.282353, 0.686275, 1)
@@ -360,6 +361,7 @@ theme_override_styles/hover = SubResource("StyleBoxTexture_vpag6")
 
 [node name="SendButton" type="Button" parent="."]
 unique_name_in_owner = true
+z_index = 99
 custom_minimum_size = Vector2(70, 50)
 layout_mode = 0
 offset_left = 289.0

@@ -1,7 +1,5 @@
 extends Control
-# Godot 4.x — concise, aligned, single-active-stone, send-on-button
 
-# --- Scene references ---
 @onready var PlayerBowl: TextureRect = %PlayerBowl
 @onready var OppBowl: TextureRect = %OppBowl
 @onready var Board: PanelContainer = %Board
@@ -16,47 +14,52 @@ extends Control
 @onready var background: ColorRect = %Background
 @onready var win_loss_label: Label = %WinLossLabel
 @onready var you_label: Label = %YouLabel
-@onready var send_button: Button = %SendButton   # unique
+@onready var spec_label: Label = %SpecLabel
+@onready var send_button: Button = %SendButton
 
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const RULES_POPUP_SCENE  = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
+const PLAYER1_BOWL_TEX := preload("res://gomoku/player1_bowl.png")
+const PLAYER2_BOWL_TEX := preload("res://gomoku/player2_bowl.png")
 
-# --- Identity / config ---
 var my_id := ""
 var my_player := 0           # 0 spectator, 1 black, 2 white
-const GRID_SIZE := 12
-@export var BOARD_MARGIN_PX := 40.0
+const GRID_SQUARES := 12
+var board_size := GRID_SQUARES + 1
+@export var BOARD_MARGIN_PX := 32.0
 @export var TILE_TEXTURE_PATH := "res://gomoku/gomoku_tile.png"
-const TILE_PX := 32
+const TILE_PX := 40
 const SNAP_PX := 10.0
-const DEBUG_DRAG := false
+var _is_dragging := false
+var _press_global := Vector2.ZERO
+const DRAG_THRESHOLD := 6.0
+const DEBUG_DRAG := true
 
-# --- Game state ---
-var is_my_turn := false
+var is_my_turn = false
 var game_id := ""
-var board_size := GRID_SIZE
 var board_state: Array = []          # 2D: board_state[y][x] = 0/1/2
 var moves: Array = []                # history [{x,y,p}]
 var game_ended := false
+var win_loss_state = ""
+var winner = null
 var game_over := false
-
-# Active stone (the ONE you move this turn)
+var _ui_gesture_block := false
 var _active_tile: TextureRect = null
 var _active_from_bowl_offset := Vector2.ZERO
-var _current_move := Vector2i(-1, -1)    # tentative grid pos for our turn
+var _current_move := Vector2i(-1, -1)
 var _has_uncommitted_move := false
-
-# Drag helpers (drag uses the active tile)
 var _drag_snapped_grid := Vector2i(-1, -1)
-
-# Runtime / misc
 var _tile_tex: Texture2D
+var last_win_coords: Array = []
+var _preview_win_line: Array = []	# Vector2i[] for tentative move preview
+var _win_preview_node: Control = null	# overlay that draws the golden outline
 var _board_tiles_root: Control
 var _rng := RandomNumberGenerator.new()
 var appPlugin: Object = null
 var has_connected := false
-var sent_tween: Tween
+var send_button_tween: Tween
+var sent_label_tween: Tween
 var dot_count := 0
 var spectator_mode := false
 const BASE_WAIT_TEXT := "WAITING FOR OPPONENT"
@@ -64,22 +67,25 @@ var game_settings_category := ""
 var _send_btn_shown_y := 0.0
 var _send_btn_hidden_y := 0.0
 
-func _log(s:String)->void: if DEBUG_DRAG: print(s)
-func _dbg(s:String)->void: print("[GOMOKU] ", s)
+func _log(s:String)->void: 
+	if DEBUG_DRAG: 
+		print(s)
+func _dbg(s:String)->void: 
+	print("[GOMOKU] ", s)
 
-# =============== READY ===============
 func _ready() -> void:
 	_rng.randomize()
 	_tile_tex = load(TILE_TEXTURE_PATH)
 	_make_runtime_nodes()
-	_reset_board_arrays(GRID_SIZE)
-	_connect_board_input()
+	_reset_board_arrays(GRID_SQUARES + 1)
 	if is_instance_valid(rules_button):
 		rules_button.pressed.connect(on_rules_button_pressed)
 	if is_instance_valid(settings_button):
 		settings_button.pressed.connect(_on_settings_button_pressed)
 	if is_instance_valid(dot_timer):
 		dot_timer.connect("timeout", _on_dot_timer_timeout)
+	if is_instance_valid(Board):
+		Board.mouse_filter = Control.MOUSE_FILTER_PASS
 	if is_instance_valid(send_button):
 		send_button.visible = false
 		send_button.modulate.a = 0.0
@@ -93,7 +99,6 @@ func _ready() -> void:
 	else:
 		push_warning("No %SendButton in scene")
 
-	# Plugin wiring
 	appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin:
 		if not has_connected:
@@ -101,15 +106,15 @@ func _ready() -> void:
 			has_connected = true
 			appPlugin.call("onReady")
 	else:
-		var dev := '{"isYourTurn": true,"size":"12","player":"2","map":"","move":"","id":"dev"}'
+		var dev := '{"isYourTurn": true,"player":"2","map":"000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000222200000000000000000000000000000000000000000000","move":"12,12,1","id":"dev"}'
 		await get_tree().process_frame
 		_set_game_data(dev)
 
-# =============== LAYOUT HELPERS (fix alignment) ===============
 func _panel_inner_rect() -> Rect2:
 	var r := Board.get_rect()
 	var sb := Board.get_theme_stylebox("panel")
-	if sb == null: return r
+	if sb == null: 
+		return r
 	var l := sb.get_content_margin(SIDE_LEFT)
 	var t := sb.get_content_margin(SIDE_TOP)
 	var rr := sb.get_content_margin(SIDE_RIGHT)
@@ -148,18 +153,76 @@ func _nearest_grid_center(local: Vector2) -> Dictionary:
 
 func _grid_in_bounds(g: Vector2i) -> bool:
 	return g.x >= 0 and g.x < board_size and g.y >= 0 and g.y < board_size
+	
+func _root_local_from_global(p_global: Vector2) -> Vector2:
+	return _to_local_ci(_board_tiles_root, p_global)
 
-# =============== RUNTIME NODES / BOARD RESET ===============
+func _board_local_from_global(p_global: Vector2) -> Vector2:
+	return _to_local_ci(Board, p_global)
+
+func _to_local_ci(ci: CanvasItem, p_global: Vector2) -> Vector2:
+	var inv := ci.get_global_transform_with_canvas().affine_inverse()
+	return inv * p_global
+	
+func _is_point_over(ci: Control, p: Vector2) -> bool:
+	return is_instance_valid(ci) and ci.is_visible_in_tree() and ci.get_global_rect().has_point(p)
+
+func _is_over_blocking_ui(p: Vector2) -> bool:
+	return _is_point_over(rules_button, p) \
+		or _is_point_over(settings_button, p) \
+		or _is_point_over(send_button, p)
+
+func _event_pos(e: InputEvent) -> Vector2:
+	if e is InputEventMouseButton: return (e as InputEventMouseButton).position
+	if e is InputEventMouseMotion: return (e as InputEventMouseMotion).position
+	if e is InputEventScreenTouch: return (e as InputEventScreenTouch).position
+	if e is InputEventScreenDrag: return (e as InputEventScreenDrag).position
+	return Vector2.INF
+
 func _make_runtime_nodes() -> void:
 	var old := get_node_or_null("BoardTiles")
-	if old: old.queue_free()
+	if old:
+		old.queue_free()
+
 	_board_tiles_root = Control.new()
 	_board_tiles_root.name = "BoardTiles"
 	_board_tiles_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_board_tiles_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_board_tiles_root.z_as_relative = false
-	_board_tiles_root.z_index = Board.z_index + 1
+	_board_tiles_root.z_index = 50
 	Board.add_child(_board_tiles_root)
+
+	var dbg := GridDebug.new()
+	dbg.name = "GridDebug"
+	dbg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dbg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dbg.z_as_relative = false
+	dbg.z_index = 30
+	dbg.get_centers = func() -> Array:
+		var area := _grid_area_rect()
+		var s := _steps()
+		var pts: Array = []
+		for y in board_size:
+			for x in board_size:
+				pts.append(Vector2(area.position.x + x*s.x, area.position.y + y*s.y))
+		return pts
+	Board.add_child(dbg)
+	_win_preview_node = WinLinePreview.new()
+	_win_preview_node.name = "WinPreview"
+	_win_preview_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_win_preview_node.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_win_preview_node.z_as_relative = false
+	_win_preview_node.z_index = 40
+	_win_preview_node.radius_px = TILE_PX * 0.3
+	_win_preview_node.get_pos_for_grid = func(g: Vector2i) -> Vector2:
+		return _grid_to_pos(g)
+	_board_tiles_root.add_child(_win_preview_node)
+
+	Board.resized.connect(func():
+		dbg.queue_redraw()
+		if is_instance_valid(_win_preview_node):
+			_win_preview_node.queue_redraw()
+	)
 
 func _reset_board_arrays(dim:int) -> void:
 	board_size = dim
@@ -167,16 +230,17 @@ func _reset_board_arrays(dim:int) -> void:
 	for y in board_size:
 		board_state[y] = []
 		(board_state[y] as Array).resize(board_size)
-		for x in board_size: board_state[y][x] = 0
+		for x in board_size:
+			board_state[y][x] = 0
 	moves.clear()
 	_current_move = Vector2i(-1,-1)
 	_has_uncommitted_move = false
+	_clear_win_preview()
 
 func _clear_board_visuals() -> void:
 	for c in _board_tiles_root.get_children():
 		c.queue_free()
 
-# =============== TILES / BOWLS ===============
 func _make_tile(is_black: bool) -> TextureRect:
 	var t := TextureRect.new()
 	t.texture = _tile_tex
@@ -190,22 +254,23 @@ func _make_tile(is_black: bool) -> TextureRect:
 	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	t.z_as_relative = false
-	t.z_index = 101
-	t.modulate = (Color.BLACK if is_black else Color.WHITE)
+	t.z_index = 50
+	t.modulate = (Color(0.278, 0.278, 0.278, 1.0) if is_black else Color.WHITE)
 	return t
 
 func _set_tile_offsets(t: TextureRect, left: float, top: float) -> void:
 	t.offset_left = left; t.offset_top = top; t.offset_right = left + TILE_PX; t.offset_bottom = top + TILE_PX
 
 func _prepare_tile_for_board(tile: TextureRect, is_black: bool) -> TextureRect:
-	if tile == null: tile = _make_tile(is_black)
+	if tile == null: 
+		tile = _make_tile(is_black)
 	tile.texture = _tile_tex
 	tile = tile
 	return tile
 
 func _place_random_in_bowl(bowl: Control, t: TextureRect) -> void:
 	var sz := (bowl.size if bowl.size != Vector2.ZERO else bowl.get_rect().size)
-	var pad := 8.0
+	var pad := 25.0
 	var x := _rng.randf_range(pad, max(pad, sz.x - TILE_PX - pad))
 	var y := _rng.randf_range(pad, max(pad, sz.y - TILE_PX - pad))
 	_set_tile_offsets(t, x, y)
@@ -217,111 +282,228 @@ func _pop_bowl_tile(is_ours: bool) -> TextureRect:
 			bowl.remove_child(c)
 			return c
 	return null
-
-func _top_up_bowl(bowl: Control, want: int, is_black: bool) -> void:
-	var count := 0
+	
+func _clear_bowl(bowl: Control) -> void:
 	for c in bowl.get_children():
-		if c is TextureRect: count += 1
-	for _i in max(0, want - count):
-		var t := _make_tile(is_black); bowl.add_child(t); _place_random_in_bowl(bowl, t)
-	# (optional strict trim omitted intentionally)
+		if c is TextureRect:
+			bowl.remove_child(c)
+			c.free()
 
-func _top_up_bowls_show7() -> void:
-	var our_is_black := (my_player == 1)
-	_top_up_bowl(PlayerBowl, 7, our_is_black)
-	_top_up_bowl(OppBowl,    7, not our_is_black)
+func _top_up_bowl(bowl: Control) -> void:
+	var count := 0
+	var is_black := (bowl == PlayerBowl and my_player == 1) or (bowl == OppBowl and my_player == 2)
+	for c in bowl.get_children():
+		if c is TextureRect and not c.is_queued_for_deletion():
+			count += 1
+	for _i in max(0, 8 - count):
+		var t := _make_tile(is_black)
+		bowl.add_child(t)
+		_place_random_in_bowl(bowl, t)
 
-# Ensure exactly one active tile (the movable stone)
+func _retint_bowl(bowl: Control, is_black: bool) -> void:
+	for c in bowl.get_children():
+		if c is TextureRect:
+			(c as TextureRect).modulate = (Color(0.278, 0.278, 0.278, 1.0) if is_black else Color.WHITE)
+
 func _ensure_active_tile() -> void:
 	if _active_tile and is_instance_valid(_active_tile): return
 	_active_tile = _pop_bowl_tile(true)
-	if _active_tile == null: _active_tile = _make_tile(true)
+	if _active_tile == null: _active_tile = _make_tile(my_player == 1)
 	_active_from_bowl_offset = Vector2(_active_tile.offset_left, _active_tile.offset_top)
-	_active_tile = _prepare_tile_for_board(_active_tile, true)
+	_active_tile = _prepare_tile_for_board(_active_tile, my_player == 1)
 	_board_tiles_root.add_child(_active_tile)
-	_active_tile.z_index = 101
+	_active_tile.z_index = 75
 
-# Move/replace tentative move; no extra stones created
 func _place_or_move_active_to(g: Vector2i) -> void:
-	if not _grid_in_bounds(g): return
-	# Clear previous tentative cell
-	if _current_move.x >= 0: board_state[_current_move.y][_current_move.x] = 0
-	if board_state[g.y][g.x] != 0: return
+	if not _grid_in_bounds(g):
+		return
+
+	if _current_move.x >= 0:
+		board_state[_current_move.y][_current_move.x] = 0
+
+	if board_state[g.y][g.x] != 0:
+		return
+
 	_ensure_active_tile()
-	board_state[g.y][g.x] = 1
+
+	var p := (2 if my_player == 1 else 1)
+	board_state[g.y][g.x] = p
 	_current_move = g
+
 	var c := _grid_to_pos(g)
-	_set_tile_offsets(_active_tile, c.x - TILE_PX*0.5, c.y - TILE_PX*0.5)
+	_set_tile_offsets(_active_tile, c.x - TILE_PX * 0.5, c.y - TILE_PX * 0.5)
+
 	_has_uncommitted_move = true
 	_show_send_button()
-	# replace last our move in history
-	for i in range(moves.size()-1, -1, -1):
+
+	print("[MOVE] Placing stone p=", p, " at ", g, " my_player=", my_player)
+	print("[MOVE] Board updated; calling _update_win_preview_for_current_move()")
+	_update_win_preview_for_current_move()
+
+	for i in range(moves.size() - 1, -1, -1):
 		var m := moves[i] as Dictionary
-		if int(m.get("p",0)) == 1: moves.remove_at(i); break
-	moves.append({"x": g.x, "y": g.y, "p": 1})
+		if int(m.get("p", 0)) == p:
+			moves.remove_at(i)
+			break
+
+	moves.append({"x": g.x, "y": g.y, "p": p})
+	print("[MOVE] Moves history now: ", moves)
 
 func _return_active_to_bowl() -> void:
-	if _active_tile == null: return
+	if _active_tile == null:
+		return
 	_active_tile.reparent(PlayerBowl)
 	_set_tile_offsets(_active_tile, _active_from_bowl_offset.x, _active_from_bowl_offset.y)
 	_active_tile = null
+	_current_move = Vector2i(-1, -1)
+	_clear_win_preview()
+	
+func _finalize_active_tile() -> void:
+	if _active_tile:
+		_active_tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_active_tile = null
 
-# Place a stone directly (for map rebuild / opponent moves)
 func _place_stone_direct(g: Vector2i, p:int) -> void:
-	if not _grid_in_bounds(g): return
+	if not _grid_in_bounds(g): 
+		return
 	board_state[g.y][g.x] = p
-	var tile := _prepare_tile_for_board(null, p==1)
+	var tile := _prepare_tile_for_board(null, p==2)
 	_board_tiles_root.add_child(tile)
 	var c := _grid_to_pos(g)
 	_set_tile_offsets(tile, c.x - TILE_PX*0.5, c.y - TILE_PX*0.5)
 
-# =============== INPUT ===============
-func _connect_board_input() -> void:
-	if not Board.gui_input.is_connected(_on_board_gui_input):
-		Board.gui_input.connect(_on_board_gui_input)
-
-func _on_board_gui_input(e: InputEvent) -> void:
-	if not is_my_turn: return
-	# simple tap-to-place/move active stone
-	if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT and e.pressed:
-		var g := _pos_to_grid(Board.get_local_mouse_position())
-		_place_or_move_active_to(g)
-
-func _unhandled_input(e: InputEvent) -> void:
-	if not is_my_turn:
+func _input(e: InputEvent) -> void:
+	if not is_my_turn or _ui_gesture_block:
 		return
-	# Drag preview: as cursor moves near intersections, we relocate the active stone
-	if (e is InputEventMouseMotion or e is InputEventScreenDrag) and _active_tile:
-		var gp: Vector2 = (e as InputEventWithModifiers).position
-		var local: Vector2 = Board.to_local(gp)
-		var info: Dictionary = _nearest_grid_center(local)
-		if float(info["dist"]) <= SNAP_PX:
-			_place_or_move_active_to(info["g"])
 
-# =============== SEND BUTTON (slide up/down) ===============
+	# -------- PRESS: mouse OR touch --------
+	if (e is InputEventMouseButton and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT and (e as InputEventMouseButton).pressed) \
+	or (e is InputEventScreenTouch and (e as InputEventScreenTouch).pressed):
+		var gp := _event_pos(e)
+		if gp == Vector2.INF:
+			return
+		if _is_over_blocking_ui(gp):
+			_ui_gesture_block = true
+			_is_dragging = false
+			return
+		else:
+			_ui_gesture_block = false
 
-func _tween_send_button(show: bool) -> void:
+		_press_global = gp
+		_is_dragging = true
+		_ensure_active_tile()
+
+		var br: Rect2 = Board.get_global_rect()
+		if br.has_point(gp):
+			var local_board := _board_local_from_global(gp)
+			var info := _nearest_grid_center(local_board)
+			var c_board: Vector2 = info["pos"]
+			_set_tile_offsets(_active_tile, c_board.x - TILE_PX * 0.5, c_board.y - TILE_PX * 0.5)
+			_drag_snapped_grid = info["g"]
+		else:
+			var in_root := _root_local_from_global(gp)
+			_set_tile_offsets(_active_tile, in_root.x - TILE_PX * 0.5, in_root.y - TILE_PX * 0.5)
+			_drag_snapped_grid = Vector2i(-1, -1)
+
+	# -------- MOVE: mouse OR touch drag --------
+	elif _is_dragging and _active_tile and (e is InputEventMouseMotion or e is InputEventScreenDrag):
+		if _ui_gesture_block:
+			return
+
+		var gp := _event_pos(e)
+		if gp == Vector2.INF:
+			return
+		var br: Rect2 = Board.get_global_rect()
+
+		if br.has_point(gp):
+			var local_board := _board_local_from_global(gp)
+			var info := _nearest_grid_center(local_board)
+			var c_board: Vector2 = info["pos"]
+			_set_tile_offsets(_active_tile, c_board.x - TILE_PX * 0.5, c_board.y - TILE_PX * 0.5)
+			_drag_snapped_grid = info["g"]
+		else:
+			var in_root := _root_local_from_global(gp)
+			_set_tile_offsets(_active_tile, in_root.x - TILE_PX * 0.5, in_root.y - TILE_PX * 0.5)
+			_drag_snapped_grid = Vector2i(-1, -1)
+
+	# -------- RELEASE: mouse OR touch --------
+	elif (e is InputEventMouseButton and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT and not (e as InputEventMouseButton).pressed and _is_dragging) \
+	or (e is InputEventScreenTouch and not (e as InputEventScreenTouch).pressed and _is_dragging):
+		if _ui_gesture_block:
+			_ui_gesture_block = false
+			_is_dragging = false
+			return
+
+		_is_dragging = false
+
+		var gp := _event_pos(e)
+		if gp == Vector2.INF:
+			gp = _press_global
+		var br: Rect2 = Board.get_global_rect()
+
+		if not br.has_point(gp):
+			_return_active_to_bowl()
+			_hide_send_button()
+			_has_uncommitted_move = false
+			_clear_win_preview()
+			_drag_snapped_grid = Vector2i(-1, -1)
+			return
+
+
+		var local_board := _board_local_from_global(gp)
+		var info := _nearest_grid_center(local_board)
+		var g: Vector2i = info["g"]
+
+		if not _grid_in_bounds(g):
+			_return_active_to_bowl()
+			_hide_send_button()
+			_has_uncommitted_move = false
+			_clear_win_preview()
+			_drag_snapped_grid = Vector2i(-1, -1)
+			return
+
+
+		if _current_move == g:
+			_has_uncommitted_move = true
+			_show_send_button()
+			_update_win_preview_for_current_move()
+			_drag_snapped_grid = Vector2i(-1, -1)
+			return
+
+
+		if board_state[g.y][g.x] == 0:
+			_place_or_move_active_to(g)
+		else:
+			_return_active_to_bowl()
+			_hide_send_button()
+			_has_uncommitted_move = false
+			_clear_win_preview()
+
+
+		_drag_snapped_grid = Vector2i(-1, -1)
+
+func _tween_send_button(sb: bool) -> void:
 	if not is_instance_valid(send_button):
 		return
-	if sent_tween:
-		sent_tween.kill()
 
-	# show/hide setup
-	if show:
+	if send_button_tween:
+		send_button_tween.kill()
+
+	if sb:
 		send_button.visible = true
 		send_button.modulate.a = 1.0
 
-	var target := (_send_btn_shown_y if show else _send_btn_hidden_y)
-	var dur := (0.25 if show else 0.20)
-	var ease := (Tween.EASE_OUT if show else Tween.EASE_IN)
+	var target := (_send_btn_shown_y if sb else _send_btn_hidden_y)
+	var dur := (0.25 if sb else 0.20)
+	var ea := (Tween.EASE_OUT if sb else Tween.EASE_IN)
 
-	sent_tween = create_tween()
-	sent_tween.tween_property(send_button, "position:y", target, dur) \
+	send_button_tween = create_tween()
+	send_button_tween.tween_property(send_button, "position:y", target, dur) \
 		.set_trans(Tween.TRANS_QUAD) \
-		.set_ease(ease)
+		.set_ease(ea)
 
-	if not show:
-		sent_tween.tween_callback(func ():
+	if not sb:
+		send_button_tween.tween_callback(func ():
 			if is_instance_valid(send_button):
 				send_button.visible = false
 		)
@@ -331,15 +513,62 @@ func _hide_send_button() -> void: _tween_send_button(false)
 
 func _on_send_button_pressed() -> void:
 	if not _has_uncommitted_move or _current_move.x < 0: return
+	_ui_gesture_block = true
 	send_game()
+	
+func play_sent_animation() -> void:
+	if not is_instance_valid(sent_label):
+		print("Warning: sent_label is not valid for play_sent_animation.")
+		return
+	
+	if sent_label_tween and sent_label_tween.is_running():
+		sent_label_tween.kill()
 
-# =============== DATA FLOW ===============
+	sent_label_tween = create_tween().set_parallel(false)
+
+	sent_label.text = "Sent"
+	sent_label.visible = true
+	sent_label.modulate.a = 0.0
+	sent_label.scale = Vector2.ONE
+	sent_label.pivot_offset = sent_label.get_size() / 2.0
+
+	sent_label_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
+	sent_label_tween.tween_interval(0.6)
+	sent_label_tween.tween_callback(func():
+		if is_instance_valid(sent_label):
+			sent_label.text = "Sent ✔"
+	)
+	sent_label_tween.tween_interval(2.0)
+	sent_label_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
+
+	sent_label_tween.tween_callback(func():
+		if is_instance_valid(sent_label):
+			sent_label.visible = false
+			sent_label.modulate.a = 1.0
+			start_waiting_animation()
+	)
+	
+func _apply_bowl_skins() -> void:
+	if not (is_instance_valid(PlayerBowl) and is_instance_valid(OppBowl)):
+		return
+	match my_player:
+		1:
+			PlayerBowl.texture = PLAYER1_BOWL_TEX
+			OppBowl.texture    = PLAYER2_BOWL_TEX
+		2:
+			PlayerBowl.texture = PLAYER2_BOWL_TEX
+			OppBowl.texture    = PLAYER1_BOWL_TEX
+		_:
+			PlayerBowl.texture = PLAYER1_BOWL_TEX
+			OppBowl.texture    = PLAYER2_BOWL_TEX
+
 func _set_game_data(raw_text: String) -> void:
 	var res: Variant = JSON.parse_string(raw_text)
 	if typeof(res) != TYPE_DICTIONARY:
 		print("[GOMOKU] Bad JSON for _set_game_data")
 		return
 	var d: Dictionary = res
+	print("INCOMING DATA: ", res)
 
 	game_id = _get_first(d, "id", game_id)
 	my_id   = _get_first(d, "myPlayerId", my_id)
@@ -348,84 +577,301 @@ func _set_game_data(raw_text: String) -> void:
 	var sender_s: String = _get_first(d, "player", "1")
 	var map_str: String = _get_first(d, "map", "")
 	var move_str: String = _get_first(d, "move", "")
-	var is_turn_s: String = _get_first(d, "isYourTurn", "")
-
+	var is_your_turn = bool(res.get("isYourTurn", false))
+	is_my_turn = is_your_turn
+	var opponent_avatar_key = ""
+	winner = _get_first(d, "winner", "")
+	stop_waiting_animation()
 	var sender_player: int = clampi(int(sender_s), 1, 2)
-	# resolve my_player
 	if p1_id != "" and p2_id != "":
 		if my_id != "" and my_id == p1_id:
 			my_player = 1
+			print("SETTING FOR ID PLAYER 1")
 		elif my_id != "" and my_id == p2_id:
 			my_player = 2
+			print("SETTING FOR ID PLAYER 2")
 		else:
 			my_player = 0
+			print("SETTING FOR ID PLAYER 0")
+			spectator_mode = true
+			
 	else:
-		my_player = (1 if sender_player == 2 and move_str == "" else (2 if sender_player == 1 and _is_all_zeros(map_str) else 1))
+		print("IS MY TURN?: ", is_my_turn, " | SENDER PLAYER: ", sender_player)
+		my_player = (1 if ((sender_player == 2 and is_my_turn) or (sender_player == 1 and not is_my_turn)) else 2)
+		print("ELSE SETTING FOR PLAYER: ", my_player)
+	if spectator_mode:
+		is_my_turn = false
+		print("SPECTATOR MODE ACTIVE")
+		you_label.text = ""
+		spec_label.show()
+	if my_player == 1:
+		opponent_avatar_key = "avatar2"
+	else:
+		opponent_avatar_key = "avatar1"
+		
+	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
+		var avatar_string = res[opponent_avatar_key]
+		var opponent_data = _parse_avatar_string(avatar_string)
+		if is_instance_valid(opp_avatar_display):
+			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
-	is_my_turn = (is_turn_s == "true" or is_turn_s == "True" or is_turn_s == "1") if is_turn_s != "" else (my_player != 0 and my_player != sender_player)
+	
+	_apply_bowl_skins()
+	_clear_bowl(PlayerBowl)
+	_clear_bowl(OppBowl)
+	_top_up_bowl(PlayerBowl)
+	_top_up_bowl(OppBowl)
 
-	# dimension & rebuild
 	var inferred_dim: int = (_infer_dim_from_map(map_str) if map_str.length() > 0 else board_size)
 	_reset_board_arrays(clampi(inferred_dim, 4, 32))
 	_clear_board_visuals()
-	_make_runtime_nodes() # ensure root exists
+	_make_runtime_nodes()
 
-	# rebuild from map (bottom-left origin)
 	if map_str.length() > 0:
 		var dim: int = _infer_dim_from_map(map_str)
 		for i in map_str.length():
 			var ch := String(map_str[i])
 			if ch == "1" or ch == "2":
-				var x := i % dim
-				var y := i / dim
-				_place_stone_direct(_map_to_grid(x, y, dim), int(ch))
+				var col := i % dim
+				@warning_ignore("integer_division")
+				var row := i / dim
+				var g := _proto_to_grid(row, col, dim)
+				_place_stone_direct(g, int(ch))
 
-	# single incoming move
+
 	if move_str != "":
 		var parts: PackedStringArray = move_str.split(",", false)
 		if parts.size() >= 3:
-			var gg: Vector2i = _map_to_grid(int(parts[0]), int(parts[1]), board_size)
+			var row := int(parts[0])
+			var col := int(parts[1])
+			var gg: Vector2i = _proto_to_grid(row, col, board_size)
 			var mp: int = int(parts[2])
 			if _grid_in_bounds(gg) and board_state[gg.y][gg.x] == 0:
 				_place_stone_direct(gg, mp)
 				board_state[gg.y][gg.x] = mp
 				moves.append({"x": gg.x, "y": gg.y, "p": mp})
 
-	_top_up_bowls_show7()
-	if is_my_turn:
+
+	print("Winner: ", winner)
+	if winner != "":
+		game_over = true
+	game_ended = await check_win()
+	if game_ended:
 		stop_waiting_animation()
-	else:
+		print("GAME OVER")
+		is_my_turn = false
+	print("IS MY TURN?: ", is_my_turn, " | GAME OVER?: ", game_over, " | PLAYER NUM?: ", my_player)
+	if not is_my_turn and not game_over:
 		start_waiting_animation()
+	else:
+		stop_waiting_animation()
 	_hide_send_button()
-	_return_active_to_bowl()
+	if _has_uncommitted_move:
+		_return_active_to_bowl()
+	else:
+		_finalize_active_tile()
+		
+	_ui_gesture_block = false
+	_is_dragging = false
 	
 	_dbg("set_game_data id=%s me=%s my_player=%d sender=%d size=%d my_turn=%s map_len=%d move=%s"
 		% [game_id, my_id, my_player, sender_player, board_size, str(is_my_turn), map_str.length(), move_str])
 
-# =============== SENDING ===============
 func _compose_current_map_string() -> String:
 	var s := ""
-	for y in range(board_size-1, -1, -1):
-		for x in board_size: s += str(board_state[y][x])
+	for row in range(0, board_size):
+		for col in range(0, board_size):
+			var g := _proto_to_grid(row, col, board_size)
+			s += str(board_state[g.y][g.x])
 	return s
+
+func _compose_lagged_map_string() -> String:
+	var s := ""
+	for row in range(0, board_size):
+		for col in range(0, board_size):
+			var g := _proto_to_grid(row, col, board_size)
+			if g == _current_move:
+				s += "0"
+			else:
+				s += str(board_state[g.y][g.x])
+	return s
+	
+func _find_five_or_more(p: int) -> Array:
+	var dirs := [
+		Vector2i(1, 0),  # →
+		Vector2i(0, 1),  # ↓
+		Vector2i(1, 1),  # ↘
+		Vector2i(1, -1)  # ↗
+	]
+
+	for y in range(board_size):
+		for x in range(board_size):
+			if board_state[y][x] != p:
+				continue
+
+			for d in dirs:
+				var coords: Array = []
+				var cx: int = x
+				var cy: int = y
+
+				while cx >= 0 and cy >= 0 and cx < board_size and cy < board_size \
+					and board_state[cy][cx] == p:
+					coords.append(Vector2i(cx, cy))
+					cx += d.x
+					cy += d.y
+
+				if coords.size() >= 5:
+					print("Found 5+ run for player ", p, " -> ", coords)
+					return coords
+
+	return []
+
+func check_win() -> bool:
+	print("--- CHECKING WIN CONDITION (5+ in-a-row) ---")
+	print("[WIN] my_player=", my_player, " current_move=", _current_move)
+
+	var p1_coords: Array = []
+	var p2_coords: Array = []
+
+	if _current_move.x >= 0 and _current_move.y >= 0:
+		var cur_p: int = int(board_state[_current_move.y][_current_move.x])
+		print("[WIN] Current cell value=", cur_p)
+		if cur_p == 1:
+			p1_coords = _get_line_through_cell(2, _current_move)
+			print("[WIN] Line through current move for P1: ", p1_coords)
+		elif cur_p == 2:
+			p2_coords = _get_line_through_cell(1, _current_move)
+			print("[WIN] Line through current move for P2: ", p2_coords)
+
+	if p1_coords.is_empty() and p2_coords.is_empty():
+		print("[WIN] No line found through current move; doing full-board scan.")
+		p1_coords = _find_five_or_more(2)
+		p2_coords = _find_five_or_more(1)
+	else:
+		print("[WIN] Skipping full scan; already have line via current move.")
+
+	var p1_has: bool = p1_coords.size() >= 5
+	var p2_has: bool = p2_coords.size() >= 5
+
+	print("[WIN] p1_has=", p1_has, " p2_has=", p2_has)
+
+	if not p1_has and not p2_has:
+		print("[WIN] RESULT: Game continues. No 5+ in-a-row found.")
+		last_win_coords = []
+		return false
+
+	if p1_has and not p2_has:
+		winner = "1"
+		last_win_coords = p1_coords
+		print("[WIN] P1 5+ coords: ", p1_coords)
+	elif p2_has and not p1_has:
+		winner = "-1"
+		last_win_coords = p2_coords
+		print("[WIN] P2 5+ coords: ", p2_coords)
+	else:
+		winner = "0"
+		last_win_coords = []
+		print("[WIN] Both players appear to have 5+; marking as draw.")
+
+	game_over = true
+
+	if is_instance_valid(_win_preview_node):
+		_win_preview_node.coords = last_win_coords
+		_win_preview_node.queue_redraw()
+		print("[WIN] Win overlay coords set to: ", last_win_coords)
+
+	if winner != "":
+		if winner == "0":
+			print("[WIN] FINAL TALLY: DRAW!")
+			win_loss_label.text = "DRAW!"
+			win_loss_state = "0"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+		else:
+			var you_win: bool = (not spectator_mode) and (
+				(my_player == 1 and winner == "1") or
+				(my_player == 2 and winner == "-1")
+			)
+			print("[WIN] you_win=", you_win, " spectator_mode=", spectator_mode)
+
+			if you_win:
+				print("[WIN] FINAL TALLY: YOU WIN! coords=", last_win_coords)
+				_show_win_burst(player_avatar_display)
+				win_loss_label.text = "YOU WIN!"
+				win_loss_state = "1"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			else:
+				if spectator_mode:
+					print("[WIN] FINAL TALLY: Player %s Wins! coords=%s" % [winner, str(last_win_coords)])
+					_show_win_burst(player_avatar_display if winner == "1" else opp_avatar_display)
+					win_loss_label.text = "Player %s Wins!" % winner
+					win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+					win_loss_state = "-1"
+				else:
+					print("[WIN] FINAL TALLY: YOU LOSE. coords=", last_win_coords)
+					_show_win_burst(opp_avatar_display)
+					win_loss_label.text = "YOU LOSE"
+					win_loss_state = "-1"
+					win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
+		win_loss_label.visible = true
+		await get_tree().process_frame
+		win_loss_label.scale = Vector2.ZERO
+		win_loss_label.pivot_offset = win_loss_label.size / 2
+		var tween_in := create_tween()
+		tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
+			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		return true
+	return false
+
 
 func send_game() -> void:
 	await get_tree().process_frame
-	if _current_move.x < 0: print("[Send] No move."); return
+	if _current_move.x < 0:
+		print("[Send] No move.")
+		return
+
+	var proto := _grid_to_proto(_current_move, board_size)
+	var send_row := proto.x
+	var send_col := proto.y
+	var p := 1 if my_player == 1 else 2
+
 	var payload := {
-		"map": _compose_current_map_string(),
-		"move": "%d,%d,%d" % [_current_move.x, _current_move.y, 1]
+		"map": _compose_lagged_map_string(),
+		"move": "%d,%d,%d" % [send_row, send_col, p]
 	}
+	var avatar_key := ("avatar1" if my_player == 1 else "avatar2")
+	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
+		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
+
+	game_ended = await check_win()
+	if game_ended and win_loss_state != "":
+		payload["winner"] = my_id + "|" + win_loss_state
+
 	var plug := Engine.get_singleton("AppPlugin")
-	if plug: plug.updateGameData(JSON.stringify(payload))
-	else: print("AppPlugin is null; cannot send.")
+	if plug:
+		plug.updateGameData(JSON.stringify(payload))
+	else:
+		print("AppPlugin is null; cannot send.")
+	print("OUTGOING DATA", payload)
+
 	_has_uncommitted_move = false
 	_hide_send_button()
 	is_my_turn = false
-	_return_active_to_bowl()
-	_top_up_bowls_show7()
+	_finalize_active_tile()
 
-# =============== Misc UI (unchanged logic, compact) ===============
+	if not game_ended:
+		print("[SEND] No win detected; clearing preview.")
+		_clear_win_preview()
+	else:
+		print("[SEND] Game ended with winner=", winner, " win_loss_state=", win_loss_state, " — keeping preview line.")
+
+	_top_up_bowl(PlayerBowl)
+	_top_up_bowl(OppBowl)
+
+	if not game_over:
+		play_sent_animation()
+
+
 func start_waiting_animation():
 	if spectator_mode or not (is_instance_valid(waiting_label) and is_instance_valid(waiting_blur) and is_instance_valid(dot_timer)): return
 	dot_count = 0
@@ -438,17 +884,31 @@ func start_waiting_animation():
 	tw.tween_callback(func(): dot_timer.start())
 
 func stop_waiting_animation():
-	if is_instance_valid(dot_timer): dot_timer.stop()
-	if is_instance_valid(waiting_label): waiting_label.visible=false; waiting_label.modulate.a=1.0
-	if is_instance_valid(waiting_blur): waiting_blur.visible=false; waiting_blur.modulate.a=1.0
+	if is_instance_valid(dot_timer): 
+		dot_timer.stop()
+	if is_instance_valid(waiting_label): 
+		waiting_label.visible=false
+		waiting_label.modulate.a=1.0
+	if is_instance_valid(waiting_blur): 
+		waiting_blur.visible=false
+		waiting_blur.modulate.a=1.0
 
 func _on_dot_timer_timeout():
 	if not is_instance_valid(waiting_label): return
 	dot_count = (dot_count % 3) + 1
 	waiting_label.text = BASE_WAIT_TEXT + ".".repeat(dot_count)
 
-# =============== Small utils ===============
-func _map_to_grid(x_map:int, y_map:int, dim:int) -> Vector2i: return Vector2i(x_map, (dim-1)-y_map)
+func _proto_to_grid(row: int, col: int, dim: int) -> Vector2i:
+	var x_grid := col
+	var y_grid := (dim - 1) - row
+	return Vector2i(x_grid, y_grid)
+
+
+func _grid_to_proto(g: Vector2i, dim: int) -> Vector2i:
+	var row := (dim - 1) - g.y
+	var col := g.x
+	return Vector2i(row, col)
+
 func _get_first(d: Dictionary, key: String, def: String = "") -> String:
 	if not d.has(key):
 		return def
@@ -511,7 +971,6 @@ func _parse_avatar_string(data_string: String) -> Dictionary:
 				if i >= 0 and i < body_map.size():
 					data["fshape_style"] = String(body_map[i])
 
-			# --- Skin color (accept both) ---
 			"fshape_color", "body_color":
 				data["fshape_color"] = read_color.call(key_value.slice(1))
 
@@ -676,6 +1135,7 @@ func _on_settings_button_pressed() -> void:
 	settings_popup_script.closed.connect(func():
 		if is_instance_valid(player_avatar_display):
 			player_avatar_display.update_display_from_settings()
+		_ui_gesture_block = false
 	)
 	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
 	settings_popup_script.dark_mode_changed.connect(_apply_bg_for_dark)
@@ -725,6 +1185,7 @@ func on_rules_button_pressed() -> void:
 		close_btn.pressed.connect(func():
 			dim.queue_free()
 			popup.queue_free()
+			_ui_gesture_block = false
 		)
 
 	var title_label := popup.find_child("Title", true, false) as Label
@@ -767,27 +1228,26 @@ func _get_rules_text() -> String:
 
 [font_size={24px}][b]Objective[/b][/font_size]
 [font_size={18px}]
-• Take turns drawing single lines between adjacent dots.
-• Complete the 4th side of a 1×1 box to claim it and score 1 point.
-• The player with the most boxes when no lines remain wins.
+• Place your stones on the intersections of the board.
+• Be the first player to create an unbroken line of 5 or more stones.
+• Lines can be horizontal, vertical, or diagonal.
 [/font_size]
 
 [font_size={24px}][b]How to Play[/b][/font_size]
 [font_size={18px}]
-• On your turn, draw exactly one horizontal or vertical line between two neighboring dots.
-• If your line completes a box, that box is marked with an [b]X[/b] in your color and you immediately take another turn.
-• If your line does not complete a box, play passes to your opponent.
-• Boxes can be claimed in chains: if completing one box lets you complete another, you continue until you draw a line that doesn’t finish a box.
+• Players take turns placing a stone on an empty intersection.
+• If your placed stone creates 5 or more in a row, your winning line will be highlighted.
 [/font_size]
 
 [font_size={24px}][b]End of Game[/b][/font_size]
 [font_size={18px}]
-• The game ends when every possible line has been drawn.
-• Each claimed box is worth 1 point. Higher total wins.
-• Ties are possible.
+• The game ends immediately when a player forms a line of 5 or more stones.
+• That player is declared the winner.
+• If both players simultaneously achieve a line (rare), the game is a draw.
 [/font_size]
 """
 
+@warning_ignore("unused_parameter")
 func _on_theme_changed(new_theme_name: String) -> void:
 	pass
 
@@ -796,3 +1256,131 @@ func _load_game_specific_settings() -> void:
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))
 	var show_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
 	print("Loaded game-specific settings for ", game_settings_category, ": volume=", saved_volume, " debug=", show_debug_info)
+
+class GridDebug:
+	extends Control
+	var get_centers: Callable = Callable()
+	func _draw():
+		if not get_centers.is_valid():
+			return
+		var pts: Array = get_centers.call()
+		for p in pts:
+			draw_circle(p, 2.0, Color(1, 0, 0, 0.9))
+
+class BoardGrid:
+	extends Control
+	var get_area: Callable  = Callable()
+	var get_steps: Callable = Callable()
+	var n: int = 12
+	func _draw():
+		if not get_area.is_valid() or not get_steps.is_valid():
+			return
+		var area: Rect2 = get_area.call()
+		var s: Vector2  = get_steps.call()
+		var col := Color(0, 0, 0, 1)
+		draw_rect(area, Color(0, 0, 0, 0), false, 2.0, true)
+		for i in n:
+			var x := area.position.x + i * s.x
+			var y := area.position.y + i * s.y
+			draw_line(Vector2(x, area.position.y), Vector2(x, area.position.y + area.size.y), col, 1.0)
+			draw_line(Vector2(area.position.x, y), Vector2(area.position.x + area.size.x, y), col, 1.0)
+
+
+func _get_line_through_cell(p: int, start_g: Vector2i) -> Array:
+	if not _grid_in_bounds(start_g):
+		return []
+	if board_state[start_g.y][start_g.x] != p:
+		return []
+
+	var best: Array = []
+	var dirs := [
+		Vector2i(1, 0),		# →
+		Vector2i(0, 1),		# ↓
+		Vector2i(1, 1),		# ↘
+		Vector2i(1, -1)		# ↗
+	]
+
+	for d in dirs:
+		var coords: Array = []
+		var g := start_g
+
+		while true:
+			var prev := Vector2i(g.x - d.x, g.y - d.y)
+			if prev.x < 0 or prev.y < 0 or prev.x >= board_size or prev.y >= board_size:
+				break
+			if board_state[prev.y][prev.x] != p:
+				break
+			g = prev
+
+		while true:
+			coords.append(g)
+			var next := Vector2i(g.x + d.x, g.y + d.y)
+			if next.x < 0 or next.y < 0 or next.x >= board_size or next.y >= board_size:
+				break
+			if board_state[next.y][next.x] != p:
+				break
+			g = next
+
+		if coords.size() > best.size():
+			best = coords
+
+	return best
+
+func _clear_win_preview() -> void:
+	_preview_win_line.clear()
+	if is_instance_valid(_win_preview_node):
+		_win_preview_node.coords = []
+		_win_preview_node.queue_redraw()
+
+func _update_win_preview_for_current_move() -> void:
+	if _current_move.x < 0 or _current_move.y < 0:
+		print("[PREVIEW] No current move; clearing preview.")
+		_clear_win_preview()
+		return
+
+	var p: int = int(board_state[_current_move.y][_current_move.x])
+	if p == 0:
+		print("[PREVIEW] Current move cell is empty; clearing preview.")
+		_clear_win_preview()
+		return
+
+	print("[PREVIEW] Checking current_move=", _current_move, " value=", p)
+
+	var coords := _get_line_through_cell(p, _current_move)
+	print("[PREVIEW] Line through cell: ", coords, " size=", coords.size())
+
+	if coords.size() >= 5:
+		print("[PREVIEW] Found 5+ in line; showing golden outline.")
+		_preview_win_line = coords
+	else:
+		print("[PREVIEW] Less than 5 stones in line; clearing preview.")
+		_preview_win_line.clear()
+
+	if is_instance_valid(_win_preview_node):
+		_win_preview_node.coords = _preview_win_line
+		_win_preview_node.queue_redraw()
+
+class WinLinePreview:
+	extends Control
+
+	var coords: Array = []
+	var get_pos_for_grid: Callable = Callable()
+	var radius_px: float = 20.0
+
+	func _draw() -> void:
+		if coords.is_empty() or not get_pos_for_grid.is_valid():
+			return
+
+		var pts: Array = []
+		for g in coords:
+			if g is Vector2i:
+				pts.append(get_pos_for_grid.call(g))
+
+		if pts.is_empty():
+			return
+
+		var outline_col := Color(1.0, 0.84, 0.0, 0.7)
+		var line_width := 20.0
+
+		for p in pts:
+			draw_arc(p, radius_px, 0.0, TAU, 64, outline_col, line_width)
