@@ -255,7 +255,7 @@ func _make_tile(is_black: bool) -> TextureRect:
 	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	t.z_as_relative = false
 	t.z_index = 50
-	t.modulate = (Color(0.278, 0.278, 0.278, 1.0) if is_black else Color.WHITE)
+	t.modulate = (Color(0.139, 0.139, 0.139, 1.0) if is_black else Color.WHITE)
 	return t
 
 func _set_tile_offsets(t: TextureRect, left: float, top: float) -> void:
