@@ -55,6 +55,7 @@ import com.bluebubbles.messaging.IMessageViewHandle
 import com.bluebubbles.messaging.IViewUpdateCallback
 import com.bluebubbles.messaging.MadridMessage
 import com.openbubbles.openpigeon.MadridExtension.Companion.games
+import com.openbubbles.openpigeon.anagrams.AnagramsGame
 import com.openbubbles.openpigeon.archery.ArcheryGame
 import com.openbubbles.openpigeon.basketball.BasketballGame
 import com.openbubbles.openpigeon.battleship.BattleshipGame
@@ -72,6 +73,8 @@ import com.openbubbles.openpigeon.pong.PongGame
 import com.openbubbles.openpigeon.pool.PoolGame
 import com.openbubbles.openpigeon.questions.QuestionsGame
 import com.openbubbles.openpigeon.reversi.ReversiGame
+import com.openbubbles.openpigeon.wordbites.WordbitesGame
+import com.openbubbles.openpigeon.wordgames.WordGames
 import com.openbubbles.openpigeon.wordhunt.WordHuntGame
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
@@ -93,7 +96,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             BattleshipGame(),
             BasketballGame(),
             ArcheryGame(),
-            WordHuntGame(),
+            WordGames(),
             DartsGame(),
             PongGame(),
             Crazy8Game(),
@@ -106,6 +109,9 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             GomokuGame(),
             ReversiGame(),
             QuestionsGame(),
+            WordHuntGame(),
+            AnagramsGame(),
+            WordbitesGame()
 
         )
 
@@ -250,6 +256,13 @@ class ChooseGameCallback : ActionCallback {
     ) {
         val game = parameters[gameName]?.let { MadridExtension.findByName(it) } ?: return
 
+        if (game.isConfigurable()) {
+            MadridExtensionService.extension?.let {
+                it.configuringGame = game
+                it.updateKeyboard()
+            }
+        }
+
         if (MadridExtension.currentUserCount < game.minPlayerRequirement()) {
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(context, "Minimum ${game.minPlayerRequirement()} players required for this game!", Toast.LENGTH_LONG).show()
@@ -260,13 +273,6 @@ class ChooseGameCallback : ActionCallback {
         val message = game.buildGameMessage(context, game.getNewGameData(context) ?: return, null)
 
         MadridExtension.currentKeyboardHandle?.addMessage(message)
-
-        if (game.isConfigurable()) {
-            MadridExtensionService.extension?.let {
-                it.configuringGame = game
-                it.updateKeyboard()
-            }
-        }
     }
 }
 
@@ -329,9 +335,13 @@ fun RenderKeyboard(extension: MadridExtension?) {
     val rowsPerPage = 2
     val p = extension?.currentPage ?: 0
     val itemsPerPage = itemsPerRow * rowsPerPage
-    val totalPages = ceil(games.size / itemsPerPage.toDouble()).toInt()
+    val hiddenGameNames = setOf("hunt", "anagrams", "bites")
+    val visibleGames = games.filter { it.getName() !in hiddenGameNames }
+    val totalPages = ceil(visibleGames.size / itemsPerPage.toDouble()).toInt()
 
-    val pageGames = games.slice(min(itemsPerPage * p, games.size)..<min(itemsPerPage * (p + 1), games.size))
+    val pageGames = visibleGames.slice(
+        min(itemsPerPage * p, visibleGames.size)..<min(itemsPerPage * (p + 1), visibleGames.size)
+    )
     Column(modifier = GlanceModifier.fillMaxHeight().padding(1.dp)) {
         Row(horizontalAlignment = Alignment.Horizontal.CenterHorizontally, verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
             Image(ImageProvider(R.drawable.madrid_icon), "OpenPigeon", modifier = GlanceModifier.width(50.dp).padding(8.dp).wrapContentHeight())
