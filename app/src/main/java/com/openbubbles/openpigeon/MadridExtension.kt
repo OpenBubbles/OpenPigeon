@@ -109,9 +109,9 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             GomokuGame(),
             ReversiGame(),
             QuestionsGame(),
-            WordHuntGame(),
-            AnagramsGame(),
-            WordbitesGame()
+            WordHuntGame(), //Marked Hidden as inside Word Games Wrapper
+            AnagramsGame(), //Marked Hidden as inside Word Games Wrapper
+            WordbitesGame() //Marked Hidden as inside Word Games Wrapper
 
         )
 
