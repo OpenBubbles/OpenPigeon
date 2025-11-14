@@ -1,0 +1,144 @@
+[gd_scene load_steps=4 format=3 uid="uid://d2yyuh6fook6k"]
+
+[ext_resource type="Script" uid="uid://cyyfd6ypbfmpr" path="res://anagrams/anagrams.gd" id="1_xvd3d"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ak8kl"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_i2lji"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[node name="Anagrams" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_xvd3d")
+
+[node name="Background" type="ColorRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.4931976, 0.378817, 0.67720133, 1)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TopRow" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="RemixButton" type="Button" parent="VBoxContainer/TopRow"]
+layout_mode = 2
+
+[node name="TimerBox" type="PanelContainer" parent="VBoxContainer/TopRow"]
+layout_mode = 2
+
+[node name="Timer" type="TextEdit" parent="VBoxContainer/TopRow/TimerBox"]
+layout_mode = 2
+
+[node name="ScoreBox" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="EnterButton" type="Button" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="VoidBox" type="HBoxContainer" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="LetterBox" type="HBoxContainer" parent="VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="WinLossLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+z_index = 102
+layout_mode = 0
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_ak8kl")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SentLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+z_index = 102
+layout_mode = 0
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_ak8kl")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WaitForOpponentLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+z_index = 102
+layout_mode = 0
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_i2lji")
+text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WaitBlur" type="ColorRect" parent="."]
+unique_name_in_owner = true
+visible = false
+z_index = 101
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.152941, 0.152941, 0.152941, 0.556863)
+
+[node name="DotTimer" type="Timer" parent="."]
+unique_name_in_owner = true
+wait_time = 0.75
+
+[node name="SpecLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 0
+offset_top = 165.0
+offset_right = 648.0
+offset_bottom = 234.0
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 50
+text = "Spectating..."
+horizontal_alignment = 1
+vertical_alignment = 1
