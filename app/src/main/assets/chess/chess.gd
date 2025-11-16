@@ -357,7 +357,7 @@ func _create_square_elements(r: int, f: int, rect: ColorRect, pieces_row: Array[
 	# Create piece texture
 	var tex: TextureRect = TextureRect.new()
 	var board_piece_size: Vector2 = Vector2(SQUARE_SIZE * 0.9, SQUARE_SIZE * 0.9)
-	var piece_pos: Vector2 = rect.position + (rect.size - board_piece_size) * 0.5 + Vector2(-SQUARE_SIZE * 0.25, -SQUARE_SIZE * 0.35)
+	var piece_pos: Vector2 = rect.position + (rect.size - board_piece_size) * 0.5 + Vector2(SQUARE_SIZE * 0.1, SQUARE_SIZE * 0.1)
 	tex.position = piece_pos
 	tex.size = board_piece_size
 	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -726,7 +726,7 @@ func _refresh_board_ui() -> void:
 			# This ensures pieces are at their correct grid positions even if animation was interrupted
 			var square: ColorRect = squares[r][f]
 			var board_piece_size: Vector2 = Vector2(SQUARE_SIZE * 0.9, SQUARE_SIZE * 0.9)
-			var correct_pos: Vector2 = square.position + (square.size - board_piece_size) * 0.5 + Vector2(-SQUARE_SIZE * 0.25, -SQUARE_SIZE * 0.35)
+			var correct_pos: Vector2 = square.position + (square.size - board_piece_size) * 0.5 + Vector2(SQUARE_SIZE * 0.1, SQUARE_SIZE * 0.1)
 			pieces[r][f].position = correct_pos
 			pieces[r][f].scale = Vector2.ONE
 

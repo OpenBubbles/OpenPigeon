@@ -33,7 +33,7 @@ bbcode_enabled = true
 text = "[center]Player 2[/center]"
 
 [node name="PlayerChessBlack" type="Sprite2D" parent="Player1Box"]
-position = Vector2(74, 45.25)
+position = Vector2(108, 86)
 texture = ExtResource("3_bk")
 
 [node name="Player2Box" type="Panel" parent="."]
@@ -55,7 +55,7 @@ bbcode_enabled = true
 text = "[center]Player 1[/center]"
 
 [node name="PlayerChessWhite" type="Sprite2D" parent="Player2Box"]
-position = Vector2(74, 45.25)
+position = Vector2(108, 86)
 texture = ExtResource("2_wk")
 
 [node name="waitingLabel" type="Panel" parent="."]
