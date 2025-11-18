@@ -18,11 +18,20 @@ import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.GameNotFound
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
+import com.openbubbles.openpigeon.godot.GodotGameActivity
 
 class AnagramsGame : Game {
-    var mode = 1 // Mode 1: 4x4, Mode 2: 5x5 circle shape, Mode 3: 5x5 X shape, Mode 4: 5x5
+    var mode = 1 // Mode 1: 6 letters, Mode 2: 7 letters
+    override fun getVersion(): String {
+        return "5"
+    }
+
     override fun getName(): String {
         return "anagrams"
+    }
+
+    override fun displayName(): String {
+        return "Anagrams"
     }
 
     override fun isConfigurable(): Boolean {
@@ -33,7 +42,7 @@ class AnagramsGame : Game {
     override fun Configuration(
         context: Context?,
     ) {
-        val maps = listOf("Map 1", "Map 2", "Map 3", "Map 4")
+        val maps = listOf("Map 1", "Map 2")
         val selectedMode = maps[mode - 1]
         val keyboardModeImages = arrayOf(R.drawable.wordhunt_kb_mode1, R.drawable.wordhunt_kb_mode2, R.drawable.wordhunt_kb_mode3, R.drawable.wordhunt_kb_mode4)
         Box(modifier = GlanceModifier.padding(16.dp)) {
@@ -63,27 +72,11 @@ class AnagramsGame : Game {
     }
 
     override fun gameClass(): Class<*> {
-        return GameNotFound::class.java
+        return GodotGameActivity::class.java
     }
 
     override fun gamePoster(config: Map<String, String>?): Int {
-        val mode = config?.get("mode")
-        return when (mode) {
-            "1" -> R.drawable.anagrams
-            null -> R.drawable.anagrams
-            "2" -> R.drawable.anagrams
-            "3" -> R.drawable.anagrams
-            "4" -> R.drawable.anagrams
-            else -> {R.drawable.anagrams}
-        }
-    }
-
-    override fun displayName(): String {
-        return "Word Hunt"
-    }
-
-    override fun getVersion(): String {
-        return "47"
+        return R.drawable.anagrams
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
@@ -94,6 +87,6 @@ class AnagramsGame : Game {
     }
 
     override fun getDefaultReplay(): String {
-        TODO("Not yet implemented")
+        return ""
     }
 }

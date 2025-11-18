@@ -142,8 +142,12 @@ viewport_path = NodePath("SubViewportContainer/SubViewport")
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_vu1q5"]
 shader = ExtResource("7_x0qku")
 shader_parameter/edge_height = 12.0
-shader_parameter/wave_amplitude = 4.0
-shader_parameter/wave_length = 220.0
+shader_parameter/min_amplitude = 2.0
+shader_parameter/max_amplitude = 7.0
+shader_parameter/min_period = 40.0
+shader_parameter/max_period = 120.0
+shader_parameter/segment_width = 80.0
+shader_parameter/max_saw_mix = 0.8
 shader_parameter/paper_color = Color(1, 1, 1, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_eugg7"]
@@ -273,44 +277,44 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Container" type="PanelContainer" parent="IntroScreen"]
-custom_minimum_size = Vector2(400, 400)
+[node name="MarginContainer" type="MarginContainer" parent="IntroScreen"]
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -200.0
-offset_top = -200.0
-offset_right = 200.0
-offset_bottom = 200.0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_override_constants/margin_left = 60
+theme_override_constants/margin_right = 60
+
+[node name="Container" type="PanelContainer" parent="IntroScreen/MarginContainer"]
+custom_minimum_size = Vector2(400, 500)
+layout_mode = 2
+size_flags_vertical = 4
 theme_override_styles/panel = SubResource("StyleBoxFlat_0k6o1")
 
-[node name="VBoxContainer" type="VBoxContainer" parent="IntroScreen/Container"]
+[node name="VBoxContainer" type="VBoxContainer" parent="IntroScreen/MarginContainer/Container"]
 layout_mode = 2
 
-[node name="Control2" type="Control" parent="IntroScreen/Container/VBoxContainer"]
+[node name="Control2" type="Control" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
 custom_minimum_size = Vector2(0, 10)
 layout_mode = 2
 
-[node name="HowToText" type="RichTextLabel" parent="IntroScreen/Container/VBoxContainer"]
+[node name="HowToText" type="RichTextLabel" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_colors/default_color = Color(0, 0, 0, 1)
 bbcode_enabled = true
 text = "[b][font_size={36px}]How to play:[/font_size][/b]
 
-[font_size={18px}]Combine letter to make words. Make as many words as you can in 60 seconds[/font_size]"
+[font_size={24px}]Combine letter to make words. Make as many words as you can in 60 seconds[/font_size]"
 fit_content = true
 horizontal_alignment = 1
 
-[node name="HowToRef" type="TextureRect" parent="IntroScreen/Container/VBoxContainer"]
+[node name="HowToRef" type="TextureRect" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
 layout_mode = 2
 
-[node name="StartButton" type="Button" parent="IntroScreen/Container/VBoxContainer"]
+[node name="StartButton" type="Button" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(120, 60)
 layout_mode = 2
@@ -328,7 +332,7 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_r3ggu")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_4ax03")
 text = "Start"
 
-[node name="Control" type="Control" parent="IntroScreen/Container/VBoxContainer"]
+[node name="Control" type="Control" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 

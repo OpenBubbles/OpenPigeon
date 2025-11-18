@@ -14,6 +14,9 @@ extends Control
 @onready var player_word_list: VBoxContainer = %PlayerWordList
 @onready var player_words_label: Label = %PlayerWordsLabel
 @onready var player_score_label: Label = %PlayerScoreLabel
+@onready var opp_word_list: VBoxContainer = %OppWordList
+@onready var opp_words_label: Label = %OppWordsLabel
+@onready var opp_score_label: Label = %OppScoreLabel
 
 const LETTER_BG: Texture2D = preload("res://anagrams/letter_bg.png")
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
@@ -55,14 +58,14 @@ func _ready() -> void:
 			has_connected = true
 			appPlugin.call("onReady")
 	else:
-		var dev := '{"isYourTurn": true,"player":"2","map":"000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000222200000000000000000000000000000000000000000000","move":"12,12,1","id":"dev"}'
+		var dev := '{"isYourTurn": true,"player":"2","letters":"OSSLER","score2":"4100","words2":"5","words_list2":"LOSERS|LOSER|LOSE|LOSS|SOS","id":"dev"}'
 		await get_tree().process_frame
 		_set_game_data(dev)
 		
 func _set_game_data(raw_text: String) -> void:
 	var res: Variant = JSON.parse_string(raw_text)
 	if typeof(res) != TYPE_DICTIONARY:
-		print("[GOMOKU] Bad JSON for _set_game_data")
+		print("[ANAGRAMS] Bad JSON for _set_game_data")
 		return
 	var d: Dictionary = res
 	print("INCOMING DATA: ", res)
@@ -72,13 +75,34 @@ func _set_game_data(raw_text: String) -> void:
 	var p1_id: String = _get_first(d, "player1", "")
 	var p2_id: String = _get_first(d, "player2", "")
 	var sender_s: String = _get_first(d, "player", "1")
-	var map_str: String = _get_first(d, "map", "")
-	var move_str: String = _get_first(d, "move", "")
+
+	# Incoming letters for this round
+	var letters_from_data: String = _get_first(d, "letters", "")
+	if letters_from_data != "":
+		# Update the game_screen’s letters so start_game() uses them
+		game_screen.letters = letters_from_data
+
+	# Incoming scores / words (these come in as strings, possibly from arrays)
+	var p1_score_s: String = _get_first(d, "score1", "")
+	var p1_words_s: String = _get_first(d, "words1", "")
+	var p1_wordlist_s: String = _get_first(d, "words_list1", "")
+	var p2_score_s: String = _get_first(d, "score2", "")
+	var p2_words_s: String = _get_first(d, "words2", "")
+	var p2_wordlist_s: String = _get_first(d, "words_list2", "")
+
+	# You can parse these as ints / arrays if needed:
+	var p1_score: int = int(p1_score_s) if p1_score_s != "" else 0
+	var p1_words: int = int(p1_words_s) if p1_words_s != "" else 0
+	var p2_score: int = int(p2_score_s) if p2_score_s != "" else 0
+	var p2_words: int = int(p2_words_s) if p2_words_s != "" else 0
+	# word lists stay as the pipe-separated strings for now (p1_wordlist_s, p2_wordlist_s)
+
 	var is_your_turn = bool(res.get("isYourTurn", false))
 	is_my_turn = is_your_turn
-	var opponent_avatar_key = ""
+	var opponent_avatar_key := ""
 	winner = _get_first(d, "winner", "")
 	stop_waiting()
+
 	var sender_player: int = clampi(int(sender_s), 1, 2)
 	if p1_id != "" and p2_id != "":
 		if my_id != "" and my_id == p1_id:
@@ -91,25 +115,47 @@ func _set_game_data(raw_text: String) -> void:
 			my_player = 0
 			print("SETTING FOR ID PLAYER 0")
 			spectator_mode = true
-			
 	else:
 		print("IS MY TURN?: ", is_my_turn, " | SENDER PLAYER: ", sender_player)
-		my_player = (1 if ((sender_player == 2 and is_my_turn) or (sender_player == 1 and not is_my_turn)) else 2)
+		my_player = 1 if ((sender_player == 2 and is_my_turn) or (sender_player == 1 and not is_my_turn)) else 2
 		print("ELSE SETTING FOR PLAYER: ", my_player)
+
 	if spectator_mode:
 		is_my_turn = false
 		print("SPECTATOR MODE ACTIVE")
-		#spec_label.show()
+
 	if my_player == 1:
 		opponent_avatar_key = "avatar2"
 	else:
 		opponent_avatar_key = "avatar1"
 		
+		# If we have opponent results in the payload, populate their scoreboard
+	if not spectator_mode:
+		var opp_score: int = 0
+		var opp_words: int = 0
+		var opp_wordlist_s: String = ""
+
+		if my_player == 1:
+			# I am player 1, opponent is player 2
+			opp_score = p2_score
+			opp_words = p2_words
+			opp_wordlist_s = p2_wordlist_s
+		elif my_player == 2:
+			# I am player 2, opponent is player 1
+			opp_score = p1_score
+			opp_words = p1_words
+			opp_wordlist_s = p1_wordlist_s
+
+		if opp_wordlist_s != "":
+			var opp_entries := _build_word_entries_from_string(opp_wordlist_s)
+			_populate_scoreboard(false, opp_entries, opp_words, opp_score)
+
 	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
 		var avatar_string = res[opponent_avatar_key]
 		var opponent_data = _parse_avatar_string(avatar_string)
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+
 	if not is_my_turn and not game_over:
 		start_waiting()
 	else:
@@ -334,41 +380,94 @@ func _on_start_button_pressed() -> void:
 	await _switch_to_screen(1)      # GameScreen
 	game_screen.start_game()
 
+func _compute_word_score(len: int) -> int:
+	# Mirror game_screen scoring rules
+	if len == 3:
+		return 100
+	elif len == 4:
+		return 400
+	elif len == 5:
+		return 1200
+	elif len == game_screen.letters.length():
+		return 2000
+	return 0
+
+
+func _build_word_entries_from_string(words_s: String) -> Array:
+	var result: Array = []
+	if words_s == "":
+		return result
+
+	var parts := words_s.split("|", false)
+	for w_raw in parts:
+		var w := String(w_raw).strip_edges()
+		if w == "":
+			continue
+		var pts := _compute_word_score(w.length())
+		result.append({
+			"word": w,
+			"points": pts
+		})
+	return result
 
 func _on_game_time_up() -> void:
-	_populate_scoreboard()
+	_populate_scoreboard(true)
 	send_game()
 	await _switch_to_screen(2)      # ScoreScreen
 	
 func send_game() -> void:
 	await get_tree().process_frame
 	
+	# Gather results from the game screen
+	var final_score: int = game_screen.get_final_score()
+	var total_words: int = game_screen.get_word_count()
+	var history: Array = game_screen.get_word_history()
+	
+	var word_strings: Array[String] = []
+	for entry in history:
+		if entry is Dictionary and entry.has("word"):
+			word_strings.append(String(entry["word"]))
+	var words_joined := "|".join(word_strings)  # e.g. "LOSERS|LOSER|LOSE|LOSS|SOS"
+	
+	# Keys depend on which player we are
+	var score_key := "score1" if my_player == 1 else "score2"
+	var words_key := "words1" if my_player == 1 else "words2"
+	var words_list_key := "words_list1" if my_player == 1 else "words_list2"
+	
+	# Base payload (map/move kept for consistency with other games)
 	var payload := {
 		"map": "",
-		"move": "%d,%d,%d" % [1, 1, 1]
+		"move": "%d,%d,%d" % [1, 1, my_player]
 	}
+	
+	# Add the results in the expected array-of-string format
+	payload[score_key] = [str(final_score)]           # e.g. "4100"
+	payload[words_key] = [str(total_words)]           # e.g. "5"
+	payload[words_list_key] = [words_joined]          # e.g. "LOSERS|LOSER|LOSE|LOSS|SOS"
+	
+	# Avatar data
 	var avatar_key := ("avatar1" if my_player == 1 else "avatar2")
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
-#
-	#game_ended = await check_win()
+	
+	# Winner info (if you’re setting these elsewhere)
 	if game_ended and win_loss_state != "":
 		payload["winner"] = my_id + "|" + win_loss_state
-#
+	
 	var plug := Engine.get_singleton("AppPlugin")
 	if plug:
 		plug.updateGameData(JSON.stringify(payload))
 	else:
 		print("AppPlugin is null; cannot send.")
 	print("OUTGOING DATA", payload)
-
+	
 	is_my_turn = false
-
+	
 	if not game_ended:
 		print("[SEND] No win detected; clearing preview.")
 	else:
 		print("[SEND] Game ended with winner=", winner, " win_loss_state=", win_loss_state, " — keeping preview line.")
-
+	
 	if not game_over:
 		play_sent_animation()
 		
@@ -404,18 +503,51 @@ func play_sent_animation() -> void:
 			start_waiting()
 	)
 
-func _populate_scoreboard() -> void:
+func _populate_scoreboard(
+	is_player: bool = true,
+	word_entries: Array = [],
+	total_words_override: int = -1,
+	final_score_override: int = -1
+) -> void:
+	# Decide which UI widgets we’re filling
+	var target_list: VBoxContainer = player_word_list if is_player else opp_word_list
+	var target_words_label: Label = player_words_label if is_player else opp_words_label
+	var target_score_label: Label = player_score_label if is_player else opp_score_label
+
 	# Clear previous rows
-	for child in player_word_list.get_children():
+	for child in target_list.get_children():
 		child.queue_free()
 
-	var words : Array = game_screen.get_word_history()
-	var total_words : int = game_screen.get_word_count()
-	var final_score : int = game_screen.get_final_score()
+	var words: Array
+	var total_words: int
+	var final_score: int
+
+	if is_player and word_entries.is_empty():
+		# Local player – use game_screen data
+		words = game_screen.get_word_history()
+		total_words = game_screen.get_word_count()
+		final_score = game_screen.get_final_score()
+	else:
+		# Opponent or externally-supplied entries
+		words = word_entries
+
+		if total_words_override >= 0:
+			total_words = total_words_override
+		else:
+			total_words = words.size()
+
+		if final_score_override >= 0:
+			final_score = final_score_override
+		else:
+			var sum := 0
+			for entry in words:
+				if entry is Dictionary and entry.has("points"):
+					sum += int(entry["points"])
+			final_score = sum
 
 	# One HBox per word: [ Panel(word) | points ]
 	for entry in words:
-		if not entry.has("word") or not entry.has("points"):
+		if not (entry is Dictionary) or not entry.has("word") or not entry.has("points"):
 			continue
 
 		var word := String(entry["word"])
@@ -423,12 +555,11 @@ func _populate_scoreboard() -> void:
 
 		var row := HBoxContainer.new()
 
-				# Word panel should hug the word, with 2px rounded corners
+		# Word panel should hug the word, with 2px rounded corners
 		var word_panel := PanelContainer.new()
 		word_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 
 		var word_panel_style := StyleBoxFlat.new()
-		# light paper/wood-ish color; tweak as you like
 		word_panel_style.bg_color = Color(0.97, 0.78, 0.54)
 		word_panel_style.corner_radius_top_left = 2
 		word_panel_style.corner_radius_top_right = 2
@@ -438,7 +569,6 @@ func _populate_scoreboard() -> void:
 		word_panel_style.set_content_margin(SIDE_RIGHT, 8.0)
 		word_panel_style.set_content_margin(SIDE_TOP, 2.0)
 		word_panel_style.set_content_margin(SIDE_BOTTOM, 2.0)
-
 		word_panel.add_theme_stylebox_override("panel", word_panel_style)
 
 		var word_label := Label.new()
@@ -447,7 +577,6 @@ func _populate_scoreboard() -> void:
 		word_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		word_label.add_theme_color_override("font_color", Color(0, 0, 0)) # black text
 		word_panel.add_child(word_label)
-
 		row.add_child(word_panel)
 
 		# Flexible spacer between word and points
@@ -457,17 +586,16 @@ func _populate_scoreboard() -> void:
 
 		# Points on the right
 		var points_label := Label.new()
-		points_label.text = str(entry.points)
+		points_label.text = str(points)
 		points_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		points_label.size_flags_horizontal = Control.SIZE_SHRINK_END
 		row.add_child(points_label)
 
-		player_word_list.add_child(row)
+		target_list.add_child(row)
 
-
-	# Update headline labels at top of scoreboard
-	player_words_label.text = "WORDS: %d" % total_words
-	player_score_label.text = "SCORE: %04d" % final_score
+	# Update headline labels at top of the correct scoreboard
+	target_words_label.text = "WORDS: %d" % total_words
+	target_score_label.text = "SCORE: %04d" % final_score
 
 func start_waiting():
 	if not (is_instance_valid(waiting_label) and is_instance_valid(dot_timer)): return
