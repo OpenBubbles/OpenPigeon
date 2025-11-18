@@ -69,12 +69,12 @@ class AnagramsGame : Game {
     override fun gamePoster(config: Map<String, String>?): Int {
         val mode = config?.get("mode")
         return when (mode) {
-            "1" -> R.drawable.wordhunt
-            null -> R.drawable.wordhunt
-            "2" -> R.drawable.wordhunt_2
-            "3" -> R.drawable.wordhunt_3
-            "4" -> R.drawable.wordhunt_4
-            else -> {R.drawable.empty}
+            "1" -> R.drawable.anagrams
+            null -> R.drawable.anagrams
+            "2" -> R.drawable.anagrams
+            "3" -> R.drawable.anagrams
+            "4" -> R.drawable.anagrams
+            else -> {R.drawable.anagrams}
         }
     }
 

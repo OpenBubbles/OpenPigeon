@@ -34,7 +34,6 @@ const SNAP_PX := 10.0
 var _is_dragging := false
 var _press_global := Vector2.ZERO
 const DRAG_THRESHOLD := 6.0
-const DEBUG_DRAG := true
 
 var is_my_turn = false
 var game_id := ""
@@ -66,12 +65,6 @@ const BASE_WAIT_TEXT := "WAITING FOR OPPONENT"
 var game_settings_category := ""
 var _send_btn_shown_y := 0.0
 var _send_btn_hidden_y := 0.0
-
-func _log(s:String)->void: 
-	if DEBUG_DRAG: 
-		print(s)
-func _dbg(s:String)->void: 
-	print("[GOMOKU] ", s)
 
 func _ready() -> void:
 	_rng.randomize()
@@ -192,21 +185,6 @@ func _make_runtime_nodes() -> void:
 	_board_tiles_root.z_index = 50
 	Board.add_child(_board_tiles_root)
 
-	var dbg := GridDebug.new()
-	dbg.name = "GridDebug"
-	dbg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dbg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dbg.z_as_relative = false
-	dbg.z_index = 30
-	dbg.get_centers = func() -> Array:
-		var area := _grid_area_rect()
-		var s := _steps()
-		var pts: Array = []
-		for y in board_size:
-			for x in board_size:
-				pts.append(Vector2(area.position.x + x*s.x, area.position.y + y*s.y))
-		return pts
-	Board.add_child(dbg)
 	_win_preview_node = WinLinePreview.new()
 	_win_preview_node.name = "WinPreview"
 	_win_preview_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -219,7 +197,6 @@ func _make_runtime_nodes() -> void:
 	_board_tiles_root.add_child(_win_preview_node)
 
 	Board.resized.connect(func():
-		dbg.queue_redraw()
 		if is_instance_valid(_win_preview_node):
 			_win_preview_node.queue_redraw()
 	)
@@ -674,9 +651,6 @@ func _set_game_data(raw_text: String) -> void:
 	_ui_gesture_block = false
 	_is_dragging = false
 	
-	_dbg("set_game_data id=%s me=%s my_player=%d sender=%d size=%d my_turn=%s map_len=%d move=%s"
-		% [game_id, my_id, my_player, sender_player, board_size, str(is_my_turn), map_str.length(), move_str])
-
 func _compose_current_map_string() -> String:
 	var s := ""
 	for row in range(0, board_size):
