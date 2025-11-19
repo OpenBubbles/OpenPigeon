@@ -34,6 +34,8 @@ class AboutActivity : Activity() {
                 Mancala - ty8447
                 Dots & Boxes - ty8447
                 Gomoku - ty8447
+                20 Questions - ty8447
+                Anagrams - ty8447
 
                 Are you a developer? Add your favorite game on GitHub!
             """.trimIndent())
