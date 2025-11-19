@@ -9,7 +9,6 @@ const DICT_PATH := "res://global/gp_wg_en2.txt"
 const TOTAL_TIME_SEC := 60
 
 @export var letters: String = "ABCDEF"
-
 @onready var picked_row: HBoxContainer = %VoidBox
 @onready var shuffle_button: TextureButton = %ShuffleButton
 @onready var letter_row: HBoxContainer = %LetterBox
@@ -34,10 +33,10 @@ var picked_buttons: Array[BaseButton] = []
 var word_dict: Dictionary = {}
 var used_words: Dictionary = {}
 var rng := RandomNumberGenerator.new()
-var seen_orders: Dictionary = {}   # key string -> true
+var seen_orders: Dictionary = {}
 var current_order_key: String = ""
 var max_orders: int = 0
-var word_history: Array = []   # [{ "word": String, "points": int }, ...]
+var word_history: Array = []
 var score: int = 0
 var displayed_score: int = 0
 var word_count: int = 0
@@ -105,20 +104,15 @@ func start_game() -> void:
 	await get_tree().process_frame
 	_update_tile_sizes()
 	_update_ui()
-
-	# --- reset word / score stuff ---
 	score = 0
 	displayed_score = 0
 	word_count = 0
 	used_words.clear()
 	word_history.clear()
 	_update_word_score_labels()
-
-	# --- shuffle history for this letter set ---
 	_compute_max_orders()
 	seen_orders.clear()
 	_register_current_order()
-	# -------------------------------------------
 
 	remaining_time = TOTAL_TIME_SEC
 	_update_timer_label()
@@ -136,7 +130,6 @@ func _add_score(points: int, word: String) -> void:
 		return
 
 	word_count += 1
-	# track this word for the scoreboard
 	word_history.append({
 		"word": word,
 		"points": points
@@ -155,7 +148,46 @@ func _add_score(points: int, word: String) -> void:
 		0.4
 	).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
-	_show_word_feedback("%s +%d" % [word, points], true)
+	var used_all_letters := (word.length() == letters.length())
+
+	_show_word_feedback("%s +%d" % [word, points], true, used_all_letters)
+	
+func _apply_rainbow_flash(label: CanvasItem, total_time: float, cycles: int = 1) -> void:
+	var colors: Array[Color] = [
+		Color(1, 1, 1),      # white
+		Color(1, 0, 0),      # red
+		Color(1, 1, 0),      # yellow
+		Color(0, 1, 0),      # green
+		Color(0, 0, 1),      # blue
+		Color(0.6, 0, 0.6),  # purple
+		Color(1, 0, 1)       # pink
+	]
+
+	if colors.is_empty():
+		return
+
+	cycles = max(cycles, 1)
+
+	var steps: int = colors.size()
+	var total_steps: int = steps * cycles
+
+	var step_time: float = total_time / float(total_steps)
+
+	var tween := create_tween()
+	tween.set_parallel(false)
+
+	var base_alpha := label.self_modulate.a
+
+	for i in total_steps:
+		var c: Color = colors[i % steps]
+		var target := Color(c.r, c.g, c.b, base_alpha)
+
+		tween.tween_property(
+			label,
+			"self_modulate",
+			target,
+			step_time
+		).set_trans(Tween.TRANS_LINEAR).set_ease(Tween.EASE_IN_OUT)
 
 func _flash_void_row_invalid() -> void:
 	var overlay := ColorRect.new()
@@ -176,7 +208,7 @@ func _flash_void_row_invalid() -> void:
 func _compute_max_orders() -> void:
 	max_orders = 1
 	for i in letters.length():
-		max_orders *= (i + 1)   # factorial of number of letters
+		max_orders *= (i + 1)
 	
 func _get_order_key_from_tiles(tiles: Array) -> String:
 	var key := ""
@@ -199,20 +231,17 @@ func _register_current_order() -> void:
 		_debug_print_order("REGISTER INITIAL ORDER", tiles, key)
 
 func _shuffle_letters_string(s: String) -> String:
-	var chars: Array = s.split("")      # split into array of single-char strings
+	var chars: Array = s.split("")
 	chars.shuffle()
 	return "".join(chars)
 
 func _on_shuffle_pressed() -> void:
-	# If there are picked letters, send them back first
 	if selected_indices.size() > 0:
 		_reset_selection_back_to_source()
 
-	# If we've shown all permutations, reset history
 	if max_orders > 0 and seen_orders.size() >= max_orders:
 		seen_orders.clear()
 
-	# Collect tiles in current visual order
 	var tiles: Array = []
 	for child in letter_row.get_children():
 		if child is TextureButton and child in source_buttons:
@@ -221,12 +250,10 @@ func _on_shuffle_pressed() -> void:
 	if tiles.is_empty():
 		return
 
-	# 1) Record original global positions
 	var original_pos: Dictionary = {}
 	for btn in tiles:
 		original_pos[btn] = btn.global_position
 
-	# 2) Shuffle until we get an unseen *letter* sequence
 	var attempts := 0
 	var key := ""
 	var starting_key := current_order_key
@@ -243,9 +270,6 @@ func _on_shuffle_pressed() -> void:
 
 		_debug_print_order("SHUFFLE CANDIDATE (attempt %d" % attempts + ")", tiles, key)
 
-		# Require:
-		#  - Not already in seen_orders
-		#  - Not equal to what’s on screen right now
 		if key != starting_key and not seen_orders.has(key):
 			break
 
@@ -254,19 +278,14 @@ func _on_shuffle_pressed() -> void:
 			seen_orders.clear()
 			break
 
-	# 3) Apply new order to the container (real final layout)
 	for i in tiles.size():
 		letter_row.move_child(tiles[i], i)
 
-	# 4) Let the HBox re-layout
 	await get_tree().process_frame
-
-	# 5) Capture target positions (what the container decided)
 	var target_pos: Dictionary = {}
 	for btn in tiles:
 		target_pos[btn] = btn.global_position
 
-	# 6) Create ghosts and fade real tiles out (alpha 0) so height stays constant
 	var ghosts: Array[Dictionary] = []
 	for btn in tiles:
 		var old_mod: Color = btn.modulate
@@ -285,7 +304,6 @@ func _on_shuffle_pressed() -> void:
 		ghost.custom_minimum_size = tile_size
 		ghost.global_position = original_pos[btn]
 
-		# Copy label text
 		if btn.get_child_count() > 0 and btn.get_child(0) is Label:
 			var src_lbl := btn.get_child(0) as Label
 			var lbl := Label.new()
@@ -312,7 +330,6 @@ func _on_shuffle_pressed() -> void:
 			"old_modulate": old_mod
 		})
 
-	# 7) Animate ghosts to the new positions
 	var tween := create_tween()
 	for pair in ghosts:
 		var g: TextureButton = pair["ghost"]
@@ -326,7 +343,6 @@ func _on_shuffle_pressed() -> void:
 
 	await tween.finished
 
-	# 8) Cleanup ghosts and restore real tiles (with full alpha)
 	for pair in ghosts:
 		var g: TextureButton = pair["ghost"]
 		var b: TextureButton = pair["btn"]
@@ -337,13 +353,12 @@ func _on_shuffle_pressed() -> void:
 		if is_instance_valid(b):
 			b.modulate = old_mod
 
-	# 9) Mark this on-screen letter order as used and log it
 	if key != "":
 		seen_orders[key] = true
 		current_order_key = key
 		_debug_print_order("APPLIED SHUFFLE", tiles, key)
 
-func _show_word_feedback(text: String, is_correct: bool) -> void:
+func _show_word_feedback(text: String, is_correct: bool, used_all_letters: bool = false) -> void:
 	var label := Label.new()
 	label.text = text
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -359,6 +374,8 @@ func _show_word_feedback(text: String, is_correct: bool) -> void:
 	else:
 		label.modulate = Color(1.0, 0.1, 0.1, 0.95)
 
+	label.self_modulate = Color(1, 1, 1, 1)
+
 	add_child(label)
 
 	var start_pos := picked_row.global_position + Vector2(0.0, picked_row.size.y - 46.0)
@@ -366,20 +383,26 @@ func _show_word_feedback(text: String, is_correct: bool) -> void:
 
 	var end_pos := start_pos + Vector2(0.0, -160.0)
 
+	var move_duration := 5.0
+	var fade_duration := 2.0
+
 	var tween := create_tween()
 	tween.tween_property(
 		label,
 		"global_position",
 		end_pos,
-		5.0
+		move_duration
 	).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 	tween.parallel().tween_property(
 		label,
 		"modulate:a",
 		0.0,
-		2.0
+		fade_duration
 	).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+	if is_correct and used_all_letters:
+		_apply_rainbow_flash(label, fade_duration, 20)
 
 	await tween.finished
 	label.queue_free()
@@ -572,17 +595,19 @@ func _on_enter_pressed() -> void:
 	_add_score(gained, upper)
 	_reset_selection_back_to_source()
 
-func _get_word_score(len: int) -> int:
-	if len == 3:
+func _get_word_score(wlen: int) -> int:
+	# Mirror the global scoring rules
+	if wlen == 3:
 		return 100
-	elif len == 4:
+	elif wlen == 4:
 		return 400
-	elif len == 5:
+	elif wlen == 5:
 		return 1200
-	elif len == letters.length():
+	elif wlen == 6:
 		return 2000
+	elif wlen == 7:
+		return 3000
 	return 0
-
 
 func _on_picked_slot_pressed(slot_index: int) -> void:
 	if slot_index >= selected_indices.size():
@@ -706,7 +731,7 @@ func _on_game_timer_timeout() -> void:
 func _update_timer_label() -> void:
 	var mins := remaining_time / 60
 	var secs := remaining_time % 60
-	timer_label.text = "%02d:%02d" % [mins, secs]
+	timer_label.text = "[font_size={24px}]%02d:%02d[/font_size]" % [mins, secs]
 
 
 func _on_time_up() -> void:

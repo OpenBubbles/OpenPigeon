@@ -1,11 +1,11 @@
 shader_type canvas_item;
 
 // Distance from top/bottom to the main body of the paper (in pixels)
-uniform float edge_height = 12.0;
+uniform float edge_height = 4.0;
 
 // Per-segment amplitude range (how tall the tear teeth can be, in px)
-uniform float min_amplitude = 2.0;
-uniform float max_amplitude = 7.0;
+uniform float min_amplitude = 4.0;
+uniform float max_amplitude = 8.0;
 
 // Per-segment period range (horizontal size of waves / teeth, in px)
 uniform float min_period = 40.0;
@@ -16,6 +16,9 @@ uniform float segment_width = 80.0;
 
 // 0 = always sine, 1 = can be fully sawtooth
 uniform float max_saw_mix = 0.8;
+
+// Per-instance random seed (set from GDScript so panels don’t match)
+uniform float global_seed = 0.0;
 
 // Base paper color (usually pure white)
 uniform vec4 paper_color : source_color = vec4(1.0);
@@ -35,7 +38,8 @@ float tear_profile(float x_px, float tex_h, bool top_edge, float seed_offset) {
 	float seg = floor(x_px / segment_width);
 	float local_x = x_px - seg * segment_width;
 
-	float base_seed = seg + seed_offset;
+	// Include global_seed so each material instance is different
+	float base_seed = seg + seed_offset + global_seed * 1000.0;
 
 	// Random amplitude & period for this segment
 	float amp = rand_range(base_seed + 1.0, min_amplitude, max_amplitude);
@@ -63,16 +67,23 @@ float tear_profile(float x_px, float tex_h, bool top_edge, float seed_offset) {
 	// Blend between sine and saw for this segment
 	float wave = mix(sine_wave, saw, saw_mix);
 
-	// Convert to vertical offset in pixels
-	float offset = wave * amp;
+	// We want teeth pointing IN towards the body:
+	//  - Top edge: move the line DOWN by a positive amount
+	//  - Bottom edge: move the line UP by a positive amount
+	float offset = abs(wave) * amp;
 
+	float line;
 	if (top_edge) {
-		// Distance from top
-		return edge_height + offset;
+		// Top starts a bit below 0 and moves further DOWN
+		line = edge_height + offset;
 	} else {
-		// Distance from bottom
-		return tex_h - edge_height + offset;
+		// Bottom starts a bit above tex_h and moves further UP
+		line = tex_h - edge_height - offset;
 	}
+
+	// Keep line inside the texture bounds
+	line = clamp(line, 0.0, tex_h);
+	return line;
 }
 
 void fragment() {

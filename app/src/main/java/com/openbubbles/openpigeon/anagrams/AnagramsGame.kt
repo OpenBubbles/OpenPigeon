@@ -1,10 +1,10 @@
 package com.openbubbles.openpigeon.anagrams
 
 import android.content.Context
-import androidx.glance.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
+import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
@@ -19,9 +19,11 @@ import com.openbubbles.openpigeon.GameNotFound
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import kotlin.random.Random
 
 class AnagramsGame : Game {
-    var mode = 1 // Mode 1: 6 letters, Mode 2: 7 letters
+    var mode = "6 Letters" // "6 Letters" or "7 Letters"
+
     override fun getVersion(): String {
         return "5"
     }
@@ -42,33 +44,19 @@ class AnagramsGame : Game {
     override fun Configuration(
         context: Context?,
     ) {
-        val maps = listOf("Map 1", "Map 2")
-        val selectedMode = maps[mode - 1]
-        val keyboardModeImages = arrayOf(R.drawable.wordhunt_kb_mode1, R.drawable.wordhunt_kb_mode2, R.drawable.wordhunt_kb_mode3, R.drawable.wordhunt_kb_mode4)
         Box(modifier = GlanceModifier.padding(16.dp)) {
-            Row(modifier = GlanceModifier.padding(horizontal = 8.dp)) {
-                keyboardModeImages.forEachIndexed { index, image ->
-                    Image(
-                        ImageProvider(image),
-                        "Mode",
-                        modifier = GlanceModifier
-                            .defaultWeight()
-                            .padding(horizontal = 8.dp)
-                            .clickable(onClick = actionRunCallback<ConfigureCallback>(
-                                actionParametersOf(
-                                    ActionParameters.Key<String>("game_name") to getName(),
-                                    ActionParameters.Key<String>("configName") to "Map",
-                                    ActionParameters.Key<String>("configVal") to maps[index]))
-                            )
-                    )
-                }
-            }
-            RenderConfigOption(this, "Map", maps, selectedMode)
+            RenderConfigOption(this, "mode", listOf("6 Letters", "7 Letters"), mode)
         }
     }
 
     override fun setConfigOption(name: String, value: String) {
-        mode = value.takeLast(1).toInt()
+        when (name.lowercase()) {
+            "mode" -> mode = value
+            else -> {
+                println("Warning: unknown config option ‘$name’")
+            }
+        }
+        println("Config option '$name' set to '$value'")
     }
 
     override fun gameClass(): Class<*> {
@@ -79,10 +67,58 @@ class AnagramsGame : Game {
         return R.drawable.anagrams
     }
 
+    /**
+     * Generate a 6- or 7-letter *word* and shuffle its letters.
+     * Uses the same dictionary as Godot: gp_wg_en2.txt
+     */
+    private fun generateStartingLetters(
+        context: Context,
+        letterCount: Int
+    ): String {
+        require(letterCount == 6 || letterCount == 7)
+
+        val candidates = mutableListOf<String>()
+
+        // Load from res/raw instead of assets
+        context.resources.openRawResource(R.raw.gp_en2).bufferedReader().useLines { lines ->
+            lines.forEach { line ->
+                val w = line.trim().uppercase()
+                if (w.length == letterCount) {
+                    candidates.add(w)
+                }
+            }
+        }
+
+        if (candidates.isEmpty()) {
+            // Emergency fallback
+            val fallback = CharArray(letterCount) { ('A'..'Z').random() }
+            return String(fallback)
+        }
+
+        val baseWord = candidates.random()
+        val chars = baseWord.toCharArray().toMutableList()
+
+        var shuffled = baseWord
+        repeat(10) {
+            chars.shuffle()
+            shuffled = chars.joinToString("")
+            if (shuffled != baseWord) return@repeat
+        }
+
+        return shuffled
+    }
+
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
         return super.getNewGameData(context)?.apply {
-            put("lang", "gp_en2")
-            put("mode", "$mode")
+            put("lang", "en")
+            put("mode", mode)
+
+            // Decide 6 vs 7 letters based on the selected mode string
+            val letterCount = if (mode.contains("7")) 7 else 6
+
+            // Generate starting letters from a real word
+            val letters = generateStartingLetters(context, letterCount)
+            put("letters", letters)
         }
     }
 
