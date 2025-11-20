@@ -221,8 +221,9 @@ func _get_order_key_from_tiles(tiles: Array) -> String:
 func _register_current_order() -> void:
 	var tiles: Array = []
 	for child in letter_row.get_children():
-		if child is TextureButton and child in source_buttons:
-			tiles.append(child)
+		var btn := _get_source_tile_from_child(child)
+		if btn != null and btn in source_buttons:
+			tiles.append(btn)
 
 	var key := _get_order_key_from_tiles(tiles)
 	if key != "":
@@ -244,15 +245,17 @@ func _on_shuffle_pressed() -> void:
 
 	var tiles: Array = []
 	for child in letter_row.get_children():
-		if child is TextureButton and child in source_buttons:
-			tiles.append(child)
+		var btn := _get_source_tile_from_child(child)
+		if btn != null and btn in source_buttons:
+			tiles.append(btn)
 
 	if tiles.is_empty():
 		return
 
 	var original_pos: Dictionary = {}
 	for btn in tiles:
-		original_pos[btn] = btn.global_position
+		var wrapper := _get_wrapper_for_button(btn)
+		original_pos[btn] = wrapper.global_position
 
 	var attempts := 0
 	var key := ""
@@ -279,12 +282,15 @@ func _on_shuffle_pressed() -> void:
 			break
 
 	for i in tiles.size():
-		letter_row.move_child(tiles[i], i)
+		var wrapper := _get_wrapper_for_button(tiles[i])
+		letter_row.move_child(wrapper, i)
 
 	await get_tree().process_frame
+
 	var target_pos: Dictionary = {}
 	for btn in tiles:
-		target_pos[btn] = btn.global_position
+		var wrapper := _get_wrapper_for_button(btn)
+		target_pos[btn] = wrapper.global_position
 
 	var ghosts: Array[Dictionary] = []
 	for btn in tiles:
@@ -357,6 +363,25 @@ func _on_shuffle_pressed() -> void:
 		seen_orders[key] = true
 		current_order_key = key
 		_debug_print_order("APPLIED SHUFFLE", tiles, key)
+
+func _set_tile_shadow(btn: TextureButton, enabled: bool) -> void:
+	if btn == null:
+		return
+
+	var wrapper := _get_wrapper_for_button(btn)
+	if wrapper == btn:
+		return
+
+	var sb := wrapper.get_theme_stylebox("panel", "")
+	if sb is StyleBoxFlat:
+		var flat := sb as StyleBoxFlat
+		if enabled:
+			flat.shadow_color.a = 0.35
+			flat.shadow_size = 6
+		else:
+			flat.shadow_color.a = 0.0
+			flat.shadow_size = 0
+		wrapper.add_theme_stylebox_override("panel", flat)
 
 func _show_word_feedback(text: String, is_correct: bool, used_all_letters: bool = false) -> void:
 	var label := Label.new()
@@ -436,27 +461,30 @@ func _create_source_buttons() -> void:
 	order.shuffle()
 
 	for idx in order:
-		var tile := TextureButton.new()
-		tile.texture_normal = LETTER_BG
-		tile.stretch_mode = TextureButton.STRETCH_SCALE
-		tile.focus_mode = Control.FOCUS_NONE
-		tile.ignore_texture_size = true
-
-		tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		tile.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var wrapper := PanelContainer.new()
+		wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		wrapper.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = Color(0, 0, 0, 0.0)
-		sb.shadow_color = Color(0, 0, 0, 0.4)
-		sb.shadow_size = 4
-		sb.shadow_offset = Vector2(0, 2)
+		sb.shadow_color = Color(0, 0, 0, 0.35)
+		sb.shadow_size = 6
+		sb.shadow_offset = Vector2(0, 3)
 		sb.corner_radius_top_left = 6
 		sb.corner_radius_top_right = 6
 		sb.corner_radius_bottom_left = 6
 		sb.corner_radius_bottom_right = 6
-		tile.add_theme_stylebox_override("normal", sb)
-		tile.add_theme_stylebox_override("hover", sb)
-		tile.add_theme_stylebox_override("pressed", sb)
+		wrapper.add_theme_stylebox_override("panel", sb)
+
+		var tile := TextureButton.new()
+		tile.name = "Tile"
+		tile.texture_normal = LETTER_BG
+		tile.stretch_mode = TextureButton.STRETCH_SCALE
+		tile.focus_mode = Control.FOCUS_NONE
+		tile.ignore_texture_size = true
+		tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tile.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		tile.set_anchors_preset(Control.PRESET_FULL_RECT)
 
 		var label := Label.new()
 		label.text = letters[idx]
@@ -477,9 +505,24 @@ func _create_source_buttons() -> void:
 		tile.add_child(label)
 		tile.pressed.connect(_on_source_letter_pressed.bind(idx))
 
-		letter_row.add_child(tile)
+		wrapper.add_child(tile)
+		letter_row.add_child(wrapper)
+
 		source_buttons[idx] = tile
 
+func _get_wrapper_for_button(btn: BaseButton) -> Control:
+	var parent := btn.get_parent()
+	if parent is Control:
+		return parent
+	return btn
+
+
+func _get_source_tile_from_child(node: Node) -> TextureButton:
+	if node is TextureButton:
+		return node
+	if node is Control and node.get_child_count() > 0 and node.get_child(0) is TextureButton:
+		return node.get_child(0) as TextureButton
+	return null
 
 func _create_picked_slots() -> void:
 	for child in picked_row.get_children():
@@ -488,14 +531,30 @@ func _create_picked_slots() -> void:
 	picked_buttons.clear()
 
 	for i in letters.length():
+		var wrapper := PanelContainer.new()
+		wrapper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		wrapper.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0, 0, 0, 0.0)
+		sb.shadow_color = Color(0, 0, 0, 0.0)
+		sb.shadow_size = 0
+		sb.shadow_offset = Vector2(0, 3)
+		sb.corner_radius_top_left = 6
+		sb.corner_radius_top_right = 6
+		sb.corner_radius_bottom_left = 6
+		sb.corner_radius_bottom_right = 6
+		wrapper.add_theme_stylebox_override("panel", sb)
+
 		var tile := TextureButton.new()
+		tile.name = "Tile"
 		tile.texture_normal = LETTER_VOID
 		tile.stretch_mode = TextureButton.STRETCH_SCALE
 		tile.focus_mode = Control.FOCUS_NONE
 		tile.ignore_texture_size = true
-
 		tile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		tile.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		tile.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		tile.set_anchors_preset(Control.PRESET_FULL_RECT)
 
 		var label := Label.new()
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -515,9 +574,10 @@ func _create_picked_slots() -> void:
 		tile.add_child(label)
 		tile.disabled = true
 		tile.pressed.connect(_on_picked_slot_pressed.bind(i))
-		picked_row.add_child(tile)
-		picked_buttons.append(tile)
 
+		wrapper.add_child(tile)
+		picked_row.add_child(wrapper)
+		picked_buttons.append(tile)
 
 func _update_tile_sizes() -> void:
 	var count: int = letters.length()
@@ -537,18 +597,30 @@ func _update_tile_sizes() -> void:
 	tile_size = Vector2(side, side)
 
 	for btn in source_buttons:
+		if btn == null:
+			continue
+		var wrapper := _get_wrapper_for_button(btn)
+		wrapper.custom_minimum_size = tile_size
 		btn.custom_minimum_size = tile_size
+
 	for btn in picked_buttons:
+		if btn == null:
+			continue
+		var wrapper := _get_wrapper_for_button(btn)
+		wrapper.custom_minimum_size = tile_size
 		btn.custom_minimum_size = tile_size
 
 	var font_size := int(tile_size.y * 0.6)
 	for btn in source_buttons:
+		if btn == null:
+			continue
 		var label := btn.get_child(0) as Label
 		label.add_theme_font_size_override("font_size", font_size)
 	for btn in picked_buttons:
+		if btn == null:
+			continue
 		var label := btn.get_child(0) as Label
 		label.add_theme_font_size_override("font_size", font_size)
-
 
 func _on_source_letter_pressed(letter_index: int) -> void:
 	if letter_index in selected_indices:
@@ -596,7 +668,6 @@ func _on_enter_pressed() -> void:
 	_reset_selection_back_to_source()
 
 func _get_word_score(wlen: int) -> int:
-	# Mirror the global scoring rules
 	if wlen == 3:
 		return 100
 	elif wlen == 4:
@@ -622,37 +693,67 @@ func _on_picked_slot_pressed(slot_index: int) -> void:
 	selected_indices.remove_at(slot_index)
 	_update_ui()
 
-
 func _animate_letter_move(from_btn: Control, to_btn: Control, letter: String) -> void:
+	var from_button := from_btn as BaseButton
+	var to_button := to_btn as BaseButton
+
+	var from_wrapper := _get_wrapper_for_button(from_button)
+	var to_wrapper := _get_wrapper_for_button(to_button)
+
 	var original_texture: Texture2D = LETTER_BG
-	if from_btn is TextureButton:
-		original_texture = (from_btn as TextureButton).texture_normal
+	if from_button is TextureButton:
+		var tb := from_button as TextureButton
+		original_texture = tb.texture_normal
 
-		if from_btn in source_buttons:
-			(from_btn as TextureButton).texture_normal = LETTER_PLACEHOLDER
-		elif from_btn in picked_buttons:
-			(from_btn as TextureButton).texture_normal = LETTER_VOID
+		if from_button in source_buttons:
+			tb.texture_normal = LETTER_PLACEHOLDER
+		elif from_button in picked_buttons:
+			tb.texture_normal = LETTER_VOID
 
-	if from_btn.get_child_count() > 0 and from_btn.get_child(0) is Label:
-		var from_label := from_btn.get_child(0) as Label
+		_set_tile_shadow(tb, false)
+
+	if from_button.get_child_count() > 0 and from_button.get_child(0) is Label:
+		var from_label := from_button.get_child(0) as Label
 		from_label.text = ""
 
-	if from_btn is BaseButton:
-		(from_btn as BaseButton).disabled = true
+	if from_button is BaseButton:
+		from_button.disabled = true
+
+	var ghost_wrapper := Control.new()
+	ghost_wrapper.top_level = true
+	ghost_wrapper.size = tile_size
+	ghost_wrapper.custom_minimum_size = tile_size
+	ghost_wrapper.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	ghost_wrapper.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ghost_wrapper.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ghost_wrapper.global_position = from_wrapper.global_position
+	add_child(ghost_wrapper)
+
+	var shadow := ColorRect.new()
+	shadow.color = Color(0, 0, 0, 0.3)
+	shadow.anchor_left = 0.0
+	shadow.anchor_top = 0.0
+	shadow.anchor_right = 1.0
+	shadow.anchor_bottom = 1.0
+	shadow.offset_left = 0.0
+	shadow.offset_top = 3.0
+	shadow.offset_right = 0.0
+	shadow.offset_bottom = 3.0
+	ghost_wrapper.add_child(shadow)
 
 	var ghost := TextureRect.new()
 	ghost.texture = original_texture
 	ghost.stretch_mode = TextureRect.STRETCH_SCALE
 	ghost.ignore_texture_size = true
-	ghost.top_level = true
-	ghost.size = tile_size
-	ghost.custom_minimum_size = tile_size
-	ghost.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	ghost.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	ghost.global_position = from_btn.global_position
-	add_child(ghost)
+	ghost.anchor_left = 0.0
+	ghost.anchor_top = 0.0
+	ghost.anchor_right = 1.0
+	ghost.anchor_bottom = 1.0
+	ghost.offset_left = 0.0
+	ghost.offset_top = 0.0
+	ghost.offset_right = 0.0
+	ghost.offset_bottom = 0.0
+	ghost_wrapper.add_child(ghost)
 
 	var label := Label.new()
 	label.text = letter
@@ -671,26 +772,26 @@ func _animate_letter_move(from_btn: Control, to_btn: Control, letter: String) ->
 	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", Color(0, 0, 0, 0.5))
 
-	ghost.add_child(label)
+	ghost_wrapper.add_child(label)
 
 	var tween := create_tween()
 	tween.tween_property(
-		ghost,
+		ghost_wrapper,
 		"global_position",
-		to_btn.global_position,
+		to_wrapper.global_position,
 		0.15
 	).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 	await tween.finished
-	ghost.queue_free()
-
+	ghost_wrapper.queue_free()
 
 func _update_ui() -> void:
 	for i in picked_buttons.size():
 		var btn := picked_buttons[i] as TextureButton
 		var label := btn.get_child(0) as Label
 
-		if i < selected_indices.size():
+		var occupied := i < selected_indices.size()
+		if occupied:
 			var letter_index := selected_indices[i]
 			btn.texture_normal = LETTER_BG
 			label.text = letters[letter_index]
@@ -700,23 +801,28 @@ func _update_ui() -> void:
 			label.text = ""
 			btn.disabled = true
 
+		_set_tile_shadow(btn, occupied)
+
 	for i in source_buttons.size():
 		var src_btn := source_buttons[i] as TextureButton
 		var label := src_btn.get_child(0) as Label
 
-		if i in selected_indices:
+		var in_use := i in selected_indices
+
+		if in_use:
 			src_btn.texture_normal = LETTER_PLACEHOLDER
 			label.text = ""
 			src_btn.disabled = true
+			_set_tile_shadow(src_btn, false)
 		else:
 			src_btn.texture_normal = LETTER_BG
 			label.text = letters[i]
 			src_btn.disabled = false
+			_set_tile_shadow(src_btn, true)
 
 	var can_submit := selected_indices.size() >= 3
 	enter_button.disabled = not can_submit
 	enter_button.self_modulate.a = 1.0 if can_submit else 0.3
-
 
 func _on_game_timer_timeout() -> void:
 	if remaining_time > 0:

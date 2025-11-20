@@ -45,13 +45,13 @@ class AnagramsGame : Game {
         context: Context?,
     ) {
         Box(modifier = GlanceModifier.padding(16.dp)) {
-            RenderConfigOption(this, "mode", listOf("6 Letters", "7 Letters"), mode)
+            RenderConfigOption(this, "Game Mode", listOf("6 Letters", "7 Letters"), mode)
         }
     }
 
     override fun setConfigOption(name: String, value: String) {
         when (name.lowercase()) {
-            "mode" -> mode = value
+            "game mode" -> mode = value
             else -> {
                 println("Warning: unknown config option ‘$name’")
             }
@@ -64,7 +64,12 @@ class AnagramsGame : Game {
     }
 
     override fun gamePoster(config: Map<String, String>?): Int {
-        return R.drawable.anagrams
+        val mode = config?.get("mode")
+        return when (mode) {
+            "6 Letters" -> R.drawable.anagrams_6l
+            "7 Letters" -> R.drawable.anagrams_7l
+            else -> {R.drawable.anagrams_6l}
+        }
     }
 
     /**

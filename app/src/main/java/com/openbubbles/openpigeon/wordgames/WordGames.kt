@@ -51,7 +51,7 @@ class WordGames : Game {
             GameChoice(
                 game = AnagramsGame(),
                 label = "Anagrams",
-                previewRes = R.drawable.anagrams
+                previewRes = R.drawable.anagrams_6l
             ),
             GameChoice(
                 game = WordHuntGame(),

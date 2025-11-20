@@ -1,108 +1,37 @@
 shader_type canvas_item;
 
-// Distance from top/bottom to the main body of the paper (in pixels)
-uniform float edge_height = 4.0;
-
-// Per-segment amplitude range (how tall the tear teeth can be, in px)
-uniform float min_amplitude = 4.0;
-uniform float max_amplitude = 8.0;
-
-// Per-segment period range (horizontal size of waves / teeth, in px)
-uniform float min_period = 40.0;
-uniform float max_period = 120.0;
-
-// How wide each "random segment" is (in px) – smaller = more variety
-uniform float segment_width = 80.0;
-
-// 0 = always sine, 1 = can be fully sawtooth
-uniform float max_saw_mix = 0.8;
-
-// Per-instance random seed (set from GDScript so panels don’t match)
-uniform float global_seed = 0.0;
-
-// Base paper color (usually pure white)
-uniform vec4 paper_color : source_color = vec4(1.0);
-
-// Simple hash
-float hash1(float n) {
-	return fract(sin(n * 43758.5453123) * 43758.5453123);
-}
-
-float rand_range(float seed, float a, float b) {
-	return a + (b - a) * hash1(seed);
-}
-
-// Generates one tear profile (wave/saw mix) for a given pixel y-edge
-float tear_profile(float x_px, float tex_h, bool top_edge, float seed_offset) {
-	// Segment index along X
-	float seg = floor(x_px / segment_width);
-	float local_x = x_px - seg * segment_width;
-
-	// Include global_seed so each material instance is different
-	float base_seed = seg + seed_offset + global_seed * 1000.0;
-
-	// Random amplitude & period for this segment
-	float amp = rand_range(base_seed + 1.0, min_amplitude, max_amplitude);
-	float period = rand_range(base_seed + 2.0, min_period, max_period);
-
-	// Convert period into angular frequency
-	float w = 6.28318 / period;
-
-	// Random phase
-	float phase = rand_range(base_seed + 3.0, 0.0, 6.28318);
-
-	// Random saw / sine mix
-	float saw_mix = rand_range(base_seed + 4.0, 0.0, max_saw_mix);
-
-	// Optional decay to avoid very linear saws everywhere
-	float decay = rand_range(base_seed + 5.0, 0.4, 1.0);
-
-	// Smooth sine
-	float sine_wave = sin(local_x * w + phase);
-
-	// Sawtooth in [-1, 1]
-	float saw = fract(local_x / period + phase) * 2.0 - 1.0;
-	saw *= decay;
-
-	// Blend between sine and saw for this segment
-	float wave = mix(sine_wave, saw, saw_mix);
-
-	// We want teeth pointing IN towards the body:
-	//  - Top edge: move the line DOWN by a positive amount
-	//  - Bottom edge: move the line UP by a positive amount
-	float offset = abs(wave) * amp;
-
-	float line;
-	if (top_edge) {
-		// Top starts a bit below 0 and moves further DOWN
-		line = edge_height + offset;
-	} else {
-		// Bottom starts a bit above tex_h and moves further UP
-		line = tex_h - edge_height - offset;
-	}
-
-	// Keep line inside the texture bounds
-	line = clamp(line, 0.0, tex_h);
-	return line;
-}
+uniform vec4 paper_color : source_color = vec4(1.0, 0.98, 0.95, 1.0);
+uniform sampler2D paper_texture;
+uniform sampler2D noise_tex : repeat_enable;
+uniform float tear_amplitude = 0.06;
+uniform float tear_scale = 0.5;
+uniform vec2 noise_offset = vec2(0.0, 0.0);
+uniform float burn_size = 0;
+uniform vec4 burn_color : source_color = vec4(0, 0, 0, 0);
 
 void fragment() {
-	// Convert UV (0..1) into pixel coordinates
-	vec2 px = UV / TEXTURE_PIXEL_SIZE;
-	float tex_h = 1.0 / TEXTURE_PIXEL_SIZE.y;
+	vec2 pixel_pos = UV / TEXTURE_PIXEL_SIZE;
+	vec2 uv_a = (pixel_pos * tear_scale) + noise_offset;
+	float noise_a = texture(noise_tex, uv_a).r;
+	vec2 uv_b = (pixel_pos * (tear_scale * 0.73)) + noise_offset + vec2(15.3, 42.1);
+	float noise_b = texture(noise_tex, uv_b).r;
+	float noise_combined = (noise_a + noise_b) * 0.5;
+	float wave = (noise_combined * 2.0 - 1.0) * tear_amplitude;
+	float top_cut_line = tear_amplitude + wave;
+	float bottom_cut_line = 1.0 - (tear_amplitude + wave);
+	float dist_to_top = UV.y - top_cut_line;
+	float dist_to_bottom = bottom_cut_line - UV.y;
+	float dist_to_edge = min(dist_to_top, dist_to_bottom);
+	float pixel_height = TEXTURE_PIXEL_SIZE.y;
+	float alpha = smoothstep(0.0, pixel_height, dist_to_edge);
+	vec4 base_col = paper_color;
+	vec4 tex_col = texture(paper_texture, UV);
+	base_col = mix(base_col, tex_col * base_col, 0.5);
 
-	// Use x in pixels for segmenting
-	float x_px = px.x;
-
-	// Get top & bottom tear lines
-	float top_line = tear_profile(x_px, tex_h, true, 10.0);
-	float bottom_line = tear_profile(x_px, tex_h, false, 100.0);
-
-	// Outside the torn band? Transparent.
-	if (px.y < top_line || px.y > bottom_line) {
-		discard;
+	if (dist_to_edge < burn_size) {
+		float t = dist_to_edge / burn_size;
+		COLOR = mix(burn_color, base_col, smoothstep(0.0, 1.0, t));
+	} else {
+		COLOR = base_col;
 	}
-
-	// Inside: solid paper
-	COLOR = paper_color;
 }

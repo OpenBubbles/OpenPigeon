@@ -70,8 +70,8 @@ func _ready() -> void:
 			has_connected = true
 			appPlugin.call("onReady")
 	else:
-		#var dev := '{"isYourTurn": true,"player":"1","letters":"ICEBERG","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","id":"dev"}'
-		var dev := '{"isYourTurn": true,"player":"2","letters":"ICEBERG","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
+		var dev := '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","id":"dev"}'
+		#var dev := '{"isYourTurn": true,"player":"2","letters":"ABCDEF","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
 		
 		await get_tree().process_frame
 		_set_game_data(dev)
@@ -79,6 +79,7 @@ func _ready() -> void:
 	_apply_score_box_style(main_score_box)
 	_apply_score_box_style(player_score_box)
 	_apply_score_box_style(opp_score_box)
+	
 		
 func _set_game_data(raw_text: String) -> void:
 	var res: Variant = JSON.parse_string(raw_text)
@@ -116,21 +117,27 @@ func _set_game_data(raw_text: String) -> void:
 	stop_waiting()
 
 	var sender_player: int = clampi(int(sender_s), 1, 2)
-	if p1_id != "" and p2_id != "":
-		if my_id != "" and my_id == p1_id:
+	if p1_id != "" and p2_id != "" and my_id != "":
+		if my_id == p1_id:
 			my_player = 1
-			print("SETTING FOR ID PLAYER 1")
-		elif my_id != "" and my_id == p2_id:
+			spectator_mode = false
+			print("SETTING FOR ID PLAYER 1 (my_id matches player1)")
+		elif my_id == p2_id:
 			my_player = 2
-			print("SETTING FOR ID PLAYER 2")
+			spectator_mode = false
+			print("SETTING FOR ID PLAYER 2 (my_id matches player2)")
 		else:
 			my_player = 0
-			print("SETTING FOR ID PLAYER 0")
 			spectator_mode = true
+			print("SETTING FOR SPECTATOR (my_id matches neither player1 nor player2)")
 	else:
-		print("IS MY TURN?: ", is_my_turn, " | SENDER PLAYER: ", sender_player)
-		my_player = 1 if ((sender_player == 2 and is_my_turn) or (sender_player == 1 and not is_my_turn)) else 2
-		print("ELSE SETTING FOR PLAYER: ", my_player)
+		if my_player == 0:
+			my_player = sender_player
+			spectator_mode = false
+			print("NO PLAYER IDS; using sender 'player' field as my slot -> my_player =", my_player)
+		else:
+			print("NO PLAYER IDS; keeping existing my_player =", my_player)
+
 
 	if spectator_mode:
 		is_my_turn = false
@@ -530,6 +537,9 @@ func _populate_full_word_list() -> void:
 		word_panel_style.set_content_margin(SIDE_RIGHT, 8.0)
 		word_panel_style.set_content_margin(SIDE_TOP, 2.0)
 		word_panel_style.set_content_margin(SIDE_BOTTOM, 2.0)
+		word_panel_style.shadow_color = Color(0, 0, 0, 0.25)
+		word_panel_style.shadow_size = 4
+		word_panel_style.shadow_offset = Vector2(0, 2)
 		word_panel.add_theme_stylebox_override("panel", word_panel_style)
 
 		var word_label := Label.new()
@@ -802,6 +812,9 @@ func _populate_scoreboard(
 		word_panel_style.set_content_margin(SIDE_RIGHT, 8.0)
 		word_panel_style.set_content_margin(SIDE_TOP, 2.0)
 		word_panel_style.set_content_margin(SIDE_BOTTOM, 2.0)
+		word_panel_style.shadow_color = Color(0, 0, 0, 0.25)
+		word_panel_style.shadow_size = 4
+		word_panel_style.shadow_offset = Vector2(0, 2)
 		word_panel.add_theme_stylebox_override("panel", word_panel_style)
 
 		var word_label := Label.new()

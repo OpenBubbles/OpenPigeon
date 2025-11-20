@@ -1,7 +1,8 @@
-[gd_scene load_steps=42 format=3 uid="uid://d2yyuh6fook6k"]
+[gd_scene load_steps=57 format=3 uid="uid://d2yyuh6fook6k"]
 
 [ext_resource type="Script" uid="uid://cyyfd6ypbfmpr" path="res://anagrams/anagrams.gd" id="1_xvd3d"]
 [ext_resource type="Texture2D" uid="uid://b4romha26qbsa" path="res://anagrams/anagrams_bg.png" id="2_ak8kl"]
+[ext_resource type="Texture2D" uid="uid://dk6sndstpx67p" path="res://anagrams/anagrams_preview.png" id="3_0k6o1"]
 [ext_resource type="Texture2D" uid="uid://btxxm6ltl6ban" path="res://anagrams/shuffle_pressed.png" id="3_ephvk"]
 [ext_resource type="Texture2D" uid="uid://b0i4rea1gtjwx" path="res://anagrams/shuffle.png" id="3_i2lji"]
 [ext_resource type="Script" uid="uid://bg3be8il4hx1b" path="res://anagrams/game_screen.gd" id="3_kxjnm"]
@@ -64,6 +65,26 @@ corner_radius_top_right = 20
 corner_radius_bottom_right = 20
 corner_radius_bottom_left = 20
 
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_0k6o1"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_0k6o1"]
+noise_type = 3
+frequency = 0.05
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_ix8dr"]
+noise = SubResource("FastNoiseLite_0k6o1")
+seamless = true
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ix8dr"]
+shader = ExtResource("7_x0qku")
+shader_parameter/paper_color = Color(1, 0.98, 0.95, 1)
+shader_parameter/noise_tex = SubResource("NoiseTexture2D_ix8dr")
+shader_parameter/tear_amplitude = 0.06
+shader_parameter/tear_scale = 0.5
+shader_parameter/noise_offset = Vector2(0, 0)
+shader_parameter/burn_size = 0.0
+shader_parameter/burn_color = Color(0.7, 0.6, 0.5, 1)
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4ax03"]
 bg_color = Color(1, 1, 1, 1)
 
@@ -112,7 +133,7 @@ shadow_size = 3
 shadow_offset = Vector2(0, 5)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_x0qku"]
-bg_color = Color(0.55, 0.55, 0.55, 0.26666668)
+bg_color = Color(0.9411765, 0.9411765, 0.9411765, 1)
 corner_radius_top_left = 15
 corner_radius_top_right = 15
 corner_radius_bottom_right = 15
@@ -130,17 +151,28 @@ viewport_path = NodePath("SubViewportContainer/SubViewport")
 [sub_resource type="ViewportTexture" id="ViewportTexture_vu1q5"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_vu1q5"]
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_eugg7"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_a0pbh"]
+noise_type = 3
+frequency = 0.05
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_rly8n"]
+noise = SubResource("FastNoiseLite_a0pbh")
+seamless = true
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tfubl"]
 shader = ExtResource("7_x0qku")
-shader_parameter/edge_height = 12.0
-shader_parameter/min_amplitude = 2.0
-shader_parameter/max_amplitude = 7.0
-shader_parameter/min_period = 40.0
-shader_parameter/max_period = 120.0
-shader_parameter/segment_width = 80.0
-shader_parameter/max_saw_mix = 0.8
-shader_parameter/global_seed = 0.0
-shader_parameter/paper_color = Color(1, 1, 1, 1)
+shader_parameter/paper_color = Color(1, 0.98, 0.95, 1)
+shader_parameter/noise_tex = SubResource("NoiseTexture2D_rly8n")
+shader_parameter/tear_amplitude = 0.06
+shader_parameter/tear_scale = 0.5
+shader_parameter/noise_offset = Vector2(0, 0)
+shader_parameter/burn_size = 0.0
+shader_parameter/burn_color = Color(0.7, 0.6, 0.5, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_h58lc"]
+bg_color = Color(1, 1, 1, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_eugg7"]
 bg_color = Color(0.22745098, 0.17254902, 0.36862746, 1)
@@ -163,6 +195,38 @@ viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="ViewportTexture" id="ViewportTexture_q6txt"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_vu1q5"]
+shader = ExtResource("7_x0qku")
+shader_parameter/paper_color = Color(1, 1, 1, 1)
+shader_parameter/tear_amplitude = 0.1
+shader_parameter/tear_scale = 0.005
+shader_parameter/noise_offset = Vector2(0, 0)
+shader_parameter/burn_size = 0.02
+shader_parameter/burn_color = Color(0.7, 0.6, 0.5, 1)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_q6txt"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_56riw"]
+noise_type = 3
+frequency = 0.05
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_r3ggu"]
+noise = SubResource("FastNoiseLite_56riw")
+seamless = true
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tw2rt"]
+shader = ExtResource("7_x0qku")
+shader_parameter/paper_color = Color(1, 0.98, 0.95, 1)
+shader_parameter/noise_tex = SubResource("NoiseTexture2D_r3ggu")
+shader_parameter/tear_amplitude = 0.06
+shader_parameter/tear_scale = 0.5
+shader_parameter/noise_offset = Vector2(0, 0)
+shader_parameter/burn_size = 0.02
+shader_parameter/burn_color = Color(0.7, 0.6, 0.5, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_orgg5"]
+bg_color = Color(1, 1, 1, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_a0pbh"]
 bg_color = Color(1, 1, 1, 1)
@@ -297,7 +361,6 @@ layout_mode = 2
 
 [node name="HowToText" type="RichTextLabel" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
 layout_mode = 2
-size_flags_vertical = 3
 theme_override_colors/default_color = Color(0, 0, 0, 1)
 bbcode_enabled = true
 text = "[b][font_size={36px}]How to play:[/font_size][/b]
@@ -308,6 +371,10 @@ horizontal_alignment = 1
 
 [node name="HowToRef" type="TextureRect" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
 layout_mode = 2
+size_flags_vertical = 3
+texture = ExtResource("3_0k6o1")
+expand_mode = 1
+stretch_mode = 5
 
 [node name="StartButton" type="Button" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
 unique_name_in_owner = true
@@ -333,7 +400,6 @@ layout_mode = 2
 
 [node name="GameScreen" type="Control" parent="."]
 unique_name_in_owner = true
-visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -412,6 +478,12 @@ offset_right = 250.0
 offset_bottom = 112.5
 grow_horizontal = 2
 grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxEmpty_0k6o1")
+
+[node name="Panel" type="Panel" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer"]
+material = SubResource("ShaderMaterial_ix8dr")
+layout_mode = 2
+mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_4ax03")
 
 [node name="ScoreBox" type="HBoxContainer" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer"]
@@ -419,7 +491,12 @@ layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 3
 
-[node name="PlayerAvatarDisplay" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox" instance=ExtResource("6_v2j8k")]
+[node name="VBoxContainer2" type="VBoxContainer" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+
+[node name="PlayerAvatarDisplay" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox/VBoxContainer2" instance=ExtResource("6_v2j8k")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
@@ -429,10 +506,18 @@ texture_pressed = SubResource("ViewportTexture_a0pbh")
 texture_hover = SubResource("ViewportTexture_rly8n")
 is_display_only = true
 
+[node name="Control" type="Control" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox/VBoxContainer2"]
+custom_minimum_size = Vector2(0, 15)
+layout_mode = 2
+
 [node name="VBoxContainer" type="VBoxContainer" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox"]
 layout_mode = 2
 size_flags_vertical = 4
 theme_override_constants/separation = -8
+
+[node name="Control" type="Control" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox/VBoxContainer"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
 
 [node name="WordsLabel" type="Label" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox/VBoxContainer"]
 unique_name_in_owner = true
@@ -498,6 +583,7 @@ layout_mode = 2
 
 [node name="ScoreScreen" type="Control" parent="."]
 unique_name_in_owner = true
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -560,28 +646,39 @@ size_flags_horizontal = 4
 
 [node name="PlayerScoreBoxContainer" type="PanelContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore"]
 unique_name_in_owner = true
-material = SubResource("ShaderMaterial_vu1q5")
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-theme_override_styles/panel = SubResource("StyleBoxFlat_4ax03")
+theme_override_styles/panel = SubResource("StyleBoxEmpty_eugg7")
 
-[node name="ScoreBox" type="HBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer"]
+[node name="Panel" type="Panel" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer"]
+material = SubResource("ShaderMaterial_tfubl")
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_h58lc")
+
+[node name="MarginContainer" type="MarginContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="ScoreBox" type="HBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/MarginContainer"]
 layout_mode = 2
 size_flags_horizontal = 0
 size_flags_vertical = 3
 alignment = 1
 
-[node name="MarginContainer" type="MarginContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/ScoreBox"]
+[node name="MarginContainer" type="MarginContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/MarginContainer/ScoreBox"]
 layout_mode = 2
 theme_override_constants/margin_left = 0
 theme_override_constants/margin_top = 0
 
-[node name="VBoxContainer" type="VBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/ScoreBox/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/MarginContainer/ScoreBox/MarginContainer"]
 layout_mode = 2
 theme_override_constants/separation = -8
 
-[node name="PlayerWordsLabel" type="Label" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/ScoreBox/MarginContainer/VBoxContainer"]
+[node name="PlayerWordsLabel" type="Label" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/MarginContainer/ScoreBox/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
@@ -592,7 +689,7 @@ text = "WORDS: 0"
 vertical_alignment = 2
 uppercase = true
 
-[node name="PlayerScoreLabel" type="Label" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/ScoreBox/MarginContainer/VBoxContainer"]
+[node name="PlayerScoreLabel" type="Label" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/MarginContainer/ScoreBox/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
@@ -612,6 +709,7 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_eugg7")
 [node name="PlayerWordList" type="VBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerWordContainer"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_override_constants/separation = 8
 
 [node name="OppScore" type="VBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer"]
 layout_mode = 2
@@ -639,22 +737,34 @@ material = SubResource("ShaderMaterial_vu1q5")
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-theme_override_styles/panel = SubResource("StyleBoxFlat_4ax03")
+theme_override_styles/panel = SubResource("StyleBoxEmpty_q6txt")
 
-[node name="ScoreBox" type="HBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer"]
+[node name="Panel" type="Panel" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer"]
+material = SubResource("ShaderMaterial_tw2rt")
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_orgg5")
+
+[node name="MarginContainer" type="MarginContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="ScoreBox" type="HBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/MarginContainer"]
 layout_mode = 2
 size_flags_horizontal = 8
 size_flags_vertical = 3
 
-[node name="MarginContainer" type="MarginContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/ScoreBox"]
+[node name="MarginContainer" type="MarginContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/MarginContainer/ScoreBox"]
 layout_mode = 2
 
-[node name="VBoxContainer" type="VBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/ScoreBox/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/MarginContainer/ScoreBox/MarginContainer"]
 layout_mode = 2
 size_flags_vertical = 4
 theme_override_constants/separation = -8
 
-[node name="OppWordsLabel" type="Label" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/ScoreBox/MarginContainer/VBoxContainer"]
+[node name="OppWordsLabel" type="Label" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/MarginContainer/ScoreBox/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
@@ -666,7 +776,7 @@ horizontal_alignment = 2
 vertical_alignment = 2
 uppercase = true
 
-[node name="OppScoreLabel" type="Label" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/ScoreBox/MarginContainer/VBoxContainer"]
+[node name="OppScoreLabel" type="Label" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/MarginContainer/ScoreBox/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
@@ -685,6 +795,7 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_eugg7")
 [node name="OppWordList" type="VBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppWordContainer"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_override_constants/separation = 8
 
 [node name="ViewWords" type="Button" parent="ScoreScreen/MarginContainer"]
 unique_name_in_owner = true
@@ -783,3 +894,4 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_eugg7")
 [node name="FullWordList" type="VBoxContainer" parent="WordsScreen/MarginContainer/CenterContainer/VBoxContainer/VScrollBar/FullWordContainer"]
 unique_name_in_owner = true
 layout_mode = 2
+theme_override_constants/separation = 8
