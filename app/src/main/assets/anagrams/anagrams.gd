@@ -357,16 +357,7 @@ func _apply_score_box_style(box: PanelContainer) -> void:
 	if _tear_rng.seed == 0:
 		_tear_rng.randomize()
 
-	var shader := preload("res://anagrams/torn_panel.gdshader")
-	var mat := ShaderMaterial.new()
-	mat.shader = shader
-
-	mat.set_shader_parameter("global_seed", _tear_rng.randf())
-
-	box.material = mat
-
 	var sb := StyleBoxTexture.new()
-	sb.texture = LETTER_BG
 	sb.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
 	sb.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
 
