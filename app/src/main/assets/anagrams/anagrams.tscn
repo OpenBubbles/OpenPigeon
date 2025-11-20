@@ -1,13 +1,13 @@
-[gd_scene load_steps=57 format=3 uid="uid://d2yyuh6fook6k"]
+[gd_scene load_steps=58 format=3 uid="uid://d2yyuh6fook6k"]
 
-[ext_resource type="Script" uid="uid://cyyfd6ypbfmpr" path="res://anagrams/anagrams.gd" id="1_xvd3d"]
+[ext_resource type="Script" path="res://anagrams/anagrams.gd" id="1_xvd3d"]
 [ext_resource type="Texture2D" uid="uid://b4romha26qbsa" path="res://anagrams/anagrams_bg.png" id="2_ak8kl"]
 [ext_resource type="Texture2D" uid="uid://dk6sndstpx67p" path="res://anagrams/anagrams_preview.png" id="3_0k6o1"]
 [ext_resource type="Texture2D" uid="uid://btxxm6ltl6ban" path="res://anagrams/shuffle_pressed.png" id="3_ephvk"]
 [ext_resource type="Texture2D" uid="uid://b0i4rea1gtjwx" path="res://anagrams/shuffle.png" id="3_i2lji"]
-[ext_resource type="Script" uid="uid://bg3be8il4hx1b" path="res://anagrams/game_screen.gd" id="3_kxjnm"]
+[ext_resource type="Script" path="res://anagrams/game_screen.gd" id="3_kxjnm"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="6_v2j8k"]
-[ext_resource type="Shader" uid="uid://cudvsdvo3ydsh" path="res://anagrams/torn_panel.gdshader" id="7_x0qku"]
+[ext_resource type="Shader" uid="uid://cudvsdvo3ydsh" path="res://global/torn_panel.gdshader" id="7_x0qku"]
 [ext_resource type="Texture2D" uid="uid://7eetny2ly08v" path="res://anagrams/back.png" id="8_mt60f"]
 [ext_resource type="Texture2D" uid="uid://cweqhn5g2msil" path="res://anagrams/back_pressed.png" id="9_0k6o1"]
 
@@ -83,7 +83,7 @@ shader_parameter/tear_amplitude = 0.06
 shader_parameter/tear_scale = 0.5
 shader_parameter/noise_offset = Vector2(0, 0)
 shader_parameter/burn_size = 0.0
-shader_parameter/burn_color = Color(0.7, 0.6, 0.5, 1)
+shader_parameter/burn_color = Color(0, 0, 0, 0)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4ax03"]
 bg_color = Color(1, 1, 1, 1)
@@ -169,7 +169,7 @@ shader_parameter/tear_amplitude = 0.06
 shader_parameter/tear_scale = 0.5
 shader_parameter/noise_offset = Vector2(0, 0)
 shader_parameter/burn_size = 0.0
-shader_parameter/burn_color = Color(0.7, 0.6, 0.5, 1)
+shader_parameter/burn_color = Color(0, 0, 0, 0)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_h58lc"]
 bg_color = Color(1, 1, 1, 1)
@@ -196,8 +196,47 @@ viewport_path = NodePath("SubViewportContainer/SubViewport")
 [sub_resource type="ViewportTexture" id="ViewportTexture_q6txt"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
+[sub_resource type="Shader" id="Shader_0k6o1"]
+code = "shader_type canvas_item;
+
+uniform vec4 paper_color : source_color = vec4(1.0, 0.98, 0.95, 1.0);
+uniform sampler2D paper_texture;
+uniform sampler2D noise_tex : repeat_enable;
+uniform float tear_amplitude = 0.06;
+uniform float tear_scale = 0.5;
+uniform vec2 noise_offset = vec2(0.0, 0.0);
+uniform float burn_size = 0;
+uniform vec4 burn_color : source_color = vec4(0, 0, 0, 0);
+
+void fragment() {
+	vec2 pixel_pos = UV / TEXTURE_PIXEL_SIZE;
+	vec2 uv_a = (pixel_pos * tear_scale) + noise_offset;
+	float noise_a = texture(noise_tex, uv_a).r;
+	vec2 uv_b = (pixel_pos * (tear_scale * 0.73)) + noise_offset + vec2(15.3, 42.1);
+	float noise_b = texture(noise_tex, uv_b).r;
+	float noise_combined = (noise_a + noise_b) * 0.5;
+	float wave = (noise_combined * 2.0 - 1.0) * tear_amplitude;
+	float top_cut_line = tear_amplitude + wave;
+	float bottom_cut_line = 1.0 - (tear_amplitude + wave);
+	float dist_to_top = UV.y - top_cut_line;
+	float dist_to_bottom = bottom_cut_line - UV.y;
+	float dist_to_edge = min(dist_to_top, dist_to_bottom);
+	float pixel_height = TEXTURE_PIXEL_SIZE.y;
+	float alpha = smoothstep(0.0, pixel_height, dist_to_edge);
+	vec4 base_col = paper_color;
+	vec4 tex_col = texture(paper_texture, UV);
+	base_col = mix(base_col, tex_col * base_col, 0.5);
+
+	if (dist_to_edge < burn_size) {
+		float t = dist_to_edge / burn_size;
+		COLOR = mix(burn_color, base_col, smoothstep(0.0, 1.0, t));
+	} else {
+		COLOR = base_col;
+	}
+}"
+
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_vu1q5"]
-shader = ExtResource("7_x0qku")
+shader = SubResource("Shader_0k6o1")
 shader_parameter/paper_color = Color(1, 1, 1, 1)
 shader_parameter/tear_amplitude = 0.1
 shader_parameter/tear_scale = 0.005
@@ -223,7 +262,7 @@ shader_parameter/tear_amplitude = 0.06
 shader_parameter/tear_scale = 0.5
 shader_parameter/noise_offset = Vector2(0, 0)
 shader_parameter/burn_size = 0.02
-shader_parameter/burn_color = Color(0.7, 0.6, 0.5, 1)
+shader_parameter/burn_color = Color(0, 0, 0, 0)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_orgg5"]
 bg_color = Color(1, 1, 1, 1)
