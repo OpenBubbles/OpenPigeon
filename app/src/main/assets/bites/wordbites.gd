@@ -578,7 +578,7 @@ func _init_screens() -> void:
 	screens = [intro_screen, game_screen, score_screen, words_screen]
 	for i in screens.size():
 		var node := screens[i]
-		if not game_over:
+		if not game_over and not spectator_mode:
 			node.visible = (i == 0)
 		else:
 			node.visible = (i == 2)

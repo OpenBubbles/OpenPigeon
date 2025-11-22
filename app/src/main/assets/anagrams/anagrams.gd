@@ -70,8 +70,8 @@ func _ready() -> void:
 			has_connected = true
 			appPlugin.call("onReady")
 	else:
-		var dev := '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","id":"dev"}'
-		#var dev := '{"isYourTurn": true,"player":"2","letters":"ABCDEF","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
+		#var dev := '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","id":"dev"}'
+		var dev := '{"isYourTurn": true,"player":"2","letters":"ABCDEF","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
 		
 		await get_tree().process_frame
 		_set_game_data(dev)
@@ -104,7 +104,7 @@ func _set_game_data(raw_text: String) -> void:
 	p2_score_s = _get_first(d, "score2", "")
 	var p2_words_s: String = _get_first(d, "words2", "")
 	var p2_wordlist_s: String = _get_first(d, "words_list2", "")
-
+	print("P1s Score: ", p1_score_s, " | P2s Score: ", p2_score_s)
 	var p1_score: int = int(p1_score_s) if p1_score_s != "" else 0
 	var p1_words: int = int(p1_words_s) if p1_words_s != "" else 0
 	var p2_score: int = int(p2_score_s) if p2_score_s != "" else 0
@@ -138,10 +138,21 @@ func _set_game_data(raw_text: String) -> void:
 		else:
 			print("NO PLAYER IDS; keeping existing my_player =", my_player)
 
-
+	spectator_mode = true
 	if spectator_mode:
 		is_my_turn = false
 		print("SPECTATOR MODE ACTIVE")
+		if res.has("avatar1"):
+			var av1 = _parse_avatar_string(res["avatar1"])
+			player_avatar_display.call_deferred("update_avatar_from_data", av1)
+			player_score_avatar_display.call_deferred("update_avatar_from_data", av1)
+		if res.has("avatar2"):
+			var av2 = _parse_avatar_string(res["avatar2"])
+			opp_avatar_display.call_deferred("update_avatar_from_data", av2)
+		var p1_entries := _build_word_entries_from_string(p1_wordlist_s)
+		_populate_scoreboard(true, p1_entries, p1_words, p1_score)
+		var p2_entries := _build_word_entries_from_string(p2_wordlist_s)
+		_populate_scoreboard(false, p2_entries, p2_words, p2_score)
 
 	if my_player == 1:
 		opponent_avatar_key = "avatar2"
@@ -372,7 +383,7 @@ func _init_screens() -> void:
 	screens = [intro_screen, game_screen, score_screen,words_screen]
 	for i in screens.size():
 		var node := screens[i]
-		if not game_over:
+		if not game_over and not spectator_mode:
 			node.visible = (i == 0)
 		else:
 			node.visible = (i == 2)
@@ -838,7 +849,7 @@ func _populate_scoreboard(
 	target_words_label.text = "WORDS: %d" % total_words
 	target_score_label.text = "SCORE: %04d" % final_score
 	
-	if is_player:
+	if is_player and not spectator_mode:
 		if my_player == 1:
 			p1_score_s = str(final_score)
 		elif my_player == 2:
