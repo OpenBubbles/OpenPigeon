@@ -1,9 +1,11 @@
-[gd_scene load_steps=50 format=3 uid="uid://cilasr7g20xo1"]
+[gd_scene load_steps=52 format=3 uid="uid://cilasr7g20xo1"]
 
 [ext_resource type="Script" uid="uid://bi1yoe7utjiuf" path="res://bites/wordbites.gd" id="1_vokfg"]
 [ext_resource type="Texture2D" uid="uid://b3htism643mu0" path="res://bites/wordbites_bg.png" id="2_vokfg"]
+[ext_resource type="Texture2D" uid="uid://cf03ed4qqk4yd" path="res://bites/wordbites_preview.png" id="3_mq8x1"]
 [ext_resource type="Script" uid="uid://df4ecikh12361" path="res://bites/game_screen.gd" id="3_vokfg"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="6_v2j8k"]
+[ext_resource type="Texture2D" uid="uid://lwye2lpschrj" path="res://bites/wordbite_board_bg.png" id="6_yom1m"]
 [ext_resource type="Shader" uid="uid://cudvsdvo3ydsh" path="res://global/torn_panel.gdshader" id="7_x0qku"]
 [ext_resource type="Texture2D" uid="uid://7eetny2ly08v" path="res://anagrams/back.png" id="8_mt60f"]
 [ext_resource type="Texture2D" uid="uid://cweqhn5g2msil" path="res://anagrams/back_pressed.png" id="9_0k6o1"]
@@ -100,7 +102,10 @@ bg_color = Color(0.08523575, 0.13335243, 0.2424103, 0.54509807)
 corner_radius_bottom_right = 20
 corner_radius_bottom_left = 20
 
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_yom1m"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_t6ssp"]
+bg_color = Color(0.6, 0.6, 0.6, 0)
+shadow_size = 16
+shadow_offset = Vector2(0, 6)
 
 [sub_resource type="ViewportTexture" id="ViewportTexture_v2j8k"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
@@ -134,12 +139,12 @@ shader_parameter/burn_color = Color(0, 0, 0, 0)
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_h58lc"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_eugg7"]
-bg_color = Color(0.22745098, 0.17254902, 0.36862746, 1)
+bg_color = Color(0.13744, 0.20674142, 0.36899713, 1)
 border_width_left = 10
 border_width_top = 10
 border_width_right = 10
 border_width_bottom = 10
-border_color = Color(0.16875118, 0.12502378, 0.28257778, 1)
+border_color = Color(0.0967247, 0.16153163, 0.24797249, 1)
 border_blend = true
 corner_radius_top_left = 10
 corner_radius_top_right = 10
@@ -287,7 +292,6 @@ vertical_alignment = 1
 
 [node name="IntroScreen" type="Control" parent="."]
 unique_name_in_owner = true
-visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -322,15 +326,16 @@ layout_mode = 2
 layout_mode = 2
 theme_override_colors/default_color = Color(0, 0, 0, 1)
 bbcode_enabled = true
-text = "[b][font_size={36px}]How to play:[/font_size][/b]
+text = "[b][font_size={36px}]How to play:[/font_size]
 
-[font_size={24px}]Combine blocks together [br]horizontally or vertically to make [br]as many words as possible.[/font_size]"
+[font_size={24px}]Combine blocks together horizontally [br] or vertically to make [br] as many words as possible.[/font_size]"
 fit_content = true
 horizontal_alignment = 1
 
 [node name="HowToRef" type="TextureRect" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
+texture = ExtResource("3_mq8x1")
 expand_mode = 1
 stretch_mode = 5
 
@@ -358,6 +363,7 @@ layout_mode = 2
 
 [node name="GameScreen" type="Control" parent="."]
 unique_name_in_owner = true
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -508,17 +514,26 @@ grow_horizontal = 2
 grow_vertical = 2
 size_flags_vertical = 3
 
-[node name="PanelContainer" type="PanelContainer" parent="GameScreen/CenterContainer"]
-custom_minimum_size = Vector2(640, 720)
+[node name="BoardPanel" type="PanelContainer" parent="GameScreen/CenterContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(624, 702)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-theme_override_styles/panel = SubResource("StyleBoxEmpty_yom1m")
+theme_override_styles/panel = SubResource("StyleBoxFlat_t6ssp")
 
-[node name="TextureRect" type="TextureRect" parent="GameScreen/CenterContainer/PanelContainer"]
+[node name="TextureRect" type="TextureRect" parent="GameScreen/CenterContainer/BoardPanel"]
 layout_mode = 2
-texture = ExtResource("2_vokfg")
+texture = ExtResource("6_yom1m")
 expand_mode = 1
+
+[node name="BoardGrid" type="GridContainer" parent="GameScreen/CenterContainer/BoardPanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(624, 702)
+layout_mode = 2
+theme_override_constants/h_separation = 0
+theme_override_constants/v_separation = 0
+columns = 8
 
 [node name="ScoreScreen" type="Control" parent="."]
 unique_name_in_owner = true
@@ -544,6 +559,7 @@ theme_override_constants/margin_bottom = 100
 
 [node name="WinLossLabel" type="Label" parent="ScoreScreen/MarginContainer"]
 unique_name_in_owner = true
+visible = false
 z_index = 102
 layout_mode = 2
 size_flags_horizontal = 4
@@ -753,7 +769,7 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_a0pbh")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_rly8n")
 theme_override_styles/hover = SubResource("StyleBoxFlat_tfubl")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_h58lc")
-text = "VIEW ALL WORDS (X)"
+text = "VIEW ALL WORDS"
 
 [node name="WaitForOpponentLabel" type="Label" parent="ScoreScreen/MarginContainer"]
 unique_name_in_owner = true

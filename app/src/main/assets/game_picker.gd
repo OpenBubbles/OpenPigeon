@@ -17,7 +17,7 @@ var games = {
 	"paintball": "res://paintball/paintball.tscn",
 	"renju": "res://gomoku/gomoku.tscn",
 	"anagrams": "res://anagrams/anagrams.tscn",
-	"bites": "res://bites/bites.tscn",
+	"wordbites": "res://bites/wordbites.tscn",
 }
 
 # Called when the node enters the scene tree for the first time.

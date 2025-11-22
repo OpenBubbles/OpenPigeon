@@ -29,6 +29,12 @@ const LETTER_BG: Texture2D = preload("res://anagrams/letter_bg.png")
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const DICT_PATH := "res://global/gp_wg_en2.txt"
 
+class TrieNode:
+	var children: Dictionary = {}
+	var is_word: bool = false
+
+var _dictionary_trie_root: TrieNode = null
+
 var _tear_rng := RandomNumberGenerator.new()
 
 var screens: Array[Control] = []
@@ -49,6 +55,11 @@ var win_loss_state = ""
 var my_player := 0           # 0 spectator, 1 black, 2 white
 var p1_score_s = ""
 var p2_score_s = ""
+var first_data := true
+var possible_word_count: int = 0
+var _possible_words_cache: Array = []
+var _words_cache_ready := false
+
 
 func _ready() -> void:
 	if not start_button.pressed.is_connected(_on_start_button_pressed):
@@ -70,17 +81,172 @@ func _ready() -> void:
 			has_connected = true
 			appPlugin.call("onReady")
 	else:
-		var dev := '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","id":"dev"}'
-		#var dev := '{"isYourTurn": true,"player":"2","letters":"ABCDEF","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
+		var dev := '{"isYourTurn": true,"player":"2","level":"2|3|5|GO&2|0|7|UB&1|0|4|RE&2|0|1|ST&1|6|4|BI&0|5|7|N&0|3|3|M&0|3|1|L&0|2|8|C&0|7|6|D&0|6|1|P","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
+		#var dev := '{"isYourTurn": true,"player":"2","level":"2|3|5|GO&2|0|7|UB&1|0|4|RE&2|0|1|ST&1|6|4|BI&0|5|7|N&0|3|3|M&0|3|1|L&0|2|8|C&0|7|6|D&0|6|1|P","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
 		
 		await get_tree().process_frame
 		_set_game_data(dev)
+
 	_init_screens()
 	_apply_score_box_style(main_score_box)
 	_apply_score_box_style(player_score_box)
 	_apply_score_box_style(opp_score_box)
 	
-		
+func _is_piece_horizontal_idx(idx: int, orientations: Array) -> bool:
+	if idx < 0 or idx >= orientations.size():
+		return false
+	var o: Variant = orientations[idx]
+	match typeof(o):
+		TYPE_BOOL:
+			return bool(o)
+		TYPE_INT:
+			return int(o) == 1
+		TYPE_STRING:
+			var s := String(o).strip_edges().to_upper()
+			if s == "H" or s == "HOR" or s == "HORIZONTAL":
+				return true
+			if s == "V" or s == "VER" or s == "VERTICAL":
+				return false
+			if s == "1":
+				return true
+			if s == "2" or s == "0":
+				return false
+			return false
+
+		_:
+			return false
+			
+func _word_respects_orientation(word: String, piece_runs: Array[String]) -> bool:
+	var orientations: Array = []
+	if game_screen and game_screen.has_method("get_letter_piece_orientations"):
+		orientations = game_screen.get_letter_piece_orientations()
+	if orientations.size() != piece_runs.size():
+		return true
+
+	var w := word.to_upper()
+	return _can_form_with_orientation(w, piece_runs, orientations, true) \
+		or _can_form_with_orientation(w, piece_runs, orientations, false)
+
+
+func _can_form_with_orientation(
+	word: String,
+	piece_runs: Array[String],
+	orientations: Array,
+	want_horizontal: bool
+) -> bool:
+	var n: int = piece_runs.size()
+	if n == 0:
+		return false
+
+	var wlen := word.length()
+	if want_horizontal and wlen > 8:
+		return false
+	if (not want_horizontal) and wlen > 9:
+		return false
+
+	var runs_upper: Array[String] = []
+	runs_upper.resize(n)
+	for i in range(n):
+		runs_upper[i] = String(piece_runs[i]).to_upper()
+
+	var memo: Dictionary = {}
+	var word_upper := word.to_upper()
+
+	return _can_form_with_orientation_dfs(
+		word_upper,
+		runs_upper,
+		orientations,
+		want_horizontal,
+		0,
+		0,
+		memo
+	)
+	
+func _can_form_with_orientation_dfs(
+	word: String,
+	runs_upper: Array[String],
+	orientations: Array,
+	want_horizontal: bool,
+	pos: int,
+	used_mask: int,
+	memo: Dictionary
+) -> bool:
+	var n: int = runs_upper.size()
+
+	if pos == word.length():
+		return true
+
+	var hv := "H" if want_horizontal else "V"
+	var key := "%d|%d|%s" % [pos, used_mask, hv]
+	if memo.has(key):
+		return false
+
+	var remaining: int = word.length() - pos
+	if remaining <= 0:
+		return true
+
+	var target_char: String = word[pos]
+
+	for i in range(n):
+		var bit: int = 1 << i
+		if (used_mask & bit) != 0:
+			continue
+
+		var run_str: String = runs_upper[i]
+		var is_h: bool = _is_piece_horizontal_idx(i, orientations)
+		var aligned: bool = (want_horizontal and is_h) or (not want_horizontal and not is_h)
+
+		if aligned and run_str.length() > 1:
+			var blen: int = run_str.length()
+			if pos + blen <= word.length() and word.substr(pos, blen) == run_str:
+				if _can_form_with_orientation_dfs(
+					word,
+					runs_upper,
+					orientations,
+					want_horizontal,
+					pos + blen,
+					used_mask | bit,
+					memo
+				):
+					return true
+
+	for i in range(n):
+		var bit2: int = 1 << i
+		if (used_mask & bit2) != 0:
+			continue
+
+		var run2: String = runs_upper[i]
+		var is_h2: bool = _is_piece_horizontal_idx(i, orientations)
+		var aligned2: bool = (want_horizontal and is_h2) or (not want_horizontal and not is_h2)
+
+		if aligned2 and run2.length() > 1:
+			continue
+
+		var can_supply_char := false
+
+		if run2.length() == 1:
+			can_supply_char = (run2[0] == target_char)
+		else:
+			for k in range(run2.length()):
+				if run2[k] == target_char:
+					can_supply_char = true
+					break
+
+		if can_supply_char:
+			if _can_form_with_orientation_dfs(
+				word,
+				runs_upper,
+				orientations,
+				want_horizontal,
+				pos + 1,
+				used_mask | bit2,
+				memo
+			):
+				return true
+
+	memo[key] = true
+	return false
+
 func _set_game_data(raw_text: String) -> void:
 	var res: Variant = JSON.parse_string(raw_text)
 	if typeof(res) != TYPE_DICTIONARY:
@@ -94,9 +260,19 @@ func _set_game_data(raw_text: String) -> void:
 	var p1_id: String = _get_first(d, "player1", "")
 	var p2_id: String = _get_first(d, "player2", "")
 	var sender_s: String = _get_first(d, "player", "1")
-	var letters_from_data: String = _get_first(d, "letters", "")
-	if letters_from_data != "":
-		game_screen.letters = letters_from_data
+	var level_s: String = _get_first(d, "level", "")
+	if level_s != "":
+		if game_screen.has_method("load_level"):
+			game_screen.load_level(level_s)
+	else:
+		var letters_from_data: String = _get_first(d, "letters", "")
+		if letters_from_data != "":
+			game_screen.letters = letters_from_data
+			
+	_words_cache_ready = false
+	_possible_words_cache.clear()
+	_compute_words_async()
+
 
 	p1_score_s = _get_first(d, "score1", "")
 	var p1_words_s: String = _get_first(d, "words1", "")
@@ -116,28 +292,29 @@ func _set_game_data(raw_text: String) -> void:
 	winner = _get_first(d, "winner", "")
 	stop_waiting()
 
-	var sender_player: int = clampi(int(sender_s), 1, 2)
 	if p1_id != "" and p2_id != "" and my_id != "":
 		if my_id == p1_id:
+			if my_player != 1:
+				print("PLAYER MAPPING: my_id matches player1 -> my_player=1")
 			my_player = 1
 			spectator_mode = false
-			print("SETTING FOR ID PLAYER 1 (my_id matches player1)")
 		elif my_id == p2_id:
+			if my_player != 2:
+				print("PLAYER MAPPING: my_id matches player2 -> my_player=2")
 			my_player = 2
 			spectator_mode = false
-			print("SETTING FOR ID PLAYER 2 (my_id matches player2)")
 		else:
+			if my_player != 0:
+				print("PLAYER MAPPING: my_id matches neither player1 nor player2 -> spectator")
 			my_player = 0
 			spectator_mode = true
-			print("SETTING FOR SPECTATOR (my_id matches neither player1 nor player2)")
 	else:
 		if my_player == 0:
-			my_player = sender_player
+			my_player = 1
 			spectator_mode = false
-			print("NO PLAYER IDS; using sender 'player' field as my slot -> my_player =", my_player)
+			print("PLAYER MAPPING: no IDs; defaulting my_player=1 (fallback)")
 		else:
-			print("NO PLAYER IDS; keeping existing my_player =", my_player)
-
+			print("PLAYER MAPPING: no IDs; keeping existing my_player =", my_player)
 
 	if spectator_mode:
 		is_my_turn = false
@@ -189,8 +366,27 @@ func _set_game_data(raw_text: String) -> void:
 		var opponent_data = _parse_avatar_string(avatar_string)
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+
 	game_ended = await check_win()
-	_populate_full_word_list()
+
+	if first_data:
+		first_data = false
+
+		var p1_submitted := p1_wordlist_s != ""
+		var p2_submitted := p2_wordlist_s != ""
+		if p1_submitted and p2_submitted:
+			for i in screens.size():
+				var node := screens[i]
+				node.visible = (i == 2)
+				node.position = Vector2.ZERO
+			current_screen = 2
+		else:
+			for i in screens.size():
+				var node := screens[i]
+				node.visible = (i == 0)
+				node.position = Vector2.ZERO
+			current_screen = 0
+
 	if not is_my_turn and not game_over:
 		start_waiting()
 	else:
@@ -369,7 +565,7 @@ func _apply_score_box_style(box: PanelContainer) -> void:
 	box.add_theme_stylebox_override("panel", sb)
 
 func _init_screens() -> void:
-	screens = [intro_screen, game_screen, score_screen,words_screen]
+	screens = [intro_screen, game_screen, score_screen, words_screen]
 	for i in screens.size():
 		var node := screens[i]
 		if not game_over:
@@ -412,36 +608,7 @@ func _switch_to_screen(next: int) -> void:
 	from_node.visible = false
 	from_node.position = Vector2.ZERO
 	current_screen = next
-	
-func _can_build_word_from_letters(word: String, letter_counts: Dictionary) -> bool:
-	var counts := {}
-	for k in letter_counts.keys():
-		counts[k] = letter_counts[k]
 
-	for c in word:
-		if not counts.has(c):
-			return false
-		counts[c] -= 1
-		if counts[c] < 0:
-			return false
-	return true
-	
-func _can_build_from_letters(word: String, pool: String) -> bool:
-	var pool_counts: Dictionary = {}
-	for c in pool:
-		pool_counts[c] = int(pool_counts.get(c, 0)) + 1
-	
-	for c in word:
-		if not pool_counts.has(c):
-			return false
-		var n: int = int(pool_counts[c]) - 1
-		if n < 0:
-			return false
-		pool_counts[c] = n
-	
-	return true
-
-	
 func _word_entry_less(a: Dictionary, b: Dictionary) -> bool:
 	var pa: int = int(a.get("points", 0))
 	var pb: int = int(b.get("points", 0))
@@ -452,106 +619,486 @@ func _word_entry_less(a: Dictionary, b: Dictionary) -> bool:
 	var wb: String = String(b.get("word", ""))
 	return wa < wb
 
-
-func _build_all_possible_words() -> Array:
-	var result: Array = []
-	
-	if not is_instance_valid(game_screen):
-		return result
-	var letters_str: String = String(game_screen.letters).to_upper().strip_edges()
-	if letters_str.is_empty():
-		return result
-	
-	var f := FileAccess.open(DICT_PATH, FileAccess.READ)
-	if f == null:
-		push_error("Could not open dictionary file: %s" % DICT_PATH)
-		return result
-	
-	while not f.eof_reached():
-		var line := f.get_line().strip_edges()
-		if line.is_empty():
-			continue
-		
-		var w := line.to_upper()
-		
-		if w.length() < 3:
-			continue
-		if w.length() > letters_str.length():
-			continue
-		
-		if not _can_build_from_letters(w, letters_str):
-			continue
-		
-		var pts := _compute_word_score(w.length())
-		if pts <= 0:
-			continue
-		
-		result.append({
-			"word": w,
-			"points": pts
-		})
-	
-	f.close()
-	
-	result.sort_custom(Callable(self, "_word_entry_less"))
-	return result
-
-func _populate_full_word_list() -> void:
+func _populate_full_word_list_from_cache() -> void:
 	for child in full_word_list.get_children():
 		child.queue_free()
 
-	var all_words := _build_all_possible_words()
+	if not _words_cache_ready:
+		await _compute_words_async()
 
-	var word_count := all_words.size()
+	var found_words: Dictionary = {}
+	if is_instance_valid(game_screen) and game_screen.has_method("get_word_history"):
+		for entry in game_screen.get_word_history():
+			if entry is Dictionary and entry.has("word"):
+				var wstr := String(entry["word"]).to_upper()
+				found_words[wstr] = true
+
+	possible_word_count = _possible_words_cache.size()
+
 	if is_instance_valid(view_words_button):
-		view_words_button.text = "VIEW ALL WORDS (%d)" % word_count
+		view_words_button.text = "VIEW ALL WORDS"
 
-	for entry in all_words:
-		if not (entry is Dictionary) or not entry.has("word") or not entry.has("points"):
-			continue
-
+	for entry in _possible_words_cache:
 		var word := String(entry["word"])
 		var points := int(entry["points"])
+		var was_found := found_words.has(word)
+		_add_word_row_with_highlight(word, points, was_found)
+		
+func _add_word_row_with_highlight(word: String, points: int, was_found: bool) -> void:
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-		var row := HBoxContainer.new()
+	var word_panel := PanelContainer.new()
+	word_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	word_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	word_panel.set_meta("word", word)
 
-		var word_panel := PanelContainer.new()
-		word_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var word_panel_style := StyleBoxFlat.new()
+	word_panel_style.bg_color = Color(0.97, 0.78, 0.54)
+	if was_found:
+		word_panel_style.bg_color = Color(1.0, 0.86, 0.40)
 
-		var word_panel_style := StyleBoxFlat.new()
-		word_panel_style.bg_color = Color(0.97, 0.78, 0.54)
-		word_panel_style.corner_radius_top_left = 2
-		word_panel_style.corner_radius_top_right = 2
-		word_panel_style.corner_radius_bottom_left = 2
-		word_panel_style.corner_radius_bottom_right = 2
-		word_panel_style.set_content_margin(SIDE_LEFT, 8.0)
-		word_panel_style.set_content_margin(SIDE_RIGHT, 8.0)
-		word_panel_style.set_content_margin(SIDE_TOP, 2.0)
-		word_panel_style.set_content_margin(SIDE_BOTTOM, 2.0)
-		word_panel_style.shadow_color = Color(0, 0, 0, 0.25)
-		word_panel_style.shadow_size = 4
-		word_panel_style.shadow_offset = Vector2(0, 2)
-		word_panel.add_theme_stylebox_override("panel", word_panel_style)
+	word_panel_style.corner_radius_top_left = 2
+	word_panel_style.corner_radius_top_right = 2
+	word_panel_style.corner_radius_bottom_left = 2
+	word_panel_style.corner_radius_bottom_right = 2
+	word_panel_style.set_content_margin(SIDE_LEFT, 8.0)
+	word_panel_style.set_content_margin(SIDE_RIGHT, 8.0)
+	word_panel_style.set_content_margin(SIDE_TOP, 2.0)
+	word_panel_style.set_content_margin(SIDE_BOTTOM, 2.0)
+	word_panel_style.shadow_color = Color(0, 0, 0, 0.25)
+	word_panel_style.shadow_size = 4
+	word_panel_style.shadow_offset = Vector2(0, 2)
+	word_panel.add_theme_stylebox_override("panel", word_panel_style)
 
-		var word_label := Label.new()
-		word_label.text = word
-		word_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		word_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-		word_label.add_theme_color_override("font_color", Color(0, 0, 0))
-		word_panel.add_child(word_label)
-		row.add_child(word_panel)
+	var word_label := Label.new()
+	word_label.text = word
+	word_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	word_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	word_label.add_theme_color_override("font_color", Color(0, 0, 0))
+	word_panel.add_child(word_label)
+	row.add_child(word_panel)
 
-		var spacer := Control.new()
-		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(spacer)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
 
-		var points_label := Label.new()
-		points_label.text = str(points)
-		points_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		points_label.size_flags_horizontal = Control.SIZE_SHRINK_END
-		row.add_child(points_label)
+	var points_label := Label.new()
+	points_label.text = str(points)
+	points_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	points_label.size_flags_horizontal = Control.SIZE_SHRINK_END
+	points_label.add_theme_font_size_override("font_size", 20)
+	row.add_child(points_label)
 
-		full_word_list.add_child(row)
+	word_panel.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton:
+			var mb := event as InputEventMouseButton
+			if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
+				_show_word_popup(word, word_panel)
+	)
+
+	full_word_list.add_child(row)
+
+func _show_word_popup(word: String, anchor: Control) -> void:
+	var old_overlay := get_node_or_null("WordPopupOverlay")
+	if old_overlay:
+		old_overlay.queue_free()
+	
+	var overlay := Control.new()
+	overlay.name = "WordPopupOverlay"
+	overlay.top_level = true
+	overlay.z_as_relative = false
+	overlay.z_index = 400
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(overlay)
+
+	var popup := PanelContainer.new()
+	popup.name = "WordPopup"
+	popup.z_as_relative = false
+	popup.z_index = 500
+
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(1, 1, 1, 0.98)
+	sb.corner_radius_top_left = 24
+	sb.corner_radius_top_right = 24
+	sb.corner_radius_bottom_left = 24
+	sb.corner_radius_bottom_right = 24
+	sb.shadow_color = Color(0, 0, 0, 0.25)
+	sb.shadow_size = 8
+	sb.shadow_offset = Vector2(0, 4)
+	sb.set_content_margin(SIDE_LEFT, 16.0)
+	sb.set_content_margin(SIDE_RIGHT, 16.0)
+	sb.set_content_margin(SIDE_TOP, 16.0)
+	sb.set_content_margin(SIDE_BOTTOM, 16.0)
+	popup.add_theme_stylebox_override("panel", sb)
+	popup.custom_minimum_size = Vector2(140, 0)
+	overlay.add_child(popup)
+
+	var piece_runs: Array[String] = []
+	if game_screen and game_screen.has_method("get_letter_pieces"):
+		piece_runs = game_screen.get_letter_pieces()
+	else:
+		var letters_str := String(game_screen.letters).to_upper()
+		for c in letters_str:
+			piece_runs.append(String(c))
+
+	var orientations: Array = []
+	if game_screen and game_screen.has_method("get_letter_piece_orientations"):
+		orientations = game_screen.get_letter_piece_orientations()
+
+	var seg_data: Dictionary = _build_visual_segments_for_word(
+		word,
+		piece_runs,
+		orientations
+	)
+
+	var show_horizontal: bool = true
+	var pieces_to_show: Array = []
+
+	if seg_data.is_empty():
+		show_horizontal = true
+	else:
+		show_horizontal = bool(seg_data.get("horizontal", true))
+		if seg_data.has("pieces"):
+			pieces_to_show = seg_data["pieces"]
+
+	var letters_canvas := Control.new()
+	letters_canvas.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	letters_canvas.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+	var center := CenterContainer.new()
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	popup.add_child(center)
+	center.add_child(letters_canvas)
+
+	var letter_size := 44.0
+	var separation := 6.0
+	var tiles: Array[Dictionary] = []
+
+	if pieces_to_show.is_empty():
+		var w_upper := word.to_upper()
+		for c in w_upper:
+			var tile := _create_run_tile(String(c), true, [])
+			letters_canvas.add_child(tile)
+			tiles.append({
+				"tile": tile,
+				"is_horizontal_piece": true,
+				"run": String(c),
+				"used_idx": 0
+			})
+	else:
+		for p in pieces_to_show:
+			if not (p is Dictionary and p.has("piece_idx")):
+				continue
+
+			var piece_idx: int = int(p["piece_idx"])
+			if piece_idx < 0 or piece_idx >= piece_runs.size():
+				continue
+
+			var full_piece := String(piece_runs[piece_idx]).to_upper()
+			if full_piece == "":
+				continue
+
+			var used_indices: Array = []
+			var used_idx := 0
+			if p.has("used_letters"):
+				used_indices = p["used_letters"]
+				if used_indices.size() > 0:
+					used_idx = int(used_indices[0])
+
+			var is_h_piece := false
+			if orientations.size() == piece_runs.size():
+				is_h_piece = _is_piece_horizontal_idx(piece_idx, orientations)
+
+			var tile := _create_run_tile(full_piece, is_h_piece, used_indices)
+			letters_canvas.add_child(tile)
+
+			tiles.append({
+				"tile": tile,
+				"is_horizontal_piece": is_h_piece,
+				"run": full_piece,
+				"used_idx": used_idx
+			})
+
+	var max_piece_width := 0.0
+	var max_piece_height := 0.0
+
+	for t in tiles:
+		var tile: Control = t["tile"]
+		var is_h_piece: bool = bool(t["is_horizontal_piece"])
+		var run: String = t["run"]
+		var run_len := run.length()
+
+		var w := letter_size * (run_len if is_h_piece else 1)
+		var h := letter_size * (1 if is_h_piece or run_len == 1 else run_len)
+
+		tile.size = Vector2(w, h)
+		tile.custom_minimum_size = tile.size
+
+		max_piece_width = max(max_piece_width, w)
+		max_piece_height = max(max_piece_height, h)
+
+	if show_horizontal:
+		var total_width := 0.0
+		for t in tiles:
+			var tile: Control = t["tile"]
+			total_width += tile.size.x
+		if tiles.size() > 1:
+			total_width += separation * float(tiles.size() - 1)
+
+		var total_height := max_piece_height + letter_size
+		letters_canvas.custom_minimum_size = Vector2(total_width, total_height)
+		letters_canvas.size = letters_canvas.custom_minimum_size
+
+		var baseline_y := total_height * 0.5
+
+		var x_accum := 0.0
+		for i in range(tiles.size()):
+			var t := tiles[i]
+			var tile: Control = t["tile"]
+			var is_h_piece: bool = bool(t["is_horizontal_piece"])
+			var run: String = t["run"]
+			var run_len := run.length()
+			var used_idx := int(t["used_idx"])
+
+			var w := tile.size.x
+			var h := tile.size.y
+
+			var used_center_y := 0.0
+			if run_len <= 1 or is_h_piece:
+				used_center_y = h * 0.5
+			else:
+				used_center_y = (float(used_idx) + 0.5) * (h / float(run_len))
+
+			var tile_y := baseline_y - used_center_y
+			tile.position = Vector2(x_accum, tile_y)
+
+			x_accum += w + separation
+	else:
+		var total_height := 0.0
+		for t in tiles:
+			var tile: Control = t["tile"]
+			total_height += tile.size.y
+		if tiles.size() > 1:
+			total_height += separation * float(tiles.size() - 1)
+
+		var total_width := max_piece_width + letter_size
+		letters_canvas.custom_minimum_size = Vector2(total_width, total_height)
+		letters_canvas.size = letters_canvas.custom_minimum_size
+
+		var baseline_x := total_width * 0.5
+
+		var y_accum := 0.0
+		for i in range(tiles.size()):
+			var t := tiles[i]
+			var tile: Control = t["tile"]
+			var is_h_piece: bool = bool(t["is_horizontal_piece"])
+			var run: String = t["run"]
+			var run_len := run.length()
+			var used_idx := int(t["used_idx"])
+
+			var w := tile.size.x
+			var h := tile.size.y
+
+			var used_center_x := 0.0
+			if run_len <= 1 or not is_h_piece:
+				used_center_x = w * 0.5
+			else:
+				used_center_x = (float(used_idx) + 0.5) * (w / float(run_len))
+
+			var tile_x := baseline_x - used_center_x
+			tile.position = Vector2(tile_x, y_accum)
+
+			y_accum += h + separation
+
+	var pointer := ColorRect.new()
+	pointer.name = "Pointer"
+	pointer.color = sb.bg_color
+	pointer.custom_minimum_size = Vector2(18, 18)
+	pointer.size = pointer.custom_minimum_size
+	pointer.rotation = deg_to_rad(45.0)
+	pointer.z_as_relative = false
+	pointer.z_index = 499
+	overlay.add_child(pointer)
+
+	var close_btn := Button.new()
+	close_btn.text = "X"
+	close_btn.flat = false
+	close_btn.focus_mode = Control.FOCUS_NONE
+	close_btn.custom_minimum_size = Vector2(28, 28)
+	close_btn.z_as_relative = false
+	close_btn.z_index = 501
+	close_btn.add_theme_color_override("font_color", Color(0, 0, 0))
+
+	var close_style := StyleBoxFlat.new()
+	close_style.bg_color = Color(1, 1, 1)
+	close_style.corner_radius_top_left = 14
+	close_style.corner_radius_top_right = 14
+	close_style.corner_radius_bottom_left = 14
+	close_style.corner_radius_bottom_right = 14
+	close_style.shadow_color = Color(0, 0, 0, 0.25)
+	close_style.shadow_size = 4
+	close_style.shadow_offset = Vector2(0, 2)
+	close_btn.add_theme_stylebox_override("normal", close_style)
+	close_btn.add_theme_stylebox_override("hover", close_style)
+	close_btn.add_theme_stylebox_override("pressed", close_style)
+	overlay.add_child(close_btn)
+
+	close_btn.pressed.connect(func() -> void:
+		_dismiss_word_popup(overlay)
+	)
+
+	overlay.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton:
+			var mb := event as InputEventMouseButton
+			if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
+				var click_pos := mb.position
+				var popup_rect := popup.get_global_rect()
+
+				if popup_rect.has_point(click_pos):
+					return
+
+				var clicked_word := ""
+				var clicked_panel: Control = null
+
+				for row in full_word_list.get_children():
+					if row is HBoxContainer:
+						for child in row.get_children():
+							if child is PanelContainer and child.has_meta("word"):
+								var r := (child as Control).get_global_rect()
+								if r.has_point(click_pos):
+									clicked_word = String(child.get_meta("word"))
+									clicked_panel = child
+									break
+						if clicked_panel:
+							break
+
+				_dismiss_word_popup(overlay)
+
+				if clicked_panel and clicked_word != "":
+					_show_word_popup(clicked_word, clicked_panel)
+	)
+
+	popup.modulate.a = 0.0
+
+	await get_tree().process_frame
+
+	var anchor_rect: Rect2 = anchor.get_global_rect()
+	var viewport_rect: Rect2 = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	var margin: float = 12.0
+	var open_on_left: bool = false
+	var popup_rect: Rect2 = popup.get_global_rect()
+	var right_space: float = viewport_rect.size.x - (anchor_rect.end.x + margin)
+	if popup_rect.size.x > right_space:
+		open_on_left = true
+
+	var target_x: float = (
+		anchor_rect.position.x - margin - popup_rect.size.x
+		if open_on_left
+		else anchor_rect.end.x + margin
+	)
+
+	var target_y: float = (
+		anchor_rect.position.y + anchor_rect.size.y * 0.5 - popup_rect.size.y * 0.5
+	)
+
+	var target_pos: Vector2 = Vector2(target_x, target_y)
+
+	target_pos.x = clamp(
+		target_pos.x,
+		margin,
+		viewport_rect.size.x - popup_rect.size.x - margin
+	)
+
+	target_pos.y = clamp(
+		target_pos.y,
+		margin,
+		viewport_rect.size.y - popup_rect.size.y - margin
+	)
+
+	popup.global_position = target_pos
+
+	await get_tree().process_frame
+	popup_rect = popup.get_global_rect()
+
+	var max_width: float = float(viewport_rect.size.x) - margin * 2.0
+	var max_height: float = float(viewport_rect.size.y) - margin * 2.0
+
+	var scale_factor: float = 1.0
+	if popup_rect.size.x > max_width or popup_rect.size.y > max_height:
+		var sx: float = max_width / popup_rect.size.x
+		var sy: float = max_height / popup_rect.size.y
+		scale_factor = clamp(min(sx, sy), 0.5, 1.0)
+
+		letters_canvas.scale = Vector2(scale_factor, scale_factor)
+
+		await get_tree().process_frame
+		popup_rect = popup.get_global_rect()
+
+		target_pos = popup.global_position
+		target_pos.x = clamp(
+			target_pos.x,
+			float(viewport_rect.position.x + margin),
+			float(viewport_rect.position.x + viewport_rect.size.x - margin - popup_rect.size.x)
+		)
+		target_pos.y = clamp(
+			target_pos.y,
+			float(viewport_rect.position.y + margin),
+			float(viewport_rect.position.y + viewport_rect.size.y - margin - popup_rect.size.y)
+		)
+		popup.global_position = target_pos
+
+	var ptr_size: Vector2 = pointer.custom_minimum_size
+	var popup_is_right: bool = popup.global_position.x >= anchor_rect.position.x
+	var pointer_x: float
+	if open_on_left:
+		pointer_x = popup.global_position.x + popup_rect.size.x - (ptr_size.x * 0.5)
+	else:
+		pointer_x = popup.global_position.x - (ptr_size.x * 0.5)
+
+
+	pointer.global_position = Vector2(
+		pointer_x,
+		anchor_rect.position.y + anchor_rect.size.y * 0.5 - ptr_size.y * 0.5
+	)
+
+	close_btn.global_position = popup.global_position + Vector2(
+		popup_rect.size.x - close_btn.custom_minimum_size.x * 0.5,
+		-close_btn.custom_minimum_size.y * 0.5
+	)
+
+	var tween := create_tween()
+	popup.modulate.a = 0.0
+	var start_pos: Vector2 = popup.global_position + Vector2(0, 8.0)
+	popup.global_position = start_pos
+
+	tween.tween_property(popup, "modulate:a", 1.0, 0.15)
+	tween.parallel().tween_property(popup, "global_position", target_pos, 0.15) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+func _dismiss_word_popup(overlay: Control) -> void:
+	if not is_instance_valid(overlay):
+		return
+	
+	var popup := overlay.get_node_or_null("WordPopup") as Control
+	if popup == null:
+		overlay.queue_free()
+		return
+	
+	var tween := create_tween()
+	var start_pos := popup.global_position
+	var end_pos := start_pos + Vector2(0, 8)
+
+	tween.tween_property(popup, "modulate:a", 0.0, 0.12)
+	tween.parallel().tween_property(popup, "global_position", end_pos, 0.12) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+
+	tween.tween_callback(func() -> void:
+		if is_instance_valid(overlay):
+			overlay.queue_free()
+	)
 
 func _on_start_button_pressed() -> void:
 	await _switch_to_screen(1)      # GameScreen
@@ -561,7 +1108,141 @@ func _on_back_button_pressed() -> void:
 	await _switch_to_screen(2)      # ScoreScreen
 	
 func _on_view_words_pressed() -> void:
-	await _switch_to_screen(3)      # View Words Screen
+	await _switch_to_screen(3) # View Words Screen
+	await _populate_full_word_list_from_cache()
+	
+func _load_words_async() -> void:
+	full_word_list.queue_free_children()
+	_compute_words_async()
+	
+func _init_dictionary_trie() -> void:
+	if _dictionary_trie_root != null: return
+	
+	_dictionary_trie_root = TrieNode.new()
+	var f := FileAccess.open(DICT_PATH, FileAccess.READ)
+	if f == null:
+		push_error("Could not open dictionary for Trie: %s" % DICT_PATH)
+		return
+
+	while not f.eof_reached():
+		var line := f.get_line().strip_edges().to_upper()
+		if line.length() < 3: continue 
+		
+		var node := _dictionary_trie_root
+		for i in line.length():
+			var char_str := line[i]
+			if not node.children.has(char_str):
+				node.children[char_str] = TrieNode.new()
+			node = node.children[char_str]
+		node.is_word = true
+		
+func _find_candidates_via_trie(piece_runs: Array[String]) -> Array[String]:
+	var results: Array[String] = []
+	if _dictionary_trie_root == null:
+		_init_dictionary_trie()
+
+	if piece_runs.is_empty():
+		return results
+
+	var letter_counts: Dictionary = {}
+	var total_letters := 0
+
+	for run in piece_runs:
+		var r_upper := run.to_upper()
+		for i in range(r_upper.length()):
+			var ch := r_upper[i]
+			letter_counts[ch] = int(letter_counts.get(ch, 0)) + 1
+			total_letters += 1
+
+	var max_len: int = int(min(total_letters, 9))
+
+	_trie_dfs_letters(_dictionary_trie_root, letter_counts, "", results, max_len)
+	return results
+	
+func _trie_dfs_letters(
+	node: TrieNode,
+	letter_counts: Dictionary,
+	current_word: String,
+	results: Array[String],
+	max_len: int
+) -> void:
+	if node.is_word and current_word.length() >= 3 and not results.has(current_word):
+		results.append(current_word)
+
+	if current_word.length() >= max_len:
+		return
+
+	for key in letter_counts.keys():
+		var remaining: int = int(letter_counts[key])
+		if remaining <= 0:
+			continue
+
+		var ch_str := String(key)
+		if ch_str.length() != 1:
+			continue
+
+		if not node.children.has(ch_str):
+			continue
+
+		var next_node: TrieNode = node.children[ch_str] as TrieNode
+
+		letter_counts[key] = remaining - 1
+		_trie_dfs_letters(next_node, letter_counts, current_word + ch_str, results, max_len)
+		letter_counts[key] = remaining
+
+func _compute_words_async() -> void:
+	_words_cache_ready = false
+	_possible_words_cache.clear()
+
+	await get_tree().process_frame
+
+	var piece_runs: Array[String] = []
+	if game_screen and game_screen.has_method("get_letter_pieces"):
+		piece_runs = game_screen.get_letter_pieces()
+	else:
+		var letters_str: String = String(game_screen.letters).to_upper().strip_edges()
+		for c in letters_str:
+			piece_runs.append(String(c))
+
+	if piece_runs.is_empty():
+		return
+
+	var candidates: Array[String] = _find_candidates_via_trie(piece_runs)
+
+	for w in candidates:
+		var w_str: String = String(w).to_upper()
+		var wlen: int = w_str.length()
+		if wlen < 3 or wlen > 9:
+			continue
+
+		if not _word_respects_orientation(w_str, piece_runs):
+			continue
+
+		var pts: int = _compute_word_score(wlen)
+		if pts <= 0:
+			continue
+
+		_possible_words_cache.append({
+			"word": w_str,
+			"points": pts
+		})
+
+	_possible_words_cache.sort_custom(
+		func(a: Dictionary, b: Dictionary) -> bool:
+			var pa: int = int(a["points"])
+			var pb: int = int(b["points"])
+			if pa == pb:
+				return String(a["word"]) < String(b["word"])
+			return pa > pb
+	)
+
+	_words_cache_ready = true
+	
+func _add_word_row(word: String, points: int) -> void:
+	_add_word_row_with_highlight(word, points, false)
+	possible_word_count += 1
+	if is_instance_valid(view_words_button):
+		view_words_button.text = "VIEW ALL WORDS"
 
 func _compute_word_score(wlen: int) -> int:
 	if wlen == 3:
@@ -571,10 +1252,314 @@ func _compute_word_score(wlen: int) -> int:
 	elif wlen == 5:
 		return 1200
 	elif wlen == 6:
-		return 2000
+		return 1400
 	elif wlen == 7:
-		return 3000
+		return 1800
+	elif wlen == 8:
+		return 2200
+	elif wlen == 9:
+		return 2600
 	return 0
+
+func _create_run_tile(run: String, is_horizontal_piece: bool, used_letter_indices: Array = []) -> Control:
+	run = run.to_upper()
+
+	var used_set: Dictionary = {}
+	for idx in used_letter_indices:
+		used_set[int(idx)] = true
+
+	var tile := TextureButton.new()
+	tile.texture_normal = LETTER_BG
+	tile.texture_pressed = LETTER_BG
+	tile.texture_hover = LETTER_BG
+	tile.ignore_texture_size = true
+	tile.stretch_mode = TextureButton.STRETCH_SCALE
+	tile.focus_mode = Control.FOCUS_NONE
+	tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tile.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	tile.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+
+	var letter_size := 44.0
+	var font_size := 26
+
+	if run.length() == 1:
+		tile.custom_minimum_size = Vector2(letter_size, letter_size)
+		tile.size = tile.custom_minimum_size
+
+		var lbl := Label.new()
+		lbl.text = run
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lbl.add_theme_font_size_override("font_size", font_size)
+
+		var used := used_set.has(0) or used_set.is_empty()
+		var color := Color(0, 0, 0) if used else Color(0, 0, 0, 0.35)
+		lbl.add_theme_color_override("font_color", color)
+
+		lbl.anchor_left = 0.0
+		lbl.anchor_top = 0.0
+		lbl.anchor_right = 1.0
+		lbl.anchor_bottom = 1.0
+		lbl.offset_left = 0.0
+		lbl.offset_top = 0.0
+		lbl.offset_right = 0.0
+		lbl.offset_bottom = 0.0
+		tile.add_child(lbl)
+	else:
+		if is_horizontal_piece:
+			tile.custom_minimum_size = Vector2(letter_size * run.length(), letter_size)
+			tile.size = tile.custom_minimum_size
+
+			var hbox := HBoxContainer.new()
+			hbox.anchor_left = 0.0
+			hbox.anchor_top = 0.0
+			hbox.anchor_right = 1.0
+			hbox.anchor_bottom = 1.0
+			hbox.offset_left = 0.0
+			hbox.offset_top = 0.0
+			hbox.offset_right = 0.0
+			hbox.offset_bottom = 0.0
+			hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+			hbox.add_theme_constant_override("separation", 0)
+			tile.add_child(hbox)
+
+			for i in run.length():
+				var ch := String(run[i])
+				var lbl_h := Label.new()
+				lbl_h.text = ch
+				lbl_h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				lbl_h.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				lbl_h.add_theme_font_size_override("font_size", font_size)
+
+				var used := used_set.is_empty() or used_set.has(i)
+				var color := Color(0, 0, 0) if used else Color(0, 0, 0, 0.35)
+				lbl_h.add_theme_color_override("font_color", color)
+
+				lbl_h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				hbox.add_child(lbl_h)
+		else:
+			tile.custom_minimum_size = Vector2(letter_size, letter_size * run.length())
+			tile.size = tile.custom_minimum_size
+
+			var vbox := VBoxContainer.new()
+			vbox.anchor_left = 0.0
+			vbox.anchor_top = 0.0
+			vbox.anchor_right = 1.0
+			vbox.anchor_bottom = 1.0
+			vbox.offset_left = 0.0
+			vbox.offset_top = 0.0
+			vbox.offset_right = 0.0
+			vbox.offset_bottom = 0.0
+			vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+			vbox.add_theme_constant_override("separation", 0)
+			tile.add_child(vbox)
+
+			for i in run.length():
+				var ch2 := String(run[i])
+				var lbl_v := Label.new()
+				lbl_v.text = ch2
+				lbl_v.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				lbl_v.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				lbl_v.add_theme_font_size_override("font_size", font_size)
+
+				var used := used_set.is_empty() or used_set.has(i)
+				var color := Color(0, 0, 0) if used else Color(0, 0, 0, 0.35)
+				lbl_v.add_theme_color_override("font_color", color)
+
+				lbl_v.size_flags_vertical = Control.SIZE_EXPAND_FILL
+				vbox.add_child(lbl_v)
+
+	return tile
+
+func _build_visual_segments_for_word(
+	word: String,
+	piece_runs: Array[String],
+	orientations: Array
+) -> Dictionary:
+	var result: Dictionary = {}
+	var n: int = piece_runs.size()
+	if n == 0:
+		return result
+
+	var word_u := word.to_upper()
+	var word_len: int = word_u.length()
+
+	if word_len > 9:
+		return result
+
+	var runs_upper: Array[String] = []
+	runs_upper.resize(n)
+	for i in range(n):
+		runs_upper[i] = String(piece_runs[i]).to_upper()
+
+	var memo: Dictionary = {}
+	var path: Array = []
+	var final_horizontal := true
+
+	var can_horiz := word_len <= 8
+	var can_vert := word_len <= 9
+	var ok := false
+
+	if can_horiz:
+		ok = _build_segments_dfs(
+			word_u,
+			runs_upper,
+			orientations,
+			true,
+			0,
+			0,
+			memo,
+			path
+		)
+		if ok:
+			final_horizontal = true
+
+	if not ok and can_vert:
+		memo.clear()
+		path.clear()
+		ok = _build_segments_dfs(
+			word_u,
+			runs_upper,
+			orientations,
+			false,
+			0,
+			0,
+			memo,
+			path
+		)
+		if ok:
+			final_horizontal = false
+
+	if not ok:
+		return result
+
+	if path.size() != word_len:
+		return result
+
+	var piece_info: Dictionary = {}
+	for pos in range(word_len):
+		var entry : Dictionary = path[pos]
+		if not (entry is Dictionary and entry.has("piece_idx") and entry.has("letter_idx")):
+			continue
+
+		var pi := int(entry["piece_idx"])
+		var li := int(entry["letter_idx"])
+
+		if not piece_info.has(pi):
+			piece_info[pi] = {
+				"piece_idx": pi,
+				"first_pos": pos,
+				"used_letters": [li]
+			}
+		else:
+			var d: Dictionary = piece_info[pi]
+			d["first_pos"] = min(int(d["first_pos"]), pos)
+			var used := d["used_letters"] as Array
+			if not used.has(li):
+				used.append(li)
+			d["used_letters"] = used
+
+	var pieces_used: Array = []
+	for pi in piece_info.keys():
+		pieces_used.append(piece_info[pi])
+	pieces_used.sort_custom(
+		func(a: Dictionary, b: Dictionary) -> bool:
+			return int(a["first_pos"]) < int(b["first_pos"])
+	)
+
+	result["horizontal"] = final_horizontal
+	result["pieces"] = pieces_used
+	return result
+
+func _build_segments_dfs(
+	word: String,
+	runs_upper: Array[String],
+	orientations: Array,
+	want_horizontal: bool,
+	pos: int,
+	used_mask: int,
+	memo: Dictionary,
+	path: Array
+) -> bool:
+	var word_len := word.length()
+	var n := runs_upper.size()
+
+	if pos == word_len:
+		return true
+
+	var hv := "H" if want_horizontal else "V"
+	var key := "%d|%d|%s" % [pos, used_mask, hv]
+	if memo.has(key):
+		return false
+
+	var target := word[pos]
+
+	for i in range(n):
+		var bit := 1 << i
+		if used_mask & bit != 0:
+			continue
+
+		var run := runs_upper[i]
+		var is_h := _is_piece_horizontal_idx(i, orientations)
+		var aligned := (want_horizontal and is_h) or (not want_horizontal and not is_h)
+
+		if aligned and run.length() > 1:
+			var blen := run.length()
+			if pos + blen <= word_len and word.substr(pos, blen) == run:
+				var old := path.size()
+				for j in range(blen):
+					path.append({
+						"piece_idx": i,
+						"letter_idx": j
+					})
+
+				if _build_segments_dfs(
+					word, runs_upper, orientations, want_horizontal,
+					pos + blen, used_mask | bit, memo, path
+				):
+					return true
+
+				path.resize(old)
+	for i in range(n):
+		var bit2 := 1 << i
+		if used_mask & bit2 != 0:
+			continue
+
+		var run2 := runs_upper[i]
+		var is_h2 := _is_piece_horizontal_idx(i, orientations)
+		var aligned2 := (want_horizontal and is_h2) or (not want_horizontal and not is_h2)
+
+		if aligned2 and run2.length() > 1:
+			continue
+
+		var letter_idx := -1
+		if run2.length() == 1:
+			if run2[0] == target:
+				letter_idx = 0
+		else:
+			for k in range(run2.length()):
+				if run2[k] == target:
+					letter_idx = k
+					break
+
+		if letter_idx == -1:
+			continue
+
+		path.append({
+			"piece_idx": i,
+			"letter_idx": letter_idx
+		})
+
+		if _build_segments_dfs(
+			word, runs_upper, orientations, want_horizontal,
+			pos + 1, used_mask | bit2, memo, path
+		):
+			return true
+
+		path.pop_back()
+
+	memo[key] = true
+	return false
 
 
 func _build_word_entries_from_string(words_s: String) -> Array:
@@ -648,7 +1633,7 @@ func send_game() -> void:
 func check_win() -> bool:
 	print("--- CHECKING WIN CONDITION ---")
 	if game_over: return false
-	print("P1 Score:", p1_score_s,"P2 Score:", p2_score_s)
+	print("P1 Score:", p1_score_s," | P2 Score:", p2_score_s)
 	if p1_score_s == "" or p2_score_s == "":
 		return false
 	var p1_has = false

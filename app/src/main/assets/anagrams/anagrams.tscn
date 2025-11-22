@@ -644,6 +644,7 @@ theme_override_constants/margin_bottom = 100
 
 [node name="WinLossLabel" type="Label" parent="ScoreScreen/MarginContainer"]
 unique_name_in_owner = true
+visible = false
 z_index = 102
 layout_mode = 2
 size_flags_horizontal = 4

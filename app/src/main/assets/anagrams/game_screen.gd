@@ -833,12 +833,10 @@ func _on_game_timer_timeout() -> void:
 			game_timer.stop()
 			_on_time_up()
 
-
 func _update_timer_label() -> void:
-	var mins := remaining_time / 60
+	var mins := int(floor(float(remaining_time) / 60.0))
 	var secs := remaining_time % 60
 	timer_label.text = "[font_size={24px}]%02d:%02d[/font_size]" % [mins, secs]
-
 
 func _on_time_up() -> void:
 	for btn in source_buttons:
