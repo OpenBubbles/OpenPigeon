@@ -101,6 +101,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             PongGame(),
             Crazy8Game(),
             ConnectGame(),
+            PaintballGame(),
             FillerGame(),
             CheckersGame(),
             MancalaGame(),
