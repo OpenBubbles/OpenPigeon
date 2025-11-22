@@ -14,7 +14,6 @@ var games = {
 	"dots": "res://dots/dots.tscn",
 	"knock": "res://knockout/knockout.tscn",
 	"questions": "res://questions/questions.tscn",
-	"paintball": "res://paintball/paintball.tscn",
 	"renju": "res://gomoku/gomoku.tscn",
 	"anagrams": "res://anagrams/anagrams.tscn",
 	"wordbites": "res://bites/wordbites.tscn",

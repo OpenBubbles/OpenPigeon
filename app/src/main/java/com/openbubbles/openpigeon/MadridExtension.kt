@@ -65,10 +65,8 @@ import com.openbubbles.openpigeon.crazy8.Crazy8Game
 import com.openbubbles.openpigeon.darts.DartsGame
 import com.openbubbles.openpigeon.dots.DotsGame
 import com.openbubbles.openpigeon.fill.FillerGame
-import com.openbubbles.openpigeon.godot.GodotGameActivity
 import com.openbubbles.openpigeon.gomoku.GomokuGame
 import com.openbubbles.openpigeon.mancala.MancalaGame
-import com.openbubbles.openpigeon.paintball.PaintballGame
 import com.openbubbles.openpigeon.pong.PongGame
 import com.openbubbles.openpigeon.pool.PoolGame
 import com.openbubbles.openpigeon.questions.QuestionsGame
