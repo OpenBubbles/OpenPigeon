@@ -328,7 +328,7 @@ theme_override_colors/default_color = Color(0, 0, 0, 1)
 bbcode_enabled = true
 text = "[b][font_size={36px}]How to play:[/font_size]
 
-[font_size={24px}]Combine blocks together horizontally [br] or vertically to make [br] as many words as possible.[/font_size]"
+[font_size={24px}]Combine blocks together horizontally or vertically to make as many words as possible.[/font_size]"
 fit_content = true
 horizontal_alignment = 1
 

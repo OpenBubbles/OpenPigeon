@@ -59,7 +59,8 @@ var first_data := true
 var possible_word_count: int = 0
 var _possible_words_cache: Array = []
 var _words_cache_ready := false
-
+var _words_loading_overlay: Control = null
+var _words_loading_tween: Tween = null
 
 func _ready() -> void:
 	if not start_button.pressed.is_connected(_on_start_button_pressed):
@@ -81,7 +82,8 @@ func _ready() -> void:
 			has_connected = true
 			appPlugin.call("onReady")
 	else:
-		var dev := '{"isYourTurn": true,"player":"2","level":"2|3|5|GO&2|0|7|UB&1|0|4|RE&2|0|1|ST&1|6|4|BI&0|5|7|N&0|3|3|M&0|3|1|L&0|2|8|C&0|7|6|D&0|6|1|P","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
+		#var dev := '{"isYourTurn": true,"player":"2","level":"2|3|5|GO&2|0|7|UB&1|0|4|RE&2|0|1|ST&1|6|4|BI&0|5|7|N&0|3|3|M&0|3|1|L&0|2|8|C&0|7|6|D&0|6|1|P","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
+		var dev := '{"isYourTurn": true,"player":"2","level":"2|3|5|GO&2|0|7|UB&1|0|4|RE&2|0|1|ST&1|6|4|BI&0|5|7|N&0|3|3|M&0|3|1|L&0|2|8|C&0|7|6|D&0|6|1|P", "avatar1":"body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "avatar2":"body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
 		#var dev := '{"isYourTurn": true,"player":"2","level":"2|3|5|GO&2|0|7|UB&1|0|4|RE&2|0|1|ST&1|6|4|BI&0|5|7|N&0|3|3|M&0|3|1|L&0|2|8|C&0|7|6|D&0|6|1|P","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
 		
 		await get_tree().process_frame
@@ -270,8 +272,6 @@ func _set_game_data(raw_text: String) -> void:
 			
 	_words_cache_ready = false
 	_possible_words_cache.clear()
-	_compute_words_async()
-
 
 	p1_score_s = _get_first(d, "score1", "")
 	var p1_words_s: String = _get_first(d, "words1", "")
@@ -318,6 +318,17 @@ func _set_game_data(raw_text: String) -> void:
 	if spectator_mode:
 		is_my_turn = false
 		print("SPECTATOR MODE ACTIVE")
+		if res.has("avatar1"):
+			var av1 = _parse_avatar_string(res["avatar1"])
+			player_avatar_display.call_deferred("update_avatar_from_data", av1)
+			player_score_avatar_display.call_deferred("update_avatar_from_data", av1)
+		if res.has("avatar2"):
+			var av2 = _parse_avatar_string(res["avatar2"])
+			opp_avatar_display.call_deferred("update_avatar_from_data", av2)
+		var p1_entries := _build_word_entries_from_string(p1_wordlist_s)
+		_populate_scoreboard(true, p1_entries, p1_words, p1_score)
+		var p2_entries := _build_word_entries_from_string(p2_wordlist_s)
+		_populate_scoreboard(false, p2_entries, p2_words, p2_score)
 
 	if my_player == 1:
 		opponent_avatar_key = "avatar2"
@@ -623,7 +634,9 @@ func _populate_full_word_list_from_cache() -> void:
 		child.queue_free()
 
 	if not _words_cache_ready:
+		_show_words_loading()
 		await _compute_words_async()
+		_hide_words_loading()
 
 	var found_words: Dictionary = {}
 	if is_instance_valid(game_screen) and game_screen.has_method("get_word_history"):
@@ -1013,8 +1026,6 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 
 	popup.global_position = target_pos
 
-	# --- Scale letters_canvas if popup is larger than the viewport area ---
-
 	await get_tree().process_frame
 	popup_rect = popup.get_global_rect()
 
@@ -1025,15 +1036,13 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 	if popup_rect.size.x > max_width or popup_rect.size.y > max_height:
 		var sx: float = max_width / popup_rect.size.x
 		var sy: float = max_height / popup_rect.size.y
-		scale_factor = clamp(min(sx, sy), 0.5, 1.0)  # never upscale, only shrink
+		scale_factor = clamp(min(sx, sy), 0.5, 1.0)
 
 		letters_canvas.scale = Vector2(scale_factor, scale_factor)
 
-		# Re-measure after scaling
 		await get_tree().process_frame
 		popup_rect = popup.get_global_rect()
 
-		# Re-clamp inside viewport
 		target_pos = popup.global_position
 		target_pos.x = clamp(
 			target_pos.x,
@@ -1046,8 +1055,6 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 			float(viewport_rect.position.y + viewport_rect.size.y - margin - popup_rect.size.y)
 		)
 		popup.global_position = target_pos
-
-	# --- Pointer and close button positions, using final popup rect ---
 
 	var ptr_size: Vector2 = pointer.custom_minimum_size
 	var popup_is_right: bool = popup.global_position.x >= anchor_rect.position.x
@@ -1075,7 +1082,90 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 	tween.tween_property(popup, "modulate:a", 1.0, 0.15)
 	tween.parallel().tween_property(popup, "global_position", target_pos, 0.15) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		
+func _show_words_loading() -> void:
+	_hide_words_loading()
 
+	if not is_instance_valid(self):
+		return
+
+	_words_loading_overlay = Control.new()
+	_words_loading_overlay.name = "WordsLoadingOverlay"
+	_words_loading_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_words_loading_overlay.z_as_relative = false
+	_words_loading_overlay.z_index = 1000
+	_words_loading_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_words_loading_overlay)
+
+	var dimmer := ColorRect.new()
+	dimmer.color = Color(0, 0, 0, 0.35)
+	dimmer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dimmer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_words_loading_overlay.add_child(dimmer)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_words_loading_overlay.add_child(center)
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 10)
+	center.add_child(vbox)
+
+	var tile_wrap := Control.new()
+	tile_wrap.custom_minimum_size = Vector2(64, 64)
+	tile_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	tile_wrap.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	vbox.add_child(tile_wrap)
+
+	var tile := TextureRect.new()
+	tile.texture = LETTER_BG
+	tile.expand = true
+	tile.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tile.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tile_wrap.add_child(tile)
+
+	var letter_lbl := Label.new()
+	letter_lbl.text = "O"
+	letter_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	letter_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	letter_lbl.add_theme_font_size_override("font_size", 30)
+	letter_lbl.add_theme_color_override("font_color", Color(0, 0, 0))
+	letter_lbl.anchor_left = 0.0
+	letter_lbl.anchor_top = 0.0
+	letter_lbl.anchor_right = 1.0
+	letter_lbl.anchor_bottom = 1.0
+	letter_lbl.offset_left = 0.0
+	letter_lbl.offset_top = 0.0
+	letter_lbl.offset_right = 0.0
+	letter_lbl.offset_bottom = 0.0
+	tile_wrap.add_child(letter_lbl)
+
+	var caption := Label.new()
+	caption.text = "Finding words..."
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption.add_theme_font_size_override("font_size", 18)
+	vbox.add_child(caption)
+
+	letter_lbl.modulate.a = 1.0
+	_words_loading_tween = create_tween()
+	_words_loading_tween.set_loops()
+	_words_loading_tween.tween_property(letter_lbl, "modulate:a", 0.2, 0.45) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_words_loading_tween.tween_property(letter_lbl, "modulate:a", 1.0, 0.45) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+func _hide_words_loading() -> void:
+	if _words_loading_tween and _words_loading_tween.is_running():
+		_words_loading_tween.kill()
+	_words_loading_tween = null
+
+	if is_instance_valid(_words_loading_overlay):
+		_words_loading_overlay.queue_free()
+	_words_loading_overlay = null
+	
 func _dismiss_word_popup(overlay: Control) -> void:
 	if not is_instance_valid(overlay):
 		return
@@ -1675,7 +1765,8 @@ func check_win() -> bool:
 			else:
 				if spectator_mode:
 					_show_win_burst(player_score_avatar_display if winner == "1" else opp_avatar_display)
-					win_loss_label.text = "Player %s Wins!" % winner
+					var displayedwinner = "1" if winner == "-1" else "2"
+					win_loss_label.text = "Player %s Wins!" % displayedwinner
 					win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 					win_loss_state = "-1"
 				else:
