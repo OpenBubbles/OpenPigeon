@@ -335,7 +335,7 @@ fun RenderKeyboard(extension: MadridExtension?) {
     val rowsPerPage = 2
     val p = extension?.currentPage ?: 0
     val itemsPerPage = itemsPerRow * rowsPerPage
-    val hiddenGameNames = setOf("hunt", "anagrams", "bites")
+    val hiddenGameNames = setOf("hunt", "anagrams", "wordbites")
     val visibleGames = games.filter { it.getName() !in hiddenGameNames }
     val totalPages = ceil(visibleGames.size / itemsPerPage.toDouble()).toInt()
 
