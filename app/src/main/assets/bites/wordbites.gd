@@ -259,7 +259,6 @@ func _set_game_data(raw_text: String) -> void:
 	my_id   = _get_first(d, "myPlayerId", my_id)
 	var p1_id: String = _get_first(d, "player1", "")
 	var p2_id: String = _get_first(d, "player2", "")
-	var sender_s: String = _get_first(d, "player", "1")
 	var level_s: String = _get_first(d, "level", "")
 	if level_s != "":
 		if game_screen.has_method("load_level"):
@@ -1006,19 +1005,15 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 
 	var target_pos: Vector2 = Vector2(target_x, target_y)
 
-	target_pos.x = clamp(
-		target_pos.x,
-		margin,
-		viewport_rect.size.x - popup_rect.size.x - margin
-	)
-
 	target_pos.y = clamp(
 		target_pos.y,
-		margin,
-		viewport_rect.size.y - popup_rect.size.y - margin
+		float(viewport_rect.position.y + margin),
+		float(viewport_rect.position.y + viewport_rect.size.y - margin - popup_rect.size.y)
 	)
 
 	popup.global_position = target_pos
+
+	# --- Scale letters_canvas if popup is larger than the viewport area ---
 
 	await get_tree().process_frame
 	popup_rect = popup.get_global_rect()
@@ -1030,13 +1025,15 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 	if popup_rect.size.x > max_width or popup_rect.size.y > max_height:
 		var sx: float = max_width / popup_rect.size.x
 		var sy: float = max_height / popup_rect.size.y
-		scale_factor = clamp(min(sx, sy), 0.5, 1.0)
+		scale_factor = clamp(min(sx, sy), 0.5, 1.0)  # never upscale, only shrink
 
 		letters_canvas.scale = Vector2(scale_factor, scale_factor)
 
+		# Re-measure after scaling
 		await get_tree().process_frame
 		popup_rect = popup.get_global_rect()
 
+		# Re-clamp inside viewport
 		target_pos = popup.global_position
 		target_pos.x = clamp(
 			target_pos.x,
@@ -1050,14 +1047,15 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 		)
 		popup.global_position = target_pos
 
+	# --- Pointer and close button positions, using final popup rect ---
+
 	var ptr_size: Vector2 = pointer.custom_minimum_size
 	var popup_is_right: bool = popup.global_position.x >= anchor_rect.position.x
 	var pointer_x: float
-	if open_on_left:
-		pointer_x = popup.global_position.x + popup_rect.size.x - (ptr_size.x * 0.5)
+	if popup_is_right:
+		pointer_x = popup.global_position.x - ptr_size.x * 0.5
 	else:
-		pointer_x = popup.global_position.x - (ptr_size.x * 0.5)
-
+		pointer_x = popup.global_position.x + popup_rect.size.x - ptr_size.x * 0.5
 
 	pointer.global_position = Vector2(
 		pointer_x,
