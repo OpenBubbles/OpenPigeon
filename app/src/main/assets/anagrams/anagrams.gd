@@ -24,6 +24,7 @@ extends Control
 @onready var view_words_button: Button = %ViewWords
 @onready var full_word_list: VBoxContainer = %FullWordList
 @onready var back_button: TextureButton = %BackButton
+@onready var words_scroll: ScrollContainer = %VScrollBar
 
 const LETTER_BG: Texture2D = preload("res://anagrams/letter_bg.png")
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
@@ -49,6 +50,13 @@ var win_loss_state = ""
 var my_player := 0           # 0 spectator, 1 black, 2 white
 var p1_score_s = ""
 var p2_score_s = ""
+var _all_words_cache: Array = []
+var my_has_data := false
+var _dict_words: Array[String] = []
+var _dict_loaded := false
+var _words_scroll: ScrollContainer = null
+var _is_dragging_words := false
+var _last_drag_pos := Vector2.ZERO
 
 func _ready() -> void:
 	if not start_button.pressed.is_connected(_on_start_button_pressed):
@@ -62,7 +70,7 @@ func _ready() -> void:
 		dot_timer.connect("timeout", _on_dot_timer_timeout)
 	if not view_words_button.pressed.is_connected(_on_view_words_pressed):
 		view_words_button.pressed.connect(_on_view_words_pressed)
-		
+	_populate_full_word_list()
 	appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin:
 		if not has_connected:
@@ -75,11 +83,41 @@ func _ready() -> void:
 		
 		await get_tree().process_frame
 		_set_game_data(dev)
-	_init_screens()
+	if is_instance_valid(full_word_list):
+		# Let the parent ScrollContainer receive mouse events
+		full_word_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+		var parent := full_word_list.get_parent()
+		if parent is ScrollContainer:
+			_words_scroll = parent
+			if not _words_scroll.gui_input.is_connected(_on_words_scroll_gui_input):
+				_words_scroll.gui_input.connect(_on_words_scroll_gui_input)
+		else:
+			print("Warning: FullWordList parent is not a ScrollContainer, drag scroll disabled.")
+	if is_instance_valid(words_scroll):
+		words_scroll.drag_to_scroll = true
 	_apply_score_box_style(main_score_box)
 	_apply_score_box_style(player_score_box)
 	_apply_score_box_style(opp_score_box)
 	
+func _on_words_scroll_gui_input(event: InputEvent) -> void:
+	if _words_scroll == null:
+		return
+
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_is_dragging_words = true
+			_last_drag_pos = event.position
+			# Optional: stop other controls from handling this click
+			_words_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+		else:
+			_is_dragging_words = false
+			_words_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+
+	elif event is InputEventMouseMotion and _is_dragging_words:
+		# Drag direction: dragging up should scroll down (like touch scrolling)
+		var delta_y : float = event.relative.y
+		_words_scroll.scroll_vertical -= int(delta_y)
 		
 func _set_game_data(raw_text: String) -> void:
 	var res: Variant = JSON.parse_string(raw_text)
@@ -88,7 +126,7 @@ func _set_game_data(raw_text: String) -> void:
 		return
 	var d: Dictionary = res
 	print("INCOMING DATA: ", res)
-
+	
 	game_id = _get_first(d, "id", game_id)
 	my_id   = _get_first(d, "myPlayerId", my_id)
 	var p1_id: String = _get_first(d, "player1", "")
@@ -117,13 +155,18 @@ func _set_game_data(raw_text: String) -> void:
 	stop_waiting()
 
 	var sender_player: int = clampi(int(sender_s), 1, 2)
-	if p1_id != "" and p2_id != "" and my_id != "":
+	my_has_data = false
+	if (p1_id != "" or p2_id != "") and my_id != "":
 		if my_id == p1_id:
 			my_player = 1
+			opponent_avatar_key = "avatar2"
+			my_has_data = (p1_wordlist_s != "" or p1_words_s != "" or p1_score_s != "")
 			spectator_mode = false
 			print("SETTING FOR ID PLAYER 1 (my_id matches player1)")
 		elif my_id == p2_id:
 			my_player = 2
+			opponent_avatar_key = "avatar1"
+			my_has_data = (p2_wordlist_s != "" or p2_words_s != "" or p2_score_s != "")
 			spectator_mode = false
 			print("SETTING FOR ID PLAYER 2 (my_id matches player2)")
 		else:
@@ -132,13 +175,13 @@ func _set_game_data(raw_text: String) -> void:
 			print("SETTING FOR SPECTATOR (my_id matches neither player1 nor player2)")
 	else:
 		if my_player == 0:
-			my_player = sender_player
+			my_player = 1 if sender_player == 2 else 2
 			spectator_mode = false
 			print("NO PLAYER IDS; using sender 'player' field as my slot -> my_player =", my_player)
 		else:
 			print("NO PLAYER IDS; keeping existing my_player =", my_player)
 
-	spectator_mode = true
+	#spectator_mode = true
 	if spectator_mode:
 		is_my_turn = false
 		print("SPECTATOR MODE ACTIVE")
@@ -153,44 +196,34 @@ func _set_game_data(raw_text: String) -> void:
 		_populate_scoreboard(true, p1_entries, p1_words, p1_score)
 		var p2_entries := _build_word_entries_from_string(p2_wordlist_s)
 		_populate_scoreboard(false, p2_entries, p2_words, p2_score)
-
-	if my_player == 1:
-		opponent_avatar_key = "avatar2"
-	else:
-		opponent_avatar_key = "avatar1"
 		
 	if not spectator_mode:
 		var my_score: int = 0
 		var my_words: int = 0
 		var my_wordlist_s: String = ""
-
-		if my_player == 1:
-			my_score = p1_score
-			my_words = p1_words
-			my_wordlist_s = p1_wordlist_s
-		elif my_player == 2:
-			my_score = p2_score
-			my_words = p2_words
-			my_wordlist_s = p2_wordlist_s
-
-		if my_wordlist_s != "":
-			var my_entries := _build_word_entries_from_string(my_wordlist_s)
-			_populate_scoreboard(true, my_entries, my_words, my_score)
-			
-	if not spectator_mode:
 		var opp_score: int = 0
 		var opp_words: int = 0
 		var opp_wordlist_s: String = ""
 
 		if my_player == 1:
+			my_score = p1_score
+			my_words = p1_words
+			my_wordlist_s = p1_wordlist_s
 			opp_score = p2_score
 			opp_words = p2_words
 			opp_wordlist_s = p2_wordlist_s
 		elif my_player == 2:
+			my_score = p2_score
+			my_words = p2_words
+			my_wordlist_s = p2_wordlist_s
 			opp_score = p1_score
 			opp_words = p1_words
 			opp_wordlist_s = p1_wordlist_s
 
+		if my_wordlist_s != "":
+			var my_entries := _build_word_entries_from_string(my_wordlist_s)
+			_populate_scoreboard(true, my_entries, my_words, my_score)
+			
 		if opp_wordlist_s != "":
 			var opp_entries := _build_word_entries_from_string(opp_wordlist_s)
 			_populate_scoreboard(false, opp_entries, opp_words, opp_score)
@@ -201,12 +234,42 @@ func _set_game_data(raw_text: String) -> void:
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 	game_ended = await check_win()
-	_populate_full_word_list()
+	print("Game Ended: ", game_ended)
+	_init_screens()
 	if not is_my_turn and not game_over:
 		start_waiting()
 	else:
 		stop_waiting()
+		
+func _load_dictionary() -> void:
+	if _dict_loaded:
+		return
+
+	var f := FileAccess.open(DICT_PATH, FileAccess.READ)
+	if f == null:
+		push_error("Could not open dictionary file: %s" % DICT_PATH)
+		_dict_words = []
+		_dict_loaded = true
+		return
+
+	var words: Array[String] = []
+	while not f.eof_reached():
+		var line := f.get_line().strip_edges()
+		if line.is_empty():
+			continue
+		words.append(line.to_upper())
+	f.close()
+
+	_dict_words = words
+	_dict_loaded = true
 	
+func _make_letter_counts(pool: String) -> Dictionary:
+	var counts := {}
+	for c in pool:
+		counts[c] = int(counts.get(c, 0)) + 1
+	return counts
+		
+
 func _parse_avatar_string(data_string: String) -> Dictionary:
 	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
 	var body_map: Array     = AvatarThumbnail.avatar_fshape_regions.keys()
@@ -383,12 +446,14 @@ func _init_screens() -> void:
 	screens = [intro_screen, game_screen, score_screen,words_screen]
 	for i in screens.size():
 		var node := screens[i]
-		if not game_over and not spectator_mode:
+		if not game_over and not spectator_mode and not my_has_data:
+			print("Screen 0 Visible, Game Over is ", game_over, " and Spectator Mode is ", spectator_mode)
 			node.visible = (i == 0)
 		else:
+			print("Showing Screen 2")
 			node.visible = (i == 2)
 		node.position = Vector2.ZERO
-	current_screen = 0 if not game_over else 2
+	current_screen = 0 if not game_over and not spectator_mode and not my_has_data else 2
 
 func _switch_to_screen(next: int) -> void:
 	if next == current_screen:
@@ -463,55 +528,16 @@ func _word_entry_less(a: Dictionary, b: Dictionary) -> bool:
 	var wb: String = String(b.get("word", ""))
 	return wa < wb
 
-
-func _build_all_possible_words() -> Array:
-	var result: Array = []
-	
-	if not is_instance_valid(game_screen):
-		return result
-	var letters_str: String = String(game_screen.letters).to_upper().strip_edges()
-	if letters_str.is_empty():
-		return result
-	
-	var f := FileAccess.open(DICT_PATH, FileAccess.READ)
-	if f == null:
-		push_error("Could not open dictionary file: %s" % DICT_PATH)
-		return result
-	
-	while not f.eof_reached():
-		var line := f.get_line().strip_edges()
-		if line.is_empty():
-			continue
-		
-		var w := line.to_upper()
-		
-		if w.length() < 3:
-			continue
-		if w.length() > letters_str.length():
-			continue
-		
-		if not _can_build_from_letters(w, letters_str):
-			continue
-		
-		var pts := _compute_word_score(w.length())
-		if pts <= 0:
-			continue
-		
-		result.append({
-			"word": w,
-			"points": pts
-		})
-	
-	f.close()
-	
-	result.sort_custom(Callable(self, "_word_entry_less"))
-	return result
-
 func _populate_full_word_list() -> void:
 	for child in full_word_list.get_children():
 		child.queue_free()
 
-	var all_words := _build_all_possible_words()
+	if _all_words_cache.is_empty():
+		print("Word list cache empty, building now")
+		_all_words_cache = _build_all_possible_words()
+
+	var all_words := _all_words_cache
+	print("Using word list, count =", all_words.size())
 
 	var word_count := all_words.size()
 	if is_instance_valid(view_words_button):
@@ -563,6 +589,44 @@ func _populate_full_word_list() -> void:
 		row.add_child(points_label)
 
 		full_word_list.add_child(row)
+
+func _build_all_possible_words() -> Array:
+	var result: Array = []
+
+	if not is_instance_valid(game_screen):
+		return result
+
+	var letters_str: String = String(game_screen.letters).to_upper().strip_edges()
+	if letters_str.is_empty():
+		return result
+
+	_load_dictionary()
+
+	if _dict_words.is_empty():
+		return result
+
+	var rack_counts := _make_letter_counts(letters_str)
+	var max_len := letters_str.length()
+
+	for w in _dict_words:
+		var wlen := w.length()
+		if wlen < 3 or wlen > max_len:
+			continue
+
+		if not _can_build_word_from_letters(w, rack_counts):
+			continue
+
+		var pts := _compute_word_score(wlen)
+		if pts <= 0:
+			continue
+
+		result.append({
+			"word": w,
+			"points": pts
+		})
+
+	result.sort_custom(Callable(self, "_word_entry_less"))
+	return result
 
 func _on_start_button_pressed() -> void:
 	await _switch_to_screen(1)      # GameScreen
@@ -664,7 +728,7 @@ func check_win() -> bool:
 		return false
 	var p1_has = false
 	var p2_has = false
-	
+	print("Both Players have a score")
 	if p1_score_s.to_int() > p2_score_s.to_int():
 		p1_has = true
 	elif p1_score_s.to_int() < p2_score_s.to_int():
@@ -681,6 +745,7 @@ func check_win() -> bool:
 		winner = "0"
 
 	game_over = true
+	print("Game Over is: ", game_over)
 	view_words_button.visible = true
 	if winner != "":
 		if winner == "0":
@@ -703,7 +768,8 @@ func check_win() -> bool:
 			else:
 				if spectator_mode:
 					_show_win_burst(player_score_avatar_display if winner == "1" else opp_avatar_display)
-					win_loss_label.text = "Player %s Wins!" % winner
+					var displayedwin = "1" if winner == "1" else "2"
+					win_loss_label.text = "Player %s Wins!" % displayedwin
 					win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 					win_loss_state = "-1"
 				else:
@@ -720,7 +786,7 @@ func check_win() -> bool:
 		tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
 			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 		return true
-	return false
+	return true
 		
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
