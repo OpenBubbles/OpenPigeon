@@ -1,4 +1,4 @@
-[gd_scene load_steps=55 format=4 uid="uid://crqbmo33pcgea"]
+[gd_scene load_steps=69 format=4 uid="uid://crqbmo33pcgea"]
 
 [ext_resource type="Script" uid="uid://g04k6aqovx1" path="res://pong/cuppong.gd" id="1_mrme4"]
 [ext_resource type="Texture2D" uid="uid://cdtc67ynx2fi6" path="res://pong/floor.jpeg" id="2_6rbnb"]
@@ -7,24 +7,87 @@
 [ext_resource type="Texture2D" uid="uid://dtex453fg0hla" path="res://pong/wall.jpeg" id="3_jmq7c"]
 [ext_resource type="Texture2D" uid="uid://xqiagf3y5fm4" path="res://pong/table.png" id="4_vceo8"]
 [ext_resource type="Script" uid="uid://cico67h0u06if" path="res://pong/pong_ball.gd" id="5_5m0fp"]
-[ext_resource type="Script" uid="uid://7qyuc6nugln5" path="res://darts/waiting_label.gd" id="8_7k4em"]
-[ext_resource type="Script" uid="uid://di2ickwbmmm1f" path="res://pong/centered_label.gd" id="9_w6v1v"]
+[ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="8_naajd"]
+[ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="9_7t2yt"]
+
+[sub_resource type="Environment" id="Environment_w6v1v"]
+background_mode = 1
+background_color = Color(0.35265633, 0.3052654, 0.12167803, 1)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jmq7c"]
 albedo_texture = ExtResource("2_6rbnb")
 
+[sub_resource type="ArrayMesh" id="ArrayMesh_kl1mu"]
+_surfaces = [{
+"aabb": AABB(-3.21814, -0.005, -6.7302, 6.43628, 0.01, 13.4604),
+"attribute_data": PackedByteArray("AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/"),
+"format": 34359738391,
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 36,
+"vertex_data": PackedByteArray("AfZNwArXo7vMXddAAfZNwArXo7vMXdfAAfZNwArXozvMXdfAAfZNQArXo7vMXdfAAfZNwArXo7vMXdfAAfZNwArXo7vMXddAAfZNwArXozvMXdfAAfZNwArXo7vMXdfAAfZNQArXo7vMXdfAAfZNwArXozvMXdfAAfZNwArXozvMXddAAfZNwArXo7vMXddAAfZNwArXo7vMXddAAfZNwArXozvMXddAAfZNQArXozvMXddAAfZNQArXozvMXddAAfZNwArXozvMXddAAfZNwArXozvMXdfAAfZNwArXo7vMXddAAfZNQArXo7vMXddAAfZNQArXo7vMXdfAAfZNQArXozvMXddAAfZNQArXo7vMXddAAfZNwArXo7vMXddAAfZNQArXo7vMXdfAAfZNQArXo7vMXddAAfZNQArXozvMXddAAfZNQArXo7vMXdfAAfZNQArXozvMXdfAAfZNwArXozvMXdfAAfZNwArXozvMXdfAAfZNQArXozvMXdfAAfZNQArXozvMXddAAfZNQArXozvMXddAAfZNQArXozvMXdfAAfZNQArXo7vMXdfAAAD/f/9//n8AAP9//3/+fwAA/3//f/5//38AAP//AAD/fwAA//8AAP9/AAD//wAA/////wAA/z//////AAD/P/////8AAP8/AAD/f/9//n8AAP9//3/+fwAA/3//f/5//3//fwAA/z//f/9/AAD/P/9//38AAP8//3//////AAD/f/////8AAP9//////wAA/38AAP//AAD/fwAA//8AAP9/AAD//wAA/3//fwAA/z//f/9/AAD/P/9//38AAP8/////f/9//n////9//3/+f////3//f/5//////wAA/z//////AAD/P/////8AAP8//3//////AAD/f/////8AAP9//////wAA////f/9//n////9//3/+f////3//f/5/")
+}]
+
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vceo8"]
 albedo_texture = ExtResource("3_jmq7c")
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_naajd"]
+_surfaces = [{
+"aabb": AABB(-3.21814, -2.587215, -0.01836015, 6.43628, 5.17443, 0.0367203),
+"attribute_data": PackedByteArray("AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/"),
+"format": 34359738391,
+"material": SubResource("StandardMaterial3D_vceo8"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 36,
+"vertex_data": PackedByteArray("AfZNwO6UJcAGaJY8AfZNwO6UJcAGaJa8AfZNwO6UJUAGaJa8AfZNQO6UJcAGaJa8AfZNwO6UJcAGaJa8AfZNwO6UJcAGaJY8AfZNwO6UJUAGaJa8AfZNwO6UJcAGaJa8AfZNQO6UJcAGaJa8AfZNwO6UJUAGaJa8AfZNwO6UJUAGaJY8AfZNwO6UJcAGaJY8AfZNwO6UJcAGaJY8AfZNwO6UJUAGaJY8AfZNQO6UJUAGaJY8AfZNQO6UJUAGaJY8AfZNwO6UJUAGaJY8AfZNwO6UJUAGaJa8AfZNwO6UJcAGaJY8AfZNQO6UJcAGaJY8AfZNQO6UJcAGaJa8AfZNQO6UJUAGaJY8AfZNQO6UJcAGaJY8AfZNwO6UJcAGaJY8AfZNQO6UJcAGaJa8AfZNQO6UJcAGaJY8AfZNQO6UJUAGaJY8AfZNQO6UJcAGaJa8AfZNQO6UJUAGaJa8AfZNwO6UJUAGaJa8AfZNwO6UJUAGaJa8AfZNQO6UJUAGaJa8AfZNQO6UJUAGaJY8AfZNQO6UJUAGaJY8AfZNQO6UJUAGaJa8AfZNQO6UJcAGaJa8AAD/f/9//n8AAP9//3/+fwAA/3//f/5//38AAP//AAD/fwAA//8AAP9/AAD//wAA/////wAA/z//////AAD/P/////8AAP8/AAD/f/9//n8AAP9//3/+fwAA/3//f/5//3//fwAA/z//f/9/AAD/P/9//38AAP8//3//////AAD/f/////8AAP9//////wAA/38AAP//AAD/fwAA//8AAP9/AAD//wAA/3//fwAA/z//f/9/AAD/P/9//38AAP8/////f/9//n////9//3/+f////3//f/5//////wAA/z//////AAD/P/////8AAP8//3//////AAD/f/////8AAP9//////wAA////f/9//n////9//3/+f////3//f/5/")
+}]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5m0fp"]
 albedo_texture = ExtResource("4_vceo8")
 uv1_offset = Vector3(0, -0.01, 0)
 
+[sub_resource type="ArrayMesh" id="ArrayMesh_r2xos"]
+_surfaces = [{
+"aabb": AABB(-1.5, -0.5325, -0.005, 3, 1.065, 0.01),
+"attribute_data": PackedByteArray("AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/"),
+"format": 34359738391,
+"material": SubResource("StandardMaterial3D_5m0fp"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 36,
+"vertex_data": PackedByteArray("AADAv+xRCL8K16M7AADAv+xRCL8K16O7AADAv+xRCD8K16O7AADAP+xRCL8K16O7AADAv+xRCL8K16O7AADAv+xRCL8K16M7AADAv+xRCD8K16O7AADAv+xRCL8K16O7AADAP+xRCL8K16O7AADAv+xRCD8K16O7AADAv+xRCD8K16M7AADAv+xRCL8K16M7AADAv+xRCL8K16M7AADAv+xRCD8K16M7AADAP+xRCD8K16M7AADAP+xRCD8K16M7AADAv+xRCD8K16M7AADAv+xRCD8K16O7AADAv+xRCL8K16M7AADAP+xRCL8K16M7AADAP+xRCL8K16O7AADAP+xRCD8K16M7AADAP+xRCL8K16M7AADAv+xRCL8K16M7AADAP+xRCL8K16O7AADAP+xRCL8K16M7AADAP+xRCD8K16M7AADAP+xRCL8K16O7AADAP+xRCD8K16O7AADAv+xRCD8K16O7AADAv+xRCD8K16O7AADAP+xRCD8K16O7AADAP+xRCD8K16M7AADAP+xRCD8K16M7AADAP+xRCD8K16O7AADAP+xRCL8K16O7AAD/f/9//n8AAP9//3/+fwAA/3//f/5//38AAP//AAD/fwAA//8AAP9/AAD//wAA/////wAA/z//////AAD/P/////8AAP8/AAD/f/9//n8AAP9//3/+fwAA/3//f/5//3//fwAA/z//f/9/AAD/P/9//38AAP8//3//////AAD/f/////8AAP9//////wAA/38AAP//AAD/fwAA//8AAP9/AAD//wAA/3//fwAA/z//f/9/AAD/P/9//38AAP8/////f/9//n////9//3/+f////3//f/5//////wAA/z//////AAD/P/////8AAP8//3//////AAD/f/////8AAP9//////wAA////f/9//n////9//3/+f////3//f/5/")
+}]
+
 [sub_resource type="BoxShape3D" id="BoxShape3D_0cl5d"]
 size = Vector3(3, 1.065, 0.293086)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7k4em"]
-albedo_color = Color(0.176419, 0.176419, 0.176419, 1)
+albedo_color = Color(0.07, 0.07, 0.07, 1)
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_scss3"]
+_surfaces = [{
+"aabb": AABB(-0.025, -0.025, -0.5, 0.05, 0.05, 1),
+"attribute_data": PackedByteArray("AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/"),
+"format": 34359738391,
+"material": SubResource("StandardMaterial3D_7k4em"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 36,
+"vertex_data": PackedByteArray("zczMvM3MzLwAAAA/zczMvM3MzLwAAAC/zczMvM3MzDwAAAC/zczMPM3MzLwAAAC/zczMvM3MzLwAAAC/zczMvM3MzLwAAAA/zczMvM3MzDwAAAC/zczMvM3MzLwAAAC/zczMPM3MzLwAAAC/zczMvM3MzDwAAAC/zczMvM3MzDwAAAA/zczMvM3MzLwAAAA/zczMvM3MzLwAAAA/zczMvM3MzDwAAAA/zczMPM3MzDwAAAA/zczMPM3MzDwAAAA/zczMvM3MzDwAAAA/zczMvM3MzDwAAAC/zczMvM3MzLwAAAA/zczMPM3MzLwAAAA/zczMPM3MzLwAAAC/zczMPM3MzDwAAAA/zczMPM3MzLwAAAA/zczMvM3MzLwAAAA/zczMPM3MzLwAAAC/zczMPM3MzLwAAAA/zczMPM3MzDwAAAA/zczMPM3MzLwAAAC/zczMPM3MzDwAAAC/zczMvM3MzDwAAAC/zczMvM3MzDwAAAC/zczMPM3MzDwAAAC/zczMPM3MzDwAAAA/zczMPM3MzDwAAAA/zczMPM3MzDwAAAC/zczMPM3MzLwAAAC/AAD/f/9//n8AAP9//3/+fwAA/3//f/5//38AAP//AAD/fwAA//8AAP9/AAD//wAA/////wAA/z//////AAD/P/////8AAP8/AAD/f/9//n8AAP9//3/+fwAA/3//f/5//3//fwAA/z//f/9/AAD/P/9//38AAP8//3//////AAD/f/////8AAP9//////wAA/38AAP//AAD/fwAA//8AAP9/AAD//wAA/3//fwAA/z//f/9/AAD/P/9//38AAP8/////f/9//n////9//3/+f////3//f/5//////wAA/z//////AAD/P/////8AAP8//3//////AAD/f/////8AAP9//////wAA////f/9//n////9//3/+f////3//f/5/")
+}]
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_ifm1x"]
+_surfaces = [{
+"aabb": AABB(-0.025, -0.025, -0.5, 0.05, 0.05, 1),
+"attribute_data": PackedByteArray("AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAIA/"),
+"format": 34359738391,
+"material": SubResource("StandardMaterial3D_7k4em"),
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 36,
+"vertex_data": PackedByteArray("zczMvM3MzLwAAAA/zczMvM3MzLwAAAC/zczMvM3MzDwAAAC/zczMPM3MzLwAAAC/zczMvM3MzLwAAAC/zczMvM3MzLwAAAA/zczMvM3MzDwAAAC/zczMvM3MzLwAAAC/zczMPM3MzLwAAAC/zczMvM3MzDwAAAC/zczMvM3MzDwAAAA/zczMvM3MzLwAAAA/zczMvM3MzLwAAAA/zczMvM3MzDwAAAA/zczMPM3MzDwAAAA/zczMPM3MzDwAAAA/zczMvM3MzDwAAAA/zczMvM3MzDwAAAC/zczMvM3MzLwAAAA/zczMPM3MzLwAAAA/zczMPM3MzLwAAAC/zczMPM3MzDwAAAA/zczMPM3MzLwAAAA/zczMvM3MzLwAAAA/zczMPM3MzLwAAAC/zczMPM3MzLwAAAA/zczMPM3MzDwAAAA/zczMPM3MzLwAAAC/zczMPM3MzDwAAAC/zczMvM3MzDwAAAC/zczMvM3MzDwAAAC/zczMPM3MzDwAAAC/zczMPM3MzDwAAAA/zczMPM3MzDwAAAA/zczMPM3MzDwAAAC/zczMPM3MzLwAAAC/AAD/f/9//n8AAP9//3/+fwAA/3//f/5//38AAP//AAD/fwAA//8AAP9/AAD//wAA/////wAA/z//////AAD/P/////8AAP8/AAD/f/9//n8AAP9//3/+fwAA/3//f/5//3//fwAA/z//f/9/AAD/P/9//38AAP8//3//////AAD/f/////8AAP9//////wAA/38AAP//AAD/fwAA//8AAP9/AAD//wAA/3//fwAA/z//f/9/AAD/P/9//38AAP8/////f/9//n////9//3/+f////3//f/5//////wAA/z//////AAD/P/////8AAP8//3//////AAD/f/////8AAP9//////wAA////f/9//n////9//3/+f////3//f/5/")
+}]
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_vceo8"]
 bounce = 0.7
@@ -310,36 +373,72 @@ shadow_mesh = SubResource("ArrayMesh_bktgw")
 
 [sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_772jt"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_w6v1v"]
-bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
-corner_radius_top_left = 25
-corner_radius_top_right = 25
-corner_radius_bottom_right = 25
-corner_radius_bottom_left = 25
+[sub_resource type="ViewportTexture" id="ViewportTexture_n8qch"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kl1mu"]
-bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
-corner_radius_top_left = 25
-corner_radius_top_right = 25
-corner_radius_bottom_right = 25
-corner_radius_bottom_left = 25
+[sub_resource type="ViewportTexture" id="ViewportTexture_j3udl"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_fxo8y"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_r2xos"]
+texture = ExtResource("9_7t2yt")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_rx4lx"]
+texture = ExtResource("9_7t2yt")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_772jt"]
+texture = ExtResource("9_7t2yt")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_865mt"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_scss3"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_ifm1x"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_w6v1v"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
 
 [node name="CupPong" type="Node3D"]
 script = ExtResource("1_mrme4")
 
 [node name="DirectionalLight3D1" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.66262, -0.399101, -0.633761, 7.39766e-08, -0.846193, 0.532876, -0.748956, -0.353095, -0.560705, -0.914775, 1.55753, -4.01124)
+light_energy = 0.5
 light_angular_distance = 1.0
 shadow_enabled = true
+shadow_bias = 0.05
+shadow_normal_bias = 3.0
+shadow_blur = 0.5
+directional_shadow_mode = 1
+directional_shadow_blend_splits = true
+directional_shadow_max_distance = 10.0
+sky_mode = 1
 
 [node name="OmniLight3D" type="OmniLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0642462, 0.866313, -0.31985)
-shadow_enabled = true
 
 [node name="OmniLight3D2" type="OmniLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0642462, 0.866313, -2.24905)
-shadow_enabled = true
 shadow_bias = 1.26
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+unique_name_in_owner = true
+environment = SubResource("Environment_w6v1v")
+
+[node name="LightmapGI" type="LightmapGI" parent="."]
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(-1, 6.87018e-08, -5.4063e-08, 0, 0.618408, 0.785857, 8.74228e-08, 0.785857, -0.618408, 0, 1.147, -3.486)
@@ -350,11 +449,19 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0887699, -1.61282, -1.8140
 material_override = SubResource("StandardMaterial3D_jmq7c")
 size = Vector3(6.43628, 0.01, 13.4604)
 
+[node name="CSGBakedMeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0887699, -1.61282, -1.81404)
+mesh = SubResource("ArrayMesh_kl1mu")
+
 [node name="wall" type="CSGBox3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0798599, 0.969402, 2.0409)
 use_collision = true
 size = Vector3(6.43628, 5.17443, 0.0367203)
 material = SubResource("StandardMaterial3D_vceo8")
+
+[node name="CSGBakedMeshInstance3D2" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0798599, 0.969402, 2.0409)
+mesh = SubResource("ArrayMesh_naajd")
 
 [node name="table" type="StaticBody3D" parent="."]
 transform = Transform3D(-4.37114e-08, -1, 4.37114e-08, 0, -4.37114e-08, -1, 1, -4.37114e-08, 1.91069e-15, 0, -0.6, -0.945)
@@ -362,6 +469,9 @@ transform = Transform3D(-4.37114e-08, -1, 4.37114e-08, 0, -4.37114e-08, -1, 1, -
 [node name="CSGBox3D" type="CSGBox3D" parent="table"]
 size = Vector3(3, 1.065, 0.01)
 material = SubResource("StandardMaterial3D_5m0fp")
+
+[node name="CSGBakedMeshInstance3D" type="MeshInstance3D" parent="table"]
+mesh = SubResource("ArrayMesh_r2xos")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="table"]
 transform = Transform3D(1, 0, 0, 0, 1, -8.35187e-23, 0, -8.35187e-23, 1, 0, 0, 0.141543)
@@ -372,10 +482,18 @@ transform = Transform3D(1, 0, 0, 0, 1, -8.35187e-23, 0, -8.35187e-23, 1, -1.2415
 size = Vector3(0.05, 0.05, 1)
 material = SubResource("StandardMaterial3D_7k4em")
 
+[node name="CSGBakedMeshInstance3D2" type="MeshInstance3D" parent="table"]
+transform = Transform3D(1, 0, 0, 0, 1, -8.35187e-23, 0, -8.35187e-23, 1, -1.24158, -0.421603, 0.504688)
+mesh = SubResource("ArrayMesh_scss3")
+
 [node name="leg2" type="CSGBox3D" parent="table"]
 transform = Transform3D(1, 0, 0, 0, 1, -8.35187e-23, 0, -8.35187e-23, 1, -1.242, 0.422, 0.505)
 size = Vector3(0.05, 0.05, 1)
 material = SubResource("StandardMaterial3D_7k4em")
+
+[node name="CSGBakedMeshInstance3D3" type="MeshInstance3D" parent="table"]
+transform = Transform3D(1, 0, 0, 0, 1, -8.35187e-23, 0, -8.35187e-23, 1, -1.242, 0.422, 0.505)
+mesh = SubResource("ArrayMesh_ifm1x")
 
 [node name="ball" type="RigidBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.17834, -0.55258, -2.07601)
@@ -611,121 +729,157 @@ mesh = ExtResource("3_0cl5d")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="cups2/cup10"]
 shape = SubResource("ConcavePolygonShape3D_772jt")
 
-[node name="SubViewportContainer" type="SubViewportContainer" parent="."]
-offset_right = 648.0
-offset_bottom = 1400.0
+[node name="MainOverlay" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="MainOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MainOverlay/MarginContainer"]
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 2
+size_flags_vertical = 0
+
+[node name="PlayerAvatarDisplay" parent="MainOverlay/MarginContainer/HBoxContainer" instance=ExtResource("8_naajd")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(96, 90)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_n8qch")
+texture_pressed = SubResource("ViewportTexture_j3udl")
+texture_hover = SubResource("ViewportTexture_fxo8y")
+ignore_texture_size = true
+is_display_only = true
+
+[node name="Control2" type="Control" parent="MainOverlay/MarginContainer/HBoxContainer"]
+custom_minimum_size = Vector2(10, 0)
+layout_mode = 2
+
+[node name="SettingsButton" type="Button" parent="MainOverlay/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 8
+focus_mode = 0
+theme_override_font_sizes/font_size = 32
+theme_override_styles/normal = SubResource("StyleBoxTexture_r2xos")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_rx4lx")
+theme_override_styles/hover = SubResource("StyleBoxTexture_772jt")
+
+[node name="Control" type="Control" parent="MainOverlay/MarginContainer/HBoxContainer"]
+layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 3
-stretch = true
+size_flags_vertical = 4
 
-[node name="SubViewport" type="SubViewport" parent="SubViewportContainer"]
-transparent_bg = true
-handle_input_locally = false
-size = Vector2i(648, 1400)
-size_2d_override_stretch = true
-render_target_update_mode = 4
+[node name="OppAvatarDisplay" parent="MainOverlay/MarginContainer/HBoxContainer" instance=ExtResource("8_naajd")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(96, 90)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_865mt")
+texture_pressed = SubResource("ViewportTexture_scss3")
+texture_hover = SubResource("ViewportTexture_ifm1x")
+ignore_texture_size = true
+is_display_only = true
+controlled_by_data = true
 
-[node name="waitingLabel" type="Panel" parent="SubViewportContainer/SubViewport"]
+[node name="CenterContainer" type="CenterContainer" parent="MainOverlay/MarginContainer"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="WinLossLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer"]
+unique_name_in_owner = true
 visible = false
-top_level = true
-z_index = 5
-offset_left = 116.0
-offset_top = 540.0
-offset_right = 546.0
-offset_bottom = 640.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_w6v1v")
-script = ExtResource("8_7k4em")
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_w6v1v")
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="RichTextLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/waitingLabel"]
-layout_mode = 0
-offset_left = 14.0
-offset_top = 29.2222
-offset_right = 417.0
-offset_bottom = 71.2222
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]WAITING FOR OPPONENT...[/center]"
-
-[node name="winnerLabel" type="Panel" parent="SubViewportContainer/SubViewport"]
+[node name="overtimeLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer"]
+unique_name_in_owner = true
 visible = false
-top_level = true
-z_index = 5
-offset_left = 116.0
-offset_top = 540.0
-offset_right = 546.0
-offset_bottom = 640.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_kl1mu")
-script = ExtResource("9_w6v1v")
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_w6v1v")
+text = "Overtime!"
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="RichTextLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/winnerLabel"]
-layout_mode = 0
-offset_left = 16.0
-offset_top = 29.2222
-offset_right = 419.0
-offset_bottom = 71.2222
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]YOU WIN![/center]"
-
-[node name="ballsBackLabel" type="Panel" parent="SubViewportContainer/SubViewport"]
+[node name="SentLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer"]
+unique_name_in_owner = true
 visible = false
-top_level = true
-z_index = 5
-offset_left = 231.0
-offset_top = 540.0
-offset_right = 442.0
-offset_bottom = 640.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_kl1mu")
-script = ExtResource("9_w6v1v")
+z_index = 1
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_w6v1v")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="RichTextLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/ballsBackLabel"]
-layout_mode = 0
-offset_left = 16.0
-offset_top = 29.0
-offset_right = 197.0
-offset_bottom = 71.0
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]Balls Back![/center]"
-
-[node name="redemptionLabel" type="Panel" parent="SubViewportContainer/SubViewport"]
+[node name="waitingLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer"]
+unique_name_in_owner = true
 visible = false
-top_level = true
-z_index = 5
-offset_left = 215.0
-offset_top = 540.0
-offset_right = 440.0
-offset_bottom = 640.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_kl1mu")
-script = ExtResource("9_w6v1v")
+z_index = 1
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_w6v1v")
+text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="RichTextLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/redemptionLabel"]
-layout_mode = 0
-offset_left = 16.0
-offset_top = 29.0
-offset_right = 213.0
-offset_bottom = 71.0
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]Redemption![/center]"
-
-[node name="overtimeLabel" type="Panel" parent="SubViewportContainer/SubViewport"]
+[node name="redemptionLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer"]
+unique_name_in_owner = true
 visible = false
-top_level = true
-z_index = 5
-offset_left = 215.0
-offset_top = 540.0
-offset_right = 440.0
-offset_bottom = 640.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_kl1mu")
-script = ExtResource("9_w6v1v")
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_w6v1v")
+text = "Redemption!"
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="RichTextLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/overtimeLabel"]
-layout_mode = 0
-offset_left = 16.0
-offset_top = 29.0
-offset_right = 213.0
-offset_bottom = 71.0
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]Overtime![/center]"
+[node name="ballsBackLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_w6v1v")
+text = "Balls Back!"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="DotTimer" type="Timer" parent="MainOverlay"]
+unique_name_in_owner = true
+wait_time = 0.75
+
+[node name="WaitBlur" type="ColorRect" parent="MainOverlay"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.152941, 0.152941, 0.152941, 0.556863)
