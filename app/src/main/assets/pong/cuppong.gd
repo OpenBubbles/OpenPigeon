@@ -32,7 +32,7 @@ const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 @onready var sun: DirectionalLight3D = $DirectionalLight3D1
 @onready var env: WorldEnvironment = $WorldEnvironment
 
-@export var show_overlay: bool = true
+@export var show_overlay: bool = false
 
 var appPlugin: Object
 var screen_size: Vector2
@@ -62,13 +62,20 @@ var start_replay_boards: String = "0,1,2,3,4,5,6,7,8,9&0,1,2,3,4,5,6,7,8,9"
 @export var player_ball_start_pos: Vector3 = Vector3(0.0, -0.55, -1.00)
 @export var second_ball_offset: Vector3 = Vector3(0.28, 0.0, 0.0)
 
-@export var max_drag_x: float = 220.0
-@export var max_drag_y: float = 380.0
-@export var max_force_x: float = 0.40
-@export var max_force_y: float = 1.1
-@export var vertical_power_curve: float = 2
-@export var horizontal_power_curve: float = 1
-@export var throw_power_scale: float = 0.65
+@export var min_drag_distance: float = 15.0 #Min Distance Required to be considered a throw
+@export var min_speed_for_throw: float = 250.0 #Speed Deadband to prevent tapping on throw
+@export var max_force_x: float = 0.40 #Absolute Max Force in x dir
+@export var max_force_y: float = 1.1 #Absolute Max Force in y dir
+@export var max_throw_speed_x: float = 2000.0 #How fast does this need to be flicked for 100% strength in x dir (lower is easy full power)
+@export var max_throw_speed_y: float = 3800.0 #How fast does this need to be flicked for 100% strength in y dir (lower is easy full power)
+@export var vertical_power_curve: float = 1.3 #Shape how the speed maps to the vertical force (lower is more sensitive)
+@export var horizontal_power_curve: float = 1 #Shape how the speed maps to the horizontal force (lower is more sensitive)
+@export var throw_power_scale: float = 0.65 #Global Scale Multiplier
+
+var last_drag_distance: float = 0.0
+var last_drag_duration: float = 0.0
+var last_drag_speed_x: float = 0.0	# px/s
+var last_drag_speed_y: float = 0.0	# px/s (screen space, before inversion)
 
 var preview_ball: PongBall = null
 var num_balls: int = 2
@@ -78,6 +85,7 @@ var played_replay: bool = false
 var lost: bool = false
 
 var drag_start_pos = Vector2.ZERO
+var drag_start_time: float = 0.0
 var dragging = false
 var ball_ready: bool = false
 var player: int
@@ -172,7 +180,7 @@ func _process(delta: float) -> void:
 			if child is PongBall and child != ball:
 				ball_count += 1
 
-		_debug_label.text = (
+				_debug_label.text = (
 			"FPS: %d\n" +
 			"avg dt: %.2f ms\n" +
 			"max dt: %.2f ms\n" +
@@ -182,6 +190,10 @@ func _process(delta: float) -> void:
 			"Primitives: %d\n" +
 			"2D Items: %d\n" +
 			"2D Calls: %d\n" +
+			"DragDist: %.1f px\n" +
+			"DragDur: %.3f s\n" +
+			"DragVx: %.1f px/s\n" +
+			"DragVy: %.1f px/s\n" +
 			"Balls: %d"
 		) % [
 			fps,
@@ -193,6 +205,10 @@ func _process(delta: float) -> void:
 			render_primitives,
 			render_2d_items,
 			render_2d_calls,
+			last_drag_distance,
+			last_drag_duration,
+			last_drag_speed_x,
+			last_drag_speed_y,
 			ball_count
 		]
 		
@@ -861,20 +877,47 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed:
-			print("START DRAG: " + str(event.position))
-			drag_start_pos = event.position
+		var mb: InputEventMouseButton = event
+		if mb.pressed:
+			print("START DRAG: " + str(mb.position))
+			drag_start_pos = mb.position
+			drag_start_time = Time.get_ticks_msec() / 1000.0
 			dragging = true
 		else:
 			if dragging:
-				print("END DRAG: " + str(event.position))
-				var drag_end_pos = event.position
-				var delta = drag_end_pos - drag_start_pos
+				var drag_end_time: float = Time.get_ticks_msec() / 1000.0
+				var drag_duration: float = max(drag_end_time - drag_start_time, 0.016)
+
+				var drag_end_pos: Vector2 = mb.position
+				var drag_distance: float = drag_end_pos.distance_to(drag_start_pos)
+
+				# --- store debug info ---
+				last_drag_distance = drag_distance
+				last_drag_duration = drag_duration
+				var t: float = max(drag_duration, 0.0001)
+				var raw_dx: float = drag_end_pos.x - drag_start_pos.x
+				var raw_dy: float = drag_end_pos.y - drag_start_pos.y
+				last_drag_speed_x = raw_dx / t          # px/s
+				last_drag_speed_y = raw_dy / t          # px/s (screen-space)
+				# -------------------------
+
+				if drag_distance < min_drag_distance:
+					print("Tap detected, ignoring throw.")
+					dragging = false
+					return
+
+				print("END DRAG: " + str(mb.position))
+				var delta: Vector2 = drag_end_pos - drag_start_pos
 				delta.y = -delta.y
 
 				print("X delta: " + str(delta.x) + ", Y delta: " + str(delta.y))
-				var delta_lerp = interpolate_delta(delta.x, delta.y)
-				print("Delta interpolated: " + str(delta_lerp))
+				var delta_lerp: Vector2 = interpolate_delta(delta.x, delta.y, drag_duration)
+				print("Delta interpolated: " + str(delta_lerp) + " duration: " + str(drag_duration))
+
+				if delta_lerp == Vector2.ZERO:
+					print("Too slow flick, ignoring throw.")
+					dragging = false
+					return
 
 				current_ball.throw(delta_lerp.x, delta_lerp.y)
 
@@ -882,17 +925,30 @@ func _unhandled_input(event: InputEvent) -> void:
 				ball_ready = false
 				current_ball = null
 
-func interpolate_delta(x_delta: float, y_delta: float) -> Vector2:
-	var x_lerp: float = clamp(inverse_lerp(-max_drag_x, max_drag_x, x_delta), 0.0, 1.0)
-	var y_lerp: float = clamp(inverse_lerp(0.0, max_drag_y, y_delta), 0.0, 1.0)
-	
-	var x_curve: float = pow(x_lerp, horizontal_power_curve)
-	var y_curve: float = pow(y_lerp, vertical_power_curve)
-	
-	var x_force: float = lerp(-max_force_x, max_force_x, x_curve) * throw_power_scale
-	var y_force: float = lerp(0.0, max_force_y, y_curve) * throw_power_scale
-	
-	return Vector2(x_force, y_force)
+func interpolate_delta(x_delta: float, y_delta: float, duration: float) -> Vector2:
+	var t: float = max(duration, 0.016)
+	var vx: float = x_delta / t
+	var vy: float = y_delta / t
+
+	var speed_x: float = abs(vx)
+	var speed_y: float = abs(vy)
+
+	if speed_x < min_speed_for_throw and speed_y < min_speed_for_throw:
+		return Vector2.ZERO
+
+	var norm_vx: float = clamp(speed_x / max_throw_speed_x, 0.0, 1.0)
+	var norm_vy: float = clamp(speed_y / max_throw_speed_y, 0.0, 1.0)
+
+	var x_curve: float = pow(norm_vx, horizontal_power_curve)
+	var y_curve: float = pow(norm_vy, vertical_power_curve)
+
+	var x_force_mag: float = lerp(0.0, max_force_x, x_curve) * throw_power_scale
+	var y_force_mag: float = lerp(0.0, max_force_y, y_curve) * throw_power_scale
+
+	var x_sign: float = sign(x_delta)
+	var y_sign: float = sign(y_delta)
+
+	return Vector2(x_sign * x_force_mag, y_sign * y_force_mag)
 
 func _on_settings_button_pressed() -> void:
 	if not is_instance_valid(settings_button):
