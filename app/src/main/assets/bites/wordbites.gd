@@ -55,12 +55,12 @@ var win_loss_state = ""
 var my_player := 0           # 0 spectator, 1 black, 2 white
 var p1_score_s = ""
 var p2_score_s = ""
-var first_data := true
 var possible_word_count: int = 0
 var _possible_words_cache: Array = []
 var _words_cache_ready := false
 var _words_loading_overlay: Control = null
 var _words_loading_tween: Tween = null
+var my_has_data := false
 
 func _ready() -> void:
 	if not start_button.pressed.is_connected(_on_start_button_pressed):
@@ -89,7 +89,6 @@ func _ready() -> void:
 		await get_tree().process_frame
 		_set_game_data(dev)
 
-	_init_screens()
 	_apply_score_box_style(main_score_box)
 	_apply_score_box_style(player_score_box)
 	_apply_score_box_style(opp_score_box)
@@ -261,15 +260,12 @@ func _set_game_data(raw_text: String) -> void:
 	my_id   = _get_first(d, "myPlayerId", my_id)
 	var p1_id: String = _get_first(d, "player1", "")
 	var p2_id: String = _get_first(d, "player2", "")
+	var sender_s: String = _get_first(d, "player", "1")
 	var level_s: String = _get_first(d, "level", "")
 	if level_s != "":
 		if game_screen.has_method("load_level"):
 			game_screen.load_level(level_s)
-	else:
-		var letters_from_data: String = _get_first(d, "letters", "")
-		if letters_from_data != "":
-			game_screen.letters = letters_from_data
-			
+	
 	_words_cache_ready = false
 	_possible_words_cache.clear()
 
@@ -279,7 +275,7 @@ func _set_game_data(raw_text: String) -> void:
 	p2_score_s = _get_first(d, "score2", "")
 	var p2_words_s: String = _get_first(d, "words2", "")
 	var p2_wordlist_s: String = _get_first(d, "words_list2", "")
-
+	print("P1s Score: ", p1_score_s, " | P2s Score: ", p2_score_s)
 	var p1_score: int = int(p1_score_s) if p1_score_s != "" else 0
 	var p1_words: int = int(p1_words_s) if p1_words_s != "" else 0
 	var p2_score: int = int(p2_score_s) if p2_score_s != "" else 0
@@ -290,30 +286,37 @@ func _set_game_data(raw_text: String) -> void:
 	var opponent_avatar_key := ""
 	winner = _get_first(d, "winner", "")
 	stop_waiting()
-
-	if p1_id != "" and p2_id != "" and my_id != "":
+	print("P1s Score: ", p1_score_s, " | P2s Score: ", p2_score_s)
+	var sender_player: int = clampi(int(sender_s), 1, 2)
+	my_has_data = false
+	if (p1_id != "" or p2_id != "") and my_id != "":
 		if my_id == p1_id:
-			if my_player != 1:
-				print("PLAYER MAPPING: my_id matches player1 -> my_player=1")
 			my_player = 1
+			opponent_avatar_key = "avatar2"
+			print("Score: ", p1_score_s, " Words: ", p1_words_s, " List: ",p1_wordlist_s)
+			my_has_data = (p1_wordlist_s != "" or p1_words_s != "" or p1_score_s != "")
 			spectator_mode = false
+			print ("My Has Data", my_has_data)
+			print("SETTING FOR ID PLAYER 1 (my_id matches player1)")
 		elif my_id == p2_id:
-			if my_player != 2:
-				print("PLAYER MAPPING: my_id matches player2 -> my_player=2")
 			my_player = 2
+			opponent_avatar_key = "avatar1"
+			print("Score: ", p2_score_s, " Words: ", p2_words_s, " List: ",p2_wordlist_s)
+			my_has_data = (p2_wordlist_s != "" or p2_words_s != "" or p2_score_s != "")
 			spectator_mode = false
+			print ("My Has Data", my_has_data)
+			print("SETTING FOR ID PLAYER 2 (my_id matches player2)")
 		else:
-			if my_player != 0:
-				print("PLAYER MAPPING: my_id matches neither player1 nor player2 -> spectator")
 			my_player = 0
 			spectator_mode = true
+			print("SETTING FOR SPECTATOR (my_id matches neither player1 nor player2)")
 	else:
 		if my_player == 0:
-			my_player = 1
+			my_player = 1 if sender_player == 2 else 2
 			spectator_mode = false
-			print("PLAYER MAPPING: no IDs; defaulting my_player=1 (fallback)")
+			print("NO PLAYER IDS; using sender 'player' field as my slot -> my_player =", my_player)
 		else:
-			print("PLAYER MAPPING: no IDs; keeping existing my_player =", my_player)
+			print("NO PLAYER IDS; keeping existing my_player =", my_player)
 
 	if spectator_mode:
 		is_my_turn = false
@@ -330,43 +333,33 @@ func _set_game_data(raw_text: String) -> void:
 		var p2_entries := _build_word_entries_from_string(p2_wordlist_s)
 		_populate_scoreboard(false, p2_entries, p2_words, p2_score)
 
-	if my_player == 1:
-		opponent_avatar_key = "avatar2"
-	else:
-		opponent_avatar_key = "avatar1"
-		
 	if not spectator_mode:
 		var my_score: int = 0
 		var my_words: int = 0
 		var my_wordlist_s: String = ""
-
-		if my_player == 1:
-			my_score = p1_score
-			my_words = p1_words
-			my_wordlist_s = p1_wordlist_s
-		elif my_player == 2:
-			my_score = p2_score
-			my_words = p2_words
-			my_wordlist_s = p2_wordlist_s
-
-		if my_wordlist_s != "":
-			var my_entries := _build_word_entries_from_string(my_wordlist_s)
-			_populate_scoreboard(true, my_entries, my_words, my_score)
-			
-	if not spectator_mode:
 		var opp_score: int = 0
 		var opp_words: int = 0
 		var opp_wordlist_s: String = ""
 
 		if my_player == 1:
+			my_score = p1_score
+			my_words = p1_words
+			my_wordlist_s = p1_wordlist_s
 			opp_score = p2_score
 			opp_words = p2_words
 			opp_wordlist_s = p2_wordlist_s
 		elif my_player == 2:
+			my_score = p2_score
+			my_words = p2_words
+			my_wordlist_s = p2_wordlist_s
 			opp_score = p1_score
 			opp_words = p1_words
 			opp_wordlist_s = p1_wordlist_s
 
+		if my_wordlist_s != "":
+			var my_entries := _build_word_entries_from_string(my_wordlist_s)
+			_populate_scoreboard(true, my_entries, my_words, my_score)
+			
 		if opp_wordlist_s != "":
 			var opp_entries := _build_word_entries_from_string(opp_wordlist_s)
 			_populate_scoreboard(false, opp_entries, opp_words, opp_score)
@@ -378,24 +371,7 @@ func _set_game_data(raw_text: String) -> void:
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
 	game_ended = await check_win()
-
-	if first_data:
-		first_data = false
-
-		var p1_submitted := p1_wordlist_s != ""
-		var p2_submitted := p2_wordlist_s != ""
-		if p1_submitted and p2_submitted:
-			for i in screens.size():
-				var node := screens[i]
-				node.visible = (i == 2)
-				node.position = Vector2.ZERO
-			current_screen = 2
-		else:
-			for i in screens.size():
-				var node := screens[i]
-				node.visible = (i == 0)
-				node.position = Vector2.ZERO
-			current_screen = 0
+	_init_screens()
 
 	if not is_my_turn and not game_over:
 		start_waiting()
@@ -578,12 +554,14 @@ func _init_screens() -> void:
 	screens = [intro_screen, game_screen, score_screen, words_screen]
 	for i in screens.size():
 		var node := screens[i]
-		if not game_over and not spectator_mode:
+		if not game_over and not spectator_mode and not my_has_data:
+			print("Game Over: ", game_over, " Spectator Mode: ", spectator_mode, " My Has Data: ", my_has_data)
 			node.visible = (i == 0)
 		else:
+			print("Going to Score Screen")
 			node.visible = (i == 2)
 		node.position = Vector2.ZERO
-	current_screen = 0 if not game_over else 2
+	current_screen = 0 if not game_over and not spectator_mode and not my_has_data else 2
 
 func _switch_to_screen(next: int) -> void:
 	if next == current_screen:

@@ -1,11 +1,11 @@
 [gd_scene load_steps=58 format=3 uid="uid://d2yyuh6fook6k"]
 
-[ext_resource type="Script" path="res://anagrams/anagrams.gd" id="1_xvd3d"]
+[ext_resource type="Script" uid="uid://cyyfd6ypbfmpr" path="res://anagrams/anagrams.gd" id="1_xvd3d"]
 [ext_resource type="Texture2D" uid="uid://b4romha26qbsa" path="res://anagrams/anagrams_bg.png" id="2_ak8kl"]
 [ext_resource type="Texture2D" uid="uid://dk6sndstpx67p" path="res://anagrams/anagrams_preview.png" id="3_0k6o1"]
 [ext_resource type="Texture2D" uid="uid://btxxm6ltl6ban" path="res://anagrams/shuffle_pressed.png" id="3_ephvk"]
 [ext_resource type="Texture2D" uid="uid://b0i4rea1gtjwx" path="res://anagrams/shuffle.png" id="3_i2lji"]
-[ext_resource type="Script" path="res://anagrams/game_screen.gd" id="3_kxjnm"]
+[ext_resource type="Script" uid="uid://bg3be8il4hx1b" path="res://anagrams/game_screen.gd" id="3_kxjnm"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="6_v2j8k"]
 [ext_resource type="Shader" uid="uid://cudvsdvo3ydsh" path="res://global/torn_panel.gdshader" id="7_x0qku"]
 [ext_resource type="Texture2D" uid="uid://7eetny2ly08v" path="res://anagrams/back.png" id="8_mt60f"]
@@ -439,6 +439,7 @@ layout_mode = 2
 
 [node name="GameScreen" type="Control" parent="."]
 unique_name_in_owner = true
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -872,7 +873,6 @@ vertical_alignment = 1
 
 [node name="WordsScreen" type="Control" parent="."]
 unique_name_in_owner = true
-visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -925,10 +925,11 @@ layout_mode = 2
 horizontal_scroll_mode = 0
 
 [node name="FullWordContainer" type="PanelContainer" parent="WordsScreen/MarginContainer/CenterContainer/VBoxContainer/VScrollBar"]
-custom_minimum_size = Vector2(300, 550)
+custom_minimum_size = Vector2(400, 800)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
+mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_eugg7")
 
 [node name="FullWordList" type="VBoxContainer" parent="WordsScreen/MarginContainer/CenterContainer/VBoxContainer/VScrollBar/FullWordContainer"]
