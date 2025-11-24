@@ -2,7 +2,7 @@ extends Node3D
 class_name PongGame
 
 #---------------------------------------------
-var _debug_perf := true
+var _debug_perf := false
 var _debug_label: Label
 
 var _frame_accum := 0.0
@@ -32,7 +32,7 @@ const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 @onready var sun: DirectionalLight3D = $DirectionalLight3D1
 @onready var env: WorldEnvironment = $WorldEnvironment
 
-@export var show_overlay: bool = false
+@export var show_overlay: bool = true
 
 var appPlugin: Object
 var screen_size: Vector2
