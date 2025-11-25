@@ -448,3 +448,16 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 color = Color(0.152941, 0.152941, 0.152941, 0.556863)
+
+[node name="SpecLabel" type="Label" parent="MainOverlay"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 0
+offset_top = 129.0
+offset_right = 648.0
+offset_bottom = 198.0
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 50
+text = "Spectating..."
+horizontal_alignment = 1
+vertical_alignment = 1
