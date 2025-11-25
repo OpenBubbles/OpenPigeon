@@ -31,6 +31,7 @@ const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 @onready var dot_timer: Timer = %DotTimer
 @onready var sun: DirectionalLight3D = $DirectionalLight3D1
 @onready var env: WorldEnvironment = $WorldEnvironment
+@onready var spectator_label: Label = %SpecLabel
 
 @export var show_overlay: bool = true
 
@@ -92,6 +93,7 @@ var player: int
 var is_my_turn: int
 var replay_string: String
 var mode: String
+var spectator_mode: bool = false
 
 func _ready():
 	screen_size = get_viewport().get_visible_rect().size
@@ -354,8 +356,8 @@ func start_waiting_animation():
 	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):
 		print("Warning: Waiting animation nodes are not valid.")
 		return
-	#if spectator_mode:
-		#return
+	if spectator_mode:
+		return
 
 	dot_count = 0
 	waiting_label.text = BASE_WAIT_TEXT + "."
@@ -557,6 +559,7 @@ func set_boards(parsed_replay: Dictionary):
 	my_cups.set_cups_in_play(my_board)
 	replay_cups.set_cups_in_play(other_board)
 
+var my_player
 func _set_game_data(new_replay: String):
 	var parsed = JSON.parse_string(new_replay)
 	print("NEW REPLAY: " + str(parsed))
@@ -569,11 +572,17 @@ func _set_game_data(new_replay: String):
 	if winner != "":
 		game_over = check_winner()
 	var opponent_avatar_key = ""
-
-	if is_my_turn:
+	my_player = parsed.get("myPlayerId", "")
+	var p1_id: String = parsed.get("player1", "")
+	var p2_id: String = parsed.get("player2", "")
+	spectator_mode = my_player != "" and my_player != p1_id and my_player != p2_id
+	if is_instance_valid(spectator_label):
+		spectator_label.visible = spectator_mode
+	if is_my_turn and not spectator_mode:
 		player = 2 if player == 1 else 1
+	elif spectator_mode: player = 1
 		
-	if player == 1:
+	if player == 1 or spectator_mode:
 		opponent_avatar_key = "avatar2"
 	else:
 		opponent_avatar_key = "avatar1"
@@ -583,6 +592,10 @@ func _set_game_data(new_replay: String):
 		var opponent_data = _parse_avatar_string(avatar_string)
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+	if spectator_mode:
+		var p1_data = _parse_avatar_string(parsed["avatar1"])
+		if is_instance_valid(player_avatar_display):
+			player_avatar_display.call_deferred("update_avatar_from_data", p1_data)
 		
 		
 	played_replay = false
@@ -870,7 +883,7 @@ func convert_arr(str: String):
 	return result
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _settings_open:
+	if _settings_open or spectator_mode:
 		return
 
 	if not ball_ready or current_ball == null:
