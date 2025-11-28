@@ -575,7 +575,7 @@ func _set_game_data(new_replay: String):
 	my_player = parsed.get("myPlayerId", "")
 	var p1_id: String = parsed.get("player1", "")
 	var p2_id: String = parsed.get("player2", "")
-	spectator_mode = my_player != "" and my_player != p1_id and my_player != p2_id
+	spectator_mode = my_player != "" and p1_id != "" and p2_id != "" and my_player != p1_id and my_player != p2_id
 	if is_instance_valid(spectator_label):
 		spectator_label.visible = spectator_mode
 	if is_my_turn and not spectator_mode:

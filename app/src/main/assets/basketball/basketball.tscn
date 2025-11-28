@@ -493,6 +493,7 @@ physics_material_override = SubResource("PhysicsMaterial_koq1v")
 shape = SubResource("ConcavePolygonShape3D_me8a1")
 
 [node name="hoop_collision" type="Node3D" parent="."]
+visible = false
 
 [node name="HoopCollisionSphere1" type="RigidBody3D" parent="hoop_collision"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.974, -3.35)
