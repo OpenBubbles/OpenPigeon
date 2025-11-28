@@ -32,6 +32,8 @@ const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 var _score_box_orig_min_size: Vector2 = Vector2.ZERO
 var _score_box_inited: bool = false
 
+var debug_no_wind: bool = true	# TEMP: disable wind + sideways deflection
+
 var _top_bar_inited: bool = false
 
 @onready var aim_cursor: Sprite2D = %AimCursor
@@ -112,7 +114,7 @@ func _ready() -> void:
 		print("App plugin is not available")
 		my_uuid = "0a602920-2033-469d-aab8-5e832c5d4f6a"
 		#var dev_data = '{ "isYourTurn": true, "player": "1", "replay": "state:2,0,0,1,1|move:0,2.433302,4.115979,-19.019581|move:0,1.885665,4.547050,-19.018667|move:0,1.404883,4.726025,-19.029633|state:2,0,0,0,1", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,0|mouth,0|acc,0|wins,0|bg_color,0.900000,0.900000,0.900000|body_color,0.000000,1.000000,0.000000|glasses,0|stache,0|backdrop,0|hair,3|clothes,2|hair_color,0.431373,0.254902,0.121569|clothes_color,0.438450,0.340784,0.366469", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "", "id": "6gt6WvSteSKHYrKr\n", "ios": "16.3.1", "num": "3", "game": "archery", "seed": "247149971", "tver": "5", "build": "d4yGowcTuIW9i", "version": "0" }'
-		var dev_data = '{ "isYourTurn": true, "player": "1", "replay": "state:0,0,0,0,0|move:0,2.433302,4.115979,-19.019581|move:0,1.885665,4.547050,-19.018667|move:0,1.404883,4.726025,-19.029633|state:0,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,0|mouth,0|acc,0|wins,0|bg_color,0.900000,0.900000,0.900000|body_color,0.000000,1.000000,0.000000|glasses,0|stache,0|backdrop,0|hair,3|clothes,2|hair_color,0.431373,0.254902,0.121569|clothes_color,0.438450,0.340784,0.366469", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "", "id": "6gt6WvSteSKHYrKr\n", "ios": "16.3.1", "num": "3", "game": "archery", "seed": "247149971", "tver": "5", "build": "d4yGowcTuIW9i", "version": "0" }'
+		var dev_data = '{ "isYourTurn": true, "player": "1", "replay": "state:2,18,0,1,0|move:1,0.059418,1.351113,-14.397592|move:1,-0.077269,1.397037,-14.397591|move:1,-0.020799,1.492665,-14.397592|state:2,29,18,1,1", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,0|mouth,0|acc,0|wins,0|bg_color,0.900000,0.900000,0.900000|body_color,0.000000,1.000000,0.000000|glasses,0|stache,0|backdrop,0|hair,3|clothes,2|hair_color,0.431373,0.254902,0.121569|clothes_color,0.438450,0.340784,0.366469", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "", "id": "6gt6WvSteSKHYrKr\n", "ios": "16.3.1", "num": "3", "game": "archery", "seed": "247149971", "tver": "5", "build": "d4yGowcTuIW9i", "version": "0" }'
 		_set_game_data(dev_data)
 	if is_instance_valid(aim_cursor):
 		aim_cursor.visible = false
@@ -225,7 +227,7 @@ func _process_game_state() -> void:
 		print("PROCESS_GAME_STATE: preparing shot index", num_shots)
 		calc_wind()
 		current_arrow = arrow.spawn()
-		if not spectator_mode:
+		if not spectator_mode and not debug_no_wind:
 			_show_wind_panel(target.global_position)
 	else:
 		print("PROCESS_GAME_STATE: set finished (local), calling _animate_set_bar_and_award_points()")
@@ -290,23 +292,29 @@ func _project_to_plane(screen_pos: Vector2) -> Vector3:
 		printerr("export_replay: ray is parallel to target plane for screen_pos=%s" % screen_pos)
 		return Vector3.ZERO
 	
-	var t := ((target.position.z + 0.296) - ray_origin.z) / ray_normal.z
+	var t := ((target.position.z) - ray_origin.z) / ray_normal.z
 	return ray_origin + ray_normal * t
 
-const BULLSEYE_Z_OFFSET: float = 0.296
-const BULLSEYE_Y_OFFSET: float = 0.0
-const FIXED_BULLSEYE_POSITIONS: Dictionary = {
-	1: Vector3(0.0, 6.718, -14.433), # Set 1 (Closest)
-	2: Vector3(0.0, 6.800, -20.433), # Example: Assuming a slight Y change here
-	3: Vector3(0.0, 6.950, -26.433)  # Example: Assuming a different Y change here
-}
+const BULLSEYE_Z_OFFSET: float = 0.03541
+const BULLSEYE_Y_OFFSET: float = 0.02
 
-func export_replay(is_calibration: bool = false) -> String:
-	var replay_str = str("state:1,0,0,0,0|")
+func _get_bullseye_center_world() -> Vector3:
+	# Prefer the live target position so both sides stay in sync.
+	if is_instance_valid(target):
+		var center: Vector3 = target.global_transform.origin
+		center.z += BULLSEYE_Z_OFFSET
+		center.y += BULLSEYE_Y_OFFSET
+		return center
+
+	# Fallback (in case target is missing) – old hard-coded values.
+	var base_z: float = -14.39759
+	return Vector3(0.0, 1.718 + BULLSEYE_Y_OFFSET, base_z + BULLSEYE_Z_OFFSET)
+
+func export_replay() -> String:
+	var replay_str: String = "state:1,0,0,0,0|"
+
 	if replay.is_empty() == false:
-		# ... (Existing logic for previous state unchanged) ...
-		var state = replay["post_state"]
-		# ... (Existing logic for setting replay_str unchanged) ...
+		var state: Array = replay["post_state"]
 		if (num - 1) % 2 != 0:
 			replay_str = str(
 				"state:",
@@ -325,52 +333,35 @@ func export_replay(is_calibration: bool = false) -> String:
 				state[4], "|"
 			)
 
-	# ---- DETERMINE SHOT POSITION (BULLSEYE) ----
-	var center_world: Vector3
+	# ---- REAL SHOT POSITIONS ----
+	var bullseye_center: Vector3 = _get_bullseye_center_world()
 
-	if is_calibration and FIXED_BULLSEYE_POSITIONS.has(set_num):
-		# ⭐ CALIBRATION MODE: Use the known, fixed coordinates (X, Y, Z)
-		center_world = FIXED_BULLSEYE_POSITIONS[set_num]
-		
-		# Apply the Z offset to hit the *front* face of the bullseye plane
-		center_world.z += BULLSEYE_Z_OFFSET
-		
-		# NOTE: We do NOT apply a Y offset here, because the Y value in 
-		# FIXED_BULLSEYE_POSITIONS is assumed to be the FINAL, CORRECT Y.
-		
-		print("EXPORT_REPLAY: CALIBRATION SHOT (FIXED) =", center_world)
-	elif is_instance_valid(target):
-		# NORMAL MODE: Use the current position of the target node.
-		center_world = target.global_transform.origin
-		
-		# Apply the Z and Y offsets from your game's constants
-		center_world.z += BULLSEYE_Z_OFFSET
-		# If you need an additional, constant Y adjustment:
-		center_world.y += BULLSEYE_Y_OFFSET # Apply Y offset here if needed
-		
-		print("EXPORT_REPLAY: center_world (LIVE) =", center_world)
-	else:
-		# FALLBACK MODE (If target node is missing)
-		var base_z: float = -14.137
-		center_world = Vector3(0.0, 1.718, base_z) # Original Fallback
-		
-	# print("EXPORT_REPLAY: center_world (bullseye) =", center_world) # Print moved into branches
-
-	# Always send 3 moves, all at the bullseye position.
+	# Always send exactly 3 moves.
 	for i in range(3):
+		var pos: Vector3
+
+		if i < moves.size():
+			# Use the actual shot we recorded.
+			pos = moves[i]
+			# Apply the calibrated Y offset so the remote board lines up.
+			pos.y += BULLSEYE_Y_OFFSET
+		else:
+			# If we somehow have fewer than 3 shots, pad with bullseye.
+			pos = bullseye_center
+
 		replay_str += str(
 			"move:1,",
-			"%0.6f" % center_world.x, ",",
-			"%0.6f" % center_world.y, ",",
-			"%0.6f" % center_world.z,
+			"%0.6f" % pos.x, ",",
+			"%0.6f" % pos.y, ",",
+			"%0.6f" % pos.z,
 			"|"
 		)
 
-	# ... (Rest of the scoring and state logic remains unchanged) ...
-	var p1_score = you_score if player == 1 else opp_score
-	var p2_score = you_score if player == 2 else opp_score
-	var p1_set_score = you_set_wins if player == 1 else opp_set_wins
-	var p2_set_score = you_set_wins if player == 2 else opp_set_wins
+	# ---- FINAL STATE (unchanged from your version) ----
+	var p1_score: int = you_score if player == 1 else opp_score
+	var p2_score: int = you_score if player == 2 else opp_score
+	var p1_set_score: int = you_set_wins if player == 1 else opp_set_wins
+	var p2_set_score: int = you_set_wins if player == 2 else opp_set_wins
 
 	print("EXPORT_REPLAY final state: set_num=", set_num, " p1_score=", p1_score, " p2_score=", p2_score, " p1_sets=", p1_set_score, " p2_sets=", p2_set_score)
 
@@ -383,7 +374,7 @@ func export_replay(is_calibration: bool = false) -> String:
 		p2_set_score
 	)
 
-	var replay_dict = {"replay": replay_str}
+	var replay_dict: Dictionary = {"replay": replay_str}
 	var avatar_key := ("avatar1" if player == 1 else "avatar2")
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		replay_dict[avatar_key] = player_avatar_display.get_avatar_data_string()
@@ -391,6 +382,7 @@ func export_replay(is_calibration: bool = false) -> String:
 		replay_dict["winner"] = send_winner
 	else:
 		play_sent_animation()
+
 	return JSON.stringify(replay_dict)
 	
 func _animate_set_win_bump(is_you: bool) -> void:
@@ -595,6 +587,14 @@ func _fade_top_bar(fshow: bool) -> void:
 	tween.tween_property(top_game_bar, "modulate:a", target_alpha, 0.5)
 	
 func calc_wind() -> void:
+	if debug_no_wind:
+		# Force absolutely no wind
+		current_wind_angle = Vector2.ZERO
+		current_wind_power = 0.0
+		print("calc_wind: DEBUG NO WIND")
+		_update_wind_ui(0.0, 0.0)
+		return
+
 	var rng := RandomNumberGenerator.new()
 	rng.seed = gseed
 
@@ -636,6 +636,17 @@ func calc_wind() -> void:
 	_update_wind_ui(angle, power)
 
 func _update_wind_ui(angle_degrees: float, power: float) -> void:
+	if debug_no_wind:
+		if is_instance_valid(wind_label):
+			wind_label.bbcode_enabled = true
+			wind_label.text = "[center][b]WIND: [color=#FFFFFF]0.0[/color][/b][/center]"
+		if is_instance_valid(wind_arrow_circle):
+			wind_arrow_circle.modulate = Color(1, 1, 1)
+		if is_instance_valid(wind_arrow):
+			# point straight up, neutral color
+			wind_arrow.set_arrow(0.0, 0.0, Color(1, 1, 1))
+		print("_update_wind_ui: DEBUG NO WIND UI")
+		return
 	print(">>> _update_wind_ui CALLED angle=", angle_degrees, " power=", power)
 	var t: float = clamp(power / MAX_WIND_POWER, 0.0, 1.0)
 
@@ -681,11 +692,11 @@ func update_set_number(uset_num: int) -> void:
 	current_set_num = uset_num
 	
 	if uset_num == 1:
-		target.position.z = -14.433
+		target.position.z = -14.39759
 	elif uset_num == 2:
-		target.position.z = -20.433
+		target.position.z = -20.39759
 	elif uset_num == 3:
-		target.position.z = -26.433
+		target.position.z = -26.39759
 	
 	if is_instance_valid(set_label):
 		set_label.text = "[center]Set " + str(uset_num) + "[/center]"
@@ -987,7 +998,7 @@ func calc_shot_pos() -> Vector3:
 		printerr("Ray is parallel to the target plane!!!")
 		return Vector3()
 	
-	var t: float = ((target.position.z + 0.296) - ray_origin.z) / ray_normal.z
+	var t: float = ((target.position.z) - ray_origin.z) / ray_normal.z
 	var target_3d_position: Vector3 = ray_origin + ray_normal * t
 	
 	print("Projected 3D position: ", target_3d_position)
@@ -1056,23 +1067,24 @@ func shoot_dart() -> void:
 	_hide_wind_panel(0.2)
 	
 	var shot_pos: Vector3 = calc_shot_pos()
-	print("initial shot pos: " + str(shot_pos))
-	
-	var flight_time: float = 0.50
-	if current_set_num > 1:
-		flight_time = 0.15 * float(current_set_num)
-	
-	var wind_displacement: Vector2 = current_wind_angle * flight_time * (current_wind_power * 0.25)
-	print("wind displacement: " + str(wind_displacement))
-	
-	var shot_pos_2d: Vector2 = Vector2(shot_pos.x, shot_pos.y) + wind_displacement
-	shot_pos = Vector3(shot_pos_2d.x, shot_pos_2d.y, shot_pos.z)
-	print("new shot pos: " + str(shot_pos))
+	print("initial shot pos (no wind): " + str(shot_pos))
+
+	# In debug_no_wind mode, do NOT alter shot_pos at all.
+	if not debug_no_wind:
+		var flight_time: float = 0.50
+		if current_set_num > 1:
+			flight_time = 0.15 * float(current_set_num)
+		
+		var wind_displacement: Vector2 = current_wind_angle * flight_time * (current_wind_power * 0.25)
+		print("wind displacement: " + str(wind_displacement))
+		
+		var shot_pos_2d: Vector2 = Vector2(shot_pos.x, shot_pos.y) + wind_displacement
+		shot_pos = Vector3(shot_pos_2d.x, shot_pos_2d.y, shot_pos.z)
+		print("new shot pos (with wind): " + str(shot_pos))
 	
 	var shot_arrow := current_arrow
 	shot_arrow.shoot(shot_pos, func() -> void:
 		var pts: int = target.calc_score(shot_arrow)
-		# Use the arrow's actual final world position
 		var hit_pos: Vector3 = shot_arrow.global_transform.origin
 
 		_spawn_score_popup(hit_pos, pts, _get_score_color(pts))
@@ -1086,6 +1098,7 @@ func shoot_dart() -> void:
 		await cam_reset_pos()
 		_process_game_state()
 	)
+
 	camera.fov = 60
 	cam_follow_dart(shot_pos)
 	shots.append(shot_arrow)
