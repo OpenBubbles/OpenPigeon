@@ -288,7 +288,7 @@ func _spawn_avatar_score_popup(is_you: bool, amount: int, is_miss: bool = false)
 	if parent_control == main_overlay:
 		var rect := avatar.get_global_rect()
 		var top_center := rect.position + Vector2(rect.size.x * 0.5, 0.0)
-		var local_pos: Vector2 = parent_control.to_local(top_center)
+		var local_pos: Vector2 = top_center - parent_control.global_position
 		popup.position = local_pos + Vector2(0.0, -10.0)
 	else:
 		popup.set_anchors_preset(Control.PRESET_CENTER_TOP)
