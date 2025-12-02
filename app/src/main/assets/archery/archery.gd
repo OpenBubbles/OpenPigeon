@@ -31,8 +31,7 @@ const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 
 var _score_box_orig_min_size: Vector2 = Vector2.ZERO
 var _score_box_inited: bool = false
-
-var debug_no_wind: bool = true	# TEMP: disable wind + sideways deflection
+var _should_play_replay: bool = true
 
 var _top_bar_inited: bool = false
 
@@ -51,13 +50,18 @@ var num: int
 var isTurn: bool
 var player: int
 var gseed: int
+var upped_set = false
 var replay: Dictionary = {}
 var my_uuid: String = ""
-var current_set_num: int = 1
 const MAX_WIND_POWER: float = 5.0   # used for color scaling
+const BOARD_RADIUS: float = 0.75
+const RING_COUNT: float = 10.0
+const RING_SPACING: float = BOARD_RADIUS / RING_COUNT
 var wind_anim_time: float = 0.0     # for the stretching arrow animation
 var wind_pulse_amount: float = 0.01
 var _settings_open: bool = false
+var has_turn_pre_state: bool = false
+var turn_pre_state: Array[int] = []
 var sent_tween: Tween
 var dot_count: int = 0
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
@@ -76,6 +80,15 @@ var local_index: int = 1
 
 var current_wind_angle: Vector2
 var current_wind_power: float
+
+const CAMERA_DEFAULT_POS := Vector3(0.0, 1.718, 1.616)
+const CAMERA_DEFAULT_FOV := 50.0
+
+const CAMERA_FOLLOW_DISTANCE_Z := 3.5	 # how close to the board when following
+const CAMERA_FOLLOW_Y_OFFSET := 0.5	 # how far above board center
+const CAMERA_LOOK_AT_Y_OFFSET := 0.55	# how far below bullseye to look
+const CAMERA_FOLLOW_FOV := 50.0		 # zoom amount for close-up
+const CAMERA_FOLLOW_LERP_TIME := 0.4	 # tween time into the close-up
 
 var set_num: int = 1          # current set (1–3)
 var you_score: int = 0        # per-set score (you)
@@ -114,7 +127,7 @@ func _ready() -> void:
 		print("App plugin is not available")
 		my_uuid = "0a602920-2033-469d-aab8-5e832c5d4f6a"
 		#var dev_data = '{ "isYourTurn": true, "player": "1", "replay": "state:2,0,0,1,1|move:0,2.433302,4.115979,-19.019581|move:0,1.885665,4.547050,-19.018667|move:0,1.404883,4.726025,-19.029633|state:2,0,0,0,1", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,0|mouth,0|acc,0|wins,0|bg_color,0.900000,0.900000,0.900000|body_color,0.000000,1.000000,0.000000|glasses,0|stache,0|backdrop,0|hair,3|clothes,2|hair_color,0.431373,0.254902,0.121569|clothes_color,0.438450,0.340784,0.366469", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "", "id": "6gt6WvSteSKHYrKr\n", "ios": "16.3.1", "num": "3", "game": "archery", "seed": "247149971", "tver": "5", "build": "d4yGowcTuIW9i", "version": "0" }'
-		var dev_data = '{ "isYourTurn": true, "player": "1", "replay": "state:2,18,0,1,0|move:1,0.059418,1.351113,-14.397592|move:1,-0.077269,1.397037,-14.397591|move:1,-0.020799,1.492665,-14.397592|state:2,29,18,1,1", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,0|mouth,0|acc,0|wins,0|bg_color,0.900000,0.900000,0.900000|body_color,0.000000,1.000000,0.000000|glasses,0|stache,0|backdrop,0|hair,3|clothes,2|hair_color,0.431373,0.254902,0.121569|clothes_color,0.438450,0.340784,0.366469", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "", "id": "6gt6WvSteSKHYrKr\n", "ios": "16.3.1", "num": "3", "game": "archery", "seed": "247149971", "tver": "5", "build": "d4yGowcTuIW9i", "version": "0" }'
+		var dev_data = '{ "isYourTurn": true, "player": "1", "replay": "state:1,18,0,0,0|move:1,0.059418,1.351113,-14.397592|move:1,-0.077269,1.397037,-14.397591|move:1,-0.020799,1.492665,-14.397592|state:1,29,18,0,1", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,0|mouth,0|acc,0|wins,0|bg_color,0.900000,0.900000,0.900000|body_color,0.000000,1.000000,0.000000|glasses,0|stache,0|backdrop,0|hair,3|clothes,2|hair_color,0.431373,0.254902,0.121569|clothes_color,0.438450,0.340784,0.366469", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "", "id": "6gt6WvSteSKHYrKr\n", "ios": "16.3.1", "num": "3", "game": "archery", "seed": "247149971", "tver": "5", "build": "d4yGowcTuIW9i", "version": "0" }'
 		_set_game_data(dev_data)
 	if is_instance_valid(aim_cursor):
 		aim_cursor.visible = false
@@ -147,23 +160,12 @@ func _ready() -> void:
 			_score_box_orig_min_size = score_box.get_combined_minimum_size()
 
 		score_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	update_set_number(current_set_num)
 
 func check_winner() -> bool:
-	var total_sets: int = you_set_wins + opp_set_wins
-	print("check_winner: you_sets=", you_set_wins, " opp_sets=", opp_set_wins, " total_sets=", total_sets)
+	print("check_winner: you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
 
-	# Early end if someone wins 2–0
-	var early_two_zero: bool = (
-		total_sets >= 2 and (
-			(you_set_wins == 2 and opp_set_wins == 0) or
-			(opp_set_wins == 2 and you_set_wins == 0)
-		)
-	)
-
-	# If no 2–0 sweep yet and fewer than 3 sets total, keep playing.
-	if not early_two_zero and total_sets < 3:
-		print("check_winner: no 2–0 sweep and less than 3 sets played, no result yet.")
+	if set_num < 3:
+		print("check_winner: less than 3 sets played, no result yet.")
 		return false
 
 	game_over = true
@@ -212,12 +214,14 @@ func _process_game_state() -> void:
 	stop_waiting_animation()
 	_hide_wind_panel(0.0)
 
-	if not replay.is_empty() and not played_replay:
+	if not replay.is_empty() and not played_replay and _should_play_replay:
 		print("PROCESS_GAME_STATE: playing opponent replay first")
 		await play_replay()
-
-	if not isTurn or spectator_mode:
-		print("PROCESS_GAME_STATE: not our turn; showing waiting UI")
+	else:
+		if not replay.is_empty() and not played_replay:
+			print("PROCESS_GAME_STATE: replay present but _should_play_replay=false; skipping replay (likely our own last turn).")
+	if (not isTurn or spectator_mode) and not game_over:
+		print("PROCESS_GAME_STATE: not our turn and check winner is: " , game_over, "; showing waiting UI")
 		start_waiting_animation()
 		return
 
@@ -225,16 +229,33 @@ func _process_game_state() -> void:
 
 	if num_shots < 3:
 		print("PROCESS_GAME_STATE: preparing shot index", num_shots)
+
+		if num_shots == 0 and not spectator_mode and not game_over and not has_turn_pre_state:
+			var p1_sets := (you_set_wins if player == 1 else opp_set_wins)
+			var p2_sets := (you_set_wins if player == 2 else opp_set_wins)
+
+			var p1_score: int
+			var p2_score: int
+			if player == 1:
+				p1_score = you_score
+				p2_score = opp_score
+			else:
+				p1_score = opp_score
+				p2_score = you_score
+
+			turn_pre_state = [set_num, p1_score, p2_score, p1_sets, p2_sets]
+			has_turn_pre_state = true
+			print("PROCESS_GAME_STATE: captured turn_pre_state=", turn_pre_state)
+
 		calc_wind()
 		current_arrow = arrow.spawn()
-		if not spectator_mode and not debug_no_wind:
+		if not spectator_mode and not game_over:
 			_show_wind_panel(target.global_position)
 	else:
 		print("PROCESS_GAME_STATE: set finished (local), calling _animate_set_bar_and_award_points()")
 		await _animate_set_bar_and_award_points()
 
 func _award_set_points_and_continue() -> void:
-	play_sent_animation()
 	if appPlugin:
 		appPlugin.updateGameData(export_replay())
 	else:
@@ -253,7 +274,6 @@ func _spawn_avatar_score_popup(is_you: bool, amount: int, is_miss: bool = false)
 	else:
 		popup.text = "+%d" % amount
 
-	# Make it larger so +1 really pops
 	popup.scale = Vector2(1.5, 1.5)
 
 	var gold := Color(1.0, 0.84, 0.0)
@@ -296,83 +316,86 @@ func _project_to_plane(screen_pos: Vector2) -> Vector3:
 	return ray_origin + ray_normal * t
 
 const BULLSEYE_Z_OFFSET: float = 0.03541
-const BULLSEYE_Y_OFFSET: float = 0.02
+const BULLSEYE_Y_OFFSET: float = 0
+const REMOTE_Y_FUDGE: float = 0.02
+
+func _get_ring_center_radius(score: int) -> float:
+	if score >= 10:
+		return 0.0
+	if score == 9:
+		return 1.5 * RING_SPACING
+
+	var ring_number := float(10 - score)
+	return 1.0625 * ring_number * RING_SPACING
 
 func _get_bullseye_center_world() -> Vector3:
-	# Prefer the live target position so both sides stay in sync.
 	if is_instance_valid(target):
 		var center: Vector3 = target.global_transform.origin
 		center.z += BULLSEYE_Z_OFFSET
 		center.y += BULLSEYE_Y_OFFSET
 		return center
 
-	# Fallback (in case target is missing) – old hard-coded values.
 	var base_z: float = -14.39759
 	return Vector3(0.0, 1.718 + BULLSEYE_Y_OFFSET, base_z + BULLSEYE_Z_OFFSET)
 
 func export_replay() -> String:
-	var replay_str: String = "state:1,0,0,0,0|"
+	var pre_state: Array[int] = []
+	var set_index_for_turn: int
 
-	if replay.is_empty() == false:
-		var state: Array = replay["post_state"]
-		if (num - 1) % 2 != 0:
-			replay_str = str(
-				"state:",
-				state[0], ",",
-				state[1], ",",
-				state[2], ",",
-				state[3], ",",
-				state[4], "|"
-			)
-		else:
-			replay_str = str(
-				"state:",
-				set_num, ",",
-				"0,0,",
-				state[3], ",",
-				state[4], "|"
-			)
+	if has_turn_pre_state:
+		pre_state = turn_pre_state.duplicate()
+		if pre_state.size() < 5:
+			pre_state.resize(5)
+		set_index_for_turn = pre_state[0]
+		print("export_replay: using turn_pre_state as pre_state: ", pre_state)
+	elif not replay.is_empty() and replay.has("post_state"):
+		pre_state = replay["post_state"]
+		if pre_state.size() < 5:
+			pre_state.resize(5)
+		set_index_for_turn = pre_state[0]
+		print("export_replay: using replay.post_state as pre_state: ", pre_state)
+	else:
+		var p1_sets := (you_set_wins if player == 1 else opp_set_wins)
+		var p2_sets := (you_set_wins if player == 2 else opp_set_wins)
+		set_index_for_turn = set_num
+		pre_state = [set_index_for_turn, 0, 0, p1_sets, p2_sets]
+		print("export_replay: no prior replay; using default pre_state: ", pre_state)
 
-	# ---- REAL SHOT POSITIONS ----
-	var bullseye_center: Vector3 = _get_bullseye_center_world()
+	while pre_state.size() < 5:
+		pre_state.append(0)
 
-	# Always send exactly 3 moves.
-	for i in range(3):
-		var pos: Vector3
+	var replay_str: String = "state:%d,%d,%d,%d,%d|" % [
+		set_index_for_turn,
+		pre_state[1],
+		pre_state[2],
+		pre_state[3],
+		pre_state[4]
+	]
 
-		if i < moves.size():
-			# Use the actual shot we recorded.
-			pos = moves[i]
-			# Apply the calibrated Y offset so the remote board lines up.
-			pos.y += BULLSEYE_Y_OFFSET
-		else:
-			# If we somehow have fewer than 3 shots, pad with bullseye.
-			pos = bullseye_center
+	for pos in moves:
+		var wire_pos := pos
+		wire_pos.y += REMOTE_Y_FUDGE
 
 		replay_str += str(
 			"move:1,",
-			"%0.6f" % pos.x, ",",
-			"%0.6f" % pos.y, ",",
-			"%0.6f" % pos.z,
+			"%0.6f" % wire_pos.x, ",",
+			"%0.6f" % wire_pos.y, ",",
+			"%0.6f" % wire_pos.z,
 			"|"
 		)
 
-	# ---- FINAL STATE (unchanged from your version) ----
 	var p1_score: int = you_score if player == 1 else opp_score
 	var p2_score: int = you_score if player == 2 else opp_score
 	var p1_set_score: int = you_set_wins if player == 1 else opp_set_wins
 	var p2_set_score: int = you_set_wins if player == 2 else opp_set_wins
 
-	print("EXPORT_REPLAY final state: set_num=", set_num, " p1_score=", p1_score, " p2_score=", p2_score, " p1_sets=", p1_set_score, " p2_sets=", p2_set_score)
-
-	replay_str += str(
-		"state:",
-		set_num, ",",
-		p1_score, ",",
-		p2_score, ",",
-		p1_set_score, ",",
+	replay_str += "state:%d,%d,%d,%d,%d" % [
+		set_index_for_turn,
+		p1_score,
+		p2_score,
+		p1_set_score,
 		p2_set_score
-	)
+	]
 
 	var replay_dict: Dictionary = {"replay": replay_str}
 	var avatar_key := ("avatar1" if player == 1 else "avatar2")
@@ -382,9 +405,9 @@ func export_replay() -> String:
 		replay_dict["winner"] = send_winner
 	else:
 		play_sent_animation()
-
+	print("OUTGOING DATA: ", replay_dict)
 	return JSON.stringify(replay_dict)
-	
+
 func _animate_set_win_bump(is_you: bool) -> void:
 	var panel: PanelContainer = player_wins if is_you else opp_wins
 	if not is_instance_valid(panel):
@@ -471,14 +494,12 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 		print("Set result: OPPONENT wins set -> opp_set_wins=", opp_set_wins)
 		_update_set_score_labels()
 		_animate_set_win_bump(false)
-		# Opponent gets +1 set win popup
 		_spawn_avatar_score_popup(false, 1)
 	elif you_score > opp_score:
 		you_set_wins += 1
 		print("Set result: YOU win set -> you_set_wins=", you_set_wins)
 		_update_set_score_labels()
 		_animate_set_win_bump(true)
-		# You get +1 set win popup
 		_spawn_avatar_score_popup(true, 1)
 	else:
 		opp_set_wins += 1
@@ -487,22 +508,17 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 		_update_set_score_labels()
 		_animate_set_win_bump(true)
 		_animate_set_win_bump(false)
-		# Both players get +1 set win popup in a tie
 		_spawn_avatar_score_popup(true, 1)
 		_spawn_avatar_score_popup(false, 1)
 
-	if check_winner():
-		print("Winner decided in _animate_set_bar_and_award_points")
-		_hide_wind_panel(0.0)
-		
-	var total_sets_now: int = you_set_wins + opp_set_wins
-	if total_sets_now < 3:
-		var next_set := total_sets_now + 1
-		update_set_number(next_set)
-	else:
-		# Ensure we at least show the final set number that was just completed.
-		update_set_number(total_sets_now)
-		
+	if not from_replay:
+		print("Calling _award_set_points_and_continue (end of full set, before score reset)")
+		_award_set_points_and_continue()
+	check_winner()
+	if set_num < 3:
+		update_set_number(set_num + 1)
+		print("CALL 506")
+	
 	if start_you != 0 or start_opp != 0:
 		print("Starting score tween from:", start_you, start_opp, "to 0,0")
 		var score_tween := create_tween()
@@ -525,12 +541,6 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 	print("Per-set scores reset to 0-0")
 
 	await get_tree().create_timer(0.4).timeout
-
-	if not from_replay and not game_over:
-		print("Calling _award_set_points_and_continue (end of full set)")
-		_award_set_points_and_continue()
-	else:
-		print("Skipping _award_set_points_and_continue (from_replay=", from_replay, " game_over=", game_over, ")")
 
 	var tween_back := create_tween()
 	tween_back.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -587,32 +597,21 @@ func _fade_top_bar(fshow: bool) -> void:
 	tween.tween_property(top_game_bar, "modulate:a", target_alpha, 0.5)
 	
 func calc_wind() -> void:
-	if debug_no_wind:
-		# Force absolutely no wind
-		current_wind_angle = Vector2.ZERO
-		current_wind_power = 0.0
-		print("calc_wind: DEBUG NO WIND")
-		_update_wind_ui(0.0, 0.0)
-		return
-
 	var rng := RandomNumberGenerator.new()
-	rng.seed = gseed
 
-	print("calc_wind: current_set_num=", current_set_num, " num_shots=", num_shots)
+	var derived_seed: int = int(gseed) \
+		+ int(set_num) * 1009 \
+		+ int(num_shots) * 7919
+	rng.seed = derived_seed
 
-	for i in range(current_set_num - 1):
-		rng.randf()
+	print("calc_wind: set=", set_num,
+		" num_shots=", num_shots,
+		" derived_seed=", derived_seed)
 
-	if num_shots > 0:
-		for i in range(num_shots):
-			rng.randf()
-
-	var power: float
 	var angle: float = rng.randf_range(0.0, 360.0)
 
-	print("calc_wind: angle picked =", angle)
-
-	match current_set_num:
+	var power: float
+	match set_num:
 		1:
 			if num_shots == 0:
 				power = rng.randf_range(0.5, 0.8)
@@ -626,27 +625,16 @@ func calc_wind() -> void:
 			power = rng.randf_range(2.0, 4.0)
 		_:
 			power = rng.randf_range(0.5, 3.0)
-
 	current_wind_angle = Vector2.UP.rotated(deg_to_rad(angle))
 	current_wind_power = power
-
-	print("wind angle: " + str(angle) + " - " + str(current_wind_angle))
-	print("wind power: " + str(power))
+	
+	print("wind angle(deg)=", angle,
+		" vec=", current_wind_angle,
+		" power=", power)
 
 	_update_wind_ui(angle, power)
 
 func _update_wind_ui(angle_degrees: float, power: float) -> void:
-	if debug_no_wind:
-		if is_instance_valid(wind_label):
-			wind_label.bbcode_enabled = true
-			wind_label.text = "[center][b]WIND: [color=#FFFFFF]0.0[/color][/b][/center]"
-		if is_instance_valid(wind_arrow_circle):
-			wind_arrow_circle.modulate = Color(1, 1, 1)
-		if is_instance_valid(wind_arrow):
-			# point straight up, neutral color
-			wind_arrow.set_arrow(0.0, 0.0, Color(1, 1, 1))
-		print("_update_wind_ui: DEBUG NO WIND UI")
-		return
 	print(">>> _update_wind_ui CALLED angle=", angle_degrees, " power=", power)
 	var t: float = clamp(power / MAX_WIND_POWER, 0.0, 1.0)
 
@@ -677,19 +665,15 @@ func _update_wind_ui(angle_degrees: float, power: float) -> void:
 
 		var display_angle_deg: float
 		if current_wind_angle.length() > 0.0001:
-			# Godot: angle() -> 0° = right, CCW positive.
 			var godot_angle_deg: float = rad_to_deg(current_wind_angle.angle())
-			# Convert so 0° = up for the arrow.
 			display_angle_deg = godot_angle_deg
 		else:
-			# Fallback: use random angle_degrees (0 = right in Godot), convert similarly.
 			display_angle_deg = angle_degrees
 
 		wind_arrow.set_arrow(display_angle_deg, t, color)
 
 func update_set_number(uset_num: int) -> void:
 	set_num = uset_num
-	current_set_num = uset_num
 	
 	if uset_num == 1:
 		target.position.z = -14.39759
@@ -701,7 +685,55 @@ func update_set_number(uset_num: int) -> void:
 	if is_instance_valid(set_label):
 		set_label.text = "[center]Set " + str(uset_num) + "[/center]"
 	
-	print("update_set_number: set_num =", set_num, " current_set_num =", current_set_num)
+	print("update_set_number 680: set_num =", set_num)
+	
+func _reconcile_scores_with_post_state() -> void:
+	if not replay.has("post_state"):
+		print("_reconcile_scores_with_post_state: no post_state in replay; skipping.")
+		return
+
+	var post: Array[int] = replay["post_state"]
+
+	var p1_score_final: int = post[1]
+	var p2_score_final: int = post[2]
+
+	var target_you: int
+	var target_opp: int
+
+	if spectator_mode:
+		target_you = p1_score_final
+		target_opp = p2_score_final
+	else:
+		if local_index == 1:
+			target_you = p1_score_final
+			target_opp = p2_score_final
+		else:
+			target_you = p2_score_final
+			target_opp = p1_score_final
+
+	if you_score == target_you and opp_score == target_opp:
+		print("_reconcile_scores_with_post_state: scores already match post_state; no adjustment.")
+		return
+
+	print("_reconcile_scores_with_post_state: reconciling. current you=", you_score,
+		" opp=", opp_score, " target you=", target_you, " target opp=", target_opp)
+
+	var start_you: int = you_score
+	var start_opp: int = opp_score
+
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_method(
+		func(t: float) -> void:
+			you_score = int(round(lerp(float(start_you), float(target_you), t)))
+			opp_score = int(round(lerp(float(start_opp), float(target_opp), t)))
+			_update_set_score_labels()
+	,
+		0.0,
+		1.0,
+		0.5
+	)
+	await tween.finished
 
 func play_replay() -> void:
 	_hide_wind_panel(0.0)
@@ -709,19 +741,23 @@ func play_replay() -> void:
 	_update_set_score_labels()
 	print("play_replay: starting, you_score=", you_score, " opp_score=", opp_score, " you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
 
-	var cam_tween = create_tween()
-	cam_tween.set_loops(1)
-	cam_tween.tween_property(camera, "position:z", target.position.z + 4.75, 0.5).set_trans(Tween.TRANS_SINE)
-	await get_tree().create_timer(0.5).timeout
-
 	var replay_arrows: Array[Arrow] = []
 	if replay.has("moves"):
-		for i in range(replay["moves"].size()):
-			var move = replay["moves"][i]
+		var moves_arr: Array = replay["moves"]
+
+		if moves_arr.size() > 0:
+			var first_move = moves_arr[0]
+			if first_move.size() >= 4:
+				cam_follow_dart()
+
+		for i in range(moves_arr.size()):
+			var move = moves_arr[i]
 			if move.size() < 4:
 				continue
-			var replay_pos := Vector3(move[1], move[2], move[3])
-			print("play_replay: move[", i, "] raw=", move, " pos=", replay_pos)
+
+			var replay_pos := Vector3(move[1], move[2] - REMOTE_Y_FUDGE, move[3])
+
+			print("play_replay: move[", i, "] raw=", move, " adjusted_pos=", replay_pos)
 
 			replay_arrows.append(arrow.spawn())
 			var this_arrow: Arrow = replay_arrows[-1]
@@ -730,50 +766,66 @@ func play_replay() -> void:
 				var arrow_score: int = target.calc_score(this_arrow)
 				print("play_replay: arrow hit score=", arrow_score, " (before add_score) opp_score=", opp_score)
 
-				# Use the arrow's actual final world position
 				var hit_pos: Vector3 = this_arrow.global_transform.origin
-
 				_spawn_score_popup(hit_pos, arrow_score, _get_score_color(arrow_score))
 
 				if arrow_score > 0:
-					add_score(arrow_score, false)	# opponent scored
+					add_score(arrow_score, false)
 			)
 			await get_tree().create_timer(2.0).timeout
 	else:
 		print("play_replay: no moves in replay")
 
-	var _tween = create_tween()
-	_tween.set_loops(1)
-	_tween.tween_property(camera, "position", Vector3(0, 1.718, 1.616), 0.5).set_trans(Tween.TRANS_SINE)
-
+	await cam_reset_pos()
+	
 	for arrow_i in replay_arrows:
 		if is_instance_valid(arrow_i):
 			arrow_i.queue_free()
 	replay_arrows.clear()
 
-	while _tween.is_running():
-		await get_tree().create_timer(0.1).timeout
-
 	played_replay = true
-	print("play_replay: finished, you_score=", you_score, " opp_score=", opp_score, " you_sets(before set anim)=", you_set_wins, " opp_sets(before set anim)=", opp_set_wins)
+	print("play_replay: finished (before reconcile), you_score=", you_score, " opp_score=", opp_score,
+		" you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
+
+	await _reconcile_scores_with_post_state()
+	print("play_replay: after reconcile, you_score=", you_score, " opp_score=", opp_score)
 
 	var should_end_set := false
+	var post_set_num: int = -1
+
 	if replay.has("pre_state") and replay.has("post_state"):
 		var pre: Array[int] = replay["pre_state"]
 		var post: Array[int] = replay["post_state"]
+
+		var pre_set_num := pre[0]
+		post_set_num = post[0]
+
 		var pre_sets := Vector2i(pre[3], pre[4])
 		var post_sets := Vector2i(post[3], post[4])
-		var pre_set_num := pre[0]
-		var post_set_num := post[0]
-		should_end_set = (pre_sets != post_sets) or (pre_set_num != post_set_num)
-		print("play_replay: pre_state=", pre, " post_state=", post, " should_end_set=", should_end_set)
+
+		var post_scores := Vector2i(post[1], post[2])
+		var both_players_have_score: bool = (post_scores.x > 0 and post_scores.y > 0)
+
+		var sets_changed: bool = (pre_sets != post_sets)
+		var set_index_changed: bool = (pre_set_num != post_set_num)
+
+		should_end_set = sets_changed or set_index_changed or both_players_have_score
+
+		print("play_replay: pre_state=", pre, " post_state=", post,
+			" pre_sets=", pre_sets, " post_sets=", post_sets,
+			" pre_set_num=", pre_set_num, " post_set_num=", post_set_num,
+			" post_scores=", post_scores,
+			" both_have_score=", both_players_have_score,
+			" sets_changed=", sets_changed,
+			" set_index_changed=", set_index_changed,
+			" should_end_set=", should_end_set)
 	else:
 		print("play_replay: no pre/post state; assuming not end-of-set for safety.")
 		should_end_set = false
 
 	if should_end_set:
 		await _animate_set_bar_and_award_points(true)
-		print("play_replay: _animate_set_bar_and_award_points(true) completed (end-of-set)")
+		print("play_replay: _animate_set_bar_and_award_points(true, ", post_set_num, ") completed (end-of-set)")
 	else:
 		print("play_replay: not end-of-set; skipping set animation and letting local player shoot.")
 
@@ -844,8 +896,52 @@ func _set_game_data(new_replay: String) -> void:
 		var has_post: bool = replay.has("post_state")
 		print("_set_game_data: has_pre_state=", has_pre, " has_post_state=", has_post, " replay=", replay)
 
-		var state: Array[int] = replay["pre_state"]
-		update_set_number(state[0])
+		var shooter_index: int = 0
+		if has_pre and has_post:
+			var pre: Array[int] = replay["pre_state"]
+			var post: Array[int] = replay["post_state"]
+
+			var pre_p1_score: int = pre[1]
+			var pre_p2_score: int = pre[2]
+			var post_p1_score: int = post[1]
+			var post_p2_score: int = post[2]
+
+			var p1_changed: bool = (post_p1_score != pre_p1_score)
+			var p2_changed: bool = (post_p2_score != pre_p2_score)
+
+			if p1_changed and not p2_changed:
+				shooter_index = 1
+			elif p2_changed and not p1_changed:
+				shooter_index = 2
+			else:
+				shooter_index = 0
+
+			print("_set_game_data: shooter_index=", shooter_index,
+				" pre_p1=", pre_p1_score, " pre_p2=", pre_p2_score,
+				" post_p1=", post_p1_score, " post_p2=", post_p2_score)
+
+		_should_play_replay = true
+		if not spectator_mode and shooter_index != 0 and shooter_index == local_index:
+			_should_play_replay = false
+
+		print("_set_game_data: _should_play_replay=", _should_play_replay, " local_index=", local_index)
+
+		var use_post_for_ui: bool = (not spectator_mode and has_post and shooter_index != 0 and shooter_index == local_index)
+		var state: Array[int]
+
+		if use_post_for_ui:
+			state = replay["post_state"]
+			print("_set_game_data: using POST state for initial UI")
+		else:
+			state = replay["pre_state"]
+			print("_set_game_data: using PRE state for initial UI")
+
+		if use_post_for_ui:
+			print("_set_game_data: applying POST set_num from state[0]=", state[0])
+			update_set_number(state[0])
+		else:
+			print("_set_game_data: applying set_num from state[0]=", state[0])
+			update_set_number(state[0])
 
 		var p1_score: int = state[1]
 		var p2_score: int = state[2]
@@ -869,7 +965,8 @@ func _set_game_data(new_replay: String) -> void:
 				you_set_wins = p2_sets
 				opp_set_wins = p1_sets
 
-		print("_set_game_data: PRE-STATE mapped you_score=", you_score, " opp_score=", opp_score, " you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
+		print("_set_game_data: mapped you_score=", you_score, " opp_score=", opp_score,
+			" you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
 		_update_set_score_labels()
 
 	for arrow_i in shots:
@@ -881,8 +978,12 @@ func _set_game_data(new_replay: String) -> void:
 	num_shots = 0
 	played_replay = false
 
+	has_turn_pre_state = false
+	turn_pre_state.clear()
+
 	print("YOU ARE PLAYER ", player, " (local_index=", local_index, ")")
 	_process_game_state()
+
 
 func add_score(score: int, you: bool = true) -> void:
 	await get_tree().create_timer(0.5).timeout
@@ -990,44 +1091,69 @@ func camera_zoom(val: float) -> void:
 	_tween.play()
 
 func calc_shot_pos() -> Vector3:
-	print(aim_cursor.position)
-	var ray_origin: Vector3 = camera.project_ray_origin(aim_cursor.position)
-	var ray_normal: Vector3 = camera.project_ray_normal(aim_cursor.position)
-	
+	var screen_pos: Vector2
+
+	screen_pos = aim_cursor.position
+	print("calc_shot_pos: using aim_cursor.position=", screen_pos)
+
+	var ray_origin: Vector3 = camera.project_ray_origin(screen_pos)
+	var ray_normal: Vector3 = camera.project_ray_normal(screen_pos)
+
 	if abs(ray_normal.z) < 0.0001:
 		printerr("Ray is parallel to the target plane!!!")
 		return Vector3()
-	
+
 	var t: float = ((target.position.z) - ray_origin.z) / ray_normal.z
 	var target_3d_position: Vector3 = ray_origin + ray_normal * t
-	
+
 	print("Projected 3D position: ", target_3d_position)
 	return target_3d_position
 
-func cam_follow_dart(shot_pos: Vector3) -> void:
+func cam_follow_dart() -> void:
+	if not is_instance_valid(camera) or not is_instance_valid(target):
+		return
+
+	var center := _get_bullseye_center_world()
+
+	var cam_pos := Vector3(
+		center.x,
+		center.y + CAMERA_FOLLOW_Y_OFFSET,
+		target.position.z + CAMERA_FOLLOW_DISTANCE_Z
+	)
+
+	var look_target := center - Vector3(0.0, CAMERA_LOOK_AT_Y_OFFSET, 0.0)
+	camera.look_at(look_target, Vector3.UP)
+
 	var _tween = create_tween()
 	_tween.set_loops(1)
-	_tween.parallel().tween_property(camera, "position:z", target.position.z + 4.75, 0.5).set_trans(Tween.TRANS_SINE)
-	_tween.parallel().tween_property(camera, "position:x", shot_pos.x, 0.5).set_trans(Tween.TRANS_SINE)
+	_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_tween.tween_property(camera, "position", cam_pos, CAMERA_FOLLOW_LERP_TIME)
+	_tween.parallel().tween_property(camera, "fov", CAMERA_FOLLOW_FOV, CAMERA_FOLLOW_LERP_TIME)
 
 func cam_reset_pos() -> void:
 	await get_tree().create_timer(0.5).timeout
+	
+	if not is_instance_valid(camera):
+		return
+	
 	var _tween = create_tween()
 	_tween.set_loops(1)
-	_tween.tween_property(camera, "position", Vector3(0, 1.718, 1.616), 0.5).set_trans(Tween.TRANS_SINE)
+	_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_tween.tween_property(camera, "position", CAMERA_DEFAULT_POS, 0.5)
+	_tween.parallel().tween_property(camera, "fov", CAMERA_DEFAULT_FOV, 0.5)
 	await _tween.finished
-
+	
 func _get_score_color(points: int) -> Color:
 	if points <= 2:
 		return Color.WHITE
 	elif points <= 4:
-		return Color.BLACK      # 3–4
+		return Color.BLACK
 	elif points <= 6:
-		return Color(0.2, 0.4, 1.0)   # 5–6 blue
+		return Color(0.2, 0.4, 1.0)
 	elif points <= 8:
-		return Color(1.0, 0.2, 0.2)   # 7–8 red
+		return Color(1.0, 0.2, 0.2)
 	else:
-		return Color(1.0, 0.84, 0.0)  # 9–10 gold
+		return Color(1.0, 0.84, 0.0)
 
 func start_aim_timer() -> void:
 	if not is_instance_valid(aim_progress_bar):
@@ -1065,23 +1191,42 @@ func shoot_dart() -> void:
 	aim_cursor_velocity = Vector2.ZERO
 	
 	_hide_wind_panel(0.2)
-	
 	var shot_pos: Vector3 = calc_shot_pos()
 	print("initial shot pos (no wind): " + str(shot_pos))
-
-	# In debug_no_wind mode, do NOT alter shot_pos at all.
-	if not debug_no_wind:
-		var flight_time: float = 0.50
-		if current_set_num > 1:
-			flight_time = 0.15 * float(current_set_num)
+	
+	if current_wind_angle.length() > 0.0 and current_wind_power != 0.0:
+		var set_factor: float = 1.0
+		match set_num:
+			1:
+				set_factor = 0.75
+			2:
+				set_factor = 1.0
+			3:
+				set_factor = 1.25
+			_:
+				set_factor = 1.0
 		
-		var wind_displacement: Vector2 = current_wind_angle * flight_time * (current_wind_power * 0.25)
-		print("wind displacement: " + str(wind_displacement))
+		var rings_offset: float = current_wind_power * set_factor
+		var displacement_mag: float = rings_offset * RING_SPACING
+		
+		var dir: Vector2 = current_wind_angle.normalized()
+		var wind_displacement: Vector2 = dir * displacement_mag
+		
+		print("wind: set=", set_num,
+			" power=", current_wind_power,
+			" rings_offset=", rings_offset,
+			" displacement_mag=", displacement_mag,
+			" dir=", dir,
+			" disp=", wind_displacement)
 		
 		var shot_pos_2d: Vector2 = Vector2(shot_pos.x, shot_pos.y) + wind_displacement
 		shot_pos = Vector3(shot_pos_2d.x, shot_pos_2d.y, shot_pos.z)
-		print("new shot pos (with wind): " + str(shot_pos))
-	
+		print("final shot pos (with wind): " + str(shot_pos))
+	else:
+		print("shoot_dart: wind not applied (angle len="
+			+ str(current_wind_angle.length())
+			+ ", power=" + str(current_wind_power) + ")")
+
 	var shot_arrow := current_arrow
 	shot_arrow.shoot(shot_pos, func() -> void:
 		var pts: int = target.calc_score(shot_arrow)
@@ -1090,7 +1235,7 @@ func shoot_dart() -> void:
 		_spawn_score_popup(hit_pos, pts, _get_score_color(pts))
 
 		if pts > 0:
-			add_score(pts)	# local player scored
+			add_score(pts)
 
 		_fade_top_bar(true)
 		num_shots += 1
@@ -1099,8 +1244,7 @@ func shoot_dart() -> void:
 		_process_game_state()
 	)
 
-	camera.fov = 60
-	cam_follow_dart(shot_pos)
+	cam_follow_dart()
 	shots.append(shot_arrow)
 	moves.append(shot_pos)
 	current_arrow = null
@@ -1131,14 +1275,8 @@ func _spawn_score_popup(world_pos: Vector3, amount: int, color: Color) -> void:
 	popup.outline_size = 3
 	popup.outline_modulate = Color.BLACK
 	popup.double_sided = true
-
-	# Attach to the ArcheryGame node so we can position in world space
 	var parent_3d: Node3D = self
 	parent_3d.add_child(popup)
-
-	# Decide final world position:
-	#  - if MISS but still near target => use arrow hit position
-	#  - if MISS and far from target   => center of target
 	var center_world: Vector3 = target.global_position
 	var final_world: Vector3 = world_pos
 
@@ -1148,17 +1286,12 @@ func _spawn_score_popup(world_pos: Vector3, amount: int, color: Color) -> void:
 			world_pos.y - center_world.y
 		).length()
 
-		var BOARD_RADIUS: float = 0.75	# tweak to match your board radius
-
 		if horizontal_dist > BOARD_RADIUS:
-			# True whiff: popup originates from the center of the target
 			final_world = center_world
 
-	# Nudge a bit toward the camera so the text is in front of the board
 	var to_camera: Vector3 = (camera.global_transform.origin - final_world).normalized()
 	var start_world: Vector3 = final_world + to_camera * 0.15
 
-	# Convert to local space of parent for tweening
 	var start_local: Vector3 = parent_3d.to_local(start_world)
 	popup.position = start_local
 
@@ -1376,7 +1509,6 @@ func _ensure_avatar_wrapper(avatar: Control) -> Control:
 		if is_instance_valid(wrapper):
 			wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
 	)
-
 	return wrapper
 
 func _show_win_burst(avatar: Control) -> void:
@@ -1391,21 +1523,17 @@ func _show_win_burst(avatar: Control) -> void:
 	var anim_instance: Control = AvatarWinAnimScene.instantiate() as Control
 	anim_instance.name = "AvatarWinAnim"
 	wrapper.add_child(anim_instance)
-
 	var avatar_idx: int = avatar.get_index()
 	wrapper.move_child(anim_instance, avatar_idx)
-
 	anim_instance.z_as_relative = false
 	avatar.z_as_relative = false
 	anim_instance.z_index = 0
 	avatar.z_index = max(avatar.z_index, 1)
-
 	anim_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
 	anim_instance.offset_left = -52.0
 	anim_instance.offset_right = 52.0
 	anim_instance.offset_top = -43.0
 	anim_instance.offset_bottom = 43.0
-
 	(anim_instance as Node).call("set_color", Color(1.0, 0.84, 0.0))
 	(anim_instance as Node).call("play", 0.05)
 
@@ -1420,21 +1548,18 @@ func _on_settings_button_pressed() -> void:
 	tween.tween_property(settings_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(settings_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
-
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.5)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	var popup_instance := SETTINGS_POPUP_SCENE.instantiate()
 	var settings_popup_script := popup_instance as SettingsPopup
-
 	var root := get_tree().root
 	root.add_child(dim)
 	root.add_child(popup_instance)
 	popup_instance.z_index = 100
 	dim.z_index = 99
 	root.move_child(dim, root.get_child_count() - 2)
-
 	settings_popup_script.setup_popup(dim)
 
 	var custom_settings_title := popup_instance.find_child("CustomSettingsTitleLabel", true)
@@ -1450,8 +1575,6 @@ func _on_settings_button_pressed() -> void:
 		if is_instance_valid(dim):
 			dim.queue_free()
 	)
-	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
-
 	popup_instance.set_as_top_level(true)
 	popup_instance.visible = true
 	await get_tree().process_frame
@@ -1469,6 +1592,3 @@ func _on_settings_button_pressed() -> void:
 	var popup_tween := create_tween()
 	popup_tween.tween_property(popup_instance, "position", target_position, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	popup_instance.grab_focus()
-
-func _on_theme_changed(_new_theme_name: String) -> void:
-	pass
