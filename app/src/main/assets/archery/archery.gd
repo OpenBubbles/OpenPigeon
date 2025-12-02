@@ -28,6 +28,7 @@ const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 @onready var wind_panel_container: PanelContainer = %WindPanel
 @onready var top_game_bar: HBoxContainer = %TopGameBar
 @onready var score_box: Control = %ScoreBox
+@onready var distance_label: Label3D = %distancemarkerlabel
 
 var _score_box_orig_min_size: Vector2 = Vector2.ZERO
 var _score_box_inited: bool = false
@@ -517,6 +518,7 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 	check_winner()
 	if set_num < 3:
 		update_set_number(set_num + 1)
+		update_distance()
 		print("CALL 506")
 	
 	if start_you != 0 or start_opp != 0:
@@ -737,7 +739,7 @@ func _reconcile_scores_with_post_state() -> void:
 
 func play_replay() -> void:
 	_hide_wind_panel(0.0)
-
+	update_distance()
 	_update_set_score_labels()
 	print("play_replay: starting, you_score=", you_score, " opp_score=", opp_score, " you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
 
@@ -828,6 +830,17 @@ func play_replay() -> void:
 		print("play_replay: _animate_set_bar_and_award_points(true, ", post_set_num, ") completed (end-of-set)")
 	else:
 		print("play_replay: not end-of-set; skipping set animation and letting local player shoot.")
+
+func update_distance() -> void:
+	match set_num:
+		1:
+			distance_label.text = "50ft"
+		2:
+			distance_label.text = "70ft"
+		3:
+			distance_label.text = "90ft"
+		_:
+			distance_label.text = "50ft"
 
 func parse_replay(replay_str: String) -> Dictionary:
 	var result = {'moves': []}
@@ -942,6 +955,7 @@ func _set_game_data(new_replay: String) -> void:
 		else:
 			print("_set_game_data: applying set_num from state[0]=", state[0])
 			update_set_number(state[0])
+		update_distance()
 
 		var p1_score: int = state[1]
 		var p2_score: int = state[2]
