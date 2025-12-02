@@ -89,7 +89,7 @@ const CAMERA_FOLLOW_DISTANCE_Z := 3.5	 # how close to the board when following
 const CAMERA_FOLLOW_Y_OFFSET := 0.5	 # how far above board center
 const CAMERA_LOOK_AT_Y_OFFSET := 0.55	# how far below bullseye to look
 const CAMERA_FOLLOW_FOV := 50.0		 # zoom amount for close-up
-const CAMERA_FOLLOW_LERP_TIME := 0.4	 # tween time into the close-up
+const CAMERA_FOLLOW_LERP_TIME := 0.7	 # tween time into the close-up
 
 var set_num: int = 1          # current set (1–3)
 var you_score: int = 0        # per-set score (you)
@@ -640,7 +640,7 @@ func _update_wind_ui(angle_degrees: float, power: float) -> void:
 	print(">>> _update_wind_ui CALLED angle=", angle_degrees, " power=", power)
 	var t: float = clamp(power / MAX_WIND_POWER, 0.0, 1.0)
 
-	var green: Color = Color(0.1, 0.9, 0.1)
+	var green: Color = Color(0.792, 0.792, 0.792, 1.0)
 	var yellow: Color = Color(1.0, 0.9, 0.1)
 	var red: Color = Color(0.95, 0.1, 0.1)
 
