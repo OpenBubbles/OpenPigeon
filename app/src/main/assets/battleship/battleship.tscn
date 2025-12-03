@@ -1,98 +1,561 @@
-[gd_scene load_steps=7 format=3 uid="uid://cwj68wu8ntln"]
+[gd_scene load_steps=47 format=3 uid="uid://cwj68wu8ntln"]
 
 [ext_resource type="Script" uid="uid://d11d0tliu83pm" path="res://battleship/battleground.gd" id="1_4q04m"]
 [ext_resource type="Script" uid="uid://bmxmvwf7usewn" path="res://battleship/battleship.gd" id="1_urm0v"]
 [ext_resource type="PackedScene" uid="uid://t4n0g4ud7n6f" path="res://battleship/patrolboat.tscn" id="2_o7hy2"]
+[ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="2_x63is"]
+[ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="3_8k61m"]
+[ext_resource type="Texture2D" uid="uid://b1s2ymrrgenod" path="res://battleship/water_noise.tres" id="3_ow2dl"]
+[ext_resource type="Texture2D" uid="uid://cudvqnhp6llyp" path="res://battleship/shuffle.png" id="4_cnvch"]
 [ext_resource type="PackedScene" uid="uid://bk5btqccsu6bo" path="res://battleship/marker.tscn" id="4_yk3pl"]
+[ext_resource type="Texture2D" uid="uid://be7c3h71y7awb" path="res://battleship/cloud_noise.tres" id="5_7ycry"]
+[ext_resource type="Texture2D" uid="uid://dvhiuy2xdxiuj" path="res://battleship/shuffle_pressed.png" id="5_8c2i7"]
+[ext_resource type="Shader" uid="uid://f1704ei481dv" path="res://battleship/water_ocean.gdshader" id="6_8c2i7"]
+[ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="8_0ayae"]
+[ext_resource type="Shader" uid="uid://djxcmb4j8hp3r" path="res://battleship/clouds_bg.gdshader" id="11_fql0a"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_yk3pl"]
-bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
-corner_radius_top_left = 25
-corner_radius_top_right = 25
-corner_radius_bottom_right = 25
-corner_radius_bottom_left = 25
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_8c2i7"]
+shader = ExtResource("6_8c2i7")
+shader_parameter/noise_tex = ExtResource("3_ow2dl")
+shader_parameter/alpha = 1.0
+shader_parameter/deep_color = Vector3(0.02, 0.25, 0.55)
+shader_parameter/shallow_color = Vector3(0.12, 0.65, 0.95)
+shader_parameter/base_scale = 3.0
+shader_parameter/detail_scale = 10.0
+shader_parameter/time_scale = 0.25
+shader_parameter/warp_amount = 0.3
+shader_parameter/swipe_offset = 0.0
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_elyco"]
-bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
-corner_radius_top_left = 25
-corner_radius_top_right = 25
-corner_radius_bottom_right = 25
-corner_radius_bottom_left = 25
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_7ycry"]
+shader = ExtResource("11_fql0a")
+shader_parameter/noise_tex = ExtResource("5_7ycry")
+shader_parameter/noise_scale = 1.0
+shader_parameter/scroll_speed = 0.01
+shader_parameter/swipe_offset = 0.0
+shader_parameter/low_freq_scale = 0.6
+shader_parameter/mid_freq_scale = 1.0
+shader_parameter/high_freq_scale = 2.5
+shader_parameter/low_freq_weight = 1.5
+shader_parameter/mid_freq_weight = 1.0
+shader_parameter/high_freq_weight = 0.4
+shader_parameter/cloud_coverage = 1.2
+shader_parameter/puffiness = 0.8
+shader_parameter/alpha_max = 0.9
+shader_parameter/edge_softness = 0.2
 
-[node name="Battleship" type="Node2D"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_cnvch"]
+texture = ExtResource("2_x63is")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_8c2i7"]
+texture = ExtResource("2_x63is")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_ow2dl"]
+texture = ExtResource("2_x63is")
+
+[sub_resource type="FontVariation" id="FontVariation_x63is"]
+variation_embolden = 0.5
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_fql0a"]
+texture = ExtResource("3_8k61m")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_7ycry"]
+texture = ExtResource("3_8k61m")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_0ayae"]
+texture = ExtResource("3_8k61m")
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ow2dl"]
+bg_color = Color(0.38431373, 0.62352943, 0.45882353, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_fql0a"]
+bg_color = Color(0.29411766, 0.47843137, 0.34901962, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_7ycry"]
+bg_color = Color(0.526846, 0.782527, 0.60314864, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_size = 5
+shadow_offset = Vector2(0, 5)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_0ayae"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_cnvch"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wlxoc"]
+bg_color = Color(1, 0.27233332, 0.26, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_874s0"]
+bg_color = Color(0.69063616, 0, 0.07796266, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_7yxgj"]
+bg_color = Color(1, 0.5463065, 0.50453, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_size = 5
+shadow_offset = Vector2(0, 5)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_e4m7h"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_d2ch3"]
+
+[sub_resource type="FontVariation" id="FontVariation_7ycry"]
+variation_embolden = 0.5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_e4m7h"]
+bg_color = Color(1, 0.528, 0.52, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_nil0b"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_xmvnm"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_7ycry"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0ayae"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_xmvnm"]
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_xmvnm"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_wlxoc"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_874s0"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_wlxoc"]
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_0ayae"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_7yxgj"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_e4m7h"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[node name="Battleship" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
 script = ExtResource("1_urm0v")
 
-[node name="BattleGround1" type="Node2D" parent="."]
-position = Vector2(68, 320)
-script = ExtResource("1_4q04m")
-rows = 8
-rect_size = Vector2(512, 512)
-ship_class = ExtResource("2_o7hy2")
-marker = ExtResource("4_yk3pl")
+[node name="WaterRect" type="ColorRect" parent="."]
+unique_name_in_owner = true
+material = SubResource("ShaderMaterial_8c2i7")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.11764706, 0.60784316, 0.8666667, 1)
 
-[node name="BattleGround2" type="Node2D" parent="."]
-position = Vector2(68, 320)
-script = ExtResource("1_4q04m")
-rows = 8
-rect_size = Vector2(512, 512)
-ship_class = ExtResource("2_o7hy2")
-marker = ExtResource("4_yk3pl")
+[node name="CloudsRect" type="ColorRect" parent="."]
+unique_name_in_owner = true
+visible = false
+material = SubResource("ShaderMaterial_7ycry")
+custom_minimum_size = Vector2(1500, 0)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
 
-[node name="SendButton" type="Button" parent="."]
-offset_left = 263.0
-offset_top = 1069.0
-offset_right = 383.0
-offset_bottom = 1119.0
-disabled = true
-text = "Send
-"
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 30
 
-[node name="waitingLabel" type="Panel" parent="."]
-top_level = true
-offset_left = 116.0
-offset_top = 609.0
-offset_right = 546.0
-offset_bottom = 709.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_yk3pl")
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+mouse_filter = 2
 
-[node name="RichTextLabel" type="RichTextLabel" parent="waitingLabel"]
-layout_mode = 0
-offset_left = 14.0
-offset_top = 29.2222
-offset_right = 417.0
-offset_bottom = 71.2222
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]WAITING FOR OPPONENT...[/center]"
+[node name="TopBar" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+mouse_filter = 2
+alignment = 1
 
-[node name="Label" type="Label" parent="."]
-offset_left = 1.0
-offset_top = 1021.0
-offset_right = 647.0
-offset_bottom = 1044.0
-text = "State"
+[node name="RulesButton" type="Button" parent="MarginContainer/VBoxContainer/TopBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(56, 56)
+layout_mode = 2
+size_flags_horizontal = 2
+size_flags_vertical = 4
+focus_mode = 0
+theme_override_font_sizes/font_size = 32
+theme_override_styles/normal = SubResource("StyleBoxTexture_cnvch")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_8c2i7")
+theme_override_styles/hover = SubResource("StyleBoxTexture_ow2dl")
+
+[node name="StateLabel" type="Label" parent="MarginContainer/VBoxContainer/TopBar"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 8
+theme_override_fonts/font = SubResource("FontVariation_x63is")
+theme_override_font_sizes/font_size = 28
+text = "Arrange your ships."
 horizontal_alignment = 1
 justification_flags = 162
 
-[node name="winLoseLabel" type="Panel" parent="."]
+[node name="SettingsButton" type="Button" parent="MarginContainer/VBoxContainer/TopBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(56, 56)
+layout_mode = 2
+size_flags_horizontal = 10
+size_flags_vertical = 4
+focus_mode = 0
+theme_override_font_sizes/font_size = 32
+theme_override_styles/normal = SubResource("StyleBoxTexture_fql0a")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_7ycry")
+theme_override_styles/hover = SubResource("StyleBoxTexture_0ayae")
+
+[node name="Control" type="Control" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="BottomBar" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+mouse_filter = 2
+alignment = 1
+
+[node name="ShuffleButton" type="TextureButton" parent="MarginContainer/VBoxContainer/BottomBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(56, 56)
+layout_mode = 2
+texture_normal = ExtResource("4_cnvch")
+texture_pressed = ExtResource("5_8c2i7")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="CenterContainer" type="CenterContainer" parent="MarginContainer/VBoxContainer/BottomBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="StartButton" type="Button" parent="MarginContainer/VBoxContainer/BottomBar/CenterContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 56)
+layout_mode = 2
+theme_override_colors/font_focus_color = Color(0.95, 0.95, 0.95, 0)
+theme_override_colors/font_pressed_color = Color(0.6509804, 0.6509804, 0.6509804, 1)
+theme_override_colors/font_disabled_color = Color(0.88, 0.88, 0.88, 0)
+theme_override_colors/icon_focus_color = Color(1, 1, 1, 0)
+theme_override_colors/icon_disabled_color = Color(1, 1, 1, 0)
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_ow2dl")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_fql0a")
+theme_override_styles/hover = SubResource("StyleBoxFlat_7ycry")
+theme_override_styles/disabled = SubResource("StyleBoxEmpty_0ayae")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_cnvch")
+disabled = true
+text = "Start"
+
+[node name="FireButton" type="Button" parent="MarginContainer/VBoxContainer/BottomBar/CenterContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 56)
+layout_mode = 2
+theme_override_colors/font_focus_color = Color(0.95, 0.95, 0.95, 0)
+theme_override_colors/font_pressed_color = Color(0.6509804, 0.6509804, 0.6509804, 1)
+theme_override_colors/font_disabled_color = Color(0.88, 0.88, 0.88, 0)
+theme_override_colors/icon_focus_color = Color(1, 1, 1, 0)
+theme_override_colors/icon_disabled_color = Color(1, 1, 1, 0)
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_wlxoc")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_874s0")
+theme_override_styles/hover = SubResource("StyleBoxFlat_7yxgj")
+theme_override_styles/disabled = SubResource("StyleBoxEmpty_e4m7h")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_d2ch3")
+disabled = true
+text = "Fire!"
+
+[node name="ChooseTargetLabel" type="Label" parent="MarginContainer/VBoxContainer/BottomBar/CenterContainer"]
+unique_name_in_owner = true
 visible = false
-top_level = true
-offset_left = 116.0
-offset_top = 609.0
-offset_right = 546.0
-offset_bottom = 709.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_elyco")
+custom_minimum_size = Vector2(400, 56)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6371911, 0, 0.068432435, 1)
+theme_override_fonts/font = SubResource("FontVariation_7ycry")
+theme_override_font_sizes/font_size = 21
+theme_override_styles/normal = SubResource("StyleBoxFlat_e4m7h")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_nil0b")
+text = "Choose your target."
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="RichTextLabel" type="RichTextLabel" parent="winLoseLabel"]
+[node name="Spacer" type="Control" parent="MarginContainer/VBoxContainer/BottomBar"]
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="WaitBlur" type="ColorRect" parent="."]
+unique_name_in_owner = true
+visible = false
+z_index = 6
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.152941, 0.152941, 0.152941, 0.556863)
+
+[node name="DotTimer" type="Timer" parent="."]
+unique_name_in_owner = true
+wait_time = 0.75
+
+[node name="SpecLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
 layout_mode = 0
-offset_left = 16.0
-offset_top = 29.2222
-offset_right = 419.0
-offset_bottom = 71.2222
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]YOU WIN![/center]"
+offset_top = 165.0
+offset_right = 648.0
+offset_bottom = 234.0
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 50
+text = "Spectating..."
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[connection signal="is_valid" from="BattleGround1" to="." method="_on_battle_ground_is_valid"]
-[connection signal="is_valid" from="BattleGround2" to="." method="_on_battle_ground_is_valid"]
-[connection signal="pressed" from="SendButton" to="." method="_on_send_button_pressed"]
+[node name="waitingLabel" type="Label" parent="."]
+unique_name_in_owner = true
+z_index = 7
+layout_mode = 0
+offset_left = 161.0
+offset_top = 558.0
+offset_right = 487.0
+offset_bottom = 593.0
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_xmvnm")
+text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="PanelContainer" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxEmpty_7ycry")
+
+[node name="CenterContainer" type="CenterContainer" parent="PanelContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="SentLabel" type="Label" parent="PanelContainer/CenterContainer"]
+unique_name_in_owner = true
+visible = false
+z_index = 7
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_0ayae")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WinLossLabel" type="Label" parent="PanelContainer/CenterContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_0ayae")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Player1BoardContainer" type="PanelContainer" parent="PanelContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxEmpty_xmvnm")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer/Player1BoardContainer"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="Control" type="Control" parent="PanelContainer/Player1BoardContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="YouLabel" type="Label" parent="PanelContainer/Player1BoardContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 18
+text = "You"
+horizontal_alignment = 1
+
+[node name="PlayerAvatarDisplay" parent="PanelContainer/Player1BoardContainer/VBoxContainer" instance=ExtResource("8_0ayae")]
+unique_name_in_owner = true
+z_index = 5
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_xmvnm")
+texture_pressed = SubResource("ViewportTexture_wlxoc")
+texture_hover = SubResource("ViewportTexture_874s0")
+is_display_only = true
+
+[node name="CenterContainer" type="CenterContainer" parent="PanelContainer/Player1BoardContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="BoardWrapper" type="Control" parent="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer"]
+custom_minimum_size = Vector2(512, 512)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="BattleGround1" type="Node2D" parent="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer/BoardWrapper"]
+unique_name_in_owner = true
+script = ExtResource("1_4q04m")
+rows = 8
+rect_size = Vector2(512, 512)
+ship_class = ExtResource("2_o7hy2")
+marker = ExtResource("4_yk3pl")
+
+[node name="Spacer" type="Control" parent="PanelContainer/Player1BoardContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 101)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Player2BoardContainer" type="PanelContainer" parent="PanelContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxEmpty_wlxoc")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer/Player2BoardContainer"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="Control" type="Control" parent="PanelContainer/Player2BoardContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="YouLabel" type="Label" parent="PanelContainer/Player2BoardContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 18
+text = "You"
+horizontal_alignment = 1
+
+[node name="OppAvatarDisplay" parent="PanelContainer/Player2BoardContainer/VBoxContainer" instance=ExtResource("8_0ayae")]
+unique_name_in_owner = true
+z_index = 5
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_0ayae")
+texture_pressed = SubResource("ViewportTexture_7yxgj")
+texture_hover = SubResource("ViewportTexture_e4m7h")
+is_display_only = true
+controlled_by_data = true
+
+[node name="CenterContainer" type="CenterContainer" parent="PanelContainer/Player2BoardContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="BoardWrapper" type="Control" parent="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer"]
+custom_minimum_size = Vector2(512, 512)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="BattleGround2" type="Node2D" parent="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer/BoardWrapper"]
+unique_name_in_owner = true
+script = ExtResource("1_4q04m")
+rows = 8
+rect_size = Vector2(512, 512)
+ship_class = ExtResource("2_o7hy2")
+marker = ExtResource("4_yk3pl")
+
+[node name="Spacer" type="Control" parent="PanelContainer/Player2BoardContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 101)
+layout_mode = 2
+mouse_filter = 2
+
+[connection signal="pressed" from="MarginContainer/VBoxContainer/BottomBar/CenterContainer/StartButton" to="." method="_on_send_button_pressed"]
+[connection signal="pressed" from="MarginContainer/VBoxContainer/BottomBar/CenterContainer/FireButton" to="." method="_on_send_button_pressed"]
+[connection signal="is_valid" from="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer/BoardWrapper/BattleGround1" to="." method="_on_battle_ground_is_valid"]
+[connection signal="is_valid" from="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer/BoardWrapper/BattleGround2" to="." method="_on_battle_ground_is_valid"]

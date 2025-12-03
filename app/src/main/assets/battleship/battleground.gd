@@ -49,6 +49,11 @@ func clear_battleground():
 			grid_state.append(GridState.NONE)
 			bullets.append(false)
 			ship_part.append(0)
+	
+	# reset targeting state
+	targeting_grid = Vector2(-1, -1)
+	if target != null:
+		target.visible = false
 
 func _ready() -> void:
 	clear_battleground()
@@ -84,15 +89,16 @@ func from_encoded(encoded: String):
 		ships.append(ship)
 
 func grid_to_coord(gridpos: Vector2) -> Vector2:
-	var cell_width = rect_size.x / columns
-	var cell_height = rect_size.y / rows
-	return Vector2(gridpos.x, rows - gridpos.y) * Vector2(cell_width, cell_height)
+	var cell_width: float = rect_size.x / columns
+	var cell_height: float = rect_size.y / rows
+	return Vector2(gridpos.x * cell_width, gridpos.y * cell_height)
+
 
 func coord_to_grid(coord: Vector2) -> Vector2:
-	var cell_width = rect_size.x / columns
-	var cell_height = rect_size.y / rows
-	var i = coord / Vector2(cell_width, cell_height)
-	return Vector2(i.x, rows - i.y).floor()
+	var cell_width: float = rect_size.x / columns
+	var cell_height: float = rect_size.y / rows
+	var i: Vector2 = coord / Vector2(cell_width, cell_height)
+	return i.floor()
 
 func _draw():
 	if columns <= 0 or rows <= 0:
@@ -176,7 +182,7 @@ func set_size(size: int):
 	queue_redraw()
 
 var target: BattlegroundMarker = null
-var targeting_grid = Vector2(0, 0)
+var targeting_grid: Vector2 = Vector2(-1, -1)
 
 # hit something
 func fire(at: Vector2) -> bool:
@@ -209,22 +215,32 @@ func mark(coord: Vector2, mark: BattlegroundMarker.MarkerMode):
 	add_child(marker)
 
 func _input(event: InputEvent) -> void:
-	print(placing_items)
-	print(can_attack)
+	# Only when we're allowed to attack and not in placement mode
 	if event is InputEventMouseButton and not placing_items and can_attack:
-		if event.pressed and event.button_index == 1:
-			var pos = event.position - get_transform().get_origin()
-			var grid = coord_to_grid(pos)
+		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			# Convert from global mouse position to this node's local space
+			var local_pos: Vector2 = to_local(event.position)
+			
+			var grid: Vector2 = coord_to_grid(local_pos)
+			
 			if grid.x < 0 or grid.y < 0 or grid.x >= columns or grid.y >= rows:
 				return
-			var idx = grid.y * columns + grid.x
+			
+			var idx: int = int(grid.y) * columns + int(grid.x)
+			
+			# Can't target where we've already fired or already destroyed that part
 			if bullets[idx] or (ship_grid[idx] != null and ship_grid[idx].parts_destroyed[ship_part[idx]]):
 				return
+			
+			# Create target marker if needed
 			if target == null:
 				target = marker.instantiate()
 				target.set_mode(BattlegroundMarker.MarkerMode.TARGET)
 				add_child(target)
+			
 			target.visible = true
 			target.play_anim()
+			
 			targeting_grid = grid
+			# Center of the selected cell
 			target.position = grid_to_coord(grid + Vector2(0.5, 0.5))
