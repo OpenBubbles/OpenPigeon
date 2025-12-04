@@ -224,9 +224,20 @@ func _set_game_data(new_replay: String):
 	if player == 1:
 		opponent_avatar_key = "avatar2"
 		player_avatar_key = "avatar1"
+		myBattleground = battleground1
+		theirBattleground = battleground2
+		myBoardContainer = player1_container
+		theirBoardContainer = player2_container
 	else:
 		opponent_avatar_key = "avatar1"
 		player_avatar_key = "avatar2"
+		myBattleground = battleground2
+		theirBattleground = battleground1
+		myBoardContainer = player2_container
+		theirBoardContainer = player1_container
+		
+	if is_instance_valid(theirBattleground):
+		theirBattleground.set_grid_tint(Color.BLACK)
 
 	var my_avatar := _get_my_avatar_display()
 	var opp_avatar := _get_opp_avatar_display()
@@ -267,17 +278,6 @@ func _set_game_data(new_replay: String):
 		battleground1.from_bullets(bullets1)
 	if not bullets2.is_empty():
 		battleground2.from_bullets(bullets2)
-
-	if player == 1:
-		myBattleground = battleground1
-		theirBattleground = battleground2
-		myBoardContainer = player1_container
-		theirBoardContainer = player2_container
-	else:
-		myBattleground = battleground2
-		theirBattleground = battleground1
-		myBoardContainer = player2_container
-		theirBoardContainer = player1_container
 
 	print("[BOARD MAP] Local player is P", player,
 		" -> myBattleground=", myBattleground.name,

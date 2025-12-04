@@ -12,14 +12,15 @@ var has_conflict = false
 var placing_items = false
 var can_attack = false
 
+func set_grid_tint(color: Color) -> void:
+	grid_color = color
+	queue_redraw()
 
 func set_attack():
 	can_attack = true
 	for ship in ships:
 		ship.visible = ship.is_sunk()
 	
-
-# array of boats, bottom first, left to right
 var ship_grid: Array[Patrolboat] = []
 var grid_state: Array[GridState] = []
 var ships: Array[Patrolboat] = []
@@ -50,7 +51,6 @@ func clear_battleground():
 			bullets.append(false)
 			ship_part.append(0)
 	
-	# reset targeting state
 	targeting_grid = Vector2(-1, -1)
 	if target != null:
 		target.visible = false
@@ -113,17 +113,14 @@ func _draw():
 	var cell_width = rect_size.x / columns
 	var cell_height = rect_size.y / rows
 
-	# Vertical lines
 	for x in range(columns + 1):
 		var xpos = x * cell_width
 		draw_line(Vector2(xpos, 0), Vector2(xpos, rect_size.y), grid_color, 2.0)
 
-	# Horizontal lines
 	for y in range(rows + 1):
 		var ypos = y * cell_height
 		draw_line(Vector2(0, ypos), Vector2(rect_size.x, ypos), grid_color, 2.0)
 
-	# Outline
 	draw_rect(Rect2(Vector2.ZERO, rect_size), grid_color, false)
 	
 	for x in range(columns):
@@ -156,7 +153,6 @@ func get_state_for_grid(x: int, y: int) -> GridState:
 	var boat = ship_grid[y * columns + x]
 	if boat == null:
 		return GridState.NONE
-	# check neighbors for other boats
 	var neighbours: Array[Vector2] = get_grid_neighbours(x, y)
 	
 	for neighbour in neighbours:
@@ -189,8 +185,9 @@ func set_size(size: int):
 
 var target: BattlegroundMarker = null
 var targeting_grid: Vector2 = Vector2(-1, -1)
+var _target_tween: Tween
+var _rotation_tween: Tween
 
-# hit something
 func fire(at: Vector2) -> bool:
 	var fire_index = at.y * columns + at.x
 	var hit = ship_grid[fire_index]
@@ -221,10 +218,8 @@ func mark(coord: Vector2, mark: BattlegroundMarker.MarkerMode):
 	add_child(marker)
 
 func _input(event: InputEvent) -> void:
-	# Only when we're allowed to attack and not in placement mode
 	if event is InputEventMouseButton and not placing_items and can_attack:
 		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			# Convert from global mouse position to this node's local space
 			var local_pos: Vector2 = to_local(event.position)
 			
 			var grid: Vector2 = coord_to_grid(local_pos)
@@ -234,19 +229,76 @@ func _input(event: InputEvent) -> void:
 			
 			var idx: int = int(grid.y) * columns + int(grid.x)
 			
-			# Can't target where we've already fired or already destroyed that part
 			if bullets[idx] or (ship_grid[idx] != null and ship_grid[idx].parts_destroyed[ship_part[idx]]):
 				return
 			
-			# Create target marker if needed
 			if target == null:
 				target = marker.instantiate()
 				target.set_mode(BattlegroundMarker.MarkerMode.TARGET)
 				add_child(target)
 			
 			target.visible = true
-			target.play_anim()
-			
 			targeting_grid = grid
-			# Center of the selected cell
 			target.position = grid_to_coord(grid + Vector2(0.5, 0.5))
+
+			_animate_target_marker()
+			
+func _animate_target_marker() -> void:
+	if target == null:
+		return
+
+	# Stop any previous tweens
+	if _target_tween and _target_tween.is_running():
+		_target_tween.kill()
+	if _rotation_tween and _rotation_tween.is_running():
+		_rotation_tween.kill()
+
+	target.scale = Vector2.ONE
+	# Don't reset rotation here; we want it to keep flowing
+
+	_target_tween = create_tween()
+	_target_tween.set_parallel(true)
+	_target_tween.set_loops()	# pulse forever
+
+	# --- Slow grow ---
+	var grow := _target_tween.tween_property(
+		target,
+		"scale",
+		Vector2(1.18, 1.18),
+		0.8
+	)
+	grow.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	# --- Slow shrink ---
+	var shrink := _target_tween.tween_property(
+		target,
+		"scale",
+		Vector2.ONE,
+		0.8
+	).set_delay(0.8)
+	shrink.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	# Start continuous rotation on its own tween
+	_start_target_rotation()
+	
+func _start_target_rotation() -> void:
+	if target == null or not is_instance_valid(target):
+		return
+
+	if _rotation_tween and _rotation_tween.is_running():
+		_rotation_tween.kill()
+
+	var start_deg := target.rotation_degrees
+
+	_rotation_tween = create_tween()
+	var spin := _rotation_tween.tween_property(
+		target,
+		"rotation_degrees",
+		start_deg + 360.0,
+		3.0		# adjust for slower/faster spin
+	)
+	spin.set_trans(Tween.TRANS_LINEAR)
+
+	_rotation_tween.tween_callback(func() -> void:
+		_start_target_rotation()
+	)
