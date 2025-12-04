@@ -81,8 +81,14 @@ func from_bullets(b: String):
 func from_encoded(encoded: String):
 	clear_battleground()
 	if encoded.is_empty():
+		print("[FROM_ENCODED] Empty encoded string, nothing to place")
 		return
+	
+	print("[FROM_ENCODED] Applying encoded layout: ", encoded)
 	for encodedShip in encoded.split('|'):
+		if encodedShip.is_empty():
+			continue
+		print("[FROM_ENCODED]  -> ship: ", encodedShip)
 		var ship = ship_class.instantiate() as Patrolboat
 		add_child(ship)
 		ship.decode_ship(encodedShip, self)
@@ -124,7 +130,7 @@ func _draw():
 		for y in range(rows):
 			var state = grid_state[y * columns + x]
 			if state == GridState.CONFLICT:
-				draw_rect(Rect2(grid_to_coord(Vector2(x, y + 1)), Vector2(cell_width, cell_height)), Color.RED)
+				draw_rect(Rect2(grid_to_coord(Vector2(x, y)), Vector2(cell_width, cell_height)), Color.RED)
 
 func get_grid_neighbours(x: int, y: int) -> Array[Vector2]:
 	var neighbours: Array[Vector2] = []

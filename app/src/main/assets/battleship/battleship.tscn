@@ -1,4 +1,4 @@
-[gd_scene load_steps=47 format=3 uid="uid://cwj68wu8ntln"]
+[gd_scene load_steps=44 format=3 uid="uid://cwj68wu8ntln"]
 
 [ext_resource type="Script" uid="uid://d11d0tliu83pm" path="res://battleship/battleground.gd" id="1_4q04m"]
 [ext_resource type="Script" uid="uid://bmxmvwf7usewn" path="res://battleship/battleship.gd" id="1_urm0v"]
@@ -41,7 +41,7 @@ shader_parameter/high_freq_weight = 0.4
 shader_parameter/cloud_coverage = 1.2
 shader_parameter/puffiness = 0.8
 shader_parameter/alpha_max = 0.9
-shader_parameter/edge_softness = 0.2
+shader_parameter/edge_softness = 0.4
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_cnvch"]
 texture = ExtResource("2_x63is")
@@ -160,17 +160,6 @@ expand_margin_bottom = 10.0
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_xmvnm"]
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_xmvnm"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_wlxoc"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_874s0"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_wlxoc"]
-
 [sub_resource type="ViewportTexture" id="ViewportTexture_0ayae"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
@@ -179,6 +168,8 @@ viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="ViewportTexture" id="ViewportTexture_e4m7h"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_wlxoc"]
 
 [node name="Battleship" type="Control"]
 layout_mode = 3
@@ -450,7 +441,7 @@ custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="YouLabel" type="Label" parent="PanelContainer/Player1BoardContainer/VBoxContainer"]
+[node name="P1YouLabel" type="Label" parent="PanelContainer/Player1BoardContainer/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -460,16 +451,17 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="PlayerAvatarDisplay" parent="PanelContainer/Player1BoardContainer/VBoxContainer" instance=ExtResource("8_0ayae")]
+[node name="P1AvatarDisplay" parent="PanelContainer/Player1BoardContainer/VBoxContainer" instance=ExtResource("8_0ayae")]
 unique_name_in_owner = true
 z_index = 5
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_xmvnm")
-texture_pressed = SubResource("ViewportTexture_wlxoc")
-texture_hover = SubResource("ViewportTexture_874s0")
+texture_normal = SubResource("ViewportTexture_0ayae")
+texture_pressed = SubResource("ViewportTexture_7yxgj")
+texture_hover = SubResource("ViewportTexture_e4m7h")
 is_display_only = true
+controlled_by_data = true
 
 [node name="CenterContainer" type="CenterContainer" parent="PanelContainer/Player1BoardContainer/VBoxContainer"]
 layout_mode = 2
@@ -511,7 +503,8 @@ custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="YouLabel" type="Label" parent="PanelContainer/Player2BoardContainer/VBoxContainer"]
+[node name="P2YouLabel" type="Label" parent="PanelContainer/Player2BoardContainer/VBoxContainer"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
@@ -520,7 +513,7 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="OppAvatarDisplay" parent="PanelContainer/Player2BoardContainer/VBoxContainer" instance=ExtResource("8_0ayae")]
+[node name="P2AvatarDisplay" parent="PanelContainer/Player2BoardContainer/VBoxContainer" instance=ExtResource("8_0ayae")]
 unique_name_in_owner = true
 z_index = 5
 layout_mode = 2
@@ -555,7 +548,5 @@ custom_minimum_size = Vector2(0, 101)
 layout_mode = 2
 mouse_filter = 2
 
-[connection signal="pressed" from="MarginContainer/VBoxContainer/BottomBar/CenterContainer/StartButton" to="." method="_on_send_button_pressed"]
-[connection signal="pressed" from="MarginContainer/VBoxContainer/BottomBar/CenterContainer/FireButton" to="." method="_on_send_button_pressed"]
 [connection signal="is_valid" from="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer/BoardWrapper/BattleGround1" to="." method="_on_battle_ground_is_valid"]
 [connection signal="is_valid" from="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer/BoardWrapper/BattleGround2" to="." method="_on_battle_ground_is_valid"]
