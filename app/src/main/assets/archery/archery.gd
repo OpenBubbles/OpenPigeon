@@ -161,10 +161,43 @@ func _ready() -> void:
 			_score_box_orig_min_size = score_box.get_combined_minimum_size()
 
 		score_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if is_instance_valid(camera):
+		camera.position = CAMERA_DEFAULT_POS
+		camera.fov = CAMERA_DEFAULT_FOV
+		var center := _get_bullseye_center_world()
+		camera.look_at(center - Vector3(0.0, CAMERA_LOOK_AT_Y_OFFSET, 0.0), Vector3.UP)
 
 func check_winner() -> bool:
 	print("check_winner: you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
 
+	if (you_set_wins == 2 and opp_set_wins == 0):
+		game_over = true
+		stop_waiting_animation()
+		_hide_wind_panel(0.0)
+
+		winner_label.text = "YOU WIN!"
+		winner_label.visible = true
+		winner_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0))
+		if is_instance_valid(player_avatar_display):
+			_show_win_burst(player_avatar_display)
+		send_winner = my_uuid + "|1"
+		print("check_winner: EARLY YOU WIN (2-0 rule)")
+		return true
+
+	if (opp_set_wins == 2 and you_set_wins == 0):
+		game_over = true
+		stop_waiting_animation()
+		_hide_wind_panel(0.0)
+
+		winner_label.text = "YOU LOSE"
+		winner_label.visible = true
+		winner_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.2))
+		if is_instance_valid(opp_avatar_display):
+			_show_win_burst(opp_avatar_display)
+		send_winner = my_uuid + "|-1"
+		print("check_winner: EARLY YOU LOSE (0-2 rule)")
+		return true
+		
 	if set_num < 3:
 		print("check_winner: less than 3 sets played, no result yet.")
 		return false
@@ -257,6 +290,7 @@ func _process_game_state() -> void:
 		await _animate_set_bar_and_award_points()
 
 func _award_set_points_and_continue() -> void:
+	check_winner()
 	if appPlugin:
 		appPlugin.updateGameData(export_replay())
 	else:
@@ -403,6 +437,7 @@ func export_replay() -> String:
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		replay_dict[avatar_key] = player_avatar_display.get_avatar_data_string()
 	if send_winner.is_empty() == false:
+		print("Adding Winner Attribute")
 		replay_dict["winner"] = send_winner
 	else:
 		play_sent_animation()
@@ -511,11 +546,11 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 		_animate_set_win_bump(false)
 		_spawn_avatar_score_popup(true, 1)
 		_spawn_avatar_score_popup(false, 1)
-
+	
+	
 	if not from_replay:
 		print("Calling _award_set_points_and_continue (end of full set, before score reset)")
 		_award_set_points_and_continue()
-	check_winner()
 	if set_num < 3:
 		update_set_number(set_num + 1)
 		update_distance()
