@@ -174,8 +174,10 @@ func check_winner() -> bool:
 		game_over = true
 		stop_waiting_animation()
 		_hide_wind_panel(0.0)
-
-		winner_label.text = "YOU WIN!"
+		if not spectator_mode:
+			winner_label.text = "YOU WIN!"
+		else:
+			winner_label.text = "Player 1 Wins!"
 		winner_label.visible = true
 		winner_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0))
 		if is_instance_valid(player_avatar_display):
@@ -188,10 +190,13 @@ func check_winner() -> bool:
 		game_over = true
 		stop_waiting_animation()
 		_hide_wind_panel(0.0)
-
-		winner_label.text = "YOU LOSE"
+		if not spectator_mode:
+			winner_label.text = "YOU LOSE"
+			winner_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.2))
+		else:
+			winner_label.text = "Player 2 Wins"
+			winner_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0))
 		winner_label.visible = true
-		winner_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.2))
 		if is_instance_valid(opp_avatar_display):
 			_show_win_burst(opp_avatar_display)
 		send_winner = my_uuid + "|-1"
@@ -218,7 +223,10 @@ func check_winner() -> bool:
 		print("check_winner: DRAW (final)")
 		return true
 	elif you_set_wins > opp_set_wins:
-		winner_label.text = "YOU WIN!"
+		if not spectator_mode:
+			winner_label.text = "YOU WIN!"
+		else:
+			winner_label.text = "Player 1 Wins!"
 		winner_label.visible = true
 		winner_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0))
 		if is_instance_valid(player_avatar_display):
@@ -227,9 +235,13 @@ func check_winner() -> bool:
 		print("check_winner: YOU WIN (final)")
 		return true
 	else:
-		winner_label.text = "YOU LOSE"
+		if not spectator_mode:
+			winner_label.text = "YOU LOSE"
+			winner_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.2))
+		else:
+			winner_label.text = "Player 2 Wins"
+			winner_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0))
 		winner_label.visible = true
-		winner_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.2))
 		if is_instance_valid(opp_avatar_display):
 			_show_win_burst(opp_avatar_display)
 		send_winner = my_uuid + "|-1"
@@ -254,6 +266,7 @@ func _process_game_state() -> void:
 	else:
 		if not replay.is_empty() and not played_replay:
 			print("PROCESS_GAME_STATE: replay present but _should_play_replay=false; skipping replay (likely our own last turn).")
+	check_winner()
 	if (not isTurn or spectator_mode) and not game_over:
 		print("PROCESS_GAME_STATE: not our turn and check winner is: " , game_over, "; showing waiting UI")
 		start_waiting_animation()
