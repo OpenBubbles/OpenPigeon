@@ -1,4 +1,4 @@
-[gd_scene load_steps=44 format=3 uid="uid://cwj68wu8ntln"]
+[gd_scene load_steps=47 format=3 uid="uid://cwj68wu8ntln"]
 
 [ext_resource type="Script" uid="uid://d11d0tliu83pm" path="res://battleship/battleground.gd" id="1_4q04m"]
 [ext_resource type="Script" uid="uid://bmxmvwf7usewn" path="res://battleship/battleship.gd" id="1_urm0v"]
@@ -170,6 +170,15 @@ viewport_path = NodePath("SubViewportContainer/SubViewport")
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_wlxoc"]
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_xmvnm"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_wlxoc"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_874s0"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [node name="Battleship" type="Control"]
 layout_mode = 3
@@ -519,9 +528,9 @@ z_index = 5
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_0ayae")
-texture_pressed = SubResource("ViewportTexture_7yxgj")
-texture_hover = SubResource("ViewportTexture_e4m7h")
+texture_normal = SubResource("ViewportTexture_xmvnm")
+texture_pressed = SubResource("ViewportTexture_wlxoc")
+texture_hover = SubResource("ViewportTexture_874s0")
 is_display_only = true
 controlled_by_data = true
 
