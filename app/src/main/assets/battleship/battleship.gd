@@ -48,6 +48,7 @@ func _apply_opponent_ship_visibility(reason: String = "") -> void:
 
 var _water_scroll_x: float = 0.0
 var isTurn = false
+var appPlugin = null
 var myBattleground: BattleGround = null
 var theirBattleground: BattleGround = null
 var myBoardContainer: Control = null
@@ -167,7 +168,7 @@ func _ready() -> void:
 				"player": 1,
 				"myPlayerId": "DEV_PLAYER",
 				"replay": "0,1",
-				"bullets1": "0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+				"bullets1": "0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
 				"bullets2": "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
 				"skip_ships": "pos:2,2&num:0,0,0,0&rot:0|pos:7,5&num:0,0,0&rot:0|pos:4,3&num:0,0,0&rot:1|pos:1,0&num:0,0,0&rot:1|pos:5,0&num:0,0&rot:1|pos:0,4&num:0,0&rot:0|pos:4,6&num:0,0&rot:0",
 				"ships1": "pos:2,1&num:0,0,0,0&rot:0|pos:5,5&num:0,0,0&rot:1|pos:1,7&num:0,0,0&rot:1|pos:7,1&num:0,0,0&rot:0|pos:5,7&num:0,0&rot:1|pos:0,2&num:0,0&rot:0|pos:5,0&num:0,0&rot:0",
@@ -731,10 +732,15 @@ func send_update():
 		print("[SEND] Winner flag included: ", msg["winner"])
 
 	var encoded = JSON.stringify(msg)
+	if appPlugin:
+		appPlugin.updateGameData(encoded)
+	else:
+		print("No app plugin! ")
 
 	print("[SEND] FINAL JSON SENT TO APP PLUGIN:")
 	print(encoded)
 	print("===================================\n")
+	play_sent_animation()
 
 func my_battleground_ready():
 	if theirBattleground.is_empty():
