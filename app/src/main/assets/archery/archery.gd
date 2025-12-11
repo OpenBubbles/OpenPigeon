@@ -266,9 +266,14 @@ func _process_game_state() -> void:
 	else:
 		if not replay.is_empty() and not played_replay:
 			print("PROCESS_GAME_STATE: replay present but _should_play_replay=false; skipping replay (likely our own last turn).")
-	check_winner()
+
+	# IMPORTANT: do NOT call check_winner() here.
+	# Winners are evaluated only:
+	#  - after our own set is fully scored (_award_set_points_and_continue)
+	#  - after a replay actually ends a set (inside play_replay).
+
 	if (not isTurn or spectator_mode) and not game_over:
-		print("PROCESS_GAME_STATE: not our turn and check winner is: " , game_over, "; showing waiting UI")
+		print("PROCESS_GAME_STATE: not our turn and game_over=", game_over, "; showing waiting UI")
 		start_waiting_animation()
 		return
 
@@ -876,6 +881,7 @@ func play_replay() -> void:
 	if should_end_set:
 		await _animate_set_bar_and_award_points(true)
 		print("play_replay: _animate_set_bar_and_award_points(true, ", post_set_num, ") completed (end-of-set)")
+		check_winner()
 	else:
 		print("play_replay: not end-of-set; skipping set animation and letting local player shoot.")
 
