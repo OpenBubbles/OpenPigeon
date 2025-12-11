@@ -54,7 +54,7 @@ var theirBattleground: BattleGround = null
 var myBoardContainer: Control = null
 var theirBoardContainer: Control = null
 var my_player
-var has_connected = false
+var my_uuid: String = ""
 var player = null
 var game_settings_category: String = ""
 var spectator_mode: bool = false
@@ -97,6 +97,57 @@ const BUFFER_OFFSETS_DIAG: Array[Vector2i] = [
 ]
 
 func _ready() -> void:
+	appPlugin = Engine.get_singleton("AppPlugin")
+	
+	if appPlugin:
+		print("App plugin is available")
+		appPlugin.connect("set_game_data", _set_game_data)
+		my_uuid = appPlugin.getSenderUUID()
+		appPlugin.onReady()
+	else:
+		print("App plugin is not available, using dev data")
+		my_uuid = "0a602920-2033-469d-aab8-5e832c5d4f6a"
+
+		#var dev_data := { #SETUP SCREEN PLAYER 1
+			#"size": 8,
+			#"isYourTurn": true,
+			#"player": 2,
+			#"myPlayerId": "DEV_PLAYER",
+			#"replay": "",
+			#"bullets1": "",
+			#"bullets2": "",
+			#"skip_ships": "",
+			#"ships1": "",
+			#"ships2": "",
+		#}
+		
+		#var dev_data := { #SETUP SCREEN PLAYER 2 (PLAYER 1 Has Chosen Board)
+			#"size": 8,
+			#"isYourTurn": true,
+			#"player": 1,
+			#"myPlayerId": "DEV_PLAYER",
+			#"replay": "",
+			#"bullets1": "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+			#"bullets2": "",
+			#"skip_ships": "",
+			#"ships1": "pos:2,3&num:0,0,0,0&rot:0|pos:1,0&num:0,0,0&rot:1|pos:4,2&num:0,0,0&rot:1|pos:7,4&num:0,0,0&rot:0|pos:0,4&num:0,0&rot:0|pos:5,6&num:0,0&rot:0|pos:5,0&num:0,0&rot:1",
+			#"ships2": "",
+		#}
+		
+		var dev_data := { #Player 1 Sent a Shot after player 2 sent one
+			"size": 8,
+			"isYourTurn": true,
+			"player": 1,
+			"myPlayerId": "DEV_PLAYER",
+			"replay": "0,1",
+			"bullets1": "0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+			"bullets2": "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+			"skip_ships": "pos:2,2&num:0,0,0,0&rot:0|pos:7,5&num:0,0,0&rot:0|pos:4,3&num:0,0,0&rot:1|pos:1,0&num:0,0,0&rot:1|pos:5,0&num:0,0&rot:1|pos:0,4&num:0,0&rot:0|pos:4,6&num:0,0&rot:0",
+			"ships1": "pos:2,1&num:0,0,0,0&rot:0|pos:5,5&num:0,0,0&rot:1|pos:1,7&num:0,0,0&rot:1|pos:7,1&num:0,0,0&rot:0|pos:5,7&num:0,0&rot:1|pos:0,2&num:0,0&rot:0|pos:5,0&num:0,0&rot:0",
+			"ships2": "pos:2,2&num:0,0,0,0&rot:0|pos:7,5&num:0,0,0&rot:0|pos:4,3&num:0,0,0&rot:1|pos:1,0&num:0,0,0&rot:1|pos:5,0&num:0,0&rot:1|pos:0,4&num:0,0&rot:0|pos:4,6&num:0,0&rot:0",
+		}
+
+		_set_game_data(JSON.stringify(dev_data))
 	_rng.randomize()
 	
 	if is_instance_valid(battleground1):
@@ -109,7 +160,6 @@ func _ready() -> void:
 
 	_board_travel_distance = get_viewport_rect().size.x * travel_distance
 	
-	var appPlugin := Engine.get_singleton("AppPlugin")
 	if is_instance_valid(rules_button):
 		rules_button.pressed.connect(on_rules_button_pressed)
 	if is_instance_valid(settings_button):
@@ -125,67 +175,23 @@ func _ready() -> void:
 	if is_instance_valid(fire_button):
 		fire_button.visible = false
 		fire_button.disabled = true
-	if appPlugin:
-		if not has_connected:
-			print("App plugin is available")
-			appPlugin.connect("set_game_data", _set_game_data)
-			has_connected = true
-			appPlugin.onReady()
-			return
-	else:
-		if player == null or replay == null:
-			print("App plugin is not available, using dev data")
-
-			#var dev_data := { #SETUP SCREEN PLAYER 1
-				#"size": 8,
-				#"isYourTurn": true,
-				#"player": 2,
-				#"myPlayerId": "DEV_PLAYER",
-				#"replay": "",
-				#"bullets1": "",
-				#"bullets2": "",
-				#"skip_ships": "",
-				#"ships1": "",
-				#"ships2": "",
-			#}
-			
-			#var dev_data := { #SETUP SCREEN PLAYER 2 (PLAYER 1 Has Chosen Board)
-				#"size": 8,
-				#"isYourTurn": true,
-				#"player": 1,
-				#"myPlayerId": "DEV_PLAYER",
-				#"replay": "",
-				#"bullets1": "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
-				#"bullets2": "",
-				#"skip_ships": "",
-				#"ships1": "pos:2,3&num:0,0,0,0&rot:0|pos:1,0&num:0,0,0&rot:1|pos:4,2&num:0,0,0&rot:1|pos:7,4&num:0,0,0&rot:0|pos:0,4&num:0,0&rot:0|pos:5,6&num:0,0&rot:0|pos:5,0&num:0,0&rot:1",
-				#"ships2": "",
-			#}
-			
-			var dev_data := { #Player 1 Sent a Shot after player 2 sent one
-				"size": 8,
-				"isYourTurn": true,
-				"player": 1,
-				"myPlayerId": "DEV_PLAYER",
-				"replay": "0,1",
-				"bullets1": "0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
-				"bullets2": "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
-				"skip_ships": "pos:2,2&num:0,0,0,0&rot:0|pos:7,5&num:0,0,0&rot:0|pos:4,3&num:0,0,0&rot:1|pos:1,0&num:0,0,0&rot:1|pos:5,0&num:0,0&rot:1|pos:0,4&num:0,0&rot:0|pos:4,6&num:0,0&rot:0",
-				"ships1": "pos:2,1&num:0,0,0,0&rot:0|pos:5,5&num:0,0,0&rot:1|pos:1,7&num:0,0,0&rot:1|pos:7,1&num:0,0,0&rot:0|pos:5,7&num:0,0&rot:1|pos:0,2&num:0,0&rot:0|pos:5,0&num:0,0&rot:0",
-				"ships2": "pos:2,2&num:0,0,0,0&rot:0|pos:7,5&num:0,0,0&rot:0|pos:4,3&num:0,0,0&rot:1|pos:1,0&num:0,0,0&rot:1|pos:5,0&num:0,0&rot:1|pos:0,4&num:0,0&rot:0|pos:4,6&num:0,0&rot:0",
-			}
-
-			_set_game_data(JSON.stringify(dev_data))
-			return
 
 	if replay == null or player == null:
 		return
 		
 	if water_rect and water_rect.material is ShaderMaterial:
 		var mat := water_rect.material as ShaderMaterial
-		if mat.get_shader_parameter_list().size() > 0:
-			if mat.get_shader_parameter_list().any(func(p): return p.name == "scroll_x"):
-				_water_scroll_x = float(mat.get_shader_parameter("scroll_x"))
+		
+		# In Godot 4, use the Shader's uniform list instead of
+		# the old get_shader_parameter_list() on ShaderMaterial.
+		if mat.shader:
+			var uniforms := mat.shader.get_shader_uniform_list()
+			for u in uniforms:
+				if u.name == "scroll_x":
+					var val = mat.get_shader_parameter("scroll_x")
+					if val != null:
+						_water_scroll_x = float(val)
+					break
 
 func _set_game_data(new_replay: String) -> void:
 	print("\n==========================")
@@ -366,11 +372,14 @@ func _set_game_data(new_replay: String) -> void:
 		battleground2.from_bullets(bullets2)
 
 	# --- Randomize ONLY our board during setup, if not a spectator ---
-	if not spectator_mode:
-		print("[INIT BOARD] Generating random layout for local player P", player, " on ", myBattleground.name)
+	var my_ships_encoded := (s1 if player == 1 else s2)
+	if not spectator_mode and my_ships_encoded.is_empty():
+		print("[INIT BOARD] No existing ships for local player P", player, " → generating random layout on ", myBattleground.name)
 		_randomize_my_ships(bsize)
 	else:
-		print("[INIT BOARD] Spectator mode; do not randomize any board")
+		print("[INIT BOARD] Not randomizing: spectator_mode=", spectator_mode,
+			" my_ships_empty=", my_ships_encoded.is_empty(),
+			" (P", player, ")")
 
 	# Show our board by default
 	show_battleground(true)
@@ -435,36 +444,61 @@ func play_replay(preplay: String) -> void:
 		my_battleground_ready()
 		return
 
-	# Use only the LAST move (opponent's most recent shot)
-	var last_move := moves[moves.size() - 1]
-	print("[PLAY_REPLAY] LAST MOVE TO REPLAY: ", last_move)
-
-	var parts := last_move.split(",", false)
-	if parts.size() < 2:
-		print("[PLAY_REPLAY] ERROR — malformed move entry: ", last_move)
-		print("========== PLAY_REPLAY END — BAD ENTRY ==========\n")
+	if not is_instance_valid(myBattleground):
+		print("[PLAY_REPLAY] ERROR — myBattleground is not valid.")
 		my_battleground_ready()
 		return
 
-	var x := int(parts[0])
-	var y := int(parts[1])
-	var v := Vector2(x, y)
-	print("[PLAY_REPLAY] Parsed coords → x:", x, " y:", y, "  Vector2:", v)
+	var scheduled_moves := 0
 
-	# Small delay so player sees that something is happening
-	await get_tree().create_timer(1.0).timeout
+	for i in range(moves.size()):
+		var move := moves[i]
+		if move.is_empty():
+			continue
 
-	print("[PLAY_REPLAY] Replaying opponent shot onto MY battleground: ", v)
-	var hit := myBattleground.fire(v)
-	print("[PLAY_REPLAY] FIRE RESULT on my board → HIT:", hit)
+		var parts := move.split(",", false)
+		if parts.size() < 2:
+			print("[PLAY_REPLAY] ERROR — malformed move entry: ", move)
+			continue
 
-	await get_tree().create_timer(1.0).timeout
+		var x := int(parts[0])
+		var proto_y := int(parts[1])
 
-	print("[PLAY_REPLAY] Replay done. Now transitioning into my active turn.")
+		# Flip from protocol bottom-origin Y to our local/top-origin grid.
+		var local_y := (myBattleground.rows - 1) - proto_y
+		var v := Vector2(x, local_y)
+
+		print("[PLAY_REPLAY] Move ", i, "/", moves.size() - 1,
+			" proto=(", x, ",", proto_y, ")",
+			" local=(", v.x, ",", v.y, ")")
+
+		# Each move starts 0.5s after the previous one, but all run in parallel.
+		var start_delay := 0.5 * scheduled_moves
+		
+		# === CHANGE: We need to pass from_right = true to indicate this is an opponent's move.
+		# This assumes _run_replay_move calls _play_bomb_fall_animation_for_board(..., true)
+		await _run_replay_move(v, start_delay)
+		# ==================================================================================
+		
+		scheduled_moves += 1
+
+	if scheduled_moves == 0:
+		print("[PLAY_REPLAY] No valid moves parsed; entering my turn.")
+		print("========== PLAY_REPLAY END — NONE SCHEDULED ==========\n")
+		my_battleground_ready()
+		return
+
+	# Last animation starts at 0.5 * (scheduled_moves - 1) and lasts ~2.0 seconds.
+	var last_start_delay := 0.5 * float(scheduled_moves - 1)
+	var total_wait := last_start_delay + 2.0 + 0.1      # small safety margin
+
+	await get_tree().create_timer(total_wait).timeout
+
+	print("[PLAY_REPLAY] All replay animations finished. Transitioning into my active turn.")
 	print("========== PLAY_REPLAY END ==========\n")
 
 	my_battleground_ready()
-
+	
 func _on_shuffle_button_pressed() -> void:
 	if not is_instance_valid(myBattleground):
 		return
@@ -740,7 +774,8 @@ func send_update():
 	print("[SEND] FINAL JSON SENT TO APP PLUGIN:")
 	print(encoded)
 	print("===================================\n")
-	play_sent_animation()
+	if not is_end:
+		play_sent_animation()
 
 func my_battleground_ready():
 	if theirBattleground.is_empty():
@@ -948,6 +983,10 @@ func _process(_delta: float) -> void:
 		if is_instance_valid(choose_target_label):
 			if theirBattleground.process_mode == Node.PROCESS_MODE_INHERIT:
 				choose_target_label.visible = true
+				choose_target_label.modulate.a = 0.0
+				choose_target_label.z_index = clouds_rect.z_index + 1
+				var label_tween := create_tween()
+				label_tween.tween_property(choose_target_label, "modulate:a", 1.0, 1.0)
 
 func _on_fire_button_pressed() -> void:
 	print("Fire pressed")
@@ -962,45 +1001,89 @@ func _on_fire_button_pressed() -> void:
 		return
 
 	print("[FIRE_BUTTON] Firing at grid: ", grid)
-
+	
+	# ======================================================================
+	# === CRITICAL TWEAKS: Lock Input and Hide Button IMMEDIATELY ===
+	# 1. Disable/Hide the button
 	if is_instance_valid(fire_button):
 		fire_button.disabled = true
+		# Setting alpha to 0 or setting visible to false accomplishes hiding.
+		# Let's set visible to false as it's cleaner than relying on alpha blending.
+		fire_button.visible = false 
+
+	# 2. Prevent player from selecting a new target (remove marker)
+	theirBattleground.targeting_grid = Vector2(-1, -1) # Removes the target marker visually/logically
+	
+	# 3. Disable attack mode on the opponent's board (prevents input/marker movement)
+	theirBattleground.can_attack = false
+	
+	# 4. Lock the overall game state
+	fireMode = false
+	# ======================================================================
 
 	if is_instance_valid(choose_target_label):
 		choose_target_label.visible = false
 
 	print("[FIRE_BUTTON] Started Bomb Fall animation")
-	await _play_bomb_fall_animation(grid)
+	await _play_bomb_fall_animation_for_board(theirBattleground, grid, false, 2.0)
 	print("[FIRE_BUTTON] Finished Bomb Fall animation")
 
-	replay.append(str(grid.x) + "," + str(grid.y))
-	print("[FIRE_BUTTON] Replay now: ", replay)
+	# --- NEW: append to replay using PROTOCOL (bottom-origin) Y ---
+	var protocol_y := (theirBattleground.rows - 1) - int(grid.y)
+	replay.append(str(grid.x) + "," + str(protocol_y))
+	print("[FIRE_BUTTON] Replay now (protocol coords): ", replay)
 
+	# Local fire still uses local grid (top-origin)
 	var hit: bool = theirBattleground.fire(grid)
 	print("[FIRE_BUTTON] Hit result: ", hit)
 
 	if not hit:
-		fireMode = false
-		if is_instance_valid(fire_button):
-			fire_button.disabled = true
-			fire_button.visible = false
-
-		theirBattleground.can_attack = false
+		# Miss → turn is over, send update
 		await get_tree().create_timer(1.0).timeout
 		print("[FIRE_BUTTON] Miss → sending update and waiting for opponent.")
 		send_update()
 	else:
+		# Hit → player gets another turn, but the shot processing is done.
 		_do_hit_camera_shake()
+		
 		if theirBattleground.is_over():
 			print("[FIRE_BUTTON] Opponent board is over — we win. Sending final update.")
 			mark_end(true)
 			send_update()
-
-	theirBattleground.targeting_grid = Vector2(-1, -1)
-
-func _play_bomb_fall_animation(grid_pos: Vector2) -> void:
-	if not is_instance_valid(theirBattleground):
-		print("SOMETHING FAILED IN BOMB FALL (missing battleground)")
+		else:
+			# If it was a hit and the game is not over, the player gets another turn.
+			# Re-enable the attack mode after a short delay to allow visual impact.
+			await get_tree().create_timer(0.5).timeout
+			
+			# Re-enable input for the next shot
+			fireMode = true
+			theirBattleground.can_attack = true
+			
+			# Re-enable the fire button for the next shot
+			if is_instance_valid(fire_button):
+				fire_button.disabled = false
+				# Set alpha to zero first, then make it visible, then tween it in
+				fire_button.modulate.a = 0.0
+				fire_button.visible = true
+				
+				var button_tween := create_tween()
+				button_tween.tween_property(fire_button, "modulate:a", 1.0, 0.5)
+			
+			if is_instance_valid(choose_target_label):
+				# === FIX: Set alpha to zero BEFORE making it visible ===
+				choose_target_label.modulate.a = 0.0
+				choose_target_label.visible = true 
+				# ========================================================
+				
+				choose_target_label.z_index = clouds_rect.z_index + 1
+				var label_tween := create_tween()
+				label_tween.tween_property(choose_target_label, "modulate:a", 1.0, 1.0)
+				
+			print("[FIRE_BUTTON] Hit → player gets another turn. Ready for next shot.")
+			
+func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2, from_right: bool, plane_duration: float = 2.0) -> void:
+	if not is_instance_valid(board):
+		print("SOMETHING FAILED IN BOMB FALL (missing board)")
 		return
 	
 	var bomb_tex: Texture2D = BOMB_TEXTURE_PATH
@@ -1013,24 +1096,27 @@ func _play_bomb_fall_animation(grid_pos: Vector2) -> void:
 		print("Plane texture not found")
 		return
 	
-	var cell_center_local: Vector2 = theirBattleground.grid_to_coord(
+	var cell_center_local: Vector2 = board.grid_to_coord(
 		grid_pos + Vector2(0.5, 0.5)
 	)
-	var board_size: Vector2 = theirBattleground.rect_size
+	var board_size: Vector2 = board.rect_size
 	
 	var plane_width: float = plane_tex.get_size().x * PLANE_SCALE
 	var plane_height: float = plane_tex.get_size().y * PLANE_SCALE
 	
 	var plane_y := cell_center_local.y - board_size.y * 0.45
 	
-	var plane_start: Vector2 = Vector2(
-		-plane_width,
-		plane_y
-	)
-	var plane_end: Vector2 = Vector2(
-		board_size.x + plane_width,
-		plane_y
-	)
+	var plane_start: Vector2
+	var plane_end: Vector2
+	
+	if from_right:
+		# Replay: plane moves RIGHT -> LEFT
+		plane_start = Vector2(board_size.x + plane_width, plane_y)
+		plane_end = Vector2(-plane_width, plane_y)
+	else:
+		# Your turn: plane moves LEFT -> RIGHT
+		plane_start = Vector2(-plane_width, plane_y)
+		plane_end = Vector2(board_size.x + plane_width, plane_y)
 	
 	var plane := Sprite2D.new()
 	plane.texture = plane_tex
@@ -1038,22 +1124,33 @@ func _play_bomb_fall_animation(grid_pos: Vector2) -> void:
 	plane.position = plane_start
 	plane.scale = Vector2(PLANE_SCALE, PLANE_SCALE)
 	plane.z_index = 1000
-	theirBattleground.add_child(plane)
+	
+	# Rotate plane 180 degrees for replay
+	if from_right:
+		plane.rotation = PI 
+	
+	board.add_child(plane)
 	
 	var bomb := Sprite2D.new()
 	bomb.texture = bomb_tex
 	bomb.centered = true
 	bomb.visible = false
-	theirBattleground.add_child(bomb)
+	
+	# Rotate bomb 180 degrees for replay
+	if from_right:
+		bomb.rotation = PI
+	
+	board.add_child(bomb)
 	
 	var bomb_above_z: int = 1100
 	var bomb_below_z: int = 0
 	if is_instance_valid(clouds_rect):
 		bomb_above_z = clouds_rect.z_index + 1
 		bomb_below_z = clouds_rect.z_index - 1
+	
+	# Initialize bomb z_index to be above everything
 	bomb.z_index = bomb_above_z
 	
-	var plane_duration := 2.0
 	var plane_tween := create_tween()
 	plane_tween.tween_property(
 		plane, "position",
@@ -1062,27 +1159,42 @@ func _play_bomb_fall_animation(grid_pos: Vector2) -> void:
 	
 	var fraction := (cell_center_local.x - plane_start.x) / (plane_end.x - plane_start.x)
 	fraction = clamp(fraction, 0.0, 1.0)
-	var spawn_delay := plane_duration * fraction
+	
+	# Timing fix: Slight offset to make the drop visually tighter
+	var spawn_delay := (plane_duration * fraction) - 0.1
+	spawn_delay = max(0.0, spawn_delay)
 	
 	await get_tree().create_timer(spawn_delay).timeout
 	
-	var plane_drop_pos: Vector2 = plane.position
-	var bomb_start: Vector2 = plane_drop_pos + Vector2(0.0, plane_height * 0.15)
+	# Position fix: Interpolate X to ensure accurate drop position regardless of frame rate
+	var drop_x: float = lerp(plane_start.x, plane_end.x, fraction)
+	var plane_drop_pos: Vector2 = Vector2(drop_x, plane.position.y)
+	
+	# Offset fix: Flip the spawn offset if the plane is rotated
+	var bomb_offset_y: float = plane_height * 0.15
+	if from_right:
+		bomb_offset_y *= -1.0
+	
+	var bomb_start: Vector2 = plane_drop_pos + Vector2(0.0, bomb_offset_y)
 	var bomb_end: Vector2 = cell_center_local
 	
 	bomb.position = bomb_start
 	bomb.scale = Vector2(BOMB_START_SCALE, BOMB_START_SCALE)
 	bomb.visible = true
 	
-	if is_instance_valid(clouds_rect):
+	# =========================================================================
+	# === FIX: ONLY perform Z-index swap if this is NOT a replay (from_right) ===
+	# This keeps the bomb on top of the clouds for the entire replay animation.
+	if is_instance_valid(clouds_rect) and not from_right:
 		var z_swap := create_tween()
 		z_swap.tween_callback(
 			func():
 				if is_instance_valid(bomb):
 					bomb.z_index = bomb_below_z
 		).set_delay(1.0)
+	# =========================================================================
 	
-	var bomb_fall_duration := 2.0
+	var bomb_fall_duration := plane_duration
 	
 	var bomb_tween := create_tween().set_parallel(true)
 	bomb_tween.tween_property(
@@ -1097,22 +1209,58 @@ func _play_bomb_fall_animation(grid_pos: Vector2) -> void:
 	
 	await bomb_tween.finished
 	
+	# Delay cleanup so the impact/splash has time to register visually
+	#await get_tree().create_timer(0.5).timeout
+	
 	if is_instance_valid(bomb):
 		bomb.queue_free()
 	if is_instance_valid(plane):
 		plane.queue_free()
+		
+func _run_replay_move(local_pos: Vector2, delay: float) -> void:
+	# Start after a delay so multiple moves can overlap
+	await get_tree().create_timer(delay).timeout
+	
+	# Bomb + plane animation on *my* board, rotated 180º
+	await _play_bomb_fall_animation_for_board(myBattleground, local_pos, true, 2.0)
+	
+	var hit := myBattleground.fire(local_pos)
+	print("[PLAY_REPLAY] FIRE RESULT on my board → HIT:", hit)
 
 func mark_end(win: bool):
 	state.text = ""
 	myBattleground.process_mode = Node.PROCESS_MODE_DISABLED
 	theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
+	var my_avatar := _get_my_avatar_display()
+	var opp_avatar := _get_opp_avatar_display()
 	print("setting their process mode to " + str(false))
-	get_node("winLoseLabel").get_child(0).set_text("[center]YOU WIN![/center]" if win else "[center]YOU LOSE :([/center]")
-	get_node("winLoseLabel").visible = true
 	stop_waiting_animation()
 	winner = win
 	is_end = true
-
+	if win:
+		if not spectator_mode:
+			winner_label.text = "YOU WIN!"
+		else:
+			winner_label.text = "Player 1 Wins!"
+		winner_label.visible = true
+		winner_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0))
+		if is_instance_valid(my_avatar):
+			_show_win_burst(my_avatar)
+		print("check_winner: YOU WIN (final)")
+		return true
+	else:
+		if not spectator_mode:
+			winner_label.text = "YOU LOSE"
+			winner_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.2))
+		else:
+			winner_label.text = "Player 2 Wins"
+			winner_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0))
+		winner_label.visible = true
+		if is_instance_valid(opp_avatar):
+			_show_win_burst(opp_avatar)
+		print("check_winner: YOU LOSE (final)")
+		return true
+	
 func _on_start_button_pressed() -> void:
 	print("Start pressed")
 	
@@ -1306,24 +1454,23 @@ func _get_rules_text() -> String:
 
 [font_size={24px}][b]Objective[/b][/font_size]
 [font_size={18px}]
-• Take turns drawing single lines between adjacent dots.
-• Complete the 4th side of a 1×1 box to claim it and score 1 point.
-• The player with the most boxes when no lines remain wins.
+• Be the first commander to locate and sink all of your opponent's hidden ships.
+• Protect your own fleet while strategically firing upon the enemy grid.
 [/font_size]
 
 [font_size={24px}][b]How to Play[/b][/font_size]
 [font_size={18px}]
-• On your turn, draw exactly one horizontal or vertical line between two neighboring dots.
-• If your line completes a box, that box is marked with an [b]X[/b] in your color and you immediately take another turn.
-• If your line does not complete a box, play passes to your opponent.
-• Boxes can be claimed in chains: if completing one box lets you complete another, you continue until you draw a line that doesn’t finish a box.
+• [b]Setup:[/b] Drag and rotate your ships to place them on the grid. Ships cannot overlap or touch each other.
+• [b]Attack:[/b] On your turn, tap a cell on the enemy grid to fire a shot.
+• [b]Hit:[/b] If you strike a ship, you will see an explosion.
+• [b]Miss:[/b] If you hit open water, a splash marker will appear.
+• [b]Sinking:[/b] A ship sinks only when all of its occupied cells have been hit.
 [/font_size]
 
 [font_size={24px}][b]End of Game[/b][/font_size]
 [font_size={18px}]
-• The game ends when every possible line has been drawn.
-• Each claimed box is worth 1 point. Higher total wins.
-• Ties are possible.
+• The game ends immediately when one player has sunk the opponent's entire fleet.
+• The survivor is declared the winner!
 [/font_size]
 """
 
