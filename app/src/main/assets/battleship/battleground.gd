@@ -33,6 +33,7 @@ enum GridState {
 }
 
 func clear_battleground():
+	print("CLEAR BATTLEGROUND")
 	for child in get_children():
 		remove_child(child)
 	if target != null:
@@ -64,9 +65,11 @@ func encode_ships() -> String:
 	return "|".join(ships.map(func(ship): return ship.encode_state()))
 
 func encode_bullets() -> String:
+	print("Encode Bullets")
 	return ",".join(bullets.map(func(bullet): return '1' if bullet else '0'))
 
 func from_bullets(b: String):
+	print("From Bullets")
 	bullets.assign(Array(b.split(",")).map(func(bullet): return bullet == '1'))
 	for x in range(columns):
 		for y in range(rows):
@@ -256,7 +259,7 @@ func _animate_target_marker() -> void:
 
 	_target_tween = create_tween()
 	_target_tween.set_parallel(true)
-	_target_tween.set_loops()	# pulse forever
+	_target_tween.set_loops()
 
 	var grow := _target_tween.tween_property(
 		target,
