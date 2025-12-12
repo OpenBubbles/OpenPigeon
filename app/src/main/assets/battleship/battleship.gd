@@ -5,6 +5,11 @@ const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const BOMB_TEXTURE_PATH := preload("res://battleship/bomb.png")
 const PLANE_TEXTURE_PATH := preload("res://battleship/plane.png")
+signal replay_finished
+
+var _replay_pending: int = 0
+var _replay_token: int = 0
+
 
 var sent_tween: Tween
 var dot_count: int = 0
@@ -19,8 +24,6 @@ func _apply_opponent_ship_visibility(reason: String = "") -> void:
 	print("[DEBUG] Forcing opponent ships visible (reason: ", reason, ")")
 	for ship in theirBattleground.ships:
 		ship.visible = true
-
-
 
 @onready var state: Label = %StateLabel
 @onready var start_button: Button = %StartButton
@@ -402,9 +405,10 @@ func _set_game_data(new_replay: String) -> void:
 			start_button.disabled = true
 
 		if not skip.is_empty():
-			print("[SET_GAME_DATA] Applying skip_ships layout to opponent board.")
-			theirBattleground.from_encoded(skip)
-			_apply_opponent_ship_visibility("after skip_ships applied")
+			var flipped_skip := _flip_ships_encoded_vertical(skip, bsize)
+			print("[SET_GAME_DATA] Applying skip_ships layout to opponent board with vertical flip. original=", skip, " flipped=", flipped_skip)
+			theirBattleground.from_encoded(flipped_skip)
+			_apply_opponent_ship_visibility("after skip_ships applied (flipped)")
 
 		if not bullets1.is_empty():
 			print("[BOARD LOAD] (NOT MY TURN) Applying bullets1 to battleground1 AFTER skip_ships/layouts")
@@ -443,6 +447,10 @@ func play_replay(preplay: String) -> void:
 		my_battleground_ready()
 		return
 
+	_replay_token += 1
+	var token := _replay_token
+	_replay_pending = 0
+
 	var scheduled_moves := 0
 
 	for i in range(moves.size()):
@@ -456,39 +464,55 @@ func play_replay(preplay: String) -> void:
 			continue
 
 		var x := int(parts[0])
-		var local_y := int(parts[1])
+		var wire_y := int(parts[1])
+
+		var local_y := _flip_y_index(wire_y, myBattleground.rows)
 		var v := Vector2(x, local_y)
 
 		print("[PLAY_REPLAY] Move ", i, "/", moves.size() - 1,
-			" raw=(", x, ",", local_y, ")",
+			" raw=(", x, ",", wire_y, ")",
 			" local=(", v.x, ",", v.y, ")")
 
 		if v.x < 0 or v.x >= myBattleground.columns or v.y < 0 or v.y >= myBattleground.rows:
 			print("[PLAY_REPLAY] WARNING — local coords out of bounds, skipping move: ", v)
 			continue
 
-		var start_delay := 0.5 * scheduled_moves
+		var start_delay := 0.5 * float(scheduled_moves)
 
-		await _run_replay_move(v, start_delay)
+		_replay_pending += 1
+		_start_replay_move_async(v, start_delay, token)
 
-		print("[PLAY_REPLAY] Replayed visual move at ", v)
 		scheduled_moves += 1
 
-	if scheduled_moves == 0:
+	if _replay_pending == 0:
 		print("[PLAY_REPLAY] No valid moves parsed; entering my turn.")
 		print("========== PLAY_REPLAY END — NONE SCHEDULED ==========\n")
 		my_battleground_ready()
 		return
 
-	var last_start_delay := 0.5 * float(scheduled_moves - 1)
-	var total_wait := last_start_delay + 2.0 + 0.1
-
-	await get_tree().create_timer(total_wait).timeout
+	print("[PLAY_REPLAY] Scheduled ", _replay_pending, " replay moves. Waiting for completion…")
+	await replay_finished
+	await get_tree().process_frame
+	if token != _replay_token:
+		print("[PLAY_REPLAY] Ignoring replay_finished (stale token).")
+		return
 
 	print("[PLAY_REPLAY] All replay animations finished. Transitioning into my active turn.")
 	print("========== PLAY_REPLAY END ==========\n")
-
 	my_battleground_ready()
+
+func _start_replay_move_async(local_pos: Vector2, delay: float, token: int) -> void:
+	await _run_replay_move(local_pos, delay)
+
+	if token != _replay_token:
+		return
+
+	_replay_pending -= 1
+	print("[PLAY_REPLAY] Move finished. Remaining: ", _replay_pending)
+
+	if _replay_pending <= 0:
+		_replay_pending = 0
+		emit_signal("replay_finished")
 
 func _on_shuffle_button_pressed() -> void:
 	if not is_instance_valid(myBattleground):
@@ -728,16 +752,23 @@ func send_update():
 
 	var myEncoded = myBattleground.encode_ships()
 	var bullets = myBattleground.encode_bullets()
-	print("[SEND] Ships encoded: ", myEncoded)
-	print("[SEND] Bullets encoded: ", bullets)
-	print("[SEND] Replay array: ", replay)
+	
+	# === FLIP LOGIC START ===
+	# Flip the board data vertically so the opponent sees it in their perspective
+	var flipped_ships := _flip_ships_encoded_vertical(myEncoded, myBattleground.rows)
+	var flipped_bullets := _flip_bullets_vertical(bullets, myBattleground.rows, myBattleground.columns)
+	# ========================
 
+	print("[SEND] Ships encoded (Original): ", myEncoded)
+	print("[SEND] Ships encoded (Flipped):  ", flipped_ships)
+	print("[SEND] Bullets encoded (Original): ", bullets)
+	
 	var msg := {
-		"bullets" + str(player): bullets,
+		"bullets" + str(player): flipped_bullets,
 	}
 
 	if _should_send_ships and not myEncoded.is_empty():
-		msg["ships" + str(player)] = myEncoded
+		msg["ships" + str(player)] = flipped_ships
 		print("[SEND] Including ships for player ", player, " (first-time send).")
 		_should_send_ships = false
 	else:
@@ -776,7 +807,7 @@ func send_update():
 
 	if not is_end:
 		play_sent_animation()
-
+		
 func my_battleground_ready():
 	print("[MY_BATTLEGROUND_READY] Entered")
 
@@ -1024,6 +1055,77 @@ func _process(_delta: float) -> void:
 				var label_tween := create_tween()
 				label_tween.tween_property(choose_target_label, "modulate:a", 1.0, 1.0)
 
+func _flip_y_index(y: int, rows: int) -> int:
+	return (rows - 1) - y
+
+func _flip_coord_vertical(pos: Vector2, rows: int) -> Vector2:
+	return Vector2(pos.x, _flip_y_index(int(pos.y), rows))
+
+func _flip_bullets_vertical(bullets_str: String, rows: int, cols: int) -> String:
+	if bullets_str.is_empty():
+		return ""
+	
+	var list := bullets_str.split(",")
+	if list.size() != rows * cols:
+		print("[FLIP] Warning: Bullet list size mismatch. Returning original.")
+		return bullets_str
+
+	var new_list: Array[String] = []
+	new_list.resize(list.size())
+
+	for y in range(rows):
+		for x in range(cols):
+			var src_idx := y * cols + x
+			var dst_idx := (rows - 1 - y) * cols + x
+			new_list[dst_idx] = list[src_idx]
+
+	return ",".join(new_list)
+
+func _flip_ships_encoded_vertical(encoded: String, rows: int) -> String:
+	if encoded.is_empty():
+		return encoded
+
+	var pieces := encoded.split("|", false)
+	var flipped_pieces: Array[String] = []
+
+	for piece in pieces:
+		if piece.is_empty():
+			continue
+
+		var sections := piece.split("&", false)
+		var x := 0
+		var y := 0
+		var rot := 0
+		var length := 1
+
+		for section in sections:
+			if section.begins_with("pos:"):
+				var coords := section.substr(4).split(",", false)
+				if coords.size() >= 2:
+					x = coords[0].to_int()
+					y = coords[1].to_int()
+			elif section.begins_with("rot:"):
+				rot = section.substr(4).to_int()
+			elif section.begins_with("num:"):
+				length = section.substr(4).split(",", false).size()
+
+		var new_y := 0
+		if rot == 1:
+			new_y = (rows - 1) - y
+		else:
+			new_y = (rows - 1) - (y + length - 1)
+
+		var new_sections: Array[String] = []
+		for section in sections:
+			if section.begins_with("pos:"):
+				new_sections.append("pos:%d,%d" % [x, new_y])
+			else:
+				new_sections.append(section)
+
+		flipped_pieces.append("&".join(new_sections))
+
+	return "|".join(flipped_pieces)
+
 func _on_fire_button_pressed() -> void:
 	print("Fire pressed")
 
@@ -1052,12 +1154,20 @@ func _on_fire_button_pressed() -> void:
 	print("[FIRE_BUTTON] Started Bomb Fall animation")
 	await _play_bomb_fall_animation_for_board(theirBattleground, grid, false, 2.0)
 	print("[FIRE_BUTTON] Finished Bomb Fall animation")
-	var replay_y := int(grid.y)
-	replay.append(str(grid.x) + "," + str(replay_y))
-	print("[FIRE_BUTTON] Replay now (top-origin coords): ", replay)
+	replay.clear()
+
+	var top_x := int(grid.x)
+	var rows := theirBattleground.rows
+	var top_y := _flip_y_index(int(grid.y), rows)
+
+	var move_str := "%d,%d" % [top_x, top_y]
+	replay.append(move_str)
+
+	print("[FIRE_BUTTON] Replay now (wire coords with vertical flip for opponent): ", replay)
+
+
 	var hit: bool = theirBattleground.fire(grid)
 	print("[FIRE_BUTTON] Hit result: ", hit)
-
 
 	if not hit:
 		await get_tree().create_timer(1.0).timeout
@@ -1219,6 +1329,7 @@ func _run_replay_move(local_pos: Vector2, delay: float) -> void:
 	if is_instance_valid(myBattleground):
 		var hit := myBattleground.fire(local_pos)
 		print("[PLAY_REPLAY] Applied replay fire at ", local_pos, " hit=", hit)
+		await get_tree().process_frame
 	else:
 		print("[PLAY_REPLAY] WARNING – myBattleground invalid when applying replay fire")
 

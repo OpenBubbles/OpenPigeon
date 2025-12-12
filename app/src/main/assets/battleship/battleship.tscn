@@ -427,6 +427,7 @@ vertical_alignment = 1
 [node name="WinLossLabel" type="Label" parent="PanelContainer/CenterContainer"]
 unique_name_in_owner = true
 visible = false
+z_index = 4096
 layout_mode = 2
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_0ayae")
