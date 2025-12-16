@@ -15,16 +15,6 @@ var sent_tween: Tween
 var dot_count: int = 0
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 
-@export var show_opponent_ships: bool = true #REMOVE THIS AFTER
-func _apply_opponent_ship_visibility(reason: String = "") -> void:
-	if not show_opponent_ships:
-		return
-	if not is_instance_valid(theirBattleground):
-		return
-	print("[DEBUG] Forcing opponent ships visible (reason: ", reason, ")")
-	for ship in theirBattleground.ships:
-		ship.visible = true
-
 @onready var state: Label = %StateLabel
 @onready var start_button: Button = %StartButton
 @onready var fire_button: Button = %FireButton
@@ -253,6 +243,13 @@ func _set_game_data(new_replay: String) -> void:
 
 	if spectator_mode:
 		resolved_player = 1
+		clouds_rect.visible = true
+		if is_instance_valid(start_button):
+			start_button.visible = false
+			start_button.disabled = true
+		if is_instance_valid(shuffle_button):
+			shuffle_button.visible = false
+			shuffle_button.disabled = true
 	else:
 		if my_player != "" and p1_id != "" and p2_id != "":
 			if my_player == p1_id:
@@ -276,8 +273,9 @@ func _set_game_data(new_replay: String) -> void:
 
 	if is_instance_valid(spectator_label):
 		spectator_label.visible = spectator_mode
-
-	_update_you_labels(true)
+		_update_you_labels(not spectator_mode)
+	else:
+		_update_you_labels(true)
 
 	if is_instance_valid(battleground1):
 		battleground1.set_size(bsize)
@@ -301,6 +299,18 @@ func _set_game_data(new_replay: String) -> void:
 		theirBattleground  = battleground1
 		myBoardContainer   = player2_container
 		theirBoardContainer = player1_container
+		
+	if spectator_mode:
+		if payload_player == 1:
+			myBattleground = battleground2
+			theirBattleground = battleground1
+			myBoardContainer = player2_container
+			theirBoardContainer = player1_container
+		else:
+			myBattleground = battleground1
+			theirBattleground = battleground2
+			myBoardContainer = player1_container
+			theirBoardContainer = player2_container
 
 	print("[BOARD MAP] Local player is P", player,
 		" -> myBattleground=", (myBattleground.name if is_instance_valid(myBattleground) else "NULL"),
@@ -344,10 +354,9 @@ func _set_game_data(new_replay: String) -> void:
 	if not s2.is_empty():
 		print("[BOARD LOAD] Applying ships2 to battleground2 (P2 board)")
 		battleground2.from_encoded(s2)
-		_apply_opponent_ship_visibility("after ships2 loaded from payload")
 	else:
 		print("[BOARD LOAD] ships2 is empty; battleground2 starts empty")
-
+	_apply_spectator_ship_hiding()
 	var my_ships_encoded := (s1 if player == 1 else s2)
 
 	_should_send_ships = my_ships_encoded.is_empty()
@@ -359,7 +368,16 @@ func _set_game_data(new_replay: String) -> void:
 		print("[INIT BOARD] Not randomizing: spectator_mode=", spectator_mode,
 			" my_ships_empty=", my_ships_encoded.is_empty(),
 			" (P", player, ")")
-
+	if spectator_mode and not greplay.is_empty():
+		print("[SET_GAME_DATA] Spectator replay: preparing board and playing replay.")
+		if not bullets1.is_empty():
+			battleground1.from_bullets(bullets1)
+		if not bullets2.is_empty():
+			battleground2.from_bullets(bullets2)
+		show_battleground(false)
+		await get_tree().process_frame
+		if not greplay.is_empty():
+			play_replay(greplay, false)
 	show_battleground(true)
 
 	print("[SET_GAME_DATA] FINAL isTurn: ", isTurn, "  spectator_mode: ", spectator_mode)
@@ -408,7 +426,6 @@ func _set_game_data(new_replay: String) -> void:
 			var flipped_skip := _flip_ships_encoded_vertical(skip, bsize)
 			print("[SET_GAME_DATA] Applying skip_ships layout to opponent board with vertical flip. original=", skip, " flipped=", flipped_skip)
 			theirBattleground.from_encoded(flipped_skip)
-			_apply_opponent_ship_visibility("after skip_ships applied (flipped)")
 
 		if not bullets1.is_empty():
 			print("[BOARD LOAD] (NOT MY TURN) Applying bullets1 to battleground1 AFTER skip_ships/layouts")
@@ -426,10 +443,21 @@ func _set_game_data(new_replay: String) -> void:
 			state.text = ""
 
 		start_waiting_animation()
-		myBattleground.process_mode = Node.PROCESS_MODE_DISABLED
-		theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
+		if not spectator_mode:
+			myBattleground.process_mode = Node.PROCESS_MODE_DISABLED
+			theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
+
+func _apply_spectator_ship_hiding() -> void:
+	if not spectator_mode:
+		return
+
+	for bg in [battleground1, battleground2]:
+		if not is_instance_valid(bg):
+			continue
+		for ship in bg.ships:
+			ship.visible = false
 		
-func play_replay(preplay: String) -> void:
+func play_replay(preplay: String, enter_turn_after: bool = true) -> void:
 	print("\n========== PLAY_REPLAY START ==========")
 	print("[PLAY_REPLAY] Incoming replay string: ", preplay)
 
@@ -439,12 +467,14 @@ func play_replay(preplay: String) -> void:
 	if moves.is_empty():
 		print("[PLAY_REPLAY] No moves to replay — entering my turn immediately.")
 		print("========== PLAY_REPLAY END — EMPTY ==========\n")
-		my_battleground_ready()
+		if enter_turn_after:
+			my_battleground_ready()
 		return
 
 	if not is_instance_valid(myBattleground):
 		print("[PLAY_REPLAY] ERROR — myBattleground is not valid.")
-		my_battleground_ready()
+		if enter_turn_after:
+			my_battleground_ready()
 		return
 
 	_replay_token += 1
@@ -487,7 +517,8 @@ func play_replay(preplay: String) -> void:
 	if _replay_pending == 0:
 		print("[PLAY_REPLAY] No valid moves parsed; entering my turn.")
 		print("========== PLAY_REPLAY END — NONE SCHEDULED ==========\n")
-		my_battleground_ready()
+		if enter_turn_after:
+			my_battleground_ready()
 		return
 
 	print("[PLAY_REPLAY] Scheduled ", _replay_pending, " replay moves. Waiting for completion…")
@@ -742,9 +773,14 @@ func show_battleground(mine: bool):
 func _set_board_active(container: Control, board: BattleGround, active: bool) -> void:
 	if not is_instance_valid(container) or not is_instance_valid(board):
 		return
-	container.visible = true 
+
+	container.visible = true
 	container.modulate.a = 1.0 if active else 0.0
-	board.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
+
+	if spectator_mode:
+		board.process_mode = Node.PROCESS_MODE_INHERIT
+	else:
+		board.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
 
 func send_update():
 	print("\n========== SEND_UPDATE ==========")
@@ -752,12 +788,8 @@ func send_update():
 
 	var myEncoded = myBattleground.encode_ships()
 	var bullets = myBattleground.encode_bullets()
-	
-	# === FLIP LOGIC START ===
-	# Flip the board data vertically so the opponent sees it in their perspective
 	var flipped_ships := _flip_ships_encoded_vertical(myEncoded, myBattleground.rows)
 	var flipped_bullets := _flip_bullets_vertical(bullets, myBattleground.rows, myBattleground.columns)
-	# ========================
 
 	print("[SEND] Ships encoded (Original): ", myEncoded)
 	print("[SEND] Ships encoded (Flipped):  ", flipped_ships)
@@ -810,7 +842,9 @@ func send_update():
 		
 func my_battleground_ready():
 	print("[MY_BATTLEGROUND_READY] Entered")
-
+	if spectator_mode:
+		print("[MY_BATTLEGROUND_READY] Spectator — skipping turn flow.")
+		return
 	if theirBattleground.is_empty():
 		print("[MY_BATTLEGROUND_READY] TheirBattleground is empty → sending update immediately.")
 		send_update()
@@ -835,7 +869,6 @@ func my_battleground_ready():
 	start_button.disabled = true
 
 	theirBattleground.set_attack()
-	_apply_opponent_ship_visibility("after set_attack in my_battleground_ready")
 
 	print("[MY_BATTLEGROUND_READY] About to swap to opponent board (reverse=false)")
 	_swap_to_opponent_board(false)
@@ -911,8 +944,9 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 		choose_target_label.visible = false
 
 	print("[SWAP] Disabling both battlegrounds process_mode before tween.")
-	myBattleground.process_mode = Node.PROCESS_MODE_DISABLED
-	theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
+	if not spectator_mode:
+		myBattleground.process_mode = Node.PROCESS_MODE_DISABLED
+		theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
 
 	var clouds_tween: Tween
 	if clouds_rect and clouds_rect.material is ShaderMaterial:
@@ -1001,7 +1035,7 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 
 	print("[SWAP] After _set_board_active calls.")
 
-	if is_instance_valid(choose_target_label) and not reverse:
+	if is_instance_valid(choose_target_label) and not reverse and not spectator_mode:
 		choose_target_label.visible = true
 		choose_target_label.modulate.a = 0.0
 		choose_target_label.z_index = clouds_rect.z_index + 1
@@ -1009,27 +1043,27 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 		label_tween.tween_property(choose_target_label, "modulate:a", 1.0, 1.0)
 		print("[SWAP] choose_target_label fade-in tween started.")
 
+
 	print("[SWAP] === _swap_to_opponent_board END ===\n")
 
 func _update_you_labels(show_you: bool = true) -> void:
 	if is_instance_valid(p1_you_label):
-		p1_you_label.text = ""
+		p1_you_label.visible = false
 	if is_instance_valid(p2_you_label):
-		p2_you_label.text = ""
+		p2_you_label.visible = false
 
-	if not show_you:
+	if not show_you or spectator_mode:
 		return
 
-	if player == 1:
-		if is_instance_valid(p1_you_label):
-			p1_you_label.text = "You"
-	elif player == 2:
-		if is_instance_valid(p2_you_label):
-			p2_you_label.text = "You"
-			
+	if player == 1 and is_instance_valid(p1_you_label):
+		p1_you_label.text = "You"
+		p1_you_label.visible = true
+	elif player == 2 and is_instance_valid(p2_you_label):
+		p2_you_label.text = "You"
+		p2_you_label.visible = true
 
 func _process(_delta: float) -> void:
-	if not fireMode or not is_instance_valid(theirBattleground):
+	if spectator_mode or not fireMode or not is_instance_valid(theirBattleground):
 		return
 	
 	var tg := theirBattleground.targeting_grid
