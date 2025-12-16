@@ -1327,7 +1327,9 @@ func _run_replay_move(local_pos: Vector2, delay: float) -> void:
 	await _play_bomb_fall_animation_for_board(myBattleground, local_pos, true, 2.0)
 
 	if is_instance_valid(myBattleground):
-		var hit := myBattleground.fire(local_pos)
+		var hit : bool = myBattleground.replay_fire(local_pos)
+		if hit:
+			_haptic_explosion(1.0, 45)
 		print("[PLAY_REPLAY] Applied replay fire at ", local_pos, " hit=", hit)
 		await get_tree().process_frame
 	else:
@@ -1337,8 +1339,6 @@ func _run_replay_move(local_pos: Vector2, delay: float) -> void:
 
 func mark_end(win: bool):
 	state.text = ""
-	myBattleground.process_mode = Node.PROCESS_MODE_DISABLED
-	theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
 	var my_avatar := _get_my_avatar_display()
 	var opp_avatar := _get_opp_avatar_display()
 	print("setting their process mode to " + str(false))
@@ -1415,6 +1415,13 @@ func _do_hit_camera_shake(intensity: float = 6.0, duration: float = 0.25) -> voi
 	_shake_tween.tween_callback(func() -> void:
 		vp.canvas_transform = Transform2D.IDENTITY
 	)
+	
+func _haptic_explosion(strength: float = 1.0, duration_ms: int = 45) -> void:
+	if not (OS.has_feature("android") or OS.has_feature("ios")):
+		return
+
+	strength = clampf(strength, 0.0, 1.0)
+	Input.vibrate_handheld(duration_ms, strength)
 	
 func on_rules_button_pressed() -> void:
 	if not is_instance_valid(rules_button):

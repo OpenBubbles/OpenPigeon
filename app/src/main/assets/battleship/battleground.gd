@@ -11,6 +11,7 @@ signal is_valid(valid: bool)
 var has_conflict = false
 var placing_items = false
 var can_attack = false
+var marked_cells: Array[bool] = []
 
 func set_grid_tint(color: Color) -> void:
 	grid_color = color
@@ -44,12 +45,14 @@ func clear_battleground():
 	ship_part.clear()
 	bullets.clear()
 	ships.clear()
+	marked_cells.clear()
 	for c in range(columns):
 		for r in range(rows):
 			ship_grid.append(null)
 			grid_state.append(GridState.NONE)
 			bullets.append(false)
 			ship_part.append(0)
+			marked_cells.append(false)
 
 	targeting_grid = Vector2(-1, -1)
 	if target != null:
@@ -216,11 +219,49 @@ func fire(at: Vector2) -> bool:
 func is_over() -> bool:
 	return not ships.is_empty() and ships.all(func(ship): return ship.is_sunk())
 
-func mark(coord: Vector2, mark: BattlegroundMarker.MarkerMode):
+func mark(coord: Vector2, markm: BattlegroundMarker.MarkerMode):
+	var ix := int(coord.x)
+	var iy := int(coord.y)
+	if ix < 0 or iy < 0 or ix >= columns or iy >= rows:
+		return
+
+	var idx := iy * columns + ix
+	if idx >= 0 and idx < marked_cells.size() and marked_cells[idx]:
+		return
+
+	if idx >= 0 and idx < marked_cells.size():
+		marked_cells[idx] = true
+
 	var m := marker.instantiate()
-	m.set_mode(mark)
+	m.set_mode(markm)
 	m.position = grid_to_coord(coord + Vector2(0.5, 0.5))
 	add_child(m)
+	
+func replay_fire(at: Vector2) -> bool:
+	var fire_index := int(at.y) * columns + int(at.x)
+	if fire_index < 0 or fire_index >= ship_grid.size():
+		return false
+
+	var hit = ship_grid[fire_index]
+
+	if hit != null:
+		var part_idx := ship_part[fire_index]
+		if not hit.parts_destroyed[part_idx]:
+			hit.parts_destroyed[part_idx] = true
+			if hit.is_sunk():
+				hit.visible = true
+				hit.outline()
+	else:
+		if not bullets[fire_index]:
+			bullets[fire_index] = true
+
+	if target != null:
+		target.visible = false
+
+	var marker_mode := BattlegroundMarker.MarkerMode.ELIMINATED if hit != null else BattlegroundMarker.MarkerMode.MISSED
+	mark(at, marker_mode)
+
+	return hit != null
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and not placing_items and can_attack:
