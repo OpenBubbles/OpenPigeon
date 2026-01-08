@@ -15,8 +15,8 @@ class ChessGame : Game {
     // Use a dedicated chess icon drawable for the poster shown in pickers/menus.
     override fun gamePoster(config: Map<String, String>?): Int = R.drawable.chess
     
-    override fun getNewGameData(context: Context): MutableMap<String, String> {
-        return super.getNewGameData(context).apply {
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        return super.getNewGameData(context)!!.apply {
             put("replay", getDefaultReplay())
         }
     }
