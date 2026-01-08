@@ -2,6 +2,7 @@ extends Node
 
 var games = {
 	"checkers": "res://checkers/checkers.tscn",
+	"chess": "res://chess/chess.tscn",
 	"connect": "res://connect/connect.tscn",
 	"basketball": "res://basketball/basketball.tscn",
 	"sea": "res://battleship/battleship.tscn",

@@ -60,6 +60,7 @@ import com.openbubbles.openpigeon.archery.ArcheryGame
 import com.openbubbles.openpigeon.basketball.BasketballGame
 import com.openbubbles.openpigeon.battleship.BattleshipGame
 import com.openbubbles.openpigeon.checkers.CheckersGame
+import com.openbubbles.openpigeon.chess.ChessGame
 import com.openbubbles.openpigeon.connect.ConnectGame
 import com.openbubbles.openpigeon.crazy8.Crazy8Game
 import com.openbubbles.openpigeon.darts.DartsGame
@@ -108,8 +109,8 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             QuestionsGame(),
             WordHuntGame(), //Marked Hidden as inside Word Games Wrapper
             AnagramsGame(), //Marked Hidden as inside Word Games Wrapper
-            WordbitesGame() //Marked Hidden as inside Word Games Wrapper
-
+            WordbitesGame(), //Marked Hidden as inside Word Games Wrapper
+            ChessGame()
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {

@@ -1,0 +1,106 @@
+[gd_scene load_steps=5 format=3 uid="uid://b8lajx2v3mn4p"]
+
+[ext_resource type="Script" uid="uid://c2tucuh4qvd1y" path="res://chess/chess.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://c5vnqtru5m53v" path="res://chess/pieces/chess_wK.png" id="2_wk"]
+[ext_resource type="Texture2D" uid="uid://bssq5dvr0wpwb" path="res://chess/pieces/chess_bK.png" id="3_bk"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4qhse"]
+bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
+corner_radius_top_left = 25
+corner_radius_top_right = 25
+corner_radius_bottom_right = 25
+corner_radius_bottom_left = 25
+
+[node name="Chess" type="Node2D"]
+script = ExtResource("1")
+
+[node name="Player1Box" type="Panel" parent="."]
+top_level = true
+offset_left = 413.0
+offset_top = 36.0
+offset_right = 559.0
+offset_bottom = 193.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
+
+[node name="P1Label" type="RichTextLabel" parent="Player1Box"]
+layout_mode = 0
+offset_left = 1.0
+offset_top = 90.2499
+offset_right = 148.0
+offset_bottom = 138.25
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]Player 2[/center]"
+
+[node name="PlayerChessBlack" type="Sprite2D" parent="Player1Box"]
+position = Vector2(108, 86)
+texture = ExtResource("3_bk")
+
+[node name="Player2Box" type="Panel" parent="."]
+top_level = true
+offset_left = 87.0
+offset_top = 36.0
+offset_right = 233.0
+offset_bottom = 193.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
+
+[node name="P2Label" type="RichTextLabel" parent="Player2Box"]
+layout_mode = 0
+offset_left = 1.0
+offset_top = 90.2499
+offset_right = 148.0
+offset_bottom = 138.25
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]Player 1[/center]"
+
+[node name="PlayerChessWhite" type="Sprite2D" parent="Player2Box"]
+position = Vector2(108, 86)
+texture = ExtResource("2_wk")
+
+[node name="waitingLabel" type="Panel" parent="."]
+visible = false
+top_level = true
+offset_left = 116.0
+offset_top = 609.0
+offset_right = 546.0
+offset_bottom = 709.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
+
+[node name="RichTextLabel" type="RichTextLabel" parent="waitingLabel"]
+layout_mode = 0
+offset_left = 14.0
+offset_top = 29.2222
+offset_right = 417.0
+offset_bottom = 71.2222
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]WAITING FOR OPPONENT...[/center]"
+
+[node name="winLoseLabel" type="Panel" parent="."]
+visible = false
+top_level = true
+offset_left = 116.0
+offset_top = 609.0
+offset_right = 546.0
+offset_bottom = 709.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
+
+[node name="RichTextLabel" type="RichTextLabel" parent="winLoseLabel"]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 29.2222
+offset_right = 419.0
+offset_bottom = 71.2222
+theme_override_font_sizes/normal_font_size = 30
+bbcode_enabled = true
+text = "[center]YOU WIN![/center]"
+
+[node name="SendButton" type="Button" parent="."]
+offset_left = 112.0
+offset_top = 1068.0
+offset_right = 232.0
+offset_bottom = 1118.0
+disabled = true
+text = "Send
+"
