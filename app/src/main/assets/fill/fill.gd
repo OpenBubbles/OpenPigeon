@@ -13,11 +13,11 @@ extends Control
 @onready var waiting_label: Label = %WaitForOpponentLabel
 @onready var waiting_blur: ColorRect = %WaitBlur
 @onready var dot_timer: Timer = %DotTimer
-@onready var win_loss_label = %WinLossLabel
-@onready var rules_button = %RulesButton
-@onready var settings_button = %SettingsButton
-@onready var spec_label = %SpecLabel
-@onready var you_label = %YouLabel
+@onready var win_loss_label: Label = %WinLossLabel
+@onready var rules_button: Button = %RulesButton
+@onready var settings_button: Button = %SettingsButton
+@onready var spec_label: Label = %SpecLabel
+@onready var you_label: Label = %YouLabel
 
 const COLORS = [0, 1, 2, 3, 4, 5]
 const BOARD_WIDTH = 8

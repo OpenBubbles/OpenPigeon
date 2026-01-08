@@ -51,8 +51,8 @@ class BattleshipGame : Game {
         return R.drawable.battleship
     }
 
-    override fun getNewGameData(context: Context): MutableMap<String, String> {
-        return super.getNewGameData(context).apply {
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        return super.getNewGameData(context)?.apply {
             put("size", when(battleshipSize) {
                 "8x8" -> "8"
                 "9x9" -> "9"

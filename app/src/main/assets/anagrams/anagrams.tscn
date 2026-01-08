@@ -1,0 +1,938 @@
+[gd_scene load_steps=58 format=3 uid="uid://d2yyuh6fook6k"]
+
+[ext_resource type="Script" uid="uid://cyyfd6ypbfmpr" path="res://anagrams/anagrams.gd" id="1_xvd3d"]
+[ext_resource type="Texture2D" uid="uid://b4romha26qbsa" path="res://anagrams/anagrams_bg.png" id="2_ak8kl"]
+[ext_resource type="Texture2D" uid="uid://dk6sndstpx67p" path="res://anagrams/anagrams_preview.png" id="3_0k6o1"]
+[ext_resource type="Texture2D" uid="uid://btxxm6ltl6ban" path="res://anagrams/shuffle_pressed.png" id="3_ephvk"]
+[ext_resource type="Texture2D" uid="uid://b0i4rea1gtjwx" path="res://anagrams/shuffle.png" id="3_i2lji"]
+[ext_resource type="Script" uid="uid://bg3be8il4hx1b" path="res://anagrams/game_screen.gd" id="3_kxjnm"]
+[ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="6_v2j8k"]
+[ext_resource type="Shader" uid="uid://cudvsdvo3ydsh" path="res://global/torn_panel.gdshader" id="7_x0qku"]
+[ext_resource type="Texture2D" uid="uid://7eetny2ly08v" path="res://anagrams/back.png" id="8_mt60f"]
+[ext_resource type="Texture2D" uid="uid://cweqhn5g2msil" path="res://anagrams/back_pressed.png" id="9_0k6o1"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ak8kl"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0k6o1"]
+bg_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ix8dr"]
+bg_color = Color(0.7019608, 0.6784314, 0.90588236, 1)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_right = 15
+corner_radius_bottom_left = 15
+shadow_color = Color(0, 0, 0, 0.39607844)
+shadow_size = 3
+shadow_offset = Vector2(0, 5)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_56riw"]
+bg_color = Color(0.597911, 0.55991894, 0.85569274, 1)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_right = 15
+corner_radius_bottom_left = 15
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_r3ggu"]
+bg_color = Color(0.7595091, 0.7425457, 0.9274122, 1)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_right = 15
+corner_radius_bottom_left = 15
+shadow_color = Color(0, 0, 0, 0.39607844)
+shadow_size = 3
+shadow_offset = Vector2(0, 5)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_4ax03"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_mt60f"]
+bg_color = Color(0.15024996, 0.1075, 0.25, 0.54509807)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_0k6o1"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_0k6o1"]
+noise_type = 3
+frequency = 0.05
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_ix8dr"]
+noise = SubResource("FastNoiseLite_0k6o1")
+seamless = true
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_ix8dr"]
+shader = ExtResource("7_x0qku")
+shader_parameter/paper_color = Color(1, 0.98, 0.95, 1)
+shader_parameter/noise_tex = SubResource("NoiseTexture2D_ix8dr")
+shader_parameter/tear_amplitude = 0.06
+shader_parameter/tear_scale = 0.5
+shader_parameter/noise_offset = Vector2(0, 0)
+shader_parameter/burn_size = 0.0
+shader_parameter/burn_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4ax03"]
+bg_color = Color(1, 1, 1, 1)
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_eugg7"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_a0pbh"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_rly8n"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="FontVariation" id="FontVariation_v2j8k"]
+variation_embolden = 0.75
+
+[sub_resource type="FontVariation" id="FontVariation_x0qku"]
+variation_embolden = 0.75
+
+[sub_resource type="FontVariation" id="FontVariation_ak8kl"]
+variation_embolden = 1.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ephvk"]
+bg_color = Color(0.6994999, 0.6804642, 0.8038474, 1)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_right = 15
+corner_radius_bottom_left = 15
+shadow_color = Color(0, 0, 0, 0.47058824)
+shadow_size = 3
+shadow_offset = Vector2(0, 5)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kxjnm"]
+bg_color = Color(0.5447076, 0.52309996, 0.67406577, 1)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_right = 15
+corner_radius_bottom_left = 15
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_v2j8k"]
+bg_color = Color(0.77840173, 0.7669561, 0.86107117, 1)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_right = 15
+corner_radius_bottom_left = 15
+shadow_size = 3
+shadow_offset = Vector2(0, 5)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_x0qku"]
+bg_color = Color(0.9411765, 0.9411765, 0.9411765, 1)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_right = 15
+corner_radius_bottom_left = 15
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vu1q5"]
+bg_color = Color(1, 1, 1, 0)
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_v2j8k"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_x0qku"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_vu1q5"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_eugg7"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_a0pbh"]
+noise_type = 3
+frequency = 0.05
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_rly8n"]
+noise = SubResource("FastNoiseLite_a0pbh")
+seamless = true
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tfubl"]
+shader = ExtResource("7_x0qku")
+shader_parameter/paper_color = Color(1, 0.98, 0.95, 1)
+shader_parameter/noise_tex = SubResource("NoiseTexture2D_rly8n")
+shader_parameter/tear_amplitude = 0.06
+shader_parameter/tear_scale = 0.5
+shader_parameter/noise_offset = Vector2(0, 0)
+shader_parameter/burn_size = 0.0
+shader_parameter/burn_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_h58lc"]
+bg_color = Color(1, 1, 1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_eugg7"]
+bg_color = Color(0.22745098, 0.17254902, 0.36862746, 1)
+border_width_left = 10
+border_width_top = 10
+border_width_right = 10
+border_width_bottom = 10
+border_color = Color(0.16875118, 0.12502378, 0.28257778, 1)
+border_blend = true
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_tfubl"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_h58lc"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_q6txt"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="Shader" id="Shader_0k6o1"]
+code = "shader_type canvas_item;
+
+uniform vec4 paper_color : source_color = vec4(1.0, 0.98, 0.95, 1.0);
+uniform sampler2D paper_texture;
+uniform sampler2D noise_tex : repeat_enable;
+uniform float tear_amplitude = 0.06;
+uniform float tear_scale = 0.5;
+uniform vec2 noise_offset = vec2(0.0, 0.0);
+uniform float burn_size = 0;
+uniform vec4 burn_color : source_color = vec4(0, 0, 0, 0);
+
+void fragment() {
+	vec2 pixel_pos = UV / TEXTURE_PIXEL_SIZE;
+	vec2 uv_a = (pixel_pos * tear_scale) + noise_offset;
+	float noise_a = texture(noise_tex, uv_a).r;
+	vec2 uv_b = (pixel_pos * (tear_scale * 0.73)) + noise_offset + vec2(15.3, 42.1);
+	float noise_b = texture(noise_tex, uv_b).r;
+	float noise_combined = (noise_a + noise_b) * 0.5;
+	float wave = (noise_combined * 2.0 - 1.0) * tear_amplitude;
+	float top_cut_line = tear_amplitude + wave;
+	float bottom_cut_line = 1.0 - (tear_amplitude + wave);
+	float dist_to_top = UV.y - top_cut_line;
+	float dist_to_bottom = bottom_cut_line - UV.y;
+	float dist_to_edge = min(dist_to_top, dist_to_bottom);
+	float pixel_height = TEXTURE_PIXEL_SIZE.y;
+	float alpha = smoothstep(0.0, pixel_height, dist_to_edge);
+	vec4 base_col = paper_color;
+	vec4 tex_col = texture(paper_texture, UV);
+	base_col = mix(base_col, tex_col * base_col, 0.5);
+
+	if (dist_to_edge < burn_size) {
+		float t = dist_to_edge / burn_size;
+		COLOR = mix(burn_color, base_col, smoothstep(0.0, 1.0, t));
+	} else {
+		COLOR = base_col;
+	}
+}"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_vu1q5"]
+shader = SubResource("Shader_0k6o1")
+shader_parameter/paper_color = Color(1, 1, 1, 1)
+shader_parameter/tear_amplitude = 0.1
+shader_parameter/tear_scale = 0.005
+shader_parameter/noise_offset = Vector2(0, 0)
+shader_parameter/burn_size = 0.02
+shader_parameter/burn_color = Color(0.7, 0.6, 0.5, 1)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_q6txt"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_56riw"]
+noise_type = 3
+frequency = 0.05
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_r3ggu"]
+noise = SubResource("FastNoiseLite_56riw")
+seamless = true
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_tw2rt"]
+shader = ExtResource("7_x0qku")
+shader_parameter/paper_color = Color(1, 0.98, 0.95, 1)
+shader_parameter/noise_tex = SubResource("NoiseTexture2D_r3ggu")
+shader_parameter/tear_amplitude = 0.06
+shader_parameter/tear_scale = 0.5
+shader_parameter/noise_offset = Vector2(0, 0)
+shader_parameter/burn_size = 0.02
+shader_parameter/burn_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_orgg5"]
+bg_color = Color(1, 1, 1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_a0pbh"]
+bg_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_size = 3
+shadow_offset = Vector2(0, 5)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_rly8n"]
+bg_color = Color(0.74978, 0.74978, 0.7497799, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tfubl"]
+bg_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+shadow_size = 3
+shadow_offset = Vector2(0, 5)
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_h58lc"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_i2lji"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[node name="Anagrams" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_xvd3d")
+
+[node name="Background" type="TextureRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("2_ak8kl")
+expand_mode = 3
+stretch_mode = 5
+
+[node name="SentLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+z_index = 102
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -30.5
+offset_top = -17.5
+offset_right = 30.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_ak8kl")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="DotTimer" type="Timer" parent="."]
+unique_name_in_owner = true
+wait_time = 0.75
+
+[node name="SpecLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 0
+offset_top = 165.0
+offset_right = 648.0
+offset_bottom = 234.0
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 50
+text = "Spectating..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="IntroScreen" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="IntroScreen"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 60
+theme_override_constants/margin_right = 60
+
+[node name="Container" type="PanelContainer" parent="IntroScreen/MarginContainer"]
+custom_minimum_size = Vector2(400, 500)
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_0k6o1")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="IntroScreen/MarginContainer/Container"]
+layout_mode = 2
+
+[node name="Control2" type="Control" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="HowToText" type="RichTextLabel" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
+layout_mode = 2
+theme_override_colors/default_color = Color(0, 0, 0, 1)
+bbcode_enabled = true
+text = "[b][font_size={36px}]How to play:[/font_size][/b]
+
+[font_size={24px}]Combine letter to make words. Make as many words as you can in 60 seconds[/font_size]"
+fit_content = true
+horizontal_alignment = 1
+
+[node name="HowToRef" type="TextureRect" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+texture = ExtResource("3_0k6o1")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="StartButton" type="Button" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 60)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_colors/font_color = Color(0.13333334, 0.13333334, 0.13333334, 1)
+theme_override_colors/font_focus_color = Color(0.13333334, 0.13333334, 0.13333334, 1)
+theme_override_colors/font_pressed_color = Color(0.13333334, 0.13333334, 0.13333334, 1)
+theme_override_colors/font_hover_color = Color(0.13333334, 0.13333334, 0.13333334, 1)
+theme_override_colors/font_hover_pressed_color = Color(0.13333334, 0.13333334, 0.13333334, 1)
+theme_override_font_sizes/font_size = 24
+theme_override_styles/normal = SubResource("StyleBoxFlat_ix8dr")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_56riw")
+theme_override_styles/hover = SubResource("StyleBoxFlat_r3ggu")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_4ax03")
+text = "Start"
+
+[node name="Control" type="Control" parent="IntroScreen/MarginContainer/Container/VBoxContainer"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+
+[node name="GameScreen" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("3_kxjnm")
+
+[node name="MarginContainer" type="MarginContainer" parent="GameScreen"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 200
+
+[node name="VBoxContainer" type="VBoxContainer" parent="GameScreen/MarginContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="TopRow" type="HBoxContainer" parent="GameScreen/MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+alignment = 1
+
+[node name="ShuffleButton" type="TextureButton" parent="GameScreen/MarginContainer/VBoxContainer/TopRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_vertical = 4
+texture_normal = ExtResource("3_i2lji")
+texture_pressed = ExtResource("3_ephvk")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="Control" type="Control" parent="GameScreen/MarginContainer/VBoxContainer/TopRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="TimerBox" type="PanelContainer" parent="GameScreen/MarginContainer/VBoxContainer/TopRow"]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_mt60f")
+
+[node name="Timer" type="RichTextLabel" parent="GameScreen/MarginContainer/VBoxContainer/TopRow/TimerBox"]
+unique_name_in_owner = true
+layout_mode = 2
+bbcode_enabled = true
+fit_content = true
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="GameTimer" type="Timer" parent="GameScreen/MarginContainer/VBoxContainer/TopRow/TimerBox"]
+unique_name_in_owner = true
+
+[node name="Control2" type="Control" parent="GameScreen/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MainScoreBoxContainer" type="PanelContainer" parent="GameScreen/MarginContainer/VBoxContainer/Control2"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -250.0
+offset_top = -37.5
+offset_right = 250.0
+offset_bottom = 112.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxEmpty_0k6o1")
+
+[node name="Panel" type="Panel" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer"]
+material = SubResource("ShaderMaterial_ix8dr")
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_4ax03")
+
+[node name="ScoreBox" type="HBoxContainer" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 3
+
+[node name="VBoxContainer2" type="VBoxContainer" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+
+[node name="PlayerAvatarDisplay" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox/VBoxContainer2" instance=ExtResource("6_v2j8k")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_eugg7")
+texture_pressed = SubResource("ViewportTexture_a0pbh")
+texture_hover = SubResource("ViewportTexture_rly8n")
+is_display_only = true
+
+[node name="Control" type="Control" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox/VBoxContainer2"]
+custom_minimum_size = Vector2(0, 15)
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_constants/separation = -8
+
+[node name="Control" type="Control" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox/VBoxContainer"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="WordsLabel" type="Label" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = SubResource("FontVariation_v2j8k")
+theme_override_font_sizes/font_size = 21
+text = "WORDS: 0"
+vertical_alignment = 2
+uppercase = true
+
+[node name="ScoreLabel" type="Label" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = SubResource("FontVariation_x0qku")
+theme_override_font_sizes/font_size = 42
+text = "SCORE: 0000"
+vertical_alignment = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="GameScreen/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 150
+theme_override_constants/margin_right = 150
+
+[node name="EnterButton" type="Button" parent="GameScreen/MarginContainer/VBoxContainer/MarginContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.13319641, 0.13319641, 0.13319638, 1)
+theme_override_colors/font_focus_color = Color(0.13333334, 0.13333334, 0.13333334, 1)
+theme_override_colors/font_pressed_color = Color(0.13333334, 0.13333334, 0.13333334, 1)
+theme_override_colors/font_hover_color = Color(0.13333334, 0.13333334, 0.13333334, 1)
+theme_override_colors/font_hover_pressed_color = Color(0.13333334, 0.13333334, 0.13333334, 1)
+theme_override_colors/font_disabled_color = Color(0.13333334, 0.13333334, 0.13333334, 1)
+theme_override_fonts/font = SubResource("FontVariation_ak8kl")
+theme_override_styles/normal = SubResource("StyleBoxFlat_ephvk")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_kxjnm")
+theme_override_styles/hover = SubResource("StyleBoxFlat_v2j8k")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_x0qku")
+theme_override_styles/focus = SubResource("StyleBoxFlat_vu1q5")
+text = "ENTER"
+icon_alignment = 1
+
+[node name="Control" type="Control" parent="GameScreen/MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+
+[node name="VoidBox" type="HBoxContainer" parent="GameScreen/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="LetterBox" type="HBoxContainer" parent="GameScreen/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="TextureRect" type="TextureRect" parent="GameScreen/MarginContainer/VBoxContainer/LetterBox"]
+layout_mode = 2
+
+[node name="ScoreScreen" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="ScoreScreen"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 0
+theme_override_constants/margin_top = 100
+theme_override_constants/margin_right = 0
+theme_override_constants/margin_bottom = 100
+
+[node name="WinLossLabel" type="Label" parent="ScoreScreen/MarginContainer"]
+unique_name_in_owner = true
+visible = false
+z_index = 102
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_ak8kl")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CenterContainer" type="CenterContainer" parent="ScoreScreen/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+
+[node name="HBoxContainer" type="HBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_constants/separation = 30
+
+[node name="PlayerScore" type="VBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="PlayerScoreAvatarDisplay" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore" instance=ExtResource("6_v2j8k")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_v2j8k")
+texture_pressed = SubResource("ViewportTexture_x0qku")
+texture_hover = SubResource("ViewportTexture_vu1q5")
+is_display_only = true
+
+[node name="Control" type="Control" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore"]
+custom_minimum_size = Vector2(0, 5)
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="PlayerScoreBoxContainer" type="PanelContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_styles/panel = SubResource("StyleBoxEmpty_eugg7")
+
+[node name="Panel" type="Panel" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer"]
+material = SubResource("ShaderMaterial_tfubl")
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_h58lc")
+
+[node name="MarginContainer" type="MarginContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="ScoreBox" type="HBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 3
+alignment = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/MarginContainer/ScoreBox"]
+layout_mode = 2
+theme_override_constants/margin_left = 0
+theme_override_constants/margin_top = 0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/MarginContainer/ScoreBox/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = -8
+
+[node name="PlayerWordsLabel" type="Label" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/MarginContainer/ScoreBox/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = SubResource("FontVariation_v2j8k")
+theme_override_font_sizes/font_size = 20
+text = "WORDS: 0"
+vertical_alignment = 2
+uppercase = true
+
+[node name="PlayerScoreLabel" type="Label" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerScoreBoxContainer/MarginContainer/ScoreBox/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = SubResource("FontVariation_x0qku")
+theme_override_font_sizes/font_size = 40
+text = "SCORE: 0000"
+vertical_alignment = 1
+justification_flags = 161
+
+[node name="PlayerWordContainer" type="PanelContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore"]
+custom_minimum_size = Vector2(225, 550)
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_eugg7")
+
+[node name="PlayerWordList" type="VBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore/PlayerWordContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="OppScore" type="VBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+alignment = 2
+
+[node name="OppAvatarDisplay" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore" instance=ExtResource("6_v2j8k")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 8
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_tfubl")
+texture_pressed = SubResource("ViewportTexture_h58lc")
+texture_hover = SubResource("ViewportTexture_q6txt")
+is_display_only = true
+controlled_by_data = true
+
+[node name="Control" type="Control" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="OppScoreBoxContainer" type="PanelContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore"]
+unique_name_in_owner = true
+material = SubResource("ShaderMaterial_vu1q5")
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+theme_override_styles/panel = SubResource("StyleBoxEmpty_q6txt")
+
+[node name="Panel" type="Panel" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer"]
+material = SubResource("ShaderMaterial_tw2rt")
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_orgg5")
+
+[node name="MarginContainer" type="MarginContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="ScoreBox" type="HBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/MarginContainer"]
+layout_mode = 2
+size_flags_horizontal = 8
+size_flags_vertical = 3
+
+[node name="MarginContainer" type="MarginContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/MarginContainer/ScoreBox"]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/MarginContainer/ScoreBox/MarginContainer"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_constants/separation = -8
+
+[node name="OppWordsLabel" type="Label" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/MarginContainer/ScoreBox/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = SubResource("FontVariation_v2j8k")
+theme_override_font_sizes/font_size = 20
+text = "WORDS: ?"
+horizontal_alignment = 2
+vertical_alignment = 2
+uppercase = true
+
+[node name="OppScoreLabel" type="Label" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppScoreBoxContainer/MarginContainer/ScoreBox/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_fonts/font = SubResource("FontVariation_x0qku")
+theme_override_font_sizes/font_size = 40
+text = "SCORE: ????"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="OppWordContainer" type="PanelContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore"]
+custom_minimum_size = Vector2(225, 550)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_eugg7")
+
+[node name="OppWordList" type="VBoxContainer" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/OppScore/OppWordContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ViewWords" type="Button" parent="ScoreScreen/MarginContainer"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(350, 75)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 8
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_focus_color = Color(0, 0, 0, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_pressed_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 23
+theme_override_styles/normal = SubResource("StyleBoxFlat_a0pbh")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_rly8n")
+theme_override_styles/hover = SubResource("StyleBoxFlat_tfubl")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_h58lc")
+text = "VIEW ALL WORDS (X)"
+
+[node name="WaitForOpponentLabel" type="Label" parent="ScoreScreen/MarginContainer"]
+unique_name_in_owner = true
+visible = false
+z_index = 102
+custom_minimum_size = Vector2(0, 70)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 8
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_i2lji")
+text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WordsScreen" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="WordsScreen"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 10
+
+[node name="BackButton" type="TextureButton" parent="WordsScreen/MarginContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 0
+texture_normal = ExtResource("8_mt60f")
+texture_pressed = ExtResource("9_0k6o1")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="CenterContainer" type="CenterContainer" parent="WordsScreen/MarginContainer"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="WordsScreen/MarginContainer/CenterContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="WordsScreen/MarginContainer/CenterContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 40
+text = "Possible Words"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="VScrollBar" type="ScrollContainer" parent="WordsScreen/MarginContainer/CenterContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 800)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="FullWordContainer" type="PanelContainer" parent="WordsScreen/MarginContainer/CenterContainer/VBoxContainer/VScrollBar"]
+custom_minimum_size = Vector2(400, 800)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_eugg7")
+
+[node name="FullWordList" type="VBoxContainer" parent="WordsScreen/MarginContainer/CenterContainer/VBoxContainer/VScrollBar/FullWordContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8

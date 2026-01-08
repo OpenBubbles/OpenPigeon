@@ -137,7 +137,7 @@ interface Game {
         }
     }
 
-    fun getNewGameData(context: Context): MutableMap<String, String> {
+    fun getNewGameData(context: Context): MutableMap<String, String>? {
         val sender = getSenderUUID(context)
         return mutableMapOf(
             "sender" to sender,

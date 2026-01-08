@@ -20,6 +20,7 @@ extends Control
 @onready var player_marker: TextureRect = %PlayerMarker
 @onready var opp_marker: TextureRect = %OppMarker
 @onready var you_label: Label = %YouLabel
+@onready var spec_label: Label = %SpecLabel
 
 
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
@@ -134,7 +135,12 @@ func _set_game_data(raw_text: String) -> void:
 	is_your_turn = bool(res.get("isYourTurn", false))
 
 	if my_id != "" and p1_id != "" and p2_id != "":
-		player = (1 if my_id == p1_id else (2 if my_id == p2_id else 1))
+		player = (1 if my_id == p1_id else (2 if my_id == p2_id else 0))
+		if player == 0:
+			spectator_mode = true
+			you_label.text = ""
+			spec_label.show()
+			player = 1
 	else:
 		player = (3 - turn_owner) if is_your_turn else turn_owner
 		

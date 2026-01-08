@@ -50,8 +50,8 @@ class PoolGame : Game {
         return R.drawable.pool_image
     }
 
-    override fun getNewGameData(context: Context): MutableMap<String, String> {
-        return super.getNewGameData(context).apply {
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        return super.getNewGameData(context)?.apply {
             // mode h for hard
             put("mode", if (hard) "h" else "n")
             put("v2", "2")

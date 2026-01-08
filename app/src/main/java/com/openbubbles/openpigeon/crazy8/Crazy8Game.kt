@@ -32,8 +32,8 @@ class Crazy8Game : Game {
         return R.drawable.crazy8thumb
     }
 
-    override fun getNewGameData(context: Context): MutableMap<String, String> {
-        var data = super.getNewGameData(context).apply {
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        var data = super.getNewGameData(context)?.apply {
             val id = UUID.randomUUID().toString()
             val randBytes = ByteArray(6)
             Random.nextBytes(randBytes)

@@ -94,11 +94,12 @@ text = "Mancala
 "
 script = ExtResource("1_4r7pt")
 
-[node name="ChessButton" type="Button" parent="."]
+[node name="QuestionsButton" type="Button" parent="."]
 layout_mode = 0
 offset_left = 143.0
-offset_top = 804.0
+offset_top = 966.0
 offset_right = 489.0
-offset_bottom = 865.0
-text = "Chess"
+offset_bottom = 1027.0
+text = "Questions
+"
 script = ExtResource("1_4r7pt")

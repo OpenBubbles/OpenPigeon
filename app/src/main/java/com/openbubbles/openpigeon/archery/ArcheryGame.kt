@@ -27,8 +27,8 @@ class ArcheryGame : Game {
         return R.drawable.archery
     }
 
-    override fun getNewGameData(context: Context): MutableMap<String, String> {
-        return super.getNewGameData(context).apply {
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        return super.getNewGameData(context)?.apply {
             put("seed", "${Random.nextInt()}")
         }
     }
