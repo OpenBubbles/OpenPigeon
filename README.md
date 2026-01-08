@@ -9,6 +9,8 @@ OpenPigeon is fully open-source, and we're actively looking for game developers 
 ## Supported Games
 - Checkers (Normal and Newbie)
 - Word Hunt (all modes)
+- Anagrams
+- Wordbites
 - Four in a Row
 - Basketball
 - Sea Battle (all sizes)
@@ -21,6 +23,9 @@ OpenPigeon is fully open-source, and we're actively looking for game developers 
 - Reversi
 - Filler
 - Dots & Boxes
+- Chess
+- 20 Questions
+- Gomoku
 
 ## Contributing
 1. Git clone with Submodules. 
