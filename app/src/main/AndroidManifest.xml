@@ -42,7 +42,10 @@
             android:name=".GameNotFound"
             android:exported="false"
             android:theme="@style/Theme.Material3.DayNight.Dialog.Alert" />
-
+        <activity
+            android:name=".questions.SecretWordActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert" />
         <activity
             android:name=".AboutActivity"
             android:exported="false"

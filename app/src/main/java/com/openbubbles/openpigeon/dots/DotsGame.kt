@@ -57,8 +57,8 @@ class DotsGame : Game {
         }
     }
 
-    override fun getNewGameData(context: Context): MutableMap<String, String> {
-        return super.getNewGameData(context).apply {
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        return super.getNewGameData(context)?.apply {
             put("size", when(boardsize) {
                 "4x4" -> "4"
                 "5x5" -> "5"

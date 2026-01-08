@@ -53,20 +53,28 @@ class GodotGameActivity : GodotActivity() {
     }
 
     override fun onPause() {
-        gameSessionIPC!!.setSuppressNotifications(sessionId, false)
+        gameSessionIPC?.setSuppressNotifications(sessionId, false)
         super.onPause()
     }
 
     override fun onDestroy() {
-        gameSessionIPC!!.setSuppressNotifications(sessionId, false)
-        gameSessionIPC!!.unlockMsgHandle(sessionId)
+        gameSessionIPC?.setSuppressNotifications(sessionId, false)
+        gameSessionIPC?.unlockMsgHandle(sessionId)
         super.onDestroy()
     }
 
     private fun initGameSession(intent: Intent) {
-        sessionId = intent.getStringExtra("SESSION")!!
-        baseGame = MadridExtension.findByName(intent.getStringExtra("GAME")!!)!!
+        val sid = intent.getStringExtra("SESSION")
+        val gname = intent.getStringExtra("GAME")
 
+        if (sid.isNullOrEmpty() || gname.isNullOrEmpty()) {
+            Log.e("openpigeon-godot", "Missing SESSION or GAME in intent; finishing.")
+            activity?.finish()
+            return
+        }
+
+        sessionId = sid
+        baseGame = MadridExtension.findByName(gname)!!
         Log.i("openpigeon-${baseGame.getName()}", "GodotGameActivity opened with session: $sessionId")
         GameSessionIPC(applicationContext) { gameSessionIPC ->
             this.gameSessionIPC = gameSessionIPC
@@ -74,16 +82,17 @@ class GodotGameActivity : GodotActivity() {
             if (currentMessage.isNotEmpty()) {
                 gameSessionIPC.lockMsgHandle(sessionId)
                 gameSessionIPC.setSuppressNotifications(sessionId, true)
-                Log.i("openpigeon-${baseGame.getName()}", "player: ${currentMessage["player"]!!.toInt()}, replay: ${currentMessage["replay"]}")
+                Log.i("openpigeon-${baseGame.getName()}", "player: ${(currentMessage["player"]?.toIntOrNull() ?: -1)}, replay: ${currentMessage["replay"]}")
                 sendGameData(isYourTurn(currentMessage), currentMessage.toMutableMap())
 
                 gameSessionIPC.onMessageUpdated(sessionId) { new: Map<String, String> ->
-                    if(isYourTurn(new)) {
+                    val yourTurn = isYourTurn(new)
+                    if(yourTurn) {
                         Log.i(
                             "openpigeon-${baseGame.getName()}",
-                            "onMessageUpdated -> isYourTurn: ${isYourTurn(new)}, message: $new"
+                            "onMessageUpdated -> isYourTurn: ${yourTurn}, message: $new"
                         )
-                        sendGameData(isYourTurn(new), new.toMutableMap())
+                        sendGameData(yourTurn, new.toMutableMap())
                     }
                 }
             } else {
@@ -101,7 +110,9 @@ class GodotGameActivity : GodotActivity() {
     }
 
     private fun isYourTurn(message: Map<String, String>): Boolean {
-        return message["sender"]!! != gameSessionIPC!!.getSenderUUID(sessionId)
+        val sender = message["sender"]
+        val myId = gameSessionIPC?.getSenderUUID(sessionId)
+        return sender != null && myId != null && sender != myId
     }
 
     private fun sendGameData(isYourTurn: Boolean, message: MutableMap<String, String>) {

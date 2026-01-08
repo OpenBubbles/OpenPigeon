@@ -71,8 +71,8 @@ class MancalaGame : Game {
         }
     }
 
-    override fun getNewGameData(context: Context): MutableMap<String, String> {
-        return super.getNewGameData(context).apply {
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        return super.getNewGameData(context)?.apply {
             val modePrefix = when(gameMode) {
                 "Capture" -> ""
                 "Avalanche" -> "a"

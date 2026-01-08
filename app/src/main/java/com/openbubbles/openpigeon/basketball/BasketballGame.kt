@@ -27,8 +27,8 @@ class BasketballGame : Game {
         return R.drawable.basketball
     }
 
-    override fun getNewGameData(context: Context): MutableMap<String, String> {
-        return super.getNewGameData(context).apply {
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        return super.getNewGameData(context)?.apply {
             put("mode", "n")
             put("skip_score1", "0")
             put("skip_score2", "0")

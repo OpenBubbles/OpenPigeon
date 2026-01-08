@@ -93,3 +93,13 @@ offset_bottom = 784.0
 text = "Mancala
 "
 script = ExtResource("1_4r7pt")
+
+[node name="QuestionsButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 143.0
+offset_top = 966.0
+offset_right = 489.0
+offset_bottom = 1027.0
+text = "Questions
+"
+script = ExtResource("1_4r7pt")

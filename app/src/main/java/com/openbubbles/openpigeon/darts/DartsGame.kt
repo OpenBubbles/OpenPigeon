@@ -51,8 +51,8 @@ class DartsGame : Game {
         gameMode = value
     }
 
-    override fun getNewGameData(context: Context): MutableMap<String, String> {
-        return super.getNewGameData(context).apply {
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        return super.getNewGameData(context)?.apply {
             put("mode", gameMode)
             put("style2", "0")
         }

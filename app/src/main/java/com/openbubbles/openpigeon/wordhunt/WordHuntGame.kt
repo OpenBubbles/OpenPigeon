@@ -85,8 +85,8 @@ class WordHuntGame : Game {
         return "47"
     }
 
-    override fun getNewGameData(context: Context): MutableMap<String, String> {
-        return super.getNewGameData(context).apply {
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        return super.getNewGameData(context)?.apply {
             put("letters", WordHuntActivity.generateLetterPool(WordHuntActivity.mode(mode)).joinToString(""))
             put("lang", "gp_en2")
             put("mode", "$mode")
