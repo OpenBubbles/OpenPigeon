@@ -60,15 +60,14 @@ import com.openbubbles.openpigeon.archery.ArcheryGame
 import com.openbubbles.openpigeon.basketball.BasketballGame
 import com.openbubbles.openpigeon.battleship.BattleshipGame
 import com.openbubbles.openpigeon.checkers.CheckersGame
+import com.openbubbles.openpigeon.chess.ChessGame
 import com.openbubbles.openpigeon.connect.ConnectGame
 import com.openbubbles.openpigeon.crazy8.Crazy8Game
 import com.openbubbles.openpigeon.darts.DartsGame
 import com.openbubbles.openpigeon.dots.DotsGame
 import com.openbubbles.openpigeon.fill.FillerGame
-import com.openbubbles.openpigeon.godot.GodotGameActivity
 import com.openbubbles.openpigeon.gomoku.GomokuGame
 import com.openbubbles.openpigeon.mancala.MancalaGame
-import com.openbubbles.openpigeon.paintball.PaintballGame
 import com.openbubbles.openpigeon.pong.PongGame
 import com.openbubbles.openpigeon.pool.PoolGame
 import com.openbubbles.openpigeon.questions.QuestionsGame
@@ -101,7 +100,6 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             PongGame(),
             Crazy8Game(),
             ConnectGame(),
-            PaintballGame(),
             FillerGame(),
             CheckersGame(),
             MancalaGame(),
@@ -111,8 +109,8 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             QuestionsGame(),
             WordHuntGame(), //Marked Hidden as inside Word Games Wrapper
             AnagramsGame(), //Marked Hidden as inside Word Games Wrapper
-            WordbitesGame() //Marked Hidden as inside Word Games Wrapper
-
+            WordbitesGame(), //Marked Hidden as inside Word Games Wrapper
+            ChessGame()
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://e7w14yawuau4"
-path="res://.godot/imported/move_1.png-4412d1074ffb80700c177b873a20d618.ctex"
+uid="uid://gx82nkebpwsv"
+path="res://.godot/imported/chess_wK.png-eb8ad9fdfd1be836531f2af855318d9b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://paintball/move_1.png"
-dest_files=["res://.godot/imported/move_1.png-4412d1074ffb80700c177b873a20d618.ctex"]
+source_file="res://chess/pieces/chess_wK.png"
+dest_files=["res://.godot/imported/chess_wK.png-eb8ad9fdfd1be836531f2af855318d9b.ctex"]
 
 [params]
 
