@@ -41,6 +41,7 @@ var isTurn					: bool	= false
 var game_settings_category	: String = ""
 var spectator_mode			: bool	= false
 var has_connected			: bool	= false
+var _last_applied_replay: String = ""
 var waitingForOpponent		: bool	= true
 var win_loss_state			: String = ""
 var replay					: String = ""
@@ -97,6 +98,15 @@ func _apply_turn_lock() -> void:
 		send_button.disabled = true
 		_update_send_button_visibility(false)
 
+func _clear_board_pieces() -> void:
+	_clear_last_highlight()
+	droppedPiece = null
+
+	for c in get_children():
+		if c is RigidBody2D:
+			var n: String = String(c.name)
+			if n.find(",") != -1:
+				c.queue_free()
 
 func _set_game_data(new_replay: String) -> void:
 	var data: Dictionary = JSON.parse_string(new_replay)
@@ -129,9 +139,11 @@ func _set_game_data(new_replay: String) -> void:
 			opp_avatar_display.call_deferred("update_avatar_from_data", opp_data)
 
 	_apply_player_piece_icons()
+	_label_you_box()
+	_hydrate_board_from_replay(replay)
+
 	game_over = _check_and_finalize_from_board()
 	_apply_turn_state()
-	_ready()
 
 func _resolve_my_side(my_id: String, p1_id: String, p2_id: String, owner: int, my_turn: bool) -> int:
 	if my_id != "" and p1_id != "" and p2_id != "":
@@ -156,23 +168,43 @@ func _label_you_box() -> void:
 		(box.get_child(0) as Label).set_text("[center]You[/center]")
 
 func _hydrate_board_from_replay(rep: String) -> void:
+	if rep.is_empty():
+		return
+
+	if rep == _last_applied_replay:
+		return
+	_last_applied_replay = rep
+
+	_clear_board_pieces()
+
 	var parts: PackedStringArray = rep.split("|")
-	var board: PackedStringArray = parts[0].substr(6).split(",")	# after "board:"
-	if firstReplay:
-		for y in range(0, BOARD_H):
-			for x in range(0, BOARD_W):
-				var v: String = board[y * BOARD_W + x]
-				if v == "1":
-					spawnPiece(x, PIECE_YELLOW, y, true)
-				elif v == "2":
-					spawnPiece(x, PIECE_RED, y, true)
-		firstReplay = false
+	if parts.is_empty():
+		return
+
+	var head: String = String(parts[0])
+	if not head.begins_with("board:"):
+		return
+
+	var board: PackedStringArray = head.substr(6).split(",")
+	if board.size() < BOARD_W * BOARD_H:
+		return
+
+	for y in range(0, BOARD_H):
+		for x in range(0, BOARD_W):
+			var v: String = board[y * BOARD_W + x]
+			if v == "1":
+				spawnPiece(x, PIECE_YELLOW, y, true)
+			elif v == "2":
+				spawnPiece(x, PIECE_RED, y, true)
+
 	for p in parts:
 		if p.begins_with("move:"):
-			var mv: PackedStringArray = p.substr(5).split(",")	# x,y,playerId
+			var mv: PackedStringArray = p.substr(5).split(",") # x,y,playerId
 			if mv.size() >= 3:
+				var mx: int = int(mv[0])
+				var my: int = int(mv[1])
 				var color: String = _player_id_to_color(int(mv[2]))
-				spawnPiece(int(mv[0]), color, -1, true)
+				spawnPiece(mx, color, my, true)
 
 func _build_replay_payload() -> Dictionary:
 	if droppedPiece == null:
@@ -627,25 +659,30 @@ func _on_dot_timer_timeout() -> void:
 func on_rules_button_pressed() -> void:
 	if not is_instance_valid(rules_button):
 		return
-	await _tap_bounce(rules_button)
 
-	var popup: Control = RULES_POPUP_SCENE.instantiate()
-	var dim: ColorRect = _make_dim(popup)
+	rules_button.pivot_offset = rules_button.size / 2.0
+	var tween := create_tween()
+	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await tween.finished
 
-	var title: Label = popup.find_child("Title", true, false) as Label
-	if title:
-		title.text = "How to Play Four In A Row"
+	var popup := RULES_POPUP_SCENE.instantiate() as RulesPopup
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-	var rules: RichTextLabel = popup.find_child("RulesLabel", true, false) as RichTextLabel
-	if rules:
-		rules.bbcode_enabled = true
-		rules.visible = true
-		rules.fit_content = true
-		rules.scroll_active = false
-		rules.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		rules.text = _get_rules_text()
+	var root := get_tree().root
+	root.add_child(dim)
+	root.add_child(popup)
+	popup.z_index = 100
+	dim.z_index = 99
 
-	_show_center_scale_in(popup)
+	popup.tree_exited.connect(func():
+		if is_instance_valid(dim):
+			dim.queue_free()
+	)
+
+	popup.open("How to Play Four In A Row", _get_rules_text())
 
 func _on_settings_button_pressed() -> void:
 	if not is_instance_valid(settings_button):
@@ -726,19 +763,6 @@ func _make_dim(popup: Control) -> ColorRect:
 			_lock_interaction_briefly()
 		)
 	return dim
-
-func _show_center_scale_in(popup: Control) -> void:
-	popup.set_as_top_level(true)
-	popup.visible = true
-	await get_tree().process_frame
-	var vp: Vector2 = get_viewport_rect().size
-	popup.size = Vector2(vp.x * 0.9, popup.get_combined_minimum_size().y)
-	popup.set_pivot_offset(popup.size / 2)
-	popup.position = (vp / 2) - (popup.size / 2)
-	popup.scale = Vector2.ZERO
-	var t: Tween = create_tween()
-	t.tween_property(popup, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	popup.grab_focus()
 
 func _slide_up_in(popup: Control) -> void:
 	popup.set_as_top_level(true)

@@ -1,8 +1,28 @@
-[gd_scene load_steps=5 format=3 uid="uid://b8lajx2v3mn4p"]
+[gd_scene load_steps=21 format=3 uid="uid://b8lajx2v3mn4p"]
 
 [ext_resource type="Script" uid="uid://c2tucuh4qvd1y" path="res://chess/chess.gd" id="1"]
-[ext_resource type="Texture2D" uid="uid://c5vnqtru5m53v" path="res://chess/pieces/chess_wK.png" id="2_wk"]
-[ext_resource type="Texture2D" uid="uid://bssq5dvr0wpwb" path="res://chess/pieces/chess_bK.png" id="3_bk"]
+[ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_6ithn"]
+[ext_resource type="Texture2D" uid="uid://cswvpaebcr2k2" path="res://chess/chess_marker.png" id="3_awjd8"]
+[ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="4_awjd8"]
+[ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="5_6ithn"]
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_hp2ci"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_d3h5h"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_a7n7t"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_xo6sa"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_0wno7"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_yqr8p"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4qhse"]
 bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
@@ -11,75 +31,149 @@ corner_radius_top_right = 25
 corner_radius_bottom_right = 25
 corner_radius_bottom_left = 25
 
-[node name="Chess" type="Node2D"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_hp2ci"]
+texture = ExtResource("4_awjd8")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_d3h5h"]
+texture = ExtResource("4_awjd8")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_a7n7t"]
+texture = ExtResource("4_awjd8")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_xo6sa"]
+texture = ExtResource("5_6ithn")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_0wno7"]
+texture = ExtResource("5_6ithn")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_yqr8p"]
+texture = ExtResource("5_6ithn")
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_6ithn"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hp2ci"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[node name="Chess" type="Control"]
+z_index = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("1")
 
-[node name="Player1Box" type="Panel" parent="."]
-top_level = true
-offset_left = 413.0
-offset_top = 36.0
-offset_right = 559.0
-offset_bottom = 193.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
-
-[node name="P1Label" type="RichTextLabel" parent="Player1Box"]
+[node name="MarginContainer" type="MarginContainer" parent="."]
 layout_mode = 0
-offset_left = 1.0
-offset_top = 90.2499
-offset_right = 148.0
-offset_bottom = 138.25
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]Player 2[/center]"
+offset_right = 648.0
+offset_bottom = 135.0
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 40
 
-[node name="PlayerChessBlack" type="Sprite2D" parent="Player1Box"]
-position = Vector2(108, 86)
-texture = ExtResource("3_bk")
+[node name="TopBarContainer" type="HBoxContainer" parent="MarginContainer"]
+layout_mode = 2
 
-[node name="Player2Box" type="Panel" parent="."]
-top_level = true
-offset_left = 87.0
-offset_top = 36.0
-offset_right = 233.0
-offset_bottom = 193.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
+[node name="PlayerContainer" type="VBoxContainer" parent="MarginContainer/TopBarContainer"]
+layout_mode = 2
+size_flags_horizontal = 0
 
-[node name="P2Label" type="RichTextLabel" parent="Player2Box"]
-layout_mode = 0
-offset_left = 1.0
-offset_top = 90.2499
-offset_right = 148.0
-offset_bottom = 138.25
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]Player 1[/center]"
+[node name="YouLabel" type="Label" parent="MarginContainer/TopBarContainer/PlayerContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 18
+text = "You"
+horizontal_alignment = 1
 
-[node name="PlayerChessWhite" type="Sprite2D" parent="Player2Box"]
-position = Vector2(108, 86)
-texture = ExtResource("2_wk")
+[node name="PlayerAvatarDisplay" parent="MarginContainer/TopBarContainer/PlayerContainer" instance=ExtResource("2_6ithn")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_hp2ci")
+texture_pressed = SubResource("ViewportTexture_d3h5h")
+texture_hover = SubResource("ViewportTexture_a7n7t")
+is_display_only = true
 
-[node name="waitingLabel" type="Panel" parent="."]
-visible = false
-top_level = true
-offset_left = 116.0
-offset_top = 609.0
-offset_right = 546.0
-offset_bottom = 709.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/TopBarContainer"]
+layout_mode = 2
 
-[node name="RichTextLabel" type="RichTextLabel" parent="waitingLabel"]
-layout_mode = 0
-offset_left = 14.0
-offset_top = 29.2222
-offset_right = 417.0
-offset_bottom = 71.2222
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]WAITING FOR OPPONENT...[/center]"
+[node name="Control" type="Control" parent="MarginContainer/TopBarContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+
+[node name="PlayerMarker" type="TextureRect" parent="MarginContainer/TopBarContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 64)
+layout_mode = 2
+texture = ExtResource("3_awjd8")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Control" type="Control" parent="MarginContainer/TopBarContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VBoxContainer2" type="VBoxContainer" parent="MarginContainer/TopBarContainer"]
+layout_mode = 2
+
+[node name="Control" type="Control" parent="MarginContainer/TopBarContainer/VBoxContainer2"]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+
+[node name="OpponentMarker" type="TextureRect" parent="MarginContainer/TopBarContainer/VBoxContainer2"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 64)
+layout_mode = 2
+texture = ExtResource("3_awjd8")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="OppContainer" type="VBoxContainer" parent="MarginContainer/TopBarContainer"]
+layout_mode = 2
+size_flags_horizontal = 8
+
+[node name="OppLabel" type="Control" parent="MarginContainer/TopBarContainer/OppContainer"]
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
+
+[node name="OppAvatarDisplay" parent="MarginContainer/TopBarContainer/OppContainer" instance=ExtResource("2_6ithn")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 1
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_xo6sa")
+texture_pressed = SubResource("ViewportTexture_0wno7")
+texture_hover = SubResource("ViewportTexture_yqr8p")
+is_display_only = true
+controlled_by_data = true
 
 [node name="winLoseLabel" type="Panel" parent="."]
 visible = false
 top_level = true
+layout_mode = 0
 offset_left = 116.0
 offset_top = 609.0
 offset_right = 546.0
@@ -97,6 +191,7 @@ bbcode_enabled = true
 text = "[center]YOU WIN![/center]"
 
 [node name="SendButton" type="Button" parent="."]
+layout_mode = 0
 offset_left = 112.0
 offset_top = 1068.0
 offset_right = 232.0
@@ -104,3 +199,120 @@ offset_bottom = 1118.0
 disabled = true
 text = "Send
 "
+
+[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="."]
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -94.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme_override_constants/separation = 10
+
+[node name="MarginContainer" type="MarginContainer" parent="BottomItemHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 30
+
+[node name="SettingsButton" type="Button" parent="BottomItemHBoxContainer/MarginContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 10
+size_flags_vertical = 8
+focus_mode = 0
+theme_override_font_sizes/font_size = 32
+theme_override_styles/normal = SubResource("StyleBoxTexture_hp2ci")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_d3h5h")
+theme_override_styles/hover = SubResource("StyleBoxTexture_a7n7t")
+
+[node name="RulesButton" type="Button" parent="BottomItemHBoxContainer/MarginContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 8
+focus_mode = 0
+theme_override_font_sizes/font_size = 32
+theme_override_styles/normal = SubResource("StyleBoxTexture_xo6sa")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_0wno7")
+theme_override_styles/hover = SubResource("StyleBoxTexture_yqr8p")
+
+[node name="WaitBlur" type="ColorRect" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.152941, 0.152941, 0.152941, 0.556863)
+
+[node name="DotTimer" type="Timer" parent="."]
+unique_name_in_owner = true
+wait_time = 0.75
+
+[node name="SpecLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 0
+offset_top = 165.0
+offset_right = 648.0
+offset_bottom = 234.0
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 50
+text = "Spectating..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SentLabel" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+z_index = 1
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -30.5
+offset_top = -17.5
+offset_right = 30.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_6ithn")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WaitForOpponentLabel" type="Label" parent="."]
+unique_name_in_owner = true
+z_index = 11
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -163.0
+offset_top = -17.5
+offset_right = 163.0
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_hp2ci")
+text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1

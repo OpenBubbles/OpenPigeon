@@ -28,6 +28,10 @@ func decode_ship(encodedShip: String, battleground: BattleGround):
 			length = len(parts)
 	
 	set_len(length)
+	start.y = (battleground.rows - 1) - start.y
+	if not is_horizontal:
+		start.y -= (length - 1)
+
 	set_grid_position(start, is_horizontal)
 	if not is_horizontal:
 		rotate(-PI / 2)

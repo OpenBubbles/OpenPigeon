@@ -1,12 +1,14 @@
-[gd_scene load_steps=43 format=3 uid="uid://boa2cnt5daakv"]
+[gd_scene load_steps=54 format=3 uid="uid://boa2cnt5daakv"]
 
 [ext_resource type="Script" uid="uid://dk82qyx6ut4l5" path="res://basketball/basketball.gd" id="1_oq83f"]
-[ext_resource type="Script" uid="uid://cvxqha68lb1tx" path="res://basketball/button_click.gd" id="2_0e03b"]
+[ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_banb7"]
 [ext_resource type="Script" uid="uid://bn3bvbnu1sr7k" path="res://basketball/ball.gd" id="2_j8ag5"]
+[ext_resource type="Texture2D" uid="uid://uxlguvauwvmq" path="res://basketball/next.png" id="2_jqehr"]
 [ext_resource type="Texture2D" uid="uid://daj3ssi0w1lee" path="res://basketball/basketball_floor.png" id="2_ryf8r"]
-[ext_resource type="Texture2D" uid="uid://dutexrlgv763w" path="res://basketball/brickwall.jpeg" id="3_7e2oe"]
+[ext_resource type="Texture2D" uid="uid://bi1qiwxpfjoyd" path="res://basketball/next_pressed.png" id="3_diu2m"]
 [ext_resource type="Texture2D" uid="uid://ermcfvwnyb8n" path="res://basketball/balldimpled.png" id="3_edmja"]
 [ext_resource type="Texture2D" uid="uid://dhj26lkqags20" path="res://basketball/backboard.png" id="3_julsv"]
+[ext_resource type="Shader" uid="uid://u71dhdy6vd5k" path="res://basketball/bricks.gdshader" id="6_jqehr"]
 [ext_resource type="Texture2D" uid="uid://jkmn81x6v6s" path="res://basketball/AdobeStock_530856469.png" id="8_banb7"]
 [ext_resource type="FontFile" uid="uid://dk1un3cvg4j5k" path="res://basketball/segment-eglas.ttf" id="8_kluaa"]
 [ext_resource type="Texture2D" uid="uid://bxkp6dpfg4vlk" path="res://basketball/scoreboard.png" id="9_lrgjq"]
@@ -24,12 +26,16 @@ sky = SubResource("Sky_512qa")
 tonemap_mode = 2
 glow_enabled = true
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_xqbk1"]
-bg_color = Color(0.303233, 0.303233, 0.303233, 0.72549)
-corner_radius_top_left = 25
-corner_radius_top_right = 25
-corner_radius_bottom_right = 25
-corner_radius_bottom_left = 25
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_u7o17"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0e03b"]
 bg_color = Color(1, 1, 1, 1)
@@ -45,21 +51,66 @@ outline_size = 3
 outline_color = Color(0, 0, 0, 1)
 
 [sub_resource type="LabelSettings" id="LabelSettings_kluaa"]
+font_size = 20
 font_color = Color(0, 0, 0, 1)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kluaa"]
-bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
-corner_radius_top_left = 25
-corner_radius_top_right = 25
-corner_radius_bottom_right = 25
-corner_radius_bottom_left = 25
-
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_banb7"]
-bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
-corner_radius_top_left = 25
-corner_radius_top_right = 25
-corner_radius_bottom_right = 25
-corner_radius_bottom_left = 25
+bg_color = Color(0.92941177, 0.5568628, 0.105882354, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 5.0
+expand_margin_top = 5.0
+expand_margin_right = 5.0
+expand_margin_bottom = 5.0
+shadow_color = Color(0, 0, 0, 0.3372549)
+shadow_size = 3
+shadow_offset = Vector2(0, 3)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jqehr"]
+bg_color = Color(0.66299707, 0.3861099, 0.027241236, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 5.0
+expand_margin_top = 5.0
+expand_margin_right = 5.0
+expand_margin_bottom = 5.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_diu2m"]
+bg_color = Color(0.92941177, 0.5568628, 0.105882354, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 5.0
+expand_margin_top = 5.0
+expand_margin_right = 5.0
+expand_margin_bottom = 5.0
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ofxhw"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_3ufe5"]
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_jqehr"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_diu2m"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_ofxhw"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_3ufe5"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_yj865"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_0odob"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_julsv"]
 albedo_texture = ExtResource("2_ryf8r")
@@ -82,10 +133,16 @@ data = PackedVector3Array(0, -12, -3.7485, 0, -12, 3.7485, 0, 12, -3.7485, 0, -1
 [sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_8nfq6"]
 data = PackedVector3Array(0, -12, -3.7485, 0, -12, 3.7485, 0, 12, -3.7485, 0, -12, 3.7485, 0, 12, 3.7485, 0, 12, -3.7485)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_xqbk1"]
-albedo_texture = ExtResource("3_7e2oe")
-uv1_scale = Vector3(1.5, 7.5, 1.5)
-uv1_offset = Vector3(-0.25, 0, 0)
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_diu2m"]
+render_priority = 0
+shader = ExtResource("6_jqehr")
+shader_parameter/noise_scale = 900.0
+shader_parameter/brick_shift = 1.6
+shader_parameter/brick_factor = 12.0
+shader_parameter/brick_scale = Vector2(80, 220)
+shader_parameter/brick_color = Vector4(0.411, 0.227, 0.117, 1)
+shader_parameter/brick_color2 = Vector4(0.37, 0.12, 0.04, 1)
+shader_parameter/mortar_joint_color = Vector4(1, 0.98777, 0.9877777, 1)
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_512qa"]
 size = Vector2(7.497, 24)
@@ -140,11 +197,9 @@ detail_blend_mode = 2
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_kluaa"]
 albedo_texture = ExtResource("9_lrgjq")
-uv1_scale = Vector3(0.65, 0.47, 1)
-uv1_offset = Vector3(0.17, 0.26, 0)
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_banb7"]
-size = Vector2(1.742, 0.735)
+size = Vector2(1.632, 0.5)
 orientation = 2
 
 [node name="BasketballScene" type="Node3D"]
@@ -154,159 +209,225 @@ script = ExtResource("1_oq83f")
 environment = SubResource("Environment_impb6")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
-transform = Transform3D(0.94786, 0.318682, 0.00174891, 0.228726, -0.684103, 0.692595, 0.221914, -0.656083, -0.721324, 0, 3.63211, -4.60591)
+transform = Transform3D(0.94785994, 0.31868216, 0.0017488081, -0.018200383, 0.048653334, 0.9986497, 0.3181669, -0.94661206, 0.05191669, 0, 3.63211, -1.4355421)
+light_color = Color(1, 0.916, 0.64, 1)
+light_energy = 0.5
 shadow_enabled = true
+
+[node name="DirectionalLight3D2" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.9478601, 0.3186824, 0.0017488871, -0.31596655, 0.93903863, 0.13554317, 0.041552946, -0.12902847, 0.99077, 0, 1.6744473, -1.4355421)
+light_color = Color(1, 0.748, 0.64, 1)
+light_energy = 0.3
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0.49)
 fov = 55.5
 far = 7.0
 
-[node name="SubViewportContainer" type="SubViewportContainer" parent="."]
-offset_right = 648.0
-offset_bottom = 1411.0
+[node name="MainOverlay" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
 
-[node name="SubViewport" type="SubViewport" parent="SubViewportContainer"]
-transparent_bg = true
-handle_input_locally = false
-size = Vector2i(648, 1400)
-render_target_update_mode = 4
+[node name="MarginContainer" type="MarginContainer" parent="MainOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 20
 
-[node name="BlackBackground" type="Panel" parent="SubViewportContainer/SubViewport"]
+[node name="CenterContainer" type="CenterContainer" parent="MainOverlay/MarginContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="WinLossLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer"]
+unique_name_in_owner = true
 visible = false
-top_level = true
-offset_left = -14.0
-offset_top = -13.0
-offset_right = 663.0
-offset_bottom = 1410.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_xqbk1")
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_u7o17")
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="Round1UI" type="Panel" parent="SubViewportContainer/SubViewport"]
+[node name="SentLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer"]
+unique_name_in_owner = true
 visible = false
-top_level = true
-offset_left = 105.0
-offset_top = 425.0
-offset_right = 549.0
-offset_bottom = 707.0
+z_index = 2
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_u7o17")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="waitingLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer"]
+unique_name_in_owner = true
+visible = false
+z_index = 1
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_u7o17")
+text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="RoundUI" type="PanelContainer" parent="MainOverlay/MarginContainer/CenterContainer"]
+unique_name_in_owner = true
+visible = false
+z_index = 1
+custom_minimum_size = Vector2(444, 282)
+layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_0e03b")
 
-[node name="Label" type="Label" parent="SubViewportContainer/SubViewport/Round1UI"]
-layout_mode = 0
-offset_left = 136.0
-offset_top = 11.0
-offset_right = 303.0
-offset_bottom = 71.0
+[node name="MarginContainer" type="MarginContainer" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI"]
+layout_mode = 2
+theme_override_constants/margin_left = 0
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 0
+theme_override_constants/margin_bottom = 20
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer"]
+layout_mode = 2
+
+[node name="RoundLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 0
 text = "Round 1"
 label_settings = SubResource("LabelSettings_lrgjq")
 
-[node name="Label2" type="Label" parent="SubViewportContainer/SubViewport/Round1UI"]
-layout_mode = 0
-offset_left = 133.0
-offset_top = 124.0
-offset_right = 310.0
-offset_bottom = 173.0
+[node name="GoalLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_font_sizes/font_size = 5
 text = "Score as many balls as 
 you can in 45 seconds"
 label_settings = SubResource("LabelSettings_kluaa")
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="StartButton" type="Button" parent="SubViewportContainer/SubViewport/Round1UI"]
-layout_mode = 0
-offset_left = 182.0
-offset_top = 222.0
-offset_right = 257.0
-offset_bottom = 255.0
+[node name="StartButton" type="Button" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 33)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 8
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_focus_color = Color(0, 0, 0, 1)
+theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
+theme_override_colors/font_hover_pressed_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxFlat_banb7")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_jqehr")
+theme_override_styles/hover = SubResource("StyleBoxFlat_diu2m")
+theme_override_styles/disabled = SubResource("StyleBoxEmpty_ofxhw")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_3ufe5")
 text = "Start"
-script = ExtResource("2_0e03b")
 
-[node name="Round2UI" type="Panel" parent="SubViewportContainer/SubViewport"]
+[node name="SkipButton" type="TextureButton" parent="MainOverlay/MarginContainer/CenterContainer"]
+unique_name_in_owner = true
 visible = false
-top_level = true
-offset_left = 105.0
-offset_top = 425.0
-offset_right = 549.0
-offset_bottom = 707.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_0e03b")
+layout_mode = 2
+texture_normal = ExtResource("2_jqehr")
+texture_pressed = ExtResource("3_diu2m")
 
-[node name="Label" type="Label" parent="SubViewportContainer/SubViewport/Round2UI"]
-layout_mode = 0
-offset_left = 136.0
-offset_top = 11.0
-offset_right = 303.0
-offset_bottom = 71.0
-text = "Round 2"
-label_settings = SubResource("LabelSettings_lrgjq")
+[node name="TopHBoxContainer" type="HBoxContainer" parent="MainOverlay/MarginContainer"]
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
 
-[node name="Label2" type="Label" parent="SubViewportContainer/SubViewport/Round2UI"]
+[node name="YouContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/TopHBoxContainer"]
+layout_mode = 2
+
+[node name="PlayerAvatarDisplay" parent="MainOverlay/MarginContainer/TopHBoxContainer/YouContainer" instance=ExtResource("2_banb7")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(96, 90)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_jqehr")
+texture_pressed = SubResource("ViewportTexture_diu2m")
+texture_hover = SubResource("ViewportTexture_ofxhw")
+ignore_texture_size = true
+is_display_only = true
+
+[node name="YouLabel" type="Label" parent="MainOverlay/MarginContainer/TopHBoxContainer/YouContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 18
+text = "You"
+horizontal_alignment = 1
+
+[node name="Control" type="Control" parent="MainOverlay/MarginContainer/TopHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+
+[node name="OppContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/TopHBoxContainer"]
+layout_mode = 2
+
+[node name="OppAvatarDisplay" parent="MainOverlay/MarginContainer/TopHBoxContainer/OppContainer" instance=ExtResource("2_banb7")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(96, 90)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_3ufe5")
+texture_pressed = SubResource("ViewportTexture_yj865")
+texture_hover = SubResource("ViewportTexture_0odob")
+ignore_texture_size = true
+is_display_only = true
+controlled_by_data = true
+
+[node name="Control" type="Control" parent="MainOverlay/MarginContainer/TopHBoxContainer/OppContainer"]
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
+
+[node name="DotTimer" type="Timer" parent="MainOverlay"]
+unique_name_in_owner = true
+wait_time = 0.75
+
+[node name="WaitBlur" type="ColorRect" parent="MainOverlay"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.152941, 0.152941, 0.152941, 0.556863)
+
+[node name="SpecLabel" type="Label" parent="MainOverlay"]
+unique_name_in_owner = true
+visible = false
 layout_mode = 0
-offset_left = 133.0
-offset_top = 124.0
-offset_right = 310.0
-offset_bottom = 173.0
-text = "Score as many balls as 
-you can in 45 seconds"
-label_settings = SubResource("LabelSettings_kluaa")
+offset_top = 129.0
+offset_right = 648.0
+offset_bottom = 198.0
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 50
+text = "Spectating..."
 horizontal_alignment = 1
 vertical_alignment = 1
-
-[node name="StartButton" type="Button" parent="SubViewportContainer/SubViewport/Round2UI"]
-layout_mode = 0
-offset_left = 182.0
-offset_top = 222.0
-offset_right = 257.0
-offset_bottom = 255.0
-text = "Start"
-script = ExtResource("2_0e03b")
-
-[node name="waitingLabel" type="Panel" parent="SubViewportContainer/SubViewport"]
-visible = false
-top_level = true
-z_index = 5
-offset_left = 116.0
-offset_top = 540.0
-offset_right = 546.0
-offset_bottom = 640.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_kluaa")
-
-[node name="RichTextLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/waitingLabel"]
-layout_mode = 0
-offset_left = 14.0
-offset_top = 29.2222
-offset_right = 417.0
-offset_bottom = 71.2222
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]WAITING FOR OPPONENT...[/center]"
-
-[node name="SkipButton" type="Button" parent="SubViewportContainer/SubViewport"]
-visible = false
-offset_left = 254.0
-offset_top = 847.0
-offset_right = 389.0
-offset_bottom = 893.0
-text = "Skip Replay"
-script = ExtResource("2_0e03b")
-
-[node name="winnerLabel" type="Panel" parent="SubViewportContainer/SubViewport"]
-visible = false
-top_level = true
-z_index = 5
-offset_left = 116.0
-offset_top = 540.0
-offset_right = 546.0
-offset_bottom = 640.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_banb7")
-
-[node name="RichTextLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/winnerLabel"]
-layout_mode = 0
-offset_left = 16.0
-offset_top = 29.2222
-offset_right = 419.0
-offset_bottom = 71.2222
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]YOU WIN![/center]"
 
 [node name="floor" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0046854, -0.6, -1.52002)
@@ -345,8 +466,8 @@ collision_mask = 3
 shape = SubResource("ConcavePolygonShape3D_8nfq6")
 
 [node name="wall" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00220406, 0.00190681, -4.49693)
-material_override = SubResource("StandardMaterial3D_xqbk1")
+transform = Transform3D(1, 0, 0, 0, 0.24642593, 0, 0, 0, 1, 0.010828614, 0.027707396, -4.5087376)
+material_override = SubResource("ShaderMaterial_diu2m")
 mesh = SubResource("PlaneMesh_512qa")
 skeleton = NodePath("../Camera3D")
 
@@ -381,16 +502,6 @@ collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 contact_monitor = true
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere1"]
-shape = SubResource("SphereShape3D_j8ag5")
-
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere1"]
-use_collision = true
-radius = 0.012
-radial_segments = 24
-rings = 24
-material = SubResource("StandardMaterial3D_10mmx")
 
 [node name="HoopCollisionSphere2" type="RigidBody3D" parent="hoop_collision"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.135, 0.845, -3.518)
@@ -553,9 +664,11 @@ physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere11"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -1.7978063e-11, 0, -0.018390656)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere11"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -1.7978063e-11, 0, -0.018390656)
 use_collision = true
 radius = 0.012
 radial_segments = 24
@@ -570,9 +683,11 @@ physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere12"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.00070886314, 0, -0.01330781)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere12"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.00070886314, 0, -0.01330781)
 use_collision = true
 radius = 0.012
 radial_segments = 24
@@ -587,9 +702,11 @@ physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere13"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.00070886314, 0, 0.01330781)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere13"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.00070886314, 0, 0.01330781)
 use_collision = true
 radius = 0.012
 radial_segments = 24
@@ -604,9 +721,11 @@ physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere14"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.00070886314, 0, -0.01330781)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere14"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.00070886314, 0, -0.01330781)
 use_collision = true
 radius = 0.012
 radial_segments = 24
@@ -621,9 +740,11 @@ physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere15"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.00070886314, 0, 0.01330781)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere15"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.00070886314, 0, 0.01330781)
 use_collision = true
 radius = 0.012
 radial_segments = 24
@@ -638,9 +759,11 @@ physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere16"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.0010004789, 0, 0)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere16"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.0010004789, 0, 0)
 use_collision = true
 radius = 0.012
 radial_segments = 24
@@ -655,9 +778,11 @@ physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere17"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -1.7978063e-11, 0, 0.018390656)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere17"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -1.7978063e-11, 0, 0.018390656)
 use_collision = true
 radius = 0.012
 radial_segments = 24
@@ -672,9 +797,11 @@ physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere18"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.0010004789, 0, 0)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere18"]
+transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.0010004789, 0, 0)
 use_collision = true
 radius = 0.012
 radial_segments = 24
@@ -682,6 +809,7 @@ rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
 [node name="Ball" type="RigidBody3D" parent="."]
+unique_name_in_owner = true
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.091, -0.45, 2.16719)
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
@@ -716,30 +844,60 @@ sides = 25
 material = SubResource("StandardMaterial3D_lrgjq")
 
 [node name="Scoreboard" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00220406, 2.05542, -4.06871)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0010493998, 1.8829808, -4.06871)
 material_override = SubResource("StandardMaterial3D_kluaa")
 mesh = SubResource("PlaneMesh_banb7")
 skeleton = NodePath("../Camera3D")
 
 [node name="Time" type="Label3D" parent="Scoreboard"]
-transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.00753897, -0.0821884, 0.00315475)
-text = "0:45"
+unique_name_in_owner = true
+transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.0010318127, -0.054722667, 0.0031547546)
+modulate = Color(0.85, 0.68000007, 0, 1)
+text = "00:45"
+font = ExtResource("8_kluaa")
+font_size = 23
+outline_size = 0
+
+[node name="Off_Time" type="Label3D" parent="Scoreboard"]
+transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.0010318127, -0.054722667, 0.0031547546)
+modulate = Color(0.45223302, 0.3534233, 0, 0.13725491)
+text = "88:88"
 font = ExtResource("8_kluaa")
 font_size = 23
 outline_size = 0
 
 [node name="YouScore" type="Label3D" parent="Scoreboard"]
-transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, -0.543613, -0.0821884, 0.00315475)
+unique_name_in_owner = true
+transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, -0.544, -0.084, 0.003)
+modulate = Color(0.77, 0, 0, 1)
 text = "00"
 font = ExtResource("8_kluaa")
-font_size = 38
+font_size = 28
+outline_size = 0
+
+[node name="Off_Segment" type="Label3D" parent="Scoreboard"]
+transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, -0.544, -0.084, 0.003)
+modulate = Color(0.44705883, 0, 0, 0.13725491)
+text = "88"
+font = ExtResource("8_kluaa")
+font_size = 28
 outline_size = 0
 
 [node name="OppScore" type="Label3D" parent="Scoreboard"]
-transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.585, -0.082, 0.003)
+unique_name_in_owner = true
+transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.56, -0.084, 0.003)
+modulate = Color(0.76862746, 0, 0, 1)
 text = "00"
 font = ExtResource("8_kluaa")
-font_size = 38
+font_size = 28
+outline_size = 0
+
+[node name="Off_Segment2" type="Label3D" parent="Scoreboard"]
+transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.56, -0.085, 0.003)
+modulate = Color(0.44894964, 1.3055467e-06, 9.62615e-08, 0.13725491)
+text = "88"
+font = ExtResource("8_kluaa")
+font_size = 28
 outline_size = 0
 
 [node name="StaticBody3D" type="StaticBody3D" parent="Scoreboard"]

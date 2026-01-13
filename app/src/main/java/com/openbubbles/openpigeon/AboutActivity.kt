@@ -23,14 +23,15 @@ class AboutActivity : Activity() {
                 Word Hunt - npulse4
                 Four in a Row - jakecrowley & ty8447
                 Basketball - jakecrowley
-                Sea Battle - Copper
+                Sea Battle - Copper + ty8447
                 Crazy 8 - Copper
                 Darts - jakecrowley
                 8 Ball - Copper
                 Cup Pong - jakecrowley
-                Archery - jakecrowley
+                Archery - jakecrowley + ty8447
                 Reversi - ty8447
                 Filler - ty8447
+                Chess - chasedredmon
                 Mancala - ty8447
                 Dots & Boxes - ty8447
                 Gomoku - ty8447

@@ -1,0 +1,13 @@
+[gd_resource type="NoiseTexture2D" load_steps=2 format=3 uid="uid://b1s2ymrrgenod"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_cago6"]
+seed = 175
+frequency = 0.0053
+fractal_octaves = 4
+fractal_lacunarity = 3.0
+fractal_gain = 0.8
+domain_warp_enabled = true
+
+[resource]
+noise = SubResource("FastNoiseLite_cago6")
+seamless = true

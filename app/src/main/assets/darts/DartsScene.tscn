@@ -1,4 +1,4 @@
-[gd_scene load_steps=26 format=3 uid="uid://dt0qnb8fe3gky"]
+[gd_scene load_steps=41 format=3 uid="uid://dt0qnb8fe3gky"]
 
 [ext_resource type="Script" uid="uid://ctiesunb7o0wh" path="res://darts/darts.gd" id="1_bx3e1"]
 [ext_resource type="Script" uid="uid://cmr4dswtwrusy" path="res://darts/dart.gd" id="1_sjdir"]
@@ -7,8 +7,9 @@
 [ext_resource type="ArrayMesh" uid="uid://dkns4r0j7oo8x" path="res://darts/dart.obj" id="4_8o3o4"]
 [ext_resource type="Script" uid="uid://bl8v6cnx4tmg0" path="res://darts/dart_board.gd" id="4_sj7sf"]
 [ext_resource type="Script" uid="uid://cukl83aya8biu" path="res://darts/highlight.gd" id="5_uhkgs"]
-[ext_resource type="Script" uid="uid://7qyuc6nugln5" path="res://darts/waiting_label.gd" id="7_6r150"]
-[ext_resource type="Script" uid="uid://o4msc612ttor" path="res://darts/scorebox.gd" id="9_y5noq"]
+[ext_resource type="Texture2D" uid="uid://bbq34m7tcwfew" path="res://darts/Score_Card.png" id="10_g6j2t"]
+[ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="10_ge5bb"]
+[ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="11_g6j2t"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_uhkgs"]
 albedo_texture = ExtResource("2_8txtq")
@@ -58,26 +59,61 @@ albedo_color = Color(1, 0, 0, 1)
 
 [sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_8txtq"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sj7sf"]
-bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
-corner_radius_top_left = 25
-corner_radius_top_right = 25
-corner_radius_bottom_right = 25
-corner_radius_bottom_left = 25
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_trppf"]
+texture = ExtResource("11_g6j2t")
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_6r150"]
-bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
-corner_radius_top_left = 25
-corner_radius_top_right = 25
-corner_radius_bottom_right = 25
-corner_radius_bottom_left = 25
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_qck03"]
+texture = ExtResource("11_g6j2t")
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_uhkgs"]
-bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
-corner_radius_top_left = 25
-corner_radius_top_right = 25
-corner_radius_bottom_right = 25
-corner_radius_bottom_left = 25
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_4ltky"]
+texture = ExtResource("11_g6j2t")
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_y7fr1"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_4pw5h"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_grv75"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_56o8f"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_mtx0u"]
+
+[sub_resource type="FontVariation" id="FontVariation_hr6en"]
+variation_embolden = 1.0
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_4pw5h"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_grv75"]
+
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_56o8f"]
+color = Color(1, 1, 1, 1)
+thickness = 2
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_e4n3y"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_a3hv2"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_irnce"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_trppf"]
+
+[sub_resource type="FontVariation" id="FontVariation_qck03"]
+variation_embolden = 1.0
 
 [node name="DartsScene" type="Node3D"]
 script = ExtResource("1_bx3e1")
@@ -165,155 +201,263 @@ script = ExtResource("1_sjdir")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="dart/StaticBody3D"]
 shape = SubResource("ConcavePolygonShape3D_8txtq")
 
-[node name="SubViewportContainer" type="SubViewportContainer" parent="."]
-offset_right = 648.0
-offset_bottom = 1400.0
+[node name="MainOverlay" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="MainOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer"]
+layout_mode = 2
+
+[node name="TopHBoxContainer" type="HBoxContainer" parent="MainOverlay/MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 2
+size_flags_vertical = 0
+
+[node name="Control" type="Control" parent="MainOverlay/MarginContainer/VBoxContainer/TopHBoxContainer"]
+layout_mode = 2
 size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="SettingsButton" type="Button" parent="MainOverlay/MarginContainer/VBoxContainer/TopHBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 8
+focus_mode = 0
+theme_override_font_sizes/font_size = 32
+theme_override_styles/normal = SubResource("StyleBoxTexture_trppf")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_qck03")
+theme_override_styles/hover = SubResource("StyleBoxTexture_4ltky")
+
+[node name="CenterContainer" type="CenterContainer" parent="MainOverlay/MarginContainer/VBoxContainer"]
+layout_mode = 2
 size_flags_vertical = 3
-stretch = true
+mouse_filter = 2
 
-[node name="SubViewport" type="SubViewport" parent="SubViewportContainer"]
-transparent_bg = true
-handle_input_locally = false
-size = Vector2i(648, 1400)
-size_2d_override_stretch = true
-render_target_update_mode = 4
-
-[node name="waitingLabel" type="Panel" parent="SubViewportContainer/SubViewport"]
+[node name="WinLossLabel" type="Label" parent="MainOverlay/MarginContainer/VBoxContainer/CenterContainer"]
+unique_name_in_owner = true
 visible = false
-top_level = true
-z_index = 5
-offset_left = 116.0
-offset_top = 540.0
-offset_right = 546.0
-offset_bottom = 640.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_sj7sf")
-script = ExtResource("7_6r150")
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_y7fr1")
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="RichTextLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/waitingLabel"]
-layout_mode = 0
-offset_left = 14.0
-offset_top = 29.2222
-offset_right = 417.0
-offset_bottom = 71.2222
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]WAITING FOR OPPONENT...[/center]"
-
-[node name="winnerLabel" type="Panel" parent="SubViewportContainer/SubViewport"]
+[node name="SentLabel" type="Label" parent="MainOverlay/MarginContainer/VBoxContainer/CenterContainer"]
+unique_name_in_owner = true
 visible = false
-top_level = true
-z_index = 5
-offset_left = 116.0
-offset_top = 540.0
-offset_right = 546.0
-offset_bottom = 640.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_6r150")
+z_index = 1
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_y7fr1")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="RichTextLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/winnerLabel"]
-layout_mode = 0
-offset_left = 16.0
-offset_top = 29.2222
-offset_right = 419.0
-offset_bottom = 71.2222
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]YOU WIN![/center]"
-
-[node name="bustLabel" type="Panel" parent="SubViewportContainer/SubViewport"]
+[node name="waitingLabel" type="Label" parent="MainOverlay/MarginContainer/VBoxContainer/CenterContainer"]
+unique_name_in_owner = true
 visible = false
-top_level = true
-z_index = 5
-offset_left = 231.0
-offset_top = 540.0
-offset_right = 409.0
-offset_bottom = 640.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_6r150")
+z_index = 1
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_y7fr1")
+text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="RichTextLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/bustLabel"]
+[node name="BustLabel" type="Label" parent="MainOverlay/MarginContainer/VBoxContainer/CenterContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_y7fr1")
+text = "BUST!"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="BottomHBoxContainer" type="HBoxContainer" parent="MainOverlay/MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
+
+[node name="YouContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer"]
+layout_mode = 2
+
+[node name="YouLabel" type="Label" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/YouContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_font_sizes/font_size = 18
+text = "You"
+horizontal_alignment = 1
+
+[node name="PlayerAvatarDisplay" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/YouContainer" instance=ExtResource("10_ge5bb")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(96, 90)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_4pw5h")
+texture_pressed = SubResource("ViewportTexture_grv75")
+texture_hover = SubResource("ViewportTexture_56o8f")
+ignore_texture_size = true
+is_display_only = true
+
+[node name="Control" type="Control" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/YouContainer"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="PlayerPanelContainer" type="PanelContainer" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/YouContainer"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxEmpty_mtx0u")
+
+[node name="TextureRect" type="TextureRect" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/YouContainer/PlayerPanelContainer"]
+layout_mode = 2
+texture = ExtResource("10_g6j2t")
+expand_mode = 5
+stretch_mode = 5
+
+[node name="MarginContainer" type="MarginContainer" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/YouContainer/PlayerPanelContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/YouContainer/PlayerPanelContainer/MarginContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="PlayerScoreLabel" type="Label" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/YouContainer/PlayerPanelContainer/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_fonts/font = SubResource("FontVariation_hr6en")
+theme_override_font_sizes/font_size = 22
+theme_override_styles/normal = SubResource("StyleBoxEmpty_4pw5h")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_grv75")
+text = "101"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Divider" type="HSeparator" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/YouContainer/PlayerPanelContainer/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_styles/separator = SubResource("StyleBoxLine_56o8f")
+
+[node name="Control" type="Control" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+
+[node name="OppContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer"]
+layout_mode = 2
+
+[node name="Control" type="Control" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/OppContainer"]
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
+
+[node name="OppAvatarDisplay" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/OppContainer" instance=ExtResource("10_ge5bb")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(96, 90)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_e4n3y")
+texture_pressed = SubResource("ViewportTexture_a3hv2")
+texture_hover = SubResource("ViewportTexture_irnce")
+ignore_texture_size = true
+is_display_only = true
+controlled_by_data = true
+
+[node name="Control2" type="Control" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/OppContainer"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="PlayerPanelContainer" type="PanelContainer" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/OppContainer"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxEmpty_trppf")
+
+[node name="TextureRect" type="TextureRect" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/OppContainer/PlayerPanelContainer"]
+layout_mode = 2
+texture = ExtResource("10_g6j2t")
+expand_mode = 5
+stretch_mode = 5
+
+[node name="MarginContainer" type="MarginContainer" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/OppContainer/PlayerPanelContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/OppContainer/PlayerPanelContainer/MarginContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="OpponentScoreLabel" type="Label" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/OppContainer/PlayerPanelContainer/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_fonts/font = SubResource("FontVariation_qck03")
+theme_override_font_sizes/font_size = 22
+theme_override_styles/normal = SubResource("StyleBoxEmpty_4pw5h")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_grv75")
+text = "101"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Divider2" type="HSeparator" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/OppContainer/PlayerPanelContainer/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_styles/separator = SubResource("StyleBoxLine_56o8f")
+
+[node name="DotTimer" type="Timer" parent="MainOverlay"]
+unique_name_in_owner = true
+wait_time = 0.75
+
+[node name="WaitBlur" type="ColorRect" parent="MainOverlay"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.152941, 0.152941, 0.152941, 0.556863)
+
+[node name="SpecLabel" type="Label" parent="MainOverlay"]
+unique_name_in_owner = true
+visible = false
 layout_mode = 0
-offset_left = 16.0
-offset_top = 29.0
-offset_right = 169.0
-offset_bottom = 71.0
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]BUST![/center]"
-
-[node name="YouBox" type="Panel" parent="SubViewportContainer/SubViewport"]
-top_level = true
-offset_left = 17.0
-offset_top = 1018.0
-offset_right = 170.0
-offset_bottom = 1136.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_uhkgs")
-script = ExtResource("9_y5noq")
-
-[node name="OpponentLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/YouBox"]
-layout_mode = 0
-offset_left = 3.0
-offset_top = 7.2499
-offset_right = 150.0
-offset_bottom = 55.25
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]You[/center]"
-
-[node name="OpponentLabel2" type="RichTextLabel" parent="SubViewportContainer/SubViewport/YouBox"]
-layout_mode = 0
-offset_left = 3.0
-offset_top = 13.2499
-offset_right = 150.0
-offset_bottom = 61.25
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]__________[/center]"
-
-[node name="ScoreLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/YouBox"]
-layout_mode = 0
-offset_left = 3.0
-offset_top = 64.2499
-offset_right = 150.0
-offset_bottom = 112.25
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]101[/center]"
-
-[node name="OpponentBox" type="Panel" parent="SubViewportContainer/SubViewport"]
-top_level = true
-offset_left = 479.0
-offset_top = 1018.0
-offset_right = 632.0
-offset_bottom = 1136.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_uhkgs")
-script = ExtResource("9_y5noq")
-
-[node name="OpponentLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/OpponentBox"]
-layout_mode = 0
-offset_left = 3.0
-offset_top = 7.2499
-offset_right = 150.0
-offset_bottom = 55.25
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]Opponent[/center]"
-
-[node name="OpponentLabel2" type="RichTextLabel" parent="SubViewportContainer/SubViewport/OpponentBox"]
-layout_mode = 0
-offset_left = 3.0
-offset_top = 13.2499
-offset_right = 150.0
-offset_bottom = 61.25
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]__________[/center]"
-
-[node name="ScoreLabel" type="RichTextLabel" parent="SubViewportContainer/SubViewport/OpponentBox"]
-layout_mode = 0
-offset_left = 3.0
-offset_top = 64.2499
-offset_right = 150.0
-offset_bottom = 112.25
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]101[/center]"
+offset_top = 129.0
+offset_right = 648.0
+offset_bottom = 198.0
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 50
+text = "Spectating..."
+horizontal_alignment = 1
+vertical_alignment = 1

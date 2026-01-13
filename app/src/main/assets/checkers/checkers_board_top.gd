@@ -1320,41 +1320,31 @@ func _on_rules_button_pressed() -> void:
 		return
 
 	rules_button.pivot_offset = rules_button.size / 2.0
-	var tween := _tween_for(rules_button)
+	var tween := create_tween()
 	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
 
-	var popup := RULES_POPUP_SCENE.instantiate()
+	var popup := RULES_POPUP_SCENE.instantiate() as RulesPopup
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.5)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	dim.gui_input.connect(_on_dim_gui_input_rules)
 
 	var root := get_tree().root
 	root.add_child(dim)
 	root.add_child(popup)
 	popup.z_index = 100
 	dim.z_index = 99
-	root.move_child(dim, root.get_child_count() - 2)
 
-	var close_btn := popup.find_child("CloseButton", true, false)
-	if close_btn:
-		close_btn.pressed.connect(_on_rules_close_pressed.bind(dim, popup))
+	popup.tree_exited.connect(func():
+		if is_instance_valid(dim):
+			dim.queue_free()
+	)
 
-	var title_label := popup.find_child("Title", true, false) as Label
-	if title_label:
-		title_label.text = "How to Play Checkers"
-
-	var rules_label := popup.find_child("RulesLabel", true, false) as RichTextLabel
-	if rules_label:
-		rules_label.bbcode_enabled = true
-		rules_label.visible = true
-		rules_label.fit_content = true
-		rules_label.scroll_active = false
-		rules_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		rules_label.text = """
+	popup.open("How to Play Checkers", _get_rules_text())
+	
+func _get_rules_text() -> String:
+	return """
 [font_size={32px}][b]Checkers[/b][/font_size]
 
 [font_size={24px}][b]Objective[/b][/font_size]
@@ -1379,22 +1369,6 @@ The other player is declared the winner.
 [/font_size]
 
 """
-
-	popup.set_as_top_level(true)
-	popup.visible = true
-	await get_tree().process_frame
-
-	var viewport_size := get_viewport_rect().size
-	var desired_width := viewport_size.x * 0.9
-	var desired_height: float = popup.get_combined_minimum_size().y
-	popup.size = Vector2(desired_width, desired_height)
-	popup.set_pivot_offset(popup.size / 2)
-	popup.position = (viewport_size / 2) - (popup.size / 2)
-	popup.scale = Vector2.ZERO
-
-	var popup_tween := create_tween()
-	popup_tween.tween_property(popup, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	popup.grab_focus()
 
 func _on_dim_gui_input_rules(e: InputEvent) -> void:
 	if e is InputEventMouseButton and e.pressed:

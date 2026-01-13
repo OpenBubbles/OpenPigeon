@@ -1,4 +1,4 @@
-[gd_scene load_steps=32 format=3 uid="uid://b0pa50r0ro6gl"]
+[gd_scene load_steps=32 format=3 uid="uid://bwjdrxq5q74fe"]
 
 [ext_resource type="Script" uid="uid://kiiu4bojif1i" path="res://questions/questions.gd" id="1_wbs8s"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_v8hg5"]
