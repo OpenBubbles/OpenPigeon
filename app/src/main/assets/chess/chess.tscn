@@ -1,9 +1,8 @@
-[gd_scene load_steps=22 format=3 uid="uid://b8lajx2v3mn4p"]
+[gd_scene load_steps=21 format=3 uid="uid://b8lajx2v3mn4p"]
 
 [ext_resource type="Script" uid="uid://c2tucuh4qvd1y" path="res://chess/chess.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_6ithn"]
-[ext_resource type="Texture2D" uid="uid://gx82nkebpwsv" path="res://chess/pieces/chess_wK.png" id="2_wk"]
-[ext_resource type="Texture2D" uid="uid://2a0k3h4per3b" path="res://chess/pieces/chess_bK.png" id="3_bk"]
+[ext_resource type="Texture2D" uid="uid://cswvpaebcr2k2" path="res://chess/chess_marker.png" id="3_awjd8"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="4_awjd8"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="5_6ithn"]
 
@@ -73,6 +72,7 @@ expand_margin_right = 20.0
 expand_margin_bottom = 10.0
 
 [node name="Chess" type="Control"]
+z_index = 3
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -117,19 +117,39 @@ texture_pressed = SubResource("ViewportTexture_d3h5h")
 texture_hover = SubResource("ViewportTexture_a7n7t")
 is_display_only = true
 
-[node name="PlayerChessBlack" type="TextureRect" parent="MarginContainer/TopBarContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/TopBarContainer"]
 layout_mode = 2
-texture = ExtResource("3_bk")
-expand_mode = 3
+
+[node name="Control" type="Control" parent="MarginContainer/TopBarContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+
+[node name="PlayerMarker" type="TextureRect" parent="MarginContainer/TopBarContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 64)
+layout_mode = 2
+texture = ExtResource("3_awjd8")
+expand_mode = 1
 stretch_mode = 5
 
 [node name="Control" type="Control" parent="MarginContainer/TopBarContainer"]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="PlayerChessWhite" type="TextureRect" parent="MarginContainer/TopBarContainer"]
+[node name="VBoxContainer2" type="VBoxContainer" parent="MarginContainer/TopBarContainer"]
 layout_mode = 2
-texture = ExtResource("2_wk")
+
+[node name="Control" type="Control" parent="MarginContainer/TopBarContainer/VBoxContainer2"]
+custom_minimum_size = Vector2(0, 50)
+layout_mode = 2
+
+[node name="OpponentMarker" type="TextureRect" parent="MarginContainer/TopBarContainer/VBoxContainer2"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 64)
+layout_mode = 2
+texture = ExtResource("3_awjd8")
+expand_mode = 1
+stretch_mode = 5
 
 [node name="OppContainer" type="VBoxContainer" parent="MarginContainer/TopBarContainer"]
 layout_mode = 2
@@ -277,8 +297,7 @@ vertical_alignment = 1
 
 [node name="WaitForOpponentLabel" type="Label" parent="."]
 unique_name_in_owner = true
-visible = false
-z_index = 1
+z_index = 11
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5

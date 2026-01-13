@@ -52,6 +52,9 @@ var flip_board_ui: bool = false  # Whether to flip the board UI to put local pla
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var background: ColorRect = %Background
+@onready var player_marker: TextureRect = %PlayerMarker
+@onready var opp_marker: TextureRect = %OpponentMarker
+
 
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
@@ -213,6 +216,7 @@ func _set_game_data(raw: String) -> void:
 	var ui_already_rebuilt: bool = false  # Track if we rebuilt UI early (before animation)
 	var data: Variant = JSON.parse_string(raw)
 	var opponent_avatar_key = ""
+	print("Raw Data: ", data)
 	_log("_set_game_data parse result type=%s" % typeof(data))
 	if typeof(data) == TYPE_DICTIONARY:
 		_log("_set_game_data: dictionary keys = %s" % str(data.keys()))
@@ -239,13 +243,19 @@ func _set_game_data(raw: String) -> void:
 		# Player 1 = black, Player 2 = white
 		my_color = "b" if my_player_index == 1 else "w"
 		if my_player_index == 1:
-			opponent_avatar_key = "avatar2"
-		else:
 			opponent_avatar_key = "avatar1"
+			player_marker.modulate = Color(0, 0, 0, 1)
+			opp_marker.modulate = Color(1, 1, 1, 1)
+		else:
+			opponent_avatar_key = "avatar2"
+			player_marker.modulate = Color(1, 1, 1, 1)
+			opp_marker.modulate = Color(0, 0, 0, 1)
 			
 		if opponent_avatar_key != "" and data.has(opponent_avatar_key):
+			print("Parsing Opponent Avatar")
 			var avatar_string = data[opponent_avatar_key]
 			var opponent_data = _parse_avatar_string(avatar_string)
+		
 			if is_instance_valid(opp_avatar_display):
 				opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 		# Track if orientation changed (for UI rebuild detection)
@@ -1943,7 +1953,7 @@ func _commit_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 	var to_send = {
 		"replay": gp_replay
 	}
-	var avatar_key := ("avatar1" if my_player_index == 1 else "avatar2")
+	var avatar_key := ("avatar2" if my_player_index == 1 else "avatar1")
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		to_send[avatar_key] = player_avatar_display.get_avatar_data_string()
 	if winner_decl != null:
