@@ -224,7 +224,7 @@ func _set_game_data(data_json: String) -> void:
 		return
 	var parsed: Dictionary = parsed_v
 	last_raw_payload = parsed.duplicate(true)
-
+	print("RAW DATA:", parsed)
 	is_my_turn = _get_b(parsed, "isYourTurn", false)
 	server_player_hint = int(_get_s(parsed, "player", "1"))
 	secret_answer = _get_s(parsed, "answer", secret_answer)
@@ -537,9 +537,11 @@ func _apply_answer_code_to_pending(code: int) -> void:
 func _send_game(text: String, q_idx: int, resp_code: int) -> void:
 	var chunks: Array[String] = []
 	for q in questions:
-		var c := "%s^&*%d^&*%d" % [q["text"], int(q["idx"]), int(q["resp"])]
+		var server_idx := int(q["idx"]) - 1
+		var c := "%s^&*%d^&*%d" % [str(q["text"]), server_idx, int(q["resp"])]
 		chunks.append(c)
-	var questions_field := "|".join(chunks)
+
+	var questions_field := "|][".join(chunks)
 
 	var payload: Dictionary = {
 		"game": "questions",

@@ -31,6 +31,7 @@ class AboutActivity : Activity() {
                 Archery - jakecrowley + ty8447
                 Reversi - ty8447
                 Filler - ty8447
+                Chess - chasedredmon
                 Mancala - ty8447
                 Dots & Boxes - ty8447
                 Gomoku - ty8447
