@@ -659,25 +659,30 @@ func _on_dot_timer_timeout() -> void:
 func on_rules_button_pressed() -> void:
 	if not is_instance_valid(rules_button):
 		return
-	await _tap_bounce(rules_button)
 
-	var popup: Control = RULES_POPUP_SCENE.instantiate()
-	var dim: ColorRect = _make_dim(popup)
+	rules_button.pivot_offset = rules_button.size / 2.0
+	var tween := create_tween()
+	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await tween.finished
 
-	var title: Label = popup.find_child("Title", true, false) as Label
-	if title:
-		title.text = "How to Play Four In A Row"
+	var popup := RULES_POPUP_SCENE.instantiate() as RulesPopup
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-	var rules: RichTextLabel = popup.find_child("RulesLabel", true, false) as RichTextLabel
-	if rules:
-		rules.bbcode_enabled = true
-		rules.visible = true
-		rules.fit_content = true
-		rules.scroll_active = false
-		rules.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		rules.text = _get_rules_text()
+	var root := get_tree().root
+	root.add_child(dim)
+	root.add_child(popup)
+	popup.z_index = 100
+	dim.z_index = 99
 
-	_show_center_scale_in(popup)
+	popup.tree_exited.connect(func():
+		if is_instance_valid(dim):
+			dim.queue_free()
+	)
+
+	popup.open("How to Play Four In A Row", _get_rules_text())
 
 func _on_settings_button_pressed() -> void:
 	if not is_instance_valid(settings_button):
@@ -758,19 +763,6 @@ func _make_dim(popup: Control) -> ColorRect:
 			_lock_interaction_briefly()
 		)
 	return dim
-
-func _show_center_scale_in(popup: Control) -> void:
-	popup.set_as_top_level(true)
-	popup.visible = true
-	await get_tree().process_frame
-	var vp: Vector2 = get_viewport_rect().size
-	popup.size = Vector2(vp.x * 0.9, popup.get_combined_minimum_size().y)
-	popup.set_pivot_offset(popup.size / 2)
-	popup.position = (vp / 2) - (popup.size / 2)
-	popup.scale = Vector2.ZERO
-	var t: Tween = create_tween()
-	t.tween_property(popup, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	popup.grab_focus()
 
 func _slide_up_in(popup: Control) -> void:
 	popup.set_as_top_level(true)

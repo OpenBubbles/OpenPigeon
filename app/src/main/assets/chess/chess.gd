@@ -1,4 +1,4 @@
-extends Node2D
+extends Control
 class_name ChessTop
 
 # Preload piece textures (PNG files, 100x100 pixels)
@@ -43,6 +43,23 @@ var enemy_player_index: int = 2  # 1 or 2, used for UI if needed
 var my_player_index: int = 1
 var my_color: String = "w"  # Tracks whether the local player is white or black
 var flip_board_ui: bool = false  # Whether to flip the board UI to put local player at bottom
+@onready var rules_button: Button     = %RulesButton
+@onready var settings_button: Button = %SettingsButton
+@onready var sent_label: Label = %SentLabel
+@onready var waiting_label: Label = %WaitForOpponentLabel
+@onready var waiting_blur: Control = %WaitBlur
+@onready var dot_timer: Timer = %DotTimer
+@onready var player_avatar_display = %PlayerAvatarDisplay
+@onready var opp_avatar_display = %OppAvatarDisplay
+@onready var background: ColorRect = %Background
+
+const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
+const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
+const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
+
+var sent_tween: Tween
+var dot_count: int = 0
+const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 
 # Chess state
 var board: Array = []                # 8x8 array of strings, e.g., "wP", "bK", or "" for empty
@@ -63,6 +80,8 @@ var selected: Vector2i = Vector2i(-1, -1)           # selected square or Vector2
 var legal_moves: Array[Vector2i] = []          # array of Vector2i targets for selected
 var opponent_last_move_from: Vector2i = Vector2i(-1, -1)  # opponent's last move origin square (for green highlight)
 var opponent_last_move_to: Vector2i = Vector2i(-1, -1)    # opponent's last move destination square (for green highlight)
+var game_settings_category: String = ""
+var spectator_mode: bool = false
 
 # Pulsing tween map for highlight overlays
 var pulse_tweens: Dictionary = {}  # Map[ColorRect, Tween]
@@ -80,7 +99,6 @@ var game_over_panel: Panel = null
 var game_over_text: Label = null
 var player_chess_black: Sprite2D = null
 var player_chess_white: Sprite2D = null
-var waiting_label: Panel = null
 
 # Promotion dialog
 var promotion_dialog: Panel = null
@@ -130,7 +148,15 @@ func _debug_state(tag: String = "") -> void:
 # ---------- Ready / plugin ----------
 func _ready() -> void:
 	_log("_ready() start")
-	
+	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
+	print("Dark Mode: ", is_dark)
+	_apply_bg_for_dark(is_dark)
+	if is_instance_valid(rules_button):
+		rules_button.pressed.connect(on_rules_button_pressed)
+	if is_instance_valid(settings_button):
+		settings_button.pressed.connect(_on_settings_button_pressed)
+	if is_instance_valid(dot_timer):
+		dot_timer.connect("timeout", _on_dot_timer_timeout)
 	# Initialize piece textures dictionary with preloaded PNG textures
 	PIECE_TEXTURES = {
 		"wP": wP_texture, "wR": wR_texture, "wN": wN_texture, "wB": wB_texture, "wQ": wQ_texture, "wK": wK_texture,
@@ -186,6 +212,7 @@ func _set_game_data(raw: String) -> void:
 	var orientation_changed: bool = false  # Track if board orientation changes
 	var ui_already_rebuilt: bool = false  # Track if we rebuilt UI early (before animation)
 	var data: Variant = JSON.parse_string(raw)
+	var opponent_avatar_key = ""
 	_log("_set_game_data parse result type=%s" % typeof(data))
 	if typeof(data) == TYPE_DICTIONARY:
 		_log("_set_game_data: dictionary keys = %s" % str(data.keys()))
@@ -211,12 +238,24 @@ func _set_game_data(raw: String) -> void:
 
 		# Player 1 = black, Player 2 = white
 		my_color = "b" if my_player_index == 1 else "w"
-
+		if my_player_index == 1:
+			opponent_avatar_key = "avatar2"
+		else:
+			opponent_avatar_key = "avatar1"
+			
+		if opponent_avatar_key != "" and data.has(opponent_avatar_key):
+			var avatar_string = data[opponent_avatar_key]
+			var opponent_data = _parse_avatar_string(avatar_string)
+			if is_instance_valid(opp_avatar_display):
+				opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 		# Track if orientation changed (for UI rebuild detection)
 		var old_flip_board_ui = flip_board_ui
 		flip_board_ui = (my_color == "b")
 		orientation_changed = (old_flip_board_ui != flip_board_ui)
-
+		
+		if not spectator_mode:
+			if isYourTurn: stop_waiting_animation()
+		
 		_log("_set_game_data: PLAYER ASSIGNMENT -> my_player_index=%d enemy_player_index=%d my_color=%s flip_board_ui=%s" % [my_player_index, enemy_player_index, my_color, str(flip_board_ui)])
 		_log("_set_game_data: BOARD ORIENTATION -> %s pieces at bottom, %s pieces at top (changed: %s)" % ["Black" if flip_board_ui else "White", "White" if flip_board_ui else "Black", str(orientation_changed)])
 
@@ -1904,13 +1943,16 @@ func _commit_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 	var to_send = {
 		"replay": gp_replay
 	}
-	
+	var avatar_key := ("avatar1" if my_player_index == 1 else "avatar2")
+	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
+		to_send[avatar_key] = player_avatar_display.get_avatar_data_string()
 	if winner_decl != null:
 		to_send["winner"] = winner_decl
 		waitingForOpponent = true
 		isTurn = false
 		_log("_commit_move: game ended, winner_decl=%s" % str(winner_decl))
 	else:
+		play_sent_animation()
 		if not local_mode:
 			waitingForOpponent = true
 			isTurn = false
@@ -2116,3 +2158,403 @@ func _ui_ready() -> bool:
 		if row.size() != 8:
 			return false
 	return true
+
+#Settings, Rules, and Avatar Code
+
+func _parse_avatar_string(data_string: String) -> Dictionary:
+	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
+	var body_map: Array     = AvatarThumbnail.avatar_fshape_regions.keys()
+	var eyes_map: Array     = AvatarThumbnail.avatar_eyes_regions.keys()
+	var mouth_map: Array    = AvatarThumbnail.avatar_mouth_regions.keys()
+	var clothing_map: Array = AvatarThumbnail.avatar_clothing_regions.keys()
+	var backdrop_map: Array = ["Plain"]
+	backdrop_map.append_array(AvatarThumbnail.avatar_background_regions.keys())
+
+	var data: Dictionary = {
+		"fshape_style":   body_map[0]     if body_map.size()     > 0 else "Default",
+		"hair_style":     hair_map[0]     if hair_map.size()     > 0 else "hair1",
+		"eyes_style":     eyes_map[0]     if eyes_map.size()     > 0 else "eyes1",
+		"mouth_style":    mouth_map[0]    if mouth_map.size()    > 0 else "mouth1",
+		"clothing_style": clothing_map[0] if clothing_map.size() > 0 else "clothing1",
+		"bg_style":       "Plain",
+		"fshape_color":   Color(0.88, 0.67, 0.41),
+		"hair_color":     Color(0.17, 0.14, 0.17),
+		"clothing_color": Color(0.63, 0.24, 0.24),
+		"bg_color":       Color(0.31, 0.36, 0.54),
+	}
+
+	if data_string.is_empty():
+		return data
+
+	var read_color = func(vals: Array) -> Color:
+		if vals.size() >= 3:
+			return Color(vals[0].to_float(), vals[1].to_float(), vals[2].to_float())
+		return Color.WHITE
+
+	for part in data_string.split("|", false):
+		var key_value := part.split(",", false)
+		if key_value.size() < 2:
+			continue
+		var key := key_value[0]
+
+		match key:
+			"fshape", "body":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < body_map.size():
+					data["fshape_style"] = String(body_map[i])
+
+			# --- Skin color (accept both) ---
+			"fshape_color", "body_color":
+				data["fshape_color"] = read_color.call(key_value.slice(1))
+
+			"hair":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < hair_map.size():
+					data["hair_style"] = String(hair_map[i])
+
+			"hair_color":
+				data["hair_color"] = read_color.call(key_value.slice(1))
+
+			"eyes":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < eyes_map.size():
+					data["eyes_style"] = String(eyes_map[i])
+
+			"mouth":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < mouth_map.size():
+					data["mouth_style"] = String(mouth_map[i])
+
+			"clothes":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < clothing_map.size():
+					data["clothing_style"] = String(clothing_map[i])
+
+			"clothes_color":
+				data["clothing_color"] = read_color.call(key_value.slice(1))
+
+			"bg_color":
+				data["bg_color"] = read_color.call(key_value.slice(1))
+
+			"backdrop":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < backdrop_map.size():
+					data["bg_style"] = String(backdrop_map[i])
+			_:
+				pass
+	return data
+
+func _apply_bg_for_dark(is_dark: bool) -> void:
+	if is_instance_valid(background):
+		print("Is Dark: ", is_dark)
+		background.color = Color("#261a19") if is_dark else Color("#947972")
+		
+func on_rules_button_pressed() -> void:
+	if not is_instance_valid(rules_button):
+		return
+
+	rules_button.pivot_offset = rules_button.size / 2.0
+	var tween := create_tween()
+	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await tween.finished
+
+	var popup := RULES_POPUP_SCENE.instantiate() as RulesPopup
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var root := get_tree().root
+	root.add_child(dim)
+	root.add_child(popup)
+	popup.z_index = 100
+	dim.z_index = 99
+
+	popup.tree_exited.connect(func():
+		if is_instance_valid(dim):
+			dim.queue_free()
+	)
+
+	popup.open("How to Play Chess", _get_rules_text())
+
+func _get_rules_text() -> String:
+	return """
+[font_size={32px}][b]Chess[/b][/font_size]
+
+[font_size={24px}][b]Objective[/b][/font_size]
+[font_size={18px}]
+• Checkmate your opponent’s king (put it under attack with no legal escape).
+• If checkmate can’t be forced and no one can win, the game may end in a draw.
+[/font_size]
+
+[font_size={24px}][b]Setup[/b][/font_size]
+[font_size={18px}]
+• Each player starts with 16 pieces: 1 King, 1 Queen, 2 Rooks, 2 Bishops, 2 Knights, 8 Pawns.
+• The board is 8×8. Place pieces on the back rank: Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook.
+• Queens go on their own color (White queen on a light square; Black queen on a dark square).
+[/font_size]
+
+[font_size={24px}][b]How the Pieces Move[/b][/font_size]
+[font_size={18px}]
+• [b]King[/b]: 1 square in any direction. Cannot move into check.
+• [b]Queen[/b]: any number of squares in any direction.
+• [b]Rook[/b]: any number of squares horizontally or vertically.
+• [b]Bishop[/b]: any number of squares diagonally.
+• [b]Knight[/b]: an “L” shape (2 squares in one direction, then 1 perpendicular). Can jump over pieces.
+• [b]Pawn[/b]: moves 1 square forward (2 from its starting rank if unobstructed). Captures 1 square diagonally forward.
+[/font_size]
+
+[font_size={24px}][b]Capturing & Turns[/b][/font_size]
+[font_size={18px}]
+• Players alternate turns. On your turn, move exactly one piece.
+• If you move onto a square occupied by an opponent’s piece, you capture it and remove it from the board.
+• You may not make a move that leaves your king in check.
+[/font_size]
+
+[font_size={24px}][b]Special Rules[/b][/font_size]
+[font_size={18px}]
+• [b]Check[/b]: your king is under attack. You must respond by moving the king, capturing the attacker, or blocking the attack (if possible).
+• [b]Castling[/b]: a king-and-rook move that can happen once per game, if:
+  – Neither the king nor the rook has moved,
+  – Squares between them are empty,
+  – The king is not in check and does not pass through or land on an attacked square.
+• [b]En passant[/b]: if an opponent pawn moves two squares forward and lands beside your pawn, you may capture it as if it moved one square (only immediately on your next move).
+• [b]Promotion[/b]: when a pawn reaches the last rank, it becomes a Queen, Rook, Bishop, or Knight (usually a Queen).
+[/font_size]
+
+[font_size={24px}][b]End of Game[/b][/font_size]
+[font_size={18px}]
+• [b]Checkmate[/b]: the king is in check and has no legal moves. Checkmating player wins.
+• [b]Stalemate[/b]: the player to move has no legal moves, but is not in check. The game is a draw.
+• Draws can also occur by repetition, the 50-move rule, or insufficient material.
+[/font_size]
+"""
+
+func play_sent_animation() -> void:
+	if not is_instance_valid(sent_label):
+		print("Warning: sent_label is not valid for play_sent_animation.")
+		return
+	
+	if sent_tween and sent_tween.is_running():
+		sent_tween.kill()
+
+	sent_tween = create_tween().set_parallel(false)
+
+	sent_label.text = "Sent"
+	sent_label.visible = true
+	sent_label.modulate.a = 0.0
+	sent_label.scale = Vector2.ONE
+	sent_label.pivot_offset = sent_label.get_size() / 2.0
+
+	sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
+	sent_tween.tween_interval(0.6)
+	sent_tween.tween_callback(func():
+		if is_instance_valid(sent_label):
+			sent_label.text = "Sent ✔"
+	)
+	sent_tween.tween_interval(2.0)
+	sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
+
+	sent_tween.tween_callback(func():
+		if is_instance_valid(sent_label):
+			sent_label.visible = false
+			sent_label.modulate.a = 1.0
+			start_waiting_animation()
+	)
+	
+func _ensure_avatar_wrapper(avatar: Control) -> Control:
+	var parent: Node = avatar.get_parent()
+	if parent == null:
+		return null
+
+	if parent is Control and not (parent is Container):
+		return parent as Control
+
+	var wrapper: Control = Control.new()
+	wrapper.name = "%s_Wrap" % avatar.name
+	wrapper.size_flags_horizontal = avatar.size_flags_horizontal
+	wrapper.size_flags_vertical = avatar.size_flags_vertical
+	wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
+
+	var idx: int = avatar.get_index()
+	parent.add_child(wrapper)
+	parent.move_child(wrapper, idx)
+
+	avatar.reparent(wrapper)
+	avatar.set_anchors_preset(Control.PRESET_FULL_RECT)
+	avatar.offset_left = 0.0
+	avatar.offset_top = 0.0
+	avatar.offset_right = 0.0
+	avatar.offset_bottom = 0.0
+
+	avatar.item_rect_changed.connect(func():
+		if is_instance_valid(wrapper):
+			wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
+	)
+
+	return wrapper
+	
+func _show_win_burst(avatar: Control) -> void:
+	var wrapper: Control = _ensure_avatar_wrapper(avatar)
+	if not is_instance_valid(wrapper):
+		return
+
+	var existing: Node = wrapper.get_node_or_null("AvatarWinAnim")
+	if existing != null:
+		return
+
+	var anim_instance: Control = AvatarWinAnimScene.instantiate() as Control
+	anim_instance.name = "AvatarWinAnim"
+	wrapper.add_child(anim_instance)
+
+	var avatar_idx: int = avatar.get_index()
+	wrapper.move_child(anim_instance, avatar_idx)
+
+	anim_instance.z_as_relative = false
+	avatar.z_as_relative = false
+	anim_instance.z_index = 0
+	avatar.z_index = max(avatar.z_index, 1)
+
+	anim_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
+	anim_instance.offset_left = -52.0
+	anim_instance.offset_right = 52.0
+	anim_instance.offset_top = -43.0
+	anim_instance.offset_bottom = 43.0
+
+	(anim_instance as Node).call("set_color", Color(1.0, 0.84, 0.0))
+	(anim_instance as Node).call("play", 0.05)
+
+func start_waiting_animation():
+	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):
+		print("Warning: Waiting animation nodes are not valid.")
+		return
+	if spectator_mode:
+		return
+
+	dot_count = 0
+	waiting_label.text = BASE_WAIT_TEXT + "."
+	waiting_label.visible = true
+	waiting_blur.visible = true
+
+	waiting_label.modulate.a = 0.0
+	waiting_blur.modulate.a = 0.0
+
+	var tween_wait_in = create_tween().set_parallel(true)
+	tween_wait_in.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
+	tween_wait_in.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
+	tween_wait_in.tween_callback(func():
+		dot_timer.start()
+	)
+
+func stop_waiting_animation():
+	if is_instance_valid(dot_timer):
+		dot_timer.stop()
+	if is_instance_valid(waiting_label):
+		waiting_label.visible = false
+		waiting_label.modulate.a = 1.0
+	if is_instance_valid(waiting_blur):
+		waiting_blur.visible = false
+		waiting_blur.modulate.a = 1.0
+
+func _on_dot_timer_timeout():
+	if not is_instance_valid(waiting_label):
+		print("Warning: waiting_label is not valid in _on_dot_timer_timeout.")
+		return
+	dot_count = (dot_count % 3) + 1
+	var dots = ""
+	for i in range(dot_count):
+		dots += "."
+	waiting_label.text = BASE_WAIT_TEXT + dots
+
+func _on_settings_button_pressed() -> void:
+	if not is_instance_valid(settings_button):
+		return
+	settings_button.pivot_offset = settings_button.size / 2.0
+	var tween := create_tween()
+	tween.tween_property(settings_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(settings_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await tween.finished
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var popup_instance := SETTINGS_POPUP_SCENE.instantiate()
+	var settings_popup_script := popup_instance as SettingsPopup
+
+	var root := get_tree().root
+	root.add_child(dim)
+	root.add_child(popup_instance)
+	popup_instance.z_index = 100
+	dim.z_index = 99
+	root.move_child(dim, root.get_child_count() - 2)
+
+	settings_popup_script.setup_popup(dim)
+
+	#var volume_setting_hbox := HBoxContainer.new()
+	#volume_setting_hbox.add_child(Label.new())
+	#(volume_setting_hbox.get_child(0) as Label).text = "Game Volume:"
+	#(volume_setting_hbox.get_child(0) as Label).set_h_size_flags(Control.SIZE_EXPAND_FILL)
+#
+	#var volume_slider := HSlider.new()
+	#volume_slider.min_value = 0.0
+	#volume_slider.max_value = 1.0
+	#volume_slider.step = 0.05
+	#var saved_volume: float = float(SettingsManager.get_setting(game_settings_category, "master_volume", 0.75))
+	#volume_slider.value = saved_volume
+	#volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
+	#volume_slider.value_changed.connect(func(value):
+		#AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
+		#SettingsManager.set_setting(game_settings_category, "master_volume", value)
+	#)
+	#volume_setting_hbox.add_child(volume_slider)
+	#settings_popup_script.add_custom_setting(volume_setting_hbox)
+#
+	#var toggle_debug_checkbox := CheckBox.new()
+	#toggle_debug_checkbox.text = "Show Debug Info"
+	#var saved_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
+	#toggle_debug_checkbox.button_pressed = saved_debug_info
+	#toggle_debug_checkbox.pressed.connect(func():
+		#SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
+	#)
+	#settings_popup_script.add_custom_setting(toggle_debug_checkbox)
+
+	var custom_settings_title := popup_instance.find_child("CustomSettingsTitleLabel", true)
+	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:
+		(custom_settings_title as Label).visible = true
+	elif custom_settings_title and custom_settings_title is Label:
+		(custom_settings_title as Label).visible = false
+
+	settings_popup_script.closed.connect(func():
+		if is_instance_valid(player_avatar_display):
+			player_avatar_display.update_display_from_settings()
+	)
+	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
+	settings_popup_script.dark_mode_changed.connect(_apply_bg_for_dark)
+
+	popup_instance.set_as_top_level(true)
+	popup_instance.visible = true
+	await get_tree().process_frame
+
+	var viewport_size := get_viewport_rect().size
+	var desired_width := viewport_size.x * 0.95
+	var desired_height: float = popup_instance.get_combined_minimum_size().y
+	popup_instance.size = Vector2(desired_width, desired_height)
+	popup_instance.position = Vector2((viewport_size.x - desired_width) / 2, viewport_size.y)
+
+	var bottom_offset := 50
+	var target_y_position := viewport_size.y - desired_height - bottom_offset
+	var target_position := Vector2((viewport_size.x - desired_width) / 2, target_y_position)
+
+	var popup_tween := create_tween()
+	popup_tween.tween_property(popup_instance, "position", target_position, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	popup_instance.grab_focus()
+
+func _on_theme_changed(new_theme_name: String) -> void:
+	pass
+
+func _load_game_specific_settings() -> void:
+	var saved_volume: float = float(SettingsManager.get_setting(game_settings_category, "master_volume", 0.75))
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))
+	var show_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
+	print("Loaded game-specific settings for ", game_settings_category, ": volume=", saved_volume, " debug=", show_debug_info)

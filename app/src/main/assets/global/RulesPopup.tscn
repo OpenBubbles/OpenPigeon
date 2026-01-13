@@ -36,7 +36,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 size_flags_horizontal = 4
-size_flags_vertical = 4
+size_flags_vertical = 3
 script = ExtResource("1_vu5r7")
 
 [node name="MarginContainer" type="MarginContainer" parent="."]
@@ -52,13 +52,14 @@ theme_override_constants/margin_right = 30
 theme_override_constants/margin_bottom = 50
 
 [node name="PanelContainer" type="PanelContainer" parent="MarginContainer"]
+unique_name_in_owner = true
 layout_mode = 2
 mouse_filter = 1
 theme_override_styles/panel = SubResource("StyleBoxFlat_4gcu8")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/PanelContainer"]
+unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 4
 
 [node name="HeaderMarginContainer" type="MarginContainer" parent="MarginContainer/PanelContainer/VBoxContainer"]
 layout_mode = 2
@@ -86,6 +87,7 @@ layout_mode = 2
 mouse_filter = 2
 
 [node name="Title" type="Label" parent="MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/HBoxContainer/MarginContainer"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 20
@@ -110,19 +112,29 @@ layout_mode = 2
 mouse_filter = 2
 
 [node name="BodyMarginContainer" type="MarginContainer" parent="MarginContainer/PanelContainer/VBoxContainer"]
+unique_name_in_owner = true
 layout_mode = 2
+size_flags_vertical = 3
 mouse_filter = 2
 theme_override_constants/margin_left = 10
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 10
 
-[node name="RulesLabel" type="RichTextLabel" parent="MarginContainer/PanelContainer/VBoxContainer/BodyMarginContainer"]
+[node name="ScrollContainer" type="ScrollContainer" parent="MarginContainer/PanelContainer/VBoxContainer/BodyMarginContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 450)
 layout_mode = 2
-size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="RulesLabel" type="RichTextLabel" parent="MarginContainer/PanelContainer/VBoxContainer/BodyMarginContainer/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
 mouse_filter = 2
 bbcode_enabled = true
 text = "This is the filler rules. This can be populated with code."
 fit_content = true
+scroll_active = false
 autowrap_mode = 2
 
 [connection signal="pressed" from="MarginContainer/PanelContainer/VBoxContainer/HeaderMarginContainer/HBoxContainer/MarginContainer/CloseButton" to="." method="_on_close_button_pressed"]

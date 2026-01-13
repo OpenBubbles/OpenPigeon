@@ -1467,7 +1467,7 @@ func on_rules_button_pressed() -> void:
 	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
 
-	var popup := RULES_POPUP_SCENE.instantiate()
+	var popup := RULES_POPUP_SCENE.instantiate() as RulesPopup
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.5)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -1477,43 +1477,13 @@ func on_rules_button_pressed() -> void:
 	root.add_child(popup)
 	popup.z_index = 100
 	dim.z_index = 99
-	root.move_child(dim, root.get_child_count() - 2)
- 
-	var close_btn := popup.find_child("CloseButton", true, false)
-	if close_btn:
-		close_btn.pressed.connect(func():
+
+	popup.tree_exited.connect(func():
+		if is_instance_valid(dim):
 			dim.queue_free()
-			popup.queue_free()
-		)
+	)
 
-	var title_label := popup.find_child("Title", true, false) as Label
-	if title_label:
-		title_label.text = "How to Play Sea Battle"
-
-	var rules_label := popup.find_child("RulesLabel", true, false) as RichTextLabel
-	if rules_label:
-		rules_label.bbcode_enabled = true
-		rules_label.visible = true
-		rules_label.fit_content = true
-		rules_label.scroll_active = false
-		rules_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		rules_label.text = _get_rules_text()
-
-	popup.set_as_top_level(true)
-	popup.visible = true
-	await get_tree().process_frame
-
-	var viewport_size := get_viewport_rect().size
-	var desired_width := viewport_size.x * 0.9
-	var desired_height: float = popup.get_combined_minimum_size().y
-	popup.size = Vector2(desired_width, desired_height)
-	popup.set_pivot_offset(popup.size / 2)
-	popup.position = (viewport_size / 2) - (popup.size / 2)
-	popup.scale = Vector2.ZERO
-
-	var popup_tween := create_tween()
-	popup_tween.tween_property(popup, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	popup.grab_focus()
+	popup.open("How to Play Sea Battle", _get_rules_text())
 	
 func _parse_avatar_string(data_string: String) -> Dictionary:
 	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
