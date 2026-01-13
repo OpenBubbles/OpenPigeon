@@ -460,6 +460,11 @@ func _apply_spectator_ship_hiding() -> void:
 func play_replay(preplay: String, enter_turn_after: bool = true) -> void:
 	print("\n========== PLAY_REPLAY START ==========")
 	print("[PLAY_REPLAY] Incoming replay string: ", preplay)
+	
+	clouds_rect.visible = false
+	var m := clouds_rect.modulate
+	m.a = 0.0
+	clouds_rect.modulate = m
 
 	var moves := preplay.split("|", false)
 	print("[PLAY_REPLAY] Parsed moves: ", moves)
@@ -468,12 +473,14 @@ func play_replay(preplay: String, enter_turn_after: bool = true) -> void:
 		print("[PLAY_REPLAY] No moves to replay — entering my turn immediately.")
 		print("========== PLAY_REPLAY END — EMPTY ==========\n")
 		if enter_turn_after:
+			await get_tree().create_timer(1.0).timeout
 			my_battleground_ready()
 		return
 
 	if not is_instance_valid(myBattleground):
 		print("[PLAY_REPLAY] ERROR — myBattleground is not valid.")
 		if enter_turn_after:
+			await get_tree().create_timer(1.0).timeout
 			my_battleground_ready()
 		return
 
@@ -518,6 +525,7 @@ func play_replay(preplay: String, enter_turn_after: bool = true) -> void:
 		print("[PLAY_REPLAY] No valid moves parsed; entering my turn.")
 		print("========== PLAY_REPLAY END — NONE SCHEDULED ==========\n")
 		if enter_turn_after:
+			await get_tree().create_timer(1.0).timeout
 			my_battleground_ready()
 		return
 
@@ -528,6 +536,8 @@ func play_replay(preplay: String, enter_turn_after: bool = true) -> void:
 		print("[PLAY_REPLAY] Ignoring replay_finished (stale token).")
 		return
 
+	await get_tree().create_timer(1.0).timeout
+	
 	print("[PLAY_REPLAY] All replay animations finished. Transitioning into my active turn.")
 	print("========== PLAY_REPLAY END ==========\n")
 	my_battleground_ready()

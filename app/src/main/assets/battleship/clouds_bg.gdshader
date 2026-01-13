@@ -20,7 +20,7 @@ uniform float high_freq_weight = 0.4;
 // Appearance
 uniform float cloud_coverage = 0.55;
 uniform float puffiness      = 1.2;
-uniform float alpha_max = 0.9;
+uniform float alpha_max = 1;
 
 // EDGE FADING: Controls how soft the box edges are (0.0 to 0.5)
 uniform float edge_softness = 0.2;
