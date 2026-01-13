@@ -40,7 +40,7 @@ shader_parameter/mid_freq_weight = 1.0
 shader_parameter/high_freq_weight = 0.4
 shader_parameter/cloud_coverage = 1.2
 shader_parameter/puffiness = 0.8
-shader_parameter/alpha_max = 0.9
+shader_parameter/alpha_max = 0.7
 shader_parameter/edge_softness = 0.4
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_cnvch"]
@@ -385,7 +385,7 @@ vertical_alignment = 1
 [node name="waitingLabel" type="Label" parent="."]
 unique_name_in_owner = true
 visible = false
-z_index = 7
+z_index = 100
 layout_mode = 0
 offset_left = 161.0
 offset_top = 558.0
@@ -417,7 +417,7 @@ mouse_filter = 2
 [node name="SentLabel" type="Label" parent="PanelContainer/CenterContainer"]
 unique_name_in_owner = true
 visible = false
-z_index = 7
+z_index = 100
 layout_mode = 2
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_0ayae")
