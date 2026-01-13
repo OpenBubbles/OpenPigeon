@@ -102,6 +102,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             ConnectGame(),
             FillerGame(),
             CheckersGame(),
+            ChessGame(),
             MancalaGame(),
             DotsGame(),
             GomokuGame(),
@@ -109,8 +110,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             QuestionsGame(),
             WordHuntGame(), //Marked Hidden as inside Word Games Wrapper
             AnagramsGame(), //Marked Hidden as inside Word Games Wrapper
-            WordbitesGame(), //Marked Hidden as inside Word Games Wrapper
-            ChessGame()
+            WordbitesGame() //Marked Hidden as inside Word Games Wrapper
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {
