@@ -215,40 +215,81 @@ func skipReplay():
 	refresh_ui_state()
 	
 func refresh_ui_state() -> void:
-	if isTurn == false:
-		print("Is Turn False")
-		round_container.visible = false
-		skip_button.visible = false
-		return
-	print("Is Turn True")
-	stop_waiting_animation()
-	
 	if gamePlaying or replayPlaying:
+		print("Game or Replay Playing")
 		round_container.visible = false
 		return
 
 	var other_player: int = 2 if player == 1 else 1
 
-	if turnNum >= 3:
-		if isNullOrEmpty(getReplay(other_player)):
+	if turnNum != null and turnNum >= 3 and replayFinished == false:
+		var r_self = getReplay(player)
+		var r_other = getReplay(other_player)
+
+		if not isNullOrEmpty(r_self) and not isNullOrEmpty(r_other):
+			print("Starting replay playback (self + other)")
+			stop_waiting_animation()
 			round_container.visible = false
-		elif replayFinished == false:
-			round_container.visible = false
-		else:
+
+			ballNum = {1: 1, 2: 1}
+
 			if turnNum == 5:
-				game_over = true
-				showWinner()
+				setScore(1, score1)
+				setScore(2, score2)
 			else:
-				waiting_blur.visible = true
-				round_label.text = "Round 2"
-				print("Round 2 Shown")
-				round_container.visible = true
-	else:
-		round_label.text = "Round 1"
+				setScore(1, 0)
+				setScore(2, 0)
+
+			clearBalls()
+			spawnBall(1)
+			spawnBall(2)
+			playReplay(1, getReplay(1))
+			playReplay(2, getReplay(2))
+
+			skip_button.visible = true
+			return
+		else:
+			print("Replay not ready yet (missing self/other replay)")
+			round_container.visible = false
+			skip_button.visible = false
+			start_waiting_animation()
+			return
+
+	if isTurn == false:
+		print("Is Turn False")
+		round_container.visible = false
+		skip_button.visible = false
+		return
+
+	print("Is Turn True")
+	stop_waiting_animation()
+
+	if turnNum >= 3:
+		print("Turn >= 3")
+
+		if isNullOrEmpty(getReplay(other_player)):
+			print("Null getReplay(other_player) -> waiting")
+			round_container.visible = false
+			skip_button.visible = false
+			start_waiting_animation()
+			return
+
+		if turnNum == 5:
+			game_over = true
+			showWinner()
+			return
+
 		waiting_blur.visible = true
-		print("Round 1 Shown")
+		round_label.text = "Round 2"
+		print("Round 2 Shown")
 		round_container.visible = true
-		
+		return
+
+	round_label.text = "Round 1"
+	waiting_blur.visible = true
+	print("Round 1 Shown")
+	round_container.visible = true
+
 func spawnBall(player_num: int, didGoInReplay = null) -> BasketballBall:
 	if appPlugin != null:
 		if (turnNum < 3) or (didGoInReplay != null and turnNum == 3):
