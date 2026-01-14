@@ -1,4 +1,4 @@
-[gd_scene load_steps=54 format=3 uid="uid://boa2cnt5daakv"]
+[gd_scene load_steps=55 format=3 uid="uid://boa2cnt5daakv"]
 
 [ext_resource type="Script" uid="uid://dk82qyx6ut4l5" path="res://basketball/basketball.gd" id="1_oq83f"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_banb7"]
@@ -181,6 +181,10 @@ radius = 0.1
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_edmja"]
 transparency = 4
 albedo_texture = ExtResource("3_edmja")
+
+[sub_resource type="SphereMesh" id="SphereMesh_jqehr"]
+radius = 0.1
+height = 0.2
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0e03b"]
 transparency = 1
@@ -812,13 +816,9 @@ script = ExtResource("2_j8ag5")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Ball"]
 shape = SubResource("SphereShape3D_10mmx")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="Ball"]
+[node name="CSGSphere3D" type="MeshInstance3D" parent="Ball"]
 material_override = SubResource("StandardMaterial3D_edmja")
-use_collision = true
-radius = 0.1
-radial_segments = 50
-rings = 50
-material = SubResource("StandardMaterial3D_10mmx")
+mesh = SubResource("SphereMesh_jqehr")
 
 [node name="net" type="MeshInstance3D" parent="."]
 transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, -0.0094685, 0.776366, -3.30605)

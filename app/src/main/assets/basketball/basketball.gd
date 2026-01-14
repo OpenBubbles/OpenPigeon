@@ -26,6 +26,7 @@ var replayFinished = false
 var gamePlaying = false
 var gameDataSet = false
 var game_over = false
+var _ui_initialized := false
 var sent_tween: Tween
 var dot_count: int = 0
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
@@ -64,83 +65,36 @@ var isWaiting = false
 var receivedMessage = null
 
 func _ready() -> void:
-	timeRemainingLabel = get_node("Scoreboard/Time")
-	youScoreLabel = get_node("Scoreboard/YouScore")
-	oppScoreLabel = get_node("Scoreboard/OppScore")
-	appPlugin = Engine.get_singleton("AppPlugin")
-	if appPlugin:
-		if not has_connected:
-			print("App plugin is available")
-			appPlugin.connect("set_game_data", _set_game_data)
-			has_connected = true
-			appPlugin.onReady()
-			return
-	else:
-		print("App plugin is not available")
-		#dev_data = '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "0", "skip_score2": "0", "player": "2", "score1": "0", "score2": "0", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "n", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Let\'s play Basketball!", "game_name": "Basketball", "replay": ""}'
-		dev_data = '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "18", "skip_score2": "46", "player": "2", "score1": "18", "score2": "23", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "n", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Let\'s play Basketball!", "game_name": "Basketball", "replay": "60,0.264,0,0|115,-0.392,0,1|166,0.120,0,0|218,-0.078,0,1|274,0.576,0,0|332,-0.401,0,0|391,0.232,0,0|445,0.418,0,1|501,0.170,0,0|569,-0.418,0,0|630,0.157,0,0|681,-0.284,0,0|738,0.247,0,1|796,0.024,0,0|854,0.249,0,1|912,-0.427,0,0|969,0.184,0,1|1034,0.478,0,0|1089,-0.010,0,0|1143,0.277,0,0|1197,-0.259,0,1|1251,0.252,0,1|1309,-0.392,0,0|1367,-0.218,0,0|1433,0.596,0,1|1486,-0.083,0,1|1541,0.304,0,0|1593,-0.206,0,0|1644,-0.308,0,0|1696,-0.362,0,1|1747,-0.203,0,0|1803,-0.142,0,0|1864,0.406,0,0|1914,-0.225,0,1|1967,-0.138,0,0|2024,-0.361,0,0|2078,0.036,0,1|2136,-0.414,0,1|2195,0.100,0,0|2256,0.580,0,1|2309,-0.239,0,0|2364,0.400,0,1|2416,-0.113,0,1|2474,-0.001,0,0|2529,0.261,0,1|2594,-0.402,0,0|2640,0.194,0,0"}'
-		_set_game_data(dev_data, true)
-	if is_instance_valid(start_button):
-		start_button.pressed.connect(start_button_pressed)
-		print("Connected Start Button")
-	if is_instance_valid(skip_button):
-		skip_button.pressed.connect(skipReplay)
-	if is_instance_valid(dot_timer):
-		dot_timer.connect("timeout", _on_dot_timer_timeout)
+	if not _ui_initialized:
+		_ui_initialized = true
+
+		timeRemainingLabel = get_node("Scoreboard/Time")
+		youScoreLabel = get_node("Scoreboard/YouScore")
+		oppScoreLabel = get_node("Scoreboard/OppScore")
+
+		appPlugin = Engine.get_singleton("AppPlugin")
+		if appPlugin:
+			if not has_connected:
+				print("App plugin is available")
+				appPlugin.connect("set_game_data", _set_game_data)
+				has_connected = true
+				appPlugin.onReady()
+		else:
+			print("App plugin is not available")
+			dev_data = '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "18", "skip_score2": "46", "player": "2", "score1": "18", "score2": "23", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "n", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Let\'s play Basketball!", "game_name": "Basketball", "replay": "60,0.264,0,0"}'
+			_set_game_data(dev_data, true)
+
+		if is_instance_valid(start_button):
+			start_button.pressed.connect(start_button_pressed)
+		if is_instance_valid(skip_button):
+			skip_button.pressed.connect(skipReplay)
+		if is_instance_valid(dot_timer):
+			dot_timer.timeout.connect(_on_dot_timer_timeout)
+
 	if not gameDataSet:
 		return
-		
-	var other_player: int
-	if player == 1:
-		other_player = 2
-	elif player == 2:
-		other_player = 1
-		
-	if has_connected or dev_data != "":
-		print("Initial")
-		if turnNum >= 3:
-			print("Option 1")
-			if isNullOrEmpty(getReplay(other_player)):
-				print("Option 2")
-				start_waiting_animation()
-			elif replayFinished == false:
-				print("Option 3")
-				stop_waiting_animation()
-				ballNum = {1: 1, 2: 1}
-				if turnNum == 5:
-					print("Option 4")
-					setScore(1, score1)
-					setScore(2, score2)
-				else:
-					print("Option 5")
-					setScore(1, 0)
-					setScore(2, 0)
-				spawnBall(1)
-				spawnBall(2)
-				playReplay(1, getReplay(1))
-				playReplay(2, getReplay(2))
-				skip_button.visible = true
-			else:
-				print("Option 6")
-				if turnNum == 5:
-					print("Game Over")
-					game_over = true
-					showWinner()
-				else:
-					stop_waiting_animation()
-					waiting_blur.visible = true
-					round_label.text = "Round 2"
-					print("Round 2 Popup")
-					round_container.visible = true
-		elif isNullOrEmpty(getReplay(other_player)) and not isNullOrEmpty(getReplay(player)):
-			print("Option 7")
-			start_waiting_animation()
-		else:
-			stop_waiting_animation()
-			round_label.text = "Round 1"
-			print("Round 1 Popup")
-			waiting_blur.visible = true
-			round_container.visible = true
+
+	refresh_ui_state()
 
 var didIWin = false
 func showWinner():
@@ -258,7 +212,42 @@ func skipReplay():
 	hideUI()
 	replayPlaying = false
 	replayFinished = true
-	_ready()
+	refresh_ui_state()
+	
+func refresh_ui_state() -> void:
+	if isTurn == false:
+		print("Is Turn False")
+		round_container.visible = false
+		skip_button.visible = false
+		return
+	print("Is Turn True")
+	stop_waiting_animation()
+	
+	if gamePlaying or replayPlaying:
+		round_container.visible = false
+		return
+
+	var other_player: int = 2 if player == 1 else 1
+
+	if turnNum >= 3:
+		if isNullOrEmpty(getReplay(other_player)):
+			round_container.visible = false
+		elif replayFinished == false:
+			round_container.visible = false
+		else:
+			if turnNum == 5:
+				game_over = true
+				showWinner()
+			else:
+				waiting_blur.visible = true
+				round_label.text = "Round 2"
+				print("Round 2 Shown")
+				round_container.visible = true
+	else:
+		round_label.text = "Round 1"
+		waiting_blur.visible = true
+		print("Round 1 Shown")
+		round_container.visible = true
 		
 func spawnBall(player_num: int, didGoInReplay = null) -> BasketballBall:
 	if appPlugin != null:
@@ -281,7 +270,7 @@ func spawnBall(player_num: int, didGoInReplay = null) -> BasketballBall:
 			i -= 1
 
 	var new_ball: BasketballBall = get_node("Ball").duplicate()
-	var ball_CSGSphere3D: CSGSphere3D = new_ball.get_child(1)
+	var ball_mesh: MeshInstance3D = new_ball.get_child(1)
 
 	var roll_source: float = appPlugin.drand48(player_num) if appPlugin != null else randf()
 	var pitch_source: float = appPlugin.drand48(player_num) if appPlugin != null else randf()
@@ -303,18 +292,23 @@ func spawnBall(player_num: int, didGoInReplay = null) -> BasketballBall:
 
 	new_ball.collision_layer = player_num
 	new_ball.collision_mask = player_num
-	ball_CSGSphere3D.collision_layer = player_num
-	ball_CSGSphere3D.collision_mask = player_num
 
 	new_ball.rotation = Vector3(roll, pitch, yaw)
 	new_ball.position = Vector3(x_pos, -0.45, -1)
 	new_ball.get_child(0).disabled = false
+
+	new_ball.axis_lock_angular_x = true
+	new_ball.axis_lock_angular_y = true
+	new_ball.axis_lock_angular_z = true
+	new_ball.angular_velocity = Vector3.ZERO
+
 	new_ball.freeze = false
-	new_ball.set_visible(true)
+	new_ball.sleeping = false
+	new_ball.visible = true
 
 	if player_num != player:
-		ball_CSGSphere3D.material_override = ball_CSGSphere3D.material_override.duplicate()
-		ball_CSGSphere3D.material_override.albedo_color = Color(1, 1, 1, 0.75)
+		ball_mesh.material_override = ball_mesh.material_override.duplicate()
+		ball_mesh.material_override.albedo_color = Color(1, 1, 1, 0.75)
 
 	new_ball.name = "Ball_P" + str(player_num) + "_" + str(ballNum[player_num])
 
@@ -371,7 +365,8 @@ func _set_game_data(new_replay: String, saved: bool = false):
 	receivedMessage = null
 	gameDataSet = true
 	if not saved:
-		_ready()
+		refresh_ui_state()
+
 	
 func sendGameData() -> void:
 	turnNum += 1
@@ -498,15 +493,14 @@ func _process(delta: float) -> void:
 					setScore(2, skip_score2)
 				
 			clearBalls()
-			
+			isTurn = false			
 			print("ready up!")
-			_ready()
+			refresh_ui_state()
 				
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
 		print("Warning: sent_label is not valid for play_sent_animation.")
 		return
-	
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()
 
@@ -538,7 +532,6 @@ func _on_dot_timer_timeout():
 	if not is_instance_valid(waiting_label):
 		print("Warning: waiting_label is not valid in _on_dot_timer_timeout.")
 		return
-	print("Starting Dot Timer Timeout")
 	dot_count = (dot_count % 3) + 1
 	var dots = ""
 	for i in range(dot_count):

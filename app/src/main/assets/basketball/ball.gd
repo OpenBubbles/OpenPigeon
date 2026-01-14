@@ -14,6 +14,9 @@ func _ready() -> void:
 	self.contact_monitor = true
 	self.max_contacts_reported = 10
 	self.BasketballGame = get_parent()
+	
+	self.can_sleep = false
+	self.sleeping = false
 
 func _process(delta: float) -> void:
 	if self.name != "Ball" and self.BasketballGame.replayPlaying == false and self.BasketballGame.replayFinished == true:
@@ -53,7 +56,16 @@ func shoot(x_delta: float) -> void:
 	
 	if player != BasketballGame.player:
 		x_force *= -1
-	
+
+	self.axis_lock_angular_x = false
+	self.axis_lock_angular_y = false
+	self.axis_lock_angular_z = false
+
+	self.freeze = false
+	self.sleeping = false
+	self.linear_velocity = Vector3.ZERO
+	self.angular_velocity = Vector3.ZERO
+
 	self.apply_impulse(Vector3(x_force, 6.80, -2.5))
 	self.apply_torque_impulse(Vector3(-0.02, 0, 0))
 	
