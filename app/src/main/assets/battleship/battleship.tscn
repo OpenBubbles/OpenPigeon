@@ -10,9 +10,9 @@
 [ext_resource type="PackedScene" uid="uid://bk5btqccsu6bo" path="res://battleship/marker.tscn" id="4_yk3pl"]
 [ext_resource type="Texture2D" uid="uid://be7c3h71y7awb" path="res://battleship/cloud_noise.tres" id="5_7ycry"]
 [ext_resource type="Texture2D" uid="uid://dvhiuy2xdxiuj" path="res://battleship/shuffle_pressed.png" id="5_8c2i7"]
-[ext_resource type="Shader" uid="uid://f1704ei481dv" path="res://battleship/water_ocean.gdshader" id="6_8c2i7"]
+[ext_resource type="Shader" path="res://battleship/water_ocean.gdshader" id="6_8c2i7"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="8_0ayae"]
-[ext_resource type="Shader" uid="uid://djxcmb4j8hp3r" path="res://battleship/clouds_bg.gdshader" id="11_fql0a"]
+[ext_resource type="Shader" path="res://battleship/clouds_bg.gdshader" id="11_fql0a"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_8c2i7"]
 shader = ExtResource("6_8c2i7")

@@ -49,7 +49,6 @@ var theirBoardContainer: Control = null
 var my_player
 var my_uuid: String = ""
 var player = null
-var _should_send_ships: bool = false
 var game_settings_category: String = ""
 var spectator_mode: bool = false
 var fireMode = false
@@ -359,8 +358,6 @@ func _set_game_data(new_replay: String) -> void:
 	_apply_spectator_ship_hiding()
 	var my_ships_encoded := (s1 if player == 1 else s2)
 
-	_should_send_ships = my_ships_encoded.is_empty()
-
 	if not spectator_mode and my_ships_encoded.is_empty():
 		print("[INIT BOARD] No existing ships for local player P", player, " → generating random layout on ", myBattleground.name)
 		_randomize_my_ships(bsize)
@@ -370,10 +367,8 @@ func _set_game_data(new_replay: String) -> void:
 			" (P", player, ")")
 	if spectator_mode and not greplay.is_empty():
 		print("[SET_GAME_DATA] Spectator replay: preparing board and playing replay.")
-		if not bullets1.is_empty():
-			battleground1.from_bullets(bullets1)
-		if not bullets2.is_empty():
-			battleground2.from_bullets(bullets2)
+		_apply_bullets_from_payload(battleground1, bullets1)
+		_apply_bullets_from_payload(battleground2, bullets2)
 		show_battleground(false)
 		await get_tree().process_frame
 		if not greplay.is_empty():
@@ -390,12 +385,9 @@ func _set_game_data(new_replay: String) -> void:
 			battleground1.process_mode = Node.PROCESS_MODE_INHERIT
 		if is_instance_valid(battleground2):
 			battleground2.process_mode = Node.PROCESS_MODE_INHERIT
-		if not bullets1.is_empty():
-			print("[BOARD LOAD] (MY TURN) Applying bullets1 to battleground1 BEFORE replay")
-			battleground1.from_bullets(bullets1)
-		if not bullets2.is_empty():
-			print("[BOARD LOAD] (MY TURN) Applying bullets2 to battleground2 BEFORE replay")
-			battleground2.from_bullets(bullets2)
+		_apply_bullets_from_payload(battleground1, bullets1)
+		_apply_bullets_from_payload(battleground2, bullets2)
+
 
 		stop_waiting_animation()
 
@@ -421,18 +413,14 @@ func _set_game_data(new_replay: String) -> void:
 		_set_setup_mode(false)
 		if is_instance_valid(start_button):
 			start_button.disabled = true
-
+		
 		if not skip.is_empty():
 			var flipped_skip := _flip_ships_encoded_vertical(skip, bsize)
 			print("[SET_GAME_DATA] Applying skip_ships layout to opponent board with vertical flip. original=", skip, " flipped=", flipped_skip)
 			theirBattleground.from_encoded(flipped_skip)
 
-		if not bullets1.is_empty():
-			print("[BOARD LOAD] (NOT MY TURN) Applying bullets1 to battleground1 AFTER skip_ships/layouts")
-			battleground1.from_bullets(bullets1)
-		if not bullets2.is_empty():
-			print("[BOARD LOAD] (NOT MY TURN) Applying bullets2 to battleground2 AFTER skip_ships/layouts")
-			battleground2.from_bullets(bullets2)
+		_apply_bullets_from_payload(battleground1, bullets1)
+		_apply_bullets_from_payload(battleground2, bullets2)
 
 		if theirBattleground.is_over():
 			print("[SET_GAME_DATA] Opponent board is already over -> we won.")
@@ -535,7 +523,7 @@ func play_replay(preplay: String, enter_turn_after: bool = true) -> void:
 	if token != _replay_token:
 		print("[PLAY_REPLAY] Ignoring replay_finished (stale token).")
 		return
-
+	replay.clear()
 	await get_tree().create_timer(1.0).timeout
 	
 	print("[PLAY_REPLAY] All replay animations finished. Transitioning into my active turn.")
@@ -809,12 +797,11 @@ func send_update():
 		"bullets" + str(player): flipped_bullets,
 	}
 
-	if _should_send_ships and not myEncoded.is_empty():
+	if not myEncoded.is_empty():
 		msg["ships" + str(player)] = flipped_ships
 		print("[SEND] Including ships for player ", player, " (first-time send).")
-		_should_send_ships = false
 	else:
-		print("[SEND] Skipping ships: _should_send_ships=", _should_send_ships, " myEncoded_empty=", myEncoded.is_empty())
+		print("[SEND] Skipping ships: ")
 
 	var my_avatar := _get_my_avatar_display()
 	if is_instance_valid(my_avatar) and my_avatar.has_method("get_avatar_data_string"):
@@ -1125,10 +1112,18 @@ func _flip_bullets_vertical(bullets_str: String, rows: int, cols: int) -> String
 
 	return ",".join(new_list)
 
+func _apply_bullets_from_payload(bg: BattleGround, wire_bullets: String) -> void:
+	if wire_bullets.is_empty() or not is_instance_valid(bg):
+		return
+
+	var local_bullets := _flip_bullets_vertical(wire_bullets, bg.rows, bg.columns)
+	bg.from_bullets(local_bullets)
+
 func _flip_ships_encoded_vertical(encoded: String, rows: int) -> String:
+	print("FLIP SHIPS ENCODED VERTICAL CALLED!")
 	if encoded.is_empty():
 		return encoded
-
+	print("FLIP SHIPS ENCODED VERTICAL NOT EMPTY!")
 	var pieces := encoded.split("|", false)
 	var flipped_pieces: Array[String] = []
 
@@ -1161,8 +1156,15 @@ func _flip_ships_encoded_vertical(encoded: String, rows: int) -> String:
 
 		var new_sections: Array[String] = []
 		for section in sections:
+			print("Updating Sections!")
 			if section.begins_with("pos:"):
 				new_sections.append("pos:%d,%d" % [x, new_y])
+			elif section.begins_with("num:") and rot == 0:
+				var nums = section.substr(4).split(",", false)
+				print("FLIPPING VERTICAL SHIP NUM FROM: ", nums)
+				nums.reverse()
+				print("TO: ", nums)
+				new_sections.append("num:" + ",".join(nums))
 			else:
 				new_sections.append(section)
 
@@ -1198,7 +1200,6 @@ func _on_fire_button_pressed() -> void:
 	print("[FIRE_BUTTON] Started Bomb Fall animation")
 	await _play_bomb_fall_animation_for_board(theirBattleground, grid, false, 2.0)
 	print("[FIRE_BUTTON] Finished Bomb Fall animation")
-	replay.clear()
 
 	var top_x := int(grid.x)
 	var rows := theirBattleground.rows

@@ -70,6 +70,52 @@ func encode_ships() -> String:
 func encode_bullets() -> String:
 	print("Encode Bullets")
 	return ",".join(bullets.map(func(bullet): return '1' if bullet else '0'))
+	
+func encode_hits() -> String:
+	# Same shape as bullets: rows*cols entries of 0/1
+	var out: Array[String] = []
+	out.resize(rows * columns)
+
+	for y in range(rows):
+		for x in range(columns):
+			var idx := y * columns + x
+			var hit_ship := ship_grid[idx]
+			if hit_ship == null:
+				out[idx] = "0"
+				continue
+
+			var part_idx := ship_part[idx]
+			out[idx] = "1" if hit_ship.parts_destroyed[part_idx] else "0"
+
+	return ",".join(out)
+
+func from_hits(h: String) -> void:
+	if h.is_empty():
+		return
+
+	var list := h.split(",")
+	if list.size() != rows * columns:
+		print("[FROM_HITS] Warning: hit list size mismatch. Ignoring.")
+		return
+
+	for y in range(rows):
+		for x in range(columns):
+			var idx := y * columns + x
+			if list[idx] != "1":
+				continue
+
+			var hit_ship := ship_grid[idx]
+			if hit_ship == null:
+				continue
+
+			var part_idx := ship_part[idx]
+			if not hit_ship.parts_destroyed[part_idx]:
+				hit_ship.parts_destroyed[part_idx] = true
+				if hit_ship.is_sunk():
+					hit_ship.visible = true
+					hit_ship.outline()
+
+			mark(Vector2(x, y), BattlegroundMarker.MarkerMode.ELIMINATED)
 
 func from_bullets(b: String):
 	print("From Bullets")

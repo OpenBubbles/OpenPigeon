@@ -14,6 +14,7 @@ func decode_ship(encodedShip: String, battleground: BattleGround):
 	this_battleground = battleground
 	var start = Vector2(0, 0)
 	var length = 0
+	var raw_num_string = ""
 	for attribute in encodedShip.split('&'):
 		var name = attribute.split(':', true, 1)
 		if name[0] == "pos":
@@ -23,9 +24,17 @@ func decode_ship(encodedShip: String, battleground: BattleGround):
 			if name[1] == "1":
 				is_horizontal = true
 		if name[0] == "num":
-			var parts = name[1].split(",")
+			raw_num_string = name[1]
+			
+	if raw_num_string != "":
+		var parts = raw_num_string.split(",")
+		if not is_horizontal:
+			var parts_array = Array(parts)
+			parts_array.reverse()
+			parts_destroyed.assign(parts_array.map(func(n): return n == '1'))
+		else:
 			parts_destroyed.assign(Array(parts).map(func(n): return n == '1'))
-			length = len(parts)
+		length = len(parts)
 	
 	set_len(length)
 	start.y = (battleground.rows - 1) - start.y
