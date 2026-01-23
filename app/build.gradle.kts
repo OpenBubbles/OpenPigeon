@@ -5,6 +5,18 @@ plugins {
     alias(libs.plugins.jetbrainsKotlinAndroid)
 }
 
+fun getGodotExecutable(project: Project): String {
+    val localProps = Properties()
+    val localPropsFile = project.rootProject.file("local.properties")
+    if (localPropsFile.exists()) {
+        localPropsFile.inputStream().use { localProps.load(it) }
+        val path = localProps.getProperty("godot.path")
+        if (!path.isNullOrBlank()) return path
+    }
+    return "godot"
+}
+val godotCmd = getGodotExecutable(project)
+
 val props = Properties()
 file("$rootDir/config.properties").inputStream().use { props.load(it) }
 
@@ -118,9 +130,24 @@ dependencies {
     implementation(libs.mixpanel.android)
 }
 
+tasks.register<Exec>("importGodotAssets") {
+    description = "Imports Godot assets to ensure .godot cache exists (Fixes Grey Screen)."
+    group = "godot"
+
+    val projectPath = project.layout.projectDirectory.dir("src/main/assets")
+    val godotHiddenFolder = projectPath.dir(".godot")
+
+    inputs.files(fileTree(projectPath).matching { exclude(".godot/**") })
+    outputs.dir(godotHiddenFolder)
+
+    commandLine(godotCmd, "--headless", "--path", projectPath, "--editor", "--quit")
+}
+
 tasks.register<Exec>("exportGodotRelease") {
     description = "Exports the Godot project for release."
     group = "godot"
+
+    dependsOn("importGodotAssets")
 
     workingDir = rootProject.projectDir
     val projectPath = project.layout.projectDirectory.dir("src/main/assets")
@@ -129,7 +156,7 @@ tasks.register<Exec>("exportGodotRelease") {
     inputs.dir(projectPath).withPathSensitivity(PathSensitivity.RELATIVE)
     outputs.file(exportZipPath)
 
-    commandLine("godot", "--headless", "--path", projectPath, "--export-pack", "Android", exportZipPath.get().asFile.absolutePath)
+    commandLine(godotCmd, "--headless", "--path", projectPath, "--export-pack", "Android", exportZipPath.get().asFile.absolutePath)
 
     doFirst {
         exportZipPath.get().asFile.parentFile.mkdirs()
@@ -153,6 +180,7 @@ tasks.register<Copy>("copyMissingAssets") {
     group = "godot"
 
     dependsOn("unzipGodotRelease")
+
     from(project.layout.projectDirectory.dir("src/main/assets/.godot/imported")) {
         include("RedCupAlbedo.png-*.s3tc.ctex")
     }
@@ -169,6 +197,10 @@ tasks.register<Copy>("copyOtherAssets") {
         include("attributions.html")
     }
     into(project.layout.buildDirectory.dir("generated/release_assets"))
+}
+
+tasks.named("preBuild") {
+    dependsOn("importGodotAssets")
 }
 
 tasks.whenTaskAdded {
