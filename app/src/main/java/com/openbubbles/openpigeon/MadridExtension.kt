@@ -155,18 +155,34 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
     fun updateKeyboard() {
-        callback?.let {
-            val displayMetrics = context.resources.displayMetrics
-            val dpWidth = displayMetrics.widthPixels / displayMetrics.density
+        val cb = callback ?: return
 
-            val result = runBlocking {
-                keyboardRemoteViews.compose(context, DpSize(dpWidth.dp, 300.dp)) {
-                    MainKeyboard()
-                }
+        val displayMetrics = context.resources.displayMetrics
+        val dpWidth = displayMetrics.widthPixels / displayMetrics.density
+
+        val result = runBlocking {
+            keyboardRemoteViews.compose(context, DpSize(dpWidth.dp, 300.dp)) {
+                MainKeyboard()
             }
-
-            it.updateView(result.remoteViews)
         }
+
+        val mainHandler = Handler(Looper.getMainLooper())
+
+        mainHandler.post {
+            try {
+                cb.updateView(result.remoteViews)
+            } catch (t: Throwable) {
+                Log.e("MadridExtension", "updateKeyboard updateView failed", t)
+            }
+        }
+
+        mainHandler.postDelayed({
+            try {
+                cb.updateView(result.remoteViews)
+            } catch (t: Throwable) {
+                Log.e("MadridExtension", "updateKeyboard second updateView failed", t)
+            }
+        }, 50)
     }
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
     val keyboardRemoteViews = GlanceRemoteViews()
@@ -297,7 +313,7 @@ fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: Glance
             contentDescription = game.displayName(),
             modifier = GlanceModifier.wrapContentHeight().clickable(
                 onClick = actionRunCallback<ChooseGameCallback>(actionParametersOf(
-                        gameName to game.getName()
+                    gameName to game.getName()
                 ))
             ).height(80.dp).cornerRadius(5.dp),
             contentScale = ContentScale.Crop,
@@ -346,7 +362,7 @@ fun RenderKeyboard(extension: MadridExtension?) {
             Text("Games", style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(end = 6.dp))
             Text("|", style = TextStyle(fontSize = 30.sp, color = ColorProvider(Color.Gray)))
             Text("About", style = TextStyle(fontSize = 15.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(start = 6.dp)
-                    .clickable(onClick = androidx.glance.action.actionStartActivity<AboutActivity>()))
+                .clickable(onClick = androidx.glance.action.actionStartActivity<AboutActivity>()))
         }
         for (index in 0..<ceil(pageGames.size / itemsPerRow.toDouble()).toInt()) {
             Row(modifier = GlanceModifier.padding(bottom = 3.dp)) {
@@ -363,16 +379,16 @@ fun RenderKeyboard(extension: MadridExtension?) {
         Spacer(modifier = GlanceModifier.defaultWeight())
         Row(modifier = GlanceModifier.fillMaxWidth()) {
             if (p > 0)
-            Image(ImageProvider(R.drawable.baseline_arrow_back_ios_24), "Back", modifier = GlanceModifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                .clickable(onClick = actionRunCallback<ChangePageCallback>(actionParametersOf(
-                    page to (p - 1)
-                ))))
+                Image(ImageProvider(R.drawable.baseline_arrow_back_ios_24), "Back", modifier = GlanceModifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    .clickable(onClick = actionRunCallback<ChangePageCallback>(actionParametersOf(
+                        page to (p - 1)
+                    ))))
             Spacer(modifier = GlanceModifier.defaultWeight())
             if (p < (totalPages - 1))
-            Image(ImageProvider(R.drawable.baseline_arrow_forward_ios_24), "Forward", modifier = GlanceModifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                .clickable(onClick = actionRunCallback<ChangePageCallback>(actionParametersOf(
-                    page to (p + 1)
-                ))))
+                Image(ImageProvider(R.drawable.baseline_arrow_forward_ios_24), "Forward", modifier = GlanceModifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                    .clickable(onClick = actionRunCallback<ChangePageCallback>(actionParametersOf(
+                        page to (p + 1)
+                    ))))
         }
     }
 }
@@ -422,8 +438,8 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
             }
         }
         Text((session?.getGame()?.getDisplaySubtitle(extension!!.context, session.currentMessage) ?: message?.caption ?: "Game Name").uppercase(),
-                style = TextStyle(fontSize = 16.sp, color = ColorProvider(Color.Gray),
-                    textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
+            style = TextStyle(fontSize = 16.sp, color = ColorProvider(Color.Gray),
+                textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
             modifier = GlanceModifier.padding(vertical = 10.dp))
     }
 }
@@ -480,12 +496,12 @@ class ConfigureCallback : ActionCallback {
 fun RenderConfigOption(game: Game, name: String, options: List<String>, selected: String) {
     Column(modifier = GlanceModifier.padding(8.dp)) {
         Text(name.uppercase(), style = TextStyle(color = ColorProvider(Color.Gray),
-                fontWeight = FontWeight.Bold, fontSize = 11.sp))
+            fontWeight = FontWeight.Bold, fontSize = 11.sp))
         Spacer(modifier = GlanceModifier.height(2.dp).background(Color.Gray).fillMaxWidth())
         Row(verticalAlignment = Alignment.Vertical.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
             for (option in options) {
                 Text(option, style = TextStyle(fontWeight =
-                        if (selected == option) FontWeight.Bold else FontWeight.Normal, color = ColorProvider(Color.Gray),
+                    if (selected == option) FontWeight.Bold else FontWeight.Normal, color = ColorProvider(Color.Gray),
                     fontSize = 18.sp, textAlign = TextAlign.Center
                 ), modifier = GlanceModifier.padding(horizontal = 8.dp, vertical = 4.dp).clickable(onClick = actionRunCallback<ConfigureCallback>(actionParametersOf(
                     gameName to game.getName(),
