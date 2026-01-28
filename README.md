@@ -33,6 +33,8 @@ OpenPigeon is fully open-source, and we're actively looking for game developers 
 1. Create an empty file named `config.properties` in the root folder.
 1. Open `app/src/main/assets` in the Godot editor
 1. Run in Android Studio and install to your device.
+1. Rename your .exe of godot to `godot.exe` and edit your system variables path to include the path to godot.exe
+1. Restart Android Studio
 1. Enable developer mode in OpenBubbles -> Developer Tools.
 1. Add the service name: `com.openbubbles.openpigeon.MadridExtensionService`
 
