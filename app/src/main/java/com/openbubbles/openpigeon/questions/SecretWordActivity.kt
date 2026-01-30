@@ -43,7 +43,7 @@ class SecretWordActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme(colorScheme = QuestionsDarkScheme()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.Center) {
                     Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
                         CardContent(
                             initial = initial,
