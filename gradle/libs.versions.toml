@@ -3,7 +3,7 @@ activityCompose = "1.10.1"
 agp = "8.9.1"
 calligraphy3 = "3.1.1"
 glanceAppwidget = "1.1.1"
-kotlin = "1.9.0"
+kotlin = "2.1.0"
 coreKtx = "1.13.1"
 junit = "4.13.2"
 junitVersion = "1.1.5"
@@ -19,7 +19,7 @@ activity = "1.8.0"
 uiGraphicsAndroid = "1.7.8"
 media3CommonKtx = "1.6.0"
 viewpump = "2.1.0"
-godot = "4.4.1.stable"
+godot = "4.5.1.stable"
 activityKtx = "1.9.1"
 
 [libraries]
@@ -52,4 +52,4 @@ viewpump = { module = "io.github.inflationx:viewpump", version.ref = "viewpump" 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
 jetbrainsKotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
-
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
