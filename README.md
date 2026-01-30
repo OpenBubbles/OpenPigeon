@@ -7,25 +7,25 @@ OpenPigeon is a GamePigeon-compatible game pack for OpenBubbles on Android. Open
 OpenPigeon is fully open-source, and we're actively looking for game developers to contribute their favorite games.
 
 ## Supported Games
-- Checkers (Normal and Newbie)
-- Word Hunt (all modes)
-- Anagrams
-- Wordbites
-- Four in a Row
-- Basketball
-- Sea Battle (all sizes)
-- Crazy 8
-- Darts (all modes)
 - 8 Ball (Easy/Hard)
-- Cup Pong
+- 20 Questions
+- Anagrams
 - Archery
+- Basketball
+- Checkers (Normal and Newbie)
+- Chess
+- Crazy 8
+- Cup Pong
+- Darts (all modes)
+- Dots & Boxes
+- Filler
+- Four in a Row
+- Gomoku
 - Mancala
 - Reversi
-- Filler
-- Dots & Boxes
-- Chess
-- 20 Questions
-- Gomoku
+- Sea Battle (all sizes)
+- Wordbites
+- Word Hunt (all modes)
 
 ## Contributing
 1. Git clone with Submodules. 
