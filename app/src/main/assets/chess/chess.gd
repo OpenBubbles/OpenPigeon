@@ -188,14 +188,6 @@ var awaiting_promotion: bool:
 	get: return dialogs.awaiting_promotion
 	set(value): dialogs.awaiting_promotion = value
 
-# ---------- Debug helpers ----------
-func _log(msg: String) -> void:
-	print(">> CHESSDBG: " + msg)
-
-func _debug_state(tag: String = "") -> void:
-	_log("[%s] turn=%s my_color=%s local_mode=%s isTurn=%s waitingForOpponent=%s fullmove=%d halfmove=%d castling=%s en_passant=%s game_over=%s reason=%s"
-		% [tag, turn, my_color, str(local_mode), str(isTurn), str(waitingForOpponent), fullmove, halfmove, castling, en_passant, str(game_over), game_over_reason])
-
 
 # ---------- Scoped Loggers (Consolidated) ----------
 ## Pre-initialized loggers for each context to avoid repeated context strings
@@ -237,6 +229,10 @@ func _calculate_player_index(is_your_turn: bool, message_player: int) -> int:
 
 # ---------- Ready / plugin ----------
 func _ready() -> void:
+	# Enable DEBUG logging in debug builds (production defaults to INFO for performance)
+	if OS.has_feature("debug"):
+		ChessDebug.set_level(ChessDebug.LogLevel.DEBUG)
+
 	_log_init.info("_ready() start")
 
 	# Initialize ChessBoard instance first - this manages all game state
