@@ -196,6 +196,37 @@ func _debug_state(tag: String = "") -> void:
 	_log("[%s] turn=%s my_color=%s local_mode=%s isTurn=%s waitingForOpponent=%s fullmove=%d halfmove=%d castling=%s en_passant=%s game_over=%s reason=%s"
 		% [tag, turn, my_color, str(local_mode), str(isTurn), str(waitingForOpponent), fullmove, halfmove, castling, en_passant, str(game_over), game_over_reason])
 
+
+# ---------- Scoped Loggers (Consolidated) ----------
+## Pre-initialized loggers for each context to avoid repeated context strings
+## Consolidated from 10 loggers to 5 for cleaner code:
+## - INIT: Initialization only
+## - GAME: Move execution, turn management, engine evaluation (was MOVE, TURN, ENGINE)
+## - UI: UI rendering, input handling, promotion dialogs (was UI, INPUT, PROMO)
+## - DATA: Data parsing, notation conversion (was DATA, NOTATION)
+## - BOARD: Board state management
+var _log_init := ChessDebug.ScopedLogger.new("INIT")
+var _log_game := ChessDebug.ScopedLogger.new("GAME")
+var _log_ui := ChessDebug.ScopedLogger.new("UI")
+var _log_data := ChessDebug.ScopedLogger.new("DATA")
+var _log_board := ChessDebug.ScopedLogger.new("BOARD")
+
+## Get standardized game state dictionary for logging.
+func _game_state_dict() -> Dictionary:
+	return {
+		"turn": turn,
+		"my_color": my_color,
+		"local_mode": local_mode,
+		"isTurn": isTurn,
+		"waitingForOpponent": waitingForOpponent,
+		"fullmove": fullmove,
+		"halfmove": halfmove,
+		"castling": castling,
+		"en_passant": en_passant,
+		"game_over": game_over,
+		"reason": game_over_reason
+	}
+
 ## Calculate player index from GamePigeon protocol fields.
 ## GamePigeon protocol: The "player" field indicates whose turn it currently is.
 ## - If it's NOT your turn, you are the OPPOSITE of the message player (flip 1↔2)
