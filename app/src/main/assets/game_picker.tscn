@@ -20,86 +20,92 @@ offset_bottom = 289.0
 text = "Checkers"
 script = ExtResource("1_4r7pt")
 
+[node name="ChessButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 144.0
+offset_top = 304.0
+offset_right = 490.0
+offset_bottom = 365.0
+text = "Chess"
+script = ExtResource("1_4r7pt")
+
 [node name="ConnectFourButton" type="Button" parent="."]
 layout_mode = 0
 offset_left = 144.0
-offset_top = 314.0
+offset_top = 380.0
 offset_right = 490.0
-offset_bottom = 375.0
+offset_bottom = 441.0
 text = "Connect Four"
 script = ExtResource("1_4r7pt")
 
 [node name="BasketballButton" type="Button" parent="."]
 layout_mode = 0
-offset_left = 143.0
-offset_top = 397.0
-offset_right = 489.0
-offset_bottom = 458.0
+offset_left = 144.0
+offset_top = 456.0
+offset_right = 490.0
+offset_bottom = 517.0
 text = "Basketball"
 script = ExtResource("1_4r7pt")
 
 [node name="DartsButton" type="Button" parent="."]
 layout_mode = 0
-offset_left = 143.0
-offset_top = 479.0
-offset_right = 489.0
-offset_bottom = 540.0
+offset_left = 144.0
+offset_top = 532.0
+offset_right = 490.0
+offset_bottom = 593.0
 text = "Darts"
 script = ExtResource("1_4r7pt")
 
 [node name="BeerButton" type="Button" parent="."]
 layout_mode = 0
-offset_left = 143.0
-offset_top = 561.0
-offset_right = 489.0
-offset_bottom = 622.0
+offset_left = 144.0
+offset_top = 608.0
+offset_right = 490.0
+offset_bottom = 669.0
 text = "Cup Pong"
 script = ExtResource("1_4r7pt")
 
 [node name="ArcheryButton" type="Button" parent="."]
 layout_mode = 0
-offset_left = 143.0
-offset_top = 642.0
-offset_right = 489.0
-offset_bottom = 703.0
+offset_left = 144.0
+offset_top = 684.0
+offset_right = 490.0
+offset_bottom = 745.0
 text = "Archery"
+script = ExtResource("1_4r7pt")
+
+[node name="MancalaButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 144.0
+offset_top = 760.0
+offset_right = 490.0
+offset_bottom = 821.0
+text = "Mancala"
 script = ExtResource("1_4r7pt")
 
 [node name="ReversiButton" type="Button" parent="."]
 layout_mode = 0
-offset_left = 143.0
-offset_top = 885.0
-offset_right = 489.0
-offset_bottom = 946.0
+offset_left = 144.0
+offset_top = 836.0
+offset_right = 490.0
+offset_bottom = 897.0
 text = "Reversi"
 script = ExtResource("1_4r7pt")
 
 [node name="FillerButton" type="Button" parent="."]
 layout_mode = 0
-offset_left = 143.0
-offset_top = 966.0
-offset_right = 489.0
-offset_bottom = 1027.0
-text = "Filler
-"
-script = ExtResource("1_4r7pt")
-
-[node name="MancalaButton" type="Button" parent="."]
-layout_mode = 0
-offset_left = 143.0
-offset_top = 723.0
-offset_right = 489.0
-offset_bottom = 784.0
-text = "Mancala
-"
+offset_left = 144.0
+offset_top = 912.0
+offset_right = 490.0
+offset_bottom = 973.0
+text = "Filler"
 script = ExtResource("1_4r7pt")
 
 [node name="QuestionsButton" type="Button" parent="."]
 layout_mode = 0
-offset_left = 143.0
-offset_top = 966.0
-offset_right = 489.0
-offset_bottom = 1027.0
-text = "Questions
-"
+offset_left = 144.0
+offset_top = 988.0
+offset_right = 490.0
+offset_bottom = 1049.0
+text = "Questions"
 script = ExtResource("1_4r7pt")
