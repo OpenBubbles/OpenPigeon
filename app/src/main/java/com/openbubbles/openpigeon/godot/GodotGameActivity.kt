@@ -46,8 +46,10 @@ class GodotGameActivity : GodotActivity() {
     override fun onResume() {
         if (gameSessionIPC != null) {
             gameSessionIPC?.setSuppressNotifications(sessionId, true)
-        } else {
+        } else if (::baseGame.isInitialized) {
             Log.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
+        } else {
+            Log.w("openpigeon-godot", "onResume called before baseGame was initialized!")
         }
         super.onResume()
     }
