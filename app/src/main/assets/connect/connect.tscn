@@ -1,4 +1,4 @@
-[gd_scene load_steps=28 format=3 uid="uid://cqobnjjddyewo"]
+[gd_scene load_steps=34 format=3 uid="uid://cqobnjjddyewo"]
 
 [ext_resource type="Texture2D" uid="uid://dicka3jn4dugu" path="res://connect/red_piece.png" id="2_ipfru"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_pdash"]
@@ -10,6 +10,24 @@
 [ext_resource type="Script" uid="uid://bhkk1jj0y7aan" path="res://connect/game_piece.gd" id="7_wlgta"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="8_mg74y"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="9_2im17"]
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_mg74y"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_2im17"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_mdy7o"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_q5pf0"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_1wmsy"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_336qj"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_utbov"]
 size = Vector2(678.133, 18)
@@ -170,6 +188,9 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_mg74y")
+texture_pressed = SubResource("ViewportTexture_2im17")
+texture_hover = SubResource("ViewportTexture_mdy7o")
 is_display_only = true
 
 [node name="PlayerPieceContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer"]
@@ -221,6 +242,9 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_q5pf0")
+texture_pressed = SubResource("ViewportTexture_1wmsy")
+texture_hover = SubResource("ViewportTexture_336qj")
 is_display_only = true
 controlled_by_data = true
 

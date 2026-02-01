@@ -55,15 +55,23 @@ var droppedPiece			: RigidBody2D = null
 func _ready() -> void:
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_bg_for_dark(is_dark)
+	if is_instance_valid(rules_button):
+		rules_button.pressed.connect(on_rules_button_pressed)
+	if is_instance_valid(settings_button):
+		settings_button.pressed.connect(_on_settings_button_pressed)
+	if is_instance_valid(dot_timer):
+		dot_timer.timeout.connect(_on_dot_timer_timeout)
+	if is_instance_valid(send_button):
+		send_button.disabled = true
+		_update_send_button_visibility(false)
+		send_button.pressed.connect(send_game)
 	var app: Object = Engine.get_singleton("AppPlugin")
-
 	if app:
 		if not has_connected:
 			app.connect("set_game_data", _set_game_data)
 			has_connected = true
 			app.call("onReady")
 			await get_tree().process_frame
-			_set_waiting(true)
 			return
 	else:
 		if player == 0 or replay.is_empty():
@@ -79,17 +87,6 @@ func _ready() -> void:
 	if not game_over:
 		await get_tree().process_frame
 		_set_waiting(not isTurn)
-
-	if is_instance_valid(rules_button):
-		rules_button.pressed.connect(on_rules_button_pressed)
-	if is_instance_valid(settings_button):
-		settings_button.pressed.connect(_on_settings_button_pressed)
-	if is_instance_valid(dot_timer):
-		dot_timer.timeout.connect(_on_dot_timer_timeout)
-	if is_instance_valid(send_button):
-		send_button.disabled = true
-		_update_send_button_visibility(false)
-		send_button.pressed.connect(send_game)
 		
 func _apply_turn_lock() -> void:
 	can_interact = isTurn and (not game_over) and (not spectator_mode)
