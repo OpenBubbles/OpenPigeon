@@ -56,6 +56,7 @@ var board_border: ColorRect = null
 var black_border: ColorRect = null
 var BLACK_THICK: float = 2.0
 var pending_evaluate: bool = false   # set true if parse_gp_replay ran before UI built
+var _modal_open: bool = false
 
 var appPlugin: Object = null
 var local_mode: bool = false        # true when running without appPlugin (local debug)
@@ -1024,6 +1025,8 @@ func _input(event: InputEvent) -> void:
 		_on_tap(event.position)
 
 func _can_interact() -> bool:
+	if _modal_open:
+		return false
 	if game_over:
 		#_log_ui.debug("_can_interact -> false (game over)")
 		return false
@@ -1580,7 +1583,7 @@ func _apply_bg_for_dark(is_dark: bool) -> void:
 func on_rules_button_pressed() -> void:
 	if not is_instance_valid(rules_button):
 		return
-
+	_modal_open = true
 	rules_button.pivot_offset = rules_button.size / 2.0
 	var tween := create_tween()
 	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -1599,6 +1602,7 @@ func on_rules_button_pressed() -> void:
 	dim.z_index = 99
 
 	popup.tree_exited.connect(func():
+		_modal_open = false
 		if is_instance_valid(dim):
 			dim.queue_free()
 	)
@@ -1802,6 +1806,7 @@ func _on_settings_button_pressed() -> void:
 	tween.tween_property(settings_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(settings_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
+	_modal_open = true
 
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.5)
@@ -1856,6 +1861,7 @@ func _on_settings_button_pressed() -> void:
 	settings_popup_script.closed.connect(func():
 		if is_instance_valid(player_avatar_display):
 			player_avatar_display.update_display_from_settings()
+		_modal_open = false
 	)
 	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
 	settings_popup_script.dark_mode_changed.connect(_apply_bg_for_dark)

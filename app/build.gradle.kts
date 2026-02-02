@@ -200,8 +200,10 @@ tasks.register<Copy>("copyOtherAssets") {
     into(project.layout.buildDirectory.dir("generated/release_assets"))
 }
 
-tasks.named("preBuild") {
-    dependsOn("importGodotAssets")
+tasks.whenTaskAdded {
+    if (name == "preReleaseBuild") {
+        dependsOn(tasks.named("importGodotAssets"))
+    }
 }
 
 tasks.whenTaskAdded {
