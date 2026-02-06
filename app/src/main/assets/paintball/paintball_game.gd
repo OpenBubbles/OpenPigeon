@@ -73,8 +73,7 @@ var _round_end_hold: float = 1.00
 var _round_end_white_out: float = 0.45
 var _opp_sprite_start_pos: Vector3
 var _opp_sprite_reveal_offset_y: float = 1.5
-var _muzzle_tex_px := Vector2(350.0, 470.0)
-var _muzzle_debug_dot: ColorRect = null
+var _muzzle_tex_px := Vector2(370.0, 180.0)
 var _paintball_scale: float = 0.12
 var _shot_in_progress: bool = false
 var sent_tween: Tween
@@ -141,7 +140,6 @@ func _ready() -> void:
 	if is_instance_valid(fp_aim_sprite):
 		fp_aim_sprite.visible = false
 		_fp_aim_base_pos = fp_aim_sprite.position
-		_ensure_fp_debug_overlay()
 		_init_player_splat_overlay()
 		_init_opponent_splat()
 
@@ -780,8 +778,7 @@ func _on_fire_pressed() -> void:
 
 		if is_instance_valid(fp_aim_sprite):
 			fp_aim_sprite.visible = true
-			fp_aim_sprite.rotation = 0.0
-			_fp_aim_base_pos = Vector2(459, 871)
+			_fp_aim_base_pos = Vector2(259, 1071)
 			fp_aim_sprite.position = _fp_aim_base_pos
 
 		for b in _buttons:
@@ -827,8 +824,16 @@ func _on_fire_pressed() -> void:
 
 	t.tween_callback(func() -> void:
 		var cam_pos := cam3d.global_transform.origin
+		
+		var aim_bias_x := 0.0
+		if _player_lane == ActionButton3D.Lane.LEFT and _selected_shoot.lane == ActionButton3D.Lane.LEFT:
+			aim_bias_x = 4
+		elif _player_lane == ActionButton3D.Lane.RIGHT and _selected_shoot.lane == ActionButton3D.Lane.RIGHT:
+			aim_bias_x = -4
 
-		var look_xform := Transform3D().looking_at(aim_point, Vector3.UP)
+		var biased_aim_point := aim_point + Vector3(aim_bias_x, 0.0, 0.0)
+
+		var look_xform := Transform3D().looking_at(biased_aim_point, Vector3.UP)
 		look_xform.origin = cam_pos
 
 		var b := look_xform.basis
@@ -914,7 +919,6 @@ func _fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached:
 			target_fixed.z += 0.05
 	else:
 		var muzzle_screen := _get_muzzle_screen_pos()
-		_set_muzzle_debug_dot_screen_pos(muzzle_screen, true)
 
 		var ray_origin := cam.project_ray_origin(muzzle_screen)
 		var ray_dir := cam.project_ray_normal(muzzle_screen).normalized()
@@ -1152,13 +1156,8 @@ func _init_opponent_splat() -> void:
 	_opp_splat.name = "OppHitSplat"
 	_opp_splat.texture = SPLAT_TEX
 	_opp_splat.visible = false
-
-	# Force it to face camera regardless of opponent pose/texture
 	_opp_splat.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-
-	# Make it “win” in sorting a bit
 	_opp_splat.render_priority = 10
-
 	_opp_splat.modulate = Color(1.0, 0.95, 0.2, 1.0)
 
 	opponent_sprite.add_child(_opp_splat)
@@ -1391,7 +1390,6 @@ func _spawn_and_fire_paintball(target_world: Vector3, is_enemy: bool = false) ->
 		muzzle_world = opponent_sprite.global_position + Vector3(0.0, 0.9, 0.0)
 	else:
 		var muzzle_screen := _get_muzzle_screen_pos()
-		_set_muzzle_debug_dot_screen_pos(muzzle_screen, true)
 
 		var ray_origin := cam.project_ray_origin(muzzle_screen)
 		var ray_dir := cam.project_ray_normal(muzzle_screen).normalized()
@@ -1538,9 +1536,6 @@ func _process(delta: float) -> void:
 		return
 	if not is_instance_valid(cam):
 		return
-	if is_instance_valid(fp_aim_sprite) and is_instance_valid(cam):
-		var p := _get_muzzle_screen_pos()
-		_set_muzzle_debug_dot_screen_pos(p, true)
 
 
 	_aim_gun_sprite_at_world_point(
@@ -1586,13 +1581,10 @@ func _aim_gun_sprite_at_world_point(
 			local -= drawn_size * 0.5
 		return sprite.global_position + local.rotated(sprite.global_rotation)
 
-	var rear_tex_px := Vector2(550.0, 720.0)
+	var rear_tex_px := Vector2(570.0, 470.0)
 	var muzzle_tex_px := _muzzle_tex_px
 	var rear_screen: Vector2 = tex_px_to_screen.call(rear_tex_px)
 	var muzzle_screen: Vector2 = tex_px_to_screen.call(muzzle_tex_px)
-
-	_set_fp_debug_barrel(rear_screen, muzzle_screen, _is_shot_sequence_running)
-
 	var cur_dir := (muzzle_screen - rear_screen)
 	var des_dir := (target_screen - rear_screen)
 
@@ -2217,103 +2209,3 @@ func _load_game_specific_settings() -> void:
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))
 	var show_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
 	print("Loaded game-specific settings for ", game_settings_category, ": volume=", saved_volume, " debug=", show_debug_info)
-
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ DEBUG CODE ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-func _ensure_muzzle_debug_dot() -> void:
-	if _muzzle_debug_dot != null and is_instance_valid(_muzzle_debug_dot):
-		return
-
-	_muzzle_debug_dot = ColorRect.new()
-	_muzzle_debug_dot.name = "MuzzleDebugDot"
-	_muzzle_debug_dot.color = Color(1.0, 0.1, 0.1, 1.0)
-	_muzzle_debug_dot.size = Vector2(12, 12)
-	_muzzle_debug_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_muzzle_debug_dot.top_level = true
-	_muzzle_debug_dot.z_index = 9999
-
-	# VERY IMPORTANT: add to the same CanvasLayer as fp_aim_sprite
-	var parent := fp_aim_sprite.get_parent()
-	while parent != null and not (parent is CanvasLayer):
-		parent = parent.get_parent()
-
-	if parent is CanvasLayer:
-		parent.add_child(_muzzle_debug_dot)
-	else:
-		# Fallback
-		get_tree().root.add_child(_muzzle_debug_dot)
-
-	_muzzle_debug_dot.visible = false
-
-func _set_muzzle_debug_dot_screen_pos(screen_pos: Vector2, showm: bool) -> void:
-	_ensure_muzzle_debug_dot()
-	if not is_instance_valid(_muzzle_debug_dot):
-		return
-
-	_muzzle_debug_dot.visible = showm
-	_muzzle_debug_dot.global_position = screen_pos - (_muzzle_debug_dot.size * 0.5)
-
-# Add these vars near your other debug vars
-var _rear_debug_dot: ColorRect = null
-var _barrel_debug_line: Line2D = null
-
-func _ensure_fp_debug_overlay() -> void:
-	_ensure_muzzle_debug_dot()
-
-	if not is_instance_valid(fp_aim_sprite):
-		return
-
-	var attach_parent: Node = null
-
-	# Try to attach to the CanvasLayer fp_aim_sprite is under (preferred)
-	var parent: Node = fp_aim_sprite.get_parent()
-	while parent != null and not (parent is CanvasLayer):
-		parent = parent.get_parent()
-
-	if parent != null and parent is CanvasLayer:
-		attach_parent = parent
-	else:
-		# Fallback: attach to the same parent as fp_aim_sprite (avoids Window typing issues)
-		attach_parent = fp_aim_sprite.get_parent()
-
-	if attach_parent == null:
-		return
-
-	# Rear dot
-	if _rear_debug_dot == null or not is_instance_valid(_rear_debug_dot):
-		_rear_debug_dot = ColorRect.new()
-		_rear_debug_dot.name = "RearDebugDot"
-		_rear_debug_dot.color = Color(0.1, 0.9, 0.2, 1.0)
-		_rear_debug_dot.size = Vector2(12, 12)
-		_rear_debug_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_rear_debug_dot.top_level = true
-		_rear_debug_dot.z_index = 9999
-		attach_parent.add_child(_rear_debug_dot)
-		_rear_debug_dot.visible = false
-
-	# Barrel line
-	if _barrel_debug_line == null or not is_instance_valid(_barrel_debug_line):
-		_barrel_debug_line = Line2D.new()
-		_barrel_debug_line.name = "BarrelDebugLine"
-		_barrel_debug_line.width = 3.0
-		_barrel_debug_line.default_color = Color(0.1, 0.9, 0.2, 1.0)
-		_barrel_debug_line.antialiased = true
-		_barrel_debug_line.top_level = true
-		_barrel_debug_line.z_index = 9998
-		attach_parent.add_child(_barrel_debug_line)
-		_barrel_debug_line.visible = false
-		
-func _set_fp_debug_barrel(rear_screen: Vector2, muzzle_screen: Vector2, should_show: bool) -> void:
-	_ensure_fp_debug_overlay()
-
-	# Muzzle dot (your existing helper)
-	_set_muzzle_debug_dot_screen_pos(muzzle_screen, should_show)
-
-	if is_instance_valid(_rear_debug_dot):
-		_rear_debug_dot.visible = should_show
-		_rear_debug_dot.global_position = rear_screen - (_rear_debug_dot.size * 0.5)
-
-	if is_instance_valid(_barrel_debug_line):
-		_barrel_debug_line.visible = should_show
-		_barrel_debug_line.clear_points()
-		_barrel_debug_line.add_point(rear_screen)
-		_barrel_debug_line.add_point(muzzle_screen)

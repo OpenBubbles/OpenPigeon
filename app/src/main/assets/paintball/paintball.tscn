@@ -160,7 +160,6 @@ layer = 0
 [node name="FirstPersonAimSprite" type="Sprite2D" parent="Camera3D/CanvasLayer"]
 unique_name_in_owner = true
 position = Vector2(459, 871)
-scale = Vector2(0.38, 0.38)
 texture = ExtResource("2_gx26o")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
@@ -193,29 +192,42 @@ mesh = SubResource("PlaneMesh_vela0")
 
 [node name="Tire" type="Sprite3D" parent="."]
 transform = Transform3D(0.265, 0, 0, 0, 0.265, 0, 0, 0, 0.265, 2.3649158, 1.471144, 0.3210783)
+flip_h = true
+billboard = 1
+texture_filter = 0
 texture = ExtResource("8_03t0m")
 
 [node name="Tire2" type="Sprite3D" parent="."]
 transform = Transform3D(0.265, 0, 0, 0, 0.265, 0, 0, 0, 0.265, 0.12682557, 1.471144, 0.3210783)
+billboard = 1
+texture_filter = 0
 texture = ExtResource("8_03t0m")
 
 [node name="Tire3" type="Sprite3D" parent="."]
 transform = Transform3D(0.265, 0, 0, 0, 0.265, 0, 0, 0, 0.265, -2.2862396, 1.471144, 0.3210783)
+billboard = 1
+texture_filter = 0
 texture = ExtResource("8_03t0m")
 
 [node name="Tire4" type="Sprite3D" parent="."]
 transform = Transform3D(0.265, 0, 0, 0, 0.265, 0, 0, 0, 0.265, 2.3649158, 1.471144, -13.749278)
 flip_h = true
+billboard = 1
+texture_filter = 1
 texture = ExtResource("8_03t0m")
 
 [node name="Tire5" type="Sprite3D" parent="."]
 transform = Transform3D(0.265, 0, 0, 0, 0.265, 0, 0, 0, 0.265, 0.127, 1.471, -13.748942)
 flip_h = true
+billboard = 1
+texture_filter = 1
 texture = ExtResource("8_03t0m")
 
 [node name="Tire6" type="Sprite3D" parent="."]
 transform = Transform3D(-0.265, 0, -2.3167035e-08, 0, 0.265, 0, 2.3167035e-08, 0, -0.265, -2.286, 1.471, -13.748942)
 flip_h = true
+billboard = 1
+texture_filter = 1
 texture = ExtResource("8_03t0m")
 
 [node name="Player" type="Sprite3D" parent="."]
@@ -241,12 +253,14 @@ transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, -2.2604523, 3.8512156, 
 lane = 0
 
 [node name="Sprite3D" parent="Buttons/ShootLeft" index="0"]
+texture_filter = 0
 texture = ExtResource("6_hy3c1")
 
 [node name="ShootCenter" parent="Buttons" instance=ExtResource("6_f7ola")]
 transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0.151, 3.851, -14.314)
 
 [node name="Sprite3D" parent="Buttons/ShootCenter" index="0"]
+texture_filter = 0
 texture = ExtResource("6_hy3c1")
 
 [node name="ShootRight" parent="Buttons" instance=ExtResource("6_f7ola")]
@@ -254,6 +268,7 @@ transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 2.4299703, 3.851, -14.3
 lane = 2
 
 [node name="Sprite3D" parent="Buttons/ShootRight" index="0"]
+texture_filter = 0
 texture = ExtResource("6_hy3c1")
 
 [node name="MoveLeft" parent="Buttons" instance=ExtResource("6_f7ola")]
@@ -263,11 +278,17 @@ lane = 0
 move_tex_1x = ExtResource("7_w8qcd")
 move_tex_2x = ExtResource("9_wuh8u")
 
+[node name="Sprite3D" parent="Buttons/MoveLeft" index="0"]
+texture_filter = 0
+
 [node name="MoveCenter" parent="Buttons" instance=ExtResource("6_f7ola")]
 transform = Transform3D(0.25, 0, 0, 0, 0.25, 0, 0, 0, 0.25, 0.11931014, 1.45, 0.531)
 kind = 1
 move_tex_1x = ExtResource("7_w8qcd")
 move_tex_2x = ExtResource("9_wuh8u")
+
+[node name="Sprite3D" parent="Buttons/MoveCenter" index="0"]
+texture_filter = 0
 
 [node name="MoveRight" parent="Buttons" instance=ExtResource("6_f7ola")]
 transform = Transform3D(0.25, 0, 0, 0, 0.25, 0, 0, 0, 0.25, 2.441579, 1.45, 0.531)
@@ -275,6 +296,9 @@ kind = 1
 lane = 2
 move_tex_1x = ExtResource("7_w8qcd")
 move_tex_2x = ExtResource("9_wuh8u")
+
+[node name="Sprite3D" parent="Buttons/MoveRight" index="0"]
+texture_filter = 0
 
 [node name="WaitBlur" type="ColorRect" parent="."]
 unique_name_in_owner = true

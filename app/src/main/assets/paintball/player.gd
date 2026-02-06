@@ -1,12 +1,12 @@
 extends Node3D
 
 @onready var shadow: MeshInstance3D = $BlobShadow
-@onready var floor: Node3D = get_tree().get_root().find_child("floor", true, false) as Node3D
+@onready var ground: Node3D = %floor
 
-@export var max_height: float = 2.0
-@export var scale_near: float = 0.85
+@export var max_height: float = 3.0
+@export var scale_near: float = 1
 @export var scale_far: float = 0.35
-@export var alpha_near: float = 0.45
+@export var alpha_near: float = 0.55
 @export var alpha_far: float = 0.12
 @export var shadow_y_offset: float = 0.02
 
@@ -20,10 +20,10 @@ func _ready() -> void:
 	shadow.set_surface_override_material(0, mat)
 
 func _process(_delta: float) -> void:
-	if floor == null or mat == null:
+	if ground == null or mat == null:
 		return
 
-	var ground_y: float = floor.global_position.y
+	var ground_y: float = ground.global_position.y
 
 	var shadow_gp: Vector3 = shadow.global_position
 	shadow_gp.y = ground_y + shadow_y_offset
