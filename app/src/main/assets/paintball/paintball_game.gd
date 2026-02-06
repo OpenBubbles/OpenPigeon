@@ -37,6 +37,8 @@ const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const PAINTBALL_SCENE := preload("res://paintball/PaintballProjectile.tscn")
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 const SPLAT_TEX := preload("res://paintball/splat.png")
+const OPPONENT_FACING_TEX := preload("res://paintball/opponent_facing.png")
+const OPPONENT_SIDE_TEX := preload("res://paintball/opponent_side.png")
 
 var _player_splat: TextureRect = null
 var _player_splat_tween: Tween = null
@@ -70,7 +72,7 @@ var _round_end_white_in: float = 0.25
 var _round_end_hold: float = 1.00
 var _round_end_white_out: float = 0.45
 var _opp_sprite_start_pos: Vector3
-var _opp_sprite_reveal_offset_y: float = 1
+var _opp_sprite_reveal_offset_y: float = 1.5
 var _muzzle_tex_px := Vector2(350.0, 470.0)
 var _muzzle_debug_dot: ColorRect = null
 var _paintball_scale: float = 0.12
@@ -154,6 +156,9 @@ func _ready() -> void:
 		fp_aim_sprite.top_level = false
 		fp_aim_sprite.z_as_relative = false
 		fp_aim_sprite.z_index = -10
+		
+	if is_instance_valid(opponent_sprite):
+		opponent_sprite.scale = Vector3.ONE * 0.4
 
 	if is_instance_valid(top_info):
 		top_info.z_as_relative = false
@@ -403,6 +408,7 @@ func _set_game_data(raw_text: String) -> void:
 			var tx: float = float(_lane_x[_opp_target_lane])
 			_opp_target_world = Vector3(tx, player.global_position.y + 0.7, player.global_position.z)
 			print("[REPLAY] opponent target lane=", _opp_target_lane, " target_world=", _opp_target_world)
+			_update_opponent_sprite_pose_for_shot()
 
 		if is_my_turn and target_me == -1 and target_opp != -1:
 			_pending_enemy_shot = true
@@ -708,6 +714,7 @@ func _on_fire_pressed() -> void:
 
 		_opp_target_world = tgt_world
 		print("[PLAYROUND] Opp target enc=", _opp_target_enc, " => lane=", _opp_target_lane, " world=", _opp_target_world)
+		_update_opponent_sprite_pose_for_shot()
 
 	var cam3d := get_viewport().get_camera_3d()
 	if not cam3d:
@@ -755,11 +762,12 @@ func _on_fire_pressed() -> void:
 	for n in fade_out_nodes:
 		if is_instance_valid(n) and n is CanvasItem:
 			t.parallel().tween_property(n, "modulate:a", 0.0, dur_in)
-
+	
 	t.tween_callback(func() -> void:
 		if is_instance_valid(player):
 			player.visible = false
-
+		if is_instance_valid(opponent_sprite):
+			opponent_sprite.visible = true
 		if is_instance_valid(player_avatar_display) and player_avatar_display is CanvasItem:
 			player_avatar_display.visible = true
 			(player_avatar_display as CanvasItem).modulate.a = 0.0
@@ -969,6 +977,10 @@ func _fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached:
 	ball.reached_plane.connect(func(world_pos: Vector3) -> void:
 		if box["got"]:
 			return
+			
+		if not is_enemy and is_instance_valid(ball):
+			ball.visible = false
+			ball.queue_free()
 
 		if on_reached.is_valid():
 			on_reached.call(world_pos)
@@ -997,8 +1009,9 @@ func _fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached:
 
 	await get_tree().process_frame
 
-	if is_instance_valid(ball):
+	if is_enemy and is_instance_valid(ball):
 		ball.queue_free()
+
 
 
 	return impact_world
@@ -1139,12 +1152,16 @@ func _init_opponent_splat() -> void:
 	_opp_splat.name = "OppHitSplat"
 	_opp_splat.texture = SPLAT_TEX
 	_opp_splat.visible = false
+
+	# Force it to face camera regardless of opponent pose/texture
 	_opp_splat.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+
+	# Make it “win” in sorting a bit
+	_opp_splat.render_priority = 10
+
 	_opp_splat.modulate = Color(1.0, 0.95, 0.2, 1.0)
-	_opp_splat.scale = Vector3.ONE * 0.05
 
 	opponent_sprite.add_child(_opp_splat)
-
 
 func _show_opponent_hit_splat() -> void:
 	if _opp_splat == null or not is_instance_valid(_opp_splat):
@@ -1157,7 +1174,6 @@ func _show_opponent_hit_splat() -> void:
 	_opp_splat.modulate.a = 0.0
 	_opp_splat.position = Vector3(randf_range(-0.10, 0.10), 0.4, 0.03)
 	_opp_splat.rotation = Vector3(0.0, 0.0, deg_to_rad(randf_range(0.0, 360.0)))
-	_opp_splat.scale = Vector3.ONE * 0.02
 
 	_opp_splat_tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_opp_splat_tween.tween_property(_opp_splat, "modulate:a", 1.0, 0.10)
@@ -1198,9 +1214,26 @@ func _run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		_opp_splat.visible = false
 		_opp_splat.modulate.a = 0.0
 
-		_opp_splat.position = Vector3(randf_range(-0.10, 0.10), 0.4, 0.03)
-		_opp_splat.rotation = Vector3(0.0, 0.0, deg_to_rad(randf_range(0.0, 360.0)))
-		_opp_splat.scale = Vector3.ONE * 0.02
+		var splat_pos := Vector3(
+			randf_range(-0.12, 0.12),
+			1.5,
+			-0.02
+		)
+		var splat_rot := Vector3(0.0, 0.0, deg_to_rad(randf_range(0.0, 360.0)))
+
+		if _opp_target_lane == ActionButton3D.Lane.CENTER:
+			splat_pos.x = 0.0
+
+		elif _opp_target_lane == ActionButton3D.Lane.LEFT:
+			splat_pos.x = 0.5
+
+		elif _opp_target_lane == ActionButton3D.Lane.RIGHT:
+			splat_pos.x = -0.5
+
+		_opp_splat.position = splat_pos
+		_opp_splat.rotation = splat_rot
+		_opp_splat.scale = Vector3.ONE * 0.1
+
 
 		var splat_world: Vector3 = opponent_sprite.to_global(_opp_splat.position)
 
@@ -1283,6 +1316,25 @@ func _run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	print("[ROUND] Sequence done")
 	_round_sequence_running = false
 	_is_shot_sequence_running = false
+	
+func _update_opponent_sprite_pose_for_shot() -> void:
+	if not is_instance_valid(opponent_sprite):
+		return
+
+	if not is_instance_valid(player):
+		opponent_sprite.texture = OPPONENT_FACING_TEX
+		opponent_sprite.flip_h = false
+		return
+
+	var delta: int = int(_opp_target_lane) - int(_player_lane)
+
+	if delta == 0:
+		opponent_sprite.texture = OPPONENT_FACING_TEX
+		opponent_sprite.flip_h = false
+		return
+
+	opponent_sprite.texture = OPPONENT_SIDE_TEX
+	opponent_sprite.flip_h = (delta > 0)
 
 func _reveal_opponent_sprite() -> void:
 	if not is_instance_valid(opponent_sprite):

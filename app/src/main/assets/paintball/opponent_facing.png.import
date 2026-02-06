@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cqglwljwunobs"
-path="res://.godot/imported/opponent_left.png-82e3edab5e7d717403a00e303e8205cf.ctex"
+uid="uid://crrfhn12jvlub"
+path="res://.godot/imported/opponent_facing.png-e4ec5cc37a27d7a1460ed54f8fea8b80.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://paintball/opponent_left.png"
-dest_files=["res://.godot/imported/opponent_left.png-82e3edab5e7d717403a00e303e8205cf.ctex"]
+source_file="res://paintball/opponent_facing.png"
+dest_files=["res://.godot/imported/opponent_facing.png-e4ec5cc37a27d7a1460ed54f8fea8b80.ctex"]
 
 [params]
 

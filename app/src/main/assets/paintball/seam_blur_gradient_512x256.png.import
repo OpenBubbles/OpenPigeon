@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://5y3skhhx53r"
-path.s3tc="res://.godot/imported/player_back.png-0acc4e9d67e108fe5b2ddbf49e64164d.s3tc.ctex"
-path.etc2="res://.godot/imported/player_back.png-0acc4e9d67e108fe5b2ddbf49e64164d.etc2.ctex"
+uid="uid://burh5dg7b72yo"
+path.s3tc="res://.godot/imported/seam_blur_gradient_512x256.png-a7f97a5e0d1edf089ce04d88a41d304c.s3tc.ctex"
+path.etc2="res://.godot/imported/seam_blur_gradient_512x256.png-a7f97a5e0d1edf089ce04d88a41d304c.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://paintball/player_back.png"
-dest_files=["res://.godot/imported/player_back.png-0acc4e9d67e108fe5b2ddbf49e64164d.s3tc.ctex", "res://.godot/imported/player_back.png-0acc4e9d67e108fe5b2ddbf49e64164d.etc2.ctex"]
+source_file="res://paintball/seam_blur_gradient_512x256.png"
+dest_files=["res://.godot/imported/seam_blur_gradient_512x256.png-a7f97a5e0d1edf089ce04d88a41d304c.s3tc.ctex", "res://.godot/imported/seam_blur_gradient_512x256.png-a7f97a5e0d1edf089ce04d88a41d304c.etc2.ctex"]
 
 [params]
 

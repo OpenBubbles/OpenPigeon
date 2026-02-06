@@ -1,16 +1,19 @@
-[gd_scene load_steps=37 format=3 uid="uid://c5mu4fun6cf05"]
+[gd_scene load_steps=44 format=3 uid="uid://c5mu4fun6cf05"]
 
 [ext_resource type="Script" uid="uid://c7kwqbkg32clk" path="res://paintball/paintball_game.gd" id="1_itydf"]
 [ext_resource type="Texture2D" uid="uid://cvd8sq0pom53b" path="res://paintball/first_person_aim.png" id="2_gx26o"]
 [ext_resource type="Texture2D" uid="uid://d4jrw0y3fvvyt" path="res://paintball/battlefield_floor.png" id="2_qilti"]
 [ext_resource type="Texture2D" uid="uid://fttv3qq0h5qw" path="res://paintball/backdrop.png" id="4_gayi8"]
-[ext_resource type="Texture2D" uid="uid://6800uctov1lx" path="res://paintball/player_back.png" id="5_gayi8"]
+[ext_resource type="Texture2D" uid="uid://burh5dg7b72yo" path="res://paintball/seam_blur_gradient_512x256.png" id="4_vlj17"]
+[ext_resource type="Texture2D" uid="uid://5y3skhhx53r" path="res://paintball/player_back.png" id="5_gayi8"]
 [ext_resource type="PackedScene" uid="uid://cc6nqf5ayikjx" path="res://paintball/ActionButton3D.tscn" id="6_f7ola"]
 [ext_resource type="Texture2D" uid="uid://b5wx7w2opmicp" path="res://paintball/target.png" id="6_hy3c1"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="6_vkxec"]
 [ext_resource type="Texture2D" uid="uid://b4pov3uhlycas" path="res://paintball/heart.png" id="7_gayi8"]
 [ext_resource type="Texture2D" uid="uid://e7w14yawuau4" path="res://paintball/move_1.png" id="7_w8qcd"]
 [ext_resource type="Texture2D" uid="uid://cdkfuv11gsbcu" path="res://paintball/tires.png" id="8_03t0m"]
+[ext_resource type="Script" uid="uid://byegu0rn0h53p" path="res://paintball/player.gd" id="8_vrfh0"]
+[ext_resource type="Texture2D" uid="uid://bktf2mvjevotp" path="res://paintball/soft_shadow.png" id="9_ohmqa"]
 [ext_resource type="Texture2D" uid="uid://smg1prb0w6xu" path="res://paintball/move_2.png" id="9_wuh8u"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="12_vevvc"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="13_gx26o"]
@@ -20,13 +23,36 @@ albedo_texture = ExtResource("2_qilti")
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_gayi8"]
 material = SubResource("StandardMaterial3D_vkxec")
-size = Vector2(50, 50)
+size = Vector2(30, 30)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vrfh0"]
+transparency = 1
+cull_mode = 2
+shading_mode = 0
+albedo_color = Color(0.5399764, 0.6608088, 0.32535878, 1)
+albedo_texture = ExtResource("4_vlj17")
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_ohmqa"]
+material = SubResource("StandardMaterial3D_vrfh0")
+size = Vector2(35, 1.5)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gayi8"]
 albedo_texture = ExtResource("4_gayi8")
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_vela0"]
-size = Vector2(50, 30)
+size = Vector2(25, 15)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fvh8h"]
+transparency = 1
+cull_mode = 2
+depth_draw_mode = 2
+shading_mode = 0
+albedo_color = Color(0, 0, 0, 1)
+albedo_texture = ExtResource("9_ohmqa")
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_24vgr"]
+material = SubResource("StandardMaterial3D_fvh8h")
+size = Vector2(1.5, 1.5)
 
 [sub_resource type="ViewportTexture" id="ViewportTexture_gayi8"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
@@ -152,11 +178,16 @@ shadow_opacity = 0.54
 shadow_blur = 2.182
 
 [node name="floor" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2759838, -0.23332882, -13.367287)
+unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2759838, -0.23332882, -1.9321003)
 mesh = SubResource("PlaneMesh_gayi8")
 
+[node name="SeamBlend" type="MeshInstance3D" parent="."]
+transform = Transform3D(1.0000001, 1.686655e-15, -4.0325425e-08, -2.4285308e-08, 0.7983204, -0.602233, 3.2192606e-08, 0.6022331, 0.7983203, -0.92802143, -0.067153215, -16.447039)
+mesh = SubResource("PlaneMesh_ohmqa")
+
 [node name="sky" type="MeshInstance3D" parent="."]
-transform = Transform3D(1.3807222, 0, 0, 0, -8.015497e-08, -1.2776886, 0, 1.8337319, -5.5849544e-08, -0.32812834, -2.7154331, -15.628933)
+transform = Transform3D(1.252351, 0, 0, 0, -8.015497e-08, -1.2776886, 0, 1.8337319, -5.5849544e-08, -0.67167807, 8.2442875, -16.722126)
 material_override = SubResource("StandardMaterial3D_gayi8")
 mesh = SubResource("PlaneMesh_vela0")
 
@@ -183,18 +214,24 @@ flip_h = true
 texture = ExtResource("8_03t0m")
 
 [node name="Tire6" type="Sprite3D" parent="."]
-transform = Transform3D(0.265, 0, 0, 0, 0.265, 0, 0, 0, 0.265, -2.286, 1.471, -13.748942)
+transform = Transform3D(-0.265, 0, -2.3167035e-08, 0, 0.265, 0, 2.3167035e-08, 0, -0.265, -2.286, 1.471, -13.748942)
 flip_h = true
 texture = ExtResource("8_03t0m")
 
 [node name="Player" type="Sprite3D" parent="."]
 unique_name_in_owner = true
-transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0.078005075, 0.6978638, 0.77275777)
+transform = Transform3D(1.4, 0, 0, 0, 1.4, 0, 0, 0, 1.4, 0.08581, 1.197899, 0.7731023)
 texture = ExtResource("5_gayi8")
+script = ExtResource("8_vrfh0")
+
+[node name="BlobShadow" type="MeshInstance3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.0133517, 0)
+mesh = SubResource("PlaneMesh_24vgr")
 
 [node name="Opponent" type="Sprite3D" parent="."]
 unique_name_in_owner = true
-transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0.078005075, 1.8858616, -14.262239)
+transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0.025266409, 1.7405827, -14.262239)
+visible = false
 texture = ExtResource("5_gayi8")
 
 [node name="Buttons" type="Node3D" parent="."]

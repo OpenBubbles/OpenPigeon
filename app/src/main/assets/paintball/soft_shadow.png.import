@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ba3ytyvaahums"
-path.s3tc="res://.godot/imported/paint_bg@3x.jpg-b42bc247c8fe05e101fcca78fe2c6484.s3tc.ctex"
-path.etc2="res://.godot/imported/paint_bg@3x.jpg-b42bc247c8fe05e101fcca78fe2c6484.etc2.ctex"
+uid="uid://bktf2mvjevotp"
+path.s3tc="res://.godot/imported/soft_shadow.png-6d1ad8b930e8f3fd80842bb007b25098.s3tc.ctex"
+path.etc2="res://.godot/imported/soft_shadow.png-6d1ad8b930e8f3fd80842bb007b25098.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://paintball/paint_bg@3x.jpg"
-dest_files=["res://.godot/imported/paint_bg@3x.jpg-b42bc247c8fe05e101fcca78fe2c6484.s3tc.ctex", "res://.godot/imported/paint_bg@3x.jpg-b42bc247c8fe05e101fcca78fe2c6484.etc2.ctex"]
+source_file="res://paintball/soft_shadow.png"
+dest_files=["res://.godot/imported/soft_shadow.png-6d1ad8b930e8f3fd80842bb007b25098.s3tc.ctex", "res://.godot/imported/soft_shadow.png-6d1ad8b930e8f3fd80842bb007b25098.etc2.ctex"]
 
 [params]
 
