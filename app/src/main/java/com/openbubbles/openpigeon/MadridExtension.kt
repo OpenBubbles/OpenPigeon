@@ -68,6 +68,7 @@ import com.openbubbles.openpigeon.dots.DotsGame
 import com.openbubbles.openpigeon.fill.FillerGame
 import com.openbubbles.openpigeon.gomoku.GomokuGame
 import com.openbubbles.openpigeon.mancala.MancalaGame
+import com.openbubbles.openpigeon.paintball.PaintGame
 import com.openbubbles.openpigeon.pong.PongGame
 import com.openbubbles.openpigeon.pool.PoolGame
 import com.openbubbles.openpigeon.questions.QuestionsGame
@@ -100,6 +101,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             PongGame(),
             Crazy8Game(),
             ConnectGame(),
+            PaintGame(),
             FillerGame(),
             CheckersGame(),
             ChessGame(),

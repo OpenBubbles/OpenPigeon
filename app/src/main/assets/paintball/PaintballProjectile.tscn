@@ -1,0 +1,16 @@
+[gd_scene load_steps=4 format=3 uid="uid://ebdwn1cuca3n"]
+
+[ext_resource type="Script" uid="uid://dkpuvv5ruvpmb" path="res://paintball/paintball_projectile.gd" id="1_kc74u"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_q6yey"]
+albedo_color = Color(0.82673895, 0.80742633, 0.45225614, 1)
+roughness = 0.6
+
+[sub_resource type="SphereMesh" id="SphereMesh_qqlq5"]
+material = SubResource("StandardMaterial3D_q6yey")
+
+[node name="PaintballProjectile" type="Node3D"]
+script = ExtResource("1_kc74u")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("SphereMesh_qqlq5")

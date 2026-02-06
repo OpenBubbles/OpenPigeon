@@ -1,0 +1,19 @@
+[gd_scene load_steps=4 format=3 uid="uid://cc6nqf5ayikjx"]
+
+[ext_resource type="Script" uid="uid://b7ia83th21v0i" path="res://paintball/action_button_3d.gd" id="1_01iag"]
+[ext_resource type="Texture2D" uid="uid://e7w14yawuau4" path="res://paintball/move_1.png" id="2_skgvf"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_w8kpy"]
+
+[node name="ActionButton3d" type="Node3D"]
+script = ExtResource("1_01iag")
+
+[node name="Sprite3D" type="Sprite3D" parent="."]
+billboard = 1
+texture = ExtResource("2_skgvf")
+
+[node name="Area3D" type="Area3D" parent="."]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Area3D"]
+transform = Transform3D(2.5, 0, 0, 0, 2.5, 0, 0, 0, 0.416, 0, 0, 0)
+shape = SubResource("BoxShape3D_w8kpy")
