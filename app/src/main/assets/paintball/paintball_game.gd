@@ -44,7 +44,10 @@ var _opp_splat: Sprite3D = null
 var _opp_splat_tween: Tween = null
 var _hp_me: int = 3
 var _hp_opp: int = 3
-var ball_speed: int = 36
+var ball_speed: float = 36.0
+var _opp_id: String = ""
+var p1_id: String = ""
+var p2_id: String = ""
 var _cam_start_xform: Transform3D
 var _cam_start_fov: float
 var _aim_target_world: Vector3
@@ -136,13 +139,10 @@ func _ready() -> void:
 	if is_instance_valid(fp_aim_sprite):
 		fp_aim_sprite.visible = false
 		_fp_aim_base_pos = fp_aim_sprite.position
-		# NEW: ensure rear dot + barrel line exist and are attached to same UI layer
 		_ensure_fp_debug_overlay()
 		_init_player_splat_overlay()
 		_init_opponent_splat()
 
-
-	# Ensure FadeWhite always draws above FP aim sprite
 	if is_instance_valid(fade_white):
 		fade_white.top_level = true
 		fade_white.z_as_relative = false
@@ -183,13 +183,13 @@ func _ready() -> void:
 	else:
 		print("[DEV] Editor hint active, loading sample game data")
 
-		var DEV_SCENARIO: int = 3
+		var DEV_SCENARIO: int = 4
 
 		var dev_data_0 := '{"isYourTurn": true,"player":"2","myPlayerId":"DEV_ME","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV0"}'
 		var dev_data_1 := '{"isYourTurn": true,"player":"2","myPlayerId":"DEV_ME","player1":"DEV_ME","player2":"DEV_OPP","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV1","replay":"hp1:3,hp2:3,pos1:2,pos2:-1,target1:2,target2:-1"}'
 		var dev_data_2 := '{"isYourTurn": true,"player":"2","myPlayerId":"DEV_ME","player1":"DEV_ME","player2":"DEV_OPP","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV2","replay":"hp1:3,hp2:3,pos1:2,pos2:1,target1:2,target2:0"}'
 		var dev_data_3 := '{"isYourTurn": true,"player":"2","myPlayerId":"DEV_ME","player1":"DEV_ME","player2":"DEV_OPP","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV3","replay":"hp1:3,hp2:3,pos1:2,pos2:1,target1:2,target2:2|hp1:2,hp2:3,pos1:2,pos2:1,target1:-1,target2:1"}'
-		var dev_data_4 := '{"isYourTurn": true,"player":"2","myPlayerId":"DEV_ME","player1":"DEV_ME","player2":"DEV_OPP","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV4","replay":"hp1:3,hp2:1,pos1:1,pos2:2,target1:0,target2:2"}'
+		var dev_data_4 := '{"isYourTurn": true,"player":"2","myPlayerId":"DEV_ME","player1":"DEV_ME","player2":"DEV_OPP","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV4","replay":"hp1:1,hp2:1,pos1:-1,pos2:2,target1:-1,target2:2"}'
 
 		var dev_data := dev_data_1
 		match DEV_SCENARIO:
@@ -216,7 +216,6 @@ func _set_game_data(raw_text: String) -> void:
 
 	print("RAW INCOMING DATA: ", res)
 
-	# Read values safely (server sometimes sends arrays-of-strings)
 	var my_id_v = res.get("myPlayerId", "")
 	if my_id_v is Array and (my_id_v as Array).size() > 0:
 		my_id = String((my_id_v as Array)[0])
@@ -225,8 +224,15 @@ func _set_game_data(raw_text: String) -> void:
 
 	var p1_v = res.get("player1", "")
 	var p2_v = res.get("player2", "")
-	var p1_id: String = ""
-	var p2_id: String = ""
+	p1_id = ""
+	p2_id = ""
+
+	if my_id != "":
+		if my_id == p1_id:
+			_opp_id = p2_id
+		elif my_id == p2_id:
+			_opp_id = p1_id
+
 
 	if p1_v is Array and (p1_v as Array).size() > 0:
 		p1_id = String((p1_v as Array)[0])
@@ -253,7 +259,6 @@ func _set_game_data(raw_text: String) -> void:
 	else:
 		is_your_turn = bool(is_turn_v)
 
-	# Determine playernum
 	if my_id != "" and p1_id != "" and p2_id != "":
 		playernum = (1 if my_id == p1_id else (2 if my_id == p2_id else 0))
 		if playernum == 0:
@@ -267,8 +272,6 @@ func _set_game_data(raw_text: String) -> void:
 		playernum = (1 if turn_owner == 2 else 2)
 
 	is_my_turn = is_your_turn
-
-	# If we just received data, this is a new decision phase
 	_need_new_selection = true
 	_touched_this_turn = false
 	_selected_shoot = null
@@ -301,7 +304,6 @@ func _set_game_data(raw_text: String) -> void:
 		if not game_over:
 			start_waiting_animation()
 
-	# Opponent avatar
 	var opponent_avatar_key: String = ("avatar2" if playernum == 1 else "avatar1")
 	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
 		var av_v = res[opponent_avatar_key]
@@ -315,7 +317,6 @@ func _set_game_data(raw_text: String) -> void:
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
-	# Replay parsing
 	var replay_v = res.get("replay", "")
 	var replay_str: String = ""
 	if replay_v is Array and (replay_v as Array).size() > 0:
@@ -329,7 +330,6 @@ func _set_game_data(raw_text: String) -> void:
 	_opp_target_world = Vector3.ZERO
 	_opp_target_lane = ActionButton3D.Lane.CENTER
 
-	# Defaults if replay not present yet
 	var hp1: int = 3
 	var hp2: int = 3
 
@@ -413,7 +413,6 @@ func _set_game_data(raw_text: String) -> void:
 	else:
 		print("[REPLAY] no replay in payload yet (first move scenario)")
 
-	# Apply hp to "me vs opp" and update hearts immediately
 	_hp_me = clamp((hp1 if playernum == 1 else hp2), 0, 3)
 	_hp_opp = clamp((hp2 if playernum == 1 else hp1), 0, 3)
 
@@ -447,8 +446,6 @@ func _spawn_player_random_lane() -> void:
 	]
 
 	var chosen: ActionButton3D.Lane = lanes[randi() % lanes.size()]
-
-	# Place player exactly on that lane anchor X
 	var p := player.global_position
 	p.x = float(_lane_x[chosen])
 	player.global_position = p
@@ -457,15 +454,11 @@ func _spawn_player_random_lane() -> void:
 	_update_move_buttons()
 		
 func _init_fire_button() -> void:
-	# Let layout/theme settle
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	# Keep your top_level approach so containers do not fight you
 	fire_button.top_level = true
 	fire_button.visible = true
-
-	# Force a sane size before we compute positions
 	fire_button.reset_size()
 	await get_tree().process_frame
 
@@ -473,16 +466,12 @@ func _init_fire_button() -> void:
 	var margin := 26.0
 	var lift := 100.0
 
-	# Desired "shown" location: bottom-center
 	_fire_btn_shown_pos = Vector2(
 		(vp.x - fire_button.size.x) * 0.5,
 		vp.y - fire_button.size.y - margin - lift
 	)
 
-	# Hidden is just below the screen
 	_fire_btn_hidden_pos = Vector2(_fire_btn_shown_pos.x, vp.y + fire_button.size.y + 40.0)
-
-	# Start hidden
 	fire_button.modulate.a = 0.0
 	fire_button.global_position = _fire_btn_hidden_pos
 
@@ -629,13 +618,10 @@ func _select_shoot_button(selected: ActionButton3D) -> void:
 
 		_show_fire_button(false)
 
-		# Still require a selection
 		_require_new_shoot_selection = true
 		return
 
 	_selected_shoot = selected
-
-	# NEW: shoot target selection satisfies the gate
 	_require_new_shoot_selection = false
 
 	for b in _buttons:
@@ -655,12 +641,10 @@ func _on_fire_pressed() -> void:
 		print("[INPUT] Ignored fire (not my turn or sequence running).")
 		return
 
-	# NEW: do not allow Fire unless we have a shoot selection
 	if _require_new_shoot_selection or _selected_shoot == null or not is_instance_valid(_selected_shoot):
 		print("[FIRE] Blocked: select a shoot target first. require_new=", _require_new_shoot_selection)
 		return
 
-	# If opponent has not moved yet: this is "move-only" send, but we still require a shoot selection
 	if not _pending_enemy_shot:
 		print("[FIRE] Opponent has not moved yet. Sending my move only (with selected shoot).")
 		send_game()
@@ -670,7 +654,6 @@ func _on_fire_pressed() -> void:
 		print("[FIRE] No aim target selected.")
 		return
 
-	# Opponent replay encoding for PLAY ROUND only is mirrored: 2=LEFT, 1=CENTER, 0=RIGHT
 	if _opp_pos_enc != -1 and is_instance_valid(opponent_sprite):
 		var opp_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
 		if _opp_pos_enc == 2:
@@ -695,8 +678,6 @@ func _on_fire_pressed() -> void:
 
 	if _opp_target_enc != -1:
 		var tgt_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
-
-		# Mirror the opponent shoot direction too (swap 0<->2)
 		var flipped_target_enc := _opp_target_enc
 		if _opp_target_enc == 0:
 			flipped_target_enc = 2
@@ -753,7 +734,6 @@ func _on_fire_pressed() -> void:
 	var target_fov := clampf(_cam_start_fov * 0.35, 10.0, _cam_start_fov)
 	var punch_transform := _compute_zoom_target(cam3d, focus_point)
 
-	# Layering: FadeWhite always above FP aim sprite
 	if is_instance_valid(fade_white):
 		fade_white.top_level = true
 		fade_white.z_as_relative = false
@@ -828,8 +808,6 @@ func _on_fire_pressed() -> void:
 	)
 
 	t.tween_interval(hold_white)
-
-	# Fade OUT white and fade IN avatars + top info
 	t.tween_property(fade_white, "color:a", 0.0, dur_out)
 
 	if is_instance_valid(player_avatar_display) and player_avatar_display is CanvasItem:
@@ -917,22 +895,16 @@ func _fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached:
 	var target_fixed := target_world
 
 	if is_enemy and is_instance_valid(opponent_sprite):
-		# Spawn from opponent in 3D
 		muzzle_world = opponent_sprite.global_position + Vector3(0.0, 0.9, 0.0)
 
-		# Force enemy shot to travel toward the camera plane (prevents "shooting backwards")
 		var cam_pos := cam.global_transform.origin
 		muzzle_world.y = cam_pos.y
 		target_fixed.y = cam_pos.y
-
-		# Critical: lock target Z to camera plane so direction is always toward camera
 		target_fixed.z = cam_pos.z
 
-		# Optional: tiny nudge so it definitely crosses the plane even if numerically equal
 		if is_equal_approx(muzzle_world.z, target_fixed.z):
 			target_fixed.z += 0.05
 	else:
-		# Spawn from FP muzzle in screen space
 		var muzzle_screen := _get_muzzle_screen_pos()
 		_set_muzzle_debug_dot_screen_pos(muzzle_screen, true)
 
@@ -943,33 +915,26 @@ func _fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached:
 		tt = maxf(tt, 0.35)
 		muzzle_world = ray_origin + ray_dir * tt
 		
-		# Force player shot to terminate on the opponent's Z plane (not the 3D button/aim plane)
 		if is_instance_valid(opponent_sprite):
 			target_fixed.z = opponent_sprite.global_position.z
 
 
 	ball.scale = Vector3.ONE * _paintball_scale
-	ball.speed = ball_speed
+	ball.speed = (ball_speed * 2.25) if is_enemy else ball_speed
 	ball.use_plane_z = true
-
-	# Kill the projectile when it reaches the victim's Z plane
 	ball.use_plane_z = true
 
 	if is_enemy:
-		# Enemy shot dies at the player's Z
 		if is_instance_valid(player):
 			ball.hit_plane_z = player.global_position.z
 		else:
 			ball.use_plane_z = false
 	else:
-		# Player shot dies at the opponent's Z
 		if is_instance_valid(opponent_sprite):
 			ball.hit_plane_z = opponent_sprite.global_position.z
 		else:
 			ball.use_plane_z = false
 
-
-	# Color assignment
 	var desired_color: Color
 	if is_enemy:
 		desired_color = Color(0.9, 0.15, 0.15)
@@ -978,7 +943,6 @@ func _fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached:
 
 	ball.set_ball_color(desired_color)
 
-	# Hard force color in case the .tscn mesh/material is yellow and ignores set_ball_color
 	var mi := ball.get_node_or_null("MeshInstance3D") as MeshInstance3D
 	if mi == null:
 		mi = ball.find_child("MeshInstance3D", true, false) as MeshInstance3D
@@ -1006,7 +970,6 @@ func _fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached:
 		if box["got"]:
 			return
 
-		# Fire splat immediately at impact moment (before projectile is freed)
 		if on_reached.is_valid():
 			on_reached.call(world_pos)
 
@@ -1032,7 +995,6 @@ func _fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached:
 
 	var impact_world: Vector3 = box["impact"]
 
-	# Give UI/world one frame to present the splat at the same moment
 	await get_tree().process_frame
 
 	if is_instance_valid(ball):
@@ -1076,7 +1038,6 @@ func _end_round_fade_and_restore_next_round() -> void:
 
 	_restore_ui_after_round()
 
-	# NEW: require new selection after the round ends
 	_require_new_shoot_selection = true
 	_selected_shoot = null
 	_show_fire_button(false)
@@ -1100,7 +1061,6 @@ func _init_player_splat_overlay() -> void:
 
 	var attach_parent: Node = null
 
-	# Prefer the CanvasLayer fp_aim_sprite is under
 	if is_instance_valid(fp_aim_sprite):
 		var parent: Node = fp_aim_sprite.get_parent()
 		while parent != null and not (parent is CanvasLayer):
@@ -1120,9 +1080,7 @@ func _init_player_splat_overlay() -> void:
 	_player_splat.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_player_splat.stretch_mode = TextureRect.STRETCH_SCALE
 	_player_splat.visible = false
-	_player_splat.modulate = Color(0.9, 0.15, 0.15, 0.0) # red
-
-	# Keep it above most UI, below FadeWhite (FadeWhite is 10000)
+	_player_splat.modulate = Color(0.9, 0.15, 0.15, 0.0)
 	_player_splat.z_as_relative = false
 	_player_splat.z_index = 9000
 
@@ -1138,26 +1096,17 @@ func _show_player_hit_splat() -> void:
 
 	var vp := get_viewport().get_visible_rect().size
 	var center := vp * 0.5
-
-	# Base size, then randomize width and height independently
 	var base_w := vp.x * 0.78
 	var base_h := vp.y * 0.58
-
 	var w := base_w * randf_range(0.85, 1.10)
 	var h := base_h * randf_range(0.85, 1.15)
-
-	# Random screen offset
 	var off := Vector2(randf_range(-60.0, 60.0), randf_range(-90.0, 50.0))
 	var pos := center + off
 
 	_player_splat.size = Vector2(w, h)
 	_player_splat.pivot_offset = _player_splat.size * 0.5
 	_player_splat.position = pos - (_player_splat.size * 0.5)
-
-	# Random rotation
 	_player_splat.rotation = deg_to_rad(randf_range(0.0, 360.0))
-
-	# Start small and fade in
 	_player_splat.scale = Vector2(0.18, 0.18)
 	_player_splat.modulate.a = 0.0
 	_player_splat.visible = true
@@ -1190,15 +1139,8 @@ func _init_opponent_splat() -> void:
 	_opp_splat.name = "OppHitSplat"
 	_opp_splat.texture = SPLAT_TEX
 	_opp_splat.visible = false
-
-	# Keep it white so you can modulate later if desired
-	_opp_splat.modulate = Color(1, 1, 1, 1)
-
-	# Face camera nicely
 	_opp_splat.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-
-	# Slightly in front of the opponent sprite so it draws on top
-	_opp_splat.modulate = Color(1.0, 0.95, 0.2, 1.0) # yellow
+	_opp_splat.modulate = Color(1.0, 0.95, 0.2, 1.0)
 	_opp_splat.scale = Vector3.ONE * 0.05
 
 	opponent_sprite.add_child(_opp_splat)
@@ -1213,8 +1155,6 @@ func _show_opponent_hit_splat() -> void:
 
 	_opp_splat.visible = true
 	_opp_splat.modulate.a = 0.0
-
-	# Random local offset, rotation, scale
 	_opp_splat.position = Vector3(randf_range(-0.10, 0.10), 0.4, 0.03)
 	_opp_splat.rotation = Vector3(0.0, 0.0, deg_to_rad(randf_range(0.0, 360.0)))
 	_opp_splat.scale = Vector3.ONE * 0.02
@@ -1249,11 +1189,8 @@ func _run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 
 	print("[ROUND][PLAYER] Step 1: Prep opp splat target + fire yellow shot")
 
-	# Start with the player's selected aim target
 	var shot_target := player_target_world
 
-	# Pre-place splat where we want the ball to land visually (randomized), BUT:
-	# We will only borrow its Y (vertical) and keep X from the selected aim target.
 	if _opp_splat != null and is_instance_valid(_opp_splat) and is_instance_valid(opponent_sprite):
 		if _opp_splat_tween and _opp_splat_tween.is_valid():
 			_opp_splat_tween.kill()
@@ -1261,18 +1198,14 @@ func _run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		_opp_splat.visible = false
 		_opp_splat.modulate.a = 0.0
 
-		# Randomize splat placement (visual)
 		_opp_splat.position = Vector3(randf_range(-0.10, 0.10), 0.4, 0.03)
 		_opp_splat.rotation = Vector3(0.0, 0.0, deg_to_rad(randf_range(0.0, 360.0)))
 		_opp_splat.scale = Vector3.ONE * 0.02
 
-		# Convert splat local pos (under opponent_sprite) to world
 		var splat_world: Vector3 = opponent_sprite.to_global(_opp_splat.position)
 
-		# FIX: keep X from the selected aim target, but use Y from the splat position
 		shot_target.y = splat_world.y
 
-		# Optional: keep Z on opponent plane if opponent exists (also enforced later)
 		if is_instance_valid(opponent_sprite):
 			shot_target.z = opponent_sprite.global_position.z
 
@@ -1282,9 +1215,7 @@ func _run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	_player_hit_last = _compute_player_hit_debug(player_impact)
 	print("[ROUND][PLAYER] Result => hit=", _player_hit_last)
 
-	# If player hits opponent, decrement opponent hp and update opponent hearts
 	if _player_hit_last:
-		# Fade in the already-positioned splat (do NOT randomize again)
 		if _opp_splat != null and is_instance_valid(_opp_splat):
 			if _opp_splat_tween and _opp_splat_tween.is_valid():
 				_opp_splat_tween.kill()
@@ -1331,10 +1262,15 @@ func _run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		for i in range(3):
 			if is_instance_valid(p_hearts[i]):
 				p_hearts[i].texture = (HEART_FULL_TEX if i < _hp_me else HEART_VOID_TEX)
-
+	
 		print("[ROUND] Player was hit. Holding 2.0s before fade-to-white")
 		await get_tree().create_timer(2.0).timeout
-
+	
+	game_ended = check_win()
+	if game_ended:
+		send_game()
+		return
+	
 	print("[ROUND] Step 7: End of round fade/restore")
 	await _end_round_fade_and_restore_next_round()
 
@@ -1429,35 +1365,7 @@ func _spawn_and_fire_paintball(target_world: Vector3, is_enemy: bool = false) ->
 		ball.set_ball_color(Color(1.0, 0.95, 0.2))
 
 	get_tree().current_scene.add_child(ball)
-	ball.reached_plane.connect(func(world_pos: Vector3) -> void:
-		_on_paintball_reached_plane(ball, world_pos, is_enemy)
-	)
-
 	ball.launch(muzzle_world, target_world)
-
-func _on_paintball_reached_plane(ball: PaintballProjectile, _world_pos: Vector3, is_enemy: bool) -> void:
-	if is_enemy:
-		# Enemy shot counts as a hit ONLY if they targeted the lane we're currently standing on
-		var hit := (_opp_target_lane == _player_lane)
-
-		if hit:
-			# TODO: show splat on player overlay (same place as fp_aim asset)
-			# _show_player_splat()
-			pass
-		else:
-			# Miss: no splat
-			pass
-
-		# TODO: end-of-round fade sequence should kick off after this resolves
-		# _end_round_fade_back_to_normal()
-	else:
-		# Your yellow shot impact logic goes here (compare aim arrow vs opponent number)
-		# var hit := ...
-		# if hit: _show_opponent_splat_at(world_pos)
-		pass
-
-	if is_instance_valid(ball):
-		ball.queue_free()
 
 func _play_opponent_recoil() -> void:
 	if not is_instance_valid(opponent_sprite):
@@ -1620,23 +1528,17 @@ func _aim_gun_sprite_at_world_point(
 	var sx := drawn_size.x / tex_size.x
 	var sy := drawn_size.y / tex_size.y
 
-	# Callable helper (Godot-friendly, no standalone local func)
 	var tex_px_to_screen := func(tex_px: Vector2) -> Vector2:
 		var local := Vector2(tex_px.x * sx, tex_px.y * sy)
 		if sprite.centered:
 			local -= drawn_size * 0.5
 		return sprite.global_position + local.rotated(sprite.global_rotation)
 
-	# Tune these two points on the gun texture:
-	# rear point is somewhere near the back of the barrel or sight line
-	# muzzle point should match your muzzle pixel (_muzzle_tex_px)
 	var rear_tex_px := Vector2(550.0, 720.0)
 	var muzzle_tex_px := _muzzle_tex_px
-
 	var rear_screen: Vector2 = tex_px_to_screen.call(rear_tex_px)
 	var muzzle_screen: Vector2 = tex_px_to_screen.call(muzzle_tex_px)
 
-	# NEW: draw rear dot + barrel line + keep your muzzle dot in sync
 	_set_fp_debug_barrel(rear_screen, muzzle_screen, _is_shot_sequence_running)
 
 	var cur_dir := (muzzle_screen - rear_screen)
@@ -1807,8 +1709,6 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 		return 1
 
 	var base_replay: String = _last_replay_str
-
-	# --- Parse last state (or default) ---
 	var hp1: int = 3
 	var hp2: int = 3
 	var pos1: int = -1
@@ -1843,7 +1743,6 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 				_:
 					pass
 
-	# --- Apply my current move + (optionally) my aim selection ---
 	var my_pos_int: int = lane_to_int.call(_player_lane)
 
 	var my_target_int: int = -1
@@ -1856,8 +1755,6 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 	else:
 		pos2 = my_pos_int
 		target2 = my_target_int
-
-	# HP mapping back into hp1/hp2 from our local view
 	if playernum == 1:
 		hp1 = _hp_me
 		hp2 = _hp_opp
@@ -1865,15 +1762,8 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 		hp1 = _hp_opp
 		hp2 = _hp_me
 
-	# --- IMPORTANT: if the round is resolved, clear BOTH targets for the next turn ---
-	# This prevents the receiver from thinking "opponent already moved" and auto-entering another play round.
-	if clear_targets_for_next_turn:
-		target1 = -1
-		target2 = -1
-
 	var new_state := "hp1:%d,hp2:%d,pos1:%d,pos2:%d,target1:%d,target2:%d" % [hp1, hp2, pos1, pos2, target1, target2]
 
-	# Replace last segment (no dupes)
 	var out_replay: String = ""
 	if segments.size() > 0:
 		segments[segments.size() - 1] = new_state
@@ -1889,8 +1779,49 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 
 	game_ended = check_win()
 	if game_ended:
-		print("Check Win my_player: ", my_id, " win_loss_state: ", win_loss_state)
-	
+		clear_targets_for_next_turn = true
+
+		var winner: String = ""
+		var winner_player: int = 0
+		var opp_id: String = ""
+		if my_id != "":
+			if p1_id != "" and my_id == p1_id:
+				opp_id = p2_id
+			elif p2_id != "" and my_id == p2_id:
+				opp_id = p1_id
+
+		if win_loss_state == "1":
+			winner = my_id
+			winner_player = playernum
+		elif win_loss_state == "-1":
+			winner = opp_id
+			winner_player = (2 if playernum == 1 else 1)
+		else:
+			winner = "0"
+			winner_player = 0
+
+		payload["gameOver"] = true
+		payload["winner"] = winner
+		payload["winnerPlayer"] = winner_player
+		payload["result"] = win_loss_state
+
+		print("[Send] Game ended. my_id=", my_id, " winner=", winner, " winnerPlayer=", winner_player, " result=", win_loss_state)
+
+	if clear_targets_for_next_turn:
+		target1 = -1
+		target2 = -1
+
+		var cleared_state := "hp1:%d,hp2:%d,pos1:%d,pos2:%d,target1:%d,target2:%d" % [hp1, hp2, pos1, pos2, target1, target2]
+
+		if segments.size() > 0:
+			segments[segments.size() - 1] = cleared_state
+			out_replay = "|".join(segments)
+		else:
+			out_replay = cleared_state
+
+		_last_replay_str = out_replay
+		payload["replay"] = out_replay
+
 	var avatar_key := ("avatar1" if playernum == 1 else "avatar2")
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
@@ -1903,7 +1834,6 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 	else:
 		print("AppPlugin is null. Cannot send game data.")
 
-	# End my turn locally
 	is_my_turn = false
 
 	_show_fire_button(false)
@@ -2006,13 +1936,11 @@ func check_win() -> bool:
 	if game_over:
 		return true
 
-	# Win condition: someone reaches 0 HP
 	if _hp_me > 0 and _hp_opp > 0:
 		return false
 
 	game_over = true
 
-	# Draw (rare, but safe)
 	if _hp_me <= 0 and _hp_opp <= 0:
 		win_loss_state = "0"
 		if is_instance_valid(win_loss_label):
@@ -2020,20 +1948,20 @@ func check_win() -> bool:
 			win_loss_label.visible = true
 		return true
 
-	# I win
 	if _hp_opp <= 0:
 		win_loss_state = "1"
 		if is_instance_valid(win_loss_label):
 			win_loss_label.text = ("Player 1 Wins!" if spectator_mode else "YOU WIN!")
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 			win_loss_label.visible = true
 		if is_instance_valid(player_avatar_display):
 			_show_win_burst(player_avatar_display)
 		return true
 
-	# I lose
 	win_loss_state = "-1"
 	if is_instance_valid(win_loss_label):
 		win_loss_label.text = ("Player 2 Wins!" if spectator_mode else "YOU LOSE")
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
 		win_loss_label.visible = true
 	if is_instance_valid(opp_avatar_display):
 		_show_win_burst(opp_avatar_display)

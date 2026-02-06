@@ -455,16 +455,6 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_fvh8h")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_qilti")
 theme_override_styles/hover = SubResource("StyleBoxTexture_24vgr")
 
-[node name="WinLossLabel" type="Label" parent="MarginContainer"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-size_flags_horizontal = 4
-theme_override_font_sizes/font_size = 25
-theme_override_styles/normal = SubResource("StyleBoxFlat_gx26o")
-horizontal_alignment = 1
-vertical_alignment = 1
-
 [node name="SentLabel" type="Label" parent="MarginContainer"]
 unique_name_in_owner = true
 visible = false
@@ -514,6 +504,27 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 color = Color(1, 1, 1, 0)
+
+[node name="WinLossLabel" type="Label" parent="CanvasLayer"]
+unique_name_in_owner = true
+visible = false
+z_index = 101
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -17.5
+offset_right = 0.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_gx26o")
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [editable path="Buttons/ShootLeft"]
 [editable path="Buttons/ShootCenter"]
