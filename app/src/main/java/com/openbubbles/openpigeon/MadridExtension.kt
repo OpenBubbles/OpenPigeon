@@ -360,11 +360,44 @@ fun RenderKeyboard(extension: MadridExtension?) {
     )
     Column(modifier = GlanceModifier.fillMaxHeight().padding(1.dp)) {
         Row(horizontalAlignment = Alignment.Horizontal.CenterHorizontally, verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
+            val arrowSlotWidth = 43.dp
+            if (p > 0) {
+                Image(
+                    ImageProvider(R.drawable.baseline_arrow_back_ios_24),
+                    "Back",
+                    modifier = GlanceModifier
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .clickable(
+                            actionRunCallback<ChangePageCallback>(
+                                actionParametersOf(page to (p - 1))
+                            )
+                        )
+                )
+            } else {
+                Spacer(modifier = GlanceModifier.width(arrowSlotWidth))
+            }
+            Spacer(modifier = GlanceModifier.defaultWeight())
             Image(ImageProvider(R.drawable.madrid_icon), "OpenPigeon", modifier = GlanceModifier.width(50.dp).padding(8.dp).wrapContentHeight())
             Text("Games", style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(end = 6.dp))
             Text("|", style = TextStyle(fontSize = 30.sp, color = ColorProvider(Color.Gray)))
             Text("About", style = TextStyle(fontSize = 15.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(start = 6.dp)
                 .clickable(onClick = androidx.glance.action.actionStartActivity<AboutActivity>()))
+            Spacer(modifier = GlanceModifier.defaultWeight())
+            if (p < (totalPages - 1)) {
+                Image(
+                    ImageProvider(R.drawable.baseline_arrow_forward_ios_24),
+                    "Forward",
+                    modifier = GlanceModifier
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .clickable(
+                            actionRunCallback<ChangePageCallback>(
+                                actionParametersOf(page to (p + 1))
+                            )
+                        )
+                )
+            } else {
+                Spacer(modifier = GlanceModifier.width(arrowSlotWidth))
+            }
         }
         for (index in 0..<ceil(pageGames.size / itemsPerRow.toDouble()).toInt()) {
             Row(modifier = GlanceModifier.padding(bottom = 3.dp)) {
@@ -379,19 +412,6 @@ fun RenderKeyboard(extension: MadridExtension?) {
             }
         }
         Spacer(modifier = GlanceModifier.defaultWeight())
-        Row(modifier = GlanceModifier.fillMaxWidth()) {
-            if (p > 0)
-                Image(ImageProvider(R.drawable.baseline_arrow_back_ios_24), "Back", modifier = GlanceModifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                    .clickable(onClick = actionRunCallback<ChangePageCallback>(actionParametersOf(
-                        page to (p - 1)
-                    ))))
-            Spacer(modifier = GlanceModifier.defaultWeight())
-            if (p < (totalPages - 1))
-                Image(ImageProvider(R.drawable.baseline_arrow_forward_ios_24), "Forward", modifier = GlanceModifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                    .clickable(onClick = actionRunCallback<ChangePageCallback>(actionParametersOf(
-                        page to (p + 1)
-                    ))))
-        }
     }
 }
 
