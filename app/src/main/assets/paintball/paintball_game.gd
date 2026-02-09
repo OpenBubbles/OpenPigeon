@@ -1300,6 +1300,7 @@ func _run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	
 	game_ended = check_win()
 	if game_ended:
+		print("End Valid")
 		send_game()
 		return
 	
@@ -1844,10 +1845,7 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 			winner = "0"
 			winner_player = 0
 
-		payload["gameOver"] = true
-		payload["winner"] = winner
-		payload["winnerPlayer"] = winner_player
-		payload["result"] = win_loss_state
+		payload["winner"] = my_id + "|" + win_loss_state
 
 		print("[Send] Game ended. my_id=", my_id, " winner=", winner, " winnerPlayer=", winner_player, " result=", win_loss_state)
 
