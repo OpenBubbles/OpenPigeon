@@ -8,7 +8,7 @@ class_name PaintballGame
 @onready var fire_button: Control = %FireButton
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var opp_avatar_display = %OppAvatarDisplay
-@onready var rules_button: Button     = %RulesButton
+@onready var rules_button: Button = %RulesButton
 @onready var settings_button: Button = %SettingsButton
 @onready var sent_label: Label = %SentLabel
 @onready var waiting_label: Label = %WaitForOpponentLabel
@@ -60,12 +60,21 @@ var _enemy_hit_last: bool = false
 var _opp_pos_enc: int = -1
 var _require_new_shoot_selection: bool = true
 var _opp_target_enc: int = -1
+var _replay_auto_pending: bool = false
+var _replay_auto_end_state: Dictionary = {}
+var _replay_auto_full_str: String = ""
+var _is_replay_playback: bool = false
 var _is_shot_sequence_running: bool = false
 var _round_sequence_running: bool = false
+var _move_btn_by_lane: Dictionary = {}
+var _shoot_btn_by_lane: Dictionary = {}
 var _pending_enemy_shot: bool = false
 var _opp_target_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
 var _opp_target_world: Vector3 = Vector3.ZERO
 var _opp_recoil_z: float = 0.22
+var _replay_segments: PackedStringArray = PackedStringArray()
+var _replay_seg_index: int = 0
+var _replay_base_state: Dictionary = {}
 var _opp_recoil_in_time: float = 0.06
 var _opp_recoil_out_time: float = 0.10
 var _round_end_white_in: float = 0.25
@@ -79,11 +88,13 @@ var _shot_in_progress: bool = false
 var sent_tween: Tween
 var _last_replay_str: String = ""
 var dot_count: int = 0
+var _replay_send_only_delta: bool = false
 var has_connected: bool = false
 var my_id: String
 var _buttons: Array[ActionButton3D] = []
 var _player_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
 var playernum: int = 1
+var _last_autoplayed_replay_str: String = ""
 var _move_tween: Tween
 var _need_new_selection: bool = true
 var _touched_this_turn: bool = false
@@ -116,6 +127,7 @@ func _ready() -> void:
 
 	_buttons.clear()
 	_collect_buttons(root)
+	_index_buttons()
 
 	for b in _buttons:
 		b.clicked.connect(_on_button_clicked)
@@ -154,7 +166,7 @@ func _ready() -> void:
 		fp_aim_sprite.top_level = false
 		fp_aim_sprite.z_as_relative = false
 		fp_aim_sprite.z_index = -10
-		
+
 	if is_instance_valid(opponent_sprite):
 		opponent_sprite.scale = Vector3.ONE * 0.4
 
@@ -186,13 +198,13 @@ func _ready() -> void:
 	else:
 		print("[DEV] Editor hint active, loading sample game data")
 
-		var DEV_SCENARIO: int = 4
+		var DEV_SCENARIO: int = 3
 
-		var dev_data_0 := '{"isYourTurn": true,"player":"2","myPlayerId":"DEV_ME","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV0"}'
-		var dev_data_1 := '{"isYourTurn": true,"player":"2","myPlayerId":"DEV_ME","player1":"DEV_ME","player2":"DEV_OPP","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV1","replay":"hp1:3,hp2:3,pos1:2,pos2:-1,target1:2,target2:-1"}'
-		var dev_data_2 := '{"isYourTurn": true,"player":"2","myPlayerId":"DEV_ME","player1":"DEV_ME","player2":"DEV_OPP","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV2","replay":"hp1:3,hp2:3,pos1:2,pos2:1,target1:2,target2:0"}'
-		var dev_data_3 := '{"isYourTurn": true,"player":"2","myPlayerId":"DEV_ME","player1":"DEV_ME","player2":"DEV_OPP","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV3","replay":"hp1:3,hp2:3,pos1:2,pos2:1,target1:2,target2:2|hp1:2,hp2:3,pos1:2,pos2:1,target1:-1,target2:1"}'
-		var dev_data_4 := '{"isYourTurn": true,"player":"2","myPlayerId":"DEV_ME","player1":"DEV_ME","player2":"DEV_OPP","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV4","replay":"hp1:1,hp2:1,pos1:-1,pos2:2,target1:-1,target2:2"}'
+		var dev_data_0 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV0"}'
+		var dev_data_1 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV1","replay":"hp1:3,hp2:3,pos1:2,pos2:-1,target1:2,target2:-1"}'
+		var dev_data_2 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV2","replay":"hp1:3,hp2:3,pos1:2,pos2:1,target1:2,target2:0"}'
+		var dev_data_3 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV3","replay":"hp1:2,hp2:3,pos1:2,pos2:1,target1:2,target2:2|hp1:1,hp2:3,pos1:2,pos2:1,target1:-1,target2:1"}'
+		var dev_data_4 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV4","replay":"hp1:1,hp2:1,pos1:-1,pos2:2,target1:-1,target2:2"}'
 
 		var dev_data := dev_data_1
 		match DEV_SCENARIO:
@@ -219,48 +231,19 @@ func _set_game_data(raw_text: String) -> void:
 
 	print("RAW INCOMING DATA: ", res)
 
-	var my_id_v = res.get("myPlayerId", "")
-	if my_id_v is Array and (my_id_v as Array).size() > 0:
-		my_id = String((my_id_v as Array)[0])
-	else:
-		my_id = String(my_id_v)
+	my_id = _res_str(res, "myPlayerId", "")
+	p1_id = _res_str(res, "player1", "")
+	p2_id = _res_str(res, "player2", "")
 
-	var p1_v = res.get("player1", "")
-	var p2_v = res.get("player2", "")
-	p1_id = ""
-	p2_id = ""
-
-	if my_id != "":
+	_opp_id = ""
+	if my_id != "" and p1_id != "" and p2_id != "":
 		if my_id == p1_id:
 			_opp_id = p2_id
 		elif my_id == p2_id:
 			_opp_id = p1_id
 
-
-	if p1_v is Array and (p1_v as Array).size() > 0:
-		p1_id = String((p1_v as Array)[0])
-	else:
-		p1_id = String(p1_v)
-
-	if p2_v is Array and (p2_v as Array).size() > 0:
-		p2_id = String((p2_v as Array)[0])
-	else:
-		p2_id = String(p2_v)
-
-	var player_v = res.get("player", 1)
-	var player_s: String = ""
-	if player_v is Array and (player_v as Array).size() > 0:
-		player_s = String((player_v as Array)[0])
-	else:
-		player_s = String(player_v)
-
-	turn_owner = clamp(int(player_s), 1, 2)
-
-	var is_turn_v = res.get("isYourTurn", false)
-	if is_turn_v is Array and (is_turn_v as Array).size() > 0:
-		is_your_turn = bool((is_turn_v as Array)[0])
-	else:
-		is_your_turn = bool(is_turn_v)
+	turn_owner = clamp(_res_int(res, "player", 1), 1, 2)
+	is_your_turn = _res_bool(res, "isYourTurn", false)
 
 	if my_id != "" and p1_id != "" and p2_id != "":
 		playernum = (1 if my_id == p1_id else (2 if my_id == p2_id else 0))
@@ -288,45 +271,26 @@ func _set_game_data(raw_text: String) -> void:
 
 		stop_waiting_animation()
 
-		for b in _buttons:
-			if is_instance_valid(b):
-				b.set_click_enabled(true)
-				_set_button_enabled(b, true)
-
+		_set_all_buttons_clickable(true)
 		_update_move_buttons()
 	else:
 		_show_fire_button(false)
 		if is_instance_valid(fire_button):
 			fire_button.visible = false
 
-		for b in _buttons:
-			if is_instance_valid(b):
-				b.set_click_enabled(false)
-				_set_button_enabled(b, false)
+		_set_all_buttons_clickable(false)
 
 		if not game_over:
 			start_waiting_animation()
 
 	var opponent_avatar_key: String = ("avatar2" if playernum == 1 else "avatar1")
 	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
-		var av_v = res[opponent_avatar_key]
-		var avatar_string: String = ""
-		if av_v is Array and (av_v as Array).size() > 0:
-			avatar_string = String((av_v as Array)[0])
-		else:
-			avatar_string = String(av_v)
-
+		var avatar_string: String = _res_str(res, opponent_avatar_key, "")
 		var opponent_data = _parse_avatar_string(avatar_string)
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
-	var replay_v = res.get("replay", "")
-	var replay_str: String = ""
-	if replay_v is Array and (replay_v as Array).size() > 0:
-		replay_str = String((replay_v as Array)[0])
-	else:
-		replay_str = String(replay_v)
-
+	var replay_str: String = _res_str(res, "replay", "")
 	print("[REPLAY] raw=", replay_str)
 
 	_pending_enemy_shot = false
@@ -337,111 +301,62 @@ func _set_game_data(raw_text: String) -> void:
 	var hp2: int = 3
 
 	if replay_str != "":
-		var segments: Array = replay_str.split("|", false)
-		var last_state: String = String(segments[segments.size() - 1])
+		_replay_segments = replay_str.split("|", false)
+		_replay_seg_index = 0
+		_replay_base_state = {}
 
-		var pos1: int = -1
-		var pos2: int = -1
-		var target1: int = -1
-		var target2: int = -1
+		var cur_seg := _replay_segments[_replay_seg_index]
+		var cur_state := _parse_replay_state(cur_seg)
+		_replay_base_state = cur_state
 
-		for p in last_state.split(",", false):
-			var kv: Array = String(p).split(":", false)
-			if kv.size() != 2:
-				continue
-			var k: String = String(kv[0])
-			var v: int = int(String(kv[1]))
-			match k:
-				"hp1":
-					hp1 = v
-				"hp2":
-					hp2 = v
-				"pos1":
-					pos1 = v
-				"pos2":
-					pos2 = v
-				"target1":
-					target1 = v
-				"target2":
-					target2 = v
-				_:
-					pass
+		print("[REPLAY] segments=", _replay_segments.size(), " cur=", cur_seg)
 
-		print("[REPLAY] parsed hp1=", hp1, " hp2=", hp2, " pos1=", pos1, " pos2=", pos2, " target1=", target1, " target2=", target2)
+		_apply_loaded_replay_segment(cur_state)
 
-		var lane_from_int := func(n: int) -> ActionButton3D.Lane:
-			if n == 0:
-				return ActionButton3D.Lane.LEFT
-			elif n == 1:
-				return ActionButton3D.Lane.CENTER
-			elif n == 2:
-				return ActionButton3D.Lane.RIGHT
-			return ActionButton3D.Lane.CENTER
+		hp1 = int(cur_state.get("hp1", 3))
+		hp2 = int(cur_state.get("hp2", 3))
 
-		var pos_me: int = (pos1 if playernum == 1 else pos2)
-		var pos_opp: int = (pos2 if playernum == 1 else pos1)
-		var target_me: int = (target1 if playernum == 1 else target2)
-		var target_opp: int = (target2 if playernum == 1 else target1)
+		_last_replay_str = replay_str
 
-		_opp_pos_enc = pos_opp
-		_opp_target_enc = target_opp
-		print("[REPLAY] stored opp enc pos=", _opp_pos_enc, " target=", _opp_target_enc)
-
-		if pos_me != -1 and is_instance_valid(player):
-			_player_lane = lane_from_int.call(pos_me)
-			var pp := player.global_position
-			pp.x = float(_lane_x[_player_lane])
-			player.global_position = pp
-			print("[REPLAY] applied player lane=", _player_lane, " x=", pp.x)
-
-		if pos_opp != -1 and is_instance_valid(opponent_sprite):
-			var opp_lane: ActionButton3D.Lane = lane_from_int.call(pos_opp)
-			var op := opponent_sprite.global_position
-			op.x = float(_lane_x[opp_lane])
-			opponent_sprite.global_position = op
-			print("[REPLAY] applied opponent lane=", opp_lane, " x=", op.x)
-
-		if target_opp != -1:
-			_opp_target_lane = lane_from_int.call(target_opp)
-			var tx: float = float(_lane_x[_opp_target_lane])
-			_opp_target_world = Vector3(tx, player.global_position.y + 0.7, player.global_position.z)
-			print("[REPLAY] opponent target lane=", _opp_target_lane, " target_world=", _opp_target_world)
-			_update_opponent_sprite_pose_for_shot()
-
-		if is_my_turn and target_me == -1 and target_opp != -1:
-			_pending_enemy_shot = true
-			print("[REPLAY] pending enemy shot is TRUE (opp already moved)")
-		else:
-			_pending_enemy_shot = false
-			print("[REPLAY] pending enemy shot is FALSE")
+		_prime_autoplay_if_loaded_segment_ready()
 	else:
+		_replay_segments = []
+		_replay_seg_index = 0
+		_replay_base_state = {}
 		print("[REPLAY] no replay in payload yet (first move scenario)")
 
 	_hp_me = clamp((hp1 if playernum == 1 else hp2), 0, 3)
 	_hp_opp = clamp((hp2 if playernum == 1 else hp1), 0, 3)
+	print("ME HP: ", _hp_me, " | OPP HP: ", _hp_opp)
+	_last_replay_str = replay_str
 
-	var p_hearts := [pheart1, pheart2, pheart3]
-	var o_hearts := [oheart1, oheart2, oheart3]
-
-	for i in range(3):
-		if is_instance_valid(p_hearts[i]):
-			p_hearts[i].texture = (HEART_FULL_TEX if i < _hp_me else HEART_VOID_TEX)
-		if is_instance_valid(o_hearts[i]):
-			o_hearts[i].texture = (HEART_FULL_TEX if i < _hp_opp else HEART_VOID_TEX)
-
+	_apply_hearts_from_hp()
 	_update_move_buttons()
 
 	game_ended = check_win()
 	if game_ended:
 		stop_waiting_animation()
 		game_over = true
+		if is_instance_valid(fp_aim_sprite):
+			fp_aim_sprite.visible = false
+
+		_show_fire_button(false)
+		if is_instance_valid(fire_button):
+			fire_button.visible = false
+
+		for b in _buttons:
+			if not is_instance_valid(b):
+				continue
+			b.visible = false
+			b.set_click_enabled(false)
+			_set_button_enabled(b, false)
 
 func _collect_buttons(n: Node) -> void:
 	if n is ActionButton3D:
 		_buttons.append(n)
 	for c in n.get_children():
 		_collect_buttons(c)
-		
+
 func _spawn_player_random_lane() -> void:
 	var lanes := [
 		ActionButton3D.Lane.LEFT,
@@ -456,7 +371,7 @@ func _spawn_player_random_lane() -> void:
 
 	_player_lane = chosen
 	_update_move_buttons()
-		
+
 func _init_fire_button() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -482,7 +397,7 @@ func _init_fire_button() -> void:
 func _show_fire_button(should_show: bool) -> void:
 	if should_show == _fire_button_is_shown:
 		return
-
+	fire_button.visible = true
 	_fire_button_is_shown = should_show
 
 	if _fire_btn_tween and _fire_btn_tween.is_valid():
@@ -519,7 +434,7 @@ func _on_button_clicked(b: ActionButton3D) -> void:
 func set_player_lane(v: ActionButton3D.Lane) -> void:
 	_player_lane = v
 	_update_move_buttons()
-	
+
 func _cache_lane_x_from_move_buttons() -> void:
 	for b in _buttons:
 		if b.kind != ActionButton3D.ButtonKind.MOVE:
@@ -539,12 +454,12 @@ func _lane_from_player_x() -> ActionButton3D.Lane:
 			best_lane = ln
 
 	return best_lane
-	
+
 func _move_player_to_button(b: ActionButton3D) -> void:
 	if not is_my_turn or _is_shot_sequence_running or _round_sequence_running:
 		print("[INPUT] Ignored move (not my turn or sequence running).")
 		return
-		
+
 	if not player:
 		return
 
@@ -606,6 +521,83 @@ func _move_player_to_button(b: ActionButton3D) -> void:
 		_update_move_buttons()
 	)
 
+func _parse_replay_state(state: String) -> Dictionary:
+	var out := {
+		"hp1": 3, "hp2": 3,
+		"pos1": -1, "pos2": -1,
+		"target1": -1, "target2": -1
+	}
+
+	if state == "":
+		return out
+
+	for p in state.split(",", false):
+		var kv := String(p).split(":", false)
+		if kv.size() != 2:
+			continue
+		var k := String(kv[0])
+		var v := int(String(kv[1]))
+		if out.has(k):
+			out[k] = v
+
+	return out
+
+func _autoplay_replay_round() -> void:
+	if not _replay_auto_pending:
+		return
+	if _round_sequence_running or _is_shot_sequence_running:
+		return
+
+	_replay_auto_pending = false
+
+	if _replay_auto_full_str != "" and _replay_auto_full_str == _last_autoplayed_replay_str:
+		return
+	_last_autoplayed_replay_str = _replay_auto_full_str
+
+	_set_all_buttons_clickable(false)
+
+	_pending_enemy_shot = true
+	_is_replay_playback = true
+
+	play_round()
+
+func _on_fire_pressed() -> void:
+	if not is_my_turn or _is_shot_sequence_running or _round_sequence_running:
+		print("[INPUT] Ignored fire (not my turn or sequence running).")
+		return
+
+	_dbg("FIRE_PRESSED")
+
+	if _require_new_shoot_selection or _selected_shoot == null or not is_instance_valid(_selected_shoot):
+		print("[FIRE] Blocked: select a shoot target first.")
+		return
+
+	if _pending_enemy_shot:
+		play_round()
+		return
+
+	if _replay_segments.size() > 0 and _replay_seg_index < _replay_segments.size() - 1:
+		var next_state := _parse_replay_state(_replay_segments[_replay_seg_index + 1])
+
+		if _state_has_opponent_ready(next_state):
+			_is_replay_playback = false
+			_replay_auto_end_state = next_state
+			_replay_auto_full_str = "|".join(_replay_segments)
+
+			var opp_pos: int = int(next_state.get("pos2", -1)) if playernum == 1 else int(next_state.get("pos1", -1))
+			var opp_tgt: int = int(next_state.get("target2", -1)) if playernum == 1 else int(next_state.get("target1", -1))
+			_opp_pos_enc = opp_pos
+			_opp_target_enc = opp_tgt
+			_pending_enemy_shot = (opp_pos != -1 and opp_tgt != -1)
+
+			_replay_seg_index += 1
+
+			play_round()
+			return
+
+	print("[FIRE] Opponent has not moved yet. Sending my move only.")
+	send_game()
+
 func _select_shoot_button(selected: ActionButton3D) -> void:
 	if not is_my_turn or _is_shot_sequence_running or _round_sequence_running:
 		print("[INPUT] Ignored shoot select (not my turn or sequence running).")
@@ -640,40 +632,27 @@ func _select_shoot_button(selected: ActionButton3D) -> void:
 	if not had_selection:
 		_show_fire_button(true)
 
-func _on_fire_pressed() -> void:
+func play_round() -> void:
 	if not is_my_turn or _is_shot_sequence_running or _round_sequence_running:
-		print("[INPUT] Ignored fire (not my turn or sequence running).")
+		print("[INPUT] Ignored play_round (not my turn or sequence running).")
 		return
 
 	if _require_new_shoot_selection or _selected_shoot == null or not is_instance_valid(_selected_shoot):
-		print("[FIRE] Blocked: select a shoot target first. require_new=", _require_new_shoot_selection)
+		print("[PLAYROUND] Blocked: select a shoot target first.")
 		return
+	_dbg("PLAY_ROUND_ENTER")
 
 	if not _pending_enemy_shot:
-		print("[FIRE] Opponent has not moved yet. Sending my move only (with selected shoot).")
-		send_game()
-		return
-
-	if _selected_shoot == null:
-		print("[FIRE] No aim target selected.")
+		print("[PLAYROUND] Blocked: opponent shot not ready (this should be gated by _on_fire_pressed).")
 		return
 
 	if _opp_pos_enc != -1 and is_instance_valid(opponent_sprite):
-		var opp_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
-		if _opp_pos_enc == 2:
-			opp_lane = ActionButton3D.Lane.LEFT
-		elif _opp_pos_enc == 1:
-			opp_lane = ActionButton3D.Lane.CENTER
-		elif _opp_pos_enc == 0:
-			opp_lane = ActionButton3D.Lane.RIGHT
+		var opp_lane: ActionButton3D.Lane = _enc_to_lane(_opp_pos_enc)
 
 		var opp_x: float = float(_lane_x[opp_lane])
-		for bb in _buttons:
-			if not is_instance_valid(bb):
-				continue
-			if bb.kind == ActionButton3D.ButtonKind.SHOOT and bb.lane == opp_lane:
-				opp_x = bb.global_position.x
-				break
+		var shoot_btn: ActionButton3D = _shoot_btn_by_lane.get(opp_lane, null)
+		if is_instance_valid(shoot_btn):
+			opp_x = shoot_btn.global_position.x
 
 		var op := opponent_sprite.global_position
 		op.x = opp_x
@@ -681,33 +660,16 @@ func _on_fire_pressed() -> void:
 		print("[PLAYROUND] Opp pos enc=", _opp_pos_enc, " => lane=", opp_lane, " set opp_x=", opp_x)
 
 	if _opp_target_enc != -1:
-		var tgt_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
-		var flipped_target_enc := _opp_target_enc
-		if _opp_target_enc == 0:
-			flipped_target_enc = 2
-		elif _opp_target_enc == 2:
-			flipped_target_enc = 0
-
-		if flipped_target_enc == 2:
-			tgt_lane = ActionButton3D.Lane.LEFT
-		elif flipped_target_enc == 1:
-			tgt_lane = ActionButton3D.Lane.CENTER
-		elif flipped_target_enc == 0:
-			tgt_lane = ActionButton3D.Lane.RIGHT
-
-		_opp_target_lane = tgt_lane
-
+		var flipped_enc: int = _flip_enc_for_perspective(_opp_target_enc)
+		_opp_target_lane = _enc_to_lane(flipped_enc)
 
 		var tgt_world: Vector3 = Vector3.ZERO
-		for bb in _buttons:
-			if not is_instance_valid(bb):
-				continue
-			if bb.kind == ActionButton3D.ButtonKind.SHOOT and bb.lane == tgt_lane:
-				tgt_world = bb.global_position + Vector3(0.0, 0.7, 0.0)
-				break
+		var shoot_btn2: ActionButton3D = _shoot_btn_by_lane.get(_opp_target_lane, null)
+		if is_instance_valid(shoot_btn2):
+			tgt_world = shoot_btn2.global_position + Vector3(0.0, 0.7, 0.0)
 
 		if tgt_world == Vector3.ZERO:
-			var tx: float = float(_lane_x[tgt_lane])
+			var tx: float = float(_lane_x[_opp_target_lane])
 			tgt_world = Vector3(tx, player.global_position.y + 0.7, player.global_position.z)
 
 		_opp_target_world = tgt_world
@@ -760,7 +722,7 @@ func _on_fire_pressed() -> void:
 	for n in fade_out_nodes:
 		if is_instance_valid(n) and n is CanvasItem:
 			t.parallel().tween_property(n, "modulate:a", 0.0, dur_in)
-	
+
 	t.tween_callback(func() -> void:
 		if is_instance_valid(player):
 			player.visible = false
@@ -824,7 +786,7 @@ func _on_fire_pressed() -> void:
 
 	t.tween_callback(func() -> void:
 		var cam_pos := cam3d.global_transform.origin
-		
+
 		var aim_bias_x := 0.0
 		if _player_lane == ActionButton3D.Lane.LEFT and _selected_shoot.lane == ActionButton3D.Lane.LEFT:
 			aim_bias_x = 4
@@ -926,14 +888,12 @@ func _fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached:
 		var tt := (target_fixed - ray_origin).dot(ray_dir)
 		tt = maxf(tt, 0.35)
 		muzzle_world = ray_origin + ray_dir * tt
-		
+
 		if is_instance_valid(opponent_sprite):
 			target_fixed.z = opponent_sprite.global_position.z
 
-
 	ball.scale = Vector3.ONE * _paintball_scale
 	ball.speed = (ball_speed * 2.25) if is_enemy else ball_speed
-	ball.use_plane_z = true
 	ball.use_plane_z = true
 
 	if is_enemy:
@@ -981,7 +941,7 @@ func _fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached:
 	ball.reached_plane.connect(func(world_pos: Vector3) -> void:
 		if box["got"]:
 			return
-			
+
 		if not is_enemy and is_instance_valid(ball):
 			ball.visible = false
 			ball.queue_free()
@@ -992,7 +952,6 @@ func _fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached:
 		box["got"] = true
 		box["impact"] = world_pos
 	)
-
 
 	ball.launch(muzzle_world, target_fixed)
 
@@ -1015,8 +974,6 @@ func _fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached:
 
 	if is_enemy and is_instance_valid(ball):
 		ball.queue_free()
-
-
 
 	return impact_world
 
@@ -1064,6 +1021,47 @@ func _end_round_fade_and_restore_next_round() -> void:
 	print("[ROUND] Holding white for 0.5s")
 	await get_tree().create_timer(0.5).timeout
 
+	if _is_replay_playback:
+		_is_replay_playback = false
+
+		if _replay_auto_end_state.size() > 0:
+			var end_state := _replay_auto_end_state
+
+			print("[REPLAY] end_state dict=", end_state)
+
+			var hp1e: int = int(end_state.get("hp1", 3))
+			var hp2e: int = int(end_state.get("hp2", 3))
+			_hp_me = clamp((hp1e if playernum == 1 else hp2e), 0, 3)
+			_hp_opp = clamp((hp2e if playernum == 1 else hp1e), 0, 3)
+			print("ME HP: ", _hp_me, " | OPP HP: ", _hp_opp, " Comment 2")
+			_apply_hearts_from_hp()
+
+			var pos1e: int = int(end_state.get("pos1", -1))
+			var pos2e: int = int(end_state.get("pos2", -1))
+			var t1e: int = int(end_state.get("target1", -1))
+			var t2e: int = int(end_state.get("target2", -1))
+
+			var opp_pos_e: int = (pos2e if playernum == 1 else pos1e)
+			var opp_target_e: int = (t2e if playernum == 1 else t1e)
+
+			_opp_pos_enc = opp_pos_e
+			_opp_target_enc = opp_target_e
+			_pending_enemy_shot = (opp_pos_e != -1 and opp_target_e != -1)
+
+			print("[REPLAY] carried forward next-round opp enc pos=", _opp_pos_enc, " target=", _opp_target_enc, " pending=", _pending_enemy_shot)
+
+			_replay_auto_end_state = {}
+
+		if _replay_segments.size() > 0:
+			var pending_seg := _replay_segments[_replay_segments.size() - 1]
+			_replay_segments = PackedStringArray([pending_seg])
+			_replay_seg_index = 0
+			_last_replay_str = pending_seg
+		else:
+			_last_replay_str = ""
+
+		_replay_auto_full_str = ""
+
 	print("[ROUND] Fade out from white start")
 	var t_out := create_tween()
 	t_out.tween_property(fade_white, "color:a", 0.0, _round_end_white_out)\
@@ -1071,7 +1069,7 @@ func _end_round_fade_and_restore_next_round() -> void:
 	await t_out.finished
 
 	print("[ROUND] Fade out complete, next round ready")
-	
+
 func _init_player_splat_overlay() -> void:
 	if _player_splat != null and is_instance_valid(_player_splat):
 		return
@@ -1103,6 +1101,88 @@ func _init_player_splat_overlay() -> void:
 
 	attach_parent.add_child(_player_splat)
 
+func _state_has_both_players_ready(st: Dictionary) -> bool:
+	return int(st.get("pos1", -1)) != -1 and int(st.get("target1", -1)) != -1 and int(st.get("pos2", -1)) != -1 and int(st.get("target2", -1)) != -1
+
+func _state_has_opponent_ready(st: Dictionary) -> bool:
+	var opp_pos: int = int(st.get("pos2", -1)) if playernum == 1 else int(st.get("pos1", -1))
+	var opp_tgt: int = int(st.get("target2", -1)) if playernum == 1 else int(st.get("target1", -1))
+	return opp_pos != -1 and opp_tgt != -1
+
+func _apply_loaded_replay_segment(seg_state: Dictionary) -> void:
+	var pos1: int = int(seg_state.get("pos1", -1))
+	var pos2: int = int(seg_state.get("pos2", -1))
+	var target1: int = int(seg_state.get("target1", -1))
+	var target2: int = int(seg_state.get("target2", -1))
+
+	var pos_me: int = (pos1 if playernum == 1 else pos2)
+	var pos_opp: int = (pos2 if playernum == 1 else pos1)
+	var target_me: int = (target1 if playernum == 1 else target2)
+	var target_opp: int = (target2 if playernum == 1 else target1)
+
+	_opp_pos_enc = pos_opp
+	_opp_target_enc = target_opp
+	_pending_enemy_shot = (pos_opp != -1 and target_opp != -1)
+
+	if pos_me != -1 and is_instance_valid(player):
+		_player_lane = _enc_to_lane(pos_me)
+		var pp := player.global_position
+		pp.x = float(_lane_x[_player_lane])
+		player.global_position = pp
+
+	if pos_opp != -1 and is_instance_valid(opponent_sprite):
+		var opp_lane: ActionButton3D.Lane = _enc_to_lane(pos_opp)
+		var op := opponent_sprite.global_position
+		op.x = float(_lane_x[opp_lane])
+		opponent_sprite.global_position = op
+
+	_opp_target_world = Vector3.ZERO
+	_opp_target_lane = ActionButton3D.Lane.CENTER
+	if target_opp != -1:
+		_opp_target_lane = _enc_to_lane(target_opp)
+		var tx: float = float(_lane_x[_opp_target_lane])
+		_opp_target_world = Vector3(tx, player.global_position.y + 0.7, player.global_position.z)
+		_update_opponent_sprite_pose_for_shot()
+
+	_selected_shoot = null
+	_require_new_shoot_selection = true
+	if target_me != -1:
+		var my_t_lane: ActionButton3D.Lane = _enc_to_lane(target_me)
+		_selected_shoot = _shoot_btn_by_lane.get(my_t_lane, null)
+		if _selected_shoot != null:
+			_require_new_shoot_selection = false
+
+func _apply_hearts_from_hp() -> void:
+	var p_hearts := [pheart1, pheart2, pheart3]
+	var o_hearts := [oheart1, oheart2, oheart3]
+
+	for i in range(3):
+		if is_instance_valid(p_hearts[i]):
+			p_hearts[i].texture = (HEART_FULL_TEX if i < _hp_me else HEART_VOID_TEX)
+		if is_instance_valid(o_hearts[i]):
+			o_hearts[i].texture = (HEART_FULL_TEX if i < _hp_opp else HEART_VOID_TEX)
+
+func _prime_autoplay_if_loaded_segment_ready() -> void:
+	if _replay_segments.size() <= 0:
+		return
+
+	var cur_state := _parse_replay_state(_replay_segments[_replay_seg_index])
+
+	if not _state_has_both_players_ready(cur_state):
+		return
+
+	_is_replay_playback = true
+
+	if _replay_seg_index < _replay_segments.size() - 1:
+		var next_state := _parse_replay_state(_replay_segments[_replay_seg_index + 1])
+		_replay_auto_end_state = next_state
+		_replay_seg_index += 1
+	else:
+		_replay_auto_end_state = cur_state
+
+	_replay_auto_full_str = "|".join(_replay_segments)
+	_replay_auto_pending = true
+	call_deferred("_autoplay_replay_round")
 
 func _show_player_hit_splat() -> void:
 	if _player_splat == null or not is_instance_valid(_player_splat):
@@ -1134,7 +1214,6 @@ func _show_player_hit_splat() -> void:
 
 	_player_splat_tween.tween_property(_player_splat, "modulate:a", 1.0, 0.08)
 	_player_splat_tween.parallel().tween_property(_player_splat, "scale", Vector2.ONE, 0.18)
-
 
 func _hide_player_hit_splat() -> void:
 	if _player_splat == null or not is_instance_valid(_player_splat):
@@ -1177,7 +1256,6 @@ func _show_opponent_hit_splat() -> void:
 	_opp_splat_tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_opp_splat_tween.tween_property(_opp_splat, "modulate:a", 1.0, 0.10)
 
-
 func _hide_opponent_hit_splat() -> void:
 	if _opp_splat == null or not is_instance_valid(_opp_splat):
 		return
@@ -1195,6 +1273,10 @@ func _run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 
 	_round_sequence_running = true
 	_is_shot_sequence_running = true
+	var was_replay := _is_replay_playback
+	var shoot_for_send := _selected_shoot
+	var opp_pos_for_send := _opp_pos_enc
+	var opp_target_for_send := _opp_target_enc
 
 	print("[ROUND] ==============================")
 	print("[ROUND] Sequence start")
@@ -1222,10 +1304,8 @@ func _run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 
 		if _opp_target_lane == ActionButton3D.Lane.CENTER:
 			splat_pos.x = 0.0
-
 		elif _opp_target_lane == ActionButton3D.Lane.LEFT:
 			splat_pos.x = 0.5
-
 		elif _opp_target_lane == ActionButton3D.Lane.RIGHT:
 			splat_pos.x = -0.5
 
@@ -1233,9 +1313,7 @@ func _run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		_opp_splat.rotation = splat_rot
 		_opp_splat.scale = Vector3.ONE * 0.1
 
-
 		var splat_world: Vector3 = opponent_sprite.to_global(_opp_splat.position)
-
 		shot_target.y = splat_world.y
 
 		if is_instance_valid(opponent_sprite):
@@ -1259,11 +1337,7 @@ func _run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 			_opp_splat_tween.tween_property(_opp_splat, "modulate:a", 1.0, 0.10)
 
 		_hp_opp = clamp(_hp_opp - 1, 0, 3)
-
-		var o_hearts := [oheart1, oheart2, oheart3]
-		for i in range(3):
-			if is_instance_valid(o_hearts[i]):
-				o_hearts[i].texture = (HEART_FULL_TEX if i < _hp_opp else HEART_VOID_TEX)
+		_apply_hearts_from_hp()
 
 	print("[ROUND][PLAYER] Step 3: Pause 1.0s before opponent returns fire")
 	await get_tree().create_timer(1.0).timeout
@@ -1289,34 +1363,40 @@ func _run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		_show_player_hit_splat()
 
 		_hp_me = clamp(_hp_me - 1, 0, 3)
+		print("ME HP: ", _hp_me, " | OPP HP: ", _hp_opp, " Comment 4")
+		_apply_hearts_from_hp()
 
-		var p_hearts := [pheart1, pheart2, pheart3]
-		for i in range(3):
-			if is_instance_valid(p_hearts[i]):
-				p_hearts[i].texture = (HEART_FULL_TEX if i < _hp_me else HEART_VOID_TEX)
-	
 		print("[ROUND] Player was hit. Holding 2.0s before fade-to-white")
 		await get_tree().create_timer(2.0).timeout
-	
+
 	game_ended = check_win()
 	if game_ended:
 		print("End Valid")
-		send_game()
+		if not _is_replay_playback:
+			send_game()
 		return
-	
+
 	print("[ROUND] Step 7: End of round fade/restore")
 	await _end_round_fade_and_restore_next_round()
 
-	_pending_enemy_shot = false
-	_opp_pos_enc = -1
-	_opp_target_enc = -1
-	_opp_target_world = Vector3.ZERO
-	_opp_target_lane = ActionButton3D.Lane.CENTER
+	if not was_replay:
+		_selected_shoot = shoot_for_send
+		_require_new_shoot_selection = (_selected_shoot == null)
+
+		_selected_shoot = null
+		_require_new_shoot_selection = true
+
+	if not was_replay:
+		_pending_enemy_shot = false
+		_opp_pos_enc = -1
+		_opp_target_enc = -1
+		_opp_target_world = Vector3.ZERO
+		_opp_target_lane = ActionButton3D.Lane.CENTER
 
 	print("[ROUND] Sequence done")
 	_round_sequence_running = false
 	_is_shot_sequence_running = false
-	
+
 func _update_opponent_sprite_pose_for_shot() -> void:
 	if not is_instance_valid(opponent_sprite):
 		return
@@ -1359,7 +1439,7 @@ func _fade_out_selected_aim_target() -> void:
 
 	var t := create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	t.tween_property(spr, "modulate:a", 0.0, 0.18)
-	t.tween_callback(func():
+	t.tween_callback(func() -> void:
 		if is_instance_valid(_selected_shoot):
 			_selected_shoot.visible = false
 	)
@@ -1376,47 +1456,6 @@ func _play_fp_recoil() -> void:
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	t.tween_property(fp_aim_sprite, "position", base, 0.08)\
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	
-func _spawn_and_fire_paintball(target_world: Vector3, is_enemy: bool = false) -> void:
-	if not is_instance_valid(cam):
-		return
-
-	var ball := PAINTBALL_SCENE.instantiate() as PaintballProjectile
-	if ball == null:
-		return
-
-	var muzzle_world: Vector3
-
-	if is_enemy and is_instance_valid(opponent_sprite):
-		muzzle_world = opponent_sprite.global_position + Vector3(0.0, 0.9, 0.0)
-	else:
-		var muzzle_screen := _get_muzzle_screen_pos()
-
-		var ray_origin := cam.project_ray_origin(muzzle_screen)
-		var ray_dir := cam.project_ray_normal(muzzle_screen).normalized()
-
-		var tt := (target_world - ray_origin).dot(ray_dir)
-		tt = maxf(tt, 0.35)
-		muzzle_world = ray_origin + ray_dir * tt
-
-	ball.scale = Vector3.ONE * _paintball_scale
-	ball.speed = ball_speed
-	ball.use_plane_z = true
-
-	if is_enemy and is_instance_valid(player):
-		ball.hit_plane_z = player.global_position.z
-	elif is_instance_valid(opponent_sprite):
-		ball.hit_plane_z = opponent_sprite.global_position.z
-	else:
-		ball.use_plane_z = false
-
-	if is_enemy:
-		ball.set_ball_color(Color(0.9, 0.15, 0.15))
-	else:
-		ball.set_ball_color(Color(1.0, 0.95, 0.2))
-
-	get_tree().current_scene.add_child(ball)
-	ball.launch(muzzle_world, target_world)
 
 func _play_opponent_recoil() -> void:
 	if not is_instance_valid(opponent_sprite):
@@ -1432,42 +1471,6 @@ func _play_opponent_recoil() -> void:
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 	await t.finished
-
-func _end_round_fade_and_restore() -> void:
-	if not is_instance_valid(fade_white):
-		return
-	if not is_instance_valid(cam):
-		return
-
-	fade_white.visible = true
-	var t := create_tween()
-	t.tween_property(fade_white, "color:a", 1.0, _round_end_white_in)\
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
-	await t.finished
-
-	cam.fov = _cam_start_fov
-	cam.global_transform = _cam_start_xform
-
-	if is_instance_valid(opponent_sprite):
-		opponent_sprite.global_position = _opp_sprite_start_pos
-
-	if is_instance_valid(fp_aim_sprite):
-		fp_aim_sprite.visible = false
-		_hide_player_hit_splat()
-		_hide_opponent_hit_splat()
-
-
-	if is_instance_valid(player):
-		player.visible = true
-
-	await get_tree().create_timer(_round_end_hold).timeout
-
-	var t2 := create_tween()
-	t2.tween_property(fade_white, "color:a", 0.0, _round_end_white_out)\
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
-	await t2.finished
-
-	_restore_ui_after_round()
 
 func _restore_ui_after_round() -> void:
 	_is_shot_sequence_running = false
@@ -1527,9 +1530,80 @@ func _get_muzzle_screen_pos() -> Vector2:
 
 	if fp_aim_sprite.centered:
 		muzzle_local -= drawn_size * 0.5
-		
+
 	return fp_aim_sprite.global_position + muzzle_local.rotated(fp_aim_sprite.global_rotation)
-	
+
+func _state_to_replay_string(st: Dictionary) -> String:
+	return "hp1:%d,hp2:%d,pos1:%d,pos2:%d,target1:%d,target2:%d" % [
+		int(st.get("hp1", 3)),
+		int(st.get("hp2", 3)),
+		int(st.get("pos1", -1)),
+		int(st.get("pos2", -1)),
+		int(st.get("target1", -1)),
+		int(st.get("target2", -1))
+	]
+
+func _my_keys() -> Dictionary:
+	if playernum == 1:
+		return {"pos":"pos1", "target":"target1"}
+	return {"pos":"pos2", "target":"target2"}
+
+func _hp_as_p1_order() -> Dictionary:
+	if playernum == 1:
+		return {"hp1": _hp_me, "hp2": _hp_opp}
+	return {"hp1": _hp_opp, "hp2": _hp_me}
+
+func _my_replay_keys() -> Dictionary:
+	if playernum == 1:
+		return {"pos": "pos1", "target": "target1"}
+	return {"pos": "pos2", "target": "target2"}
+
+func _replay_is_full_round(st: Dictionary) -> bool:
+	return int(st.get("pos1", -1)) != -1 and int(st.get("pos2", -1)) != -1 and int(st.get("target1", -1)) != -1 and int(st.get("target2", -1)) != -1
+
+func _replay_trim_to_sliding_window(segs: PackedStringArray) -> PackedStringArray:
+	while segs.size() > 2:
+		segs.remove_at(0)
+	return segs
+
+func _replay_build_after_my_fire(my_pos_int: int, my_target_int: int) -> String:
+	var segs: PackedStringArray = PackedStringArray()
+	if _last_replay_str != "":
+		segs = _last_replay_str.split("|", false)
+
+	var hp := _hp_as_p1_order()
+	var myk := _my_replay_keys()
+
+	if segs.size() == 0:
+		segs.append("hp1:%d,hp2:%d,pos1:-1,pos2:-1,target1:-1,target2:-1" % [int(hp["hp1"]), int(hp["hp2"])])
+
+	var last_i := segs.size() - 1
+	var last_state := _parse_replay_state(segs[last_i])
+
+	last_state["hp1"] = int(hp["hp1"])
+	last_state["hp2"] = int(hp["hp2"])
+
+	var my_target_missing := int(last_state.get(myk["target"], -1)) == -1
+
+	if my_target_missing:
+		last_state[myk["pos"]] = my_pos_int
+		last_state[myk["target"]] = my_target_int
+		segs[last_i] = _state_to_replay_string(last_state)
+		return "|".join(_replay_trim_to_sliding_window(segs))
+
+	var next_state := last_state.duplicate(true)
+	next_state["hp1"] = int(hp["hp1"])
+	next_state["hp2"] = int(hp["hp2"])
+	next_state["target1"] = -1
+	next_state["target2"] = -1
+
+	next_state[myk["pos"]] = my_pos_int
+	next_state[myk["target"]] = my_target_int
+
+	segs.append(_state_to_replay_string(next_state))
+	segs = _replay_trim_to_sliding_window(segs)
+	return "|".join(segs)
+
 func _process(delta: float) -> void:
 	if not _is_shot_sequence_running:
 		return
@@ -1538,18 +1612,17 @@ func _process(delta: float) -> void:
 	if not is_instance_valid(cam):
 		return
 
-
 	_aim_gun_sprite_at_world_point(
 		cam,
 		fp_aim_sprite,
 		_aim_target_world,
 		delta,
-		6.0,	# max rotation degrees
-		12.0,	# rotation snappiness
-		28.0,	# max position pixels
-		10.0	# position snappiness
+		6.0,
+		12.0,
+		28.0,
+		10.0
 	)
-	
+
 func _aim_gun_sprite_at_world_point(
 	camera: Camera3D,
 	sprite: Sprite2D,
@@ -1618,13 +1691,6 @@ func _aim_gun_sprite_at_world_point(
 	var target_pos := _fp_aim_base_pos + Vector2(nx * max_pos_px, ny * (max_pos_px * 0.6))
 	sprite.position = sprite.position.lerp(target_pos, delta * pos_lerp_speed)
 
-func _set_opponent_shot_target_from_move_button(move_btn: ActionButton3D) -> void:
-	if not is_instance_valid(move_btn):
-		return
-
-	_opp_target_lane = move_btn.lane
-	_opp_target_world = move_btn.global_position + Vector3(0.0, 0.7, 0.0)
-
 func _set_button_enabled(b: ActionButton3D, enabled: bool) -> void:
 	var sprite := b.get_node("Sprite3D") as Sprite3D
 	if not sprite:
@@ -1640,7 +1706,7 @@ func _update_move_buttons() -> void:
 	for b in _buttons:
 		if b.kind == ActionButton3D.ButtonKind.MOVE:
 			b.set_player_lane(_player_lane)
-			
+
 func _compute_zoom_target(camera: Camera3D, focus_world: Vector3) -> Transform3D:
 	var start_xform := camera.global_transform
 	var start_pos := start_xform.origin
@@ -1651,31 +1717,31 @@ func _compute_zoom_target(camera: Camera3D, focus_world: Vector3) -> Transform3D
 	var up := start_xform.basis.y.normalized()
 	var target_pos := focus_world - forward * target_dist + up * 0.6
 	var target_xform := start_xform
-	
+
 	target_xform.origin = target_pos
-	
+
 	return target_xform
-			
+
 func _parse_avatar_string(data_string: String) -> Dictionary:
-	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
-	var body_map: Array     = AvatarThumbnail.avatar_fshape_regions.keys()
-	var eyes_map: Array     = AvatarThumbnail.avatar_eyes_regions.keys()
-	var mouth_map: Array    = AvatarThumbnail.avatar_mouth_regions.keys()
+	var hair_map: Array = AvatarThumbnail.avatar_hair_regions.keys()
+	var body_map: Array = AvatarThumbnail.avatar_fshape_regions.keys()
+	var eyes_map: Array = AvatarThumbnail.avatar_eyes_regions.keys()
+	var mouth_map: Array = AvatarThumbnail.avatar_mouth_regions.keys()
 	var clothing_map: Array = AvatarThumbnail.avatar_clothing_regions.keys()
 	var backdrop_map: Array = ["Plain"]
 	backdrop_map.append_array(AvatarThumbnail.avatar_background_regions.keys())
 
 	var data: Dictionary = {
-		"fshape_style":   body_map[0]     if body_map.size()     > 0 else "Default",
-		"hair_style":     hair_map[0]     if hair_map.size()     > 0 else "hair1",
-		"eyes_style":     eyes_map[0]     if eyes_map.size()     > 0 else "eyes1",
-		"mouth_style":    mouth_map[0]    if mouth_map.size()    > 0 else "mouth1",
+		"fshape_style": body_map[0] if body_map.size() > 0 else "Default",
+		"hair_style": hair_map[0] if hair_map.size() > 0 else "hair1",
+		"eyes_style": eyes_map[0] if eyes_map.size() > 0 else "eyes1",
+		"mouth_style": mouth_map[0] if mouth_map.size() > 0 else "mouth1",
 		"clothing_style": clothing_map[0] if clothing_map.size() > 0 else "clothing1",
-		"bg_style":       "Plain",
-		"fshape_color":   Color(0.88, 0.67, 0.41),
-		"hair_color":     Color(0.17, 0.14, 0.17),
+		"bg_style": "Plain",
+		"fshape_color": Color(0.88, 0.67, 0.41),
+		"hair_color": Color(0.17, 0.14, 0.17),
 		"clothing_color": Color(0.63, 0.24, 0.24),
-		"bg_color":       Color(0.31, 0.36, 0.54),
+		"bg_color": Color(0.31, 0.36, 0.54),
 	}
 
 	if data_string.is_empty():
@@ -1698,7 +1764,6 @@ func _parse_avatar_string(data_string: String) -> Dictionary:
 				if i >= 0 and i < body_map.size():
 					data["fshape_style"] = String(body_map[i])
 
-			# --- Skin color (accept both) ---
 			"fshape_color", "body_color":
 				data["fshape_color"] = read_color.call(key_value.slice(1))
 
@@ -1738,89 +1803,30 @@ func _parse_avatar_string(data_string: String) -> Dictionary:
 			_:
 				pass
 	return data
-			
-		
+
 func send_game(clear_targets_for_next_turn: bool = false) -> void:
+	if _is_replay_playback or _replay_auto_pending:
+		print("[Send] Blocked: replay playback/autoplay pending. Not sending.")
+		return
+
 	print("[Send] send_game() called clear_targets_for_next_turn=", clear_targets_for_next_turn)
 	await get_tree().process_frame
 
-	var lane_to_int := func(l: ActionButton3D.Lane) -> int:
-		if l == ActionButton3D.Lane.LEFT:
-			return 0
-		elif l == ActionButton3D.Lane.CENTER:
-			return 1
-		elif l == ActionButton3D.Lane.RIGHT:
-			return 2
-		return 1
-
-	var base_replay: String = _last_replay_str
-	var hp1: int = 3
-	var hp2: int = 3
-	var pos1: int = -1
-	var pos2: int = -1
-	var target1: int = -1
-	var target2: int = -1
-
-	var segments: Array = []
-	if base_replay != "":
-		segments = base_replay.split("|", false)
-		var last_state: String = String(segments[segments.size() - 1])
-
-		for p in last_state.split(",", false):
-			var kv: Array = String(p).split(":", false)
-			if kv.size() != 2:
-				continue
-			var k: String = String(kv[0])
-			var v: int = int(String(kv[1]))
-			match k:
-				"hp1":
-					hp1 = v
-				"hp2":
-					hp2 = v
-				"pos1":
-					pos1 = v
-				"pos2":
-					pos2 = v
-				"target1":
-					target1 = v
-				"target2":
-					target2 = v
-				_:
-					pass
-
-	var my_pos_int: int = lane_to_int.call(_player_lane)
+	var my_pos_int: int = _lane_to_enc(_player_lane)
 
 	var my_target_int: int = -1
 	if _selected_shoot != null and is_instance_valid(_selected_shoot):
-		my_target_int = lane_to_int.call(_selected_shoot.lane)
+		my_target_int = _lane_to_enc(_selected_shoot.lane)
 
-	if playernum == 1:
-		pos1 = my_pos_int
-		target1 = my_target_int
-	else:
-		pos2 = my_pos_int
-		target2 = my_target_int
-	if playernum == 1:
-		hp1 = _hp_me
-		hp2 = _hp_opp
-	else:
-		hp1 = _hp_opp
-		hp2 = _hp_me
-
-	var new_state := "hp1:%d,hp2:%d,pos1:%d,pos2:%d,target1:%d,target2:%d" % [hp1, hp2, pos1, pos2, target1, target2]
-
-	var out_replay: String = ""
-	if segments.size() > 0:
-		segments[segments.size() - 1] = new_state
-		out_replay = "|".join(segments)
-	else:
-		out_replay = new_state
-
+	var out_replay := _replay_build_after_my_fire(my_pos_int, my_target_int)
 	_last_replay_str = out_replay
 
 	var payload: Dictionary = {
 		"replay": out_replay
 	}
+
+	var out_parts := out_replay.split("|", false)
+	print("[Send] REPLAY_OUT segs=", out_parts.size(), " last_seg=", out_parts[out_parts.size() - 1])
 
 	game_ended = check_win()
 	if game_ended:
@@ -1846,29 +1852,14 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 			winner_player = 0
 
 		payload["winner"] = my_id + "|" + win_loss_state
-
 		print("[Send] Game ended. my_id=", my_id, " winner=", winner, " winnerPlayer=", winner_player, " result=", win_loss_state)
-
-	if clear_targets_for_next_turn:
-		target1 = -1
-		target2 = -1
-
-		var cleared_state := "hp1:%d,hp2:%d,pos1:%d,pos2:%d,target1:%d,target2:%d" % [hp1, hp2, pos1, pos2, target1, target2]
-
-		if segments.size() > 0:
-			segments[segments.size() - 1] = cleared_state
-			out_replay = "|".join(segments)
-		else:
-			out_replay = cleared_state
-
-		_last_replay_str = out_replay
-		payload["replay"] = out_replay
 
 	var avatar_key := ("avatar1" if playernum == 1 else "avatar2")
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
 
 	print("[Send] PAYLOAD: ", payload)
+	_dbg("SEND_GAME_BEFORE")
 
 	var appPlugin := Engine.get_singleton("AppPlugin")
 	if appPlugin:
@@ -1884,10 +1875,7 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 
 	_selected_shoot = null
 
-	for b in _buttons:
-		if is_instance_valid(b):
-			b.set_click_enabled(false)
-			_set_button_enabled(b, false)
+	_set_all_buttons_clickable(false)
 
 	if not game_over:
 		play_sent_animation()
@@ -1896,11 +1884,7 @@ func on_rules_button_pressed() -> void:
 	if not is_instance_valid(rules_button):
 		return
 
-	rules_button.pivot_offset = rules_button.size / 2.0
-	var tween := create_tween()
-	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
+	await _pop_button(rules_button)
 
 	var popup := RULES_POPUP_SCENE.instantiate() as RulesPopup
 	var dim := ColorRect.new()
@@ -1913,7 +1897,7 @@ func on_rules_button_pressed() -> void:
 	popup.z_index = 100
 	dim.z_index = 99
 
-	popup.tree_exited.connect(func():
+	popup.tree_exited.connect(func() -> void:
 		if is_instance_valid(dim):
 			dim.queue_free()
 	)
@@ -1944,7 +1928,7 @@ func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
 		print("Warning: sent_label is not valid for play_sent_animation.")
 		return
-	
+
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()
 
@@ -1958,20 +1942,20 @@ func play_sent_animation() -> void:
 
 	sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
 	sent_tween.tween_interval(0.6)
-	sent_tween.tween_callback(func():
+	sent_tween.tween_callback(func() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.text = "Sent ✔"
 	)
 	sent_tween.tween_interval(2.0)
 	sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
 
-	sent_tween.tween_callback(func():
+	sent_tween.tween_callback(func() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
 			start_waiting_animation()
 	)
-	
+
 func check_win() -> bool:
 	print("--- CHECKING WIN CONDITION ---")
 
@@ -2035,13 +2019,13 @@ func _ensure_avatar_wrapper(avatar: Control) -> Control:
 	avatar.offset_right = 0.0
 	avatar.offset_bottom = 0.0
 
-	avatar.item_rect_changed.connect(func():
+	avatar.item_rect_changed.connect(func() -> void:
 		if is_instance_valid(wrapper):
 			wrapper.custom_minimum_size = avatar.get_combined_minimum_size()
 	)
 
 	return wrapper
-	
+
 func _show_win_burst(avatar: Control) -> void:
 	var wrapper: Control = _ensure_avatar_wrapper(avatar)
 	if not is_instance_valid(wrapper):
@@ -2072,7 +2056,7 @@ func _show_win_burst(avatar: Control) -> void:
 	(anim_instance as Node).call("set_color", Color(1.0, 0.84, 0.0))
 	(anim_instance as Node).call("play", 0.05)
 
-func start_waiting_animation():
+func start_waiting_animation() -> void:
 	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):
 		print("Warning: Waiting animation nodes are not valid.")
 		return
@@ -2090,11 +2074,11 @@ func start_waiting_animation():
 	var tween_wait_in = create_tween().set_parallel(true)
 	tween_wait_in.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
 	tween_wait_in.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_callback(func():
+	tween_wait_in.tween_callback(func() -> void:
 		dot_timer.start()
 	)
 
-func stop_waiting_animation():
+func stop_waiting_animation() -> void:
 	if is_instance_valid(dot_timer):
 		dot_timer.stop()
 	if is_instance_valid(waiting_label):
@@ -2104,7 +2088,7 @@ func stop_waiting_animation():
 		waiting_blur.visible = false
 		waiting_blur.modulate.a = 1.0
 
-func _on_dot_timer_timeout():
+func _on_dot_timer_timeout() -> void:
 	if not is_instance_valid(waiting_label):
 		print("Warning: waiting_label is not valid in _on_dot_timer_timeout.")
 		return
@@ -2117,11 +2101,8 @@ func _on_dot_timer_timeout():
 func _on_settings_button_pressed() -> void:
 	if not is_instance_valid(settings_button):
 		return
-	settings_button.pivot_offset = settings_button.size / 2.0
-	var tween := create_tween()
-	tween.tween_property(settings_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(settings_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
+
+	await _pop_button(settings_button)
 
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.5)
@@ -2139,41 +2120,13 @@ func _on_settings_button_pressed() -> void:
 
 	settings_popup_script.setup_popup(dim)
 
-	#var volume_setting_hbox := HBoxContainer.new()
-	#volume_setting_hbox.add_child(Label.new())
-	#(volume_setting_hbox.get_child(0) as Label).text = "Game Volume:"
-	#(volume_setting_hbox.get_child(0) as Label).set_h_size_flags(Control.SIZE_EXPAND_FILL)
-#
-	#var volume_slider := HSlider.new()
-	#volume_slider.min_value = 0.0
-	#volume_slider.max_value = 1.0
-	#volume_slider.step = 0.05
-	#var saved_volume: float = float(SettingsManager.get_setting(game_settings_category, "master_volume", 0.75))
-	#volume_slider.value = saved_volume
-	#volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	#volume_slider.value_changed.connect(func(value):
-		#AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
-		#SettingsManager.set_setting(game_settings_category, "master_volume", value)
-	#)
-	#volume_setting_hbox.add_child(volume_slider)
-	#settings_popup_script.add_custom_setting(volume_setting_hbox)
-#
-	#var toggle_debug_checkbox := CheckBox.new()
-	#toggle_debug_checkbox.text = "Show Debug Info"
-	#var saved_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
-	#toggle_debug_checkbox.button_pressed = saved_debug_info
-	#toggle_debug_checkbox.pressed.connect(func():
-		#SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
-	#)
-	#settings_popup_script.add_custom_setting(toggle_debug_checkbox)
-
 	var custom_settings_title := popup_instance.find_child("CustomSettingsTitleLabel", true)
 	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:
 		(custom_settings_title as Label).visible = true
 	elif custom_settings_title and custom_settings_title is Label:
 		(custom_settings_title as Label).visible = false
 
-	settings_popup_script.closed.connect(func():
+	settings_popup_script.closed.connect(func() -> void:
 		if is_instance_valid(player_avatar_display):
 			player_avatar_display.update_display_from_settings()
 	)
@@ -2194,7 +2147,6 @@ func _on_settings_button_pressed() -> void:
 	var target_y_position: float = viewport_size.y - desired_height - bottom_offset
 	var target_position: Vector2 = Vector2((viewport_size.x - desired_width) / 2.0, target_y_position)
 
-
 	var popup_tween := create_tween()
 	popup_tween.tween_property(popup_instance, "position", target_position, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	popup_instance.grab_focus()
@@ -2207,3 +2159,98 @@ func _load_game_specific_settings() -> void:
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))
 	var show_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
 	print("Loaded game-specific settings for ", game_settings_category, ": volume=", saved_volume, " debug=", show_debug_info)
+
+func _dbg(tag: String) -> void:
+	print("[DBG][", tag, "] playernum=", playernum,
+		" is_my_turn=", is_my_turn,
+		" pending_enemy=", _pending_enemy_shot,
+		" opp_pos_enc=", _opp_pos_enc,
+		" opp_target_enc=", _opp_target_enc,
+		" my_lane=", int(_player_lane),
+		" my_selected=", (-1 if _selected_shoot == null else int(_selected_shoot.lane)),
+		" segs=", _replay_segments.size(),
+		" seg_i=", _replay_seg_index,
+		" last_replay_len=", _last_replay_str.length()
+	)
+	if _last_replay_str != "":
+		var parts := _last_replay_str.split("|", false)
+		print("[DBG][", tag, "] last_replay_segs=", parts.size(), " last_seg=", parts[parts.size() - 1])
+
+func _res_str(res: Dictionary, key: String, default_value: String = "") -> String:
+	var v: Variant = res.get(key, default_value)
+	if v is Array:
+		var a: Array = v
+		if a.size() > 0:
+			return String(a[0])
+	return String(v)
+
+func _res_bool(res: Dictionary, key: String, default_value: bool = false) -> bool:
+	var v: Variant = res.get(key, default_value)
+	if v is Array:
+		var a: Array = v
+		if a.size() > 0:
+			return bool(a[0])
+	return bool(v)
+
+func _res_int(res: Dictionary, key: String, default_value: int = 0) -> int:
+	var v: Variant = res.get(key, default_value)
+	if v is Array:
+		var a: Array = v
+		if a.size() > 0:
+			return int(a[0])
+	return int(v)
+
+func _lane_to_enc(lane: ActionButton3D.Lane) -> int:
+	match lane:
+		ActionButton3D.Lane.LEFT:
+			return 0
+		ActionButton3D.Lane.CENTER:
+			return 1
+		ActionButton3D.Lane.RIGHT:
+			return 2
+		_:
+			return 1
+
+func _enc_to_lane(enc: int) -> ActionButton3D.Lane:
+	match enc:
+		0:
+			return ActionButton3D.Lane.LEFT
+		1:
+			return ActionButton3D.Lane.CENTER
+		2:
+			return ActionButton3D.Lane.RIGHT
+		_:
+			return ActionButton3D.Lane.CENTER
+
+func _flip_enc_for_perspective(enc: int) -> int:
+	if enc == 0:
+		return 2
+	if enc == 2:
+		return 0
+	return enc
+
+func _index_buttons() -> void:
+	_move_btn_by_lane.clear()
+	_shoot_btn_by_lane.clear()
+
+	for b in _buttons:
+		if not is_instance_valid(b):
+			continue
+		if b.kind == ActionButton3D.ButtonKind.MOVE:
+			_move_btn_by_lane[b.lane] = b
+		elif b.kind == ActionButton3D.ButtonKind.SHOOT:
+			_shoot_btn_by_lane[b.lane] = b
+
+func _set_all_buttons_clickable(enabled: bool) -> void:
+	for b in _buttons:
+		if not is_instance_valid(b):
+			continue
+		b.set_click_enabled(enabled)
+		_set_button_enabled(b, enabled)
+
+func _pop_button(btn: Control) -> void:
+	btn.pivot_offset = btn.size / 2.0
+	var tween := create_tween()
+	tween.tween_property(btn, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(btn, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await tween.finished

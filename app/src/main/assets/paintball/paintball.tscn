@@ -149,6 +149,7 @@ expand_margin_bottom = 10.0
 
 [node name="Paintball" type="Node3D"]
 script = ExtResource("1_itydf")
+buttons_root = null
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.97189945, 0.23539655, 0, -0.23539655, 0.97189945, 0, 5.428241, 12.890634)
@@ -159,6 +160,7 @@ layer = 0
 
 [node name="FirstPersonAimSprite" type="Sprite2D" parent="Camera3D/CanvasLayer"]
 unique_name_in_owner = true
+visible = false
 position = Vector2(459, 871)
 texture = ExtResource("2_gx26o")
 
@@ -469,6 +471,7 @@ mouse_filter = 2
 
 [node name="FireButton" type="Button" parent="MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 8
