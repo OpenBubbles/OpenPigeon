@@ -3,17 +3,103 @@ extends RefCounted
 class_name PB_Buttons
 
 var g: PaintballGame
+var _root: Node = null
 
 func setup(owner: PaintballGame) -> void:
 	g = owner
 
+# ADD: stores the resolved root node for button collection
+func setup_buttons_root(root_path: NodePath) -> void:
+	if g == null:
+		push_error("[PB_Buttons] setup_buttons_root called before setup(owner).")
+		_root = null
+		return
+
+	_root = g
+	if root_path != NodePath(""):
+		if g.has_node(root_path):
+			_root = g.get_node(root_path)
+		else:
+			push_error("[PB_Buttons] buttons_root path not found: %s" % String(root_path))
+			_root = g
+
+# ADD: one-call convenience used by PaintballGame._ready()
+func collect_and_index_buttons() -> void:
+	if g == null:
+		push_error("[PB_Buttons] collect_and_index_buttons called before setup(owner).")
+		return
+	if _root == null:
+		push_error("[PB_Buttons] collect_and_index_buttons called before setup_buttons_root().")
+		return
+
+	g._buttons.clear()
+	collect_buttons(_root)
+	index_buttons()
+
+func connect_button_signals() -> void:
+	print("[PB_BUTTONS] connect_button_signals count=", g._buttons.size())
+
+	for b in g._buttons:
+		if not is_instance_valid(b):
+			continue
+
+		print("[PB_BUTTONS] wiring:", b.name, " kind=", int(b.kind), " lane=", int(b.lane))
+
+		if b.has_signal("clicked"):
+			if not b.clicked.is_connected(_on_button_clicked):
+				b.clicked.connect(_on_button_clicked)
+			continue
+
+		if b.has_signal("pressed"):
+			var cb: Callable = _on_button_pressed.bind(b)
+			if not b.pressed.is_connected(cb):
+				b.pressed.connect(cb)
+			continue
+
+
+		if b.has_signal("button_clicked"):
+			if not b.button_clicked.is_connected(_on_button_clicked):
+				b.button_clicked.connect(_on_button_clicked)
+			continue
+
+		print("[PB_BUTTONS] WARNING no usable signal on:", b.name)
+
+func _on_button_clicked(b: ActionButton3D) -> void:
+	print("[PB_BUTTONS] CLICKED:", b.name,
+		" kind=", int(b.kind),
+		" lane=", int(b.lane),
+		" is_my_turn=", g.is_my_turn,
+		" shot_seq=", g._is_shot_sequence_running,
+		" round_seq=", g._round_sequence_running
+	)
+
+	# forward to PaintballGame
+	g._on_button_clicked(b)
+
+func _on_button_pressed(b: ActionButton3D) -> void:
+	print("[PB_BUTTONS] PRESSED:", b.name,
+		" kind=", int(b.kind),
+		" lane=", int(b.lane)
+	)
+	_on_button_clicked(b)
+
 func collect_buttons(n: Node) -> void:
+	if g == null:
+		return
+	if n == null or not is_instance_valid(n):
+		return
+
 	if n is ActionButton3D:
 		g._buttons.append(n)
+
 	for c in n.get_children():
-		collect_buttons(c)
+		if c != null and is_instance_valid(c):
+			collect_buttons(c)
 
 func index_buttons() -> void:
+	if g == null:
+		return
+
 	g._move_btn_by_lane.clear()
 	g._shoot_btn_by_lane.clear()
 
@@ -36,6 +122,9 @@ func set_button_enabled(b: ActionButton3D, enabled: bool) -> void:
 		sprite.modulate = Color(0.5, 0.5, 0.5, 0.4)
 
 func set_all_buttons_clickable(enabled: bool) -> void:
+	if g == null:
+		return
+
 	for b in g._buttons:
 		if not is_instance_valid(b):
 			continue
@@ -43,16 +132,36 @@ func set_all_buttons_clickable(enabled: bool) -> void:
 		set_button_enabled(b, enabled)
 
 func update_move_buttons() -> void:
+	if g == null:
+		return
+
 	print("Update move buttons: lane=", g._player_lane)
 	for b in g._buttons:
 		if b.kind == ActionButton3D.ButtonKind.MOVE:
 			b.set_player_lane(g._player_lane)
 
 func cache_lane_x_from_move_buttons() -> void:
+	if g == null:
+		return
+
 	for b in g._buttons:
 		if b.kind != ActionButton3D.ButtonKind.MOVE:
 			continue
 		g._lane_x[b.lane] = b.global_position.x
+
+func _get_lane_world_x(lane: ActionButton3D.Lane) -> float:
+	# Prefer the actual MOVE button world X for that lane
+	if g._move_btn_by_lane.has(lane):
+		var mb := g._move_btn_by_lane[lane] as ActionButton3D
+		if is_instance_valid(mb):
+			return mb.global_position.x
+
+	# Fallback to cached lane map
+	if g._lane_x.has(lane):
+		return float(g._lane_x[lane])
+
+	# Last resort
+	return g.player.global_position.x
 
 func lane_from_player_x() -> ActionButton3D.Lane:
 	var px: float = g.player.global_position.x
@@ -119,9 +228,10 @@ func move_player_to_button(b: ActionButton3D) -> void:
 
 	for i in range(1, path.size()):
 		var leg_lane: ActionButton3D.Lane = path[i]
-		var leg_x: float = float(g._lane_x[leg_lane])
+		var leg_x: float = _get_lane_world_x(leg_lane)
 
-		g._move_tween.tween_property(g.player, "global_position:x", leg_x, leg_time)
+		var leg_pos := Vector3(leg_x, base_y, base_z)
+		g._move_tween.tween_property(g.player, "global_position", leg_pos, leg_time)
 
 		var yseq: Tween = g._move_tween.parallel()
 		yseq.tween_method(func(t: float) -> void:
@@ -148,3 +258,27 @@ func move_player_to_button(b: ActionButton3D) -> void:
 		g._player_lane = lane_from_player_x()
 		update_move_buttons()
 	)
+
+func update_shoot_selection_visuals(selected: ActionButton3D) -> void:
+	for b in g._buttons:
+		if not is_instance_valid(b):
+			continue
+		if b.kind != ActionButton3D.ButtonKind.SHOOT:
+			continue
+
+		var is_selected := (selected != null and b == selected)
+
+		# Keep clickable, just change look
+		b.set_click_enabled(true)
+
+		var sprite := b.get_node_or_null("Sprite3D") as Sprite3D
+		if sprite == null:
+			continue
+
+		if selected == null:
+			sprite.modulate = Color(1, 1, 1, 1)
+		elif is_selected:
+			sprite.modulate = Color(1, 1, 1, 1)
+		else:
+			# Dim non-selected targets
+			sprite.modulate = Color(0.5, 0.5, 0.5, 0.4)

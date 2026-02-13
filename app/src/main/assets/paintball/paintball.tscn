@@ -149,7 +149,6 @@ expand_margin_bottom = 10.0
 
 [node name="Paintball" type="Node3D"]
 script = ExtResource("1_itydf")
-buttons_root = null
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.97189945, 0.23539655, 0, -0.23539655, 0.97189945, 0, 5.428241, 12.890634)
@@ -244,8 +243,9 @@ mesh = SubResource("PlaneMesh_24vgr")
 
 [node name="Opponent" type="Sprite3D" parent="."]
 unique_name_in_owner = true
-transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0.025266409, 1.7405827, -14.262239)
+transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0.025266409, 1.7820818, -14.262239)
 visible = false
+texture_filter = 0
 texture = ExtResource("5_gayi8")
 
 [node name="Buttons" type="Node3D" parent="."]

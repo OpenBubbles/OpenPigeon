@@ -1,4 +1,4 @@
-# res://paintball/modules/PB_State.gd
+# res://paintball/paintball_state.gd
 extends RefCounted
 class_name PB_State
 
@@ -20,7 +20,7 @@ func dbg(tag: String) -> void:
 		" last_replay_len=", g._last_replay_str.length()
 	)
 	if g._last_replay_str != "":
-		var parts := g._last_replay_str.split("|", false)
+		var parts: PackedStringArray = g._last_replay_str.split("|", false)
 		print("[DBG][", tag, "] last_replay_segs=", parts.size(), " last_seg=", parts[parts.size() - 1])
 
 func res_str(res: Dictionary, key: String, default_value: String = "") -> String:
@@ -192,6 +192,10 @@ func set_game_data(raw_text: String) -> void:
 		g.playernum = (1 if g.turn_owner == 2 else 2)
 
 	g.is_my_turn = g.is_your_turn
+	if g.is_my_turn:
+	# If it's my turn, we must not be "in replay playback"
+		g._is_replay_playback = false
+		g._replay_auto_pending = false
 	g._need_new_selection = true
 	g._touched_this_turn = false
 	g._selected_shoot = null
@@ -239,8 +243,8 @@ func set_game_data(raw_text: String) -> void:
 		g._replay_seg_index = 0
 		g._replay_base_state = {}
 
-		var cur_seg := g._replay_segments[g._replay_seg_index]
-		var cur_state := g._parse_replay_state(cur_seg)
+		var cur_seg: String = String(g._replay_segments[g._replay_seg_index])
+		var cur_state: Dictionary = g._parse_replay_state(cur_seg)
 		g._replay_base_state = cur_state
 
 		print("[REPLAY] segments=", g._replay_segments.size(), " cur=", cur_seg)
@@ -286,9 +290,22 @@ func set_game_data(raw_text: String) -> void:
 			g._set_button_enabled(b, false)
 
 func send_game(clear_targets_for_next_turn: bool = false) -> void:
-	if g._is_replay_playback or g._replay_auto_pending:
-		print("[Send] Blocked: replay playback/autoplay pending. Not sending.")
+	if g._is_replay_playback and (g._round_sequence_running or g._is_shot_sequence_running):
+		print("[Send] Blocked: replay playback running. Not sending.")
 		return
+
+	# Safety: clear stuck playback flag if nothing is actually running
+	if g._is_replay_playback and not g._round_sequence_running and not g._is_shot_sequence_running:
+		print("[Send] NOTE: replay flag was true but no sequence running. Clearing.")
+		g._is_replay_playback = false
+		g._replay_auto_pending = false
+
+
+	# If autoplay was queued but user is firing, cancel autoplay and send.
+	if g._replay_auto_pending:
+		print("[Send] NOTE: autoplay was pending, cancelling due to user send.")
+		g._replay_auto_pending = false
+
 
 	print("[Send] send_game() called clear_targets_for_next_turn=", clear_targets_for_next_turn)
 	await g.get_tree().process_frame
@@ -299,14 +316,14 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 	if g._selected_shoot != null and is_instance_valid(g._selected_shoot):
 		my_target_int = lane_to_enc(g._selected_shoot.lane)
 
-	var out_replay := g._replay_build_after_my_fire(my_pos_int, my_target_int)
+	var out_replay: String = g._replay_build_after_my_fire(my_pos_int, my_target_int)
 	g._last_replay_str = out_replay
 
 	var payload: Dictionary = {
 		"replay": out_replay
 	}
 
-	var out_parts := out_replay.split("|", false)
+	var out_parts: PackedStringArray = out_replay.split("|", false)
 	print("[Send] REPLAY_OUT segs=", out_parts.size(), " last_seg=", out_parts[out_parts.size() - 1])
 
 	g.game_ended = g.check_win()

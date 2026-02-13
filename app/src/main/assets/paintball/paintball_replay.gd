@@ -1,4 +1,4 @@
-# res://paintball/modules/PB_Replay.gd
+# res://paintball/paintball_replay.gd
 extends RefCounted
 class_name PB_Replay
 

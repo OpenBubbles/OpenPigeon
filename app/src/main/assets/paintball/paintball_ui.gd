@@ -1,4 +1,4 @@
-# res://paintball/modules/PB_UI.gd
+# res://paintball/paintball_ui.gd
 extends RefCounted
 class_name PB_UI
 
