@@ -28,16 +28,14 @@ func update_opponent_sprite_pose_for_shot() -> void:
 		g.opponent_sprite.flip_h = false
 		return
 
-	# Opponent target enc is mirrored relative to our view (0 <-> 2)
-	var tgt_enc_vis: int = g._opp_target_enc
-	if tgt_enc_vis == 0:
-		tgt_enc_vis = 2
-	elif tgt_enc_vis == 2:
-		tgt_enc_vis = 0
+	if g._opp_target_enc_vis == -1:
+		g.opponent_sprite.texture = g.OPPONENT_FACING_TEX
+		g.opponent_sprite.flip_h = false
+		return
 
-	var tgt_lane_vis: ActionButton3D.Lane = g._enc_to_lane(tgt_enc_vis)
+	var tgt_lane_vis: ActionButton3D.Lane = g._enc_to_lane(g._opp_target_enc_vis)
 
-	# FACE only if (mirrored) target is OUR lane, otherwise SIDE
+	# FACE only if target is OUR lane, otherwise SIDE
 	if tgt_lane_vis == g._player_lane:
 		g.opponent_sprite.texture = g.OPPONENT_FACING_TEX
 		g.opponent_sprite.flip_h = false
@@ -334,19 +332,45 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 
 	print("[ROUND][ENEMY] Step 4: Opponent recoil + fire red shot")
 	await g.shots.play_opponent_recoil()
+
+	# Determine hit/miss FIRST using RAW enc (logic)
+	var my_hit_enc: int = g.states.lane_to_target_enc(g._player_lane)
+	g._enemy_hit_last = (g._opp_target_enc == my_hit_enc)
+
+	# Base target (normal lane world)
 	var enemy_target_world: Vector3 = g._opp_target_world
 	if enemy_target_world == Vector3.ZERO:
 		enemy_target_world = g._get_world_for_player_lane(g._opp_target_lane)
 
-	print("[ROUND][ENEMY] Target lane=", g._opp_target_lane, " computed_target_world=", enemy_target_world)
+	# If it's a hit, aim at camera instead of lane point so splat reads correctly
+	if g._enemy_hit_last and is_instance_valid(g.cam):
+		var cam_pos: Vector3 = g.cam.global_transform.origin
+		var cam_fwd: Vector3 = (-g.cam.global_transform.basis.z).normalized()
+
+		# Put the target a little in front of the camera so projectile hits "screen" plane
+		var hit_dist: float = 0.85
+		var cam_target: Vector3 = cam_pos + cam_fwd * hit_dist
+
+		# Tiny lane-based X offset so it still feels like it came from that lane
+		var lane_x_offset: float = 0.0
+		if g._player_lane == ActionButton3D.Lane.LEFT:
+			lane_x_offset = -0.12
+		elif g._player_lane == ActionButton3D.Lane.RIGHT:
+			lane_x_offset = 0.12
+
+		cam_target.x += lane_x_offset
+		enemy_target_world = cam_target
+
+	print("[ROUND][ENEMY] Target lane=", g._opp_target_lane,
+		" raw_hit_enc=", my_hit_enc,
+		" enemy_hit_last=", g._enemy_hit_last,
+		" computed_target_world=", enemy_target_world
+	)
 
 	print("[ROUND][ENEMY] Step 5: Fire red shot and wait until it passes us")
 	var _enemy_impact: Vector3 = await g.shots.fire_paintball_and_wait(enemy_target_world, true)
 
-	print("[ROUND][ENEMY] Step 6: Determine hit/miss")
-	var my_hit_enc: int = g.states.lane_to_target_enc(g._player_lane)
-	g._enemy_hit_last = (g._opp_target_enc == my_hit_enc)
-
+	print("[ROUND][ENEMY] Step 6: Determine hit/miss (already computed)")
 	print("[HITCHECK][ENEMY] opp_target_enc=", g._opp_target_enc,
 		" my_hit_enc=", my_hit_enc,
 		" player_lane=", int(g._player_lane),
@@ -354,6 +378,13 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	)
 	print("[ROUND][ENEMY] Result => hit=", g._enemy_hit_last)
 
+
+	print("[HITCHECK][ENEMY] opp_target_enc=", g._opp_target_enc,
+		" my_hit_enc=", my_hit_enc,
+		" player_lane=", int(g._player_lane),
+		" => hit=", g._enemy_hit_last
+	)
+	print("[ROUND][ENEMY] Result => hit=", g._enemy_hit_last)
 
 	if g._enemy_hit_last:
 		if g.ui != null:
@@ -464,8 +495,8 @@ func play_round() -> void:
 	g._opp_target_world = Vector3.ZERO
 	g._opp_target_lane = ActionButton3D.Lane.CENTER
 
-	if g._opp_target_enc != -1:
-		g._opp_target_lane = g._enc_to_lane(g._opp_target_enc)
+	if g._opp_target_enc_vis != -1:
+		g._opp_target_lane = g._enc_to_lane(g._opp_target_enc_vis)
 
 		# X: from the shoot lane button if possible, else lane_x
 		var tx: float = float(g._lane_x.get(g._opp_target_lane, 0.0))
@@ -476,7 +507,8 @@ func play_round() -> void:
 		# Y/Z: ALWAYS based on player plane so projectile plane reach matches visuals
 		g._opp_target_world = Vector3(tx, player_plane_y + 0.7, player_plane_z)
 
-		print("[PLAYROUND] Opp target enc=", g._opp_target_enc,
+		print("[PLAYROUND] Opp target enc(raw)=", g._opp_target_enc,
+			" enc(vis)=", g._opp_target_enc_vis,
 			" => lane=", int(g._opp_target_lane),
 			" world=", g._opp_target_world,
 			" player_plane_z=", player_plane_z
@@ -611,8 +643,8 @@ func play_round() -> void:
 		var s: int = int(g._selected_shoot.lane)
 
 		# Tune these
-		var bias_same: float = -1.75
-		var bias_cross: float = 3.75
+		var bias_same: float = 3.75
+		var bias_cross: float = -1.75
 
 		# Pick magnitude (0 when center lane or center shot)
 		var mag: float = 0.0

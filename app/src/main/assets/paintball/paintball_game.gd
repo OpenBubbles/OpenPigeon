@@ -125,6 +125,7 @@ var _last_autoplayed_replay_str: String = ""
 var _pending_enemy_shot: bool = false
 var _opp_pos_enc: int = -1
 var _opp_target_enc: int = -1
+var _opp_target_enc_vis: int = -1
 var _opp_target_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
 var _opp_target_world: Vector3 = Vector3.ZERO
 var _opp_reveal_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
@@ -295,7 +296,7 @@ func _connect_app_plugin_or_dev() -> void:
 
 	# Editor dev payload
 	print("[DEV] Editor hint active, loading sample game data")
-	var DEV_SCENARIO: int = 1
+	var DEV_SCENARIO: int = 3
 	var dev_data_1 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV1"}'
 	var dev_data_2 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV1","replay":"hp1:3,hp2:3,pos1:2,pos2:-1,target1:2,target2:-1"}'
 	var dev_data_3 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV3","replay":"hp1:3,hp2:3,pos1:2,pos2:2,target1:0,target2:0|hp1:2,hp2:3,pos1:2,pos2:1,target1:-1,target2:1"}'

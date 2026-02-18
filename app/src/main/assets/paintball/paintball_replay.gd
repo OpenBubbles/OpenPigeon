@@ -156,8 +156,8 @@ func apply_loaded_replay_segment(seg_state: Dictionary) -> void:
 
 	g._opp_pos_enc = pos_opp_vis
 	g._opp_target_enc = target_opp
+	g._opp_target_enc_vis = (-1 if target_opp == -1 else _flip_enc_for_perspective(target_opp))
 	g._pending_enemy_shot = (g._opp_pos_enc != -1 and g._opp_target_enc != -1)
-
 
 	# Apply my lane immediately + update move arrows immediately
 	if pos_me != -1 and is_instance_valid(g.player):
@@ -179,8 +179,8 @@ func apply_loaded_replay_segment(seg_state: Dictionary) -> void:
 	# Enemy target world must be on OUR plane (Z = player Z)
 	g._opp_target_world = Vector3.ZERO
 	g._opp_target_lane = ActionButton3D.Lane.CENTER
-	if target_opp != -1 and is_instance_valid(g.player):
-		g._opp_target_lane = g._enc_to_lane(target_opp)
+	if g._opp_target_enc_vis != -1 and is_instance_valid(g.player):
+		g._opp_target_lane = g._enc_to_lane(g._opp_target_enc_vis)
 		var tx: float = float(g._lane_x.get(g._opp_target_lane, 0.0))
 		g._opp_target_world = Vector3(tx, g.player.global_position.y + 0.7, g.player.global_position.z)
 		g._update_opponent_sprite_pose_for_shot()
