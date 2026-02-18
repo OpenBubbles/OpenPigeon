@@ -1,4 +1,3 @@
-# res://paintball/paintball_round.gd
 extends RefCounted
 class_name PB_Round
 
@@ -29,14 +28,25 @@ func update_opponent_sprite_pose_for_shot() -> void:
 		g.opponent_sprite.flip_h = false
 		return
 
-	var delta: int = int(g._opp_target_lane) - int(g._player_lane)
+	# Opponent target enc is mirrored relative to our view (0 <-> 2)
+	var tgt_enc_vis: int = g._opp_target_enc
+	if tgt_enc_vis == 0:
+		tgt_enc_vis = 2
+	elif tgt_enc_vis == 2:
+		tgt_enc_vis = 0
 
-	if delta == 0:
+	var tgt_lane_vis: ActionButton3D.Lane = g._enc_to_lane(tgt_enc_vis)
+
+	# FACE only if (mirrored) target is OUR lane, otherwise SIDE
+	if tgt_lane_vis == g._player_lane:
 		g.opponent_sprite.texture = g.OPPONENT_FACING_TEX
 		g.opponent_sprite.flip_h = false
 		return
 
 	g.opponent_sprite.texture = g.OPPONENT_SIDE_TEX
+
+	# Flip side asset based on which way they're aiming relative to us
+	var delta: int = int(tgt_lane_vis) - int(g._player_lane)
 	g.opponent_sprite.flip_h = (delta > 0)
 
 func reveal_opponent_sprite() -> void:
@@ -81,6 +91,18 @@ func fade_out_selected_aim_target() -> void:
 	)
 
 func restore_ui_after_round() -> void:
+	print("[DBG][ROUND_RESTORE_UI] BEFORE restore",
+		" pending_enemy=", g._pending_enemy_shot,
+		" opp_pos_enc=", g._opp_pos_enc,
+		" opp_target_enc=", g._opp_target_enc,
+		" segs=", g._replay_segments.size(),
+		" replay_playback=", g._is_replay_playback,
+		" replay_auto_pending=", g._replay_auto_pending
+	)
+
+	if g.replay != null and g.replay.has_method("debug_dump_replay_queue"):
+		g.replay.debug_dump_replay_queue("ROUND_RESTORE_UI_BEFORE")
+
 	g._is_shot_sequence_running = false
 	g._shot_in_progress = false
 	g.ui.hide_player_hit_splat()
@@ -120,9 +142,28 @@ func restore_ui_after_round() -> void:
 
 	g._update_move_buttons()
 
+	print("[DBG][ROUND_RESTORE_UI] AFTER restore",
+		" pending_enemy=", g._pending_enemy_shot,
+		" opp_pos_enc=", g._opp_pos_enc,
+		" opp_target_enc=", g._opp_target_enc,
+		" segs=", g._replay_segments.size()
+	)
+
+	if g.replay != null and g.replay.has_method("debug_dump_replay_queue"):
+		g.replay.debug_dump_replay_queue("ROUND_RESTORE_UI_AFTER")
+
 func end_round_fade_and_restore_next_round() -> void:
 	if not is_instance_valid(g.fade_white) or not is_instance_valid(g.cam):
 		return
+
+	print("[DBG][ROUND_END] enter",
+		" replay_playback=", g._is_replay_playback,
+		" auto_pending=", g._replay_auto_pending,
+		" segs=", g._replay_segments.size()
+	)
+
+	if g.replay != null and g.replay.has_method("debug_dump_replay_queue"):
+		g.replay.debug_dump_replay_queue("ROUND_END_ENTER")
 
 	print("[ROUND] Fade to white start")
 	g.fade_white.visible = true
@@ -164,48 +205,37 @@ func end_round_fade_and_restore_next_round() -> void:
 	print("[ROUND] Holding white for 0.5s")
 	await g.get_tree().create_timer(0.5).timeout
 
-	if g._is_replay_playback:
+	# =========================================================================
+	# MOVED LOGIC: Pop the replay chain and snap positions WHILE screen is white
+	# =========================================================================
+	print("[DBG][ROUND_END] before replay pop/chain",
+		" replay_playback=", g._is_replay_playback,
+		" auto_pending=", g._replay_auto_pending,
+		" segs=", g._replay_segments.size()
+	)
+	if g.replay != null and g.replay.has_method("debug_dump_replay_queue"):
+		g.replay.debug_dump_replay_queue("ROUND_END_BEFORE_POP")
+
+	if g.replay != null and g.replay.has_method("on_round_finished_pop_autoplayed_head_and_chain"):
+		g.replay.on_round_finished_pop_autoplayed_head_and_chain()
+
+	print("[DBG][ROUND_END] after replay pop/chain",
+		" replay_playback=", g._is_replay_playback,
+		" auto_pending=", g._replay_auto_pending,
+		" segs=", g._replay_segments.size(),
+		" pending_enemy=", g._pending_enemy_shot,
+		" opp_pos_enc=", g._opp_pos_enc,
+		" opp_target_enc=", g._opp_target_enc
+	)
+	
+	if g._replay_segments.size() == 0:
 		g._is_replay_playback = false
-
-		if g._replay_auto_end_state.size() > 0:
-			# FIX (Line ~157): explicitly typed
-			var end_state: Dictionary = g._replay_auto_end_state
-
-			print("[REPLAY] end_state dict=", end_state)
-
-			var hp1e: int = int(end_state.get("hp1", 3))
-			var hp2e: int = int(end_state.get("hp2", 3))
-			g._hp_me = clamp((hp1e if g.playernum == 1 else hp2e), 0, 3)
-			g._hp_opp = clamp((hp2e if g.playernum == 1 else hp1e), 0, 3)
-			print("ME HP: ", g._hp_me, " | OPP HP: ", g._hp_opp, " Comment 2")
-			g._apply_hearts_from_hp()
-
-			var pos1e: int = int(end_state.get("pos1", -1))
-			var pos2e: int = int(end_state.get("pos2", -1))
-			var t1e: int = int(end_state.get("target1", -1))
-			var t2e: int = int(end_state.get("target2", -1))
-
-			var opp_pos_e: int = (pos2e if g.playernum == 1 else pos1e)
-			var opp_target_e: int = (t2e if g.playernum == 1 else t1e)
-
-			g._opp_pos_enc = opp_pos_e
-			g._opp_target_enc = opp_target_e
-			g._pending_enemy_shot = (opp_pos_e != -1 and opp_target_e != -1)
-
-			print("[REPLAY] carried forward next-round opp enc pos=", g._opp_pos_enc, " target=", g._opp_target_enc, " pending=", g._pending_enemy_shot)
-
-			g._replay_auto_end_state = {}
-
-		if g._replay_segments.size() > 0:
-			# FIX (Line ~185): explicitly typed
-			var pending_seg: String = String(g._replay_segments[g._replay_segments.size() - 1])
-			g._replay_segments = PackedStringArray([pending_seg])
-			g._replay_seg_index = 0
-			g._last_replay_str = pending_seg
-		else:
-			g._last_replay_str = ""
-
-		g._replay_auto_full_str = ""
+		g._replay_auto_pending = false
+		print("[ROUND_END] Replay chain empty. is_replay_playback set to FALSE.")
+		
+	if g.replay != null and g.replay.has_method("debug_dump_replay_queue"):
+		g.replay.debug_dump_replay_queue("ROUND_END_AFTER_POP")
+	# =========================================================================
 
 	print("[ROUND] Fade out from white start")
 	var t_out: Tween = g.create_tween()
@@ -213,7 +243,7 @@ func end_round_fade_and_restore_next_round() -> void:
 	await t_out.finished
 
 	print("[ROUND] Fade out complete, next round ready")
-
+	
 func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	if g._round_sequence_running:
 		print("[ROUND] Sequence already running, abort duplicate call.")
@@ -222,11 +252,10 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	g._round_sequence_running = true
 	g._is_shot_sequence_running = true
 
-	# FIX (Line ~208): explicitly typed
 	var was_replay: bool = bool(g._is_replay_playback)
-
-	# FIX (Line ~209): explicitly typed (nullable ok)
+	var suppress_send: bool = bool(g._suppress_send_after_round)
 	var shoot_for_send: ActionButton3D = g._selected_shoot
+
 
 	print("[ROUND] ==============================")
 	print("[ROUND] Sequence start")
@@ -269,7 +298,6 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		if is_instance_valid(g.opponent_sprite):
 			shot_target.z = g.opponent_sprite.global_position.z
 
-	# FIX (Line ~252): explicitly typed
 	var player_impact: Vector3 = await g.shots.fire_paintball_and_wait(shot_target, false)
 
 	print("[ROUND][PLAYER] Step 2: Determine hit/miss")
@@ -306,8 +334,6 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 
 	print("[ROUND][ENEMY] Step 4: Opponent recoil + fire red shot")
 	await g.shots.play_opponent_recoil()
-
-	# FIX (Line ~278): explicitly typed
 	var enemy_target_world: Vector3 = g._opp_target_world
 	if enemy_target_world == Vector3.ZERO:
 		enemy_target_world = g._get_world_for_player_lane(g._opp_target_lane)
@@ -315,13 +341,19 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	print("[ROUND][ENEMY] Target lane=", g._opp_target_lane, " computed_target_world=", enemy_target_world)
 
 	print("[ROUND][ENEMY] Step 5: Fire red shot and wait until it passes us")
-	# FIX (Line ~285): explicitly typed
 	var _enemy_impact: Vector3 = await g.shots.fire_paintball_and_wait(enemy_target_world, true)
 
 	print("[ROUND][ENEMY] Step 6: Determine hit/miss")
-	g._enemy_hit_last = (g._opp_target_lane == g._player_lane)
-	print("[HITCHECK][ENEMY] opp_target_lane=", g._opp_target_lane, " player_lane=", g._player_lane, " => hit=", g._enemy_hit_last)
+	var my_hit_enc: int = g.states.lane_to_target_enc(g._player_lane)
+	g._enemy_hit_last = (g._opp_target_enc == my_hit_enc)
+
+	print("[HITCHECK][ENEMY] opp_target_enc=", g._opp_target_enc,
+		" my_hit_enc=", my_hit_enc,
+		" player_lane=", int(g._player_lane),
+		" => hit=", g._enemy_hit_last
+	)
 	print("[ROUND][ENEMY] Result => hit=", g._enemy_hit_last)
+
 
 	if g._enemy_hit_last:
 		if g.ui != null:
@@ -339,8 +371,12 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	g.game_ended = g.check_win()
 	if g.game_ended:
 		print("End Valid")
+
+		g.game_over = true
+
 		if not g._is_replay_playback:
-			g.send_game()
+			g.send_game(true)
+
 		return
 
 	print("[ROUND] Step 7: End of round fade/restore")
@@ -351,8 +387,13 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		g._selected_shoot = shoot_for_send
 		g._require_new_shoot_selection = (g._selected_shoot == null)
 
-		g._selected_shoot = null
-		g._require_new_shoot_selection = true
+		if suppress_send:
+			print("[ROUND] Completed queued partial head. Not sending. Waiting for next selection.")
+		else:
+			print("[ROUND] Live turn complete. Sending new data to server.")
+			g.send_game()
+			g._selected_shoot = null
+			g._require_new_shoot_selection = true
 
 	if not was_replay:
 		g._pending_enemy_shot = false
@@ -366,9 +407,8 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	g._is_shot_sequence_running = false
 	
 func _end_round_sequence() -> void:
-	g._is_replay_playback = false
 	g._replay_auto_pending = false
-	print("[ROUND] playback end")
+	print("[ROUND] playback end (leaving is_replay_playback=", g._is_replay_playback, ")")
 
 func play_round() -> void:
 	if not g.is_my_turn or g._is_shot_sequence_running or g._round_sequence_running:
@@ -378,7 +418,7 @@ func play_round() -> void:
 	if g._require_new_shoot_selection or g._selected_shoot == null or not is_instance_valid(g._selected_shoot):
 		print("[PLAYROUND] Blocked: select a shoot target first.")
 		return
-		
+
 	print("[DBG][PLAY_ROUND_ENTER] is_my_turn=", g.is_my_turn,
 		" pending_enemy=", g._pending_enemy_shot,
 		" my_lane=", int(g._player_lane),
@@ -388,17 +428,24 @@ func play_round() -> void:
 		" shot_seq=", g._is_shot_sequence_running
 	)
 
-
 	if not g._pending_enemy_shot:
 		print("[PLAYROUND] Blocked: opponent shot not ready (this should be gated by _on_fire_pressed).")
 		return
 
 	print("[ROUND] play_round start. replay_playback=", g._is_replay_playback)
-	
+
+	# --- Cache player plane (authoritative for enemy shot) ---
+	var player_plane_z: float = 0.0
+	var player_plane_y: float = 0.0
+	if is_instance_valid(g.player):
+		player_plane_z = g.player.global_position.z
+		player_plane_y = g.player.global_position.y
+
+	# --- Place opponent by encoded lane (x only) ---
 	if g._opp_pos_enc != -1 and is_instance_valid(g.opponent_sprite):
 		var opp_lane: ActionButton3D.Lane = g._enc_to_lane(g._opp_pos_enc)
 
-		var opp_x: float = float(g._lane_x[opp_lane])
+		var opp_x: float = float(g._lane_x.get(opp_lane, 0.0))
 		var shoot_btn: ActionButton3D = g._shoot_btn_by_lane.get(opp_lane, null)
 		if is_instance_valid(shoot_btn):
 			opp_x = shoot_btn.global_position.x
@@ -406,32 +453,39 @@ func play_round() -> void:
 		var op: Vector3 = g.opponent_sprite.global_position
 		op.x = opp_x
 		g.opponent_sprite.global_position = op
-		print("[PLAYROUND] Opp pos enc=", g._opp_pos_enc, " => lane=", opp_lane, " set opp_x=", opp_x)
+
+		print("[PLAYROUND] Opp pos enc=", g._opp_pos_enc,
+			" => lane=", int(opp_lane),
+			" set opp_x=", opp_x,
+			" opp_z=", g.opponent_sprite.global_position.z
+		)
+
+	# --- Compute opponent target lane and world (Z MUST be player plane) ---
+	g._opp_target_world = Vector3.ZERO
+	g._opp_target_lane = ActionButton3D.Lane.CENTER
 
 	if g._opp_target_enc != -1:
-		var flipped_enc: int = g._opp_target_enc
-		if flipped_enc == 0:
-			flipped_enc = 2
-		elif flipped_enc == 2:
-			flipped_enc = 0
+		g._opp_target_lane = g._enc_to_lane(g._opp_target_enc)
 
-		g._opp_target_lane = g._enc_to_lane(flipped_enc)
-
-		var tgt_world: Vector3 = Vector3.ZERO
+		# X: from the shoot lane button if possible, else lane_x
+		var tx: float = float(g._lane_x.get(g._opp_target_lane, 0.0))
 		var shoot_btn2: ActionButton3D = g._shoot_btn_by_lane.get(g._opp_target_lane, null)
 		if is_instance_valid(shoot_btn2):
-			tgt_world = shoot_btn2.global_position + Vector3(0.0, 0.7, 0.0)
+			tx = shoot_btn2.global_position.x
 
-		if tgt_world == Vector3.ZERO:
-			var tx: float = float(g._lane_x[g._opp_target_lane])
-			tgt_world = Vector3(tx, g.player.global_position.y + 0.7, g.player.global_position.z)
+		# Y/Z: ALWAYS based on player plane so projectile plane reach matches visuals
+		g._opp_target_world = Vector3(tx, player_plane_y + 0.7, player_plane_z)
 
-		g._opp_target_world = tgt_world
-		print("[PLAYROUND] Opp target enc=", g._opp_target_enc, " => lane=", g._opp_target_lane, " world=", g._opp_target_world)
+		print("[PLAYROUND] Opp target enc=", g._opp_target_enc,
+			" => lane=", int(g._opp_target_lane),
+			" world=", g._opp_target_world,
+			" player_plane_z=", player_plane_z
+		)
+
 		update_opponent_sprite_pose_for_shot()
 
+	# --- Resolve camera ---
 	var cam3d: Camera3D = null
-
 	if is_instance_valid(g.cam):
 		cam3d = g.cam
 	else:
@@ -441,6 +495,7 @@ func play_round() -> void:
 		_end_round_sequence()
 		return
 
+	# --- Begin cinematic state ---
 	g._is_shot_sequence_running = true
 	(g.fire_button as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -448,10 +503,7 @@ func play_round() -> void:
 	g._cam_start_xform = cam3d.global_transform
 
 	var focus_point: Vector3 = g.player.global_position + Vector3(0.0, 0.8, 0.0)
-
-	# FIX (Line ~385): explicitly typed
 	var aim_point: Vector3 = g._selected_shoot.global_position + Vector3(0.0, 0.7, 0.0)
-
 	g._aim_target_world = aim_point
 
 	var dur_in: float = 1.10
@@ -555,14 +607,52 @@ func play_round() -> void:
 	t.tween_callback(func() -> void:
 		var cam_pos: Vector3 = cam3d.global_transform.origin
 
-		var aim_bias_x: float = 0.0
-		if g._player_lane == ActionButton3D.Lane.LEFT and g._selected_shoot.lane == ActionButton3D.Lane.LEFT:
-			aim_bias_x = 4.0
-		elif g._player_lane == ActionButton3D.Lane.RIGHT and g._selected_shoot.lane == ActionButton3D.Lane.RIGHT:
-			aim_bias_x = -4.0
+		var p: int = int(g._player_lane)
+		var s: int = int(g._selected_shoot.lane)
 
-		# FIX (Line ~491): explicitly typed
-		var biased_aim_point: Vector3 = aim_point + Vector3(aim_bias_x, 0.0, 0.0)
+		# Tune these
+		var bias_same: float = -1.75
+		var bias_cross: float = 3.75
+
+		# Pick magnitude (0 when center lane or center shot)
+		var mag: float = 0.0
+		if p == int(ActionButton3D.Lane.LEFT):
+			if s == int(ActionButton3D.Lane.LEFT):
+				mag = bias_same
+			elif s == int(ActionButton3D.Lane.RIGHT):
+				mag = bias_cross
+		elif p == int(ActionButton3D.Lane.RIGHT):
+			if s == int(ActionButton3D.Lane.RIGHT):
+				mag = bias_same
+			elif s == int(ActionButton3D.Lane.LEFT):
+				mag = bias_cross
+
+		# Figure out which way "toward center" is in WORLD X
+		# aim_point.x < 0 means aim is left, so toward center is +X
+		# aim_point.x > 0 means aim is right, so toward center is -X
+		var toward_center_world_sign: float = 0.0
+		if absf(aim_point.x) > 0.001:
+			toward_center_world_sign = -signf(aim_point.x)
+
+		# Now determine whether positive cam_right moves world +X or world -X
+		var cam_right: Vector3 = cam3d.global_transform.basis.x.normalized()
+		var cam_right_world_x: float = cam_right.dot(Vector3(1.0, 0.0, 0.0))
+		var cam_right_x_sign: float = 1.0
+		if absf(cam_right_world_x) > 0.001:
+			cam_right_x_sign = signf(cam_right_world_x)
+
+		# Final scalar along cam_right that always nudges toward world center
+		var aim_bias: float = mag * toward_center_world_sign * cam_right_x_sign
+
+		var biased_aim_point: Vector3 = aim_point + (cam_right * aim_bias)
+
+		print("[DBG][AIM_BIAS2] aim_x=", aim_point.x,
+			" mag=", mag,
+			" toward_center_world_sign=", toward_center_world_sign,
+			" cam_right=", cam_right,
+			" cam_right_world_x=", cam_right_world_x,
+			" aim_bias=", aim_bias
+		)
 
 		var look_xform: Transform3D = Transform3D().looking_at(biased_aim_point, Vector3.UP)
 		look_xform.origin = cam_pos
@@ -572,30 +662,16 @@ func play_round() -> void:
 
 		var end_xform: Transform3D = Transform3D(b, cam_pos)
 
-		print("[PAN] cam3d=", cam3d, " name=", cam3d.name)
-
-		if is_instance_valid(g.fp_aim_sprite):
-			var p := g.fp_aim_sprite.get_parent()
-			print("[PAN] fp_aim_sprite parent=", p, " parent_name=", (p.name if p != null else "null"))
-
-			# If you truly parent FP to camera, this should be true:
-			# fp_aim_sprite.get_parent() == cam3d  (or a child under cam3d)
-
-
 		var pan: Tween = g.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 		pan.tween_property(cam3d, "global_transform", end_xform, dur_pan)
 
 		pan.finished.connect(func() -> void:
 			g._shot_in_progress = true
-			print("[ROUND] Camera pan finished. Begin reveal + shot sequence")
-
 			reveal_opponent_sprite()
 
 			var seq: Tween = g.create_tween()
 			seq.tween_interval(0.5)
-
 			seq.tween_callback(func() -> void:
-				print("[ROUND] Player firing moment reached (after 0.5s)")
 				fade_out_selected_aim_target()
 				if g.shots != null and g.shots.has_method("play_fp_recoil"):
 					g.shots.call("play_fp_recoil")
@@ -605,5 +681,4 @@ func play_round() -> void:
 				run_player_then_enemy_shot_sequence(aim_point)
 			)
 		)
-	)
-	
+)

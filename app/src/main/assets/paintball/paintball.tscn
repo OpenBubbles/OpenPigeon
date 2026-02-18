@@ -252,7 +252,7 @@ texture = ExtResource("5_gayi8")
 
 [node name="ShootLeft" parent="Buttons" instance=ExtResource("6_f7ola")]
 transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, -2.2604523, 3.8512156, -14.313803)
-lane = 0
+lane = 2
 
 [node name="Sprite3D" parent="Buttons/ShootLeft" index="0"]
 texture_filter = 0
@@ -267,7 +267,7 @@ texture = ExtResource("6_hy3c1")
 
 [node name="ShootRight" parent="Buttons" instance=ExtResource("6_f7ola")]
 transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 2.4299703, 3.851, -14.314)
-lane = 2
+lane = 0
 
 [node name="Sprite3D" parent="Buttons/ShootRight" index="0"]
 texture_filter = 0

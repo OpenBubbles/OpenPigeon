@@ -1,4 +1,3 @@
-# res://paintball/paintball_ui.gd
 extends RefCounted
 class_name PB_UI
 

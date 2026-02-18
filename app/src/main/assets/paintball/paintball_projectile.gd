@@ -16,7 +16,6 @@ var _prev_z: float = 0.0
 var _active: bool = false
 
 func _ready() -> void:
-	# Do not auto-launch here. We wait for launch() so target is guaranteed set.
 	_prev_z = global_position.z
 	_active = false
 

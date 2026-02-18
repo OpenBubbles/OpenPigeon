@@ -1,4 +1,3 @@
-# res://paintball/paintball_state.gd
 extends RefCounted
 class_name PB_State
 
@@ -68,6 +67,21 @@ func enc_to_lane(enc: int) -> ActionButton3D.Lane:
 			return ActionButton3D.Lane.RIGHT
 		_:
 			return ActionButton3D.Lane.CENTER
+			
+func lane_to_pos_enc(lane: ActionButton3D.Lane) -> int:
+	return lane_to_enc(lane) # normal
+
+func lane_to_target_enc(lane: ActionButton3D.Lane) -> int:
+	return flip_enc_for_perspective(lane_to_enc(lane))
+
+func pos_enc_to_lane_for_view(enc: int) -> ActionButton3D.Lane:
+	return enc_to_lane(flip_enc_for_perspective(enc))
+
+func target_enc_to_lane_for_view(enc: int) -> ActionButton3D.Lane:
+	return enc_to_lane(enc)
+
+func my_target_enc_to_lane(enc: int) -> ActionButton3D.Lane:
+	return enc_to_lane(flip_enc_for_perspective(enc))
 
 func flip_enc_for_perspective(enc: int) -> int:
 	if enc == 0:
@@ -239,34 +253,38 @@ func set_game_data(raw_text: String) -> void:
 	var hp2: int = 3
 
 	if replay_str != "":
-		g._replay_segments = replay_str.split("|", false)
-		g._replay_seg_index = 0
-		g._replay_base_state = {}
+		g.replay.ingest_replay_string(replay_str)
 
-		var cur_seg: String = String(g._replay_segments[g._replay_seg_index])
-		var cur_state: Dictionary = g._parse_replay_state(cur_seg)
-		g._replay_base_state = cur_state
+		# Build SEND-only queue from the payload, but strip any FULL rounds (start-of-game autoplay history)
+		g._replay_send_segments = PackedStringArray(replay_str.split("|", false))
+		while g._replay_send_segments.size() > 0:
+			var st: Dictionary = g._parse_replay_state(String(g._replay_send_segments[0]))
+			var full: bool = (
+				int(st.get("pos1", -1)) != -1 and int(st.get("pos2", -1)) != -1 and
+				int(st.get("target1", -1)) != -1 and int(st.get("target2", -1)) != -1
+			)
+			if full:
+				g._replay_send_segments.remove_at(0)
+				continue
+			break
 
-		print("[REPLAY] segments=", g._replay_segments.size(), " cur=", cur_seg)
-
-		g._apply_loaded_replay_segment(cur_state)
-
-		hp1 = int(cur_state.get("hp1", 3))
-		hp2 = int(cur_state.get("hp2", 3))
-
-		g._last_replay_str = replay_str
-
-		g._prime_autoplay_if_loaded_segment_ready()
+		hp1 = g._hp_opp if g.playernum == 2 else g._hp_me
+		hp2 = g._hp_me if g.playernum == 2 else g._hp_opp
 	else:
-		g._replay_segments = []
+		g._replay_send_segments = PackedStringArray()
+		g._replay_segments = PackedStringArray()
 		g._replay_seg_index = 0
 		g._replay_base_state = {}
+		g._last_replay_str = ""
 		print("[REPLAY] no replay in payload yet (first move scenario)")
+
+	if replay_str == "":
+		if g.buttons != null and g.buttons.has_method("spawn_player_random_lane"):
+			g.buttons.spawn_player_random_lane()
 
 	g._hp_me = clamp((hp1 if g.playernum == 1 else hp2), 0, 3)
 	g._hp_opp = clamp((hp2 if g.playernum == 1 else hp1), 0, 3)
 	print("ME HP: ", g._hp_me, " | OPP HP: ", g._hp_opp)
-	g._last_replay_str = replay_str
 
 	g._apply_hearts_from_hp()
 	g._update_move_buttons()
@@ -310,13 +328,14 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 	print("[Send] send_game() called clear_targets_for_next_turn=", clear_targets_for_next_turn)
 	await g.get_tree().process_frame
 
-	var my_pos_int: int = lane_to_enc(g._player_lane)
+	var my_pos_int: int = lane_to_pos_enc(g._player_lane)
 
 	var my_target_int: int = -1
 	if g._selected_shoot != null and is_instance_valid(g._selected_shoot):
-		my_target_int = lane_to_enc(g._selected_shoot.lane)
+		my_target_int = lane_to_target_enc(g._selected_shoot.lane)
 
-	var out_replay: String = g._replay_build_after_my_fire(my_pos_int, my_target_int)
+
+	var out_replay: String = "|".join(g._replay_send_segments)
 	g._last_replay_str = out_replay
 
 	var payload: Dictionary = {

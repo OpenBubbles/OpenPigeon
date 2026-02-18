@@ -4,6 +4,7 @@ class_name PB_Buttons
 
 var g: PaintballGame
 var _root: Node = null
+var _did_initial_spawn: bool = false
 
 func setup(owner: PaintballGame) -> void:
 	g = owner
@@ -178,19 +179,33 @@ func lane_from_player_x() -> ActionButton3D.Lane:
 	return best_lane
 
 func spawn_player_random_lane() -> void:
-	var lanes := [
+	# Only do this once per scene lifetime
+	if _did_initial_spawn:
+		return
+
+	if not is_instance_valid(g.player):
+		return
+
+	# If replay already exists, do NOT randomize. Replay will place us.
+	if g._replay_segments.size() > 0 or g._last_replay_str != "":
+		return
+
+	var lanes: Array = [
 		ActionButton3D.Lane.LEFT,
 		ActionButton3D.Lane.CENTER,
 		ActionButton3D.Lane.RIGHT
 	]
 
 	var chosen: ActionButton3D.Lane = lanes[randi() % lanes.size()]
-	var p := g.player.global_position
-	p.x = float(g._lane_x[chosen])
+
+	var p: Vector3 = g.player.global_position
+	p.x = float(g._lane_x.get(chosen, 0.0))
 	g.player.global_position = p
 
 	g._player_lane = chosen
 	update_move_buttons()
+
+	_did_initial_spawn = true
 
 func move_player_to_button(b: ActionButton3D) -> void:
 	if not g.is_my_turn or g._is_shot_sequence_running or g._round_sequence_running:

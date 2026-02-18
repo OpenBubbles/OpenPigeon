@@ -1,4 +1,3 @@
-# res://paintball/paintball_shots.gd
 extends RefCounted
 class_name PB_Shots
 
@@ -9,7 +8,7 @@ func setup(owner: PaintballGame) -> void:
 
 func tick(delta: float) -> void:
 	tick_aim(delta)
-	tick_debug_shot_guides()
+	#tick_debug_shot_guides()
 
 # This is what paintball_game.gd should call from _process(delta)
 func tick_aim(delta: float) -> void:
@@ -30,7 +29,6 @@ func tick_aim(delta: float) -> void:
 	else:
 		return
 
-	# Store if you rely on it elsewhere
 	g._aim_target_world = aim_world
 	
 	aim_gun_sprite_at_world_point(
@@ -102,48 +100,33 @@ func fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached: 
 		print("[SHOT] ERROR: projectile instantiate failed.")
 		return Vector3.ZERO
 
-	var muzzle_world: Vector3
+	var muzzle_world: Vector3 = Vector3.ZERO
 	var target_fixed: Vector3 = target_world
 
-	if is_enemy and is_instance_valid(g.opponent_sprite):
+	if is_enemy:
+		if not is_instance_valid(g.opponent_sprite):
+			print("[SHOT] ERROR: opponent_sprite invalid for enemy shot.")
+			return Vector3.ZERO
+
 		muzzle_world = g.opponent_sprite.global_position + Vector3(0.0, 0.9, 0.0)
-
 		var cam_pos: Vector3 = g.cam.global_transform.origin
-
-		# Keep enemy shot on camera Y (your rule)
 		muzzle_world.y = cam_pos.y
 		target_fixed.y = cam_pos.y
-
-		# IMPORTANT: keep target on the same Z plane the projectile will hit (player plane)
-		if is_instance_valid(g.player):
-			target_fixed.z = g.player.global_position.z
-
-		# Safety: avoid zero-length forward
-		if is_equal_approx(muzzle_world.z, target_fixed.z):
-			target_fixed.z += 0.05
 	else:
 		var muzzle_screen: Vector2 = get_muzzle_screen_pos()
-
 		var ray_origin: Vector3 = g.cam.project_ray_origin(muzzle_screen)
 		var ray_dir: Vector3 = g.cam.project_ray_normal(muzzle_screen).normalized()
 
 		var tt: float = (target_fixed - ray_origin).dot(ray_dir)
 		tt = maxf(tt, 0.35)
 		muzzle_world = ray_origin + ray_dir * tt
-		
-		# Debug: draw muzzle -> target line on screen
-	if is_instance_valid(g.cam):
-		var muzzle_screen_dbg: Vector2
-		if is_enemy:
-			muzzle_screen_dbg = g.cam.unproject_position(muzzle_world)
-		else:
-			muzzle_screen_dbg = get_muzzle_screen_pos()
 
-		var target_screen_dbg: Vector2 = g.cam.unproject_position(target_fixed)
-	
-		if not is_enemy and is_instance_valid(g.opponent_sprite):
-			target_fixed.z = g.opponent_sprite.global_position.z
-
+	print("[SHOT] launch is_enemy=", is_enemy,
+		" muzzle=", muzzle_world,
+		" target=", target_fixed,
+		" player_z=", (g.player.global_position.z if is_instance_valid(g.player) else 0.0),
+		" opp_z=", (g.opponent_sprite.global_position.z if is_instance_valid(g.opponent_sprite) else 0.0)
+	)
 
 	ball.scale = Vector3.ONE * g._paintball_scale
 	ball.speed = (g.ball_speed * 2.25) if is_enemy else g.ball_speed
@@ -178,8 +161,6 @@ func fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached: 
 			sm.emission = desired_color * 0.35
 
 	g.get_tree().current_scene.add_child(ball)
-
-	print("[SHOT] launch is_enemy=", is_enemy, " muzzle=", muzzle_world, " target=", target_fixed, " plane_z=", ball.hit_plane_z)
 
 	var box: Dictionary = {
 		"got": false,
@@ -278,7 +259,6 @@ func aim_gun_sprite_at_world_point(
 
 	var target_rot: float = sprite.rotation + delta_ang
 	sprite.rotation = lerp(sprite.rotation, target_rot, delta * rot_lerp_speed)
-	print("[FP AIM] rot_deg=", rad_to_deg(sprite.rotation), " pos=", sprite.position)
 	var screen_center: Vector2 = viewport.get_visible_rect().size * 0.5
 	var px_delta: Vector2 = target_screen - screen_center
 
@@ -319,147 +299,147 @@ func play_opponent_recoil() -> void:
 
 	await t.finished
  
-#~~~~~~~~~~~~~~~~~~~~~~~~ DEBUG (REMOVE BEFORE PUBLISHING) ~~~~~~~~~~~~~~~~~~~~~~~~
-var _dbg_enabled: bool = true
-
-var _dbg_layer: CanvasLayer = null
-var _dbg_overlay: PB_Shots_DebugOverlay = null
-
-const _REAR_TEX_PX := Vector2(590.0, 500.0) # back of gun reference (tune as needed)
-
-func _ensure_dbg_overlay() -> void:
-	if not _dbg_enabled:
-		return
-	if g == null:
-		return
-	if _dbg_layer != null and is_instance_valid(_dbg_layer) and _dbg_overlay != null and is_instance_valid(_dbg_overlay):
-		return
-
-	var root: Node = g.get_tree().current_scene
-	if root == null:
-		return
-
-	if _dbg_layer == null or not is_instance_valid(_dbg_layer):
-		_dbg_layer = CanvasLayer.new()
-		_dbg_layer.name = "PB_ShotDebugLayer"
-		_dbg_layer.layer = 200 # above most UI; bump if needed
-		root.add_child(_dbg_layer)
-
-	if _dbg_overlay == null or not is_instance_valid(_dbg_overlay):
-		_dbg_overlay = PB_Shots_DebugOverlay.new()
-		_dbg_overlay.name = "PB_ShotDebugOverlay"
-		_dbg_layer.add_child(_dbg_overlay)
-
-func _tex_px_to_screen(sprite: Sprite2D, tex_px: Vector2) -> Vector2:
-	if sprite.texture == null:
-		return sprite.global_position
-
-	var tex_size: Vector2 = sprite.texture.get_size()
-	if tex_size.x <= 0.0 or tex_size.y <= 0.0:
-		return sprite.global_position
-
-	var drawn_size := Vector2(tex_size.x * sprite.scale.x, tex_size.y * sprite.scale.y)
-	var sx: float = drawn_size.x / tex_size.x
-	var sy: float = drawn_size.y / tex_size.y
-
-	# local point in sprite space (same space rotation happens in)
-	var local := Vector2(tex_px.x * sx, tex_px.y * sy)
-	if sprite.centered:
-		local -= drawn_size * 0.5
-
-	# Let Godot handle rotation, scale, parenting, canvas transforms
-	return sprite.to_global(local)
-
-func _get_fp_endpoints_screen() -> Dictionary:
-	var out := {"rear": Vector2.ZERO, "muzzle": Vector2.ZERO}
-
-	if not is_instance_valid(g.fp_aim_sprite):
-		return out
-	if g.fp_aim_sprite.texture == null:
-		return out
-
-	out["rear"] = _tex_px_to_screen(g.fp_aim_sprite, _REAR_TEX_PX)
-	out["muzzle"] = _tex_px_to_screen(g.fp_aim_sprite, g._muzzle_tex_px)
-	return out
-
-func tick_debug_shot_guides() -> void:
-	if not _dbg_enabled:
-		return
-	if g == null:
-		return
-	if not is_instance_valid(g.cam):
-		return
-	if not is_instance_valid(g.fp_aim_sprite):
-		return
-
-	_ensure_dbg_overlay()
-	if _dbg_overlay == null or not is_instance_valid(_dbg_overlay):
-		return
-
-	# If FP hidden, clear so it doesn't "stick"
-	if not g.fp_aim_sprite.visible:
+##~~~~~~~~~~~~~~~~~~~~~~~~ DEBUG (REMOVE BEFORE PUBLISHING) ~~~~~~~~~~~~~~~~~~~~~~~~
+#var _dbg_enabled: bool = true
+#
+#var _dbg_layer: CanvasLayer = null
+#var _dbg_overlay: PB_Shots_DebugOverlay = null
+#
+#const _REAR_TEX_PX := Vector2(590.0, 500.0) # back of gun reference (tune as needed)
+#
+#func _ensure_dbg_overlay() -> void:
+	#if not _dbg_enabled:
+		#return
+	#if g == null:
+		#return
+	#if _dbg_layer != null and is_instance_valid(_dbg_layer) and _dbg_overlay != null and is_instance_valid(_dbg_overlay):
+		#return
+#
+	#var root: Node = g.get_tree().current_scene
+	#if root == null:
+		#return
+#
+	#if _dbg_layer == null or not is_instance_valid(_dbg_layer):
+		#_dbg_layer = CanvasLayer.new()
+		#_dbg_layer.name = "PB_ShotDebugLayer"
+		#_dbg_layer.layer = 200 # above most UI; bump if needed
+		#root.add_child(_dbg_layer)
+#
+	#if _dbg_overlay == null or not is_instance_valid(_dbg_overlay):
+		#_dbg_overlay = PB_Shots_DebugOverlay.new()
+		#_dbg_overlay.name = "PB_ShotDebugOverlay"
+		#_dbg_layer.add_child(_dbg_overlay)
+#
+#func _tex_px_to_screen(sprite: Sprite2D, tex_px: Vector2) -> Vector2:
+	#if sprite.texture == null:
+		#return sprite.global_position
+#
+	#var tex_size: Vector2 = sprite.texture.get_size()
+	#if tex_size.x <= 0.0 or tex_size.y <= 0.0:
+		#return sprite.global_position
+#
+	#var drawn_size := Vector2(tex_size.x * sprite.scale.x, tex_size.y * sprite.scale.y)
+	#var sx: float = drawn_size.x / tex_size.x
+	#var sy: float = drawn_size.y / tex_size.y
+#
+	## local point in sprite space (same space rotation happens in)
+	#var local := Vector2(tex_px.x * sx, tex_px.y * sy)
+	#if sprite.centered:
+		#local -= drawn_size * 0.5
+#
+	## Let Godot handle rotation, scale, parenting, canvas transforms
+	#return sprite.to_global(local)
+#
+#func _get_fp_endpoints_screen() -> Dictionary:
+	#var out := {"rear": Vector2.ZERO, "muzzle": Vector2.ZERO}
+#
+	#if not is_instance_valid(g.fp_aim_sprite):
+		#return out
+	#if g.fp_aim_sprite.texture == null:
+		#return out
+#
+	#out["rear"] = _tex_px_to_screen(g.fp_aim_sprite, _REAR_TEX_PX)
+	#out["muzzle"] = _tex_px_to_screen(g.fp_aim_sprite, g._muzzle_tex_px)
+	#return out
+#
+#func tick_debug_shot_guides() -> void:
+	#if not _dbg_enabled:
+		#return
+	#if g == null:
+		#return
+	#if not is_instance_valid(g.cam):
+		#return
+	#if not is_instance_valid(g.fp_aim_sprite):
+		#return
+#
+	#_ensure_dbg_overlay()
+	#if _dbg_overlay == null or not is_instance_valid(_dbg_overlay):
+		#return
+#
+	## If FP hidden, clear so it doesn't "stick"
+	#if not g.fp_aim_sprite.visible:
+		##_dbg_overlay.clear()
+		#return
+#
+	#var aim_world: Vector3 = g._aim_target_world
+	#if aim_world == Vector3.ZERO and g._selected_shoot != null and is_instance_valid(g._selected_shoot):
+		#aim_world = g._selected_shoot.global_position + Vector3(0.0, 0.7, 0.0)
+	#if aim_world == Vector3.ZERO:
 		#_dbg_overlay.clear()
-		return
-
-	var aim_world: Vector3 = g._aim_target_world
-	if aim_world == Vector3.ZERO and g._selected_shoot != null and is_instance_valid(g._selected_shoot):
-		aim_world = g._selected_shoot.global_position + Vector3(0.0, 0.7, 0.0)
-	if aim_world == Vector3.ZERO:
-		_dbg_overlay.clear()
-		return
-
-	var ends: Dictionary = _get_fp_endpoints_screen()
-	var rear: Vector2 = ends["rear"]
-	var muzzle: Vector2 = ends["muzzle"]
-
-	var target_screen: Vector2 = g.cam.unproject_position(aim_world)
-
-	# Draw rear->muzzle and muzzle->target
-	_dbg_overlay.set_points(rear, muzzle, target_screen)
-
-class PB_Shots_DebugOverlay:
-	extends Control
-
-	var _rear: Vector2 = Vector2.ZERO
-	var _muzzle: Vector2 = Vector2.ZERO
-	var _target: Vector2 = Vector2.ZERO
-	var _has: bool = false
-
-	func _ready() -> void:
-		mouse_filter = Control.MOUSE_FILTER_IGNORE
-		top_level = true
-		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		z_as_relative = false
-		z_index = 999999
-
-	func set_points(rear: Vector2, muzzle: Vector2, target: Vector2) -> void:
-		_rear = rear
-		_muzzle = muzzle
-		_target = target
-		_has = true
-		queue_redraw()
-
-	func clear() -> void:
-		_has = false
-		queue_redraw()
-
-	func _draw() -> void:
-		if not _has:
-			return
-
-		# rear -> muzzle (gun direction)
-		draw_line(_rear, _muzzle, Color(0.8, 0.8, 0.8, 1.0), 2.0, true)
-
-		# muzzle -> target (shot guide)
-		draw_line(_muzzle, _target, Color(1, 1, 1, 1), 2.0, true)
-
-		# dots
-		draw_circle(_rear, 6.0, Color(0.2, 0.6, 1.0, 1.0))   # rear (blue)
-		draw_circle(_muzzle, 6.0, Color(0.2, 1.0, 0.2, 1.0)) # muzzle (green)
-		draw_circle(_target, 6.0, Color(1.0, 0.2, 0.2, 1.0)) # target (red)
-
-		# tiny centers
-		draw_circle(_rear, 2.0, Color(0, 0, 0, 1))
-		draw_circle(_muzzle, 2.0, Color(0, 0, 0, 1))
-		draw_circle(_target, 2.0, Color(0, 0, 0, 1))
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		#return
+#
+	#var ends: Dictionary = _get_fp_endpoints_screen()
+	#var rear: Vector2 = ends["rear"]
+	#var muzzle: Vector2 = ends["muzzle"]
+#
+	#var target_screen: Vector2 = g.cam.unproject_position(aim_world)
+#
+	## Draw rear->muzzle and muzzle->target
+	#_dbg_overlay.set_points(rear, muzzle, target_screen)
+#
+#class PB_Shots_DebugOverlay:
+	#extends Control
+#
+	#var _rear: Vector2 = Vector2.ZERO
+	#var _muzzle: Vector2 = Vector2.ZERO
+	#var _target: Vector2 = Vector2.ZERO
+	#var _has: bool = false
+#
+	#func _ready() -> void:
+		#mouse_filter = Control.MOUSE_FILTER_IGNORE
+		#top_level = true
+		#set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		#z_as_relative = false
+		#z_index = 999999
+#
+	#func set_points(rear: Vector2, muzzle: Vector2, target: Vector2) -> void:
+		#_rear = rear
+		#_muzzle = muzzle
+		#_target = target
+		#_has = true
+		#queue_redraw()
+#
+	#func clear() -> void:
+		#_has = false
+		#queue_redraw()
+#
+	#func _draw() -> void:
+		#if not _has:
+			#return
+#
+		## rear -> muzzle (gun direction)
+		#draw_line(_rear, _muzzle, Color(0.8, 0.8, 0.8, 1.0), 2.0, true)
+#
+		## muzzle -> target (shot guide)
+		#draw_line(_muzzle, _target, Color(1, 1, 1, 1), 2.0, true)
+#
+		## dots
+		#draw_circle(_rear, 6.0, Color(0.2, 0.6, 1.0, 1.0))   # rear (blue)
+		#draw_circle(_muzzle, 6.0, Color(0.2, 1.0, 0.2, 1.0)) # muzzle (green)
+		#draw_circle(_target, 6.0, Color(1.0, 0.2, 0.2, 1.0)) # target (red)
+#
+		## tiny centers
+		#draw_circle(_rear, 2.0, Color(0, 0, 0, 1))
+		#draw_circle(_muzzle, 2.0, Color(0, 0, 0, 1))
+		#draw_circle(_target, 2.0, Color(0, 0, 0, 1))
+##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -41,7 +41,7 @@ const OPPONENT_FACING_TEX := preload("res://paintball/opponent_facing.png")
 const OPPONENT_SIDE_TEX := preload("res://paintball/opponent_side.png")
 
 # -------------------------------------------------------------------
-# Modules (match your class_name declarations)
+# Modules
 # -------------------------------------------------------------------
 const PBButtons := preload("res://paintball/paintball_buttons.gd")
 const PBReplay := preload("res://paintball/paintball_replay.gd")
@@ -75,6 +75,7 @@ var turn_owner: int = 1
 var is_your_turn: bool = false
 var is_my_turn: bool = false
 var spectator_mode: bool = false
+var _suppress_send_after_round: bool = false
 
 # -------------------------------------------------------------------
 # Win state (PB_UI + PB_State expect these)
@@ -116,6 +117,7 @@ var _need_new_selection: bool = true
 var _touched_this_turn: bool = false
 var _opp_sprite_base_scale: Vector3 = Vector3.ONE
 var _fp_aim_base_scale: Vector2 = Vector2.ONE
+var _last_autoplayed_replay_str: String = ""
 
 # -------------------------------------------------------------------
 # Opponent pending shot + reveal (PB_State, PB_Round, PB_Shots)
@@ -141,6 +143,9 @@ var _is_replay_playback: bool = false
 var _replay_auto_pending: bool = false
 var _replay_auto_full_str: String = ""
 var _replay_auto_end_state: Dictionary = {}
+var _replay_send_segments: PackedStringArray = PackedStringArray()
+var _replay_is_autoplay_round: bool = false
+var _replay_send_armed: bool = false
 
 # -------------------------------------------------------------------
 # Camera / aim / recoil (PB_Round + PB_Shots)
@@ -188,7 +193,7 @@ var dot_count: int = 0
 func _ready() -> void:
 	_build_modules()
 
-	# Owner refs first (modules read/write via g)
+	# Owner refs first
 	buttons.setup(self)
 	shots.setup(self)
 	ui.setup(self)
@@ -196,11 +201,9 @@ func _ready() -> void:
 	replay.setup(self)
 	round_mgr.setup(self)
 
-	# Buttons boot (single path, deterministic)
+	# Buttons boot
 	buttons.setup_buttons_root(buttons_root)
 	buttons.collect_and_index_buttons()
-	
-	# ADD: lane positions must be cached before we can place player correctly
 	buttons.cache_lane_x_from_move_buttons()
 	
 	print("[GAME] buttons collected:", _buttons.size())
@@ -209,12 +212,8 @@ func _ready() -> void:
 			print("[GAME]  -", b.name, " kind=", int(b.kind), " lane=", int(b.lane))
 
 	buttons.connect_button_signals()
-
-	# ADD: start player in a random lane immediately on load
-	buttons.spawn_player_random_lane()
 	buttons.update_move_buttons()
 
-	# Optional but helpful: clear any shoot selection at boot
 	_selected_shoot = null
 	_require_new_shoot_selection = true
 	ui.show_fire_button(false)
@@ -244,6 +243,9 @@ func _ready() -> void:
 		
 	if is_instance_valid(opponent_sprite):
 		_opp_sprite_base_scale = opponent_sprite.scale
+		_opp_sprite_start_pos = opponent_sprite.global_position
+		print("[DBG][READY] cached _opp_sprite_start_pos=", _opp_sprite_start_pos)
+
 
 	if is_instance_valid(fp_aim_sprite):
 		_fp_aim_base_scale = fp_aim_sprite.scale
@@ -295,7 +297,7 @@ func _connect_app_plugin_or_dev() -> void:
 	print("[DEV] Editor hint active, loading sample game data")
 	var DEV_SCENARIO: int = 3
 	var dev_data_1 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV1","replay":"hp1:3,hp2:3,pos1:2,pos2:-1,target1:2,target2:-1"}'
-	var dev_data_3 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV3","replay":"hp1:2,hp2:3,pos1:2,pos2:1,target1:2,target2:2|hp1:1,hp2:3,pos1:2,pos2:1,target1:-1,target2:1"}'
+	var dev_data_3 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV3","replay":"hp1:3,hp2:3,pos1:2,pos2:2,target1:0,target2:0|hp1:2,hp2:3,pos1:2,pos2:1,target1:-1,target2:1"}'
 	var dev_data := dev_data_1
 	if DEV_SCENARIO == 3:
 		dev_data = dev_data_3
@@ -328,7 +330,7 @@ func _on_button_clicked(b: ActionButton3D) -> void:
 		_require_new_shoot_selection = false
 		_aim_target_world = _selected_shoot.global_position + Vector3(0.0, 0.7, 0.0)
 
-		buttons.update_shoot_selection_visuals(_selected_shoot) # ADD THIS
+		buttons.update_shoot_selection_visuals(_selected_shoot)
 
 		ui.show_fire_button(true)
 		return
@@ -344,28 +346,114 @@ func _on_fire_pressed() -> void:
 	if _require_new_shoot_selection or _selected_shoot == null or not is_instance_valid(_selected_shoot):
 		return
 
-	# If opponent shot is ready, we should play the round (DEV3 case).
-	if _pending_enemy_shot:
-		# This is user driven, not autoplay
-		_is_replay_playback = false
-		_replay_auto_pending = false
+	print("[DBG][FIRE_PRESSED] is_my_turn=", is_my_turn,
+		" shot_seq=", _is_shot_sequence_running,
+		" round_seq=", _round_sequence_running,
+		" require_select=", _require_new_shoot_selection,
+		" selected=", (-1 if _selected_shoot == null else int(_selected_shoot.lane)),
+		" pending_enemy=", _pending_enemy_shot,
+		" replay_playback=", _is_replay_playback,
+		" replay_auto_pending=", _replay_auto_pending,
+		" segs=", _replay_segments.size(),
+		" last_replay_len=", _last_replay_str.length()
+	)
+	
+	_replay_send_armed = true
+	_replay_is_autoplay_round = false
 
+	if _pending_enemy_shot:
+		var my_pos_int: int = states.lane_to_pos_enc(_player_lane)
+		var my_target_int: int = states.lane_to_target_enc(_selected_shoot.lane)
+
+		if _replay_send_segments.size() > 0:
+			var head_state: Dictionary = _parse_replay_state(String(_replay_send_segments[0]))
+
+			# Only if opponent is ready and my fields are missing (the "2nd replay" case)
+			var opp_ready: bool = false
+			if playernum == 1:
+				opp_ready = int(head_state.get("pos2", -1)) != -1 and int(head_state.get("target2", -1)) != -1
+			else:
+				opp_ready = int(head_state.get("pos1", -1)) != -1 and int(head_state.get("target1", -1)) != -1
+
+			var my_pos_key: String = ("pos1" if playernum == 1 else "pos2")
+			var my_tgt_key: String = ("target1" if playernum == 1 else "target2")
+			var my_missing: bool = int(head_state.get(my_pos_key, -1)) == -1 or int(head_state.get(my_tgt_key, -1)) == -1
+
+			if opp_ready and my_missing:
+				# Keep hp aligned with current game state in p1 order
+				if playernum == 1:
+					head_state["hp1"] = _hp_me
+					head_state["hp2"] = _hp_opp
+				else:
+					head_state["hp1"] = _hp_opp
+					head_state["hp2"] = _hp_me
+
+				head_state[my_pos_key] = my_pos_int
+				head_state[my_tgt_key] = my_target_int
+
+				_replay_send_segments[0] = _replay_state_to_string(head_state)
+
+				if _replay_segments.size() > 0:
+					_replay_segments[0] = _replay_send_segments[0]
+
+				print("[DBG][SENDQ] committed my selection into head=", String(_replay_send_segments[0]))
+
+		_replay_auto_pending = false
+		_is_replay_playback = true
 		round_mgr.play_round()
 		return
 
-	print("[FIRE] sending. my_lane=", int(_player_lane),
-		" target=", (-1 if _selected_shoot == null else int(_selected_shoot.lane)),
-		" last_replay_len=", _last_replay_str.length()
+	print("[DBG][FIRE_PRESSED] BRANCH: send_game (pending_enemy_shot=false)")
+
+	var my_pos_int: int = states.lane_to_pos_enc(_player_lane)
+	var my_target_int: int = states.lane_to_target_enc(_selected_shoot.lane)
+	var st: Dictionary = {
+		"hp1": 3, "hp2": 3,
+		"pos1": -1, "pos2": -1,
+		"target1": -1, "target2": -1
+	}
+
+	if playernum == 1:
+		st["hp1"] = _hp_me
+		st["hp2"] = _hp_opp
+		st["pos1"] = my_pos_int
+		st["target1"] = my_target_int
+	else:
+		st["hp1"] = _hp_opp
+		st["hp2"] = _hp_me
+		st["pos2"] = my_pos_int
+		st["target2"] = my_target_int
+
+	_replay_send_segments.append(_replay_state_to_string(st))
+
+	print("[DBG][SENDQ] appended my-only seg=", _replay_state_to_string(st),
+		" sendq_size=", _replay_send_segments.size()
 	)
 
 	send_game()
+	
+func _replay_state_to_string(st: Dictionary) -> String:
+	return "hp1:%d,hp2:%d,pos1:%d,pos2:%d,target1:%d,target2:%d" % [
+		int(st.get("hp1", 3)),
+		int(st.get("hp2", 3)),
+		int(st.get("pos1", -1)),
+		int(st.get("pos2", -1)),
+		int(st.get("target1", -1)),
+		int(st.get("target2", -1))
+	]
+
+func play_round() -> void:
+	if round_mgr != null:
+		round_mgr.play_round()
+
+func _replay_autoplay_round() -> void:
+	if replay != null and replay.has_method("autoplay_replay_round"):
+		replay.autoplay_replay_round()
 
 # -------------------------------------------------------------------
 # Compatibility wrappers PB_State / PB_Round expect on PaintballGame
-# Keep these thin and delegate to modules.
 # -------------------------------------------------------------------
 func send_game(clear_targets_for_next_turn: bool = false) -> void:
-	# PB_State owns send_game() in your current module set
 	if states != null:
 		states.send_game(clear_targets_for_next_turn)
 
@@ -437,7 +525,6 @@ func _update_move_buttons() -> void:
 		buttons.update_move_buttons()
 
 func check_win() -> bool:
-	# PB_UI currently owns check_win() in your module set
 	if ui != null:
 		return ui.check_win()
 	return false
