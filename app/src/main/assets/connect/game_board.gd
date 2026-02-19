@@ -49,8 +49,11 @@ var player					: int	= 0		# 0=spectator/unknown, 1=P1, 2=P2
 var game_over				: bool	= false
 var can_interact			: bool	= true
 var suppress_next_click		: bool	= false
+var _replay_apply_id: int = 0
 var last_highlight			: Node2D = null
 var droppedPiece			: RigidBody2D = null
+var board_state: PackedInt32Array = PackedInt32Array()
+var winner : String = ""
 
 func _ready() -> void:
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
@@ -83,30 +86,28 @@ func _ready() -> void:
 
 	_label_you_box()
 	_hydrate_board_from_replay(replay)
+	_reset_board_state()
 
 	if not game_over:
 		await get_tree().process_frame
+		print("Set Waiting 1")
 		_set_waiting(not isTurn)
 		
-func _apply_turn_lock() -> void:
-	can_interact = isTurn and (not game_over) and (not spectator_mode)
-	_set_waiting(not can_interact)
-	if is_instance_valid(send_button):
-		send_button.disabled = true
-		_update_send_button_visibility(false)
-
 func _clear_board_pieces() -> void:
 	_clear_last_highlight()
-	droppedPiece = null
+	_clear_pending_move()
 
 	for c in get_children():
 		if c is RigidBody2D:
 			var n: String = String(c.name)
 			if n.find(",") != -1:
 				c.queue_free()
+	_reset_board_state()
+
 
 func _set_game_data(new_replay: String) -> void:
 	var data: Dictionary = JSON.parse_string(new_replay)
+	print("[INCOMING] Raw Data: ", data)
 	isTurn		= bool(data.get("isYourTurn", false))
 	replay		= String(data.get("replay", ""))
 	my_player	= String(data.get("myPlayerId", ""))
@@ -121,8 +122,6 @@ func _set_game_data(new_replay: String) -> void:
 		spec_label.visible = spectator_mode
 	if is_instance_valid(you_label):
 		you_label.modulate.a = 1.0 if not spectator_mode else 0.0
-		
-	_apply_turn_lock()
 
 	var opp_key: String = ""
 	if player == 1:
@@ -134,13 +133,19 @@ func _set_game_data(new_replay: String) -> void:
 		var opp_data: Dictionary = _parse_avatar_string(String(data[opp_key]))
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opp_data)
-
+			
+	if sent_tween and sent_tween.is_running():
+		sent_tween.kill()
+	if is_instance_valid(sent_label):
+		sent_label.visible = false
+		sent_label.modulate.a = 1.0
+		
 	_apply_player_piece_icons()
 	_label_you_box()
+	
+	winner = data.get("winner", "")
 	_hydrate_board_from_replay(replay)
-
-	game_over = _check_and_finalize_from_board()
-	_apply_turn_state()
+	_refresh_turn_ui()
 
 func _resolve_my_side(my_id: String, p1_id: String, p2_id: String, owner: int, my_turn: bool) -> int:
 	if my_id != "" and p1_id != "" and p2_id != "":
@@ -164,14 +169,26 @@ func _label_you_box() -> void:
 	if box:
 		(box.get_child(0) as Label).set_text("[center]You[/center]")
 
+func _idx(x: int, y: int) -> int:
+	return y * BOARD_W + x
+
+func _reset_board_state() -> void:
+	board_state.resize(BOARD_W * BOARD_H)
+	for i in range(board_state.size()):
+		board_state[i] = 0
+
 func _hydrate_board_from_replay(rep: String) -> void:
 	if rep.is_empty():
 		return
 
 	if rep == _last_applied_replay:
 		return
-	_last_applied_replay = rep
 
+	_last_applied_replay = rep
+	_replay_apply_id += 1
+	call_deferred("_apply_replay_with_drop", rep, _replay_apply_id)
+
+func _apply_replay_with_drop(rep: String, apply_id: int) -> void:
 	_clear_board_pieces()
 
 	var parts: PackedStringArray = rep.split("|")
@@ -186,45 +203,113 @@ func _hydrate_board_from_replay(rep: String) -> void:
 	if board.size() < BOARD_W * BOARD_H:
 		return
 
-	for y in range(0, BOARD_H):
-		for x in range(0, BOARD_W):
-			var v: String = board[y * BOARD_W + x]
-			if v == "1":
-				spawnPiece(x, PIECE_YELLOW, y, true)
-			elif v == "2":
-				spawnPiece(x, PIECE_RED, y, true)
+	var has_move: bool = false
+	var mx: int = -1
+	var my: int = -1
+	var mpid: int = 0
 
 	for p in parts:
 		if p.begins_with("move:"):
-			var mv: PackedStringArray = p.substr(5).split(",") # x,y,playerId
+			var mv: PackedStringArray = p.substr(5).split(",")
 			if mv.size() >= 3:
-				var mx: int = int(mv[0])
-				var my: int = int(mv[1])
-				var color: String = _player_id_to_color(int(mv[2]))
-				spawnPiece(mx, color, my, true)
+				mx = int(mv[0])
+				my = int(mv[1])
+				mpid = int(mv[2])
+				has_move = (mx >= 0 and mx < BOARD_W and my >= 0 and my < BOARD_H and mpid > 0)
+
+	for y in range(0, BOARD_H):
+		for x in range(0, BOARD_W):
+			var idx := y * BOARD_W + x
+			var v: int = int(board[idx])
+
+			if has_move and x == mx and y == my:
+				v = 0
+
+			board_state[_idx(x, y)] = v
+
+			if v == 1 or v == 2:
+				_spawn_piece_static(x, v, y)
+
+	if has_move:
+		board_state[_idx(mx, my)] = mpid
+		_spawn_piece_drop_anim(mx, mpid, my, apply_id)
+
+func _spawn_piece_static(x: int, pid: int, y: int) -> Node2D:
+	var proto: RigidBody2D = get_node("ConnectPiece" + str(x))
+	var piece: RigidBody2D = proto.duplicate()
+
+	piece.position.y = yPoses[y]
+	piece.name = "%d,%d" % [x, y]
+
+	add_child(piece)
+
+	var spr: Sprite2D = piece.get_child(0) as Sprite2D
+	spr.texture = PIECE_TEX[_player_id_to_color(pid)]
+
+	(piece.get_child(1) as CollisionShape2D).disabled = false
+	piece.visible = true
+
+	piece.set_freeze_enabled(true)
+
+	return piece
+
+
+func _spawn_piece_drop_anim(x: int, pid: int, y: int, apply_id: int) -> void:
+	var proto: RigidBody2D = get_node("ConnectPiece" + str(x))
+	var piece: RigidBody2D = proto.duplicate()
+
+	var target_y: float = yPoses[y]
+	var start_y: float = yPoses[BOARD_H - 1] - 400.0 # Start slightly higher for better effect
+
+	piece.position.y = start_y
+	piece.name = "%d,%d" % [x, y]
+
+	add_child(piece)
+
+	var spr: Sprite2D = piece.get_child(0) as Sprite2D
+	spr.texture = PIECE_TEX[_player_id_to_color(pid)]
+
+	(piece.get_child(1) as CollisionShape2D).disabled = false
+	piece.visible = true
+	piece.set_freeze_enabled(true)
+
+	var tw := create_tween()
+	tw.tween_property(piece, "position:y", target_y, 0.65).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+	tw.tween_callback(func():
+		if apply_id != _replay_apply_id:
+			if is_instance_valid(piece): piece.queue_free()
+			return
+
+		_highlight_last(piece)
+		_check_and_finalize_from_board()
+	)
 
 func _build_replay_payload() -> Dictionary:
 	if droppedPiece == null:
 		return {}
-	var board_str := ""
-	for y in range(0, BOARD_H):
-		for x in range(0, BOARD_W):
-			if (str(x) + "," + str(y)) == droppedPiece.name:
-				board_str += "0,"
-			else:
-				board_str += getPositionInt(x, y) + ","
-	board_str = board_str.left(board_str.length() - 1)
 
 	var move_x: int = int(droppedPiece.name.get_slice(",", 0))
 	var move_y: int = int(droppedPiece.name.get_slice(",", 1))
 	var move_color: String = str(player)
 
+	var board_str := ""
+	for y in range(0, BOARD_H):
+		for x in range(0, BOARD_W):
+			if x == move_x and y == move_y:
+				board_str += "0,"
+			else:
+				board_str += str(board_state[_idx(x, y)]) + ","
+	board_str = board_str.left(board_str.length() - 1)
+
 	var payload: Dictionary = {
 		"replay": "board:%s|move:%d,%d,%s" % [board_str, move_x, move_y, move_color]
 	}
+
 	if game_over and win_loss_state != "":
 		var winner_id: String = my_player if my_player != "" else str(player)
 		payload["winner"] = "%s|%s" % [winner_id, win_loss_state]
+
 	return payload
 
 func send_game() -> void:
@@ -238,7 +323,7 @@ func send_game() -> void:
 	var avatar_key: String = "avatar1" if player == 1 else "avatar2"
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.call("get_avatar_data_string")
-
+	print("[SEND] Payload: ", payload)
 	var app: Object = Engine.get_singleton("AppPlugin")
 	if app:
 		app.call("updateGameData", JSON.stringify(payload))
@@ -251,23 +336,37 @@ func send_game() -> void:
 		play_sent_animation()
 		can_interact = false
 		
-
-func _apply_turn_state() -> void:
+func _refresh_turn_ui() -> void:
 	if game_over:
-		_stop_waiting_animation()
+		can_interact = false
+		print("Set Waiting 3")
+		_set_waiting(false)
 		return
-	_set_waiting(player == 0 or not isTurn)
+		
+	can_interact = (not spectator_mode) and (not game_over) and isTurn
+	print("Can Interact: ", can_interact, " | Spectator Mode: ", spectator_mode, " | Game Over: ", game_over, " | Is Turn: ", isTurn)
+	print("Set Waiting 4")
+	_set_waiting(not can_interact)
 
-func _set_waiting(enabled: bool) -> void:
-	waitingForOpponent = enabled
-	droppedPiece = null
 	if is_instance_valid(send_button):
 		send_button.disabled = true
 		_update_send_button_visibility(false)
+
+func _set_waiting(enabled: bool) -> void:
+	waitingForOpponent = enabled
+
+	_clear_pending_move()
+
+	if is_instance_valid(send_button):
+		send_button.disabled = true
+		_update_send_button_visibility(false)
+
 	if enabled:
+		print("Start Waiting Called 1")
 		_start_waiting_animation()
 	else:
 		_stop_waiting_animation()
+		print("STOP 1")
 
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
@@ -332,11 +431,19 @@ func play_sent_animation() -> void:
 	sent_tween.tween_interval(2.0)
 	sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
 	sent_tween.tween_callback(func():
-		if is_instance_valid(sent_label):
-			sent_label.visible = false
-			sent_label.modulate.a = 1.0
-			_set_waiting(true)
+		if not is_instance_valid(sent_label):
+			return
+
+		sent_label.visible = false
+		sent_label.modulate.a = 1.0
+
+		if game_over or spectator_mode or isTurn or can_interact or not waitingForOpponent:
+			return
+
+		print("Start Waiting Called 2")
+		_start_waiting_animation()
 	)
+
 
 func _player_id_to_color(pid: int) -> String:
 	return PIECE_YELLOW if pid == 1 else PIECE_RED
@@ -365,15 +472,13 @@ func _cell_color(x: int, y: int) -> String:
 	return getPieceColor(n as RigidBody2D)
 
 func getPositionInt(x: int, y: int) -> String:
-	var n: Node2D = get_node_or_null("%d,%d" % [x, y])
-	if n == null:
+	if board_state.is_empty():
 		return "0"
-	var path: String = (n.get_child(0) as Sprite2D).texture.resource_path
-	return "2" if path.contains("red") else "1"
+	return str(board_state[_idx(x, y)])
 
 func get_piece_y(x: int) -> int:
 	for y in range(0, BOARD_H):
-		if get_node_or_null("%d,%d" % [x, y]) == null:
+		if board_state[_idx(x, y)] == 0:
 			return y
 	return -1
 
@@ -391,6 +496,9 @@ func spawnPiece(x: int, color: String, y: int=-1, from_replay: bool=false) -> vo
 		y = get_piece_y(x)
 		if y < 0:
 			return
+			
+	var pid: int = 1 if color == PIECE_YELLOW else 2
+	board_state[_idx(x, y)] = pid
 
 	add_child(piece)
 	var spr: Sprite2D = piece.get_child(0) as Sprite2D
@@ -418,14 +526,18 @@ func spawnPiece(x: int, color: String, y: int=-1, from_replay: bool=false) -> vo
 func move_dropped_piece_to_column(new_x: int) -> void:
 	if game_over or not can_interact or droppedPiece == null:
 		return
+
 	var new_y: int = get_piece_y(new_x)
 	if new_y < 0:
 		return
+
 	var color: String = getPieceColor(droppedPiece)
-	droppedPiece.queue_free()
-	droppedPiece = null
+
+	_clear_pending_move()
+
 	await get_tree().process_frame
 	spawnPiece(new_x, color, -1, false)
+
 	if is_instance_valid(send_button):
 		send_button.disabled = false
 		_update_send_button_visibility(true)
@@ -467,7 +579,7 @@ func _find_winning_sequence() -> Dictionary:
 
 func _check_and_finalize_from_board() -> bool:
 	var win: Dictionary = _find_winning_sequence()
-	if win.is_empty():
+	if win.is_empty() and winner == "":
 		return false
 	_clear_last_highlight()
 	_highlight_winning_pulse(win["coords"])
@@ -481,10 +593,42 @@ func _clear_last_highlight() -> void:
 		var spr: Sprite2D = last_highlight.get_child(0) as Sprite2D
 		if spr:
 			spr.self_modulate.a = 1.0
-		var t: Tween = last_highlight.get_meta("hl_tween") as Tween
+
+		if last_highlight.has_meta("hl_tween"):
+			var t: Tween = last_highlight.get_meta("hl_tween") as Tween
+			if t and t.is_running():
+				t.kill()
+			last_highlight.remove_meta("hl_tween")
+			
+	last_highlight = null
+
+func _highlight_last(p: Node2D) -> void:
+	_clear_last_highlight()
+	if p == null or not is_instance_valid(p):
+		return
+
+	last_highlight = p
+
+	var spr := p.get_child(0) as Sprite2D
+	if spr == null:
+		return
+
+	var tw := _pulse_sprite(spr)
+	p.set_meta("hl_tween", tw)
+
+	if not p.is_connected("tree_exited", Callable(self, "_on_highlight_piece_exited")):
+		p.tree_exited.connect(_on_highlight_piece_exited.bind(p))
+
+func _on_highlight_piece_exited(p: Node) -> void:
+	if p == null or not is_instance_valid(p):
+		return
+
+	if p.has_meta("hl_tween"):
+		var t := p.get_meta("hl_tween") as Tween
 		if t and t.is_running():
 			t.kill()
-		last_highlight.set_meta("hl_tween", null)
+		p.remove_meta("hl_tween")
+		
 	last_highlight = null
 
 func _pulse_sprite(spr: Sprite2D) -> Tween:
@@ -509,22 +653,6 @@ func _winning_nodes_from_coords(cs: Array[Vector2i]) -> Array[Node2D]:
 			out.append(n)
 	return out
 
-func _highlight_last(p: Node2D) -> void:
-	_clear_last_highlight()
-	if p and is_instance_valid(p):
-		last_highlight = p
-		var spr: Sprite2D = p.get_child(0) as Sprite2D
-		if not spr:
-			return
-		var tw: Tween = _pulse_sprite(spr)
-		p.set_meta("hl_tween", tw)
-		p.tree_exited.connect(func():
-			var t2: Tween = p.get_meta("hl_tween") as Tween
-			if t2 and t2.is_running():
-				t2.kill()
-			p.set_meta("hl_tween", null)
-		)
-
 func _highlight_winning_pulse(cs: Array[Vector2i]) -> void:
 	_pulse_nodes(_winning_nodes_from_coords(cs))
 
@@ -533,8 +661,8 @@ func _finalize_win(i_won: bool) -> void:
 		return
 	game_over = true
 	win_loss_state = "1" if i_won else "-1"
-
-	_stop_waiting_animation()
+	print("Set Waiting 6")
+	_set_waiting(false)
 	waitingForOpponent = false
 
 	if spectator_mode:
@@ -621,28 +749,40 @@ func _show_win_burst(avatar: Control) -> void:
 func _start_waiting_animation() -> void:
 	if spectator_mode or not (is_instance_valid(waiting_label) and is_instance_valid(waiting_blur) and is_instance_valid(dot_timer)):
 		return
+	if waiting_label.visible == true and waiting_blur.visible == true:
+		return
 	dot_count = 0
 	waiting_label.text = BASE_WAIT_TEXT + "."
 	waiting_label.visible = true
+	print("Waiting 1 Visible: True")
 	waiting_blur.visible = true
 	waiting_label.modulate.a = 0.0
+	print("Waiting 1 Mod: 0")
 	waiting_blur.modulate.a = 0.0
 	var t: Tween = create_tween().set_parallel(true)
 	t.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
+	print("Waiting 2 Mod: 1")
 	t.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
 	t.tween_callback(func():
 		dot_timer.start()
 	)
 
 func _stop_waiting_animation() -> void:
+	if waiting_label.visible == false and waiting_blur.visible == false:
+		return
 	if is_instance_valid(dot_timer):
 		dot_timer.stop()
 	if is_instance_valid(waiting_label):
 		waiting_label.visible = false
-		waiting_label.modulate.a = 1.0
+		print("Waiting 2 Visible: False")
+		waiting_label.modulate.a = 0.0
+		print("Waiting 3 Mod: 0")
 	if is_instance_valid(waiting_blur):
 		waiting_blur.visible = false
-		waiting_blur.modulate.a = 1.0
+		waiting_blur.modulate.a = 0.0
+		
+	if not game_over and isTurn and not spectator_mode:
+		can_interact = true
 
 func _on_dot_timer_timeout() -> void:
 	if not is_instance_valid(waiting_label):
@@ -723,6 +863,20 @@ func _on_settings_button_pressed() -> void:
 	script.dark_mode_changed.connect(_apply_bg_for_dark)
 
 	_slide_up_in(popup)
+	
+func _clear_pending_move() -> void:
+	if droppedPiece == null or not is_instance_valid(droppedPiece):
+		droppedPiece = null
+		return
+
+	var ox: int = int(droppedPiece.name.get_slice(",", 0))
+	var oy: int = int(droppedPiece.name.get_slice(",", 1))
+
+	if ox >= 0 and ox < BOARD_W and oy >= 0 and oy < BOARD_H:
+		board_state[_idx(ox, oy)] = 0
+
+	droppedPiece.queue_free()
+	droppedPiece = null
 
 func _tap_bounce(btn: Button) -> void:
 	btn.pivot_offset = btn.size / 2.0
