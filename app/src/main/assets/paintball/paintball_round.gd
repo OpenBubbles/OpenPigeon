@@ -404,10 +404,7 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		print("End Valid")
 
 		g.game_over = true
-
-		if not g._is_replay_playback:
-			g.send_game(true)
-
+		g.send_game(true)
 		return
 
 	print("[ROUND] Step 7: End of round fade/restore")

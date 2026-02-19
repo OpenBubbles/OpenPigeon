@@ -291,6 +291,7 @@ func set_game_data(raw_text: String) -> void:
 
 	g.game_ended = g.check_win()
 	if g.game_ended:
+		print("GAME ENDED")
 		g.stop_waiting_animation()
 		g.game_over = true
 		if is_instance_valid(g.fp_aim_sprite):
@@ -308,7 +309,7 @@ func set_game_data(raw_text: String) -> void:
 			g._set_button_enabled(b, false)
 
 func send_game(clear_targets_for_next_turn: bool = false) -> void:
-	if g._is_replay_playback and (g._round_sequence_running or g._is_shot_sequence_running):
+	if g._is_replay_playback and (g._round_sequence_running or g._is_shot_sequence_running) and not g.game_over:
 		print("[Send] Blocked: replay playback running. Not sending.")
 		return
 
@@ -347,6 +348,7 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 
 	g.game_ended = g.check_win()
 	if g.game_ended:
+		print("GAME ENDED 1")
 		clear_targets_for_next_turn = true
 
 		var winner: String = ""
