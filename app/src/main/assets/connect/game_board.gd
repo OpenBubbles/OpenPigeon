@@ -90,7 +90,6 @@ func _ready() -> void:
 
 	if not game_over:
 		await get_tree().process_frame
-		print("Set Waiting 1")
 		_set_waiting(not isTurn)
 		
 func _clear_board_pieces() -> void:
@@ -339,13 +338,11 @@ func send_game() -> void:
 func _refresh_turn_ui() -> void:
 	if game_over:
 		can_interact = false
-		print("Set Waiting 3")
 		_set_waiting(false)
 		return
 		
 	can_interact = (not spectator_mode) and (not game_over) and isTurn
 	print("Can Interact: ", can_interact, " | Spectator Mode: ", spectator_mode, " | Game Over: ", game_over, " | Is Turn: ", isTurn)
-	print("Set Waiting 4")
 	_set_waiting(not can_interact)
 
 	if is_instance_valid(send_button):
@@ -362,11 +359,9 @@ func _set_waiting(enabled: bool) -> void:
 		_update_send_button_visibility(false)
 
 	if enabled:
-		print("Start Waiting Called 1")
 		_start_waiting_animation()
 	else:
 		_stop_waiting_animation()
-		print("STOP 1")
 
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
@@ -440,10 +435,8 @@ func play_sent_animation() -> void:
 		if game_over or spectator_mode or isTurn or can_interact or not waitingForOpponent:
 			return
 
-		print("Start Waiting Called 2")
 		_start_waiting_animation()
 	)
-
 
 func _player_id_to_color(pid: int) -> String:
 	return PIECE_YELLOW if pid == 1 else PIECE_RED
@@ -661,7 +654,6 @@ func _finalize_win(i_won: bool) -> void:
 		return
 	game_over = true
 	win_loss_state = "1" if i_won else "-1"
-	print("Set Waiting 6")
 	_set_waiting(false)
 	waitingForOpponent = false
 
@@ -754,14 +746,11 @@ func _start_waiting_animation() -> void:
 	dot_count = 0
 	waiting_label.text = BASE_WAIT_TEXT + "."
 	waiting_label.visible = true
-	print("Waiting 1 Visible: True")
 	waiting_blur.visible = true
 	waiting_label.modulate.a = 0.0
-	print("Waiting 1 Mod: 0")
 	waiting_blur.modulate.a = 0.0
 	var t: Tween = create_tween().set_parallel(true)
 	t.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
-	print("Waiting 2 Mod: 1")
 	t.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
 	t.tween_callback(func():
 		dot_timer.start()
@@ -774,9 +763,7 @@ func _stop_waiting_animation() -> void:
 		dot_timer.stop()
 	if is_instance_valid(waiting_label):
 		waiting_label.visible = false
-		print("Waiting 2 Visible: False")
 		waiting_label.modulate.a = 0.0
-		print("Waiting 3 Mod: 0")
 	if is_instance_valid(waiting_blur):
 		waiting_blur.visible = false
 		waiting_blur.modulate.a = 0.0
