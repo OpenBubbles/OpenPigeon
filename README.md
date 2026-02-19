@@ -22,6 +22,7 @@ OpenPigeon is fully open-source, and we're actively looking for game developers 
 - Four in a Row
 - Gomoku
 - Mancala
+- Paintball
 - Reversi
 - Sea Battle (all sizes)
 - Wordbites
