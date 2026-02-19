@@ -19,25 +19,26 @@ class AboutActivity : Activity() {
                 OpenPigeon is fully open-source, and we're looking for game developers to contribute their favorite games. If you're interested, find out more on GitHub.
 
                 Thank you to our contributors!
-                Checkers - jakecrowley & ty8447
-                Word Hunt - npulse4
-                Four in a Row - jakecrowley & ty8447
-                Basketball - jakecrowley
-                Sea Battle - Copper + ty8447
-                Crazy 8 - Copper
-                Darts - jakecrowley
                 8 Ball - Copper
-                Cup Pong - jakecrowley
-                Archery - jakecrowley + ty8447
-                Reversi - ty8447
-                Filler - ty8447
-                Chess - chasedredmon
-                Mancala - ty8447
-                Dots & Boxes - ty8447
-                Gomoku - ty8447
                 20 Questions - ty8447
                 Anagrams - ty8447
+                Archery - jakecrowley + ty8447
+                Basketball - jakecrowley
+                Checkers - jakecrowley & ty8447
+                Chess - chasedredmon
+                Crazy 8 - Copper
+                Cup Pong - jakecrowley
+                Darts - jakecrowley
+                Dots & Boxes - ty8447
+                Filler - ty8447
+                Four in a Row - jakecrowley & ty8447
+                Gomoku - ty8447
+                Mancala - ty8447
+                Paintball - ty8447
+                Reversi - ty8447
+                Sea Battle - Copper + ty8447
                 Wordbites - ty8447
+                Word Hunt - npulse4
 
                 Are you a developer? Add your favorite game on GitHub!
             """.trimIndent())
