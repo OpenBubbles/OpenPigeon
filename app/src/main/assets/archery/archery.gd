@@ -203,8 +203,8 @@ func check_winner() -> bool:
 		print("check_winner: EARLY YOU LOSE (0-2 rule)")
 		return true
 		
-	if set_num < 3:
-		print("check_winner: less than 3 sets played, no result yet.")
+	if you_set_wins + opp_set_wins < 3:
+		print("check_winner: less than 3 combined points earned, no result yet.")
 		return false
 
 	game_over = true
