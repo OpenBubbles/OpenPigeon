@@ -1,4 +1,4 @@
-[gd_scene load_steps=44 format=3 uid="uid://c5mu4fun6cf05"]
+[gd_scene format=3 uid="uid://c5mu4fun6cf05"]
 
 [ext_resource type="Script" uid="uid://c7kwqbkg32clk" path="res://paintball/paintball_game.gd" id="1_itydf"]
 [ext_resource type="Texture2D" uid="uid://cvd8sq0pom53b" path="res://paintball/first_person_aim.png" id="2_gx26o"]
@@ -54,22 +54,22 @@ albedo_texture = ExtResource("9_ohmqa")
 material = SubResource("StandardMaterial3D_fvh8h")
 size = Vector2(1.5, 1.5)
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_gayi8"]
+[sub_resource type="ViewportTexture" id="ViewportTexture_ohmqa"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_03t0m"]
+[sub_resource type="ViewportTexture" id="ViewportTexture_fvh8h"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_hy3c1"]
+[sub_resource type="ViewportTexture" id="ViewportTexture_qilti"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_w8qcd"]
+[sub_resource type="ViewportTexture" id="ViewportTexture_24vgr"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_f7ola"]
+[sub_resource type="ViewportTexture" id="ViewportTexture_8pydp"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_wuh8u"]
+[sub_resource type="ViewportTexture" id="ViewportTexture_tmo83"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_f7ola"]
@@ -147,23 +147,24 @@ expand_margin_top = 10.0
 expand_margin_right = 20.0
 expand_margin_bottom = 10.0
 
-[node name="Paintball" type="Node3D"]
+[node name="Paintball" type="Node3D" unique_id=2055827145]
 script = ExtResource("1_itydf")
+buttons_root = null
 
-[node name="Camera3D" type="Camera3D" parent="."]
+[node name="Camera3D" type="Camera3D" parent="." unique_id=592133526]
 transform = Transform3D(1, 0, 0, 0, 0.97189945, 0.23539655, 0, -0.23539655, 0.97189945, 0, 5.428241, 12.890634)
 fov = 61.5
 
-[node name="CanvasLayer" type="CanvasLayer" parent="Camera3D"]
+[node name="CanvasLayer" type="CanvasLayer" parent="Camera3D" unique_id=104659371]
 layer = 0
 
-[node name="FirstPersonAimSprite" type="Sprite2D" parent="Camera3D/CanvasLayer"]
+[node name="FirstPersonAimSprite" type="Sprite2D" parent="Camera3D/CanvasLayer" unique_id=270838155]
 unique_name_in_owner = true
 visible = false
 position = Vector2(459, 871)
 texture = ExtResource("2_gx26o")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1033243923]
 transform = Transform3D(1, 0, 0, 0, 0.819582, 0.572962, 0, -0.572962, 0.819582, -0.6293869, -1.0634995, 3.145176)
 light_color = Color(0.90488917, 0.8954045, 0.7149156, 1)
 light_energy = 1.07
@@ -177,80 +178,80 @@ shadow_transmittance_bias = 5.868
 shadow_opacity = 0.54
 shadow_blur = 2.182
 
-[node name="floor" type="MeshInstance3D" parent="."]
+[node name="floor" type="MeshInstance3D" parent="." unique_id=1415502638]
 unique_name_in_owner = true
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.2759838, -0.23332882, -1.9321003)
 mesh = SubResource("PlaneMesh_gayi8")
 
-[node name="SeamBlend" type="MeshInstance3D" parent="."]
+[node name="SeamBlend" type="MeshInstance3D" parent="." unique_id=1213842168]
 transform = Transform3D(1.0000001, 1.686655e-15, -4.0325425e-08, -2.4285308e-08, 0.7983204, -0.602233, 3.2192606e-08, 0.6022331, 0.7983203, -0.92802143, -0.067153215, -16.447039)
 mesh = SubResource("PlaneMesh_ohmqa")
 
-[node name="sky" type="MeshInstance3D" parent="."]
+[node name="sky" type="MeshInstance3D" parent="." unique_id=215178045]
 transform = Transform3D(1.252351, 0, 0, 0, -8.015497e-08, -1.2776886, 0, 1.8337319, -5.5849544e-08, -0.67167807, 8.2442875, -16.722126)
 material_override = SubResource("StandardMaterial3D_gayi8")
 mesh = SubResource("PlaneMesh_vela0")
 
-[node name="Tire" type="Sprite3D" parent="."]
+[node name="Tire" type="Sprite3D" parent="." unique_id=1286073896]
 transform = Transform3D(0.265, 0, 0, 0, 0.265, 0, 0, 0, 0.265, 2.3649158, 1.471144, 0.3210783)
 flip_h = true
 billboard = 1
 texture_filter = 0
 texture = ExtResource("8_03t0m")
 
-[node name="Tire2" type="Sprite3D" parent="."]
+[node name="Tire2" type="Sprite3D" parent="." unique_id=856041455]
 transform = Transform3D(0.265, 0, 0, 0, 0.265, 0, 0, 0, 0.265, 0.12682557, 1.471144, 0.3210783)
 billboard = 1
 texture_filter = 0
 texture = ExtResource("8_03t0m")
 
-[node name="Tire3" type="Sprite3D" parent="."]
+[node name="Tire3" type="Sprite3D" parent="." unique_id=1916497094]
 transform = Transform3D(0.265, 0, 0, 0, 0.265, 0, 0, 0, 0.265, -2.2862396, 1.471144, 0.3210783)
 billboard = 1
 texture_filter = 0
 texture = ExtResource("8_03t0m")
 
-[node name="Tire4" type="Sprite3D" parent="."]
+[node name="Tire4" type="Sprite3D" parent="." unique_id=314615646]
 transform = Transform3D(0.265, 0, 0, 0, 0.265, 0, 0, 0, 0.265, 2.3649158, 1.471144, -13.749278)
 flip_h = true
 billboard = 1
 texture_filter = 1
 texture = ExtResource("8_03t0m")
 
-[node name="Tire5" type="Sprite3D" parent="."]
+[node name="Tire5" type="Sprite3D" parent="." unique_id=1882599042]
 transform = Transform3D(0.265, 0, 0, 0, 0.265, 0, 0, 0, 0.265, 0.127, 1.471, -13.748942)
 flip_h = true
 billboard = 1
 texture_filter = 1
 texture = ExtResource("8_03t0m")
 
-[node name="Tire6" type="Sprite3D" parent="."]
+[node name="Tire6" type="Sprite3D" parent="." unique_id=1084269075]
 transform = Transform3D(-0.265, 0, -2.3167035e-08, 0, 0.265, 0, 2.3167035e-08, 0, -0.265, -2.286, 1.471, -13.748942)
 flip_h = true
 billboard = 1
 texture_filter = 1
 texture = ExtResource("8_03t0m")
 
-[node name="Player" type="Sprite3D" parent="."]
+[node name="Player" type="Sprite3D" parent="." unique_id=2103342718]
 unique_name_in_owner = true
 transform = Transform3D(1.4, 0, 0, 0, 1.4, 0, 0, 0, 1.4, 0.08581, 1.197899, 0.7731023)
 texture = ExtResource("5_gayi8")
 script = ExtResource("8_vrfh0")
 
-[node name="BlobShadow" type="MeshInstance3D" parent="Player"]
+[node name="BlobShadow" type="MeshInstance3D" parent="Player" unique_id=786166917]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.0133517, 0)
 mesh = SubResource("PlaneMesh_24vgr")
 
-[node name="Opponent" type="Sprite3D" parent="."]
+[node name="Opponent" type="Sprite3D" parent="." unique_id=1902984645]
 unique_name_in_owner = true
 transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0.025266409, 1.7820818, -14.262239)
 visible = false
 texture_filter = 0
 texture = ExtResource("5_gayi8")
 
-[node name="Buttons" type="Node3D" parent="."]
+[node name="Buttons" type="Node3D" parent="." unique_id=757215455]
 
-[node name="ShootLeft" parent="Buttons" instance=ExtResource("6_f7ola")]
+[node name="ShootLeft" parent="Buttons" unique_id=1651712716 instance=ExtResource("6_f7ola")]
 transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, -2.2604523, 3.8512156, -14.313803)
 lane = 0
 
@@ -258,14 +259,14 @@ lane = 0
 texture_filter = 0
 texture = ExtResource("6_hy3c1")
 
-[node name="ShootCenter" parent="Buttons" instance=ExtResource("6_f7ola")]
+[node name="ShootCenter" parent="Buttons" unique_id=1018106484 instance=ExtResource("6_f7ola")]
 transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0.151, 3.851, -14.314)
 
 [node name="Sprite3D" parent="Buttons/ShootCenter" index="0"]
 texture_filter = 0
 texture = ExtResource("6_hy3c1")
 
-[node name="ShootRight" parent="Buttons" instance=ExtResource("6_f7ola")]
+[node name="ShootRight" parent="Buttons" unique_id=199169833 instance=ExtResource("6_f7ola")]
 transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 2.4299703, 3.851, -14.314)
 lane = 2
 
@@ -273,7 +274,7 @@ lane = 2
 texture_filter = 0
 texture = ExtResource("6_hy3c1")
 
-[node name="MoveLeft" parent="Buttons" instance=ExtResource("6_f7ola")]
+[node name="MoveLeft" parent="Buttons" unique_id=1299058168 instance=ExtResource("6_f7ola")]
 transform = Transform3D(0.25, 0, 0, 0, 0.25, 0, 0, 0, 0.25, -2.305, 1.45, 0.531)
 kind = 1
 lane = 0
@@ -283,7 +284,7 @@ move_tex_2x = ExtResource("9_wuh8u")
 [node name="Sprite3D" parent="Buttons/MoveLeft" index="0"]
 texture_filter = 0
 
-[node name="MoveCenter" parent="Buttons" instance=ExtResource("6_f7ola")]
+[node name="MoveCenter" parent="Buttons" unique_id=610868590 instance=ExtResource("6_f7ola")]
 transform = Transform3D(0.25, 0, 0, 0, 0.25, 0, 0, 0, 0.25, 0.11931014, 1.45, 0.531)
 kind = 1
 move_tex_1x = ExtResource("7_w8qcd")
@@ -292,7 +293,7 @@ move_tex_2x = ExtResource("9_wuh8u")
 [node name="Sprite3D" parent="Buttons/MoveCenter" index="0"]
 texture_filter = 0
 
-[node name="MoveRight" parent="Buttons" instance=ExtResource("6_f7ola")]
+[node name="MoveRight" parent="Buttons" unique_id=323220374 instance=ExtResource("6_f7ola")]
 transform = Transform3D(0.25, 0, 0, 0, 0.25, 0, 0, 0, 0.25, 2.441579, 1.45, 0.531)
 kind = 1
 lane = 2
@@ -302,7 +303,7 @@ move_tex_2x = ExtResource("9_wuh8u")
 [node name="Sprite3D" parent="Buttons/MoveRight" index="0"]
 texture_filter = 0
 
-[node name="WaitBlur" type="ColorRect" parent="."]
+[node name="WaitBlur" type="ColorRect" parent="." unique_id=760944224]
 unique_name_in_owner = true
 visible = false
 z_index = 20
@@ -314,7 +315,7 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 
-[node name="MarginContainer" type="MarginContainer" parent="."]
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=373531116]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -328,21 +329,21 @@ theme_override_constants/margin_top = 20
 theme_override_constants/margin_right = 40
 theme_override_constants/margin_bottom = 80
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer" unique_id=680373546]
 layout_mode = 2
 mouse_filter = 2
 
-[node name="TopInfoContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+[node name="TopInfoContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=692534205]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 4
 mouse_filter = 2
 alignment = 1
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoContainer" unique_id=1036966252]
 layout_mode = 2
 
-[node name="YouLabel" type="Label" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer"]
+[node name="YouLabel" type="Label" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer" unique_id=1907422372]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -352,124 +353,124 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="PlayerAvatarDisplay" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer" instance=ExtResource("6_vkxec")]
+[node name="PlayerAvatarDisplay" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer" unique_id=1449898264 instance=ExtResource("6_vkxec")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_gayi8")
-texture_pressed = SubResource("ViewportTexture_03t0m")
-texture_hover = SubResource("ViewportTexture_hy3c1")
+texture_normal = SubResource("ViewportTexture_ohmqa")
+texture_pressed = SubResource("ViewportTexture_fvh8h")
+texture_hover = SubResource("ViewportTexture_qilti")
 is_display_only = true
 
-[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer"]
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer" unique_id=612783076]
 layout_mode = 2
 alignment = 1
 
-[node name="pheart1" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer/HBoxContainer"]
+[node name="pheart1" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer/HBoxContainer" unique_id=928075460]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(24, 24)
 layout_mode = 2
 texture = ExtResource("7_gayi8")
 expand_mode = 3
 
-[node name="pheart2" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer/HBoxContainer"]
+[node name="pheart2" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer/HBoxContainer" unique_id=446114714]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(24, 24)
 layout_mode = 2
 texture = ExtResource("7_gayi8")
 expand_mode = 3
 
-[node name="pheart3" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer/HBoxContainer"]
+[node name="pheart3" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer/HBoxContainer" unique_id=1284498526]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(24, 24)
 layout_mode = 2
 texture = ExtResource("7_gayi8")
 expand_mode = 3
 
-[node name="VBoxContainer3" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoContainer"]
+[node name="VBoxContainer3" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoContainer" unique_id=1631889978]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Label" type="Control" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3"]
+[node name="Label" type="Control" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3" unique_id=1994899104]
 custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
 
-[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3"]
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3" unique_id=1728060444]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="Separation4" type="Control" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3/HBoxContainer"]
+[node name="Separation4" type="Control" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3/HBoxContainer" unique_id=360995400]
 custom_minimum_size = Vector2(8, 0)
 layout_mode = 2
 
-[node name="PlayerCountLabel" type="Label" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3/HBoxContainer"]
+[node name="PlayerCountLabel" type="Label" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3/HBoxContainer" unique_id=1445266176]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 
-[node name="Separation" type="Control" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3/HBoxContainer"]
+[node name="Separation" type="Control" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3/HBoxContainer" unique_id=1930689527]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="OppCountLabel" type="Label" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3/HBoxContainer"]
+[node name="OppCountLabel" type="Label" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3/HBoxContainer" unique_id=797187586]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 
-[node name="Separation3" type="Control" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3/HBoxContainer"]
+[node name="Separation3" type="Control" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer3/HBoxContainer" unique_id=431175063]
 custom_minimum_size = Vector2(8, 0)
 layout_mode = 2
 
-[node name="VBoxContainer2" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoContainer"]
+[node name="VBoxContainer2" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoContainer" unique_id=2062604263]
 layout_mode = 2
 
-[node name="Label" type="Control" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer2"]
+[node name="Label" type="Control" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer2" unique_id=1286856647]
 custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
 
-[node name="OppAvatarDisplay" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer2" instance=ExtResource("6_vkxec")]
+[node name="OppAvatarDisplay" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer2" unique_id=984748167 instance=ExtResource("6_vkxec")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_w8qcd")
-texture_pressed = SubResource("ViewportTexture_f7ola")
-texture_hover = SubResource("ViewportTexture_wuh8u")
+texture_normal = SubResource("ViewportTexture_24vgr")
+texture_pressed = SubResource("ViewportTexture_8pydp")
+texture_hover = SubResource("ViewportTexture_tmo83")
 is_display_only = true
 controlled_by_data = true
 
-[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer2"]
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer2" unique_id=97977832]
 layout_mode = 2
 alignment = 1
 
-[node name="oheart1" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer2/HBoxContainer"]
+[node name="oheart1" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer2/HBoxContainer" unique_id=1560349232]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(24, 24)
 layout_mode = 2
 texture = ExtResource("7_gayi8")
 expand_mode = 3
 
-[node name="oheart2" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer2/HBoxContainer"]
+[node name="oheart2" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer2/HBoxContainer" unique_id=729074289]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(24, 24)
 layout_mode = 2
 texture = ExtResource("7_gayi8")
 expand_mode = 3
 
-[node name="oheart3" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer2/HBoxContainer"]
+[node name="oheart3" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer2/HBoxContainer" unique_id=802237862]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(24, 24)
 layout_mode = 2
 texture = ExtResource("7_gayi8")
 expand_mode = 3
 
-[node name="Control" type="Control" parent="MarginContainer/VBoxContainer"]
+[node name="Control" type="Control" parent="MarginContainer/VBoxContainer" unique_id=1139590256]
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 
-[node name="FireButton" type="Button" parent="MarginContainer/VBoxContainer"]
+[node name="FireButton" type="Button" parent="MarginContainer/VBoxContainer" unique_id=950715987]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -487,7 +488,7 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_vevvc")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_gx26o")
 text = "Fire!"
 
-[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/VBoxContainer"]
+[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/VBoxContainer" unique_id=1444638642]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 8
@@ -495,7 +496,7 @@ theme_override_constants/margin_left = 40
 theme_override_constants/margin_right = 40
 theme_override_constants/margin_bottom = 30
 
-[node name="SettingsButton" type="Button" parent="MarginContainer/VBoxContainer/MarginContainer"]
+[node name="SettingsButton" type="Button" parent="MarginContainer/VBoxContainer/MarginContainer" unique_id=1310041826]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -507,7 +508,7 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_vlj17")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_vrfh0")
 theme_override_styles/hover = SubResource("StyleBoxTexture_ohmqa")
 
-[node name="RulesButton" type="Button" parent="MarginContainer/VBoxContainer/MarginContainer"]
+[node name="RulesButton" type="Button" parent="MarginContainer/VBoxContainer/MarginContainer" unique_id=1716192625]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -519,7 +520,7 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_fvh8h")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_qilti")
 theme_override_styles/hover = SubResource("StyleBoxTexture_24vgr")
 
-[node name="SentLabel" type="Label" parent="MarginContainer"]
+[node name="SentLabel" type="Label" parent="MarginContainer" unique_id=835395556]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -530,7 +531,7 @@ text = "SENT"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="WaitForOpponentLabel" type="Label" parent="MarginContainer"]
+[node name="WaitForOpponentLabel" type="Label" parent="MarginContainer" unique_id=1272825137]
 unique_name_in_owner = true
 z_index = 21
 layout_mode = 2
@@ -541,11 +542,11 @@ text = "WAITING FOR OPPONENT..."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="DotTimer" type="Timer" parent="MarginContainer"]
+[node name="DotTimer" type="Timer" parent="MarginContainer" unique_id=1112939586]
 unique_name_in_owner = true
 wait_time = 0.75
 
-[node name="SpecLabel" type="Label" parent="MarginContainer"]
+[node name="SpecLabel" type="Label" parent="MarginContainer" unique_id=951527160]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -555,10 +556,10 @@ text = "Spectating..."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="CanvasLayer" type="CanvasLayer" parent="."]
+[node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=1075600429]
 layer = 100
 
-[node name="FadeWhite" type="ColorRect" parent="CanvasLayer"]
+[node name="FadeWhite" type="ColorRect" parent="CanvasLayer" unique_id=1602852595]
 unique_name_in_owner = true
 z_index = 100
 anchors_preset = 15
@@ -569,7 +570,7 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(1, 1, 1, 0)
 
-[node name="WinLossLabel" type="Label" parent="CanvasLayer"]
+[node name="WinLossLabel" type="Label" parent="CanvasLayer" unique_id=1723080953]
 unique_name_in_owner = true
 visible = false
 z_index = 101

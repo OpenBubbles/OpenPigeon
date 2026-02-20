@@ -402,9 +402,9 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	g.game_ended = g.check_win()
 	if g.game_ended:
 		print("End Valid")
-
 		g.game_over = true
-		g.send_game(true)
+		if g.winner == "":
+			g.send_game(true)
 		return
 
 	print("[ROUND] Step 7: End of round fade/restore")

@@ -69,6 +69,7 @@ var my_id: String = ""
 var p1_id: String = ""
 var p2_id: String = ""
 var _opp_id: String = ""
+var winner: String = ""
 
 var playernum: int = 0
 var turn_owner: int = 1

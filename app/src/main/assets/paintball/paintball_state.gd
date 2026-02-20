@@ -192,6 +192,7 @@ func set_game_data(raw_text: String) -> void:
 
 	g.turn_owner = clamp(res_int(res, "player", 1), 1, 2)
 	g.is_your_turn = res_bool(res, "isYourTurn", false)
+	g.winner = res_str(res, "winner", "")
 
 	if g.my_id != "" and g.p1_id != "" and g.p2_id != "":
 		g.playernum = (1 if g.my_id == g.p1_id else (2 if g.my_id == g.p2_id else 0))
@@ -359,7 +360,13 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 				opp_id = g.p2_id
 			elif g.p2_id != "" and g.my_id == g.p2_id:
 				opp_id = g.p1_id
-
+		if g.win_loss_state == "":
+			if g._hp_opp < g._hp_me:
+				g.win_loss_state = "1" 
+			elif g._hp_opp > g._hp_me:
+				g.win_loss_state = "-1"
+			else:
+				g.win_loss_state = "0"
 		if g.win_loss_state == "1":
 			winner = g.my_id
 			winner_player = g.playernum
