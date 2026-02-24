@@ -1,8 +1,8 @@
-[gd_scene load_steps=2 format=3 uid="uid://cj7d2jqu5r5ym"]
+[gd_scene format=3 uid="uid://cj7d2jqu5r5ym"]
 
 [ext_resource type="Script" uid="uid://b56glsl3s85ue" path="res://game_picker.gd" id="1_4r7pt"]
 
-[node name="GamePicker" type="Control"]
+[node name="GamePicker" type="Control" unique_id=1494898153]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -11,7 +11,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_4r7pt")
 
-[node name="CheckersButton" type="Button" parent="."]
+[node name="CheckersButton" type="Button" parent="." unique_id=1172003433]
 layout_mode = 0
 offset_left = 144.0
 offset_top = 228.0
@@ -20,7 +20,7 @@ offset_bottom = 289.0
 text = "Checkers"
 script = ExtResource("1_4r7pt")
 
-[node name="ChessButton" type="Button" parent="."]
+[node name="ChessButton" type="Button" parent="." unique_id=1512648394]
 layout_mode = 0
 offset_left = 144.0
 offset_top = 304.0
@@ -29,7 +29,7 @@ offset_bottom = 365.0
 text = "Chess"
 script = ExtResource("1_4r7pt")
 
-[node name="ConnectFourButton" type="Button" parent="."]
+[node name="ConnectFourButton" type="Button" parent="." unique_id=1973222691]
 layout_mode = 0
 offset_left = 144.0
 offset_top = 380.0
@@ -38,7 +38,7 @@ offset_bottom = 441.0
 text = "Connect Four"
 script = ExtResource("1_4r7pt")
 
-[node name="BasketballButton" type="Button" parent="."]
+[node name="BasketballButton" type="Button" parent="." unique_id=1528570351]
 layout_mode = 0
 offset_left = 144.0
 offset_top = 456.0
@@ -47,7 +47,7 @@ offset_bottom = 517.0
 text = "Basketball"
 script = ExtResource("1_4r7pt")
 
-[node name="DartsButton" type="Button" parent="."]
+[node name="DartsButton" type="Button" parent="." unique_id=1019168950]
 layout_mode = 0
 offset_left = 144.0
 offset_top = 532.0
@@ -56,7 +56,7 @@ offset_bottom = 593.0
 text = "Darts"
 script = ExtResource("1_4r7pt")
 
-[node name="BeerButton" type="Button" parent="."]
+[node name="BeerButton" type="Button" parent="." unique_id=152409457]
 layout_mode = 0
 offset_left = 144.0
 offset_top = 608.0
@@ -65,7 +65,7 @@ offset_bottom = 669.0
 text = "Cup Pong"
 script = ExtResource("1_4r7pt")
 
-[node name="ArcheryButton" type="Button" parent="."]
+[node name="ArcheryButton" type="Button" parent="." unique_id=1727776380]
 layout_mode = 0
 offset_left = 144.0
 offset_top = 684.0
@@ -74,7 +74,7 @@ offset_bottom = 745.0
 text = "Archery"
 script = ExtResource("1_4r7pt")
 
-[node name="MancalaButton" type="Button" parent="."]
+[node name="MancalaButton" type="Button" parent="." unique_id=1600105530]
 layout_mode = 0
 offset_left = 144.0
 offset_top = 760.0
@@ -83,7 +83,7 @@ offset_bottom = 821.0
 text = "Mancala"
 script = ExtResource("1_4r7pt")
 
-[node name="ReversiButton" type="Button" parent="."]
+[node name="ReversiButton" type="Button" parent="." unique_id=1557846171]
 layout_mode = 0
 offset_left = 144.0
 offset_top = 836.0
@@ -92,7 +92,7 @@ offset_bottom = 897.0
 text = "Reversi"
 script = ExtResource("1_4r7pt")
 
-[node name="FillerButton" type="Button" parent="."]
+[node name="FillerButton" type="Button" parent="." unique_id=712375232]
 layout_mode = 0
 offset_left = 144.0
 offset_top = 912.0
@@ -101,7 +101,7 @@ offset_bottom = 973.0
 text = "Filler"
 script = ExtResource("1_4r7pt")
 
-[node name="QuestionsButton" type="Button" parent="."]
+[node name="QuestionsButton" type="Button" parent="." unique_id=1520576430]
 layout_mode = 0
 offset_left = 144.0
 offset_top = 988.0

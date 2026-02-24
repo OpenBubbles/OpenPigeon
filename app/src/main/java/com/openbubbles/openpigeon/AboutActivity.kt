@@ -37,6 +37,7 @@ class AboutActivity : Activity() {
                 Paintball - ty8447
                 Reversi - ty8447
                 Sea Battle - Copper + ty8447
+                Tanks - ty8447
                 Wordbites - ty8447
                 Word Hunt - npulse4
 

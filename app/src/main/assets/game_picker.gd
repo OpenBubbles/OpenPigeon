@@ -18,7 +18,8 @@ var games: Dictionary = {
 	"renju": "res://gomoku/gomoku.tscn",
 	"anagrams": "res://anagrams/anagrams.tscn",
 	"wordbites": "res://bites/wordbites.tscn",
-	"paint": "res://paintball/paintball.tscn"
+	"paint": "res://paintball/paintball.tscn",
+	"tanks": "res://tanks/tanks_game.tscn"
 }
 
 # Called when the node enters the scene tree for the first time.
