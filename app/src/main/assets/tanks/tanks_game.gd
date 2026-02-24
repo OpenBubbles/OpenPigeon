@@ -584,6 +584,7 @@ func _send_payload(payload: Dictionary) -> void:
 func _on_rules_pressed() -> void:
 	var popup := RULES_POPUP_SCENE.instantiate()
 	var dim := _make_dim()
+	popup.z_index = 1000
 	get_tree().root.add_child(dim)
 	get_tree().root.add_child(popup)
 	(popup as Node).tree_exited.connect(func():
@@ -610,7 +611,7 @@ func _on_settings_pressed() -> void:
 	root.add_child(dim)
 	root.add_child(popup_instance)
 
-	popup_instance.z_index = 100
+	popup_instance.z_index = 1000
 	dim.z_index = 99
 	root.move_child(dim, root.get_child_count() - 2)
 

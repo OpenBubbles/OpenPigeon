@@ -277,6 +277,7 @@ theme_override_styles/hover = SubResource("StyleBoxTexture_t7yy8")
 [node name="Controls" type="VBoxContainer" parent="MarginContainer" unique_id=571956456]
 layout_mode = 2
 size_flags_vertical = 8
+mouse_filter = 2
 
 [node name="PowerLabel" type="RichTextLabel" parent="MarginContainer/Controls" unique_id=244262187]
 unique_name_in_owner = true
@@ -290,6 +291,7 @@ vertical_alignment = 1
 [node name="Spacer2" type="Control" parent="MarginContainer/Controls" unique_id=990678402]
 custom_minimum_size = Vector2(0, 10)
 layout_mode = 2
+mouse_filter = 2
 
 [node name="PowerSlider" type="HSlider" parent="MarginContainer/Controls" unique_id=1251560292]
 unique_name_in_owner = true
@@ -306,6 +308,7 @@ rounded = true
 [node name="Spacer" type="Control" parent="MarginContainer/Controls" unique_id=1777210889]
 custom_minimum_size = Vector2(0, 80)
 layout_mode = 2
+mouse_filter = 2
 
 [node name="FireButton" type="Button" parent="MarginContainer/Controls" unique_id=491874045]
 unique_name_in_owner = true
