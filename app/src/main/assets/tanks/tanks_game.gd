@@ -31,6 +31,7 @@ var sent_tween: Tween
 var dot_count: int = 0
 var _view_flipped: bool = false
 var _is_dragging_aim: bool = false
+var spectator_mode: bool = false
 const BASE_WAIT_TEXT := "WAITING FOR OPPONENT"
 
 #~~~~~~~~~~~ DEBUG ~~~~~~~~~~~~~~~~
@@ -573,6 +574,7 @@ func _on_turn_changed(v: bool) -> void:
 	_update_aim_label_visibility()
 
 func _on_send_pressed() -> void:
+	print("Fire Button Pressed!")
 	core.request_send()
 	play_sent_animation()
 
@@ -694,21 +696,34 @@ func _rules_text() -> String:
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
+		print("Warning: sent_label is not valid for play_sent_animation.")
 		return
-
+	
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()
 
-	sent_tween = create_tween()
+	sent_tween = create_tween().set_parallel(false)
+
 	sent_label.text = "Sent"
 	sent_label.visible = true
 	sent_label.modulate.a = 0.0
-	sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.2)
+	sent_label.scale = Vector2.ONE
+	sent_label.pivot_offset = sent_label.get_size() / 2.0
+
+	sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
 	sent_tween.tween_interval(0.6)
-	sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.3)
+	sent_tween.tween_callback(func():
+		if is_instance_valid(sent_label):
+			sent_label.text = "Sent ✔"
+	)
+	sent_tween.tween_interval(2.0)
+	sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
+
 	sent_tween.tween_callback(func():
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
+			sent_label.modulate.a = 1.0
+			start_waiting_animation()
 	)
 
 func _update_avatars() -> void:
@@ -727,27 +742,37 @@ func _update_avatars() -> void:
 	if opp_avatar_display.has_method("update_avatar_from_string") and opp_str != "":
 		opp_avatar_display.call_deferred("update_avatar_from_string", opp_str)
 
-func start_waiting_animation() -> void:
+func start_waiting_animation():
 	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):
+		print("Warning: Waiting animation nodes are not valid.")
 		return
-	if core.spectator_mode:
+	if spectator_mode:
 		return
 
 	dot_count = 0
 	waiting_label.text = BASE_WAIT_TEXT + "."
 	waiting_label.visible = true
 	waiting_blur.visible = true
-	waiting_label.modulate.a = 1.0
-	waiting_blur.modulate.a = 1.0
-	dot_timer.start()
 
-func stop_waiting_animation() -> void:
+	waiting_label.modulate.a = 0.0
+	waiting_blur.modulate.a = 0.0
+
+	var tween_wait_in = create_tween().set_parallel(true)
+	tween_wait_in.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
+	tween_wait_in.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
+	tween_wait_in.tween_callback(func():
+		dot_timer.start()
+	)
+
+func stop_waiting_animation():
 	if is_instance_valid(dot_timer):
 		dot_timer.stop()
 	if is_instance_valid(waiting_label):
 		waiting_label.visible = false
+		waiting_label.modulate.a = 1.0
 	if is_instance_valid(waiting_blur):
 		waiting_blur.visible = false
+		waiting_blur.modulate.a = 1.0
 
 func _on_dot_timer_timeout() -> void:
 	if not is_instance_valid(waiting_label):
