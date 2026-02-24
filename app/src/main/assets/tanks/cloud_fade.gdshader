@@ -39,5 +39,5 @@ void fragment() {
 	// Standard screen-space fade
 	float ramp = smoothstep(0.0, 1.0, SCREEN_UV.x) * fade_max;
 	
-	COLOR = vec4(1.0, 1.0, 1.0, cloud * ramp);
+	COLOR = vec4(0.004, 0.015, 0.18, cloud * ramp);
 }

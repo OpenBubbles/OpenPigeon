@@ -21,6 +21,7 @@ class_name TanksGame
 @onready var fire_button: CanvasItem = %FireButton
 @onready var power_slider: Slider = %PowerSlider
 @onready var power_label: RichTextLabel = %PowerLabel
+@onready var wind_indicator: WindIndicator = %WindIndicator
 
 const RULES_POPUP_SCENE := preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE := preload("res://global/settings_popup.tscn")
@@ -33,79 +34,6 @@ var _view_flipped: bool = false
 var _is_dragging_aim: bool = false
 var spectator_mode: bool = false
 const BASE_WAIT_TEXT := "WAITING FOR OPPONENT"
-
-#~~~~~~~~~~~ DEBUG ~~~~~~~~~~~~~~~~
-var _aim_probe_frames: int = 0
-const AIM_PROBE_MAX_FRAMES := 60
-var _aim_debug_draw: bool = true
-
-func _start_aim_probe() -> void:
-	_aim_probe_frames = AIM_PROBE_MAX_FRAMES
-	set_process(true)
-	
-func _process(_delta: float) -> void:
-	if _aim_probe_frames <= 0:
-		set_process(false)
-		return
-
-	_aim_probe_frames -= 1
-	_debug_dump_aim_state()
-	
-func _debug_dump_aim_state() -> void:
-	if not is_instance_valid(_aim_label):
-		print("[AIM] label invalid")
-		return
-
-	var my_tank: Tank = tank_p1 if core.player == 1 else tank_p2
-	if not is_instance_valid(my_tank):
-		print("[AIM] tank invalid")
-		return
-
-	var pivot_world: Vector2 = my_tank.barrel_pivot.global_position
-	var tip_world: Vector2 = my_tank.get_indicator_tip_global() if my_tank.has_method("get_indicator_tip_global") else my_tank.get_barrel_tip_global()
-
-	var canvas_xf: Transform2D = get_viewport().get_canvas_transform()
-	var pivot_screen: Vector2 = canvas_xf * pivot_world
-	var tip_screen: Vector2 = canvas_xf * tip_world
-
-	print("[AIM]",
-		"	frame=", str(AIM_PROBE_MAX_FRAMES - _aim_probe_frames),
-		"	player=", str(core.player),
-		"	view_flipped=", str(_view_flipped),
-		"	label_vis=", str(_aim_label.visible),
-		"	label_pos=", str(_aim_label.position),
-		"	pivotW=", str(pivot_world),
-		"	tipW=", str(tip_world),
-		"	pivotS=", str(pivot_screen),
-		"	tipS=", str(tip_screen),
-		"	world_scale=", str(world.scale),
-		"	world_pos=", str(world.position)
-	)
-	if _aim_debug_draw:
-		overlay.queue_redraw()
-
-func _draw() -> void:
-	if not _aim_debug_draw:
-		return
-	if core == null:
-		return
-
-	var my_tank: Tank = tank_p1 if core.player == 1 else tank_p2
-	if not is_instance_valid(my_tank):
-		return
-
-	var pivot_world: Vector2 = my_tank.barrel_pivot.global_position
-	var tip_world: Vector2 = my_tank.get_indicator_tip_global() if my_tank.has_method("get_indicator_tip_global") else my_tank.get_barrel_tip_global()
-
-	var canvas_xf: Transform2D = get_viewport().get_canvas_transform()
-	var pivot_screen: Vector2 = canvas_xf * pivot_world
-	var tip_screen: Vector2 = canvas_xf * tip_world
-
-	# Draw small circles in overlay/canvas space
-	draw_circle(pivot_screen, 4.0, Color(1, 1, 0, 1))
-	draw_circle(tip_screen, 4.0, Color(0, 1, 1, 1))
-	draw_line(pivot_screen, tip_screen, Color(0, 1, 0, 1), 2.0)
-#~~~~~~~~~~~ DEBUG ~~~~~~~~~~~~~~~~
 
 const HEALTH_TEX := {
 	0: preload("res://tanks/tanks_health_0.png"),
@@ -215,7 +143,6 @@ func _set_game_data(raw_text: String) -> void:
 		call_deferred("_apply_tanks_from_board", core.current_board)
 		
 	_update_aim_label_visibility()
-	_start_aim_probe()
 	
 func _apply_view_flip() -> void:
 	# Flip exactly once based on who I am
@@ -304,7 +231,7 @@ func _on_board_loaded(board: Dictionary) -> void:
 
 	var h: float = float(board.get("height", 0.0))
 	var w: float = float(board.get("wind", 0.0))
-
+	print("Wind Speed: ", w)
 	# Terrain is always built the same direction.
 	# World mirroring handles the player-2 view.
 	if is_instance_valid(terrain):
@@ -312,6 +239,10 @@ func _on_board_loaded(board: Dictionary) -> void:
 
 	if is_instance_valid(sky):
 		sky.set_wind(w)
+		
+	if is_instance_valid(wind_indicator):
+		wind_indicator.set_wind(w)
+		print("Setting Wind: ", w)
 
 	_apply_tank_colors()
 
@@ -320,7 +251,6 @@ func _on_board_loaded(board: Dictionary) -> void:
 
 	call_deferred("_apply_tanks_from_board", board)
 	call_deferred("_update_aim_label_visibility")
-	_start_aim_probe()
 
 func _apply_tanks_from_board(board: Dictionary) -> void:
 	if not is_instance_valid(terrain):

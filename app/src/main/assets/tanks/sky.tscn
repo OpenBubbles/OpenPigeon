@@ -60,7 +60,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.030600004, 0.07791003, 0.18, 1)
+color = Color(0.03137255, 0.078431375, 0.18039216, 1)
 
 [node name="Moon" type="Sprite2D" parent="." unique_id=1667784033]
 unique_name_in_owner = true

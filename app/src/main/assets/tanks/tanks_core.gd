@@ -124,7 +124,7 @@ func build_outbound_payload() -> Dictionary:
 
 	# HARDCODED TEST PAYLOAD
 	# Use this to match the exact string format of the other game instance
-	var hardcoded_replay = "board:height,55.690147&wind,0.413690&tank1x,-140.662827&tank1rot,0.000000&tank1power,1.000000&tank1hp,2&tank2x,116.385284&tank2rot,0.000000&tank2power,0.500000&tank2hp,2|shoot:1"
+	var hardcoded_replay = "board:height,0&wind,0&tank1x,-140.662827&tank1rot,90.000000&tank1power,1.000000&tank1hp,2&tank2x,116.385284&tank2rot,0.000000&tank2power,0.500000&tank2hp,2|shoot:1"
 	
 	return { "replay": hardcoded_replay }
 
