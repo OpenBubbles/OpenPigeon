@@ -122,7 +122,7 @@ func clear_my_selection() -> void:
 	_my_selection_ready = false
 	emit_signal("state_changed")
 
-func build_outbound_payload() -> Dictionary:
+func build_outbound_payload(my_avatar_str: String = "") -> Dictionary:
 	# --- ORIGINAL LOGIC COMMENTED OUT ---
 	# if current_board.is_empty():
 	# 	return {}
@@ -148,12 +148,24 @@ func build_outbound_payload() -> Dictionary:
 	# HARDCODED TEST PAYLOAD
 	var hardcoded_replay = "board:height,0&wind,0&tank1x,-140.662827&tank1rot,90.000000&tank1power,1.000000&tank1hp,2&tank2x,116.385284&tank2rot,0.000000&tank2power,0.500000&tank2hp,2|shoot:1"
 	
-	return { "replay": hardcoded_replay }
+	# Prepare the final dictionary
+	var final_payload: Dictionary = { "replay": hardcoded_replay }
+	
+	# Determine which avatar key belongs to the current player
+	var avatar_key := ("avatar1" if player == 1 else "avatar2")
+	
+	# Bundle the avatar string if it was provided
+	if my_avatar_str != "":
+		final_payload[avatar_key] = my_avatar_str
+	
+	return final_payload
 
-func request_send() -> void:
-	var payload: Dictionary = build_outbound_payload()
+func request_send(my_avatar_str: String = "") -> void:
+	var payload: Dictionary = build_outbound_payload(my_avatar_str)
+	print("RAW OUTGOING DATA: ", payload)
 	if payload.is_empty():
 		return
+		
 	emit_signal("outbound_ready", payload)
 
 func _resolve_player_identity(is_your_turn_in: bool, turn_owner_in: int) -> void:

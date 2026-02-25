@@ -12,10 +12,10 @@ var wind: float = 0.0
 @export var spread: float = 1.0
 
 # Speed tuning
-@export var base_speed_px: float = 500.0
+@export var base_speed_px: float = 100.0
 @export var min_drift_uv: float = 0.05		# baseline UV/sec drift even if wind=0
 
-@export var layer2_speed_mult: float = 1.6
+@export var layer2_speed_mult: float = 3.6
 @export var layer2_alpha_mult: float = 0.7
 @export var wind_smooth: float = 10.0		# higher = snappier, lower = smoother
 

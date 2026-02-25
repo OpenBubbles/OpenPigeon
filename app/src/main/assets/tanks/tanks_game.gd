@@ -490,7 +490,11 @@ func _on_send_pressed() -> void:
 	fire_button.modulate.a = 0
 	power_slider.editable = false
 	_is_dragging_aim = false
-	core.request_send()
+	var avatar_data_to_send := ""
+	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
+		avatar_data_to_send = player_avatar_display.get_avatar_data_string()
+	
+	core.request_send(avatar_data_to_send)
 	play_sent_animation()
 
 func _send_payload(payload: Dictionary) -> void:

@@ -93,7 +93,7 @@ z_index = 4
 
 [node name="CloudLayer1" type="Sprite2D" parent="Clouds" unique_id=938427640]
 unique_name_in_owner = true
-z_index = 2
+z_index = 4
 texture_repeat = 2
 material = SubResource("ShaderMaterial_mxqg2")
 position = Vector2(-3, -4)
@@ -102,7 +102,7 @@ centered = false
 
 [node name="CloudLayer2" type="Sprite2D" parent="Clouds" unique_id=308410752]
 unique_name_in_owner = true
-z_index = 2
+z_index = 5
 texture_repeat = 2
 material = SubResource("ShaderMaterial_jhx0d")
 texture = SubResource("NoiseTexture2D_fys4t")
