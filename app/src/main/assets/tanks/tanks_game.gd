@@ -33,6 +33,7 @@ var dot_count: int = 0
 var _view_flipped: bool = false
 var _is_dragging_aim: bool = false
 var spectator_mode: bool = false
+var can_interact: bool = true
 const BASE_WAIT_TEXT := "WAITING FOR OPPONENT"
 
 const HEALTH_TEX := {
@@ -55,6 +56,7 @@ func _ready() -> void:
 	core.board_loaded.connect(_on_board_loaded)
 	core.replay_action.connect(_on_replay_action)
 	core.outbound_ready.connect(_send_payload)
+	core.opponent_avatar_ready.connect(_on_opponent_avatar_received)
 
 	if is_instance_valid(rules_button):
 		rules_button.pressed.connect(_on_rules_pressed)
@@ -62,6 +64,8 @@ func _ready() -> void:
 		settings_button.pressed.connect(_on_settings_pressed)
 	if is_instance_valid(fire_button):
 		fire_button.pressed.connect(_on_send_pressed)
+		fire_button.button_down.connect(_on_fire_button_down)
+		fire_button.button_up.connect(_on_fire_button_up)
 	if is_instance_valid(dot_timer):
 		dot_timer.timeout.connect(_on_dot_timer_timeout)
 	if is_instance_valid(power_slider):
@@ -87,14 +91,11 @@ func _setup_aim_label() -> void:
 	_aim_label.visible = false
 	_aim_label.z_index = 1000
 	_aim_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	# Keep it immune from any Control containers
 	_aim_label.set_as_top_level(true)
 
 	if is_instance_valid(aim_layer):
 		aim_layer.add_child(_aim_label)
 	elif is_instance_valid(overlay):
-		# Fallback, but AimLayer should exist
 		overlay.add_child(_aim_label)
 
 func _connect_app_plugin_or_dev() -> void:
@@ -111,7 +112,7 @@ func _connect_app_plugin_or_dev() -> void:
 			"player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb",
 			"player": "1",
 			"isYourTurn": true,
-			"avatar1": "",
+			"avatar1": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657",
 			"avatar2": "",
 			"replay": "board:height,55.690147&wind,0.413690&tank1x,-140.662827&tank1rot,0.000000&tank1power,1.000000&tank1hp,2&tank2x,116.385284&tank2rot,0.000000&tank2power,0.500000&tank2hp,2"
 		})
@@ -122,7 +123,7 @@ func _connect_app_plugin_or_dev() -> void:
 			#"player": "1",
 			#"isYourTurn": true,
 			#"avatar1": "",
-			#"avatar2": "",
+			#"avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657",
 			#"replay": "board:height,55.690147&wind,0.413690&tank1x,-140.662827&tank1rot,0.000000&tank1power,1.000000&tank1hp,2&tank2x,116.385284&tank2rot,0.000000&tank2power,0.500000&tank2hp,2"
 		#})
 		_set_game_data(dev)
@@ -145,7 +146,6 @@ func _set_game_data(raw_text: String) -> void:
 	_update_aim_label_visibility()
 	
 func _apply_view_flip() -> void:
-	# Flip exactly once based on who I am
 	_view_flipped = (core.player == 2)
 
 	if not is_instance_valid(world):
@@ -153,7 +153,6 @@ func _apply_view_flip() -> void:
 
 	var vp_w: float = get_viewport().get_visible_rect().size.x
 
-	# Mirror World only, do not mirror Overlay
 	if _view_flipped:
 		world.scale = Vector2(-1, 1)
 		world.position = Vector2(vp_w, 0.0)
@@ -161,15 +160,18 @@ func _apply_view_flip() -> void:
 		world.scale = Vector2(1, 1)
 		world.position = Vector2(0.0, 0.0)
 
-	# After world flip changes, re-apply which tank is visually mirrored
 	_apply_tank_facing(_view_flipped)
 
-	# Keep label correct if it is currently visible
 	_update_aim_label_visibility()
 
 func _on_resized() -> void:
 	if is_instance_valid(sky):
 		sky.set_view_size(size)
+		
+func _on_opponent_avatar_received(avatar_data: Dictionary) -> void:
+	if is_instance_valid(opp_avatar_display):
+		if opp_avatar_display.has_method("update_avatar_from_data"):
+			opp_avatar_display.update_avatar_from_data(avatar_data)
 
 func _apply_health_colors() -> void:
 	if not is_instance_valid(player_health) or not is_instance_valid(opp_health):
@@ -181,14 +183,12 @@ func _apply_health_colors() -> void:
 	player_health.self_modulate = my_color
 	opp_health.self_modulate = opp_color
 
-	# Match FireButton to MY color (same as PlayerHealth)
 	_apply_fire_button_color(my_color)
 	
 func _apply_fire_button_color(c: Color) -> void:
 	if not is_instance_valid(fire_button):
 		return
 
-	# Works for Button/TextureRect/etc
 	fire_button.self_modulate = c
 	
 func _visual_deg_to_data_deg(visual_deg: float) -> float:
@@ -196,6 +196,14 @@ func _visual_deg_to_data_deg(visual_deg: float) -> float:
 	if _view_flipped:
 		return 180.0 - visual_deg
 	return visual_deg
+	
+func _on_fire_button_down() -> void:
+	if is_instance_valid(fire_button):
+		fire_button.self_modulate = fire_button.self_modulate.darkened(0.2)
+
+func _on_fire_button_up() -> void:
+	var my_color: Color = TANK1_COLOR if core.player == 1 else TANK2_COLOR
+	_apply_fire_button_color(my_color)
 
 func _data_deg_to_visual_deg(data_deg: float) -> float:
 	data_deg = clamp(data_deg, 0.0, 180.0)
@@ -232,8 +240,6 @@ func _on_board_loaded(board: Dictionary) -> void:
 	var h: float = float(board.get("height", 0.0))
 	var w: float = float(board.get("wind", 0.0))
 	print("Wind Speed: ", w)
-	# Terrain is always built the same direction.
-	# World mirroring handles the player-2 view.
 	if is_instance_valid(terrain):
 		terrain.apply_board(h, false)
 
@@ -246,7 +252,6 @@ func _on_board_loaded(board: Dictionary) -> void:
 
 	_apply_tank_colors()
 
-	# Make sure the correct single tank is visually flipped
 	_apply_tank_facing(_view_flipped)
 
 	call_deferred("_apply_tanks_from_board", board)
@@ -264,8 +269,6 @@ func _apply_tanks_from_board(board: Dictionary) -> void:
 	var world_w: float = terrain.get_world_width()
 	var cx: float = world_w * 0.5
 
-	# Positions are always in the terrain’s base coordinate system.
-	# World mirroring handles what player 2 sees.
 	var x1: float = cx + tank1x
 	var x2: float = cx + tank2x
 
@@ -278,7 +281,6 @@ func _apply_tanks_from_board(board: Dictionary) -> void:
 	tank_p1.position = Vector2(x1, y1 - off1)
 	tank_p2.position = Vector2(x2, y2 - off2)
 
-	# Board rotations are radians in Godot space (0 right, -pi/2 up, pi left)
 	var r1: float = float(board.get("tank1rot", 0.0))
 	var r2: float = float(board.get("tank2rot", 0.0))
 
@@ -291,7 +293,6 @@ func _apply_tanks_from_board(board: Dictionary) -> void:
 	tank_p1.z_index = 20
 	tank_p2.z_index = 20
 
-	# Apply single-tank facing after placement
 	_apply_tank_facing(_view_flipped)
 
 	_update_aim_label_position()
@@ -302,12 +303,10 @@ func _apply_tanks_from_board(board: Dictionary) -> void:
 	tank_p1.set_power(p1_power)
 	tank_p2.set_power(p2_power)
 	
-	# --- NEW: Sync Slider and Core on Load ---
 	var my_power = p1_power if core.player == 1 else p2_power
 	if is_instance_valid(power_slider):
 		power_slider.value = my_power * 100.0
 	
-	# Sync the core internal state so 'Send' works immediately
 	var my_tank = tank_p1 if core.player == 1 else tank_p2
 	core.set_my_aim(my_tank.barrel_pivot.rotation, my_power)
 	
@@ -316,32 +315,24 @@ func _apply_tanks_from_board(board: Dictionary) -> void:
 	_update_aim_label_visibility()
 	
 func _display_deg_from_godot_rad(godot_rad: float) -> float:
-	# Godot rad: 0 right, -pi/2 up, pi left
-	# Convert to VISUAL deg: 0 right..180 left
 	var visual_deg: float = -rad_to_deg(godot_rad)
 	visual_deg = fposmod(visual_deg, 360.0)
 	if visual_deg > 180.0:
 		visual_deg = 360.0 - visual_deg
 	visual_deg = clamp(visual_deg, 0.0, 180.0)
 
-	# Return DATA deg for UI/serialization (swap ends if view flipped)
 	return _visual_deg_to_data_deg(visual_deg)
 	
 func _apply_tank_facing(_flip_view: bool) -> void:
 	if not is_instance_valid(tank_p1) or not is_instance_valid(tank_p2):
 		return
 
-	# Reset scales to absolute values first
 	tank_p1.body.scale.x = abs(tank_p1.body.scale.x)
 	tank_p2.body.scale.x = abs(tank_p2.body.scale.x)
 
 	tank_p1.barrel_sprite.scale.y = abs(tank_p1.barrel_sprite.scale.y)
 	tank_p2.barrel_sprite.scale.y = abs(tank_p2.barrel_sprite.scale.y)
 
-	# Tank 1 is naturally on the left, so it faces Right (+1 local scale)
-	# (No changes needed since we used abs() above)
-	
-	# Tank 2 is naturally on the right, so it faces Left (-1 local scale)
 	tank_p2.body.scale.x = -tank_p2.body.scale.x
 	tank_p2.barrel_sprite.scale.y = -tank_p2.barrel_sprite.scale.y
 	
@@ -351,11 +342,9 @@ func _update_aim_label_visibility() -> void:
 
 	_aim_label.visible = (core.is_my_turn and not core.spectator_mode)
 
-	# If we’re not showing it, nothing to position
 	if not _aim_label.visible:
 		return
 
-	# One-frame defer so Tank + IndicatorTip globals are valid
 	call_deferred("_update_aim_label_position")
 	
 func _update_aim_label_position() -> void:
@@ -368,7 +357,6 @@ func _update_aim_label_position() -> void:
 	if not is_instance_valid(my_tank):
 		return
 
-	# --- FIX: Account for the power indicator tip instead of just the barrel tip ---
 	var tip_world: Vector2 = my_tank.get_indicator_tip_global() if my_tank.has_method("get_indicator_tip_global") else my_tank.get_barrel_tip_global()
 	var pivot_world: Vector2 = my_tank.barrel_pivot.global_position
 
@@ -398,19 +386,15 @@ func _on_power_slider_changed(value: float) -> void:
 	var power_val = int(value)
 	power_label.text = "Power: " + str(power_val)
 	
-	# Update Core so the data is ready for outbound payload
 	var rot_rad := my_tank.barrel_pivot.rotation 
 	core.set_my_aim(rot_rad, p_01)
 	
-	# Keep the label attached to the moving tip
 	_update_aim_label_position()
 	
 func _unhandled_input(event: InputEvent) -> void:
-	if core == null:
+	if core == null or core.spectator_mode or not core.is_my_turn or not can_interact:
 		return
-	if core.spectator_mode:
-		return
-	if not core.is_my_turn:
+	if fire_button.modulate.a == 0:
 		return
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -432,7 +416,6 @@ func _handle_aim_at_screen_pos(screen_pos: Vector2) -> void:
 	if not is_instance_valid(my_tank):
 		return
 
-	# Work entirely in SCREEN space. World is already mirrored visually when _view_flipped.
 	var pivot_world: Vector2 = my_tank.barrel_pivot.global_position
 	var pivot_screen: Vector2 = get_viewport().get_canvas_transform() * pivot_world
 
@@ -440,12 +423,9 @@ func _handle_aim_at_screen_pos(screen_pos: Vector2) -> void:
 	if v.length() < 1.0:
 		return
 
-	# --- THE FIX: Invert X when the world is flipped to match screen drag ---
 	if _view_flipped:
 		v.x = -v.x
 
-	# Restriction: below pivot does nothing,
-	# but allow finishing to 0/180 if already close to an end.
 	if v.y > 0.0:
 		var end_visual: float = 0.0 if v.x >= 0.0 else 180.0
 		const END_SNAP_DEG := 25.0
@@ -454,7 +434,6 @@ func _handle_aim_at_screen_pos(screen_pos: Vector2) -> void:
 			_update_aim_label_position()
 		return
 
-	# v.angle(): 0 right, -90 up, 180 left
 	var visual_deg: float = -rad_to_deg(v.angle())
 	visual_deg = fposmod(visual_deg, 360.0)
 	if visual_deg > 180.0:
@@ -482,7 +461,6 @@ func _handle_aim_click() -> void:
 	if _view_flipped:
 		v.x = -v.x
 
-	# v.angle(): 0 right, -90 up, 180 left
 	var display_deg: float = -rad_to_deg(v.angle())
 	display_deg = fposmod(display_deg, 360.0)
 	if display_deg > 180.0:
@@ -499,12 +477,19 @@ func _on_replay_action(_action: Dictionary) -> void:
 func _on_turn_changed(v: bool) -> void:
 	if v:
 		stop_waiting_animation()
+		fire_button.modulate.a = 1
+		power_slider.editable = true
 	else:
 		start_waiting_animation()
+		fire_button.modulate.a = 0
+		power_slider.editable = false
 	_update_aim_label_visibility()
 
 func _on_send_pressed() -> void:
 	print("Fire Button Pressed!")
+	fire_button.modulate.a = 0
+	power_slider.editable = false
+	_is_dragging_aim = false
 	core.request_send()
 	play_sent_animation()
 
@@ -517,11 +502,13 @@ func _on_rules_pressed() -> void:
 	var popup := RULES_POPUP_SCENE.instantiate()
 	var dim := _make_dim()
 	popup.z_index = 1000
+	can_interact = false
 	get_tree().root.add_child(dim)
 	get_tree().root.add_child(popup)
 	(popup as Node).tree_exited.connect(func():
 		if is_instance_valid(dim):
 			dim.queue_free()
+		can_interact = true
 	)
 	if popup.has_method("open"):
 		popup.open("How to Play Tanks", _rules_text())
@@ -531,7 +518,7 @@ func _on_settings_pressed() -> void:
 		return
 
 	await _pop_button(settings_button)
-
+	can_interact = false
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.5)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -563,6 +550,7 @@ func _on_settings_pressed() -> void:
 		settings_popup.closed.connect(func():
 			if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("update_display_from_settings"):
 				player_avatar_display.update_display_from_settings()
+			can_interact = true
 		)
 		settings_popup.settings_theme_selected.connect(_on_theme_changed)
 
@@ -603,6 +591,7 @@ func _make_dim() -> ColorRect:
 	dim.color = Color(0, 0, 0, 0.5)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dim.z_index = 99
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	return dim
 
 func _rules_text() -> String:
@@ -661,16 +650,10 @@ func _update_avatars() -> void:
 		return
 
 	var my_key := ("avatar1" if core.player == 1 else "avatar2")
-	var opp_key := ("avatar2" if core.player == 1 else "avatar1")
-
 	var my_str := (core.avatar1_str if my_key == "avatar1" else core.avatar2_str)
-	var opp_str := (core.avatar2_str if opp_key == "avatar2" else core.avatar1_str)
-
+	
 	if player_avatar_display.has_method("update_avatar_from_string") and my_str != "":
-		player_avatar_display.call_deferred("update_avatar_from_string", my_str)
-
-	if opp_avatar_display.has_method("update_avatar_from_string") and opp_str != "":
-		opp_avatar_display.call_deferred("update_avatar_from_string", opp_str)
+		player_avatar_display.update_avatar_from_string(my_str)
 
 func start_waiting_animation():
 	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):

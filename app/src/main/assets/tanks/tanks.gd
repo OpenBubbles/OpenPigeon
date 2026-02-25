@@ -18,7 +18,6 @@ class_name Tank
 var _display_deg: float = 0.0
 
 func _ready() -> void:
-	# Let the Godot Editor handle the hierarchy and positioning!
 	set_player_color(player_color)
 	set_barrel_display_deg(0.0)
 
@@ -40,19 +39,15 @@ func set_power(power_val: float) -> void:
 func set_barrel_display_deg(display_deg: float) -> void:
 	_display_deg = clamp(display_deg, min_display_deg, max_display_deg)
 
-	# Display: 0 right, 90 up, 180 left
-	# Godot rotation_degrees: 0 right, -90 up, 180 left
 	barrel_pivot.rotation_degrees = (-_display_deg) + art_zero_offset_deg
 
 func get_barrel_display_deg() -> float:
 	return _display_deg
 	
 func get_indicator_tip_global() -> Vector2:
-	# Explicitly treat the node as a PowerIndicator script
 	var pi = power_indicator as PowerIndicator
 	
 	if is_instance_valid(pi) and pi.current_power > 0.01:
-		# Now Godot knows for sure this function exists
 		return pi.get_tip_global_position()
 		
 	if is_instance_valid(barrel_tip):
@@ -62,7 +57,6 @@ func get_indicator_tip_global() -> Vector2:
 func get_barrel_tip_global() -> Vector2:
 	if is_instance_valid(barrel_tip):
 		return barrel_tip.global_position
-	# Fallback just in case
 	return barrel_pivot.global_position
 
 func get_bottom_offset_px() -> float:

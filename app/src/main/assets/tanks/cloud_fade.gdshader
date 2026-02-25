@@ -19,7 +19,7 @@ void fragment() {
 	uv.x *= max(spread, 0.001);
 	
 	// INCREDIBLE SPEED: Moving the X-coordinate fast
-	uv.x += TIME * uv_speed;
+	uv.x -= TIME * uv_speed;
 
 	// High-frequency vertical vibration (simulates extreme wind turbulence)
 	float whip = sin(TIME * whip_speed) * whip_strength * wind_abs;
@@ -37,7 +37,7 @@ void fragment() {
 	cloud = pow(cloud, 0.8); 
 
 	// Standard screen-space fade
-	float ramp = smoothstep(0.0, 1.0, SCREEN_UV.x) * fade_max;
+	float ramp = fade_max;
 	
-	COLOR = vec4(0.004, 0.015, 0.18, cloud * ramp);
+	COLOR = vec4(0.004, 0.015, 0.07, cloud * ramp);
 }
