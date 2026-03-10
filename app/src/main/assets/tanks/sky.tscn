@@ -80,6 +80,7 @@ scale = Vector2(0.35, 0.3)
 texture = ExtResource("3_riuxi")
 
 [node name="Mountains" type="TextureRect" parent="." unique_id=1431328235]
+unique_name_in_owner = true
 z_index = 3
 offset_left = -519.0
 offset_top = 285.0

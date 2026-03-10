@@ -310,6 +310,7 @@ stretch_mode = 5
 [node name="CenterContainer" type="CenterContainer" parent="MarginContainer/Overlay" unique_id=470694506]
 layout_mode = 2
 size_flags_vertical = 3
+mouse_filter = 2
 
 [node name="BottomItemHBoxContainer" type="HBoxContainer" parent="MarginContainer/Overlay" unique_id=339762347]
 custom_minimum_size = Vector2(0, 80)

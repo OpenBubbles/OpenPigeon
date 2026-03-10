@@ -6,11 +6,13 @@ signal state_changed
 signal board_loaded(board: Dictionary)
 signal replay_action(action: Dictionary)
 signal turn_changed(is_my_turn: bool)
+signal replay_true(has_replay: bool)
 signal outbound_ready(payload: Dictionary)
 
 var player: int = 1
 var spectator_mode: bool = false
 var is_my_turn: bool = false
+var has_replay: bool = false
 var is_your_turn: bool = false
 var turn_owner: int = 1
 
@@ -75,6 +77,8 @@ func ingest_game_data(raw_text: String) -> void:
 	current_board = _find_last_board(steps)
 
 	is_my_turn = is_your_turn
+	has_replay = replay_raw.contains("shoot:1")
+	emit_signal("replay_true", has_replay)
 	emit_signal("turn_changed", is_my_turn)
 	emit_signal("state_changed")
 
@@ -122,44 +126,73 @@ func clear_my_selection() -> void:
 	_my_selection_ready = false
 	emit_signal("state_changed")
 
-func build_outbound_payload(my_avatar_str: String = "") -> Dictionary:
-	# --- ORIGINAL LOGIC COMMENTED OUT ---
-	# if current_board.is_empty():
-	# 	return {}
-	#
-	# var out_board: Dictionary = current_board.duplicate(true)
-	#
-	# if player == 1:
-	# 	out_board["tank1rot"] = _my_rot
-	# 	out_board["tank1power"] = _my_power
-	# else:
-	# 	out_board["tank2rot"] = _my_rot
-	# 	out_board["tank2power"] = _my_power
-	#
-	# var parts: Array[String] = []
-	# parts.append("board:" + _compose_board_kv(out_board))
-	#
-	# if _my_selection_ready:
-	# 	parts.append("shoot:1")
-	#
-	# var replay_out: String = String("|").join(parts)
-	# ---------------------------------------
+# Toggle this to true when you want to bypass live data
+var use_hardcoded_test: bool = false 
 
-	# HARDCODED TEST PAYLOAD
-	var hardcoded_replay = "board:height,0&wind,0&tank1x,-140.662827&tank1rot,90.000000&tank1power,1.000000&tank1hp,2&tank2x,116.385284&tank2rot,0.000000&tank2power,0.500000&tank2hp,2|shoot:1"
+func build_outbound_payload(my_avatar_str: String = "") -> Dictionary:
+	if current_board.is_empty() and not use_hardcoded_test:
+		return {}
 	
-	# Prepare the final dictionary
-	var final_payload: Dictionary = { "replay": hardcoded_replay }
-	
-	# Determine which avatar key belongs to the current player
+	var final_payload: Dictionary = {}
+	var replay_string: String = ""
+
+	if use_hardcoded_test:
+		replay_string = "board:height,0&wind,0&tank1x,-140.662827&tank1rot,090.000000&tank1power,1.000000&tank1hp,2&tank2x,116.385284&tank2rot,90.000000&tank2power,0.500000&tank2hp,2|shoot:1"
+	else:
+		var out_board: Dictionary = current_board.duplicate(true)
+		
+		# --- RADIANS CALCULATION ---
+		var send_rot: float = _my_rot
+		
+		# If Player 2, we mirror the local rotation horizontally 
+		# before sending so the opponent sees the correct arc.
+		if player == 2:
+			# Mirroring across the vertical axis in Godot space
+			send_rot = -PI - send_rot
+			
+		# Normalize to ensure we are in the -2PI to 2PI range
+		send_rot = fposmod(send_rot + PI, TAU) - PI
+		# ---------------------------
+
+		if player == 1:
+			out_board["tank1rot"] = send_rot
+			out_board["tank1power"] = _my_power
+		else:
+			out_board["tank2rot"] = send_rot
+			out_board["tank2power"] = _my_power
+		
+		var parts: Array[String] = []
+		parts.append("board:" + _compose_board_kv(out_board))
+		
+		if _my_selection_ready:
+			parts.append("shoot:1")
+		
+		replay_string = String("|").join(parts)
+
+	final_payload["replay"] = replay_string
 	var avatar_key := ("avatar1" if player == 1 else "avatar2")
-	
-	# Bundle the avatar string if it was provided
 	if my_avatar_str != "":
 		final_payload[avatar_key] = my_avatar_str
 	
 	return final_payload
-
+	
+func _get_data_deg_for_send(rads: float) -> float:
+	# 1. Convert Radians to Degrees
+	var deg = rad_to_deg(rads)
+	
+	# 2. Normalize to a 0-180 arc (the "Visual Degree")
+	var visual_deg = fmod(abs(deg), 360.0)
+	if visual_deg > 180.0:
+		visual_deg = 360.0 - visual_deg
+	
+	# 3. Handle Player 2 Flip:
+	# If Player 2 aims at 45° (inward), they must send 135° so 
+	# Player 1 sees them aiming inward from the other side.
+	if player == 2:
+		return 180.0 - visual_deg
+		
+	return visual_deg
+	
 func request_send(my_avatar_str: String = "") -> void:
 	var payload: Dictionary = build_outbound_payload(my_avatar_str)
 	print("RAW OUTGOING DATA: ", payload)

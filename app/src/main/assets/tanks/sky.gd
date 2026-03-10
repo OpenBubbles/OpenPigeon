@@ -4,8 +4,10 @@ class_name TanksSky
 @onready var bg: ColorRect = %Background
 @onready var c1: Sprite2D = %CloudLayer1
 @onready var c2: Sprite2D = %CloudLayer2
+@onready var mountains: TextureRect = %Mountains
 
 var wind: float = 0.0
+var terrain_base_y: float = 0.0
 
 @export var max_alpha: float = 0.75
 @export var density: float = 1.0
@@ -58,6 +60,23 @@ func _apply_viewport() -> void:
 
 	_setup_cloud(c1)
 	_setup_cloud(c2)
+
+func set_terrain_height(y: float) -> void:
+	terrain_base_y = y
+	_anchor_mountains_to_terrain()
+
+func _anchor_mountains_to_terrain() -> void:
+	if not is_instance_valid(mountains):
+		return
+	
+	mountains.size.x = _vp_size.x
+	
+	# If terrain_base_y hasn't been set yet, default to screen bottom
+	var target_y = terrain_base_y if terrain_base_y > 0 else _vp_size.y
+	
+	# Align the BOTTOM of the mountain texture with the terrain's base_y
+	mountains.global_position.y = target_y - mountains.size.y
+	mountains.global_position.x = 0
 
 func _setup_cloud(s: Sprite2D) -> void:
 	if not is_instance_valid(s) or s.texture == null:
