@@ -358,9 +358,9 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		# Tiny lane-based X offset so it still feels like it came from that lane
 		var lane_x_offset: float = 0.0
 		if g._player_lane == ActionButton3D.Lane.LEFT:
-			lane_x_offset = 0.12
-		elif g._player_lane == ActionButton3D.Lane.RIGHT:
 			lane_x_offset = -0.12
+		elif g._player_lane == ActionButton3D.Lane.RIGHT:
+			lane_x_offset = 0.12
 
 		cam_target.x += lane_x_offset
 		enemy_target_world = cam_target
