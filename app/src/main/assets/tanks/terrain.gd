@@ -28,6 +28,12 @@ var world_width: float = 1024.0
 var world_height: float = 576.0
 var base_y: float = 380.0
 
+const BOARD_X_MIN := -187.0
+const BOARD_X_MAX := 187.0
+const BOARD_X_WIDTH := BOARD_X_MAX - BOARD_X_MIN
+
+@export var tower_width_units: float = 70.0
+
 var _trans_left: float = 0.0
 var _trans_right: float = 0.0
 var _y_high: float = 0.0
@@ -73,9 +79,11 @@ func _rebuild() -> void:
 
 	var tower_center_x: float = world_width * 0.5
 
+	_apply_tower_scale()
+
 	var tower_half_w: float = 60.0
 	if is_instance_valid(tower) and tower.texture != null:
-		tower_half_w = (float(tower.texture.get_width()) * tower.scale.x) * 0.5
+		tower_half_w = (float(tower.texture.get_width()) * abs(tower.scale.x)) * 0.5
 
 	var tower_left_edge_x: float = tower_center_x - tower_half_w - tower_edge_pad
 
@@ -130,6 +138,7 @@ func _rebuild() -> void:
 			edge.points = top
 
 	_place_tower_centered(tower_center_x, y_high)
+	print("Tower target width px: ", get_tower_target_width_px(), " | actual: ", get_tower_width_px(), " | pixels/unit: ", get_pixels_per_board_unit())
 
 func _place_tower_centered(tower_center_x: float, y_high: float) -> void:
 	if not is_instance_valid(tower_root) or not is_instance_valid(tower):
@@ -182,3 +191,29 @@ func _mirror_pts(pts: PackedVector2Array, w: float) -> PackedVector2Array:
 	for p in pts:
 		out.append(Vector2(w - p.x, p.y))
 	return out
+
+func get_pixels_per_board_unit() -> float:
+	return world_width / BOARD_X_WIDTH
+
+func get_tower_target_width_px() -> float:
+	return tower_width_units * get_pixels_per_board_unit()
+
+func _apply_tower_scale() -> void:
+	if not is_instance_valid(tower) or tower.texture == null:
+		return
+	
+	var tex_w: float = float(tower.texture.get_width())
+	if tex_w <= 0.0:
+		return
+	
+	var sign_x: float = -1.0 if tower.scale.x < 0.0 else 1.0
+	var sign_y: float = -1.0 if tower.scale.y < 0.0 else 1.0
+	var uniform_scale: float = get_tower_target_width_px() / tex_w
+	
+	tower.scale = Vector2(sign_x * uniform_scale, sign_y * uniform_scale)
+
+func get_tower_width_px() -> float:
+	if not is_instance_valid(tower) or tower.texture == null:
+		return 0.0
+	
+	return float(tower.texture.get_width()) * abs(tower.scale.x)

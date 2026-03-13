@@ -59,6 +59,39 @@ func get_barrel_tip_global() -> Vector2:
 		return barrel_tip.global_position
 	return barrel_pivot.global_position
 
+func get_body_width_px() -> float:
+	if not is_instance_valid(body) or body.texture == null:
+		return 0.0
+	
+	var tex_w: float = float(body.texture.get_width())
+	var eff_scale_x: float = abs(scale.x * body.scale.x)
+	return tex_w * eff_scale_x
+
+func fit_body_width_px(target_width_px: float) -> void:
+	if not is_instance_valid(body) or body.texture == null:
+		return
+	
+	var tex_w: float = float(body.texture.get_width())
+	if tex_w <= 0.0:
+		return
+	
+	var sign_x := -1.0 if body.scale.x < 0.0 else 1.0
+	body.scale.x = sign_x * (target_width_px / tex_w)
+	
+func fit_visual_width_px(target_width_px: float) -> void:
+	if not is_instance_valid(body) or body.texture == null:
+		return
+	
+	var tex_w: float = float(body.texture.get_width())
+	if tex_w <= 0.0:
+		return
+	
+	var sign_x := -1.0 if scale.x < 0.0 else 1.0
+	var sign_y := -1.0 if scale.y < 0.0 else 1.0
+	var uniform_scale := target_width_px / tex_w
+	
+	scale = Vector2(sign_x * uniform_scale, sign_y * uniform_scale)
+
 func get_bottom_offset_px() -> float:
 	if not is_instance_valid(body) or body.texture == null:
 		return 0.0

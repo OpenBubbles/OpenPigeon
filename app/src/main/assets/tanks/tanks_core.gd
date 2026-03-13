@@ -8,6 +8,10 @@ signal replay_action(action: Dictionary)
 signal turn_changed(is_my_turn: bool)
 signal replay_true(has_replay: bool)
 signal outbound_ready(payload: Dictionary)
+signal outbound_edit_requested(payload: Dictionary)
+
+var allow_outbound_edit: bool = false
+var _pending_outbound_payload: Dictionary = {}
 
 var player: int = 1
 var spectator_mode: bool = false
@@ -198,7 +202,41 @@ func request_send(my_avatar_str: String = "") -> void:
 	print("RAW OUTGOING DATA: ", payload)
 	if payload.is_empty():
 		return
-		
+
+	var safe_payload: Dictionary = payload.duplicate(true)
+
+	if allow_outbound_edit:
+		_pending_outbound_payload = safe_payload
+		emit_signal("outbound_edit_requested", _pending_outbound_payload.duplicate(true))
+		return
+
+	_emit_outbound_ready_deferred(safe_payload)
+	
+func send_modified_payload(modified_payload: Dictionary = {}) -> void:
+	var final_payload: Dictionary = {}
+
+	if not modified_payload.is_empty():
+		final_payload = modified_payload.duplicate(true)
+	elif not _pending_outbound_payload.is_empty():
+		final_payload = _pending_outbound_payload.duplicate(true)
+
+	_pending_outbound_payload.clear()
+
+	if final_payload.is_empty():
+		print("send_modified_payload: no payload to send")
+		return
+
+	print("FINAL OUTGOING DATA: ", final_payload)
+	_emit_outbound_ready_deferred(final_payload)
+	
+func cancel_pending_payload() -> void:
+	_pending_outbound_payload.clear()
+	
+func _emit_outbound_ready_deferred(payload: Dictionary) -> void:
+	var safe_payload: Dictionary = payload.duplicate(true)
+	call_deferred("_deferred_emit_outbound_ready", safe_payload)
+
+func _deferred_emit_outbound_ready(payload: Dictionary) -> void:
 	emit_signal("outbound_ready", payload)
 
 func _resolve_player_identity(is_your_turn_in: bool, turn_owner_in: int) -> void:

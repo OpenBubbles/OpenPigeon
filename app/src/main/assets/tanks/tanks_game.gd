@@ -47,6 +47,19 @@ const HEALTH_TEX := {
 const TANK1_COLOR := Color(0.25, 0.55, 1.0, 1.0) # Blue
 const TANK2_COLOR := Color(1.0, 0.25, 0.25, 1.0) # Red
 
+const BOARD_X_MIN := -187.0
+const BOARD_X_MAX := 187.0
+const BOARD_X_WIDTH := BOARD_X_MAX - BOARD_X_MIN # 374.0
+
+const TANK_WIDTH_UNITS := 25.0
+const TANK_HALF_WIDTH_UNITS := TANK_WIDTH_UNITS * 0.5
+
+func _game_x_to_screen_x(game_x: float) -> float:
+	if not is_instance_valid(terrain):
+		return game_x
+	
+	return remap(game_x, BOARD_X_MIN, BOARD_X_MAX, 0.0, terrain.get_world_width())
+
 var _aim_label: Label
 
 func _ready() -> void:
@@ -76,6 +89,10 @@ func _ready() -> void:
 	_on_resized()
 	
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	_apply_tank_size()
+	_apply_tank_colors()
+	_debug_tank_sizes()
 
 	_apply_health_colors()
 	_set_health_tex(player_health, 3)
@@ -99,6 +116,29 @@ func _ready() -> void:
 	power_slider.editable = false
 
 	_connect_app_plugin_or_dev()
+
+func _get_pixels_per_board_unit() -> float:
+	if not is_instance_valid(terrain):
+		return 1.0
+	
+	return terrain.get_world_width() / BOARD_X_WIDTH
+
+func _get_target_tank_width_screen_px() -> float:
+	return TANK_WIDTH_UNITS * _get_pixels_per_board_unit()
+
+func _apply_tank_size() -> void:
+	var target_width_px := _get_target_tank_width_screen_px()
+	
+	if is_instance_valid(tank_p1):
+		tank_p1.fit_visual_width_px(target_width_px)
+	if is_instance_valid(tank_p2):
+		tank_p2.fit_visual_width_px(target_width_px)
+	
+func _screen_x_to_game_x(screen_x: float) -> float:
+	if not is_instance_valid(terrain):
+		return screen_x
+	
+	return remap(screen_x, 0.0, terrain.get_world_width(), BOARD_X_MIN, BOARD_X_MAX)
 
 func _setup_aim_label() -> void:
 	_aim_label = Label.new()
@@ -276,21 +316,31 @@ func _on_board_loaded(board: Dictionary) -> void:
 	
 	if is_instance_valid(sky):
 		sky.set_terrain_height(terrain.base_y)
+		
+func _debug_tank_sizes() -> void:
+	var ppu := _get_pixels_per_board_unit()
+	var tank_w := _get_target_tank_width_screen_px()
+	print("Pixels per board unit: ", ppu)
+	print("Target tank width screen px: ", tank_w)
+	
+	if is_instance_valid(tank_p1):
+		print("Tank P1 width px: ", tank_p1.get_body_width_px())
+	if is_instance_valid(tank_p2):
+		print("Tank P2 width px: ", tank_p2.get_body_width_px())
 
 func _apply_tanks_from_board(board: Dictionary) -> void:
 	if not is_instance_valid(terrain):
 		return
 	if not is_instance_valid(tank_p1) or not is_instance_valid(tank_p2):
 		return
+		
+	_apply_tank_size()
 
 	var tank1x: float = float(board.get("tank1x", 0.0))
 	var tank2x: float = float(board.get("tank2x", 0.0))
 
-	var world_w: float = terrain.get_world_width()
-	var cx: float = world_w * 0.5
-
-	var x1: float = cx + tank1x
-	var x2: float = cx + tank2x
+	var x1: float = _game_x_to_screen_x(tank1x)
+	var x2: float = _game_x_to_screen_x(tank2x)
 
 	var y1: float = terrain.get_surface_y_at_screen_x(x1)
 	var y2: float = terrain.get_surface_y_at_screen_x(x2)
@@ -520,7 +570,7 @@ func _on_turn_changed(v: bool) -> void:
 		_set_ui_visible(true)
 	else:
 		start_waiting_animation()
-		_set_ui_visible(false)
+		await _set_ui_visible(false)
 	_update_aim_label_visibility()
 
 #func _on_send_pressed() -> void:
@@ -557,10 +607,22 @@ func _on_turn_changed(v: bool) -> void:
 	#_is_playing_round = false
 	## can_interact remains false because we are now waiting for opponent
 
-func _send_payload(payload: Dictionary) -> void:
+func _send_payload(payload: Dictionary) -> bool:
+	print(">>> _send_payload CALLED")
+	print(">>> PAYLOAD: ", payload)
+
+	var json := JSON.stringify(payload)
 	var app_plugin := Engine.get_singleton("AppPlugin")
+
 	if app_plugin:
-		app_plugin.updateGameData(JSON.stringify(payload))
+		print(">>> AppPlugin found, calling updateGameData")
+		app_plugin.updateGameData(json)
+		return true
+
+	print(">>> AppPlugin NOT found. DEV MODE FALLBACK.")
+	print(">>> JSON TO SEND: ", json)
+
+	return true
 
 func _on_rules_pressed() -> void:
 	var popup := RULES_POPUP_SCENE.instantiate()
@@ -817,10 +879,11 @@ class TankBullet extends Node2D:
 			return
 			
 		# 3. Tank Collisions
-		if is_instance_valid(game.tank_p1) and global_position.distance_to(game.tank_p1.global_position) < 25.0:
+		const TANK_HIT_RADIUS := 13.0
+		if is_instance_valid(game.tank_p1) and global_position.distance_to(game.tank_p1.global_position) < TANK_HIT_RADIUS:
 			_trigger_impact("tank1")
 			return
-		if is_instance_valid(game.tank_p2) and global_position.distance_to(game.tank_p2.global_position) < 25.0:
+		if is_instance_valid(game.tank_p2) and global_position.distance_to(game.tank_p2.global_position) < TANK_HIT_RADIUS:
 			_trigger_impact("tank2")
 			return
 			
@@ -1032,14 +1095,16 @@ var _dev_override_wind_value := 0.0
 var _dev_kb_h_last := -1
 
 func _on_send_pressed() -> void:
+	print(">>> _on_send_pressed entered")
 	if _is_playing_round:
+		print(">>> blocked: _is_playing_round is true")
 		return
 
 	# Run your normal local-shot flow first (so visuals/trajectory are correct)
 	print("Executing Local Shot...")
 	_is_playing_round = true
 	can_interact = false
-	_set_ui_visible(false)
+	await _set_ui_visible(false)
 
 	var my_tank: Tank = tank_p1 if core.player == 1 else tank_p2
 	var my_rot := my_tank.barrel_pivot.rotation
@@ -1062,7 +1127,7 @@ func _on_send_pressed() -> void:
 		play_sent_animation()
 		_is_playing_round = false
 		return
-
+	print(">>> local shot complete, opening dev middleman")
 	# Dev middleman send (this will call _send_payload itself)
 	var did_send := await _dev_send_middleman_and_send(avatar_str)
 	if not did_send:
@@ -1081,15 +1146,20 @@ func _on_send_pressed() -> void:
 		_on_turn_changed(core.is_my_turn)
 
 func _dev_send_middleman_and_send(avatar_str: String) -> bool:
+	print(">>> _dev_send_middleman_and_send entered")
 	if _dev_popup_open:
+		print(">>> popup already open, aborting")
 		return false
 	_dev_popup_open = true
 
 	# Ensure we always unlock even if something weird happens
 	var accepted := false
 	var base_payload: Dictionary = core.build_outbound_payload(avatar_str)
+	print(">>> base_payload = ", base_payload)
+	if base_payload.is_empty():
+		print(">>> base_payload is empty")
 	var result := await _dev_popup(JSON.stringify(base_payload, "\t"))
-
+	print(">>> popup result = ", result)
 	_dev_popup_open = false
 
 	if not result["accepted"]:
@@ -1137,8 +1207,11 @@ func _dev_send_middleman_and_send(avatar_str: String) -> bool:
 
 	# >>> THE IMPORTANT PART: SEND NOW <<<
 	print("DEV MIDDLEMAN SENDING: ", final_payload)
-	_send_payload(final_payload)
-	accepted = true
+	accepted = _send_payload(final_payload)
+
+	if not accepted:
+		print("DEV MIDDLEMAN: send failed")
+		return false
 
 	# Waiting UX
 	if _dev_skip_wait:
@@ -1148,7 +1221,6 @@ func _dev_send_middleman_and_send(avatar_str: String) -> bool:
 
 	return accepted
 
-# ---------- Popup UI (viewport-safe + keyboard-aware) ----------
 func _dev_popup(initial_json: String) -> Dictionary:
 	var out := {
 		"accepted": false,
@@ -1160,8 +1232,11 @@ func _dev_popup(initial_json: String) -> Dictionary:
 		"wind_value": _dev_override_wind_value,
 	}
 
+	var state := {
+		"done": false
+	}
+
 	var root := get_tree().root
-	var done := false
 
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.75)
@@ -1248,19 +1323,21 @@ func _dev_popup(initial_json: String) -> Dictionary:
 		wind_spin.editable = v
 	)
 
-	var close_all := func():
-		done = true
+	var close_all := func() -> void:
+		state["done"] = true
 		if is_instance_valid(popup):
 			popup.queue_free()
 		if is_instance_valid(dim):
 			dim.queue_free()
 
 	btn_cancel.pressed.connect(func():
+		print(">>> DEV POPUP CANCEL PRESSED")
 		out["accepted"] = false
 		close_all.call()
 	)
 
 	btn_send.pressed.connect(func():
+		print(">>> DEV POPUP SEND PRESSED")
 		out["accepted"] = true
 		out["json"] = te.text
 		out["force_turn"] = cb_turn.button_pressed
@@ -1271,14 +1348,13 @@ func _dev_popup(initial_json: String) -> Dictionary:
 		close_all.call()
 	)
 
-	# Escape to cancel
 	popup.gui_input.connect(func(ev: InputEvent):
 		if ev is InputEventKey and ev.pressed and not ev.echo:
 			if ev.keycode == KEY_ESCAPE:
 				btn_cancel.emit_signal("pressed")
 	)
 
-	var relayout := func():
+	var relayout := func() -> void:
 		if not is_instance_valid(panel):
 			return
 
@@ -1289,13 +1365,16 @@ func _dev_popup(initial_json: String) -> Dictionary:
 			kb_h = int(DisplayServer.virtual_keyboard_get_height())
 
 		var margin := DEV_POPUP_MARGIN_PX * 2.0
-		var usable_h : Variant = max(1.0, vp_size.y - float(kb_h) - margin)
+		var usable_h: float = max(1.0, vp_size.y - float(kb_h) - margin)
 
-		var target_w : Variant = min(vp_size.x - margin, DEV_POPUP_MAX_W_PX)
-		var target_h : Variant = min(usable_h, vp_size.y * DEV_POPUP_MAX_H_FRAC)
+		var target_w: float = min(vp_size.x - margin, DEV_POPUP_MAX_W_PX)
+		var target_h: float = min(usable_h, vp_size.y * DEV_POPUP_MAX_H_FRAC)
 
 		panel.size = Vector2(target_w, target_h)
-		panel.position = Vector2((vp_size.x - target_w) * 0.5, (vp_size.y - float(kb_h) - target_h) * 0.5)
+		panel.position = Vector2(
+			(vp_size.x - target_w) * 0.5,
+			(vp_size.y - float(kb_h) - target_h) * 0.5
+		)
 
 	get_viewport().size_changed.connect(func():
 		relayout.call()
@@ -1307,7 +1386,7 @@ func _dev_popup(initial_json: String) -> Dictionary:
 	_dev_kb_h_last = -1
 	var has_kb := DisplayServer.has_feature(DisplayServer.FEATURE_VIRTUAL_KEYBOARD)
 
-	while not done:
+	while not bool(state["done"]):
 		if has_kb:
 			var cur := int(DisplayServer.virtual_keyboard_get_height())
 			if cur != _dev_kb_h_last:
@@ -1315,4 +1394,5 @@ func _dev_popup(initial_json: String) -> Dictionary:
 				relayout.call()
 		await get_tree().process_frame
 
+	print(">>> DEV POPUP RETURNING: ", out)
 	return out
