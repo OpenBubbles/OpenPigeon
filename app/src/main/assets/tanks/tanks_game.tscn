@@ -8,15 +8,9 @@
 [ext_resource type="PackedScene" uid="uid://dvhrp4pphm6u8" path="res://tanks/tanks.tscn" id="3_np35w"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="4_8t3x1"]
 [ext_resource type="Texture2D" uid="uid://d07n16n6mvtvy" path="res://tanks/tanks_health_3.png" id="6_j7ea1"]
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_j7ea1"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_g5fg3"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_yjlgf"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
+[ext_resource type="Script" uid="uid://dkdputva64cb8" path="res://tanks/wind_indicator.gd" id="7_blwoc"]
+[ext_resource type="Texture2D" uid="uid://bdldwjhh5k4tn" path="res://tanks/wind_backing.png" id="7_yjlgf"]
+[ext_resource type="Texture2D" uid="uid://dcav7qvfoafl4" path="res://tanks/wind_arrow.png" id="8_blwoc"]
 
 [sub_resource type="ViewportTexture" id="ViewportTexture_blwoc"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
@@ -25,6 +19,15 @@ viewport_path = NodePath("SubViewportContainer/SubViewport")
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="ViewportTexture" id="ViewportTexture_knpvn"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_ngt5w"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_qlxma"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_8kvy3"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_5g7og"]
@@ -53,12 +56,6 @@ corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 expand_margin_top = 2.0
 expand_margin_bottom = 2.0
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_7jppp"]
-bg_color = Color(0, 0, 0, 1)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_knpvn"]
-bg_color = Color(0, 0, 0, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_j7ea1"]
 corner_radius_top_left = 10
@@ -94,6 +91,28 @@ expand_margin_bottom = 10.0
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_7jppp"]
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ngt5w"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_qlxma"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
 [node name="TanksGame" type="Control" unique_id=18805160]
 layout_mode = 3
 anchors_preset = 15
@@ -109,6 +128,7 @@ script = ExtResource("1_y7nem")
 unique_name_in_owner = true
 
 [node name="Sky" parent="World" unique_id=506347145 instance=ExtResource("2_np35w")]
+unique_name_in_owner = true
 
 [node name="Terrain" parent="World" unique_id=1314481984 instance=ExtResource("2_8t3x1")]
 unique_name_in_owner = true
@@ -173,9 +193,9 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_j7ea1")
-texture_pressed = SubResource("ViewportTexture_g5fg3")
-texture_hover = SubResource("ViewportTexture_yjlgf")
+texture_normal = SubResource("ViewportTexture_blwoc")
+texture_pressed = SubResource("ViewportTexture_7jppp")
+texture_hover = SubResource("ViewportTexture_knpvn")
 is_display_only = true
 
 [node name="Control3" type="Control" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/PlayerContainer" unique_id=401160366]
@@ -196,9 +216,63 @@ size_flags_horizontal = 3
 [node name="Wind" type="VBoxContainer" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer" unique_id=214643943]
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_constants/separation = 0
 
 [node name="WindLabel" type="RichTextLabel" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/Wind" unique_id=1627796872]
 layout_mode = 2
+size_flags_vertical = 10
+theme_override_font_sizes/normal_font_size = 24
+bbcode_enabled = true
+text = "wind"
+fit_content = true
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WindIndicator" type="Control" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/Wind" unique_id=1722602854]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 20)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 6
+script = ExtResource("7_blwoc")
+
+[node name="ColorRect" type="TextureRect" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/Wind/WindIndicator" unique_id=1830656793]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("7_yjlgf")
+expand_mode = 5
+stretch_mode = 5
+
+[node name="ClipRect" type="Control" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/Wind/WindIndicator" unique_id=1277963275]
+clip_children = 1
+clip_contents = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 1
+anchors_preset = 13
+anchor_left = 0.5
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -100.0
+offset_right = -100.0
+grow_horizontal = 2
+grow_vertical = 2
+pivot_offset = Vector2(0, 20)
+
+[node name="ArrowSprite" type="TextureRect" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/Wind/WindIndicator/ClipRect" unique_id=1758679129]
+custom_minimum_size = Vector2(200, 20)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("8_blwoc")
+expand_mode = 1
 
 [node name="Spacer2" type="Control" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer" unique_id=1431904077]
 layout_mode = 2
@@ -216,9 +290,9 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_blwoc")
-texture_pressed = SubResource("ViewportTexture_7jppp")
-texture_hover = SubResource("ViewportTexture_knpvn")
+texture_normal = SubResource("ViewportTexture_ngt5w")
+texture_pressed = SubResource("ViewportTexture_qlxma")
+texture_hover = SubResource("ViewportTexture_8kvy3")
 is_display_only = true
 controlled_by_data = true
 
@@ -236,6 +310,7 @@ stretch_mode = 5
 [node name="CenterContainer" type="CenterContainer" parent="MarginContainer/Overlay" unique_id=470694506]
 layout_mode = 2
 size_flags_vertical = 3
+mouse_filter = 2
 
 [node name="BottomItemHBoxContainer" type="HBoxContainer" parent="MarginContainer/Overlay" unique_id=339762347]
 custom_minimum_size = Vector2(0, 80)
@@ -277,10 +352,12 @@ theme_override_styles/hover = SubResource("StyleBoxTexture_t7yy8")
 [node name="Controls" type="VBoxContainer" parent="MarginContainer" unique_id=571956456]
 layout_mode = 2
 size_flags_vertical = 8
+mouse_filter = 2
 
 [node name="PowerLabel" type="RichTextLabel" parent="MarginContainer/Controls" unique_id=244262187]
 unique_name_in_owner = true
 layout_mode = 2
+theme_override_font_sizes/normal_font_size = 24
 bbcode_enabled = true
 text = "Power: XX"
 fit_content = true
@@ -290,6 +367,7 @@ vertical_alignment = 1
 [node name="Spacer2" type="Control" parent="MarginContainer/Controls" unique_id=990678402]
 custom_minimum_size = Vector2(0, 10)
 layout_mode = 2
+mouse_filter = 2
 
 [node name="PowerSlider" type="HSlider" parent="MarginContainer/Controls" unique_id=1251560292]
 unique_name_in_owner = true
@@ -299,13 +377,12 @@ size_flags_horizontal = 4
 size_flags_vertical = 4
 theme_override_constants/center_grabber = 0
 theme_override_styles/slider = SubResource("StyleBoxFlat_blwoc")
-theme_override_styles/grabber_area = SubResource("StyleBoxFlat_7jppp")
-theme_override_styles/grabber_area_highlight = SubResource("StyleBoxFlat_knpvn")
 rounded = true
 
 [node name="Spacer" type="Control" parent="MarginContainer/Controls" unique_id=1777210889]
 custom_minimum_size = Vector2(0, 80)
 layout_mode = 2
+mouse_filter = 2
 
 [node name="FireButton" type="Button" parent="MarginContainer/Controls" unique_id=491874045]
 unique_name_in_owner = true
@@ -324,3 +401,99 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_yjlgf")
 theme_override_styles/disabled = SubResource("StyleBoxEmpty_blwoc")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_7jppp")
 text = "Fire!"
+
+[node name="WaitBlur" type="ColorRect" parent="." unique_id=810597666]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.152941, 0.152941, 0.152941, 0.556863)
+
+[node name="WaitForOpponentLabel" type="Label" parent="." unique_id=1637633089]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -163.0
+offset_top = -17.5
+offset_right = 163.0
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_ngt5w")
+text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="DotTimer" type="Timer" parent="." unique_id=414039073]
+unique_name_in_owner = true
+wait_time = 0.75
+
+[node name="SpecLabel" type="Label" parent="." unique_id=1674530875]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -324.0
+offset_right = 324.0
+offset_bottom = 69.0
+grow_horizontal = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 50
+text = "Spectating..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WinLossLabel" type="Label" parent="." unique_id=725603060]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -17.5
+offset_right = 0.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_qlxma")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SentLabel" type="Label" parent="." unique_id=1136453592]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -30.5
+offset_top = -17.5
+offset_right = 30.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_qlxma")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1

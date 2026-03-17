@@ -1,9 +1,27 @@
-[gd_scene load_steps=20 format=3 uid="uid://dtbbaumnb5h2m"]
+[gd_scene format=3 uid="uid://dtbbaumnb5h2m"]
 
 [ext_resource type="Script" uid="uid://bwig68hkxtmyu" path="res://reversi/reversi.gd" id="1_0y82s"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="2_by1w1"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_cwv3m"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="3_cwv3m"]
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_cwv3m"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_m5bvx"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_gybti"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_31pxf"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_on1mr"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_an3or"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ig7tw"]
 bg_color = Color(0, 0, 0, 1)
@@ -144,7 +162,7 @@ expand_margin_bottom = 6.0
 shadow_size = 2
 shadow_offset = Vector2(0, 2)
 
-[node name="Main" type="Control"]
+[node name="Main" type="Control" unique_id=1738690366]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -156,7 +174,7 @@ size_flags_vertical = 3
 mouse_filter = 1
 script = ExtResource("1_0y82s")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="ColorRect" parent="." unique_id=1596836536]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
@@ -166,7 +184,7 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.898039, 0.898039, 0.898039, 1)
 
-[node name="MainVBoxContainer" type="VBoxContainer" parent="."]
+[node name="MainVBoxContainer" type="VBoxContainer" parent="." unique_id=1259320288]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
@@ -175,22 +193,22 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="MainVBoxContainer"]
+[node name="MarginContainer" type="MarginContainer" parent="MainVBoxContainer" unique_id=981538613]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/margin_left = 40
 theme_override_constants/margin_top = 20
 theme_override_constants/margin_right = 40
 
-[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer/MarginContainer"]
+[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer/MarginContainer" unique_id=870367590]
 layout_mode = 2
 size_flags_vertical = 4
 alignment = 1
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer" unique_id=1473341432]
 layout_mode = 2
 
-[node name="YouLabel" type="Label" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer"]
+[node name="YouLabel" type="Label" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer" unique_id=1254292232]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
@@ -199,78 +217,84 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="PlayerAvatarDisplay" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer" instance=ExtResource("2_cwv3m")]
+[node name="PlayerAvatarDisplay" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer" unique_id=1912461780 instance=ExtResource("2_cwv3m")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_cwv3m")
+texture_pressed = SubResource("ViewportTexture_m5bvx")
+texture_hover = SubResource("ViewportTexture_gybti")
 is_display_only = true
 
-[node name="VBoxContainer3" type="VBoxContainer" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer"]
+[node name="VBoxContainer3" type="VBoxContainer" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer" unique_id=949578115]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Label" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3"]
+[node name="Label" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3" unique_id=1516836061]
 custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
 
-[node name="HBoxContainer" type="HBoxContainer" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3"]
+[node name="HBoxContainer" type="HBoxContainer" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3" unique_id=704129010]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="Separation4" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer"]
+[node name="Separation4" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=1397791600]
 custom_minimum_size = Vector2(8, 0)
 layout_mode = 2
 
-[node name="PlayerCountLabel" type="Label" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer"]
+[node name="PlayerCountLabel" type="Label" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=541223853]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 
-[node name="Separation" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer"]
+[node name="Separation" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=2134539785]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="OppCountLabel" type="Label" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer"]
+[node name="OppCountLabel" type="Label" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=276484070]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 
-[node name="Separation3" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer"]
+[node name="Separation3" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=1423360136]
 custom_minimum_size = Vector2(8, 0)
 layout_mode = 2
 
-[node name="VBoxContainer2" type="VBoxContainer" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer"]
+[node name="VBoxContainer2" type="VBoxContainer" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer" unique_id=1858708587]
 layout_mode = 2
 
-[node name="Label" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer2"]
+[node name="Label" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer2" unique_id=1073392581]
 custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
 
-[node name="OppAvatarDisplay" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer2" instance=ExtResource("2_cwv3m")]
+[node name="OppAvatarDisplay" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer2" unique_id=1468532327 instance=ExtResource("2_cwv3m")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_31pxf")
+texture_pressed = SubResource("ViewportTexture_on1mr")
+texture_hover = SubResource("ViewportTexture_an3or")
 is_display_only = true
 controlled_by_data = true
 
-[node name="GameAreaCenterContainer" type="CenterContainer" parent="MainVBoxContainer"]
+[node name="GameAreaCenterContainer" type="CenterContainer" parent="MainVBoxContainer" unique_id=1751118404]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="BoardVBoxContainer" type="VBoxContainer" parent="MainVBoxContainer/GameAreaCenterContainer"]
+[node name="BoardVBoxContainer" type="VBoxContainer" parent="MainVBoxContainer/GameAreaCenterContainer" unique_id=1684801110]
 layout_mode = 2
 alignment = 1
 
-[node name="BorderPanelContainer" type="PanelContainer" parent="MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer"]
+[node name="BorderPanelContainer" type="PanelContainer" parent="MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer" unique_id=915855555]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
 theme_override_styles/panel = SubResource("StyleBoxFlat_ig7tw")
 
-[node name="GridContainer" type="GridContainer" parent="MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer/BorderPanelContainer"]
+[node name="GridContainer" type="GridContainer" parent="MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer/BorderPanelContainer" unique_id=1209884702]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
@@ -279,7 +303,7 @@ theme_override_constants/h_separation = 2
 theme_override_constants/v_separation = 2
 columns = 8
 
-[node name="ReplayButton" type="Button" parent="MainVBoxContainer/GameAreaCenterContainer"]
+[node name="ReplayButton" type="Button" parent="MainVBoxContainer/GameAreaCenterContainer" unique_id=1469836556]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -288,10 +312,10 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_2damg")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_by1w1")
 theme_override_styles/hover = SubResource("StyleBoxFlat_0y82s")
 
-[node name="ReplayButtonWrapper" type="Control" parent="MainVBoxContainer/GameAreaCenterContainer"]
+[node name="ReplayButtonWrapper" type="Control" parent="MainVBoxContainer/GameAreaCenterContainer" unique_id=1966050849]
 layout_mode = 2
 
-[node name="WinLossLabel" type="Label" parent="MainVBoxContainer/GameAreaCenterContainer"]
+[node name="WinLossLabel" type="Label" parent="MainVBoxContainer/GameAreaCenterContainer" unique_id=1706679778]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -300,7 +324,7 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_h2yge")
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="SentLabel" type="Label" parent="MainVBoxContainer/GameAreaCenterContainer"]
+[node name="SentLabel" type="Label" parent="MainVBoxContainer/GameAreaCenterContainer" unique_id=183223186]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -310,25 +334,25 @@ text = "SENT"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="StarPointLayer" type="Control" parent="MainVBoxContainer/GameAreaCenterContainer"]
+[node name="StarPointLayer" type="Control" parent="MainVBoxContainer/GameAreaCenterContainer" unique_id=869684551]
 unique_name_in_owner = true
 layout_mode = 2
 mouse_filter = 2
 
-[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer"]
+[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer" unique_id=1536183417]
 custom_minimum_size = Vector2(0, 250)
 layout_mode = 2
 size_flags_vertical = 4
 theme_override_constants/separation = 10
 
-[node name="MarginContainer" type="MarginContainer" parent="MainVBoxContainer/BottomItemHBoxContainer"]
+[node name="MarginContainer" type="MarginContainer" parent="MainVBoxContainer/BottomItemHBoxContainer" unique_id=1231647709]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/margin_left = 40
 theme_override_constants/margin_right = 40
 theme_override_constants/margin_bottom = 30
 
-[node name="SettingsButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer"]
+[node name="SettingsButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer" unique_id=1930811821]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -340,7 +364,7 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_31pxf")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_gybti")
 theme_override_styles/hover = SubResource("StyleBoxTexture_m5bvx")
 
-[node name="RulesButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer"]
+[node name="RulesButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer" unique_id=670403671]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -352,7 +376,7 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_yb6cj")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_an3or")
 theme_override_styles/hover = SubResource("StyleBoxTexture_on1mr")
 
-[node name="SendButton" type="Button" parent="."]
+[node name="SendButton" type="Button" parent="." unique_id=1520935385]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
@@ -376,7 +400,7 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_0xm2m")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_m5bvx")
 theme_override_styles/hover = SubResource("StyleBoxFlat_cwv3m")
 
-[node name="WaitBlur" type="ColorRect" parent="."]
+[node name="WaitBlur" type="ColorRect" parent="." unique_id=1794363568]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
@@ -388,7 +412,7 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 
-[node name="WaitForOpponentLabel" type="Label" parent="."]
+[node name="WaitForOpponentLabel" type="Label" parent="." unique_id=376450574]
 unique_name_in_owner = true
 visible = false
 layout_mode = 0
@@ -403,11 +427,11 @@ text = "WAITING FOR OPPONENT..."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="DotTimer" type="Timer" parent="."]
+[node name="DotTimer" type="Timer" parent="." unique_id=2027008919]
 unique_name_in_owner = true
 wait_time = 0.75
 
-[node name="SpecLabel" type="Label" parent="."]
+[node name="SpecLabel" type="Label" parent="." unique_id=1973205902]
 unique_name_in_owner = true
 visible = false
 layout_mode = 0

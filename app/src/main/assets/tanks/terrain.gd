@@ -28,6 +28,13 @@ var world_width: float = 1024.0
 var world_height: float = 576.0
 var base_y: float = 380.0
 
+const BOARD_X_MIN := -187.0
+const BOARD_X_MAX := 187.0
+const BOARD_X_WIDTH := BOARD_X_MAX - BOARD_X_MIN
+
+@export var tower_width_units: float = 70.0
+@export var tower_height_units: float = 140.0
+
 var _trans_left: float = 0.0
 var _trans_right: float = 0.0
 var _y_high: float = 0.0
@@ -73,9 +80,11 @@ func _rebuild() -> void:
 
 	var tower_center_x: float = world_width * 0.5
 
+	_apply_tower_scale()
+
 	var tower_half_w: float = 60.0
 	if is_instance_valid(tower) and tower.texture != null:
-		tower_half_w = (float(tower.texture.get_width()) * tower.scale.x) * 0.5
+		tower_half_w = (float(tower.texture.get_width()) * abs(tower.scale.x)) * 0.5
 
 	var tower_left_edge_x: float = tower_center_x - tower_half_w - tower_edge_pad
 
@@ -130,6 +139,29 @@ func _rebuild() -> void:
 			edge.points = top
 
 	_place_tower_centered(tower_center_x, y_high)
+	print(
+		"Tower target width px: ", get_tower_target_width_px(),
+		" | actual width: ", get_tower_width_px(),
+		" | target height px: ", get_tower_target_height_px(),
+		" | actual height: ", get_tower_height_px(),
+		" | pixels/unit: ", get_pixels_per_board_unit()
+	)
+	
+func get_tower_rect() -> Rect2:
+	if not is_instance_valid(tower_root) or not is_instance_valid(tower) or tower.texture == null:
+		return Rect2()
+
+	var tex_size := Vector2(float(tower.texture.get_width()), float(tower.texture.get_height()))
+	var scaled_size := Vector2(
+		tex_size.x * abs(tower.scale.x),
+		tex_size.y * abs(tower.scale.y)
+	)
+
+	var top_left := tower_root.global_position + tower.position
+	return Rect2(top_left, scaled_size)
+
+func has_tower() -> bool:
+	return is_instance_valid(tower_root) and is_instance_valid(tower) and tower.texture != null
 
 func _place_tower_centered(tower_center_x: float, y_high: float) -> void:
 	if not is_instance_valid(tower_root) or not is_instance_valid(tower):
@@ -182,3 +214,52 @@ func _mirror_pts(pts: PackedVector2Array, w: float) -> PackedVector2Array:
 	for p in pts:
 		out.append(Vector2(w - p.x, p.y))
 	return out
+
+func get_pixels_per_board_unit() -> float:
+	return world_width / BOARD_X_WIDTH
+
+func get_tower_target_width_px() -> float:
+	return tower_width_units * get_pixels_per_board_unit()
+	
+func get_tower_target_height_px() -> float:
+	return tower_height_units * get_pixels_per_board_unit()
+
+func _apply_tower_scale() -> void:
+	if not is_instance_valid(tower) or tower.texture == null:
+		return
+	
+	var tex_w: float = float(tower.texture.get_width())
+	var tex_h: float = float(tower.texture.get_height())
+	if tex_w <= 0.0 or tex_h <= 0.0:
+		return
+	
+	var target_w: float = get_tower_target_width_px()
+	var target_h: float = get_tower_target_height_px()
+	
+	var scale_from_w: float = target_w / tex_w
+	var scale_from_h: float = target_h / tex_h
+	
+	# Prefer uniform scaling. If the source art ratio is correct,
+	# these should be the same or extremely close.
+	var uniform_scale: float = scale_from_w
+	
+	var sign_x: float = -1.0 if tower.scale.x < 0.0 else 1.0
+	var sign_y: float = -1.0 if tower.scale.y < 0.0 else 1.0
+	tower.scale = Vector2(sign_x * uniform_scale, sign_y * uniform_scale)
+	
+	# Debug warning if source art aspect ratio does not match 70x140
+	if abs(scale_from_w - scale_from_h) > 0.01:
+		print("WARNING: Tower art aspect ratio does not match target 70x140 units.")
+		print("scale_from_w: ", scale_from_w, " | scale_from_h: ", scale_from_h)
+	
+func get_tower_width_px() -> float:
+	if not is_instance_valid(tower) or tower.texture == null:
+		return 0.0
+	
+	return float(tower.texture.get_width()) * abs(tower.scale.x)
+
+func get_tower_height_px() -> float:
+	if not is_instance_valid(tower) or tower.texture == null:
+		return 0.0
+	
+	return float(tower.texture.get_height()) * abs(tower.scale.y)

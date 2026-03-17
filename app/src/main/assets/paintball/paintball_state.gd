@@ -72,7 +72,7 @@ func lane_to_pos_enc(lane: ActionButton3D.Lane) -> int:
 	return lane_to_enc(lane) # normal
 
 func lane_to_target_enc(lane: ActionButton3D.Lane) -> int:
-	return flip_enc_for_perspective(lane_to_enc(lane))
+	return lane_to_enc(lane)
 
 func pos_enc_to_lane_for_view(enc: int) -> ActionButton3D.Lane:
 	return enc_to_lane(flip_enc_for_perspective(enc))

@@ -6,7 +6,6 @@ class_name PowerIndicator
 @export var head_width: float = 14.0
 @export var head_length: float = 30.0
 
-# Increase this to make the arrow chunkier/longer
 @export var visual_scale: float = 20.0 
 
 var current_power: float = 0.5
@@ -20,8 +19,6 @@ func get_tip_global_position() -> Vector2:
 	if length < head_length:
 		length = head_length
 	
-	# We must multiply by visual_scale so the label knows 
-	# exactly where the drawn tip ended up
 	var local_x: float = length * visual_scale
 	return to_global(Vector2(local_x, 0))
 
@@ -33,13 +30,11 @@ func _draw() -> void:
 	if length < head_length:
 		length = head_length
 
-	# APPLY SCALING TO EVERYTHING
 	var s_len = length * visual_scale
 	var s_base = base_width * visual_scale
 	var s_h_wid = head_width * visual_scale
 	var s_h_len = head_length * visual_scale
 
-	# Define the 5 points of the arrow using the scaled values
 	var points := PackedVector2Array([
 		Vector2(0, -s_base * 0.5),           # Bottom of base
 		Vector2(s_len - s_h_len, -s_base * 0.5), # Base meets head

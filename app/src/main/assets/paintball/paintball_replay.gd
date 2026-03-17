@@ -6,12 +6,12 @@ var g: PaintballGame
 func setup(owner: PaintballGame) -> void:
 	g = owner
 	
-func _flip_enc_for_perspective(enc: int) -> int:
-	if enc == 0:
-		return 2
-	if enc == 2:
-		return 0
-	return enc
+#func _flip_enc_for_perspective(enc: int) -> int:
+	#if enc == 0:
+		#return 2
+	#if enc == 2:
+		#return 0
+	#return enc
 
 func parse_replay_state(state: String) -> Dictionary:
 	var out := {
@@ -151,12 +151,12 @@ func apply_loaded_replay_segment(seg_state: Dictionary) -> void:
 	g._apply_hearts_from_hp()
 
 	# Pending enemy shot
-	# Flip opponent POSITION for our visual perspective (0 <-> 2)
-	var pos_opp_vis: int = (pos_opp if pos_opp == -1 else _flip_enc_for_perspective(pos_opp))
+	var pos_opp_vis: int = pos_opp
+	var target_opp_vis: int = target_opp
 
 	g._opp_pos_enc = pos_opp_vis
 	g._opp_target_enc = target_opp
-	g._opp_target_enc_vis = (-1 if target_opp == -1 else _flip_enc_for_perspective(target_opp))
+	g._opp_target_enc_vis = target_opp_vis
 	g._pending_enemy_shot = (g._opp_pos_enc != -1 and g._opp_target_enc != -1)
 
 	# Apply my lane immediately + update move arrows immediately

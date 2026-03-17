@@ -149,7 +149,6 @@ expand_margin_bottom = 10.0
 
 [node name="Paintball" type="Node3D" unique_id=2055827145]
 script = ExtResource("1_itydf")
-buttons_root = null
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=592133526]
 transform = Transform3D(1, 0, 0, 0, 0.97189945, 0.23539655, 0, -0.23539655, 0.97189945, 0, 5.428241, 12.890634)
@@ -226,8 +225,7 @@ texture_filter = 1
 texture = ExtResource("8_03t0m")
 
 [node name="Tire6" type="Sprite3D" parent="." unique_id=1084269075]
-transform = Transform3D(-0.265, 0, -2.3167035e-08, 0, 0.265, 0, 2.3167035e-08, 0, -0.265, -2.286, 1.471, -13.748942)
-flip_h = true
+transform = Transform3D(-0.265, 0, -2.3167035e-08, 0, 0.265, 0, 2.3167035e-08, 0, -0.265, -2.1526496, 1.471, -13.748942)
 billboard = 1
 texture_filter = 1
 texture = ExtResource("8_03t0m")
@@ -253,7 +251,7 @@ texture = ExtResource("5_gayi8")
 
 [node name="ShootLeft" parent="Buttons" unique_id=1651712716 instance=ExtResource("6_f7ola")]
 transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, -2.2604523, 3.8512156, -14.313803)
-lane = 0
+lane = 2
 
 [node name="Sprite3D" parent="Buttons/ShootLeft" index="0"]
 texture_filter = 0
@@ -268,7 +266,7 @@ texture = ExtResource("6_hy3c1")
 
 [node name="ShootRight" parent="Buttons" unique_id=199169833 instance=ExtResource("6_f7ola")]
 transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 2.4299703, 3.851, -14.314)
-lane = 2
+lane = 0
 
 [node name="Sprite3D" parent="Buttons/ShootRight" index="0"]
 texture_filter = 0

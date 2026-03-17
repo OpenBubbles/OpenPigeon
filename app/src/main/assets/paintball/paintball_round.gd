@@ -282,9 +282,9 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		if g._opp_target_lane == ActionButton3D.Lane.CENTER:
 			splat_pos.x = 0.0
 		elif g._opp_target_lane == ActionButton3D.Lane.LEFT:
-			splat_pos.x = 0.5
-		elif g._opp_target_lane == ActionButton3D.Lane.RIGHT:
 			splat_pos.x = -0.5
+		elif g._opp_target_lane == ActionButton3D.Lane.RIGHT:
+			splat_pos.x = 0.5
 
 		g._opp_splat.position = splat_pos
 		g._opp_splat.rotation = splat_rot
@@ -334,11 +334,15 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	await g.shots.play_opponent_recoil()
 
 	# Determine hit/miss FIRST using RAW enc (logic)
-	var my_hit_enc: int = g.states.lane_to_target_enc(g._player_lane)
+	var my_hit_enc: int = g.states.lane_to_enc(g._player_lane)
 	g._enemy_hit_last = (g._opp_target_enc == my_hit_enc)
+	
+	var visual_lane_for_shot: ActionButton3D.Lane = g.states.enc_to_lane(
+		g.states.flip_enc_for_perspective(g._opp_target_enc)
+	)
 
 	# Base target (normal lane world)
-	var enemy_target_world: Vector3 = g._opp_target_world
+	var enemy_target_world: Vector3 = g.get_world_for_player_lane(visual_lane_for_shot)
 	if enemy_target_world == Vector3.ZERO:
 		enemy_target_world = g._get_world_for_player_lane(g._opp_target_lane)
 
@@ -640,8 +644,8 @@ func play_round() -> void:
 		var s: int = int(g._selected_shoot.lane)
 
 		# Tune these
-		var bias_same: float = 3.75
-		var bias_cross: float = -1.75
+		var bias_same: float = -1.75
+		var bias_cross: float = 3.75
 
 		# Pick magnitude (0 when center lane or center shot)
 		var mag: float = 0.0

@@ -2,24 +2,23 @@ extends CanvasLayer
 class_name TanksSky
 
 @onready var bg: ColorRect = %Background
-@onready var moon: Sprite2D = %Moon
 @onready var c1: Sprite2D = %CloudLayer1
 @onready var c2: Sprite2D = %CloudLayer2
+@onready var mountains: TextureRect = %Mountains
 
 var wind: float = 0.0
+var terrain_base_y: float = 0.0
 
 @export var max_alpha: float = 0.75
 @export var density: float = 1.0
 @export var spread: float = 1.0
 
 # Speed tuning
-@export var base_speed_px: float = 1400.0	# faster (px/sec at wind=1)
-@export var min_drift_uv: float = 0.015		# baseline UV/sec drift even if wind=0
+@export var base_speed_px: float = 100.0
+@export var min_drift_uv: float = 0.05		# baseline UV/sec drift even if wind=0
 
-@export var layer2_speed_mult: float = 1.6
+@export var layer2_speed_mult: float = 3.6
 @export var layer2_alpha_mult: float = 0.7
-
-# Optional smoothing to reduce any wind jitter from data updates
 @export var wind_smooth: float = 10.0		# higher = snappier, lower = smoother
 
 # Whip motion
@@ -48,7 +47,6 @@ func _on_viewport_size_changed() -> void:
 
 func set_wind(w: float) -> void:
 	wind = w
-	# Do not push immediately, we smooth in _process
 
 func _apply_viewport() -> void:
 	var vp := get_viewport()
@@ -63,8 +61,22 @@ func _apply_viewport() -> void:
 	_setup_cloud(c1)
 	_setup_cloud(c2)
 
-	if is_instance_valid(moon):
-		moon.position = Vector2(_vp_size.x * 0.78, _vp_size.y * 0.18)
+func set_terrain_height(y: float) -> void:
+	terrain_base_y = y
+	_anchor_mountains_to_terrain()
+
+func _anchor_mountains_to_terrain() -> void:
+	if not is_instance_valid(mountains):
+		return
+	
+	mountains.size.x = _vp_size.x
+	
+	# If terrain_base_y hasn't been set yet, default to screen bottom
+	var target_y = terrain_base_y if terrain_base_y > 0 else _vp_size.y
+	
+	# Align the BOTTOM of the mountain texture with the terrain's base_y
+	mountains.global_position.y = target_y - mountains.size.y
+	mountains.global_position.x = 0
 
 func _setup_cloud(s: Sprite2D) -> void:
 	if not is_instance_valid(s) or s.texture == null:
@@ -79,7 +91,6 @@ func _setup_cloud(s: Sprite2D) -> void:
 	if tw <= 0.0 or th <= 0.0:
 		return
 
-	# Scale sprite to cover viewport, shader uses SCREEN_UV so pattern will not stretch.
 	s.scale = Vector2(_vp_size.x / tw, _vp_size.y / th)
 
 func _ensure_unique_material(s: Sprite2D) -> void:
@@ -91,24 +102,28 @@ func _ensure_unique_material(s: Sprite2D) -> void:
 		dup.resource_local_to_scene = true
 		s.material = dup
 
+func set_view_size(_new_size: Vector2) -> void:
+	_apply_viewport()
+
 func _process(delta: float) -> void:
 	if _vp_size.x <= 1.0:
 		return
 
-	# Smooth wind to remove data jitter
 	var a: float = clamp(wind_smooth * delta, 0.0, 1.0)
 	_wind_smoothed = lerp(_wind_smoothed, wind, a)
 
-	# Convert px/sec to UV/sec
-	var uv_per_sec: float = (_wind_smoothed * base_speed_px) / _vp_size.x
+	var dir: float = sign(_wind_smoothed)
+	if dir == 0.0:
+		dir = 1.0
 
-	# Always a baseline drift so you can see motion even with 0 wind
-	if abs(uv_per_sec) < min_drift_uv:
-		uv_per_sec = (sign(_wind_smoothed) * min_drift_uv) if _wind_smoothed != 0.0 else min_drift_uv
+	var mag: float = abs(_wind_smoothed)
 
-	_set_layer_params(c1, uv_per_sec, density, max_alpha, spread, whip_strength, whip_speed, abs(_wind_smoothed))
-	_set_layer_params(c2, uv_per_sec * layer2_speed_mult, density * layer2_alpha_mult, max_alpha, spread * 1.25, whip_strength * 1.2, whip_speed, abs(_wind_smoothed))
+	var added_uv_speed: float = (mag * base_speed_px) / _vp_size.x
+	var final_uv_speed: float = (min_drift_uv + added_uv_speed) * dir
 
+	_set_layer_params(c1, final_uv_speed, density, max_alpha, spread, whip_strength, whip_speed, mag)
+	_set_layer_params(c2, final_uv_speed * layer2_speed_mult, density * layer2_alpha_mult, max_alpha, spread * 1.25, whip_strength * 1.2, whip_speed, mag)
+	
 func _push_all_params() -> void:
 	_set_layer_params(c1, 0.0, density, max_alpha, spread, whip_strength, whip_speed, 0.0)
 	_set_layer_params(c2, 0.0, density * layer2_alpha_mult, max_alpha, spread * 1.25, whip_strength * 1.2, whip_speed, 0.0)
@@ -117,7 +132,6 @@ func _set_layer_params(s: Sprite2D, uv_speed: float, dens: float, fade_max: floa
 	if not is_instance_valid(s):
 		return
 
-	# Sprite modulate alpha is still allowed, but main fade is shader-based.
 	s.modulate.a = clamp(fade_max * dens, 0.0, 1.0)
 
 	var m := s.material as ShaderMaterial

@@ -18,7 +18,6 @@ class_name Tank
 var _display_deg: float = 0.0
 
 func _ready() -> void:
-	# Let the Godot Editor handle the hierarchy and positioning!
 	set_player_color(player_color)
 	set_barrel_display_deg(0.0)
 
@@ -40,19 +39,15 @@ func set_power(power_val: float) -> void:
 func set_barrel_display_deg(display_deg: float) -> void:
 	_display_deg = clamp(display_deg, min_display_deg, max_display_deg)
 
-	# Display: 0 right, 90 up, 180 left
-	# Godot rotation_degrees: 0 right, -90 up, 180 left
 	barrel_pivot.rotation_degrees = (-_display_deg) + art_zero_offset_deg
 
 func get_barrel_display_deg() -> float:
 	return _display_deg
 	
 func get_indicator_tip_global() -> Vector2:
-	# Explicitly treat the node as a PowerIndicator script
 	var pi = power_indicator as PowerIndicator
 	
 	if is_instance_valid(pi) and pi.current_power > 0.01:
-		# Now Godot knows for sure this function exists
 		return pi.get_tip_global_position()
 		
 	if is_instance_valid(barrel_tip):
@@ -62,8 +57,40 @@ func get_indicator_tip_global() -> Vector2:
 func get_barrel_tip_global() -> Vector2:
 	if is_instance_valid(barrel_tip):
 		return barrel_tip.global_position
-	# Fallback just in case
 	return barrel_pivot.global_position
+
+func get_body_width_px() -> float:
+	if not is_instance_valid(body) or body.texture == null:
+		return 0.0
+	
+	var tex_w: float = float(body.texture.get_width())
+	var eff_scale_x: float = abs(scale.x * body.scale.x)
+	return tex_w * eff_scale_x
+
+func fit_body_width_px(target_width_px: float) -> void:
+	if not is_instance_valid(body) or body.texture == null:
+		return
+	
+	var tex_w: float = float(body.texture.get_width())
+	if tex_w <= 0.0:
+		return
+	
+	var sign_x := -1.0 if body.scale.x < 0.0 else 1.0
+	body.scale.x = sign_x * (target_width_px / tex_w)
+	
+func fit_visual_width_px(target_width_px: float) -> void:
+	if not is_instance_valid(body) or body.texture == null:
+		return
+	
+	var tex_w: float = float(body.texture.get_width())
+	if tex_w <= 0.0:
+		return
+	
+	var sign_x := -1.0 if scale.x < 0.0 else 1.0
+	var sign_y := -1.0 if scale.y < 0.0 else 1.0
+	var uniform_scale := target_width_px / tex_w
+	
+	scale = Vector2(sign_x * uniform_scale, sign_y * uniform_scale)
 
 func get_bottom_offset_px() -> float:
 	if not is_instance_valid(body) or body.texture == null:

@@ -117,7 +117,8 @@ func _ready():
 			appPlugin.onReady()
 			print("AppPlugin Connected")
 	else:
-		_set_game_data('{ "isYourTurn": true, "player": "2", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,0,2,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0|move:0,3,1|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,2,2,2,0,0,1,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
+		#_set_game_data('{ "isYourTurn": true, "player": "2", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,0,2,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0|move:0,3,1|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,2,2,2,0,0,1,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
+		_set_game_data('{ "isYourTurn": true, "player": "1", "replay": "board:1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,2,2,1,0|move:0,3,1|board:1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,2,2,1,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player2": "", "player1": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "reversi", "mode": "1", "tver": "5", "build": "56", "version": "0" }')
 		#_set_game_data('{ "isYourTurn": true, "player": "1", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0|move:3,1,2|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
 		print("No AppPlugin Available, Setting Debug Data")
 		
@@ -1087,38 +1088,98 @@ func on_cell_pressed(x: int, y: int) -> void:
 	if not is_my_turn or game_over:
 		return
 
-	if temp_piece_active and temp_piece_x == x and temp_piece_y == y:
-		return
-
-	if temp_piece_active:
-		reset_board_to_pre_data()
-		clear_temp_piece_visual()
-		temp_piece_active = false
-		preview_flips_active = false
-		temp_piece_x = -1
-		temp_piece_y = -1
-		if send_button.visible:
-			animate_button_slide_down()
-
 	var current_piece = get_piece(x, y)
 	var directions = get_flippable_directions(x, y, player_symbol)
 	if current_piece != "" or directions.size() == 0:
 		return
 
-	temp_piece_x = x
-	temp_piece_y = y
-	temp_piece_active = true
-	preview_flips_active = true
+	var empty_count = 0
+	for ty in range(BOARD_SIZE):
+		for tx in range(BOARD_SIZE):
+			if get_piece(tx, ty) == "":
+				empty_count += 1
 
-	place_temp_piece_visual(x, y, player_symbol)
-	preview_flip_pieces(x, y, player_symbol)
+	if empty_count == 1:
+		if temp_piece_active:
+			reset_board_to_pre_data()
+			clear_temp_piece_visual()
+		
+		flip_pieces(x, y, player_symbol, directions)
+		set_piece(x, y, player_symbol, true)
+		
+		temp_piece_active = false
+		update_piece_counts()
+		
+		await get_tree().create_timer(0.5).timeout
+		
+		_internal_submit_move(x, y)
+	else:
+		if temp_piece_active and temp_piece_x == x and temp_piece_y == y:
+			return
 
-	update_piece_counts()
-	animate_button_slide_up()
+		if temp_piece_active:
+			reset_board_to_pre_data()
+			clear_temp_piece_visual()
+		
+		temp_piece_x = x
+		temp_piece_y = y
+		temp_piece_active = true
+		preview_flips_active = true
 
+		place_temp_piece_visual(x, y, player_symbol)
+		preview_flip_pieces(x, y, player_symbol)
+		
+		var base_counts = update_piece_counts()
+		var flipped_count = 0
+		for dir in directions:
+			var pos = Vector2i(x, y) + dir
+			while is_in_bounds(pos) and get_piece(pos.x, pos.y) != "" and get_piece(pos.x, pos.y) != player_symbol:
+				flipped_count += 1
+				pos += dir
+		
+		if player == 1:
+			player_count_label.text = str(base_counts["black"] + flipped_count)
+			opp_count_label.text = str(base_counts["white"] - flipped_count)
+		else:
+			player_count_label.text = str(base_counts["white"] + flipped_count)
+			opp_count_label.text = str(base_counts["black"] - flipped_count)
+
+		animate_button_slide_up()
+		
+func _internal_submit_move(final_x: int, final_y: int):
+	post_board_data = get_current_board_as_array()
+	var move_arr = [final_x, 7 - final_y, player]
+	my_moves.append(move_arr)
+
+	var moves_str = ""
+	for move in my_moves:
+		moves_str += "move:" + str(move[0]) + "," + str(move[1]) + "," + str(move[2])
+
+	var result = {
+		"replay": "board:" + ",".join(pre_board_data) + "|" + moves_str + "|" + "board:" + ",".join(post_board_data)
+	}
+
+	avatar_key = "avatar" + str(player)
+	if player != 0 and is_instance_valid(player_avatar_display):
+		result[avatar_key] = player_avatar_display.get_avatar_data_string()
+
+	if await check_win():
+		if win_loss_state != "":
+			result["winner"] = my_player_id + "|" + win_loss_state
+	else:
+		play_sent_animation()
+
+	var appPlugin := Engine.get_singleton("AppPlugin")
+	if appPlugin:
+		appPlugin.updateGameData(JSON.stringify(result))
+	
+	animate_button_slide_down()
+	is_my_turn = false
+		
 func on_send_button_pressed():
 	if not temp_piece_active or temp_piece_x == -1:
 		return
+		
 	set_highlight_visibility(false)
 	reset_board_to_pre_data()
 	clear_temp_piece_visual()
@@ -1130,11 +1191,16 @@ func on_send_button_pressed():
 		send_button.visible = false
 		highlight_valid_moves()
 		return
+		
 	flip_pieces(temp_piece_x, temp_piece_y, player_symbol, directions_to_flip)
 	set_piece(temp_piece_x, temp_piece_y, player_symbol, true)
+	temp_piece_active = false
+	update_piece_counts()
+
 	print("Pre Avatar Assignment Number: ", player)
 	avatar_key = "avatar" + str(player)
 	print("Post Avatar Assignment Number: ", avatar_key)
+	
 	post_board_data = get_current_board_as_array()
 
 	print("Pre board data: ", pre_board_data)
@@ -1174,12 +1240,13 @@ func on_send_button_pressed():
 		appPlugin.updateGameData(game_data)
 	else:
 		print("AppPlugin is null. Cannot send game data.")
+		
 	temp_piece_active = false
 	temp_piece_x = -1
 	temp_piece_y = -1
 	animate_button_slide_down()
 	is_my_turn = false
-
+	
 func start_waiting_animation():
 	dot_count = 0
 	waiting_label.text = BASE_WAIT_TEXT + "."
