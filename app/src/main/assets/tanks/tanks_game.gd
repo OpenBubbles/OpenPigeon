@@ -51,6 +51,16 @@ const BOARD_X_MIN := -187.0
 const BOARD_X_MAX := 187.0
 const BOARD_X_WIDTH := BOARD_X_MAX - BOARD_X_MIN # 374.0
 
+const SHOT_FIXED_DT := 1.0 / 60.0
+const SHOT_GRAVITY_UNITS := -200.8
+const SHOT_WIND_ACCEL_SCALE := 150.0
+const SHOT_LINEAR_DAMPING := 0.5
+const SHOT_MUZZLE_OFFSET_UNITS := 20.0
+const SHOT_SAFE_TRAVEL_UNITS := 40.0
+const SHOT_OUT_Y_UNITS := 2500.0
+const SHOT_OUT_X_UNITS := 5000.0
+const SHOT_COLLISION_RADIUS_PX := 4.0
+
 const TANK_WIDTH_UNITS := 25.0
 const TANK_HALF_WIDTH_UNITS := TANK_WIDTH_UNITS * 0.5
 
@@ -117,12 +127,6 @@ func _ready() -> void:
 
 	_connect_app_plugin_or_dev()
 
-func _get_pixels_per_board_unit() -> float:
-	if not is_instance_valid(terrain):
-		return 1.0
-	
-	return terrain.get_world_width() / BOARD_X_WIDTH
-
 func _get_target_tank_width_screen_px() -> float:
 	return TANK_WIDTH_UNITS * _get_pixels_per_board_unit()
 
@@ -139,6 +143,30 @@ func _screen_x_to_game_x(screen_x: float) -> float:
 		return screen_x
 	
 	return remap(screen_x, 0.0, terrain.get_world_width(), BOARD_X_MIN, BOARD_X_MAX)
+	
+func _units_vec_to_screen_delta(units: Vector2) -> Vector2:
+	return Vector2(
+		_board_units_to_screen_px(units.x),
+		-_board_units_to_screen_px(units.y)
+	)
+
+func _get_original_launch_angle(player_idx: int, rot_rad: float) -> float:
+	if player_idx == 1:
+		return rot_rad
+	return -PI - rot_rad
+
+func _get_launch_speed_units(power_01: float) -> float:
+	power_01 = clampf(power_01, 0.0, 1.0)
+	return 88.0 + 302.0 * power_01
+
+func _get_shot_spawn_screen_position(tank: Tank, launch_angle: float) -> Vector2:
+	var muzzle_base: Vector2 = tank.barrel_pivot.global_position
+	var muzzle_offset_screen: Vector2 = Vector2(
+		cos(launch_angle),
+		-sin(launch_angle)
+	) * _board_units_to_screen_px(SHOT_MUZZLE_OFFSET_UNITS)
+
+	return muzzle_base + muzzle_offset_screen
 
 func _setup_aim_label() -> void:
 	_aim_label = Label.new()
@@ -152,6 +180,15 @@ func _setup_aim_label() -> void:
 		aim_layer.add_child(_aim_label)
 	elif is_instance_valid(overlay):
 		overlay.add_child(_aim_label)
+		
+func _get_pixels_per_board_unit() -> float:
+	if not is_instance_valid(terrain):
+		return 1.0
+	
+	return terrain.get_world_width() / BOARD_X_WIDTH
+
+func _board_units_to_screen_px(units: float) -> float:
+	return units * _get_pixels_per_board_unit()
 
 func _connect_app_plugin_or_dev() -> void:
 	var app_plugin := Engine.get_singleton("AppPlugin")
@@ -169,7 +206,7 @@ func _connect_app_plugin_or_dev() -> void:
 			"isYourTurn": true,
 			"avatar1": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657",
 			"avatar2": "",
-			"replay": "board:height,55.690147&wind,0.0&tank1x,-140.662827&tank1rot,-3.1415&tank1power,1.000000&tank1hp,2&tank2x,116.385284&tank2rot,-3.1415&tank2power,0.500000&tank2hp,2|shoot:1"
+			"replay": "board:height,0.0&wind,0.0&tank1x,-150.0&tank1rot,4.960246&tank1power,0.82741&tank1hp,3&tank2x,150.0&tank2rot,-4.960246&tank2power,0.82741&tank2hp,2|shoot:1"
 		})
 		#var dev := JSON.stringify({ #PLAYER 1
 			#"myPlayerId": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb",
@@ -822,72 +859,117 @@ func _on_dot_timer_timeout() -> void:
 		dots += "."
 	waiting_label.text = BASE_WAIT_TEXT + dots
 	
-# --- ADD TO THE VERY BOTTOM OF tanks_game.gd ---
+func _circle_intersects_rect(center: Vector2, radius: float, rect: Rect2) -> bool:
+	var closest_x: float = clampf(center.x, rect.position.x, rect.position.x + rect.size.x)
+	var closest_y: float = clampf(center.y, rect.position.y, rect.position.y + rect.size.y)
+	var closest: Vector2 = Vector2(closest_x, closest_y)
+	return center.distance_squared_to(closest) <= radius * radius
+
+func _circle_intersects_tank(center: Vector2, radius: float, tank: Tank) -> bool:
+	if not is_instance_valid(tank) or not is_instance_valid(tank.body) or tank.body.texture == null:
+		return false
+
+	var tex_size := Vector2(
+		float(tank.body.texture.get_width()),
+		float(tank.body.texture.get_height())
+	)
+
+	var scaled_size := Vector2(
+		tex_size.x * abs(tank.scale.x * tank.body.scale.x),
+		tex_size.y * abs(tank.scale.y * tank.body.scale.y)
+	)
+
+	var top_left := tank.global_position - Vector2(scaled_size.x * 0.5, scaled_size.y)
+	var rect := Rect2(top_left, scaled_size)
+
+	return _circle_intersects_rect(center, radius, rect)
 
 class TankBullet extends Node2D:
 	signal impact(target_hit: String)
-	
-	var velocity: Vector2 = Vector2.ZERO
-	var gravity: float = 600.0
-	var wind: float = 0.0
+
 	var game: TanksGame
-	var _distance_traveled: float = 0.0
-	
+	var origin_screen_position: Vector2 = Vector2.ZERO
+	var position_units: Vector2 = Vector2.ZERO
+	var velocity_units: Vector2 = Vector2.ZERO
+	var gravity_units: float = SHOT_GRAVITY_UNITS
+	var wind_units: float = 0.0
+	var collision_radius_px: float = SHOT_COLLISION_RADIUS_PX
+
+	var _distance_traveled_units: float = 0.0
 	var _trail: Line2D
 	var _is_dead: bool = false
-	
+	var _step_accum: float = 0.0
+
 	func _ready() -> void:
+		set_as_top_level(true)
+
 		_trail = Line2D.new()
 		_trail.width = 4.0
 		_trail.default_color = Color(1.0, 0.9, 0.4, 0.8)
-		# Setting as top level ensures the trail stays put globally 
-		# even if the bullet rotates or moves
-		_trail.set_as_top_level(true) 
+		_trail.set_as_top_level(true)
 		add_child(_trail)
-		set_as_top_level(true)
-		
+
 	func _draw() -> void:
-		if not _is_dead:
-			draw_circle(Vector2.ZERO, 4.0, Color.WHITE)
-			draw_circle(Vector2.ZERO, 2.0, Color.YELLOW)
-			
+		if _is_dead:
+			return
+
+		draw_circle(Vector2.ZERO, 4.0, Color.WHITE)
+		draw_circle(Vector2.ZERO, 2.0, Color.YELLOW)
+
 	func _physics_process(delta: float) -> void:
 		if _is_dead:
 			return
-			
-		velocity.y += gravity * delta
-		velocity.x += wind * delta
-		
-		var step = velocity * delta
-		global_position += step
-		_distance_traveled += step.length() # Track how far we've gone
-		
+
+		_step_accum += delta
+
+		while _step_accum >= SHOT_FIXED_DT and not _is_dead:
+			_step_accum -= SHOT_FIXED_DT
+			_step_simulation()
+
+	func _step_simulation() -> void:
+		velocity_units.y += gravity_units * SHOT_FIXED_DT
+
+		if not is_zero_approx(wind_units):
+			velocity_units.x += wind_units * SHOT_FIXED_DT
+
+		velocity_units /= (1.0 + SHOT_LINEAR_DAMPING * SHOT_FIXED_DT)
+
+		var step_units := velocity_units * SHOT_FIXED_DT
+		position_units += step_units
+		_distance_traveled_units += step_units.length()
+
+		global_position = origin_screen_position + game._units_vec_to_screen_delta(position_units)
+
 		_trail.add_point(global_position)
 		if _trail.get_point_count() > 20:
 			_trail.remove_point(0)
-			
+
 		_check_collisions()
-		
+
 	func _check_collisions() -> void:
-		# 1. Safety check: Don't collide with the shooter until we've moved 40 pixels
-		if _distance_traveled < 40.0:
+		if _distance_traveled_units < SHOT_SAFE_TRAVEL_UNITS:
 			return
 
-		# 2. Out of Bounds
-		if global_position.y > 2500 or abs(global_position.x) > 5000:
+		var pos_units_x := game._screen_x_to_game_x(global_position.x)
+
+		if abs(position_units.y) > SHOT_OUT_Y_UNITS or abs(pos_units_x) > SHOT_OUT_X_UNITS:
 			_trigger_impact("out")
 			return
-			
-		# 3. Tank Collisions
-		const TANK_HIT_RADIUS := 13.0
-		if is_instance_valid(game.tank_p1) and global_position.distance_to(game.tank_p1.global_position) < TANK_HIT_RADIUS:
+
+		if game._circle_intersects_tank(global_position, collision_radius_px, game.tank_p1):
 			_trigger_impact("tank1")
 			return
-		if is_instance_valid(game.tank_p2) and global_position.distance_to(game.tank_p2.global_position) < TANK_HIT_RADIUS:
+
+		if game._circle_intersects_tank(global_position, collision_radius_px, game.tank_p2):
 			_trigger_impact("tank2")
 			return
-			
-		# 4. Ground Collision
+
+		if is_instance_valid(game.terrain) and game.terrain.has_tower():
+			var tower_rect := game.terrain.get_tower_rect()
+			if game._circle_intersects_rect(global_position, collision_radius_px, tower_rect):
+				_trigger_impact("tower")
+				return
+
 		if is_instance_valid(game.terrain):
 			var ground_y := game.terrain.get_surface_y_at_screen_x(global_position.x)
 			if global_position.y >= ground_y:
@@ -897,13 +979,12 @@ class TankBullet extends Node2D:
 	func _trigger_impact(target: String) -> void:
 		_is_dead = true
 		emit_signal("impact", target)
-		queue_redraw() # Hides the bullet core
-		
-		# Fade out the trail smoothly before deleting
+		queue_redraw()
+
 		var tw := create_tween()
 		tw.tween_property(_trail, "modulate:a", 0.0, 0.5)
 		tw.tween_callback(queue_free)
-
+		
 var _is_playing_round: bool = false
 
 func _on_replay_action(_action: Dictionary) -> void:
@@ -1002,44 +1083,39 @@ func _set_ui_visible(v: bool) -> void:
 	
 func _execute_shot(player_idx: int, rot_rad: float, power_01: float, wind_val: float) -> void:
 	var tank: Tank = tank_p1 if player_idx == 1 else tank_p2
-	
-	var target_visual_deg = _display_deg_from_godot_rad(rot_rad)
+
+	var target_visual_deg := _display_deg_from_godot_rad(rot_rad)
 	if player_idx != core.player:
 		target_visual_deg = 180.0 - target_visual_deg
-	var target_visual = _data_deg_to_visual_deg(target_visual_deg)
-	
+	var target_visual := _data_deg_to_visual_deg(target_visual_deg)
+
 	var tw := create_tween()
-	# Call your tank's setter method
 	tw.tween_method(tank.set_barrel_display_deg, tank.get_barrel_display_deg(), target_visual, 0.6).set_trans(Tween.TRANS_SINE)
 	await tw.finished
-	await get_tree().create_timer(0.2).timeout 
-	
-	# 2. Spawn Bullet
+	await get_tree().create_timer(0.2).timeout
+
+	var launch_angle := _get_original_launch_angle(player_idx, rot_rad)
+
 	var bullet := TankBullet.new()
 	bullet.game = self
-	bullet.wind = wind_val * 450.0 
-	
-	# --- USE YOUR TANK'S HELPER ---
-	bullet.global_position = tank.get_barrel_tip_global()
-	
-	# To get the perfect velocity direction, we look from the pivot to the tip
-	var shoot_dir = (tank.barrel_tip.global_position - tank.barrel_pivot.global_position).normalized()
-	bullet.velocity = shoot_dir * (power_01 * 1200.0)
-	# ------------------------------
-	
+	bullet.origin_screen_position = _get_shot_spawn_screen_position(tank, launch_angle)
+	bullet.global_position = bullet.origin_screen_position
+	bullet.position_units = Vector2.ZERO
+	bullet.velocity_units = Vector2(cos(launch_angle), sin(launch_angle)) * _get_launch_speed_units(power_01)
+	bullet.gravity_units = SHOT_GRAVITY_UNITS
+	bullet.wind_units = wind_val * SHOT_WIND_ACCEL_SCALE
+
 	add_child(bullet)
-	
-	# 3. Wait for impact
+
 	var target_hit: String = await bullet.impact
-	
-	# 4. Handle Damage
+
 	if target_hit == "tank1":
 		_damage_tank(1)
 	elif target_hit == "tank2":
 		_damage_tank(2)
-		
+
 	await get_tree().create_timer(0.8).timeout
-	
+
 func _damage_tank(idx: int) -> void:
 	var key := "tank1hp" if idx == 1 else "tank2hp"
 	var current_hp: int = core.current_board.get(key, 3)
