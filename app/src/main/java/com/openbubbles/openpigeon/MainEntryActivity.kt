@@ -13,7 +13,7 @@ class MainEntryActivity : Activity() {
         super.onCreate(savedInstanceState)
         val launchIntent = packageManager.getLaunchIntentForPackage("com.openbubbles.messaging")
         if (launchIntent != null) {
-            Toast.makeText(this, "Add OpenPigeon like you would a photo.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Choose OpenPigeon in the photo picker.", Toast.LENGTH_LONG).show()
             // Start main activity
             startActivity(launchIntent)
             finishAndRemoveTask()
