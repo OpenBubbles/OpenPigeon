@@ -1,0 +1,32 @@
+[gd_scene format=3 uid="uid://dvhrp4pphm6u8"]
+
+[ext_resource type="Script" uid="uid://xqa68dguoagn" path="res://tanks/tanks.gd" id="1_aqudm"]
+[ext_resource type="Texture2D" uid="uid://cw12n63myr4oc" path="res://tanks/tank_body.png" id="2_gm0yf"]
+[ext_resource type="Texture2D" uid="uid://b0naaftorps7w" path="res://tanks/tank_barrel.png" id="3_ooklr"]
+[ext_resource type="Script" uid="uid://b315e8i41x8pl" path="res://tanks/power_indicator.gd" id="4_gm0yf"]
+
+[node name="Tanks" type="Node2D" unique_id=1778300704]
+script = ExtResource("1_aqudm")
+
+[node name="Body" type="Sprite2D" parent="." unique_id=69126261]
+unique_name_in_owner = true
+z_index = 1
+texture = ExtResource("2_gm0yf")
+
+[node name="BarrelPivot" type="Node2D" parent="." unique_id=690416245]
+unique_name_in_owner = true
+position = Vector2(30, -80)
+
+[node name="Barrel" type="Sprite2D" parent="BarrelPivot" unique_id=1770052559]
+unique_name_in_owner = true
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("3_ooklr")
+offset = Vector2(400, 0)
+
+[node name="BarrelTip" type="Marker2D" parent="BarrelPivot" unique_id=125551200]
+unique_name_in_owner = true
+position = Vector2(390, 0)
+
+[node name="PowerIndicator" type="Node2D" parent="BarrelPivot/BarrelTip" unique_id=1827408363]
+unique_name_in_owner = true
+script = ExtResource("4_gm0yf")

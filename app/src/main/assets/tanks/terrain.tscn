@@ -1,0 +1,25 @@
+[gd_scene format=3 uid="uid://cl11a76ir55ay"]
+
+[ext_resource type="Script" uid="uid://csaiawkyxgq7x" path="res://tanks/terrain.gd" id="1_f0n1t"]
+[ext_resource type="Texture2D" uid="uid://bc6xvgbrvdvmj" path="res://tanks/tower.png" id="2_usr47"]
+
+[node name="Terrain" type="Node2D" unique_id=1314481984]
+script = ExtResource("1_f0n1t")
+
+[node name="Ground" type="Polygon2D" parent="." unique_id=708335497]
+unique_name_in_owner = true
+color = Color(0.011764706, 0.09803922, 0.015686275, 1)
+
+[node name="Edge" type="Line2D" parent="." unique_id=1785079306]
+unique_name_in_owner = true
+width = 4.0
+default_color = Color(0.16862746, 0.1882353, 0.13333334, 1)
+
+[node name="TowerRoot" type="Node2D" parent="." unique_id=569447194]
+unique_name_in_owner = true
+
+[node name="Tower" type="Sprite2D" parent="TowerRoot" unique_id=1538528775]
+unique_name_in_owner = true
+scale = Vector2(0.15, 0.15)
+texture = ExtResource("2_usr47")
+centered = false
