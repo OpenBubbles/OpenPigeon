@@ -76,6 +76,9 @@ var shots: Array[Arrow] = []
 var moves: Array[Vector3] = []
 var current_arrow: Arrow = null
 var played_replay: bool = false
+var replay_in_progress: bool = false
+var last_replay_raw: String = ""
+var set_award_in_progress: bool = false
 var send_winner: String = ""
 var local_index: int = 1
 
@@ -260,8 +263,14 @@ func _process_game_state() -> void:
 	stop_waiting_animation()
 	_hide_wind_panel(0.0)
 
+	if replay_in_progress:
+		print("PROCESS_GAME_STATE: replay already in progress, skipping re-entry")
+		return
+
 	if not replay.is_empty() and not played_replay and _should_play_replay:
 		print("PROCESS_GAME_STATE: playing opponent replay first")
+		replay_in_progress = true
+		played_replay = true
 		await play_replay()
 	else:
 		if not replay.is_empty() and not played_replay:
@@ -476,6 +485,10 @@ func _animate_set_win_bump(is_you: bool) -> void:
 	t.tween_property(panel, "scale", start_scale, 0.18)
 	
 func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
+	if set_award_in_progress:
+		print("_animate_set_bar_and_award_points: already in progress, skipping duplicate entry")
+		return
+	set_award_in_progress = true
 	_hide_wind_panel(0.0)
 	print("=== _animate_set_bar_and_award_points START === from_replay=", from_replay)
 	print("num_shots:", num_shots, " num:", num, " you_score:", you_score, " opp_score:", opp_score)
@@ -488,6 +501,7 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 		print("Top bar / score_box / score_label missing, skipping animation.")
 		if not from_replay:
 			_award_set_points_and_continue()
+		set_award_in_progress = false
 		return
 
 	var is_second_shooter: bool = from_replay or (num % 2 == 0)
@@ -537,6 +551,7 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 
 		print("Back tween finished (mid-set)")
 		print("=== _animate_set_bar_and_award_points END (mid-set) ===")
+		set_award_in_progress = false
 		return
 
 	var start_you: int = you_score
@@ -607,6 +622,7 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 
 	print("Back tween finished")
 	print("=== _animate_set_bar_and_award_points END (full set) ===")
+	set_award_in_progress = false
 
 func _hide_wind_panel(duration: float = 0.2) -> void:
 	if not is_instance_valid(wind_panel_container):
@@ -791,6 +807,9 @@ func _reconcile_scores_with_post_state() -> void:
 	await tween.finished
 
 func play_replay() -> void:
+	if not replay_in_progress:
+		print("play_replay: called without replay_in_progress guard, aborting")
+		return
 	_hide_wind_panel(0.0)
 	update_distance()
 	_update_set_score_labels()
@@ -838,7 +857,6 @@ func play_replay() -> void:
 			arrow_i.queue_free()
 	replay_arrows.clear()
 
-	played_replay = true
 	print("play_replay: finished (before reconcile), you_score=", you_score, " opp_score=", opp_score,
 		" you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
 
@@ -864,7 +882,7 @@ func play_replay() -> void:
 		var sets_changed: bool = (pre_sets != post_sets)
 		var set_index_changed: bool = (pre_set_num != post_set_num)
 
-		should_end_set = sets_changed or set_index_changed or both_players_have_score
+		should_end_set = sets_changed or set_index_changed
 
 		print("play_replay: pre_state=", pre, " post_state=", post,
 			" pre_sets=", pre_sets, " post_sets=", post_sets,
@@ -884,6 +902,8 @@ func play_replay() -> void:
 		check_winner()
 	else:
 		print("play_replay: not end-of-set; skipping set animation and letting local player shoot.")
+
+	replay_in_progress = false
 
 func update_distance() -> void:
 	match set_num:
@@ -956,12 +976,19 @@ func _set_game_data(new_replay: String) -> void:
 		if is_instance_valid(player_avatar_display):
 			player_avatar_display.call_deferred("update_avatar_from_data", p1_data)
 
-	if "replay" in parsed and not parsed["replay"].is_empty():
-		replay = parse_replay(parsed["replay"])
+	var incoming_replay_raw: String = ""
+	if "replay" in parsed:
+		incoming_replay_raw = String(parsed["replay"])
+
+	if not incoming_replay_raw.is_empty():
+		replay = parse_replay(incoming_replay_raw)
 
 		var has_pre: bool = replay.has("pre_state")
 		var has_post: bool = replay.has("post_state")
 		print("_set_game_data: has_pre_state=", has_pre, " has_post_state=", has_post, " replay=", replay)
+		if incoming_replay_raw == last_replay_raw and replay_in_progress:
+			print("_set_game_data: same replay received while replay_in_progress=true; ignoring duplicate processing request")
+		last_replay_raw = incoming_replay_raw
 
 		var shooter_index: int = 0
 		if has_pre and has_post:
@@ -1044,14 +1071,22 @@ func _set_game_data(new_replay: String) -> void:
 	shots.clear()
 	moves = []
 	num_shots = 0
-	played_replay = false
+
+	if replay_in_progress:
+		print("_set_game_data: replay already in progress, preserving played_replay state")
+	else:
+		played_replay = false
 
 	has_turn_pre_state = false
 	turn_pre_state.clear()
 
 	print("YOU ARE PLAYER ", player, " (local_index=", local_index, ")")
-	_process_game_state()
 
+	if replay_in_progress and incoming_replay_raw == last_replay_raw:
+		print("_set_game_data: suppressing _process_game_state re-entry for identical replay already in progress")
+		return
+
+	_process_game_state()
 
 func add_score(score: int, you: bool = true) -> void:
 	await get_tree().create_timer(0.5).timeout
