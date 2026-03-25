@@ -170,44 +170,47 @@ func _ready() -> void:
 		var center := _get_bullseye_center_world()
 		camera.look_at(center - Vector3(0.0, CAMERA_LOOK_AT_Y_OFFSET, 0.0), Vector3.UP)
 
-func check_winner() -> bool:
-	print("check_winner: you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
+func check_winner(completed_round: int = set_num) -> bool:
+	print("check_winner: completed_round=", completed_round, " you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
 
-	if (you_set_wins == 2 and opp_set_wins == 0):
-		game_over = true
-		stop_waiting_animation()
-		_hide_wind_panel(0.0)
-		if not spectator_mode:
-			winner_label.text = "YOU WIN!"
-		else:
-			winner_label.text = "Player 1 Wins!"
-		winner_label.visible = true
-		winner_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0))
-		if is_instance_valid(player_avatar_display):
-			_show_win_burst(player_avatar_display)
-		send_winner = my_uuid + "|1"
-		print("check_winner: EARLY YOU WIN (2-0 rule)")
-		return true
-
-	if (opp_set_wins == 2 and you_set_wins == 0):
-		game_over = true
-		stop_waiting_animation()
-		_hide_wind_panel(0.0)
-		if not spectator_mode:
-			winner_label.text = "YOU LOSE"
-			winner_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.2))
-		else:
-			winner_label.text = "Player 2 Wins"
+	# Early clinch only after round 2 or later.
+	if completed_round >= 2:
+		if you_set_wins == 2 and opp_set_wins == 0:
+			game_over = true
+			stop_waiting_animation()
+			_hide_wind_panel(0.0)
+			if not spectator_mode:
+				winner_label.text = "YOU WIN!"
+			else:
+				winner_label.text = "Player 1 Wins!"
+			winner_label.visible = true
 			winner_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0))
-		winner_label.visible = true
-		if is_instance_valid(opp_avatar_display):
-			_show_win_burst(opp_avatar_display)
-		send_winner = my_uuid + "|-1"
-		print("check_winner: EARLY YOU LOSE (0-2 rule)")
-		return true
-		
-	if you_set_wins + opp_set_wins < 3:
-		print("check_winner: less than 3 combined points earned, no result yet.")
+			if is_instance_valid(player_avatar_display):
+				_show_win_burst(player_avatar_display)
+			send_winner = my_uuid + "|1"
+			print("check_winner: EARLY YOU WIN (2-0 rule)")
+			return true
+
+		if opp_set_wins == 2 and you_set_wins == 0:
+			game_over = true
+			stop_waiting_animation()
+			_hide_wind_panel(0.0)
+			if not spectator_mode:
+				winner_label.text = "YOU LOSE"
+				winner_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.2))
+			else:
+				winner_label.text = "Player 2 Wins"
+				winner_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0))
+			winner_label.visible = true
+			if is_instance_valid(opp_avatar_display):
+				_show_win_burst(opp_avatar_display)
+			send_winner = my_uuid + "|-1"
+			print("check_winner: EARLY YOU LOSE (0-2 rule)")
+			return true
+
+	# No final winner unless round 3 has actually completed.
+	if completed_round < 3:
+		print("check_winner: completed_round < 3 and no early clinch; no result yet.")
 		return false
 
 	game_over = true
@@ -250,7 +253,7 @@ func check_winner() -> bool:
 		send_winner = my_uuid + "|-1"
 		print("check_winner: YOU LOSE (final)")
 		return true
-
+		
 func _process_game_state() -> void:
 	if game_over:
 		print("PROCESS_GAME_STATE: game_over=true, ignoring further state.")
@@ -316,12 +319,13 @@ func _process_game_state() -> void:
 		print("PROCESS_GAME_STATE: set finished (local), calling _animate_set_bar_and_award_points()")
 		await _animate_set_bar_and_award_points()
 
-func _award_set_points_and_continue() -> void:
-	check_winner()
+func _award_set_points_and_continue(completed_round: int = set_num) -> bool:
+	var won_now: bool = check_winner(completed_round)
 	if appPlugin:
 		appPlugin.updateGameData(export_replay())
 	else:
 		print("No app plugin! " + export_replay())
+	return won_now
 		
 func _spawn_avatar_score_popup(is_you: bool, amount: int, is_miss: bool = false) -> void:
 	var avatar: Control = player_avatar_display if is_you else opp_avatar_display
@@ -581,34 +585,44 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 		_spawn_avatar_score_popup(false, 1)
 	
 	
+	var completed_round: int = set_num
+	var match_over_now: bool = false
+
 	if not from_replay:
 		print("Calling _award_set_points_and_continue (end of full set, before score reset)")
-		_award_set_points_and_continue()
-	if set_num < 3:
-		update_set_number(set_num + 1)
-		update_distance()
-		print("CALL 506")
-	
-	if start_you != 0 or start_opp != 0:
-		print("Starting score tween from:", start_you, start_opp, "to 0,0")
-		var score_tween := create_tween()
-		score_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		match_over_now = _award_set_points_and_continue(completed_round)
+	else:
+		match_over_now = check_winner(completed_round)
 
-		var update_score := func(t: float) -> void:
-			var y_val: int = int(round(lerp(float(start_you), 0.0, t)))
-			var o_val: int = int(round(lerp(float(start_opp), 0.0, t)))
-			you_score = y_val
-			opp_score = o_val
-			_update_set_score_labels()
+	# If the match just ended, keep the final round score visible.
+	if match_over_now:
+		print("_animate_set_bar_and_award_points: match_over_now=true; preserving final score display")
+	else:
+		if set_num < 3:
+			update_set_number(set_num + 1)
+			update_distance()
+			print("CALL 506")
 
-		score_tween.tween_method(update_score, 0.0, 1.0, 0.7)
-		await score_tween.finished
-		print("Score tween finished")
+		if start_you != 0 or start_opp != 0:
+			print("Starting score tween from:", start_you, start_opp, "to 0,0")
+			var score_tween := create_tween()
+			score_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
-	you_score = 0
-	opp_score = 0
-	_update_set_score_labels()
-	print("Per-set scores reset to 0-0")
+			var update_score := func(t: float) -> void:
+				var y_val: int = int(round(lerp(float(start_you), 0.0, t)))
+				var o_val: int = int(round(lerp(float(start_opp), 0.0, t)))
+				you_score = y_val
+				opp_score = o_val
+				_update_set_score_labels()
+
+			score_tween.tween_method(update_score, 0.0, 1.0, 0.7)
+			await score_tween.finished
+			print("Score tween finished")
+
+		you_score = 0
+		opp_score = 0
+		_update_set_score_labels()
+		print("Per-set scores reset to 0-0")
 
 	await get_tree().create_timer(0.4).timeout
 
@@ -899,10 +913,8 @@ func play_replay() -> void:
 	if should_end_set:
 		await _animate_set_bar_and_award_points(true)
 		print("play_replay: _animate_set_bar_and_award_points(true, ", post_set_num, ") completed (end-of-set)")
-		check_winner()
 	else:
 		print("play_replay: not end-of-set; skipping set animation and letting local player shoot.")
-
 	replay_in_progress = false
 
 func update_distance() -> void:
