@@ -43,6 +43,8 @@ var p2_pre_score: int = 0
 var p1_score: int = 0
 var p2_score: int = 0
 var spectator_mode: bool = false
+var redemption_active: bool = false
+var redemption_darts_allowed: int = 0
 
 func _ready():
 	main_dart = get_node("dart")
@@ -104,22 +106,68 @@ func _set_game_data(new_replay: String):
 		p2_pre_score = mode
 		set_score(1, mode)
 		set_score(2, mode)
-	
+	redemption_active = false
+	redemption_darts_allowed = 0
 	replay_played = false
 	reset_game_board()
 	_process_game_state()
+	
+func _get_turn_dart_limit() -> int:
+	if redemption_active:
+		return redemption_darts_allowed
+	return 3
+
+func _maybe_start_redemption_from_replay() -> bool:
+	if spectator_mode:
+		return false
+	if player != 2:
+		return false
+	if replay == null or replay.is_empty():
+		return false
+
+	var parsed := parse_replay(replay)
+	if not parsed.has("pre_state") or not parsed.has("post_state"):
+		return false
+
+	var pre_state: Array = parsed["pre_state"]
+	var post_state: Array = parsed["post_state"]
+
+	if pre_state.size() < 2 or post_state.size() < 2:
+		return false
+
+	var p1_was_not_zero: bool = int(pre_state[0]) != 0
+	var p1_is_zero_now: bool = int(post_state[0]) == 0
+	if not (p1_was_not_zero and p1_is_zero_now):
+		return false
+
+	var darts_used: int = 0
+	if parsed.has("moves"):
+		darts_used = (parsed["moves"] as Array).size()
+
+	if darts_used <= 0:
+		return false
+
+	redemption_active = true
+	redemption_darts_allowed = darts_used
+	print("REDEMPTION ENABLED: player 2 gets ", redemption_darts_allowed, " dart(s)")
+	return true
 
 func _process_game_state():
 	if is_my_turn:
 		stop_waiting_animation()
 		if replay != null and not replay.is_empty() and not replay_played:
 			await play_replay(replay)
-			if check_win():
-				return
-			reset_game_board()
-			replay_played = true
+
+			if _maybe_start_redemption_from_replay():
+				reset_game_board()
+				replay_played = true
+			else:
+				if check_win():
+					return
+				reset_game_board()
+				replay_played = true
 			
-		if num_shots < 3:
+		if num_shots < _get_turn_dart_limit():
 			var player_dart = spawn_dart(true)
 			print("NEW DART: " + str(player_dart))
 			player_dart.on_hit_board.connect(func(score):
@@ -138,9 +186,9 @@ func _process_game_state():
 					await get_tree().create_timer(1).timeout
 					bust_label.visible = false
 					set_score(player, old_score)
-					num_shots = 3
+					num_shots = _get_turn_dart_limit()
 				if get_score(player) == 0:
-					num_shots = 3
+					num_shots = _get_turn_dart_limit()
 				print(my_moves)
 				_process_game_state()
 			)
@@ -160,6 +208,35 @@ func _process_game_state():
 
 var didIWin = false
 func check_win() -> bool:
+	# Special redemption rule:
+	# If player 1 has reached 0 and the local player is player 2, allow
+	# player 2 one answering turn with the same number of darts player 1 used.
+	if redemption_active and player == 2 and get_score(1) == 0:
+		if get_score(2) == 0:
+			redemption_active = false
+			redemption_darts_allowed = 0
+			winner_label.text = "YOU WIN!"
+			winner_label.visible = true
+			winner_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			if is_instance_valid(player_avatar_display):
+				_show_win_burst(player_avatar_display)
+			didIWin = true
+			return true
+
+		if my_moves.size() < redemption_darts_allowed:
+			print("check_win: redemption still in progress ", my_moves.size(), "/", redemption_darts_allowed)
+			return false
+
+		redemption_active = false
+		redemption_darts_allowed = 0
+		winner_label.text = "YOU LOSE"
+		winner_label.visible = true
+		winner_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+		if is_instance_valid(opp_avatar_display):
+			_show_win_burst(opp_avatar_display)
+		didIWin = false
+		return true
+
 	if get_score(player) == 0:
 		winner_label.text = "YOU WIN!"
 		winner_label.visible = true
@@ -177,7 +254,7 @@ func check_win() -> bool:
 		didIWin = false
 		return true
 	return false
-
+	
 func send_replay():
 	var moves_str = ""
 	for move in my_moves:
