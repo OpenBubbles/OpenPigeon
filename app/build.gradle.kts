@@ -158,7 +158,15 @@ tasks.register<Exec>("exportGodotRelease") {
     inputs.dir(projectPath).withPathSensitivity(PathSensitivity.RELATIVE)
     outputs.file(exportZipPath)
 
-    commandLine(godotCmd, "--headless", "--path", projectPath, "--export-pack", "Android", exportZipPath.get().asFile.absolutePath)
+    commandLine(
+        godotCmd,
+        "--headless",
+        "--path",
+        projectPath,
+        "--export-pack",
+        "Android",
+        exportZipPath.get().asFile.absolutePath
+    )
 
     doFirst {
         exportZipPath.get().asFile.parentFile.mkdirs()
@@ -201,14 +209,15 @@ tasks.register<Copy>("copyOtherAssets") {
     into(project.layout.buildDirectory.dir("generated/release_assets"))
 }
 
-tasks.whenTaskAdded {
-    if (name == "preReleaseBuild") {
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
+    .configureEach {
         dependsOn(tasks.named("importGodotAssets"))
     }
-}
 
-tasks.whenTaskAdded {
-    if (name == "mergeReleaseAssets" || name.startsWith("lintVital") || name.startsWith("generateReleaseLint")) {
-        dependsOn(tasks.named<Copy>("copyOtherAssets"))
-    }
+tasks.matching {
+    it.name == "mergeReleaseAssets" ||
+            it.name.startsWith("lintVital") ||
+            it.name.startsWith("generateReleaseLint")
+}.configureEach {
+    dependsOn(tasks.named<Copy>("copyOtherAssets"))
 }
