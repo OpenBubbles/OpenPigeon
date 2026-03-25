@@ -326,6 +326,12 @@ func _award_set_points_and_continue(completed_round: int = set_num) -> bool:
 	else:
 		print("No app plugin! " + export_replay())
 	return won_now
+	
+func _send_turn_state_only() -> void:
+	if appPlugin:
+		appPlugin.updateGameData(export_replay())
+	else:
+		print("No app plugin! " + export_replay())
 		
 func _spawn_avatar_score_popup(is_you: bool, amount: int, is_miss: bool = false) -> void:
 	var avatar: Control = player_avatar_display if is_you else opp_avatar_display
@@ -541,9 +547,9 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 	await get_tree().create_timer(1).timeout
 
 	if not is_second_shooter:
-		print("Mid-set animation: only local player has shot; skipping set-win + score reset.")
+		print("Mid-set animation: only first shooter has shot; send state only, no winner check, no set award.")
 
-		_award_set_points_and_continue()
+		_send_turn_state_only()
 
 		var tween_back_mid := create_tween()
 		tween_back_mid.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
