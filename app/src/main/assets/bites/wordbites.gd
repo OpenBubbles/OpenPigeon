@@ -979,6 +979,9 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 	var viewport_rect: Rect2 = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
 	var margin: float = 12.0
 	var open_on_left: bool = false
+	
+	# Wait for popup to render and size itself before calculating position
+	await get_tree().process_frame
 	var popup_rect: Rect2 = popup.get_global_rect()
 	var right_space: float = viewport_rect.size.x - (anchor_rect.end.x + margin)
 	if popup_rect.size.x > right_space:
