@@ -256,6 +256,7 @@ tasks.configureEach {
         "mergeReleaseAssets",
         "compressReleaseAssets",
         "generateReleaseLintReportModel",
+        "generateReleaseLintVitalReportModel", // add this
         "lintAnalyzeRelease",
         "lintVitalAnalyzeRelease",
         "lintVitalReportRelease",

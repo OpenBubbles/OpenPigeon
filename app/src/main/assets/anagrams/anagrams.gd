@@ -78,8 +78,8 @@ func _ready() -> void:
 			has_connected = true
 			appPlugin.call("onReady")
 	else:
-		#var dev := '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","id":"dev"}'
-		var dev := '{"isYourTurn": true,"player":"2","letters":"ABCDEF","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
+		var dev := '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","id":"dev"}'
+		#var dev := '{"isYourTurn": true,"player":"2","letters":"ABCDEF","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
 		
 		await get_tree().process_frame
 		_set_game_data(dev)
