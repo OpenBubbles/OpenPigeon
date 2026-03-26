@@ -380,20 +380,18 @@ class PoolActivity : AppCompatActivity() {
     var scratch = false
 
     fun tableIsScratch(): Boolean {
-        var scratch = !cueBall.hitBall || cueBall.sunk
-
-        if (cueBall.ballHit != -1) {
-            val ballHit = poolBalls.find { it.number == cueBall.ballHit } ?: return false
-            val stripes = iAmStripes
-            val hasMoreBalls = stripes == null || poolBalls.count { !it.sunk && ((stripes && it.isStripe) || (!stripes && it.isSolid)) } != 0
-            if (ballHit.number == 8 && !hasMoreBalls) {
-                scratch = false
-            } else if (iAmStripes != null && ((!ballHit.isSolid && !iAmStripes!!) || (!ballHit.isStripe && iAmStripes!!))) {
-                // we hit the wrong ball
-                scratch = true
-            }
-        }
-        return scratch
+        val ballHit = if (cueBall.ballHit != -1) poolBalls.find { it.number == cueBall.ballHit } ?: return false else null
+        val stripes = iAmStripes
+        val remainingBalls = if (stripes == null) 0 else poolBalls.count { !it.sunk && ((stripes && it.isStripe) || (!stripes && it.isSolid)) }
+        return isScratch(
+            cueBallHitSomething = cueBall.hitBall,
+            cueBallSunk = cueBall.sunk,
+            ballHitNumber = ballHit?.number,
+            ballHitIsSolid = ballHit?.isSolid ?: false,
+            ballHitIsStripe = ballHit?.isStripe ?: false,
+            iAmStripes = iAmStripes,
+            remainingBalls = remainingBalls
+        )
     }
 
     var didIWin: Boolean? = null
@@ -480,18 +478,13 @@ class PoolActivity : AppCompatActivity() {
             mode = PoolMode.Disabled
 
 
-            var winState: Boolean? = null
             val blackBall = poolBalls.find { it.number == 8 }!!
-            if (blackBall.sunk) {
-                if (iAmStripes == null || poolBalls.count { !it.sunk && ((iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid)) } != 0
-                    || blackBall.holeX != calledPocket[0].toFloat() || blackBall.holeY != calledPocket[1].toFloat()) {
-                    // I lose, there are more balls to pocket, or the white ball went in too, or I put it in the wrong hole
-                    winState = false
-                } else {
-                    // this person win
-                    winState = true
-                }
-            }
+            val winState = determineWinState(
+                blackBallSunk = blackBall.sunk,
+                cueBallSunk = cueBall.sunk,
+                remainingBalls = poolBalls.count { !it.sunk && iAmStripes?.let { s -> if (s) it.isStripe else it.isSolid } == true },
+                blackBallInCalledPocket = blackBall.holeX == calledPocket[0].toFloat() && blackBall.holeY == calledPocket[1].toFloat()
+            )
 
             if (poolBalls.any { it.sunk } && !scratch && winState == null) {
                 if (iAmStripes == null && !wasFirst) {
