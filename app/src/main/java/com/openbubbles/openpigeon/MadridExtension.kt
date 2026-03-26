@@ -73,7 +73,6 @@ import com.openbubbles.openpigeon.pong.PongGame
 import com.openbubbles.openpigeon.pool.PoolGame
 import com.openbubbles.openpigeon.questions.QuestionsGame
 import com.openbubbles.openpigeon.reversi.ReversiGame
-import com.openbubbles.openpigeon.tanks.TanksGame
 import com.openbubbles.openpigeon.wordbites.WordbitesGame
 import com.openbubbles.openpigeon.wordgames.WordGames
 import com.openbubbles.openpigeon.wordhunt.WordHuntGame
@@ -103,7 +102,6 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             Crazy8Game(),
             ConnectGame(),
             PaintGame(),
-            TanksGame(),
             FillerGame(),
             CheckersGame(),
             ChessGame(),
