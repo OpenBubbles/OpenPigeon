@@ -1,4 +1,9 @@
 import java.util.Properties
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.Sync
+import org.gradle.api.tasks.Exec
+import org.gradle.kotlin.dsl.named
+import org.gradle.kotlin.dsl.register
 
 plugins {
     alias(libs.plugins.androidApplication)
@@ -16,10 +21,17 @@ fun getGodotExecutable(project: Project): String {
     }
     return "godot"
 }
+
 val godotCmd = getGodotExecutable(project)
 
 val props = Properties()
 file("$rootDir/config.properties").inputStream().use { props.load(it) }
+
+val godotProjectDir = layout.projectDirectory.dir("src/main/assets")
+val generatedGodotRoot = layout.buildDirectory.dir("generated/godotAssets")
+val debugGodotAssetsDir = generatedGodotRoot.map { it.dir("debug") }
+val releaseGodotAssetsDir = generatedGodotRoot.map { it.dir("release") }
+val godotExportZip = layout.buildDirectory.file("intermediates/godot/release/godot_export.zip")
 
 android {
     namespace = "com.openbubbles.openpigeon"
@@ -33,12 +45,15 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
         androidResources {
-            ignoreAssetsPattern = "!.svn:!.git:!.gitignore:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"
+            ignoreAssetsPattern =
+                "!.svn:!.git:!.gitignore:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"
         }
 
         buildConfigField("String", "PIO_SHARED_SECRET", "\"${props["PIO_SHARED_SECRET"]}\"")
         buildConfigField("String", "PIO_GAME_ID", "\"${props["PIO_GAME_ID"]}\"")
+
         externalNativeBuild {
             cmake {
                 cppFlags += ""
@@ -67,13 +82,16 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
+
     kotlinOptions {
         jvmTarget = "1.8"
     }
+
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
@@ -82,20 +100,22 @@ android {
     }
 
     sourceSets {
-        getByName("release") {
-            assets.setSrcDirs(files(project.layout.buildDirectory.dir("generated/release_assets")))
-        }
-        getByName("debug") {
-            assets.setSrcDirs(files( project.layout.projectDirectory.dir("src/main/assets")))
-        }
         getByName("main") {
-            assets.setSrcDirs(files())
+            // Main should not directly package assets anymore.
+            assets.setSrcDirs(emptyList<File>())
+        }
+
+        getByName("debug") {
+            assets.setSrcDirs(listOf(debugGodotAssetsDir))
+        }
+
+        getByName("release") {
+            assets.setSrcDirs(listOf(releaseGodotAssetsDir))
         }
     }
 }
 
 dependencies {
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
@@ -117,10 +137,7 @@ dependencies {
     implementation(composeBom)
     androidTestImplementation(composeBom)
 
-    // Choose one of the following:
-    // Material Design 3
     implementation(libs.androidx.material3)
-
     implementation(libs.androidx.ui.tooling.preview)
     debugImplementation(libs.androidx.ui.tooling)
 
@@ -132,92 +149,116 @@ dependencies {
     implementation(libs.mixpanel.android)
 }
 
-tasks.register<Exec>("importGodotAssets") {
-    description = "Imports Godot assets to ensure .godot cache exists (Fixes Grey Screen)."
+/**
+ * Runs Godot import so .godot cache exists in the Godot project itself.
+ *
+ * Note:
+ * This task writes into src/main/assets/.godot because Godot expects the project
+ * directory layout there. That is not ideal from Gradle’s perspective, but all
+ * Android consumers are isolated from it by reading only build/generated/...
+ */
+val importGodotAssets by tasks.registering(Exec::class) {
+    description = "Imports Godot assets so .godot cache exists."
     group = "godot"
 
-    val projectPath = project.layout.projectDirectory.dir("src/main/assets")
-    val godotHiddenFolder = projectPath.dir(".godot")
+    val godotHiddenFolder = godotProjectDir.dir(".godot")
 
-    inputs.files(fileTree(projectPath).matching { exclude(".godot/**") })
+    inputs.files(fileTree(godotProjectDir) {
+        exclude(".godot/**")
+    }).withPathSensitivity(PathSensitivity.RELATIVE)
+
     outputs.dir(godotHiddenFolder)
-
-    commandLine(godotCmd, "--headless", "--path", projectPath, "--editor", "--quit")
-}
-
-tasks.register<Exec>("exportGodotRelease") {
-    description = "Exports the Godot project for release."
-    group = "godot"
-
-    dependsOn("importGodotAssets")
-
-    workingDir = rootProject.projectDir
-    val projectPath = project.layout.projectDirectory.dir("src/main/assets")
-    val exportZipPath = project.layout.buildDirectory.file("godot_export.zip")
-
-    inputs.dir(projectPath).withPathSensitivity(PathSensitivity.RELATIVE)
-    outputs.file(exportZipPath)
 
     commandLine(
         godotCmd,
         "--headless",
         "--path",
-        projectPath,
-        "--export-pack",
-        "Android",
-        exportZipPath.get().asFile.absolutePath
+        godotProjectDir.asFile.absolutePath,
+        "--editor",
+        "--quit"
     )
+}
+
+/**
+ * Debug pipeline:
+ * import -> sync whole project assets into build/generated/godotAssets/debug
+ */
+val prepareGodotDebugAssets by tasks.registering(Sync::class) {
+    description = "Prepares Godot-backed Android assets for the debug build."
+    group = "godot"
+
+    dependsOn(importGodotAssets)
+
+    from(godotProjectDir)
+    into(debugGodotAssetsDir)
+
+    includeEmptyDirs = false
+}
+
+/**
+ * Release pipeline:
+ * import -> export pack -> unzip -> overlay extra files
+ */
+val exportGodotRelease by tasks.registering(Exec::class) {
+    description = "Exports the Godot project pack for release."
+    group = "godot"
+
+    dependsOn(importGodotAssets)
+
+    inputs.dir(godotProjectDir).withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.file(godotExportZip)
 
     doFirst {
-        exportZipPath.get().asFile.parentFile.mkdirs()
+        godotExportZip.get().asFile.parentFile.mkdirs()
     }
+
+    commandLine(
+        godotCmd,
+        "--headless",
+        "--path",
+        godotProjectDir.asFile.absolutePath,
+        "--export-pack",
+        "Android",
+        godotExportZip.get().asFile.absolutePath
+    )
 }
 
-tasks.register<Copy>("unzipGodotRelease") {
-    description = "Unzips the exported Godot project for the release build."
+val prepareGodotReleaseAssets by tasks.registering(Sync::class) {
+    description = "Prepares Godot-backed Android assets for the release build."
     group = "godot"
 
-    dependsOn("exportGodotRelease")
+    dependsOn(exportGodotRelease)
 
-    val exportZipPath = tasks.named<Exec>("exportGodotRelease").get().outputs.files.singleFile
+    from(zipTree(godotExportZip))
+    into(releaseGodotAssetsDir)
 
-    from(zipTree(exportZipPath))
-    into(project.layout.buildDirectory.dir("generated/release_assets"))
-}
+    includeEmptyDirs = false
 
-tasks.register<Copy>("copyMissingAssets") {
-    description = "Copy missing texture from original assets folder."
-    group = "godot"
-
-    dependsOn("unzipGodotRelease")
-
-    from(project.layout.projectDirectory.dir("src/main/assets/.godot/imported")) {
+    from(godotProjectDir.dir(".godot/imported")) {
         include("RedCupAlbedo.png-*.s3tc.ctex")
+        into(".godot/imported")
     }
-    into(project.layout.buildDirectory.dir("generated/release_assets/.godot/imported"))
-}
 
-tasks.register<Copy>("copyOtherAssets") {
-    description = "Copies the other misc assets files to the build directory."
-    group = "godot"
-
-    dependsOn("copyMissingAssets")
-
-    from(project.layout.projectDirectory.dir("src/main/assets")) {
+    from(godotProjectDir) {
         include("attributions.html")
     }
-    into(project.layout.buildDirectory.dir("generated/release_assets"))
 }
 
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
-    .configureEach {
-        dependsOn(tasks.named("importGodotAssets"))
-    }
+tasks.configureEach {
+    when (name) {
+        "mergeDebugAssets",
+        "compressDebugAssets",
+        "generateDebugLintReportModel",
+        "lintAnalyzeDebug",
+        "lintReportDebug",
+        "packageDebug" -> dependsOn(prepareGodotDebugAssets)
 
-tasks.matching {
-    it.name == "mergeReleaseAssets" ||
-            it.name.startsWith("lintVital") ||
-            it.name.startsWith("generateReleaseLint")
-}.configureEach {
-    dependsOn(tasks.named<Copy>("copyOtherAssets"))
+        "mergeReleaseAssets",
+        "compressReleaseAssets",
+        "generateReleaseLintReportModel",
+        "lintAnalyzeRelease",
+        "lintVitalAnalyzeRelease",
+        "lintVitalReportRelease",
+        "packageRelease" -> dependsOn(prepareGodotReleaseAssets)
+    }
 }
