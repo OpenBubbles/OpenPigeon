@@ -83,7 +83,7 @@ class PoolActivity : AppCompatActivity() {
         listOf(392, 412),
     )
 
-    val cueBallPlacementRadius = 20f
+    val cueBallPlacementRadius = 21f
     val cueBallMinX = 40f + cueBallPlacementRadius
     val cueBallMaxX = 744f - cueBallPlacementRadius
     val cueBallMinY = 40f + cueBallPlacementRadius
