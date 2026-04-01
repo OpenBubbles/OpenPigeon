@@ -1,4 +1,4 @@
-[gd_scene load_steps=47 format=3 uid="uid://cwj68wu8ntln"]
+[gd_scene format=3 uid="uid://cwj68wu8ntln"]
 
 [ext_resource type="Script" uid="uid://d11d0tliu83pm" path="res://battleship/battleground.gd" id="1_4q04m"]
 [ext_resource type="Script" uid="uid://bmxmvwf7usewn" path="res://battleship/battleship.gd" id="1_urm0v"]
@@ -10,7 +10,7 @@
 [ext_resource type="PackedScene" uid="uid://bk5btqccsu6bo" path="res://battleship/marker.tscn" id="4_yk3pl"]
 [ext_resource type="Texture2D" uid="uid://be7c3h71y7awb" path="res://battleship/cloud_noise.tres" id="5_7ycry"]
 [ext_resource type="Texture2D" uid="uid://dvhiuy2xdxiuj" path="res://battleship/shuffle_pressed.png" id="5_8c2i7"]
-[ext_resource type="Shader" path="res://battleship/water_ocean.gdshader" id="6_8c2i7"]
+[ext_resource type="Shader" uid="uid://f1704ei481dv" path="res://battleship/water_ocean.gdshader" id="6_8c2i7"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="8_0ayae"]
 [ext_resource type="Shader" uid="uid://djxcmb4j8hp3r" path="res://battleship/clouds_bg.gdshader" id="11_fql0a"]
 
@@ -163,24 +163,24 @@ expand_margin_bottom = 10.0
 [sub_resource type="ViewportTexture" id="ViewportTexture_0ayae"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_7yxgj"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_e4m7h"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_wlxoc"]
-
 [sub_resource type="ViewportTexture" id="ViewportTexture_xmvnm"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="ViewportTexture" id="ViewportTexture_wlxoc"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_wlxoc"]
+
 [sub_resource type="ViewportTexture" id="ViewportTexture_874s0"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
-[node name="Battleship" type="Control"]
+[sub_resource type="ViewportTexture" id="ViewportTexture_7yxgj"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_e4m7h"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[node name="Battleship" type="Control" unique_id=772642184]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -190,7 +190,7 @@ grow_vertical = 2
 mouse_filter = 1
 script = ExtResource("1_urm0v")
 
-[node name="WaterRect" type="ColorRect" parent="."]
+[node name="WaterRect" type="ColorRect" parent="." unique_id=530869131]
 unique_name_in_owner = true
 material = SubResource("ShaderMaterial_8c2i7")
 layout_mode = 1
@@ -202,7 +202,7 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.11764706, 0.60784316, 0.8666667, 1)
 
-[node name="CloudsRect" type="ColorRect" parent="."]
+[node name="CloudsRect" type="ColorRect" parent="." unique_id=1803390380]
 unique_name_in_owner = true
 visible = false
 material = SubResource("ShaderMaterial_7ycry")
@@ -215,7 +215,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="."]
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=1513067229]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -228,16 +228,16 @@ theme_override_constants/margin_top = 30
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 30
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer" unique_id=282603884]
 layout_mode = 2
 mouse_filter = 2
 
-[node name="TopBar" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+[node name="TopBar" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=2029384277]
 layout_mode = 2
 mouse_filter = 2
 alignment = 1
 
-[node name="RulesButton" type="Button" parent="MarginContainer/VBoxContainer/TopBar"]
+[node name="RulesButton" type="Button" parent="MarginContainer/VBoxContainer/TopBar" unique_id=496177112]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(56, 56)
 layout_mode = 2
@@ -249,7 +249,7 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_cnvch")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_8c2i7")
 theme_override_styles/hover = SubResource("StyleBoxTexture_ow2dl")
 
-[node name="StateLabel" type="Label" parent="MarginContainer/VBoxContainer/TopBar"]
+[node name="StateLabel" type="Label" parent="MarginContainer/VBoxContainer/TopBar" unique_id=1726717328]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -260,7 +260,7 @@ text = "Arrange your ships."
 horizontal_alignment = 1
 justification_flags = 162
 
-[node name="SettingsButton" type="Button" parent="MarginContainer/VBoxContainer/TopBar"]
+[node name="SettingsButton" type="Button" parent="MarginContainer/VBoxContainer/TopBar" unique_id=1358888823]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(56, 56)
 layout_mode = 2
@@ -272,18 +272,18 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_fql0a")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_7ycry")
 theme_override_styles/hover = SubResource("StyleBoxTexture_0ayae")
 
-[node name="Control" type="Control" parent="MarginContainer/VBoxContainer"]
+[node name="Control" type="Control" parent="MarginContainer/VBoxContainer" unique_id=1805439225]
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 
-[node name="BottomBar" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+[node name="BottomBar" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=445107251]
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 mouse_filter = 2
 alignment = 1
 
-[node name="ShuffleButton" type="TextureButton" parent="MarginContainer/VBoxContainer/BottomBar"]
+[node name="ShuffleButton" type="TextureButton" parent="MarginContainer/VBoxContainer/BottomBar" unique_id=558923282]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(56, 56)
 layout_mode = 2
@@ -292,12 +292,12 @@ texture_pressed = ExtResource("5_8c2i7")
 ignore_texture_size = true
 stretch_mode = 5
 
-[node name="CenterContainer" type="CenterContainer" parent="MarginContainer/VBoxContainer/BottomBar"]
+[node name="CenterContainer" type="CenterContainer" parent="MarginContainer/VBoxContainer/BottomBar" unique_id=164986195]
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
 
-[node name="StartButton" type="Button" parent="MarginContainer/VBoxContainer/BottomBar/CenterContainer"]
+[node name="StartButton" type="Button" parent="MarginContainer/VBoxContainer/BottomBar/CenterContainer" unique_id=439567799]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 56)
 layout_mode = 2
@@ -315,7 +315,7 @@ theme_override_styles/focus = SubResource("StyleBoxEmpty_cnvch")
 disabled = true
 text = "Start"
 
-[node name="FireButton" type="Button" parent="MarginContainer/VBoxContainer/BottomBar/CenterContainer"]
+[node name="FireButton" type="Button" parent="MarginContainer/VBoxContainer/BottomBar/CenterContainer" unique_id=792994879]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 56)
 layout_mode = 2
@@ -333,7 +333,7 @@ theme_override_styles/focus = SubResource("StyleBoxEmpty_d2ch3")
 disabled = true
 text = "Fire!"
 
-[node name="ChooseTargetLabel" type="Label" parent="MarginContainer/VBoxContainer/BottomBar/CenterContainer"]
+[node name="ChooseTargetLabel" type="Label" parent="MarginContainer/VBoxContainer/BottomBar/CenterContainer" unique_id=350406634]
 unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(400, 56)
@@ -347,12 +347,12 @@ text = "Choose your target."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Spacer" type="Control" parent="MarginContainer/VBoxContainer/BottomBar"]
+[node name="Spacer" type="Control" parent="MarginContainer/VBoxContainer/BottomBar" unique_id=1165774890]
 custom_minimum_size = Vector2(48, 48)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="WaitBlur" type="ColorRect" parent="."]
+[node name="WaitBlur" type="ColorRect" parent="." unique_id=1296293352]
 unique_name_in_owner = true
 visible = false
 z_index = 6
@@ -365,11 +365,11 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 
-[node name="DotTimer" type="Timer" parent="."]
+[node name="DotTimer" type="Timer" parent="." unique_id=1796385003]
 unique_name_in_owner = true
 wait_time = 0.75
 
-[node name="SpecLabel" type="Label" parent="."]
+[node name="SpecLabel" type="Label" parent="." unique_id=742369017]
 unique_name_in_owner = true
 visible = false
 layout_mode = 0
@@ -382,7 +382,7 @@ text = "Spectating..."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="waitingLabel" type="Label" parent="."]
+[node name="waitingLabel" type="Label" parent="." unique_id=860420082]
 unique_name_in_owner = true
 visible = false
 z_index = 100
@@ -398,7 +398,7 @@ text = "WAITING FOR OPPONENT..."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="PanelContainer" type="PanelContainer" parent="."]
+[node name="PanelContainer" type="PanelContainer" parent="." unique_id=1237377789]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -409,12 +409,12 @@ size_flags_vertical = 3
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxEmpty_7ycry")
 
-[node name="CenterContainer" type="CenterContainer" parent="PanelContainer"]
+[node name="CenterContainer" type="CenterContainer" parent="PanelContainer" unique_id=18455416]
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
 
-[node name="SentLabel" type="Label" parent="PanelContainer/CenterContainer"]
+[node name="SentLabel" type="Label" parent="PanelContainer/CenterContainer" unique_id=1134226032]
 unique_name_in_owner = true
 visible = false
 z_index = 100
@@ -425,7 +425,7 @@ text = "SENT"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="WinLossLabel" type="Label" parent="PanelContainer/CenterContainer"]
+[node name="WinLossLabel" type="Label" parent="PanelContainer/CenterContainer" unique_id=976979202]
 unique_name_in_owner = true
 visible = false
 z_index = 99
@@ -435,24 +435,24 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_0ayae")
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Player1BoardContainer" type="PanelContainer" parent="PanelContainer"]
+[node name="Player1BoardContainer" type="PanelContainer" parent="PanelContainer" unique_id=611951633]
 unique_name_in_owner = true
 layout_mode = 2
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxEmpty_xmvnm")
 
-[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer/Player1BoardContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer/Player1BoardContainer" unique_id=321728913]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 0
 alignment = 1
 
-[node name="Control" type="Control" parent="PanelContainer/Player1BoardContainer/VBoxContainer"]
+[node name="Control" type="Control" parent="PanelContainer/Player1BoardContainer/VBoxContainer" unique_id=263444050]
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="P1YouLabel" type="Label" parent="PanelContainer/Player1BoardContainer/VBoxContainer"]
+[node name="P1YouLabel" type="Label" parent="PanelContainer/Player1BoardContainer/VBoxContainer" unique_id=32039645]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -462,29 +462,29 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="P1AvatarDisplay" parent="PanelContainer/Player1BoardContainer/VBoxContainer" instance=ExtResource("8_0ayae")]
+[node name="P1AvatarDisplay" parent="PanelContainer/Player1BoardContainer/VBoxContainer" unique_id=217387468 instance=ExtResource("8_0ayae")]
 unique_name_in_owner = true
 z_index = 5
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
 texture_normal = SubResource("ViewportTexture_0ayae")
-texture_pressed = SubResource("ViewportTexture_7yxgj")
-texture_hover = SubResource("ViewportTexture_e4m7h")
+texture_pressed = SubResource("ViewportTexture_xmvnm")
+texture_hover = SubResource("ViewportTexture_wlxoc")
 is_display_only = true
 controlled_by_data = true
 
-[node name="CenterContainer" type="CenterContainer" parent="PanelContainer/Player1BoardContainer/VBoxContainer"]
+[node name="CenterContainer" type="CenterContainer" parent="PanelContainer/Player1BoardContainer/VBoxContainer" unique_id=774056009]
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 
-[node name="BoardWrapper" type="Control" parent="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer"]
+[node name="BoardWrapper" type="Control" parent="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer" unique_id=539585886]
 custom_minimum_size = Vector2(512, 512)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="BattleGround1" type="Node2D" parent="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer/BoardWrapper"]
+[node name="BattleGround1" type="Node2D" parent="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer/BoardWrapper" unique_id=369258069]
 unique_name_in_owner = true
 script = ExtResource("1_4q04m")
 rows = 8
@@ -492,29 +492,29 @@ rect_size = Vector2(512, 512)
 ship_class = ExtResource("2_o7hy2")
 marker = ExtResource("4_yk3pl")
 
-[node name="Spacer" type="Control" parent="PanelContainer/Player1BoardContainer/VBoxContainer"]
+[node name="Spacer" type="Control" parent="PanelContainer/Player1BoardContainer/VBoxContainer" unique_id=2002909751]
 custom_minimum_size = Vector2(0, 101)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="Player2BoardContainer" type="PanelContainer" parent="PanelContainer"]
+[node name="Player2BoardContainer" type="PanelContainer" parent="PanelContainer" unique_id=24526193]
 unique_name_in_owner = true
 layout_mode = 2
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxEmpty_wlxoc")
 
-[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer/Player2BoardContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer/Player2BoardContainer" unique_id=1555406441]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 0
 alignment = 1
 
-[node name="Control" type="Control" parent="PanelContainer/Player2BoardContainer/VBoxContainer"]
+[node name="Control" type="Control" parent="PanelContainer/Player2BoardContainer/VBoxContainer" unique_id=379758072]
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="P2YouLabel" type="Label" parent="PanelContainer/Player2BoardContainer/VBoxContainer"]
+[node name="P2YouLabel" type="Label" parent="PanelContainer/Player2BoardContainer/VBoxContainer" unique_id=1339274672]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -524,29 +524,29 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="P2AvatarDisplay" parent="PanelContainer/Player2BoardContainer/VBoxContainer" instance=ExtResource("8_0ayae")]
+[node name="P2AvatarDisplay" parent="PanelContainer/Player2BoardContainer/VBoxContainer" unique_id=1318610400 instance=ExtResource("8_0ayae")]
 unique_name_in_owner = true
 z_index = 5
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_xmvnm")
-texture_pressed = SubResource("ViewportTexture_wlxoc")
-texture_hover = SubResource("ViewportTexture_874s0")
+texture_normal = SubResource("ViewportTexture_874s0")
+texture_pressed = SubResource("ViewportTexture_7yxgj")
+texture_hover = SubResource("ViewportTexture_e4m7h")
 is_display_only = true
 controlled_by_data = true
 
-[node name="CenterContainer" type="CenterContainer" parent="PanelContainer/Player2BoardContainer/VBoxContainer"]
+[node name="CenterContainer" type="CenterContainer" parent="PanelContainer/Player2BoardContainer/VBoxContainer" unique_id=1913121538]
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 
-[node name="BoardWrapper" type="Control" parent="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer"]
+[node name="BoardWrapper" type="Control" parent="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer" unique_id=715707348]
 custom_minimum_size = Vector2(512, 512)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="BattleGround2" type="Node2D" parent="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer/BoardWrapper"]
+[node name="BattleGround2" type="Node2D" parent="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer/BoardWrapper" unique_id=1452145077]
 unique_name_in_owner = true
 script = ExtResource("1_4q04m")
 rows = 8
@@ -554,7 +554,7 @@ rect_size = Vector2(512, 512)
 ship_class = ExtResource("2_o7hy2")
 marker = ExtResource("4_yk3pl")
 
-[node name="Spacer" type="Control" parent="PanelContainer/Player2BoardContainer/VBoxContainer"]
+[node name="Spacer" type="Control" parent="PanelContainer/Player2BoardContainer/VBoxContainer" unique_id=1365316999]
 custom_minimum_size = Vector2(0, 101)
 layout_mode = 2
 mouse_filter = 2

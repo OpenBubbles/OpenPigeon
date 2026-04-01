@@ -232,8 +232,16 @@ func update_grid_states():
 		queue_redraw()
 
 func set_size(size: int):
+	if size <= 0:
+		return
+
+	var changed := (rows != size or columns != size)
 	rows = size
 	columns = size
+
+	if changed:
+		clear_battleground()
+
 	queue_redraw()
 
 var target: BattlegroundMarker = null

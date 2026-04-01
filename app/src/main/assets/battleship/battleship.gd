@@ -101,18 +101,18 @@ func _ready() -> void:
 		print("App plugin is not available, using dev data")
 		my_uuid = "0a602920-2033-469d-aab8-5e832c5d4f6a"
 
-		#var dev_data := { #SETUP SCREEN PLAYER 1
-			#"size": 8,
-			#"isYourTurn": true,
-			#"player": 2,
-			#"myPlayerId": "DEV_PLAYER",
-			#"replay": "",
-			#"bullets1": "",
-			#"bullets2": "",
-			#"skip_ships": "",
-			#"ships1": "",
-			#"ships2": "",
-		#}
+		var dev_data := { #SETUP SCREEN PLAYER 1
+			"size": 9,
+			"isYourTurn": true,
+			"player": 2,
+			"myPlayerId": "DEV_PLAYER",
+			"replay": "",
+			"bullets1": "",
+			"bullets2": "",
+			"skip_ships": "",
+			"ships1": "",
+			"ships2": "",
+		}
 		
 		#var dev_data := { #SETUP SCREEN PLAYER 2 (PLAYER 1 Has Chosen Board)
 			#"size": 8,
@@ -127,18 +127,18 @@ func _ready() -> void:
 			#"ships2": "",
 		#}
 		
-		var dev_data := { #Player 1 Sent a Shot after player 2 sent one
-			"size": 8,
-			"isYourTurn": true,
-			"player": 1,
-			"myPlayerId": "DEV_PLAYER",
-			"replay": "0,1",
-			"bullets1": "0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
-			"bullets2": "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
-			"skip_ships": "pos:2,2&num:0,0,0,0&rot:0|pos:7,5&num:0,0,0&rot:0|pos:4,3&num:0,0,0&rot:1|pos:1,0&num:0,0,0&rot:1|pos:5,0&num:0,0&rot:1|pos:0,4&num:0,0&rot:0|pos:4,6&num:0,0&rot:0",
-			"ships1": "pos:2,1&num:0,0,0,0&rot:0|pos:5,5&num:0,0,0&rot:1|pos:1,7&num:0,0,0&rot:1|pos:7,1&num:0,0,0&rot:0|pos:5,7&num:0,0&rot:1|pos:0,2&num:0,0&rot:0|pos:5,0&num:0,0&rot:0",
-			"ships2": "pos:2,2&num:0,0,0,0&rot:0|pos:7,5&num:0,0,0&rot:0|pos:4,3&num:0,0,0&rot:1|pos:1,0&num:0,0,0&rot:1|pos:5,0&num:0,0&rot:1|pos:0,4&num:0,0&rot:0|pos:4,6&num:0,0&rot:0",
-		}
+		#var dev_data := { #Player 1 Sent a Shot after player 2 sent one
+			#"size": 8,
+			#"isYourTurn": true,
+			#"player": 1,
+			#"myPlayerId": "DEV_PLAYER",
+			#"replay": "0,1",
+			#"bullets1": "0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+			#"bullets2": "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+			#"skip_ships": "pos:2,2&num:0,0,0,0&rot:0|pos:7,5&num:0,0,0&rot:0|pos:4,3&num:0,0,0&rot:1|pos:1,0&num:0,0,0&rot:1|pos:5,0&num:0,0&rot:1|pos:0,4&num:0,0&rot:0|pos:4,6&num:0,0&rot:0",
+			#"ships1": "pos:2,1&num:0,0,0,0&rot:0|pos:5,5&num:0,0,0&rot:1|pos:1,7&num:0,0,0&rot:1|pos:7,1&num:0,0,0&rot:0|pos:5,7&num:0,0&rot:1|pos:0,2&num:0,0&rot:0|pos:5,0&num:0,0&rot:0",
+			#"ships2": "pos:2,2&num:0,0,0,0&rot:0|pos:7,5&num:0,0,0&rot:0|pos:4,3&num:0,0,0&rot:1|pos:1,0&num:0,0,0&rot:1|pos:5,0&num:0,0&rot:1|pos:0,4&num:0,0&rot:0|pos:4,6&num:0,0&rot:0",
+		#}
 
 		_set_game_data(JSON.stringify(dev_data))
 	_rng.randomize()
@@ -558,39 +558,48 @@ func _randomize_my_ships(board_size: int) -> void:
 	if not is_instance_valid(myBattleground):
 		print("Missing BattleGround")
 		return
-	
+
 	var template := _get_template_for_size(board_size)
 	if template.is_empty():
 		print("[RANDOMIZE] No template for board_size=", board_size, " – keeping existing layout")
 		return
-	
-	var previous_layout: String = _last_random_layout_by_size.get(board_size, "")
-	var encoded := ""
-	
-	var max_distinct_attempts := 6
-	for i in range(max_distinct_attempts):
-		encoded = _build_randomized_encoded(template, board_size)
-		if encoded != previous_layout:
-			break
-	
-	if encoded == "":
-		print("[RANDOMIZE] Empty encoded result; falling back to template.")
-		encoded = template
-	
-	if encoded == previous_layout:
-		print("[RANDOMIZE] Could not find a different layout after ", max_distinct_attempts,
-			" attempts; reusing previous layout.")
+
+	var encoded := template
+
+	# Minimal stability fix:
+	# size 9 currently crashes in the backtracking randomizer, so use the known-good layout.
+	if board_size != 9:
+		var previous_layout: String = _last_random_layout_by_size.get(board_size, "")
+		var max_distinct_attempts := 6
+
+		for i in range(max_distinct_attempts):
+			encoded = _build_randomized_encoded(template, board_size)
+			if encoded != previous_layout:
+				break
+
+		if encoded == "":
+			print("[RANDOMIZE] Empty encoded result; falling back to template.")
+			encoded = template
+
+		if encoded == previous_layout:
+			print("[RANDOMIZE] Could not find a different layout after ", max_distinct_attempts,
+				" attempts; reusing previous layout.")
+		else:
+			print("[RANDOMIZE] FINAL encoded layout for my board_size=", board_size, " => ", encoded)
 	else:
-		print("[RANDOMIZE] FINAL encoded layout for my board_size=", board_size, " => ", encoded)
-	
+		print("[RANDOMIZE] board_size=9 -> using known-good template layout for stability")
+
 	_last_random_layout_by_size[board_size] = encoded
-	
+
 	myBattleground.from_encoded(encoded)
 	myBattleground.placing_items = true
-	
-	for ship in myBattleground.ships:
-		ship.canBeMoved = true
 
+	for ship in myBattleground.ships:
+		if ship == null or not is_instance_valid(ship):
+			push_error("[RANDOMIZE] Invalid ship after from_encoded. encoded=" + encoded)
+			return
+		ship.canBeMoved = true
+		
 func _build_randomized_encoded(template: String, bsize: int) -> String:
 	var ship_defs: Array[Dictionary] = []
 	for piece in template.split("|", false):
@@ -619,66 +628,82 @@ func _build_randomized_encoded(template: String, bsize: int) -> String:
 		return int(a["length"]) > int(b["length"])
 	ship_defs.sort_custom(cmp)
 
-	var max_global_attempts := 32
+	var blocked: Array = []
+	for x in range(bsize):
+		var col: Array[bool] = []
+		col.resize(bsize)
+		col.fill(false)
+		blocked.append(col)
 
-	for global_attempt in range(max_global_attempts):
-		var blocked: Array = []
-		for x in range(bsize):
-			var col: Array = []
-			col.resize(bsize)
-			blocked.append(col)
+	var placed: Array[String] = []
+	if _try_place_ships(ship_defs, 0, blocked, bsize, placed):
+		var final_encoded := "|".join(placed)
+		print("[RANDOMIZE] Backtracking success encoded=", final_encoded)
+		return final_encoded
 
-		var placed: Array[String] = []
-		var success := true
-
-		for def in ship_defs:
-			var length: int = int(def["length"])
-			var num_text: String = String(def["num_text"])
-
-			var candidates: Array[Dictionary] = []
-
-			for rot in [0, 1]:
-				var is_horizontal: bool = (rot == 1)
-				var max_x := bsize - (length if is_horizontal else 1)
-				var max_y := bsize - (1 if is_horizontal else length)
-
-				if max_x < 0 or max_y < 0:
-					continue
-
-				for x in range(max_x + 1):
-					for y in range(max_y + 1):
-						if _can_place_ship_at(blocked, bsize, x, y, length, rot):
-							candidates.append({
-								"x": x,
-								"y": y,
-								"rot": rot,
-							})
-
-			if candidates.is_empty():
-				success = false
-				break
-
-			var idx := _rng.randi_range(0, candidates.size() - 1)
-			var choice: Dictionary = candidates[idx]
-			var px: int = int(choice["x"])
-			var py: int = int(choice["y"])
-			var prot: int = int(choice["rot"])
-
-			_place_ship_on_blocked(blocked, bsize, px, py, length, prot)
-
-			var piece_str := "pos:%d,%d&num:%s&rot:%d" % [px, py, num_text, prot]
-			placed.append(piece_str)
-
-		if success:
-			var final_encoded := "|".join(placed)
-			print("[RANDOMIZE] Greedy success on attempt ", global_attempt, " encoded=", final_encoded)
-			return final_encoded
-
-	push_warning("Greedy randomization failed after %d attempts; using template." % max_global_attempts)
-	print("[RANDOMIZE] Greedy FAILED, returning ORIGINAL TEMPLATE: ", template)
+	push_warning("Backtracking randomization failed; using template.")
+	print("[RANDOMIZE] Backtracking FAILED, returning ORIGINAL TEMPLATE: ", template)
 	return template
+	
+func _try_place_ships(ship_defs: Array[Dictionary], ship_idx: int, blocked: Array, bsize: int, placed: Array[String]) -> bool:
+	if ship_idx >= ship_defs.size():
+		return true
 
+	var def: Dictionary = ship_defs[ship_idx]
+	var length: int = int(def["length"])
+	var num_text: String = String(def["num_text"])
 
+	var candidates: Array[Dictionary] = []
+
+	for rot in [0, 1]:
+		var is_horizontal: bool = (rot == 1)
+		var max_x := bsize - (length if is_horizontal else 1)
+		var max_y := bsize - (1 if is_horizontal else length)
+
+		if max_x < 0 or max_y < 0:
+			continue
+
+		for x in range(max_x + 1):
+			for y in range(max_y + 1):
+				if _can_place_ship_at(blocked, bsize, x, y, length, rot):
+					candidates.append({
+						"x": x,
+						"y": y,
+						"rot": rot,
+					})
+
+	_shuffle_in_place(candidates)
+
+	for choice in candidates:
+		var px: int = int(choice["x"])
+		var py: int = int(choice["y"])
+		var prot: int = int(choice["rot"])
+
+		var next_blocked := _clone_blocked(blocked)
+		_place_ship_on_blocked(next_blocked, bsize, px, py, length, prot)
+
+		placed.append("pos:%d,%d&num:%s&rot:%d" % [px, py, num_text, prot])
+
+		if _try_place_ships(ship_defs, ship_idx + 1, next_blocked, bsize, placed):
+			return true
+
+		placed.pop_back()
+
+	return false
+	
+func _shuffle_in_place(arr: Array) -> void:
+	for i in range(arr.size() - 1, 0, -1):
+		var j := _rng.randi_range(0, i)
+		var tmp = arr[i]
+		arr[i] = arr[j]
+		arr[j] = tmp
+		
+func _clone_blocked(blocked: Array) -> Array:
+	var out: Array = []
+	for col in blocked:
+		out.append((col as Array).duplicate())
+	return out
+	
 func _can_place_ship_at(blocked: Array, bsize: int, x: int, y: int, length: int, rot: int) -> bool:
 	var is_horizontal: bool = (rot == 1)
 
@@ -784,8 +809,29 @@ func send_update():
 	print("\n========== SEND_UPDATE ==========")
 	print("[SEND] Preparing outbound update…")
 
-	var myEncoded = myBattleground.encode_ships()
-	var bullets = myBattleground.encode_bullets()
+	if not is_instance_valid(myBattleground):
+		push_error("[SEND] myBattleground invalid")
+		return
+
+	if myBattleground.rows <= 0 or myBattleground.columns <= 0:
+		push_error("[SEND] Invalid battleground dimensions rows=%s cols=%s" % [myBattleground.rows, myBattleground.columns])
+		return
+
+	for ship in myBattleground.ships:
+		if ship == null or not is_instance_valid(ship):
+			push_error("[SEND] Invalid ship found before encode_ships")
+			return
+
+	var myEncoded := myBattleground.encode_ships()
+	if myEncoded == null:
+		push_error("[SEND] encode_ships returned null")
+		return
+
+	var bullets := myBattleground.encode_bullets()
+	if bullets == null:
+		push_error("[SEND] encode_bullets returned null")
+		return
+
 	var flipped_ships := _flip_ships_encoded_vertical(myEncoded, myBattleground.rows)
 	var flipped_bullets := _flip_bullets_vertical(bullets, myBattleground.rows, myBattleground.columns)
 
