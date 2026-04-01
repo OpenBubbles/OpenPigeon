@@ -36,6 +36,7 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.min
 import kotlin.math.sqrt
+import kotlin.math.max
 
 class PoolActivity : AppCompatActivity() {
     lateinit var sessionId: String
@@ -82,6 +83,13 @@ class PoolActivity : AppCompatActivity() {
         listOf(392, 412),
     )
 
+    val cueBallPlacementRadius = 20f
+    val cueBallMinX = 40f + cueBallPlacementRadius
+    val cueBallMaxX = 744f - cueBallPlacementRadius
+    val cueBallMinY = 40f + cueBallPlacementRadius
+    val cueBallMaxY = 400f - cueBallPlacementRadius
+    val breakLineX = 205f
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -125,6 +133,7 @@ class PoolActivity : AppCompatActivity() {
 
         findViewById<Button>(R.id.skip_replay).setOnClickListener {
             synchronized(this@PoolActivity) {
+                skipReplayRequested = true
                 finishReplay()
             }
         }
@@ -200,10 +209,11 @@ class PoolActivity : AppCompatActivity() {
                     }
                     MotionEvent.ACTION_MOVE -> {
                         if (draggingCue) {
+                            val (moveX, moveY) = clampCueBallPosition(origPoints[0], origPoints[1])
                             for (ball in poolBalls) {
                                 if (ball.number == 0) continue
-                                val distX = ball.x - origPoints[0]
-                                val distY = ball.y - origPoints[1]
+                                val distX = ball.x - moveX
+                                val distY = ball.y - moveY
                                 val distance = sqrt(distX * distX + distY * distY)
                                 if (distance < 20f) {
                                     // we overslap another ball, reject this move
@@ -211,7 +221,7 @@ class PoolActivity : AppCompatActivity() {
                                 }
                             }
                             synchronized(this) {
-                                moveBall(table, 0, origPoints[0], origPoints[1], 0f)
+                                moveBall(table, 0, moveX, moveY, 0f)
                             }
                         } else {
                             var diff = position - lastAngle
@@ -301,9 +311,17 @@ class PoolActivity : AppCompatActivity() {
         }
     }
 
+    fun clampCueBallPosition(x: Float, y: Float): Pair<Float, Float> {
+        val maxX = if (scratch && isFirst) breakLineX else cueBallMaxX
+        val clampedX = min(maxX, max(cueBallMinX, x))
+        val clampedY = min(cueBallMaxY, max(cueBallMinY, y))
+        return Pair(clampedX, clampedY)
+    }
+
     var replaying = false
     var isFirst = false
     var wasFirst = false
+    var skipReplayRequested = false
 
     fun animateShoot(power: Float, hit: BallHit) {
         var cancelled = false
@@ -314,7 +332,7 @@ class PoolActivity : AppCompatActivity() {
         }
         animator.doOnEnd {
             synchronized(this@PoolActivity) {
-                if (cancelled) return@synchronized
+                if (cancelled || skipReplayRequested) return@synchronized
                 renderer.cuePos = floatArrayOf(cueBall.x, cueBall.y)
                 if (scratch && !replaying) {
                     finalBalls = exportBalls(false)
@@ -355,15 +373,18 @@ class PoolActivity : AppCompatActivity() {
 
     var cancelAllShots: () -> Unit = { }
     fun playNextReplay() {
+        if (skipReplayRequested) return
         mode = PoolMode.ReplayAiming
         renderer.cueRot = replayHits[0].direction
         runOnUiThread { renderer.setCueVisible(true) }
         val handler = Handler(mainLooper)
         handler.postDelayed({
+            if (skipReplayRequested || replayHits.isEmpty()) return@postDelayed
             val animator = ValueAnimator.ofFloat(0f, replayHits[0].power)
             animator.duration = 300L
             animator.addUpdateListener { animation -> setCueDrawAmount(animation.animatedValue as Float) }
             animator.doOnEnd {
+                if (skipReplayRequested || replayHits.isEmpty()) return@doOnEnd
                 val hit = replayHits.removeAt(0)
                 animateShoot(hit.power, hit)
             }
@@ -383,19 +404,27 @@ class PoolActivity : AppCompatActivity() {
         var scratch = !cueBall.hitBall || cueBall.sunk
 
         if (cueBall.ballHit != -1) {
-            val ballHit = poolBalls.find { it.number == cueBall.ballHit } ?: return false
+            val ballHit = poolBalls.find { it.number == cueBall.ballHit } ?: return scratch
             val stripes = iAmStripes
             val hasMoreBalls = stripes == null || poolBalls.count { !it.sunk && ((stripes && it.isStripe) || (!stripes && it.isSolid)) } != 0
+
             if (ballHit.number == 8 && !hasMoreBalls) {
-                scratch = false
+                if (!cueBall.sunk) {
+                    scratch = false
+                }
             } else if (iAmStripes != null && ((!ballHit.isSolid && !iAmStripes!!) || (!ballHit.isStripe && iAmStripes!!))) {
                 // we hit the wrong ball
                 scratch = true
             }
         }
+
+        Log.i(
+            "POOL_DEBUG",
+            "SCRATCH_CHECK cueBall.sunk=${cueBall.sunk} blackBall.sunk=${poolBalls.find { it.number == 8 }?.sunk} ballHit=${cueBall.ballHit} scratch=$scratch"
+        )
+
         return scratch
     }
-
     var didIWin: Boolean? = null
     var disableSend = false
 
@@ -417,6 +446,7 @@ class PoolActivity : AppCompatActivity() {
             findViewById<Button>(R.id.skip_replay).visibility = View.GONE
         }
         replaying = false
+        skipReplayRequested = false
 
         Log.i("Pool", "Scratch $scratch")
 
@@ -467,7 +497,7 @@ class PoolActivity : AppCompatActivity() {
     var call8Ball = false
 
     fun handleFinishPlay() {
-        if (disableSend) return
+        if (disableSend || skipReplayRequested) return
         cancelAllShots()
         cancelAllShots = {}
         if (replayHits.isNotEmpty()) {
@@ -476,19 +506,27 @@ class PoolActivity : AppCompatActivity() {
             finishReplay()
         } else {
             val scratch = tableIsScratch()
+            val blackBall = poolBalls.find { it.number == 8 }!!
+            Log.i(
+                "POOL_DEBUG",
+                "FINAL_STATE cueBall.sunk=${cueBall.sunk} blackBall.sunk=${blackBall?.sunk} scratch=$scratch"
+            )
 
             mode = PoolMode.Disabled
 
 
             var winState: Boolean? = null
-            val blackBall = poolBalls.find { it.number == 8 }!!
             if (blackBall.sunk) {
-                if (iAmStripes == null || poolBalls.count { !it.sunk && ((iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid)) } != 0
-                    || blackBall.holeX != calledPocket[0].toFloat() || blackBall.holeY != calledPocket[1].toFloat()) {
-                    // I lose, there are more balls to pocket, or the white ball went in too, or I put it in the wrong hole
+                if (
+                    iAmStripes == null ||
+                    poolBalls.count { !it.sunk && ((iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid)) } != 0 ||
+                    cueBall.sunk ||
+                    calledPocket.isEmpty() ||
+                    blackBall.holeX != calledPocket[0].toFloat() ||
+                    blackBall.holeY != calledPocket[1].toFloat()
+                ) {
                     winState = false
                 } else {
-                    // this person win
                     winState = true
                 }
             }
@@ -793,7 +831,7 @@ class PoolActivity : AppCompatActivity() {
                 return
             }
             iAmStripes = null
-            finalBalls = "#632.746155,178.000000,0.000000,0.801981,9,5.632916,7.415801,5.384167#632.746155,199.000000,0.000000,0.050000,10,-1.479509,5.981912,-0.639594#632.746155,220.000000,0.000000,0.145560,7,-4.857441,-3.796834,-5.439248#632.746155,241.000000,0.000000,0.050000,6,3.548234,-7.060621,-3.771457#632.746155,262.000000,0.000000,0.964504,1,7.809305,-4.673173,7.553514#614.559570,188.500000,0.000000,0.868768,12,6.889496,7.963203,-4.292648#614.559570,209.500000,0.000000,0.759525,13,4.140916,-0.562560,-5.371364#614.559570,230.500000,0.000000,0.839745,15,-7.863293,-3.022674,-7.419384#614.559570,251.500000,0.000000,1.153367,11,-5.802108,7.468212,-7.951379#596.373047,199.000000,0.000000,1.053345,4,1.589040,2.324956,0.526632#596.373047,220.000000,0.000000,1.437710,8,3.826384,-4.029884,3.487882#596.373047,241.000000,0.000000,1.085851,3,4.912686,3.917787,5.660569#578.186523,209.500000,0.000000,1.100000,2,-5.776122,-4.926837,0.760138#578.186523,230.500000,0.000000,0.900000,5,-1.848043,-0.386153,6.410922#560.000000,220.000000,0.000000,1.000000,14,2.079596,7.069168,-7.283604#220.000000,220.000000,0.000000,0.990000,0,4.519086,0.074793,-2.054408"
+            finalBalls = "#632.746155,178.000000,0.000000,0.801981,9,5.632916,7.415801,5.384167#632.746155,199.000000,0.000000,0.050000,10,-1.479509,5.981912,-0.639594#632.746155,220.000000,0.000000,0.145560,7,-4.857441,-3.796834,-5.439248#632.746155,241.000000,0.000000,0.050000,6,3.548234,-7.060621,-3.771457#632.746155,262.000000,0.000000,0.964504,1,7.809305,-4.673173,7.553514#614.559570,188.500000,0.000000,0.868768,12,6.889496,7.963203,-4.292648#614.559570,209.500000,0.000000,0.759525,13,4.140916,-0.562560,-5.371364#614.559570,230.500000,0.000000,0.839745,15,-7.863293,-3.022674,-7.419384#614.559570,251.500000,0.000000,1.153367,11,-5.802108,7.468212,-7.951379#596.373047,199.000000,0.000000,1.053345,4,1.589040,2.324956,0.526632#596.373047,220.000000,0.000000,1.437710,8,3.826384,-4.029884,3.487882#596.373047,241.000000,0.000000,1.085851,3,4.912686,3.917787,5.660569#578.186523,209.500000,0.000000,1.100000,2,-5.776122,-4.926837,0.760138#578.186523,230.500000,0.000000,0.900000,5,-1.848043,-0.386153,6.410922#560.000000,220.000000,0.000000,1.000000,14,2.079596,7.069168,-7.283604#205.000000,220.000000,0.000000,0.990000,0,4.519086,0.074793,-2.054408"
             buildBalls(finalBalls, null)
             scratch = true
 
