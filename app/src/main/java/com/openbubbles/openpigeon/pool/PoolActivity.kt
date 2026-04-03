@@ -37,6 +37,12 @@ import kotlin.math.atan2
 import kotlin.math.min
 import kotlin.math.sqrt
 import kotlin.math.max
+import android.content.Context
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import kotlin.math.floor
 
 class PoolActivity : AppCompatActivity() {
     lateinit var sessionId: String
@@ -60,6 +66,28 @@ class PoolActivity : AppCompatActivity() {
     var lastAngle = 0f
 
     var touchDownCueX = 0f
+
+    private var lastCueHapticStep = -1
+
+    private fun vibrateCueTick() {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val manager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            manager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+
+        if (!vibrator.hasVibrator()) return
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createOneShot(12, 180))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(6)
+        }
+    }
+
     fun setCueDrawAmount(power: Float) {
         val frac = power / 2000
         // negative cue draw is used for the hit animation, don't show in the draw
@@ -70,99 +98,101 @@ class PoolActivity : AppCompatActivity() {
     }
 
     private fun openCuePopup() {
-        if (cuePopupOpen || cuePopupAnimating || mode != PoolMode.Aiming) return
+        runOnUiThread {
+            if (cuePopupOpen || cuePopupAnimating || mode != PoolMode.Aiming) return@runOnUiThread
 
-        val cueView = findViewById<FrameLayout>(R.id.cueView)
-        val cueOverlay = findViewById<FrameLayout>(R.id.cueOverlay)
-        val cuePopup = findViewById<FrameLayout>(R.id.cuePopup)
+            val cueView = findViewById<FrameLayout>(R.id.cueView)
+            val cueOverlay = findViewById<FrameLayout>(R.id.cueOverlay)
+            val cuePopup = findViewById<FrameLayout>(R.id.cuePopup)
 
-        cuePopupAnimating = true
-        cuePopupOpen = true
+            cuePopupAnimating = true
+            cuePopupOpen = true
 
-        syncCueDots()
+            syncCueDots()
 
-        val sourceLoc = IntArray(2)
-        val overlayLoc = IntArray(2)
-        cueView.getLocationOnScreen(sourceLoc)
-        cueOverlay.getLocationOnScreen(overlayLoc)
+            val sourceLoc = IntArray(2)
+            val overlayLoc = IntArray(2)
+            cueView.getLocationOnScreen(sourceLoc)
+            cueOverlay.getLocationOnScreen(overlayLoc)
 
-        val startX = (sourceLoc[0] - overlayLoc[0]).toFloat()
-        val startY = (sourceLoc[1] - overlayLoc[1]).toFloat()
+            val startX = (sourceLoc[0] - overlayLoc[0]).toFloat()
+            val startY = (sourceLoc[1] - overlayLoc[1]).toFloat()
 
-        cueOverlay.visibility = View.VISIBLE
-        cueOverlay.alpha = 0f
-        cuePopup.visibility = View.VISIBLE
+            cueOverlay.visibility = View.VISIBLE
+            cueOverlay.alpha = 0f
+            cuePopup.visibility = View.VISIBLE
 
-        cuePopup.post {
-            val endX = (cueOverlay.width - cuePopup.width) / 2f
-            val endY = (cueOverlay.height - cuePopup.height) / 2f
+            cuePopup.post {
+                val endX = (cueOverlay.width - cuePopup.width) / 2f
+                val endY = (cueOverlay.height - cuePopup.height) / 2f
 
-            val startScaleX = cueView.width.toFloat() / cuePopup.width.toFloat()
-            val startScaleY = cueView.height.toFloat() / cuePopup.height.toFloat()
+                val startScaleX = cueView.width.toFloat() / cuePopup.width.toFloat()
+                val startScaleY = cueView.height.toFloat() / cuePopup.height.toFloat()
 
-            cuePopup.x = startX
-            cuePopup.y = startY
-            cuePopup.scaleX = startScaleX
-            cuePopup.scaleY = startScaleY
+                cuePopup.x = startX
+                cuePopup.y = startY
+                cuePopup.scaleX = startScaleX
+                cuePopup.scaleY = startScaleY
+
+                cueOverlay.animate()
+                    .alpha(1f)
+                    .setDuration(180L)
+                    .start()
+
+                cuePopup.animate()
+                    .x(endX)
+                    .y(endY)
+                    .scaleX(1f)
+                    .scaleY(1f)
+                    .setDuration(220L)
+                    .withEndAction {
+                        cuePopupAnimating = false
+                    }
+                    .start()
+            }
+        }
+    }
+    private fun closeCuePopup() {
+        runOnUiThread {
+            if (!cuePopupOpen || cuePopupAnimating) return@runOnUiThread
+
+            val cueView = findViewById<FrameLayout>(R.id.cueView)
+            val cueOverlay = findViewById<FrameLayout>(R.id.cueOverlay)
+            val cuePopup = findViewById<FrameLayout>(R.id.cuePopup)
+
+            cuePopupAnimating = true
+
+            val sourceLoc = IntArray(2)
+            val overlayLoc = IntArray(2)
+            cueView.getLocationOnScreen(sourceLoc)
+            cueOverlay.getLocationOnScreen(overlayLoc)
+
+            val endX = (sourceLoc[0] - overlayLoc[0]).toFloat()
+            val endY = (sourceLoc[1] - overlayLoc[1]).toFloat()
+
+            val endScaleX = cueView.width.toFloat() / cuePopup.width.toFloat()
+            val endScaleY = cueView.height.toFloat() / cuePopup.height.toFloat()
 
             cueOverlay.animate()
-                .alpha(1f)
+                .alpha(0f)
                 .setDuration(180L)
                 .start()
 
             cuePopup.animate()
                 .x(endX)
                 .y(endY)
-                .scaleX(1f)
-                .scaleY(1f)
+                .scaleX(endScaleX)
+                .scaleY(endScaleY)
                 .setDuration(220L)
                 .withEndAction {
+                    cueOverlay.visibility = View.GONE
+                    cuePopup.visibility = View.INVISIBLE
                     cuePopupAnimating = false
+                    cuePopupOpen = false
                 }
                 .start()
         }
     }
-
-    private fun closeCuePopup() {
-        if (!cuePopupOpen || cuePopupAnimating) return
-
-        val cueView = findViewById<FrameLayout>(R.id.cueView)
-        val cueOverlay = findViewById<FrameLayout>(R.id.cueOverlay)
-        val cuePopup = findViewById<FrameLayout>(R.id.cuePopup)
-
-        cuePopupAnimating = true
-
-        val sourceLoc = IntArray(2)
-        val overlayLoc = IntArray(2)
-        cueView.getLocationOnScreen(sourceLoc)
-        cueOverlay.getLocationOnScreen(overlayLoc)
-
-        val endX = (sourceLoc[0] - overlayLoc[0]).toFloat()
-        val endY = (sourceLoc[1] - overlayLoc[1]).toFloat()
-
-        val endScaleX = cueView.width.toFloat() / cuePopup.width.toFloat()
-        val endScaleY = cueView.height.toFloat() / cuePopup.height.toFloat()
-
-        cueOverlay.animate()
-            .alpha(0f)
-            .setDuration(180L)
-            .start()
-
-        cuePopup.animate()
-            .x(endX)
-            .y(endY)
-            .scaleX(endScaleX)
-            .scaleY(endScaleY)
-            .setDuration(220L)
-            .withEndAction {
-                cueOverlay.visibility = View.GONE
-                cuePopup.visibility = View.INVISIBLE
-                cuePopupAnimating = false
-                cuePopupOpen = false
-            }
-            .start()
-    }
-
     private fun updateCueSpinFromTouch(
         touchX: Float,
         touchY: Float,
@@ -227,34 +257,38 @@ class PoolActivity : AppCompatActivity() {
     }
 
     private fun setCueUiVisible(visible: Boolean) {
-        val leftRail = findViewById<FrameLayout>(R.id.leftRail)
-        val rightRail = findViewById<FrameLayout>(R.id.rightRail)
-        val views = listOf(leftRail, rightRail)
+        runOnUiThread {
+            val leftRail = findViewById<FrameLayout>(R.id.leftRail)
+            val rightRail = findViewById<FrameLayout>(R.id.rightRail)
+            val views = listOf(leftRail, rightRail)
 
-        if (visible) {
-            for (view in views) {
-                if (view.visibility != View.VISIBLE) {
-                    view.alpha = 0f
-                    view.visibility = View.VISIBLE
-                }
-                view.animate()
-                    .alpha(1f)
-                    .setDuration(180L)
-                    .start()
-            }
-        } else {
-            for (view in views) {
-                view.animate()
-                    .alpha(0f)
-                    .setDuration(180L)
-                    .withEndAction {
-                        if (view.alpha == 0f) {
-                            view.visibility = View.INVISIBLE
-                        }
+            if (visible) {
+                for (view in views) {
+                    view.animate().cancel()
+                    if (view.visibility != View.VISIBLE) {
+                        view.alpha = 0f
+                        view.visibility = View.VISIBLE
                     }
-                    .start()
+                    view.animate()
+                        .alpha(1f)
+                        .setDuration(180L)
+                        .start()
+                }
+            } else {
+                for (view in views) {
+                    view.animate().cancel()
+                    view.animate()
+                        .alpha(0f)
+                        .setDuration(180L)
+                        .withEndAction {
+                            if (view.alpha == 0f) {
+                                view.visibility = View.INVISIBLE
+                            }
+                        }
+                        .start()
+                }
+                closeCuePopup()
             }
-            closeCuePopup()
         }
     }
 
@@ -342,12 +376,24 @@ class PoolActivity : AppCompatActivity() {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     touchDownCueX = event.x
+                    lastCueHapticStep = 0
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val power = -min(event.x - touchDownCueX, 0.0f) / container.width * 2000
                     setCueDrawAmount(power)
+
+                    val stepSize = 60f
+                    val currentStep = floor(power / stepSize).toInt()
+                    if (currentStep > lastCueHapticStep) {
+                        vibrateCueTick()
+                        lastCueHapticStep = currentStep
+                    } else if (currentStep < lastCueHapticStep) {
+                        vibrateCueTick()
+                        lastCueHapticStep = currentStep
+                    }
                 }
                 MotionEvent.ACTION_UP -> {
+                    lastCueHapticStep = -1
                     disableSend = false
                     val power = -min(event.x - touchDownCueX, 0.0f) / container.width * 2000
                     if (power < 100) {
@@ -358,6 +404,9 @@ class PoolActivity : AppCompatActivity() {
                     val hit = BallHit(renderer.cueRot, power, setSpinX, setSpinY, iAmStripes)
                     outgoingReplayHits.add(hit)
                     animateShoot(power, hit)
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    lastCueHapticStep = -1
                 }
             }
             true
@@ -940,6 +989,7 @@ class PoolActivity : AppCompatActivity() {
         if (table == 0L) return; // we are dead
         clearBalls(table)
         poolBalls.clear()
+        cueBall = null
         replayHits.clear()
         isHard = msg["mode"]!! != "n"
         val num = msg["num"]!!

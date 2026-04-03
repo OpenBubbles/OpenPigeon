@@ -225,31 +225,47 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         val ball = closestBall
 
         if (stripes == null) {
-            // Open table: stop at first contact, show marker only, no projected trajectories.
-            return
-        }
+            // Open table: allow trajectories for solids and stripes, but not the 8-ball.
+            if (ball.number == 8) {
+                canvas.drawLine(
+                    hitPointX - 10f,
+                    hitPointY - 10f,
+                    hitPointX + 10f,
+                    hitPointY + 10f,
+                    paint
+                )
+                canvas.drawLine(
+                    hitPointX + 10f,
+                    hitPointY - 10f,
+                    hitPointX - 10f,
+                    hitPointY + 10f,
+                    paint
+                )
+                return
+            }
+        } else {
+            val hasMoreBalls = hasRemainingClaimedBalls()
+            val isWrongBall =
+                (stripes && !ball.isStripe && !(ball.number == 8 && !hasMoreBalls)) ||
+                        (!stripes && !ball.isSolid && !(ball.number == 8 && !hasMoreBalls))
 
-        val hasMoreBalls = hasRemainingClaimedBalls()
-        val isWrongBall =
-            (stripes && !ball.isStripe && !(ball.number == 8 && !hasMoreBalls)) ||
-                    (!stripes && !ball.isSolid && !(ball.number == 8 && !hasMoreBalls))
-
-        if (isWrongBall) {
-            canvas.drawLine(
-                hitPointX - 10f,
-                hitPointY - 10f,
-                hitPointX + 10f,
-                hitPointY + 10f,
-                paint
-            )
-            canvas.drawLine(
-                hitPointX + 10f,
-                hitPointY - 10f,
-                hitPointX - 10f,
-                hitPointY + 10f,
-                paint
-            )
-            return
+            if (isWrongBall) {
+                canvas.drawLine(
+                    hitPointX - 10f,
+                    hitPointY - 10f,
+                    hitPointX + 10f,
+                    hitPointY + 10f,
+                    paint
+                )
+                canvas.drawLine(
+                    hitPointX + 10f,
+                    hitPointY - 10f,
+                    hitPointX - 10f,
+                    hitPointY + 10f,
+                    paint
+                )
+                return
+            }
         }
 
         if (activity.isHard) {
@@ -337,7 +353,11 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                 activity.mode == PoolActivity.PoolMode.Playing
             ) {
                 val translation = if (activity.mode != PoolActivity.PoolMode.Playing) {
-                    val cueBall = activity.cueBall ?: return@synchronized
+                    val cueBall = activity.cueBall
+                    if (cueBall == null) {
+                        canvas.restore()
+                        return
+                    }
                     floatArrayOf(cueBall.x, cueBall.y)
                 } else {
                     cuePos
@@ -380,6 +400,7 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
 
     private fun drawScratchRing(canvas: Canvas) {
         if (!(activity.mode == PoolActivity.PoolMode.Aiming && activity.scratch)) return
+        val cueBall = activity.cueBall ?: return
 
         scratchRingPhase += 0.05f
         if (scratchRingPhase > (PI * 2).toFloat()) {
@@ -389,8 +410,6 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         val baseRadius = 15f
         val pulse = ((sin(scratchRingPhase.toDouble()).toFloat() + 1f) * 0.5f) * 3f
         val radius = baseRadius + pulse
-
-        val cueBall = activity.cueBall ?: return
 
         canvas.drawCircle(
             cueBall.x,
