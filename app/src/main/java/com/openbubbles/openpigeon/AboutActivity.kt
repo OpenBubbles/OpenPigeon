@@ -19,7 +19,7 @@ class AboutActivity : Activity() {
                 OpenPigeon is fully open-source, and we're looking for game developers to contribute their favorite games. If you're interested, find out more on GitHub.
 
                 Thank you to our contributors!
-                8 Ball - Copper
+                8 Ball - Copper + ty8447
                 20 Questions - ty8447
                 Anagrams - ty8447
                 Archery - jakecrowley + ty8447
@@ -37,7 +37,6 @@ class AboutActivity : Activity() {
                 Paintball - ty8447
                 Reversi - ty8447
                 Sea Battle - Copper + ty8447
-                Tanks - ty8447
                 Wordbites - ty8447
                 Word Hunt - npulse4
 
