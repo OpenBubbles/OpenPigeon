@@ -69,10 +69,202 @@ class PoolActivity : AppCompatActivity() {
         renderer.cueDraw = frac * 500
     }
 
+    private fun openCuePopup() {
+        if (cuePopupOpen || cuePopupAnimating || mode != PoolMode.Aiming) return
+
+        val cueView = findViewById<FrameLayout>(R.id.cueView)
+        val cueOverlay = findViewById<FrameLayout>(R.id.cueOverlay)
+        val cuePopup = findViewById<FrameLayout>(R.id.cuePopup)
+
+        cuePopupAnimating = true
+        cuePopupOpen = true
+
+        syncCueDots()
+
+        val sourceLoc = IntArray(2)
+        val overlayLoc = IntArray(2)
+        cueView.getLocationOnScreen(sourceLoc)
+        cueOverlay.getLocationOnScreen(overlayLoc)
+
+        val startX = (sourceLoc[0] - overlayLoc[0]).toFloat()
+        val startY = (sourceLoc[1] - overlayLoc[1]).toFloat()
+
+        cueOverlay.visibility = View.VISIBLE
+        cueOverlay.alpha = 0f
+        cuePopup.visibility = View.VISIBLE
+
+        cuePopup.post {
+            val endX = (cueOverlay.width - cuePopup.width) / 2f
+            val endY = (cueOverlay.height - cuePopup.height) / 2f
+
+            val startScaleX = cueView.width.toFloat() / cuePopup.width.toFloat()
+            val startScaleY = cueView.height.toFloat() / cuePopup.height.toFloat()
+
+            cuePopup.x = startX
+            cuePopup.y = startY
+            cuePopup.scaleX = startScaleX
+            cuePopup.scaleY = startScaleY
+
+            cueOverlay.animate()
+                .alpha(1f)
+                .setDuration(180L)
+                .start()
+
+            cuePopup.animate()
+                .x(endX)
+                .y(endY)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(220L)
+                .withEndAction {
+                    cuePopupAnimating = false
+                }
+                .start()
+        }
+    }
+
+    private fun closeCuePopup() {
+        if (!cuePopupOpen || cuePopupAnimating) return
+
+        val cueView = findViewById<FrameLayout>(R.id.cueView)
+        val cueOverlay = findViewById<FrameLayout>(R.id.cueOverlay)
+        val cuePopup = findViewById<FrameLayout>(R.id.cuePopup)
+
+        cuePopupAnimating = true
+
+        val sourceLoc = IntArray(2)
+        val overlayLoc = IntArray(2)
+        cueView.getLocationOnScreen(sourceLoc)
+        cueOverlay.getLocationOnScreen(overlayLoc)
+
+        val endX = (sourceLoc[0] - overlayLoc[0]).toFloat()
+        val endY = (sourceLoc[1] - overlayLoc[1]).toFloat()
+
+        val endScaleX = cueView.width.toFloat() / cuePopup.width.toFloat()
+        val endScaleY = cueView.height.toFloat() / cuePopup.height.toFloat()
+
+        cueOverlay.animate()
+            .alpha(0f)
+            .setDuration(180L)
+            .start()
+
+        cuePopup.animate()
+            .x(endX)
+            .y(endY)
+            .scaleX(endScaleX)
+            .scaleY(endScaleY)
+            .setDuration(220L)
+            .withEndAction {
+                cueOverlay.visibility = View.GONE
+                cuePopup.visibility = View.INVISIBLE
+                cuePopupAnimating = false
+                cuePopupOpen = false
+            }
+            .start()
+    }
+
+    private fun updateCueSpinFromTouch(
+        touchX: Float,
+        touchY: Float,
+        container: FrameLayout,
+        dot: ImageView
+    ) {
+        if (dot.width == 0 || dot.height == 0 || container.width == 0 || container.height == 0) return
+
+        val centerX = container.width / 2f
+        val centerY = container.height / 2f
+        val maxRadius = min(container.width, container.height) / 2f - max(dot.width, dot.height) / 2f
+
+        var dx = touchX - centerX
+        var dy = touchY - centerY
+
+        val dist = sqrt(dx * dx + dy * dy)
+        if (dist > maxRadius && dist > 0f) {
+            val scale = maxRadius / dist
+            dx *= scale
+            dy *= scale
+        }
+
+        setSpinX = (dx / maxRadius) * 30f
+        setSpinY = (dy / maxRadius) * 30f
+
+        dot.translationX = dx
+        dot.translationY = dy
+
+        syncCueDots()
+    }
+
+    private fun syncCueDots() {
+        val cueView = findViewById<FrameLayout>(R.id.cueView)
+        val cueDot = findViewById<ImageView>(R.id.cueDot)
+        val cuePopup = findViewById<FrameLayout>(R.id.cuePopup)
+        val cuePopupDot = findViewById<ImageView>(R.id.cuePopupDot)
+
+        fun applyDotPosition(container: FrameLayout, dot: ImageView) {
+            if (container.width == 0 || container.height == 0 || dot.width == 0 || dot.height == 0) return
+
+            val maxRadius = min(container.width, container.height) / 2f - max(dot.width, dot.height) / 2f
+            val dx = (setSpinX / 30f) * maxRadius
+            val dy = (setSpinY / 30f) * maxRadius
+
+            dot.translationX = dx
+            dot.translationY = dy
+        }
+
+        cueView.post {
+            applyDotPosition(cueView, cueDot)
+        }
+
+        cuePopup.post {
+            applyDotPosition(cuePopup, cuePopupDot)
+        }
+    }
+
+    private fun resetCueSpin() {
+        setSpinX = 0f
+        setSpinY = 0f
+        syncCueDots()
+    }
+
+    private fun setCueUiVisible(visible: Boolean) {
+        val leftRail = findViewById<FrameLayout>(R.id.leftRail)
+        val rightRail = findViewById<FrameLayout>(R.id.rightRail)
+        val views = listOf(leftRail, rightRail)
+
+        if (visible) {
+            for (view in views) {
+                if (view.visibility != View.VISIBLE) {
+                    view.alpha = 0f
+                    view.visibility = View.VISIBLE
+                }
+                view.animate()
+                    .alpha(1f)
+                    .setDuration(180L)
+                    .start()
+            }
+        } else {
+            for (view in views) {
+                view.animate()
+                    .alpha(0f)
+                    .setDuration(180L)
+                    .withEndAction {
+                        if (view.alpha == 0f) {
+                            view.visibility = View.INVISIBLE
+                        }
+                    }
+                    .start()
+            }
+            closeCuePopup()
+        }
+    }
+
     var setSpinX = 0f
     var setSpinY = 0f
     var draggingCue = false
     var calledPocket: List<Int> = listOf()
+
+    var cuePopupOpen = false
+    var cuePopupAnimating = false
 
     val holes = listOf(
         listOf(40, 40),
@@ -101,33 +293,38 @@ class PoolActivity : AppCompatActivity() {
 
         enableEdgeToEdge()
         setContentView(R.layout.activity_pool)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.surfaceView)) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content)) { _, insets ->
             insets
         }
 
         val cueView = findViewById<FrameLayout>(R.id.cueView)
-        val cueDot = findViewById<ImageView>(R.id.cueDot)
-        cueView.setOnTouchListener { v, event ->
-            if (mode != PoolMode.Aiming) return@setOnTouchListener true
-            val dotRadiusPx = TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_DIP,
-                4f,
-                resources.displayMetrics
-            )
-            val normalizedX = ((event.x - dotRadiusPx) / (cueView.width - dotRadiusPx * 2)) * 2 - 1
-            val normalizedY = ((event.y - dotRadiusPx) / (cueView.height - dotRadiusPx * 2)) * 2 - 1
-            val dist = normalizedY * normalizedY + normalizedX * normalizedX
-            // need to subtract the distance of the rest of the red ball
-            if (dist > 1) {
-                // we are a unit circle, if we're more than a unit, that means we are outside the circle
-                return@setOnTouchListener true
+        val cueOverlay = findViewById<FrameLayout>(R.id.cueOverlay)
+        val cuePopup = findViewById<FrameLayout>(R.id.cuePopup)
+        val cuePopupDot = findViewById<ImageView>(R.id.cuePopupDot)
+
+        cueView.setOnClickListener {
+            openCuePopup()
+        }
+
+        cueOverlay.setOnClickListener {
+            closeCuePopup()
+        }
+
+        cuePopup.setOnClickListener {
+            // absorb inside clicks so overlay does not close
+        }
+
+        cuePopup.setOnTouchListener { _, event ->
+            if (!cuePopupOpen || mode != PoolMode.Aiming) return@setOnTouchListener true
+
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN,
+                MotionEvent.ACTION_MOVE,
+                MotionEvent.ACTION_UP -> {
+                    updateCueSpinFromTouch(event.x, event.y, cuePopup, cuePopupDot)
+                }
             }
-            setSpinX = normalizedX * 30
-            setSpinY = normalizedY * 30
-            cueDot.translationX = event.x - dotRadiusPx // center radius
-            cueDot.translationY = event.y - dotRadiusPx
+
             true
         }
 
@@ -193,6 +390,7 @@ class PoolActivity : AppCompatActivity() {
                 mode = PoolMode.Aiming
                 renderer.setCueVisible(true)
             } else if (mode == PoolMode.Aiming) {
+                val cueBall = cueBall ?: return@setOnTouchListener true
                 val origPoints = points.copyOf()
 
                 // get distance between ball and finger
@@ -243,6 +441,10 @@ class PoolActivity : AppCompatActivity() {
                 Log.i("Point", "${points[0]} ${points[1]}")
             }
             true
+        }
+
+        findViewById<FrameLayout>(R.id.cueView).post {
+            syncCueDots()
         }
 
         sessionId = intent.getStringExtra("SESSION")!!
@@ -333,6 +535,7 @@ class PoolActivity : AppCompatActivity() {
         animator.doOnEnd {
             synchronized(this@PoolActivity) {
                 if (cancelled || skipReplayRequested) return@synchronized
+                val cueBall = cueBall ?: return@synchronized
                 renderer.cuePos = floatArrayOf(cueBall.x, cueBall.y)
                 if (scratch && !replaying) {
                     finalBalls = exportBalls(false)
@@ -344,19 +547,8 @@ class PoolActivity : AppCompatActivity() {
                 clearHandler.postDelayed({
                     renderer.setCueVisible(false)
                     setCueDrawAmount(0f)
-                    setSpinX = 0f
-                    setSpinY = 0f
-                    val cueDot = findViewById<ImageView>(R.id.cueDot)
-                    cueDot.translationX = TypedValue.applyDimension(
-                        TypedValue.COMPLEX_UNIT_DIP,
-                        21f,
-                        resources.displayMetrics
-                    )
-                    cueDot.translationY = TypedValue.applyDimension(
-                        TypedValue.COMPLEX_UNIT_DIP,
-                        21f,
-                        resources.displayMetrics
-                    )
+                    resetCueSpin()
+                    closeCuePopup()
                     cancelAllShots = {}
                 }, 300)
                 cancelAllShots = {
@@ -401,6 +593,7 @@ class PoolActivity : AppCompatActivity() {
     var scratch = false
 
     fun tableIsScratch(): Boolean {
+        val cueBall = cueBall ?: return false
         var scratch = !cueBall.hitBall || cueBall.sunk
 
         if (cueBall.ballHit != -1) {
@@ -431,11 +624,12 @@ class PoolActivity : AppCompatActivity() {
     fun finishReplay() {
         disableSend = true
         mode = PoolMode.Disabled
+        setCueUiVisible(false)
         cancelAllShots()
         cancelAllShots = {}
 
         setCueDrawAmount(0.0f)
-
+        closeCuePopup()
 
         outgoingReplayHits.clear()
         replayHits.clear()
@@ -490,6 +684,7 @@ class PoolActivity : AppCompatActivity() {
 
         mode = PoolMode.Aiming
         runOnUiThread {
+            setCueUiVisible(true)
             renderer.setCueVisible(true)
         }
     }
@@ -507,13 +702,14 @@ class PoolActivity : AppCompatActivity() {
         } else {
             val scratch = tableIsScratch()
             val blackBall = poolBalls.find { it.number == 8 }!!
+            val cueBall = cueBall ?: return
             Log.i(
                 "POOL_DEBUG",
-                "FINAL_STATE cueBall.sunk=${cueBall.sunk} blackBall.sunk=${blackBall?.sunk} scratch=$scratch"
+                "FINAL_STATE cueBall.sunk=${cueBall.sunk} blackBall.sunk=${blackBall.sunk} scratch=$scratch"
             )
 
             mode = PoolMode.Disabled
-
+            closeCuePopup()
 
             var winState: Boolean? = null
             if (blackBall.sunk) {
@@ -556,12 +752,14 @@ class PoolActivity : AppCompatActivity() {
                 // you get another turn
                 mode = PoolMode.Aiming
                 runOnUiThread {
+                    setCueUiVisible(true)
                     renderer.setCueVisible(true)
                 }
                 return
             }
-
+            closeCuePopup()
             runOnUiThread {
+                setCueUiVisible(false)
                 val label = findViewById<TextView>(R.id.state_label)
                 label.visibility = View.VISIBLE
                 label.text = "Waiting for opponent..."
@@ -684,7 +882,7 @@ class PoolActivity : AppCompatActivity() {
     val outgoingReplayHits = arrayListOf<BallHit>()
 
     private var finalBalls = ""
-    lateinit var cueBall: PoolBall
+    var cueBall: PoolBall? = null
 
     private fun exportBalls(centerScratch: Boolean): String {
         return poolBalls.filter { !it.sunk || (centerScratch && it.number == 0) }.map {
@@ -822,9 +1020,11 @@ class PoolActivity : AppCompatActivity() {
             if (!isYourTurn) {
                 runOnUiThread {
                     findViewById<Button>(R.id.skip_replay).visibility = View.GONE
+                    setCueUiVisible(false)
                 }
 
                 mode = PoolMode.Disabled
+                closeCuePopup()
                 if (!renderer.isAlive) {
                     renderer.start()
                 }
@@ -837,6 +1037,7 @@ class PoolActivity : AppCompatActivity() {
 
             mode = PoolMode.Aiming
             runOnUiThread {
+                setCueUiVisible(true)
                 renderer.setCueVisible(true)
                 val label = findViewById<TextView>(R.id.state_label)
                 label.visibility = View.GONE
@@ -858,6 +1059,7 @@ class PoolActivity : AppCompatActivity() {
         if (!isYourTurn) {
             runOnUiThread {
                 findViewById<Button>(R.id.skip_replay).visibility = View.GONE
+                setCueUiVisible(false)
                 if (didIWin != null) {
                     val label = findViewById<TextView>(R.id.state_label)
                     label.visibility = View.VISIBLE
@@ -869,8 +1071,10 @@ class PoolActivity : AppCompatActivity() {
                 }
             }
             mode = PoolMode.Disabled
+            closeCuePopup()
         } else {
             runOnUiThread {
+                setCueUiVisible(true)
                 val label = findViewById<TextView>(R.id.state_label)
                 label.visibility = View.GONE
                 val controls = findViewById<LinearLayout>(R.id.controls)
