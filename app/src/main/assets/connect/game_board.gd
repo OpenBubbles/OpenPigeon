@@ -323,6 +323,7 @@ func send_game() -> void:
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.call("get_avatar_data_string")
 	print("[SEND] Payload: ", payload)
+
 	var app: Object = Engine.get_singleton("AppPlugin")
 	if app:
 		app.call("updateGameData", JSON.stringify(payload))
@@ -332,23 +333,32 @@ func send_game() -> void:
 		_update_send_button_visibility(false)
 
 	if not game_over:
-		play_sent_animation()
 		can_interact = false
+		isTurn = false
+		waitingForOpponent = true
+		play_sent_animation()
 		
 func _refresh_turn_ui() -> void:
 	if game_over:
 		can_interact = false
+		waitingForOpponent = false
 		_set_waiting(false)
 		return
-		
-	can_interact = (not spectator_mode) and (not game_over) and isTurn
+
+	can_interact = (not spectator_mode) and isTurn
+	waitingForOpponent = (not spectator_mode) and (not isTurn)
+
 	print("Can Interact: ", can_interact, " | Spectator Mode: ", spectator_mode, " | Game Over: ", game_over, " | Is Turn: ", isTurn)
-	_set_waiting(not can_interact)
+
+	if waitingForOpponent:
+		_set_waiting(true)
+	else:
+		_set_waiting(false)
 
 	if is_instance_valid(send_button):
 		send_button.disabled = true
 		_update_send_button_visibility(false)
-
+		
 func _set_waiting(enabled: bool) -> void:
 	waitingForOpponent = enabled
 
@@ -411,12 +421,14 @@ func play_sent_animation() -> void:
 		return
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()
+
 	sent_tween = create_tween()
 	sent_label.text = "Sent"
 	sent_label.visible = true
 	sent_label.modulate.a = 0.0
 	sent_label.scale = Vector2.ONE
 	sent_label.pivot_offset = sent_label.get_size() / 2.0
+
 	sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
 	sent_tween.tween_interval(0.6)
 	sent_tween.tween_callback(func():
@@ -432,12 +444,13 @@ func play_sent_animation() -> void:
 		sent_label.visible = false
 		sent_label.modulate.a = 1.0
 
-		if game_over or spectator_mode or isTurn or can_interact or not waitingForOpponent:
+		if game_over or spectator_mode:
 			return
 
-		_start_waiting_animation()
+		if waitingForOpponent and not isTurn and not can_interact:
+			_start_waiting_animation()
 	)
-
+	
 func _player_id_to_color(pid: int) -> String:
 	return PIECE_YELLOW if pid == 1 else PIECE_RED
 
