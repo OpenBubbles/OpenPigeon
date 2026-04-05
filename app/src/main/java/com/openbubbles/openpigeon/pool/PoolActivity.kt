@@ -724,6 +724,8 @@ class PoolActivity : AppCompatActivity() {
             call8Ball = true
             mode = PoolMode.Aiming
             runOnUiThread {
+                setCueUiVisible(true)
+                renderer.setCueVisible(true)
                 val label = findViewById<TextView>(R.id.state_label)
                 label.visibility = View.VISIBLE
                 label.text = "Choose a pocket"
