@@ -12,6 +12,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.util.Log
 import android.util.TypedValue
+import com.openbubbles.openpigeon.settings.AvatarView
+import android.widget.ImageButton
+import androidx.appcompat.widget.SwitchCompat
 import android.view.MotionEvent
 import android.view.SurfaceView
 import android.view.View
@@ -26,6 +29,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.animation.doOnEnd
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.SettingsSheet
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.godot.GameSessionIPC
 import java.nio.ByteBuffer
@@ -49,6 +54,9 @@ class PoolActivity : AppCompatActivity() {
     var gameSessionIPC: GameSessionIPC? = null
     var baseGame = PoolGame()
 
+    private lateinit var settingsSheet: SettingsSheet
+    private var darkMode = false
+
     var table: Long = 0L
 
     lateinit var renderer: PoolRenderer
@@ -68,6 +76,17 @@ class PoolActivity : AppCompatActivity() {
     var touchDownCueX = 0f
 
     private var lastCueHapticStep = -1
+
+    private fun applyDarkMode(enabled: Boolean) {
+        darkMode = enabled
+        getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+            .edit().putBoolean("pool/dark_mode", enabled).apply()
+
+        val root = findViewById<FrameLayout>(android.R.id.content)
+        val bgRes = if (enabled) R.drawable.background_soft_depth_dark
+        else         R.drawable.background_soft_depth
+        root.setBackgroundResource(bgRes)
+    }
 
     private fun vibrateCueTick() {
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -331,6 +350,32 @@ class PoolActivity : AppCompatActivity() {
             insets
         }
 
+        AvatarData.init(applicationContext)
+
+        val rootFrame = findViewById<FrameLayout>(android.R.id.content)
+        settingsSheet = SettingsSheet(this, rootFrame)
+
+        val settingsBtn = findViewById<ImageButton>(R.id.settingsButton)
+        try {
+            val bm = assets.open("global/settings.png")
+                .use { android.graphics.BitmapFactory.decodeStream(it) }
+            settingsBtn.setImageBitmap(bm)
+        } catch (e: Exception) { e.printStackTrace() }
+
+        // Build dark mode switch and register it as a game control
+        val darkSwitch = SwitchCompat(this)
+        darkSwitch.isChecked = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+            .getBoolean("pool/dark_mode", false)
+        darkSwitch.setOnCheckedChangeListener { _, checked -> applyDarkMode(checked) }
+        applyDarkMode(darkSwitch.isChecked)
+
+        settingsSheet.addGameControl("Dark Mode", darkSwitch)
+        val gameAvatarAnchor = findViewById<FrameLayout>(R.id.gameAvatarAnchor)
+        settingsSheet.attachGameAvatar(gameAvatarAnchor)
+        val oppAvatarAnchor = findViewById<FrameLayout>(R.id.oppAvatarAnchor)
+        settingsSheet.attachOpponentAvatar(oppAvatarAnchor)
+        settingsBtn.setOnClickListener { settingsSheet.open() }
+
         val cueView = findViewById<FrameLayout>(R.id.cueView)
         val cueOverlay = findViewById<FrameLayout>(R.id.cueOverlay)
         val cuePopup = findViewById<FrameLayout>(R.id.cuePopup)
@@ -520,6 +565,7 @@ class PoolActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (::settingsSheet.isInitialized) settingsSheet.detach()
         Log.i("Table", "Destroying")
         if (table != 0L) {
             destroyPoolTable(table)
@@ -847,11 +893,15 @@ class PoolActivity : AppCompatActivity() {
             }
 
             val currentMessage = gameSessionIPC!!.getCurrentMessage(sessionId)
+            val myId      = gameSessionIPC!!.getSenderUUID(sessionId)
+            val myAvatarKey = if (currentMessage["player1"] == myId) "avatar1" else "avatar2"
+
             val msgUpdates = mapOf(
-                "player" to if (currentMessage["player"] == "2") "1" else "2",
-                "num" to (currentMessage["num"]?.toInt()!! + 1).toString(),
-                "sender" to gameSessionIPC!!.getSenderUUID(sessionId),
-                "replay" to replays,
+                "player"      to if (currentMessage["player"] == "2") "1" else "2",
+                "num"         to (currentMessage["num"]?.toInt()!! + 1).toString(),
+                "sender"      to myId,
+                "replay"      to replays,
+                myAvatarKey   to AvatarView.buildAvatarString(),   // ← our avatar
             ).toMutableMap()
 
             if (winState != null) {
@@ -997,6 +1047,17 @@ class PoolActivity : AppCompatActivity() {
         val num = msg["num"]!!
         uuid1 = msg["player1"]
         uuid2 = msg["player2"]
+        val myUuid = gameSessionIPC?.getSenderUUID(sessionId)
+        val oppAvatarKey = when (myUuid) {
+            uuid1 -> "avatar2"
+            uuid2 -> "avatar1"
+            else -> {
+                if (player == 1) "avatar2" else "avatar1"
+            }
+        }
+        msg[oppAvatarKey]?.takeIf { it.isNotBlank() }?.let { avatarStr ->
+            runOnUiThread { settingsSheet.applyOpponentAvatarString(avatarStr) }
+        }
         Log.i("number", "$num")
         if (num == "2") {
             isFirst = true // for replay

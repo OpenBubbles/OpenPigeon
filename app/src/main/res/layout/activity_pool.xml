@@ -14,6 +14,22 @@
         android:layout_height="match_parent" />
 
     <FrameLayout
+        android:id="@+id/gameAvatarAnchor"
+        android:layout_width="80dp"
+        android:layout_height="58dp"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="10dp" />
+
+    <FrameLayout
+        android:id="@+id/oppAvatarAnchor"
+        android:layout_width="80dp"
+        android:layout_height="58dp"
+        android:layout_gravity="top|end"
+        android:layout_marginEnd="10dp"
+        android:layout_marginTop="10dp" />
+
+    <FrameLayout
         android:id="@+id/leftRail"
         android:layout_width="50dp"
         android:layout_height="match_parent"
@@ -121,5 +137,18 @@
                 app:srcCompat="@drawable/cue_point" />
         </FrameLayout>
     </FrameLayout>
+
+    <ImageButton
+        android:id="@+id/settingsButton"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="10dp"
+        android:layout_marginBottom="10dp"
+        android:background="@android:color/transparent"
+        android:alpha="0.7"
+        android:contentDescription="Settings"
+        android:scaleType="fitCenter"
+        android:padding="6dp" />
 
 </FrameLayout>
