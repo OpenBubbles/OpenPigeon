@@ -13,21 +13,69 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <FrameLayout
-        android:id="@+id/gameAvatarAnchor"
+    <LinearLayout
+        android:id="@+id/playerColumn"
         android:layout_width="80dp"
-        android:layout_height="58dp"
+        android:layout_height="wrap_content"
         android:layout_gravity="top|start"
         android:layout_marginStart="10dp"
-        android:layout_marginTop="10dp" />
+        android:layout_marginTop="10dp"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
 
-    <FrameLayout
-        android:id="@+id/oppAvatarAnchor"
+        <TextView
+            android:id="@+id/youLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="You"
+            android:textColor="#CCFFFFFF"
+            android:textSize="18sp"
+            android:gravity="center"
+            android:layout_marginBottom="2dp" />
+
+        <FrameLayout
+            android:id="@+id/gameAvatarAnchor"
+            android:layout_width="80dp"
+            android:layout_height="58dp" />
+
+        <ImageView
+            android:id="@+id/playerBallType"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginTop="4dp"
+            android:src="@drawable/pool_ball_empty"
+            android:scaleType="fitCenter" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/oppColumn"
         android:layout_width="80dp"
-        android:layout_height="58dp"
+        android:layout_height="wrap_content"
         android:layout_gravity="top|end"
         android:layout_marginEnd="10dp"
-        android:layout_marginTop="10dp" />
+        android:layout_marginTop="18dp"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="18dp" />
+
+        <FrameLayout
+            android:id="@+id/oppAvatarAnchor"
+            android:layout_width="80dp"
+            android:layout_height="58dp" />
+
+        <ImageView
+            android:id="@+id/oppBallType"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginTop="4dp"
+            android:src="@drawable/pool_ball_empty"
+            android:scaleType="fitCenter" />
+
+    </LinearLayout>
 
     <FrameLayout
         android:id="@+id/leftRail"

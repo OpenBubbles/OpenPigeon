@@ -88,6 +88,28 @@ class PoolActivity : AppCompatActivity() {
         root.setBackgroundResource(bgRes)
     }
 
+    private fun updateBallTypeUi() {
+        runOnUiThread {
+            val playerBall = findViewById<ImageView>(R.id.playerBallType)
+            val oppBall    = findViewById<ImageView>(R.id.oppBallType)
+
+            when (iAmStripes) {
+                null  -> {
+                    playerBall.setImageResource(R.drawable.pool_ball_empty)
+                    oppBall.setImageResource(R.drawable.pool_ball_empty)
+                }
+                true  -> {
+                    playerBall.setImageResource(R.drawable.pool_ball_stripes)
+                    oppBall.setImageResource(R.drawable.pool_ball_solids)
+                }
+                false -> {
+                    playerBall.setImageResource(R.drawable.pool_ball_solids)
+                    oppBall.setImageResource(R.drawable.pool_ball_stripes)
+                }
+            }
+        }
+    }
+
     private fun vibrateCueTick() {
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val manager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
@@ -831,6 +853,7 @@ class PoolActivity : AppCompatActivity() {
                         Log.i("order", "${it.sunkOrder}")
                         it.sunkOrder == 0
                     }!!.isStripe
+                    updateBallTypeUi()
                 }
 
                 val stripes = iAmStripes
@@ -1100,6 +1123,7 @@ class PoolActivity : AppCompatActivity() {
                 if (output["stripes"] != null) {
                     val stripes = output["stripes"]!!.toInt()
                     iAmStripes = if(stripes == 0) null else player == stripes
+                    updateBallTypeUi()
                     Log.i("Me", "$iAmStripes")
                 }
 
@@ -1144,6 +1168,7 @@ class PoolActivity : AppCompatActivity() {
                 return
             }
             iAmStripes = null
+            updateBallTypeUi()
             finalBalls = "#632.746155,178.000000,0.000000,0.801981,9,5.632916,7.415801,5.384167#632.746155,199.000000,0.000000,0.050000,10,-1.479509,5.981912,-0.639594#632.746155,220.000000,0.000000,0.145560,7,-4.857441,-3.796834,-5.439248#632.746155,241.000000,0.000000,0.050000,6,3.548234,-7.060621,-3.771457#632.746155,262.000000,0.000000,0.964504,1,7.809305,-4.673173,7.553514#614.559570,188.500000,0.000000,0.868768,12,6.889496,7.963203,-4.292648#614.559570,209.500000,0.000000,0.759525,13,4.140916,-0.562560,-5.371364#614.559570,230.500000,0.000000,0.839745,15,-7.863293,-3.022674,-7.419384#614.559570,251.500000,0.000000,1.153367,11,-5.802108,7.468212,-7.951379#596.373047,199.000000,0.000000,1.053345,4,1.589040,2.324956,0.526632#596.373047,220.000000,0.000000,1.437710,8,3.826384,-4.029884,3.487882#596.373047,241.000000,0.000000,1.085851,3,4.912686,3.917787,5.660569#578.186523,209.500000,0.000000,1.100000,2,-5.776122,-4.926837,0.760138#578.186523,230.500000,0.000000,0.900000,5,-1.848043,-0.386153,6.410922#560.000000,220.000000,0.000000,1.000000,14,2.079596,7.069168,-7.283604#205.000000,220.000000,0.000000,0.990000,0,4.519086,0.074793,-2.054408"
             buildBalls(finalBalls, null)
             scratch = true
