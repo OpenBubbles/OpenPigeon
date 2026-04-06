@@ -307,9 +307,17 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
 
     external fun update(table: Long): Boolean
 
+    private fun getBackgroundColor(): Int {
+        return if (activity.isPoolDarkModeEnabled()) {
+            0xFF2E2B2E.toInt()
+        } else {
+            0xFFC8C5C8.toInt()
+        }
+    }
+
     private fun drawFrame(canvas: Canvas) {
         synchronized(activity) {
-            canvas.drawColor(0xFFC8C5C8.toInt())
+            canvas.drawColor(getBackgroundColor())
 
             canvas.save()
             canvas.concat(transform)

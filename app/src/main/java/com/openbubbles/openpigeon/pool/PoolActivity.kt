@@ -78,14 +78,25 @@ class PoolActivity : AppCompatActivity() {
 
     private var lastCueHapticStep = -1
 
+    fun isPoolDarkModeEnabled(): Boolean {
+        return darkMode
+    }
+
     private fun applyDarkMode(enabled: Boolean) {
         darkMode = enabled
-        getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-            .edit().putBoolean("pool/dark_mode", enabled).apply()
 
-        val root = findViewById<FrameLayout>(android.R.id.content)
-        val bgRes = if (enabled) R.drawable.background_soft_depth_dark
-        else         R.drawable.background_soft_depth
+        getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("pool/dark_mode", enabled)
+            .apply()
+
+        val root = findViewById<FrameLayout>(R.id.poolRoot)
+        val bgRes = if (enabled) {
+            R.drawable.background_soft_depth_dark
+        } else {
+            R.drawable.background_soft_depth
+        }
+
         root.setBackgroundResource(bgRes)
     }
 
