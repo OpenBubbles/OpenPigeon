@@ -31,6 +31,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.SettingsSheet
+import com.openbubbles.openpigeon.ui.RulesPopup
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.godot.GameSessionIPC
 import java.nio.ByteBuffer
@@ -397,6 +398,41 @@ class PoolActivity : AppCompatActivity() {
         val oppAvatarAnchor = findViewById<FrameLayout>(R.id.oppAvatarAnchor)
         settingsSheet.attachOpponentAvatar(oppAvatarAnchor)
         settingsBtn.setOnClickListener { settingsSheet.open() }
+
+        val rulesBtn = findViewById<ImageButton>(R.id.rulesButton)
+        try {
+            val bm = assets.open("global/rules.png")
+                .use { android.graphics.BitmapFactory.decodeStream(it) }
+            rulesBtn.setImageBitmap(bm)
+        } catch (e: Exception) { e.printStackTrace() }
+
+        rulesBtn.setOnClickListener {
+            val root = findViewById<FrameLayout>(android.R.id.content)
+            RulesPopup.show(
+                context  = this,
+                rootView = root,
+                title    = "Pool Rules",
+                sections = listOf(
+                    RulesPopup.Section("Objective",
+                        "Be the first player to sink all your group of balls, then pocket the 8-ball to win."),
+                    RulesPopup.Section("Ball Groups",
+                        "• Solids: balls 1–7\n• Stripes: balls 9–15\n• Your group is decided by the first ball you legally pocket."),
+                    RulesPopup.Section("How to Play",
+                        "• Aim the cue by rotating it around the cue ball.\n" +
+                                "• Pull back the cue strip on the left to set your power.\n" +
+                                "• Tap the cue dial on the right to set spin.\n" +
+                                "• Release to shoot."),
+                    RulesPopup.Section("Fouls (Scratch)",
+                        "• Hitting the wrong group first.\n" +
+                                "• Sinking the cue ball.\n" +
+                                "• Not hitting any ball.\n" +
+                                "On a foul your opponent places the cue ball anywhere behind the break line."),
+                    RulesPopup.Section("Winning",
+                        "Sink the 8-ball after clearing all your group balls. " +
+                                "Sinking the 8-ball early, or on a scratch, loses the game immediately."),
+                )
+            )
+        }
 
         val cueView = findViewById<FrameLayout>(R.id.cueView)
         val cueOverlay = findViewById<FrameLayout>(R.id.cueOverlay)

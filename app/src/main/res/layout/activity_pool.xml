@@ -187,6 +187,19 @@
     </FrameLayout>
 
     <ImageButton
+        android:id="@+id/rulesButton"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="10dp"
+        android:layout_marginBottom="10dp"
+        android:background="@android:color/transparent"
+        android:alpha="0.7"
+        android:contentDescription="Rules"
+        android:scaleType="fitCenter"
+        android:padding="6dp" />
+
+    <ImageButton
         android:id="@+id/settingsButton"
         android:layout_width="50dp"
         android:layout_height="50dp"
