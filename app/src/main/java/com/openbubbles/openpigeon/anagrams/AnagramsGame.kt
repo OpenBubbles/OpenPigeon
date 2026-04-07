@@ -19,6 +19,8 @@ import com.openbubbles.openpigeon.GameNotFound
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 import kotlin.random.Random
 
 class AnagramsGame : Game {
@@ -114,6 +116,7 @@ class AnagramsGame : Game {
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
         return super.getNewGameData(context)?.apply {
             put("lang", "en")
             put("mode", mode)
@@ -124,6 +127,7 @@ class AnagramsGame : Game {
             // Generate starting letters from a real word
             val letters = generateStartingLetters(context, letterCount)
             put("letters", letters)
+            put("avatar2", AvatarView.buildAvatarString())
         }
     }
 

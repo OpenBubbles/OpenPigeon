@@ -4,6 +4,8 @@ import android.content.Context
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 
 class ChessGame : Game {
     override fun getVersion(): String = "1"
@@ -16,8 +18,10 @@ class ChessGame : Game {
     override fun gamePoster(config: Map<String, String>?): Int = R.drawable.chess
     
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
         return super.getNewGameData(context)!!.apply {
             put("replay", getDefaultReplay())
+            put("avatar2", AvatarView.buildAvatarString())
         }
     }
     

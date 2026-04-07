@@ -19,6 +19,8 @@ import com.openbubbles.openpigeon.GameNotFound
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 import kotlin.random.Random
 
 class WordbitesGame : Game {
@@ -230,6 +232,7 @@ class WordbitesGame : Game {
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
         return super.getNewGameData(context)?.apply {
             // Match the Godot side expectations
             put("lang", "en")
@@ -250,6 +253,7 @@ class WordbitesGame : Game {
 
             // 5) Send it down to Godot
             put("level", levelString)
+            put("avatar2", AvatarView.buildAvatarString())
         }
     }
 

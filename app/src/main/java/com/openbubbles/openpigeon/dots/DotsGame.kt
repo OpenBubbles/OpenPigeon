@@ -10,6 +10,8 @@ import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 
 class DotsGame : Game {
     override fun getVersion(): String {
@@ -58,6 +60,7 @@ class DotsGame : Game {
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
         return super.getNewGameData(context)?.apply {
             put("size", when(boardsize) {
                 "4x4" -> "4"
@@ -65,6 +68,7 @@ class DotsGame : Game {
                 "6x6" -> "6"
                 else -> "4"
             })
+            put("avatar2", AvatarView.buildAvatarString())
         }
     }
 

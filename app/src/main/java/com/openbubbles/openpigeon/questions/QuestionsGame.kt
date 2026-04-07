@@ -21,6 +21,8 @@ import androidx.glance.unit.ColorProvider
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 
 class QuestionsGame : Game {
     private var secretWord: String = ""
@@ -78,6 +80,7 @@ class QuestionsGame : Game {
     override fun gameClass(): Class<*> = GodotGameActivity::class.java
     override fun gamePoster(config: Map<String, String>?): Int = R.drawable.questions_preview
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
         if (secretWord.isBlank()) {
             val intent = Intent(context, SecretWordActivity::class.java)
                 .putExtra("game_name", getName())
@@ -89,6 +92,7 @@ class QuestionsGame : Game {
 
         return super.getNewGameData(context)?.apply {
             put("answer", secretWord)
+            put("avatar2", AvatarView.buildAvatarString())
         }
     }
 

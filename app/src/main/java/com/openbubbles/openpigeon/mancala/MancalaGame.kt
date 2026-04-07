@@ -11,6 +11,8 @@ import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 import kotlin.random.Random
 
 class MancalaGame : Game {
@@ -72,6 +74,7 @@ class MancalaGame : Game {
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
         return super.getNewGameData(context)?.apply {
             val modePrefix = when(gameMode) {
                 "Capture" -> ""
@@ -85,6 +88,7 @@ class MancalaGame : Game {
             }
             put("mode", modePrefix + difficultySuffix)
             put("replay", getDefaultReplay())
+            put("avatar2", AvatarView.buildAvatarString())
         }
     }
 
@@ -153,8 +157,6 @@ class MancalaGame : Game {
             }
             // Pits 6 and 13 (store pits) remain empty
         }
-
-        // Add this print statement to see the generated pits array
             Log.d("MancalaGame", "Generated Board Array (pits): $pits")
 
         // Build the board string

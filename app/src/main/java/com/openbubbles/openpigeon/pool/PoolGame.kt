@@ -9,6 +9,8 @@ import androidx.glance.layout.padding
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 
 class PoolGame : Game {
     override fun getVersion(): String {
@@ -51,6 +53,7 @@ class PoolGame : Game {
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
         return super.getNewGameData(context)?.apply {
             // mode h for hard
             put("mode", if (hard) "h" else "n")
@@ -58,6 +61,7 @@ class PoolGame : Game {
             put("v3", "2")
             put("v4", "2")
             put("v5", "2")
+            put("avatar2", AvatarView.buildAvatarString())
         }
     }
 

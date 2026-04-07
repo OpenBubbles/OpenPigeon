@@ -10,6 +10,8 @@ import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 
 class BattleshipGame : Game {
     override fun getVersion(): String {
@@ -52,6 +54,7 @@ class BattleshipGame : Game {
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
         return super.getNewGameData(context)?.apply {
             put("size", when(battleshipSize) {
                 "8x8" -> "8"
@@ -60,6 +63,7 @@ class BattleshipGame : Game {
                 else -> "8"
             })
             put("mode", "1,3,3,0")
+            put("avatar2", AvatarView.buildAvatarString())
         }
     }
 

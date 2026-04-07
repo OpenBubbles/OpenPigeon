@@ -10,6 +10,8 @@ import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 
 class DartsGame : Game {
     override fun getVersion(): String {
@@ -52,9 +54,11 @@ class DartsGame : Game {
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
         return super.getNewGameData(context)?.apply {
             put("mode", gameMode)
             put("style2", "0")
+            put("avatar2", AvatarView.buildAvatarString())
         }
     }
 

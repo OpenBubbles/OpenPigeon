@@ -11,6 +11,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import androidx.core.content.edit
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 
 interface Game {
 
@@ -138,6 +140,7 @@ interface Game {
     }
 
     fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
         val sender = getSenderUUID(context)
         return mutableMapOf(
             "sender" to sender,
@@ -153,6 +156,7 @@ interface Game {
             "num" to "1",
             "build" to "HeO3hkh1UZH8IaVCaV",
             "player2" to sender,
+            "avatar2" to AvatarView.buildAvatarString(),
         )
     }
 

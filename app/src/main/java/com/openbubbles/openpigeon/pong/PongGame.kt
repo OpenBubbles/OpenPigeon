@@ -4,6 +4,8 @@ import android.content.Context
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 import kotlin.random.Random
 
 class PongGame : Game {
@@ -32,10 +34,12 @@ class PongGame : Game {
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
         return super.getNewGameData(context)?.apply {
             put("seed", "${Random.nextInt()}")
             put("mode", "n")
             put("style2", "0")
+            put("avatar2", AvatarView.buildAvatarString())
         }
     }
 

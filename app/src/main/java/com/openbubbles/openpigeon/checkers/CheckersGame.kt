@@ -10,6 +10,8 @@ import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 
 class CheckersGame : Game {
     override fun getVersion(): String {
@@ -56,8 +58,10 @@ class CheckersGame : Game {
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
         return super.getNewGameData(context)?.apply {
             put("mode", if (mode == "Checkers") "n" else "h")
+            put("avatar2", AvatarView.buildAvatarString())
         }
     }
 
