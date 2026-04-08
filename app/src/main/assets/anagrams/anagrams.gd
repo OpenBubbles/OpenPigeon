@@ -70,7 +70,6 @@ func _ready() -> void:
 		dot_timer.connect("timeout", _on_dot_timer_timeout)
 	if not view_words_button.pressed.is_connected(_on_view_words_pressed):
 		view_words_button.pressed.connect(_on_view_words_pressed)
-	_populate_full_word_list()
 	appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin:
 		if not has_connected:
@@ -78,8 +77,8 @@ func _ready() -> void:
 			has_connected = true
 			appPlugin.call("onReady")
 	else:
-		var dev := '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","id":"dev"}'
-		#var dev := '{"isYourTurn": true,"player":"2","letters":"ABCDEF","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
+		#var dev := '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","id":"dev"}'
+		var dev := '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
 		
 		await get_tree().process_frame
 		_set_game_data(dev)
@@ -135,6 +134,7 @@ func _set_game_data(raw_text: String) -> void:
 	var letters_from_data: String = _get_first(d, "letters", "")
 	if letters_from_data != "":
 		game_screen.letters = letters_from_data
+		_all_words_cache.clear()
 
 	p1_score_s = _get_first(d, "score1", "")
 	var p1_words_s: String = _get_first(d, "words1", "")
@@ -746,6 +746,7 @@ func check_win() -> bool:
 
 	game_over = true
 	print("Game Over is: ", game_over)
+	_populate_full_word_list()
 	view_words_button.visible = true
 	if winner != "":
 		if winner == "0":
