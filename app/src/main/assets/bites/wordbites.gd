@@ -47,7 +47,6 @@ var appPlugin: Object = null
 var has_connected := false
 var my_id := ""
 var game_id := ""
-var is_my_turn = false
 var winner = null
 var game_over := false
 var game_ended := false
@@ -62,6 +61,12 @@ var _words_loading_overlay: Control = null
 var _words_loading_tween: Tween = null
 var my_has_data := false
 
+var _words_scroll_container: ScrollContainer = null
+var _words_pointer_down := false
+var _words_is_dragging := false
+var _words_last_drag_pos := Vector2.ZERO
+const WORDS_DRAG_THRESHOLD := 8.0
+
 func _ready() -> void:
 	if not start_button.pressed.is_connected(_on_start_button_pressed):
 		start_button.pressed.connect(_on_start_button_pressed)
@@ -74,7 +79,15 @@ func _ready() -> void:
 		dot_timer.connect("timeout", _on_dot_timer_timeout)
 	if not view_words_button.pressed.is_connected(_on_view_words_pressed):
 		view_words_button.pressed.connect(_on_view_words_pressed)
-		
+	
+	if is_instance_valid(full_word_list):
+		full_word_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var grandparent := full_word_list.get_parent().get_parent()
+		if grandparent is ScrollContainer:
+			_words_scroll_container = grandparent as ScrollContainer
+			if not _words_scroll_container.gui_input.is_connected(_on_words_list_scroll_gui_input):
+				_words_scroll_container.gui_input.connect(_on_words_list_scroll_gui_input)
+	
 	appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin:
 		if not has_connected:
@@ -84,8 +97,7 @@ func _ready() -> void:
 	else:
 		#var dev := '{"isYourTurn": true,"player":"2","level":"2|3|5|GO&2|0|7|UB&1|0|4|RE&2|0|1|ST&1|6|4|BI&0|5|7|N&0|3|3|M&0|3|1|L&0|2|8|C&0|7|6|D&0|6|1|P","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
 		#var dev := '{"isYourTurn": true,"player":"2","level":"2|3|5|GO&2|0|7|UB&1|0|4|RE&2|0|1|ST&1|6|4|BI&0|5|7|N&0|3|3|M&0|3|1|L&0|2|8|C&0|7|6|D&0|6|1|P", "avatar1":"body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "avatar2":"body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
-		var dev := '{"isYourTurn": true,"player":"2","level":"2|3|5|GO&2|0|7|UB&1|0|4|RE&2|0|1|ST&1|6|4|BI&0|5|7|N&0|3|3|M&0|3|1|L&0|2|8|C&0|7|6|D&0|6|1|P","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
-		
+		var dev := '{"sender":"BB938756-D694-4421-9642-82CB312C13B0nbdTdV","version":"5","tver":"5","ios":"26.4","caption":"Lets play Word Bites!","id":"DlPri7dhRO5Nb3a2","player":"2","player2":"BB938756-D694-4421-9642-82CB312C13B0nbdTdV","letters":"AAA","lang":"en","mode":"1","level":"1|0|0|NG&1|6|4|RO&2|2|3|NY&2|0|3|FU&1|6|8|TE&0|6|6|U&0|6|0|I&0|4|1|U&0|0|8|L&0|3|6|K&0|7|2|P","avatar2":"body,2|eyes,0|mouth,3|acc,0|wins,0|bg_color,0.291679,0.246671,0.464589|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,3|clothes,1|hair_color,0.000000,0.000000,0.000000|clothes_color,0.922711,0.395143,0.779568","game":"wordbites","game_name":"Word Bites","num":"1","build":"LR5rAXhOt"}'
 		await get_tree().process_frame
 		_set_game_data(dev)
 
@@ -127,7 +139,6 @@ func _word_respects_orientation(word: String, piece_runs: Array[String]) -> bool
 	var w := word.to_upper()
 	return _can_form_with_orientation(w, piece_runs, orientations, true) \
 		or _can_form_with_orientation(w, piece_runs, orientations, false)
-
 
 func _can_form_with_orientation(
 	word: String,
@@ -253,73 +264,90 @@ func _set_game_data(raw_text: String) -> void:
 	if typeof(res) != TYPE_DICTIONARY:
 		print("[ANAGRAMS] Bad JSON for _set_game_data")
 		return
+
 	var d: Dictionary = res
 	print("INCOMING DATA: ", res)
 
 	game_id = _get_first(d, "id", game_id)
-	my_id   = _get_first(d, "myPlayerId", my_id)
+	my_id = _get_first(d, "myPlayerId", my_id)
+
 	var p1_id: String = _get_first(d, "player1", "")
 	var p2_id: String = _get_first(d, "player2", "")
 	var sender_s: String = _get_first(d, "player", "1")
 	var level_s: String = _get_first(d, "level", "")
+
 	if level_s != "":
 		if game_screen.has_method("load_level"):
 			game_screen.load_level(level_s)
-	
+
 	_words_cache_ready = false
 	_possible_words_cache.clear()
 
 	p1_score_s = _get_first(d, "score1", "")
 	var p1_words_s: String = _get_first(d, "words1", "")
 	var p1_wordlist_s: String = _get_first(d, "words_list1", "")
+
 	p2_score_s = _get_first(d, "score2", "")
 	var p2_words_s: String = _get_first(d, "words2", "")
 	var p2_wordlist_s: String = _get_first(d, "words_list2", "")
+
 	print("P1s Score: ", p1_score_s, " | P2s Score: ", p2_score_s)
+
 	var p1_score: int = int(p1_score_s) if p1_score_s != "" else 0
 	var p1_words: int = int(p1_words_s) if p1_words_s != "" else 0
 	var p2_score: int = int(p2_score_s) if p2_score_s != "" else 0
 	var p2_words: int = int(p2_words_s) if p2_words_s != "" else 0
 
-	var is_your_turn = bool(res.get("isYourTurn", false))
-	is_my_turn = is_your_turn
 	var opponent_avatar_key := ""
 	winner = _get_first(d, "winner", "")
 	stop_waiting()
-	print("P1s Score: ", p1_score_s, " | P2s Score: ", p2_score_s)
+
 	var sender_player: int = clampi(int(sender_s), 1, 2)
+
+	# Reset before determining
 	my_has_data = false
-	if (p1_id != "" or p2_id != "") and my_id != "":
+
+	if p1_id != "" and p2_id != "" and my_id != "":
 		if my_id == p1_id:
 			my_player = 1
 			opponent_avatar_key = "avatar2"
-			print("Score: ", p1_score_s, " Words: ", p1_words_s, " List: ",p1_wordlist_s)
-			my_has_data = (p1_wordlist_s != "" or p1_words_s != "" or p1_score_s != "")
 			spectator_mode = false
-			print ("My Has Data", my_has_data)
 			print("SETTING FOR ID PLAYER 1 (my_id matches player1)")
 		elif my_id == p2_id:
 			my_player = 2
 			opponent_avatar_key = "avatar1"
-			print("Score: ", p2_score_s, " Words: ", p2_words_s, " List: ",p2_wordlist_s)
-			my_has_data = (p2_wordlist_s != "" or p2_words_s != "" or p2_score_s != "")
 			spectator_mode = false
-			print ("My Has Data", my_has_data)
 			print("SETTING FOR ID PLAYER 2 (my_id matches player2)")
 		else:
 			my_player = 0
 			spectator_mode = true
 			print("SETTING FOR SPECTATOR (my_id matches neither player1 nor player2)")
 	else:
-		if my_player == 0:
-			my_player = 1 if sender_player == 2 else 2
-			spectator_mode = false
-			print("NO PLAYER IDS; using sender 'player' field as my slot -> my_player =", my_player)
-		else:
-			print("NO PLAYER IDS; keeping existing my_player =", my_player)
+		my_player = 1 if sender_player == 2 else 2
+		spectator_mode = false
+		opponent_avatar_key = "avatar1" if my_player == 2 else "avatar2"
+		print("PARTIAL OR MISSING PLAYER IDS; using sender 'player' field as my slot -> my_player =", my_player)
+
+	# Now determine whether MY side has any data
+	if not spectator_mode:
+		if my_player == 1:
+			my_has_data = (
+				p1_score_s != ""
+				or p1_words_s != ""
+				or p1_wordlist_s != ""
+			)
+			print("PLAYER 1 DATA CHECK -> score:", p1_score_s, " words:", p1_words_s, " list:", p1_wordlist_s)
+		elif my_player == 2:
+			my_has_data = (
+				p2_score_s != ""
+				or p2_words_s != ""
+				or p2_wordlist_s != ""
+			)
+			print("PLAYER 2 DATA CHECK -> score:", p2_score_s, " words:", p2_words_s, " list:", p2_wordlist_s)
+
+	print("my_player =", my_player, " | my_has_data =", my_has_data, " | spectator_mode =", spectator_mode)
 
 	if spectator_mode:
-		is_my_turn = false
 		print("SPECTATOR MODE ACTIVE")
 		if res.has("avatar1"):
 			var av1 = _parse_avatar_string(res["avatar1"])
@@ -328,8 +356,10 @@ func _set_game_data(raw_text: String) -> void:
 		if res.has("avatar2"):
 			var av2 = _parse_avatar_string(res["avatar2"])
 			opp_avatar_display.call_deferred("update_avatar_from_data", av2)
+
 		var p1_entries := _build_word_entries_from_string(p1_wordlist_s)
 		_populate_scoreboard(true, p1_entries, p1_words, p1_score)
+
 		var p2_entries := _build_word_entries_from_string(p2_wordlist_s)
 		_populate_scoreboard(false, p2_entries, p2_words, p2_score)
 
@@ -359,7 +389,7 @@ func _set_game_data(raw_text: String) -> void:
 		if my_wordlist_s != "":
 			var my_entries := _build_word_entries_from_string(my_wordlist_s)
 			_populate_scoreboard(true, my_entries, my_words, my_score)
-			
+
 		if opp_wordlist_s != "":
 			var opp_entries := _build_word_entries_from_string(opp_wordlist_s)
 			_populate_scoreboard(false, opp_entries, opp_words, opp_score)
@@ -373,11 +403,11 @@ func _set_game_data(raw_text: String) -> void:
 	game_ended = await check_win()
 	_init_screens()
 
-	if not is_my_turn and not game_over:
+	if my_has_data and not game_over:
 		start_waiting()
 	else:
 		stop_waiting()
-	
+		
 func _parse_avatar_string(data_string: String) -> Dictionary:
 	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
 	var body_map: Array     = AvatarThumbnail.avatar_fshape_regions.keys()
@@ -459,6 +489,58 @@ func _parse_avatar_string(data_string: String) -> Dictionary:
 			_:
 				pass
 	return data
+	
+func _on_words_list_scroll_gui_input(event: InputEvent) -> void:
+	if _words_scroll_container == null:
+		return
+
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed:
+			_words_pointer_down = true
+			_words_is_dragging = false
+			_words_last_drag_pos = touch.position
+		else:
+			_words_pointer_down = false
+			_words_is_dragging = false
+		return
+
+	if event is InputEventScreenDrag and _words_pointer_down:
+		var drag := event as InputEventScreenDrag
+
+		if not _words_is_dragging:
+			if drag.position.distance_to(_words_last_drag_pos) >= WORDS_DRAG_THRESHOLD:
+				_words_is_dragging = true
+
+		if _words_is_dragging:
+			_words_scroll_container.scroll_vertical -= int(drag.relative.y)
+
+		_words_last_drag_pos = drag.position
+		return
+
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				_words_pointer_down = true
+				_words_is_dragging = false
+				_words_last_drag_pos = mb.position
+			else:
+				_words_pointer_down = false
+				_words_is_dragging = false
+		return
+
+	if event is InputEventMouseMotion and _words_pointer_down:
+		var mm := event as InputEventMouseMotion
+
+		if not _words_is_dragging:
+			if mm.position.distance_to(_words_last_drag_pos) >= WORDS_DRAG_THRESHOLD:
+				_words_is_dragging = true
+
+		if _words_is_dragging:
+			_words_scroll_container.scroll_vertical -= int(mm.relative.y)
+
+		_words_last_drag_pos = mm.position
 
 func _ensure_avatar_wrapper(avatar: Control) -> Control:
 	var parent: Node = avatar.get_parent()
@@ -637,10 +719,11 @@ func _populate_full_word_list_from_cache() -> void:
 func _add_word_row_with_highlight(word: String, points: int, was_found: bool) -> void:
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var word_panel := PanelContainer.new()
 	word_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	word_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	word_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 	word_panel.set_meta("word", word)
 
 	var word_panel_style := StyleBoxFlat.new()
@@ -974,12 +1057,26 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 	popup.modulate.a = 0.0
 
 	await get_tree().process_frame
+	await get_tree().process_frame
 
 	var anchor_rect: Rect2 = anchor.get_global_rect()
 	var viewport_rect: Rect2 = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
 	var margin: float = 12.0
-	var open_on_left: bool = false
 	var popup_rect: Rect2 = popup.get_global_rect()
+	
+	# Scale down the content first if the popup is too large for the screen
+	var max_width: float = float(viewport_rect.size.x) - margin * 2.0
+	var max_height: float = float(viewport_rect.size.y) - margin * 2.0
+	if popup_rect.size.x > max_width or popup_rect.size.y > max_height:
+		var sx: float = max_width / popup_rect.size.x
+		var sy: float = max_height / popup_rect.size.y
+		var scale_factor: float = clamp(min(sx, sy), 0.5, 1.0)
+		letters_canvas.scale = Vector2(scale_factor, scale_factor)
+		await get_tree().process_frame
+		popup_rect = popup.get_global_rect()
+
+	# Decide left or right of anchor
+	var open_on_left: bool = false
 	var right_space: float = viewport_rect.size.x - (anchor_rect.end.x + margin)
 	if popup_rect.size.x > right_space:
 		open_on_left = true
@@ -989,50 +1086,22 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 		if open_on_left
 		else anchor_rect.end.x + margin
 	)
-
 	var target_y: float = (
 		anchor_rect.position.y + anchor_rect.size.y * 0.5 - popup_rect.size.y * 0.5
 	)
 
 	var target_pos: Vector2 = Vector2(target_x, target_y)
-
+	target_pos.x = clamp(
+		target_pos.x,
+		float(viewport_rect.position.x + margin),
+		float(viewport_rect.position.x + viewport_rect.size.x - margin - popup_rect.size.x)
+	)
 	target_pos.y = clamp(
 		target_pos.y,
 		float(viewport_rect.position.y + margin),
 		float(viewport_rect.position.y + viewport_rect.size.y - margin - popup_rect.size.y)
 	)
-
 	popup.global_position = target_pos
-
-	await get_tree().process_frame
-	popup_rect = popup.get_global_rect()
-
-	var max_width: float = float(viewport_rect.size.x) - margin * 2.0
-	var max_height: float = float(viewport_rect.size.y) - margin * 2.0
-
-	var scale_factor: float = 1.0
-	if popup_rect.size.x > max_width or popup_rect.size.y > max_height:
-		var sx: float = max_width / popup_rect.size.x
-		var sy: float = max_height / popup_rect.size.y
-		scale_factor = clamp(min(sx, sy), 0.5, 1.0)
-
-		letters_canvas.scale = Vector2(scale_factor, scale_factor)
-
-		await get_tree().process_frame
-		popup_rect = popup.get_global_rect()
-
-		target_pos = popup.global_position
-		target_pos.x = clamp(
-			target_pos.x,
-			float(viewport_rect.position.x + margin),
-			float(viewport_rect.position.x + viewport_rect.size.x - margin - popup_rect.size.x)
-		)
-		target_pos.y = clamp(
-			target_pos.y,
-			float(viewport_rect.position.y + margin),
-			float(viewport_rect.position.y + viewport_rect.size.y - margin - popup_rect.size.y)
-		)
-		popup.global_position = target_pos
 
 	var ptr_size: Vector2 = pointer.custom_minimum_size
 	var popup_is_right: bool = popup.global_position.x >= anchor_rect.position.x
@@ -1259,9 +1328,11 @@ func _trie_dfs_letters(
 func _compute_words_async() -> void:
 	_words_cache_ready = false
 	_possible_words_cache.clear()
-
+	
+	if game_screen and game_screen.word_dict.is_empty():
+		game_screen._load_dictionary()
+	
 	await get_tree().process_frame
-
 	var piece_runs: Array[String] = []
 	if game_screen and game_screen.has_method("get_letter_pieces"):
 		piece_runs = game_screen.get_letter_pieces()
@@ -1271,39 +1342,31 @@ func _compute_words_async() -> void:
 			piece_runs.append(String(c))
 
 	if piece_runs.is_empty():
+		_words_cache_ready = true
 		return
 
 	var candidates: Array[String] = _find_candidates_via_trie(piece_runs)
-
 	for w in candidates:
 		var w_str: String = String(w).to_upper()
 		var wlen: int = w_str.length()
-		if wlen < 3 or wlen > 9:
-			continue
+		if wlen >= 3 and wlen <= 9:
+			if _word_respects_orientation(w_str, piece_runs):
+				var pts: int = _compute_word_score(wlen)
+				if pts > 0:
+					_possible_words_cache.append({"word": w_str, "points": pts})
 
-		if not _word_respects_orientation(w_str, piece_runs):
-			continue
-
-		var pts: int = _compute_word_score(wlen)
-		if pts <= 0:
-			continue
-
-		_possible_words_cache.append({
-			"word": w_str,
-			"points": pts
-		})
+		await get_tree().process_frame
 
 	_possible_words_cache.sort_custom(
-		func(a: Dictionary, b: Dictionary) -> bool:
-			var pa: int = int(a["points"])
-			var pb: int = int(b["points"])
-			if pa == pb:
-				return String(a["word"]) < String(b["word"])
-			return pa > pb
+	func(a: Dictionary, b: Dictionary) -> bool:
+		var pa: int = int(a["points"])
+		var pb: int = int(b["points"])
+		if pa == pb:
+			return String(a["word"]) < String(b["word"])
+		return pa > pb
 	)
-
 	_words_cache_ready = true
-	
+
 func _add_word_row(word: String, points: int) -> void:
 	_add_word_row_with_highlight(word, points, false)
 	possible_word_count += 1
@@ -1316,7 +1379,7 @@ func _compute_word_score(wlen: int) -> int:
 	elif wlen == 4:
 		return 400
 	elif wlen == 5:
-		return 1200
+		return 800
 	elif wlen == 6:
 		return 1400
 	elif wlen == 7:
@@ -1686,7 +1749,6 @@ func send_game() -> void:
 		print("AppPlugin is null; cannot send.")
 	print("OUTGOING DATA", payload)
 	
-	is_my_turn = false
 	game_ended = await check_win()
 	if not game_ended:
 		print("[SEND] No win detected; clearing preview.")
@@ -1864,6 +1926,7 @@ func _populate_scoreboard(
 		word_label.text = word
 		word_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		word_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		word_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		word_label.add_theme_color_override("font_color", Color(0, 0, 0))
 		var base_font := word_label.get_theme_font("font")
 		var bold_var := FontVariation.new()

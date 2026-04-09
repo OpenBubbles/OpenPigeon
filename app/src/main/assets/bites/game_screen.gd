@@ -50,7 +50,6 @@ var _drag_offset: Vector2 = Vector2.ZERO
 func _ready() -> void:
 	main_vbox.add_theme_constant_override("separation", 24)
 	
-	_load_dictionary()
 	score = 0
 	displayed_score = 0
 	word_count = 0
@@ -93,6 +92,9 @@ func _update_word_score_labels() -> void:
 
 
 func start_game() -> void:
+	if word_dict.is_empty():
+		_load_dictionary()
+		
 	selected_indices.clear()
 
 	await get_tree().process_frame
@@ -389,7 +391,7 @@ func _process_found_word_with_fx(raw_word: String, row: int, col: int, horizonta
 		return
 
 	var orient := "H" if horizontal else "V"
-	var key := "%s_%d_%d_%s" % [orient, row, col, word]
+	var key := "%s_%s" % [orient, word]
 
 	if used_words.has(key):
 		return
