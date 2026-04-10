@@ -15,6 +15,8 @@ import androidx.navigation.compose.rememberNavController
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.godot.GameSessionIPC
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 
 class WordHuntActivity : AppCompatActivity() {
     private val baseGame: Game = WordHuntGame()
@@ -111,6 +113,7 @@ class WordHuntActivity : AppCompatActivity() {
         sessionId = intent.getStringExtra("SESSION")!!
 
         dictionary = WordDictionary(this)
+        com.openbubbles.openpigeon.settings.AvatarData.init(this)
         lateinit var startDestination: String
         GameSessionIPC(applicationContext) { gameSessionIPC ->
             // This is called when the service is bound
@@ -137,7 +140,7 @@ class WordHuntActivity : AppCompatActivity() {
                 startDestination = if (!currentMessage["score$player"].isNullOrBlank()) {
                     GameUI.Screen.Score.route
                 } else {
-                    GameUI.Screen.Game.route
+                    GameUI.Screen.Intro.route
                 }
 
                 setContent {
@@ -195,10 +198,11 @@ class WordHuntActivity : AppCompatActivity() {
         val score1 = currentMessage["score1"]
         val score2 = currentMessage["score2"]
         val scores = arrayOf(score1, score2)
-        
+
         val updates = mutableMapOf(
             "sender" to gameSessionIPC!!.getSenderUUID(sessionId),
             "player$player" to gameSessionIPC!!.getSenderUUID(sessionId),
+            "avatar$player" to AvatarView.buildAvatarString(),
             "score$player" to gameState.score.toString(),
             "words$player" to gameState.wordCount.toString(),
             "words_list$player" to gameState.sortedWords().joinToString("|"),
@@ -238,7 +242,9 @@ class WordHuntActivity : AppCompatActivity() {
             "words1" to (msg["words$client"] ?: gameState.wordCount.toString()),
             "words2" to (msg["words$opponent"] ?: ""),
             "words_list1" to (msg["words_list$client"] ?: gameState.sortedWords().joinToString("|")),
-            "words_list2" to (msg["words_list$opponent"] ?: "")
+            "words_list2" to (msg["words_list$opponent"] ?: ""),
+            // Opponent avatar string so the score screen can display it
+            "opponent_avatar" to (msg["avatar$opponent"] ?: ""),
         )
         return scoreData
     }

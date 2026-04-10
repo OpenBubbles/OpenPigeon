@@ -22,6 +22,17 @@ class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHu
     private val _score = mutableIntStateOf(0)
     val score get() = _score.intValue
 
+    private val _lastAwardedText = mutableStateOf<String?>(null)
+    val lastAwardedText: String? get() = _lastAwardedText.value
+
+    private val _validWordTrigger = mutableIntStateOf(0)
+    val validWordTrigger: Int get() = _validWordTrigger.intValue
+
+    private var lastBuzzedValidWord: String? = null
+
+    private val _lastAwardedTrigger = mutableIntStateOf(0)
+    val lastAwardedTrigger: Int get() = _lastAwardedTrigger.intValue
+
     private val _secondsLeft = mutableIntStateOf(80)
     val secondsLeft: Int get() = _secondsLeft.intValue
 
@@ -32,6 +43,11 @@ class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHu
         return _foundWords.sortedWith(compareByDescending<String> { it.length }
             .thenBy { it.lowercase() })
     }
+
+    fun clearLastAwardedText() {
+        _lastAwardedText.value = null
+    }
+
     private fun checkWord(word: String): String {
         if (word.length >= MIN_WORD_LENGTH && dictionary.isValidWord(word) && !_foundWords.contains(word)) {
             return "VALID"
@@ -56,6 +72,7 @@ class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHu
     fun startSelection(row: Int, col: Int) {
 //        Log.d("Selection Started", "Row: $row, Column: $col")
         isSelecting = true
+        lastBuzzedValidWord = null
         _selectedPositions.clear()
         _selectedPositions.add(Pair(row, col))
         updateCurrentWord()
@@ -68,18 +85,12 @@ class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHu
         val position = Pair(row, col)
         val lastPosition = _selectedPositions.lastOrNull() ?: return
 
-        // Check if already selected
+        // Ignore any tile that is already part of the current path
         if (position in _selectedPositions) {
-            // If going back to the second-last position, remove the last position
-            if (_selectedPositions.size >= 2 && position == _selectedPositions[_selectedPositions.size - 2]) {
-                _selectedPositions.removeAt(_selectedPositions.size - 1)
-                updateCurrentWord()
-                updateWordStatus()
-            }
             return
         }
 
-        // Check if adjacent
+        // Only allow adding adjacent new tiles
         if (isAdjacent(lastPosition, position)) {
             _selectedPositions.add(position)
             updateCurrentWord()
@@ -93,10 +104,15 @@ class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHu
         isSelecting = false
         _selectedPositions.clear()
         _currentWord.value = ""
+
         if (checkWord(word) == "VALID") {
+            val points = calculatePoints(word)
             _foundWords.add(word)
-            _score.intValue += calculatePoints(word)
+            _score.intValue += points
+            _lastAwardedText.value = "$word +$points"
+            _lastAwardedTrigger.intValue += 1
         }
+
         updateWordStatus()
     }
 
@@ -119,11 +135,17 @@ class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHu
 
     private fun updateWordStatus() {
         _wordStatus.value = checkWord(_currentWord.value)
-        _wordStatusColor.value = when(_wordStatus.value) {
+
+        _wordStatusColor.value = when (_wordStatus.value) {
             "INVALID" -> Color(0xFFEAEAEA)
             "VALID" -> Color(0xFF86FE8C)
             "FOUND" -> Color(0xFFFFE95E)
-            else -> {Color.Cyan}
+            else -> Color.Cyan
+        }
+
+        if (_wordStatus.value == "VALID" && _currentWord.value != lastBuzzedValidWord) {
+            lastBuzzedValidWord = _currentWord.value
+            _validWordTrigger.intValue += 1
         }
     }
 

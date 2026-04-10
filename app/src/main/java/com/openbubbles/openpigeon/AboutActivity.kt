@@ -38,7 +38,7 @@ class AboutActivity : Activity() {
                 Reversi - ty8447
                 Sea Battle - Copper + ty8447
                 Wordbites - ty8447
-                Word Hunt - npulse4
+                Word Hunt - npulse4 + ty8447
 
                 Are you a developer? Add your favorite game on GitHub!
             """.trimIndent())
