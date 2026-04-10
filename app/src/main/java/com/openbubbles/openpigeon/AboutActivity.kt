@@ -23,15 +23,15 @@ class AboutActivity : Activity() {
                 20 Questions - ty8447
                 Anagrams - ty8447
                 Archery - jakecrowley + ty8447
-                Basketball - jakecrowley
-                Checkers - jakecrowley & ty8447
-                Chess - chasedredmon
+                Basketball - jakecrowley + ty8447
+                Checkers - jakecrowley + ty8447
+                Chess - chasedredmon + ty8447
                 Crazy 8 - Copper
-                Cup Pong - jakecrowley
-                Darts - jakecrowley
+                Cup Pong - jakecrowley + ty8447
+                Darts - jakecrowley + ty8447
                 Dots & Boxes - ty8447
                 Filler - ty8447
-                Four in a Row - jakecrowley & ty8447
+                Four in a Row - jakecrowley + ty8447
                 Gomoku - ty8447
                 Mancala - ty8447
                 Paintball - ty8447
