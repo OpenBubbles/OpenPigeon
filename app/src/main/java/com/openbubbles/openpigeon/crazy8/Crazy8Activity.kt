@@ -968,7 +968,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                     Column(
                         verticalArrangement = Arrangement.spacedBy((-100).dp)
                     ) {
-                        for (i in 1..min(participant.cardCount, 10)) {
+                        (1..min(participant.cardCount, 10)).forEach { _ ->
                             RenderCard(null)
                         }
                     }
@@ -1207,10 +1207,6 @@ fun WaitingRoomChatPane(
                 .statusBarsPadding()
                 .imePadding()
                 .padding(horizontal = 12.dp, vertical = 12.dp)
-                .clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() }
-                ) { }
         ) {
             Spacer(modifier = Modifier.height(44.dp))
 
@@ -1219,7 +1215,13 @@ fun WaitingRoomChatPane(
                 reverseLayout = true,
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) {
+                        onClose()
+                    },
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(messages) { item ->
