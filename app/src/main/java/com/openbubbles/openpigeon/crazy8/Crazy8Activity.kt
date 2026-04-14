@@ -48,6 +48,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -109,6 +110,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.viewinterop.AndroidView
@@ -117,6 +119,8 @@ import com.openbubbles.openpigeon.settings.AvatarView
 import com.openbubbles.openpigeon.settings.SettingsSheet
 import kotlin.apply
 import kotlin.toString
+import androidx.compose.ui.res.painterResource
+import com.openbubbles.openpigeon.R
 
 class CrazyParticipant(
     val name: String,
@@ -332,6 +336,13 @@ class Crazy8Activity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize()
                         .safeContentPadding()
                 ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.crazybg),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+
                     Column(modifier = Modifier.align(Alignment.Center),
                         horizontalAlignment = Alignment.CenterHorizontally) {
                         OutlinedTextField(
@@ -374,6 +385,13 @@ class Crazy8Activity : ComponentActivity() {
                 Box(
                     modifier = Modifier.fillMaxSize()
                 ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.crazybg),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+
                     Column(modifier = Modifier.align(Alignment.Center),
                         horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Failed to connect: $connectedError",
@@ -394,6 +412,13 @@ class Crazy8Activity : ComponentActivity() {
                 Box(
                     modifier = Modifier.fillMaxSize()
                 ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.crazybg),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+
                     Text("Connecting...",
                         modifier = Modifier.align(Alignment.Center),
                         fontSize = 20.sp,
@@ -1119,13 +1144,23 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
         null
     }
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .statusBarsPadding()
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
+        Image(
+            painter = painterResource(id = R.drawable.crazybg),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxSize()
+                .navigationBarsPadding()
+                .statusBarsPadding()
+        ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1249,17 +1284,34 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
             Spacer(modifier = Modifier.height(28.dp))
         }
 
-        Button(
-            onClick = {
-                me!!.ready = !me.ready
-                activity!!.setReady(me.ready)
-            },
-            modifier = Modifier.padding(bottom = 16.dp)
-        ) {
-            Text(if (me?.ready == true) "CANCEL" else "READY")
-        }
+            Button(
+                onClick = {
+                    me!!.ready = !me.ready
+                    activity!!.setReady(me.ready)
+                },
+                modifier = Modifier
+                    .padding(bottom = 16.dp)
+                    .shadow(
+                        elevation = 10.dp,
+                        shape = RoundedCornerShape(6.dp),
+                        ambientColor = Color.Black.copy(alpha = 0.24f),
+                        spotColor = Color.Black.copy(alpha = 0.24f)
+                    ),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (me?.ready == true) Color(0xFFFF2D2D) else Color(0xFF247E2A),
+                    contentColor = Color.White
+                )
+            ) {
+                Text(
+                    text = if (me?.ready == true) "CANCEL" else "READY",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
     }
 }
+    }
 
 private fun extractCrazy8DisplayName(data: String): String {
     val legacy = decodeCrazy8PackedAvatarString(data)
@@ -1306,9 +1358,7 @@ private fun legacyCrazy8ToOpponentString(data: String): String {
 private const val CRAZY8_PACKED_ALPHABET =
     "0123456789QWERTYUIOPASDFGHJKLZXCVBNM" +
             "qwertyuiopasdfghjklzxcvbnm" +
-            "!@#$%^*()-_=+[{]};.<>/?" +
-            "йцукенгшщзхъёфывапролджэячсмитьбю" +
-            "ЙЦУКЕНГШЩЗХЪЁФЫВАПРОЛДЖЭЯЧСМИТЬБЮ"
+            "!@#$%^*()-_=+[{]};.<>/?"
 
 private fun crazy8CharToInt(char: String): Int {
     if (char.isEmpty()) return 0

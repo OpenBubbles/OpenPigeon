@@ -119,10 +119,24 @@ class AvatarView @JvmOverloads constructor(
             val backdropKeys = listOf("Plain") + (1..9).map { "Pattern $it" }
 
             fun colorStr(argb: Int): String {
-                val r = Color.red(argb)   / 255f
+                val r = Color.red(argb) / 255f
                 val g = Color.green(argb) / 255f
-                val b = Color.blue(argb)  / 255f
+                val b = Color.blue(argb) / 255f
                 return "%.6f,%.6f,%.6f".format(r, g, b)
+            }
+
+            fun adjustedColor(base: Int, brightness: Float): Int {
+                if (brightness == 0f) return base
+                val hsv = FloatArray(3)
+                Color.colorToHSV(base, hsv)
+                if (brightness < 0f) {
+                    val t = brightness + 1f
+                    hsv[2] = hsv[2] * t + 0.3f * (1f - t)
+                } else {
+                    hsv[1] = hsv[1] * (1f - brightness)
+                    hsv[2] = hsv[2] + (1f - hsv[2]) * brightness
+                }
+                return Color.HSVToColor(hsv)
             }
 
             val bodyIdx     = fshapeKeys.indexOf(AvatarData.fshapeStyle).coerceAtLeast(0)
@@ -139,10 +153,10 @@ class AvatarView @JvmOverloads constructor(
                 "mouth,$mouthIdx",
                 "clothes,$clothesIdx",
                 "backdrop,$backdropIdx",
-                "bg_color,${colorStr(AvatarData.bgColor)}",
-                "body_color,${colorStr(AvatarData.fshapeColor)}",
-                "hair_color,${colorStr(AvatarData.hairColor)}",
-                "clothes_color,${colorStr(AvatarData.clothingColor)}",
+                "bg_color,${colorStr(adjustedColor(AvatarData.bgColor, AvatarData.bgBrightness))}",
+                "body_color,${colorStr(adjustedColor(AvatarData.fshapeColor, AvatarData.fshapeBrightness))}",
+                "hair_color,${colorStr(adjustedColor(AvatarData.hairColor, AvatarData.hairBrightness))}",
+                "clothes_color,${colorStr(adjustedColor(AvatarData.clothingColor, AvatarData.clothingBrightness))}",
                 "acc,0", "glasses,0", "stache,0", "wins,0"
             ).joinToString("|")
         }
@@ -178,7 +192,7 @@ class AvatarView @JvmOverloads constructor(
         applyPreview(parseOpponentString(avatarString))
     }
 
-    /** Show the question-mark placeholder — call when opponent is unknown. */
+    // Show the question-mark placeholder. call when opponent is unknown.
     fun showPlaceholder() {
         if (state == null && cachedBitmap != null) return  // already showing placeholder
         state = null
@@ -197,7 +211,7 @@ class AvatarView @JvmOverloads constructor(
     private var cachedBitmap: Bitmap? = null
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
 
-    // Placeholder bitmap — loaded once lazily
+    // Placeholder bitmap - loaded once lazily
     private var placeholderBitmap: Bitmap? = null
     private fun getPlaceholder(): Bitmap? {
         if (placeholderBitmap == null) {
@@ -225,7 +239,7 @@ class AvatarView @JvmOverloads constructor(
             return
         }
 
-        // Render avatar at actual view size (same as before the natural-canvas change)
+        // Render avatar at actual view size
         if (cachedBitmap == null || cachedBitmap!!.width != w || cachedBitmap!!.height != h) {
             cachedBitmap?.recycle()
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
@@ -258,7 +272,7 @@ class AvatarView @JvmOverloads constructor(
         val hairFinal  = applyBrightness(s.hairColor,     s.hairBrightness)
         val clothFinal = applyBrightness(s.clothingColor, s.clothingBrightness)
 
-        // Sprites sized by height, anchored to bottom — same as original working version
+        // Sprites sized by height, anchored to bottom
         fun drawCell(bm: Bitmap?, src: Rect?, tint: Int = Color.WHITE, yOffset: Float = 0f) {
 			bm  ?: return
 			src ?: return
@@ -267,7 +281,7 @@ class AvatarView @JvmOverloads constructor(
 			val drawH     = h * scale
 			val drawW     = drawH
 			val left      = (w - drawW) / 2f
-			val top       = h - drawH - bottomPad + yOffset   // ← yOffset applied here
+			val top       = h - drawH - bottomPad + yOffset
 			drawPaint.colorFilter =
 				if (tint == Color.WHITE) null
 				else PorterDuffColorFilter(tint, PorterDuff.Mode.MULTIPLY)
