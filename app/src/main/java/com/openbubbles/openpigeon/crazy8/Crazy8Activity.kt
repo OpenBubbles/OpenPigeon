@@ -21,6 +21,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -59,6 +61,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -67,6 +70,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -121,6 +125,9 @@ import kotlin.apply
 import kotlin.toString
 import androidx.compose.ui.res.painterResource
 import com.openbubbles.openpigeon.R
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.zIndex
+import com.openbubbles.openpigeon.ui.RulesPopup
 
 class CrazyParticipant(
     val name: String,
@@ -128,7 +135,6 @@ class CrazyParticipant(
     val isMe: Boolean,
     ready: Boolean,
     val avatar: String = "",
-    val avatarRaw: String = ""
 ) {
     var ready by mutableStateOf(ready)
     var cardCount by mutableIntStateOf(0)
@@ -139,7 +145,7 @@ data class CrazyMessage(val message: String, val sender: CrazyParticipant)
 data class CrazyCard(val rank: Int, val file: Int) {
     companion object {
         fun parse(data: String): CrazyCard {
-            var parts = data.split(",")
+            val parts = data.split(",")
             return CrazyCard(parts[0].toInt(), parts[1].toInt())
         }
     }
@@ -280,6 +286,36 @@ class Crazy8Activity : ComponentActivity() {
         }
     }
 
+    fun openRules() {
+        val root = findViewById<FrameLayout>(android.R.id.content)
+        RulesPopup.show(
+            context = this,
+            rootView = root,
+            title = "Crazy 8 Rules",
+            sections = listOf(
+                RulesPopup.Section(
+                    "Objective",
+                    "Be the first player to get rid of all your cards."
+                ),
+                RulesPopup.Section(
+                    "How to Play",
+                    "On your turn, play a card that matches the current card by color or symbol. If you cannot play, draw a card."
+                ),
+                RulesPopup.Section(
+                    "Wild Cards",
+                    "8 cards are wild. When you play one, you choose the new color."
+                ),
+                RulesPopup.Section(
+                    "Action Cards",
+                    "Special cards can skip, reverse, or force draws depending on the game rules in this version."
+                ),
+                RulesPopup.Section(
+                    "Winning",
+                    "The first player to play all of their cards wins the round."
+                )
+            )
+        )
+    }
 
     @SuppressLint("UseKtx")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -445,7 +481,7 @@ class Crazy8Activity : ComponentActivity() {
         PlayerIO.authenticate(this, BuildConfig.PIO_GAME_ID, "mobile", authParams, null, object : Callback<Client>() {
             override fun onSuccess(p0: Client?) {
                 Log.i("PlayerIO", "Authenticated with playerIO!")
-                var joinData = mapOf(
+                val joinData = mapOf(
                     "id" to userid,
                     // avatar data
                     "name" to legacyAvatarStringForCrazy8(name ?: "Player"),
@@ -508,7 +544,6 @@ class Crazy8Activity : ComponentActivity() {
             isMe = id == myId,
             ready = ready,
             avatar = avatarStringForLobby(data),
-            avatarRaw = data
         )
     }
 
@@ -518,6 +553,9 @@ class Crazy8Activity : ComponentActivity() {
     var game by mutableStateOf<CrazyGame?>(null)
     var label by mutableStateOf<String?>(null)
     var connected by mutableStateOf(false)
+    var showLobbyChat by mutableStateOf(false)
+    val lobbySpeechBubbles = mutableStateMapOf<Int, String>()
+    var showBurgerMenu by mutableStateOf(false)
 
     var connectedError by mutableStateOf<String?>(null)
 
@@ -632,6 +670,14 @@ class Crazy8Activity : ComponentActivity() {
                         val decrypted = String(cipher.doFinal(bytes))
 
                         messages.add(0, CrazyMessage(decrypted, sender))
+                        lobbySpeechBubbles[sender.id] = decrypted.take(80)
+
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            if (lobbySpeechBubbles[sender.id] == decrypted.take(80)) {
+                                lobbySpeechBubbles.remove(sender.id)
+                            }
+                        }, 3000)
+
                         Log.i("Got message", decrypted)
                     }
                     else -> { }
@@ -889,7 +935,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
         chatRead = messages.size
     }
 
-    var unread = messages.size - chatRead
+    val unread = messages.size - chatRead
 
     Log.i("visible", imeVisible.toString())
     Box(
@@ -1129,17 +1175,198 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
 }
 
 @Composable
+fun WaitingRoomChatPane(
+    messages: SnapshotStateList<CrazyMessage>,
+    onSend: (String) -> Unit,
+    onClose: () -> Unit
+) {
+    val textInput = remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.scrollToItem(0)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0x66000000))
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ) {
+                onClose()
+            }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .navigationBarsPadding()
+                .statusBarsPadding()
+                .imePadding()
+                .padding(horizontal = 12.dp, vertical = 12.dp)
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() }
+                ) { }
+        ) {
+            Spacer(modifier = Modifier.height(44.dp))
+
+            LazyColumn(
+                state = listState,
+                reverseLayout = true,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(messages) { item ->
+                    if (item.sender.isMe) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Text(
+                                "Me",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(end = 6.dp, bottom = 2.dp)
+                            )
+                            Text(
+                                item.message,
+                                modifier = Modifier
+                                    .background(Color(0xFF1E88E5), shape = RoundedCornerShape(16.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                color = Color.White,
+                                fontSize = 16.sp
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.Start
+                        ) {
+                            Text(
+                                item.sender.name,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(start = 6.dp, bottom = 2.dp)
+                            )
+                            Text(
+                                item.message,
+                                modifier = Modifier
+                                    .background(Color.White, shape = RoundedCornerShape(16.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                color = Color.Black,
+                                fontSize = 16.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            BasicTextField(
+                value = textInput.value,
+                onValueChange = { textInput.value = it },
+                textStyle = TextStyle(fontSize = 16.sp, color = Color.White),
+                cursorBrush = SolidColor(Color.White),
+                keyboardOptions = KeyboardOptions.Default.copy(
+                    imeAction = ImeAction.Send
+                ),
+                keyboardActions = KeyboardActions(
+                    onSend = {
+                        val msg = textInput.value.trim()
+                        if (msg.isNotEmpty()) {
+                            onSend(msg)
+                            textInput.value = ""
+                        }
+                    }
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0x66000000), shape = RoundedCornerShape(16.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                decorationBox = { innerTextField ->
+                    if (textInput.value.isEmpty()) {
+                        Text(
+                            text = "Chat",
+                            style = TextStyle(
+                                fontSize = 16.sp,
+                                color = Color.White.copy(alpha = 0.85f)
+                            )
+                        )
+                    }
+                    innerTextField()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun LobbyAvatarSpeechBubble(text: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.zIndex(2f)
+    ) {
+        Canvas(
+            modifier = Modifier
+                .matchParentSize()
+        ) {
+            val tailTipX = 0f
+            val tailTipY = size.height * 0.72f
+
+            val bubbleLeft = 18.dp.toPx()
+
+            val attachTopX = bubbleLeft + 6.dp.toPx()
+            val attachTopY = size.height * 0.60f
+
+            val attachBottomX = bubbleLeft + 6.dp.toPx()
+            val attachBottomY = size.height * 0.86f
+
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(attachTopX, attachTopY)
+                lineTo(tailTipX, tailTipY)
+                lineTo(attachBottomX, attachBottomY)
+                close()
+            }
+            drawPath(path, color = Color(0xFF1E88E5))
+        }
+
+        Box(
+            modifier = Modifier
+                .padding(start = 16.dp)
+                .widthIn(max = 180.dp)
+                .background(Color(0xFF1E88E5), shape = RoundedCornerShape(9.dp))
+                .padding(horizontal = 12.dp, vertical = 9.dp)
+        ) {
+            Text(
+                text = text,
+                color = Color.White,
+                fontSize = 12.sp,
+                maxLines = 2
+            )
+        }
+    }
+}
+
+@Composable
 fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: Crazy8Activity?) {
     val me = participants.find { it.isMe }
 
-    val settingsIcon = if (activity != null) {
-        rememberAssetBitmap(activity, "global/settings.png")
+    val burgerIcon = if (activity != null) {
+        rememberAssetBitmap(activity, "global/burger.png")
     } else {
         null
     }
 
     val rulesIcon = if (activity != null) {
-        rememberAssetBitmap(activity, "global/rules.png")
+        rememberAssetBitmap(activity, "global/chat.png")
     } else {
         null
     }
@@ -1150,7 +1377,9 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
         Image(
             painter = painterResource(id = R.drawable.crazybg),
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .blur(if (activity?.showBurgerMenu == true) 8.dp else 0.dp),
             contentScale = ContentScale.Crop
         )
 
@@ -1158,6 +1387,7 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxSize()
+                .blur(if (activity?.showBurgerMenu == true) 8.dp else 0.dp)
                 .navigationBarsPadding()
                 .statusBarsPadding()
         ) {
@@ -1168,7 +1398,7 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
         ) {
             IconButton(
                 onClick = {
-                    // temporary chat / rules button
+                    activity?.showLobbyChat = true
                 },
                 modifier = Modifier.align(Alignment.CenterStart)
             ) {
@@ -1176,7 +1406,7 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
                     Image(
                         bitmap = rulesIcon,
                         contentDescription = "Rules",
-                        modifier = Modifier.size(28.dp),
+                        modifier = Modifier.size(36.dp),
                         contentScale = ContentScale.Fit
                     )
                 }
@@ -1184,15 +1414,17 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
 
             IconButton(
                 onClick = {
-                    activity?.openSettings()
+                    activity?.let {
+                        it.showBurgerMenu = !it.showBurgerMenu
+                    }
                 },
                 modifier = Modifier.align(Alignment.CenterEnd)
             ) {
-                if (settingsIcon != null) {
+                if (burgerIcon != null) {
                     Image(
-                        bitmap = settingsIcon,
-                        contentDescription = "Settings",
-                        modifier = Modifier.size(28.dp),
+                        bitmap = burgerIcon,
+                        contentDescription = "Menu",
+                        modifier = Modifier.size(36.dp),
                         contentScale = ContentScale.Fit
                     )
                 }
@@ -1217,13 +1449,20 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
                             .padding(horizontal = 4.dp, vertical = 3.dp)
                             .fillMaxWidth()
                     ) {
-                        Row(
-                            modifier = Modifier.align(Alignment.CenterStart),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RenderLobbyAvatar(
-                                avatarData = participant.avatar,
-                                modifier = Modifier.size(width = 72.dp, height = 52.dp)
+                        RenderLobbyAvatar(
+                            avatarData = participant.avatar,
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .size(width = 72.dp, height = 52.dp)
+                        )
+
+                        val bubbleText = activity?.lobbySpeechBubbles?.get(participant.id)
+                        if (!bubbleText.isNullOrBlank()) {
+                            LobbyAvatarSpeechBubble(
+                                text = bubbleText,
+                                modifier = Modifier
+                                    .align(Alignment.CenterStart)
+                                    .offset(x = 42.dp, y = (-6).dp)
                             )
                         }
 
@@ -1310,7 +1549,67 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
                 )
             }
     }
-}
+        if (activity?.showLobbyChat == true) {
+            WaitingRoomChatPane(
+                messages = activity.messages,
+                onSend = { msg -> activity.sendMessage(msg) },
+                onClose = { activity.showLobbyChat = false }
+            )
+        }
+
+        if (activity?.showBurgerMenu == true) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) {
+                        activity.showBurgerMenu = false
+                    }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 56.dp, end = 12.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xEEFFFFFF))
+                        .border(1.dp, Color(0x22000000), RoundedCornerShape(10.dp))
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) { }
+                        .padding(vertical = 6.dp)
+                        .widthIn(min = 120.dp)
+                        .wrapContentWidth()
+                ) {
+                    Text(
+                        "Settings",
+                        modifier = Modifier
+                            .clickable {
+                                activity.showBurgerMenu = false
+                                activity.openSettings()
+                            }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        color = Color.Black,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Text(
+                        "Help",
+                        modifier = Modifier
+                            .clickable {
+                                activity.showBurgerMenu = false
+                                activity.openRules()
+                            }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        color = Color.Black,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+    }
     }
 
 private fun extractCrazy8DisplayName(data: String): String {
