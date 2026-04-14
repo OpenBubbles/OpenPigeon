@@ -102,8 +102,30 @@ import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import com.openbubbles.openpigeon.BuildConfig
+import android.graphics.BitmapFactory
+import android.widget.FrameLayout
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.viewinterop.AndroidView
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
+import com.openbubbles.openpigeon.settings.SettingsSheet
+import kotlin.apply
+import kotlin.toString
 
-class CrazyParticipant(val name: String, val id: Int, val isMe: Boolean, ready: Boolean) {
+class CrazyParticipant(
+    val name: String,
+    val id: Int,
+    val isMe: Boolean,
+    ready: Boolean,
+    val avatar: String = "",
+    val avatarRaw: String = ""
+) {
     var ready by mutableStateOf(ready)
     var cardCount by mutableIntStateOf(0)
 }
@@ -162,15 +184,114 @@ class Crazy8Activity : ComponentActivity() {
     var currentConnection: Connection? = null
     var name by mutableStateOf<String?>(null)
 
+    lateinit var settingsSheet: SettingsSheet
+    private var settingsConfigured = false
+    private var settingsNameEdit: android.widget.EditText? = null
+    private var settingsAvatarView: AvatarView? = null
+
     fun getPrefs(): SharedPreferences {
         return getSharedPreferences("crazy_prefs", Context.MODE_PRIVATE)
     }
+
+    private fun refreshSettingsSheetValues() {
+        settingsNameEdit?.let { edit ->
+            val current = name ?: getPrefs().getString("name", "") ?: ""
+            if (edit.text?.toString() != current) {
+                edit.setText(current)
+                edit.setSelection(edit.text?.length ?: 0)
+            }
+        }
+
+        settingsAvatarView?.apply {
+            try {
+                applyFromAvatarData()
+            } catch (e: Exception) {
+                Log.e("Crazy8", "Failed to refresh settings avatar", e)
+            }
+        }
+    }
+
+    private fun setupSettingsSheet() {
+        if (settingsConfigured) return
+        settingsConfigured = true
+
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(0, 8, 0, 8)
+        }
+
+        val avatar = AvatarView(this).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(150, 110).also {
+                it.marginEnd = 24
+            }
+            setBackgroundColor(android.graphics.Color.WHITE)
+            alpha = 1f
+
+            try {
+                applyFromAvatarData()
+            } catch (e: Exception) {
+                Log.e("Crazy8", "Failed to apply avatar preview", e)
+            }
+        }
+
+        val edit = androidx.appcompat.widget.AppCompatEditText(this).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                0,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f
+            )
+            hint = "Player name"
+            setSingleLine(true)
+            setText(name ?: getPrefs().getString("name", "") ?: "")
+        }
+
+        edit.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val newName = s?.toString()?.trim().orEmpty()
+                getPrefs().edit().putString("name", newName).apply()
+                name = newName
+            }
+        })
+
+        container.addView(avatar)
+        container.addView(edit)
+
+        settingsAvatarView = avatar
+        settingsNameEdit = edit
+
+        settingsSheet.addGameControl("Player", container)
+    }
+
+    fun openSettings() {
+        if (::settingsSheet.isInitialized) {
+            refreshSettingsSheetValues()
+            settingsSheet.open()
+        }
+    }
+
 
     @SuppressLint("UseKtx")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         enableEdgeToEdge()
+
+        val savedName = getPrefs().getString("name", "")?.trim().orEmpty()
+        if (savedName.isNotEmpty() && name == null) {
+            name = savedName
+        }
+
+        AvatarData.init(applicationContext)
+        val rootFrame = window.decorView.findViewById<FrameLayout>(android.R.id.content)
+        settingsSheet = SettingsSheet(this, rootFrame)
+        setupSettingsSheet()
 
         Timer().schedule(object: TimerTask() {
             override fun run() {
@@ -234,6 +355,7 @@ class Crazy8Activity : ComponentActivity() {
                                 onGo = {
                                     prefs.edit().putString("name", thisName).apply()
                                     name = thisName
+                                    refreshSettingsSheetValues()
                                     joinRoom(currentRoom)
                                 }
                             )
@@ -241,6 +363,7 @@ class Crazy8Activity : ComponentActivity() {
                         Button(onClick = {
                             prefs.edit().putString("name", thisName).apply()
                             name = thisName
+                            refreshSettingsSheetValues()
                             joinRoom(currentRoom)
                         }, modifier = Modifier.padding(top = 16.dp)) {
                             Text("Join")
@@ -260,6 +383,7 @@ class Crazy8Activity : ComponentActivity() {
                             textAlign = TextAlign.Center)
                         Button(onClick = {
                             connectedError = null
+                            refreshSettingsSheetValues()
                             joinRoom(currentRoom)
                         }, modifier = Modifier.padding(top = 16.dp)) {
                             Text("Retry")
@@ -299,7 +423,7 @@ class Crazy8Activity : ComponentActivity() {
                 var joinData = mapOf(
                     "id" to userid,
                     // avatar data
-                    "name" to "b,4`e,0`m,2`a,0`w,0`bg,0.608878,0.670567,0.842836`bc,0.764706,0.254902,0.152941`g,0`s,0`d,0`h,3`c,2`hc,0.000000,0.000000,0.000000`cc,0.290639,0.935341,0.083265`n,$name",
+                    "name" to legacyAvatarStringForCrazy8(name ?: "Player"),
                     "version" to "52"
                 )
                 p0!!.multiplayer.createJoinRoom(room, "Chat", true, mapOf(), joinData, object : Callback<Connection>() {
@@ -353,8 +477,14 @@ class Crazy8Activity : ComponentActivity() {
     }
 
     fun parseParticipant(id: Int, data: String, ready: Boolean): CrazyParticipant {
-        var parts = data.split("`")
-        return CrazyParticipant(parts[0].substring(34), id, id == myId, ready)
+        return CrazyParticipant(
+            name = extractCrazy8DisplayName(data),
+            id = id,
+            isMe = id == myId,
+            ready = ready,
+            avatar = avatarStringForLobby(data),
+            avatarRaw = data
+        )
     }
 
     val messages = mutableStateListOf<CrazyMessage>()
@@ -656,6 +786,68 @@ fun RenderParticipant(game: CrazyGame, participant: CrazyParticipant) {
 }
 
 @Composable
+fun rememberAssetBitmap(context: Context, path: String): androidx.compose.ui.graphics.ImageBitmap? {
+    val imageState = remember(path) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+
+    LaunchedEffect(path) {
+        try {
+            context.assets.open(path).use { stream ->
+                val bmp = BitmapFactory.decodeStream(stream)
+                imageState.value = bmp?.asImageBitmap()
+            }
+        } catch (e: Exception) {
+            Log.e("Crazy8", "Failed to load asset $path", e)
+        }
+    }
+
+    return imageState.value
+}
+
+@Composable
+fun RenderLobbyAvatar(avatarData: String, modifier: Modifier = Modifier) {
+    androidx.compose.runtime.key(avatarData) {
+        Box(
+            modifier = modifier
+                .clip(RoundedCornerShape(percent = 50))
+                .background(Color.White)
+                .border(1.dp, Color(0x22000000), RoundedCornerShape(percent = 50)),
+            contentAlignment = Alignment.Center
+        ) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { context ->
+                    AvatarData.init(context)
+                    AvatarView(context).apply {
+                        setBackgroundColor(android.graphics.Color.WHITE)
+                        setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
+                        alpha = 1f
+                        elevation = 0f
+                        try {
+                            applyFromOpponentString(avatarData)
+                        } catch (e: Exception) {
+                            Log.e("Crazy8", "Failed to render lobby avatar", e)
+                            showPlaceholder()
+                        }
+                    }
+                },
+                update = { view ->
+                    view.setBackgroundColor(android.graphics.Color.WHITE)
+                    view.setLayerType(android.view.View.LAYER_TYPE_SOFTWARE, null)
+                    view.alpha = 1f
+                    view.elevation = 0f
+                    try {
+                        view.applyFromOpponentString(avatarData)
+                    } catch (e: Exception) {
+                        Log.e("Crazy8", "Failed to update lobby avatar", e)
+                        view.showPlaceholder()
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
 fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotStateList<CrazyMessage>) {
     val scrollState = rememberScrollState()
     val participantScrollState = rememberScrollState()
@@ -914,12 +1106,68 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
 @Composable
 fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: Crazy8Activity?) {
     val me = participants.find { it.isMe }
-    Column (horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
+
+    val settingsIcon = if (activity != null) {
+        rememberAssetBitmap(activity, "global/settings.png")
+    } else {
+        null
+    }
+
+    val rulesIcon = if (activity != null) {
+        rememberAssetBitmap(activity, "global/rules.png")
+    } else {
+        null
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxWidth()
             .navigationBarsPadding()
-            .statusBarsPadding()) {
-        Column(modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.Center) {
+            .statusBarsPadding()
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            IconButton(
+                onClick = {
+                    // temporary chat / rules button
+                },
+                modifier = Modifier.align(Alignment.CenterStart)
+            ) {
+                if (rulesIcon != null) {
+                    Image(
+                        bitmap = rulesIcon,
+                        contentDescription = "Rules",
+                        modifier = Modifier.size(28.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            }
+
+            IconButton(
+                onClick = {
+                    activity?.openSettings()
+                },
+                modifier = Modifier.align(Alignment.CenterEnd)
+            ) {
+                if (settingsIcon != null) {
+                    Image(
+                        bitmap = settingsIcon,
+                        contentDescription = "Settings",
+                        modifier = Modifier.size(28.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            }
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center
+        ) {
             for (participant in participants) {
                 ElevatedCard(
                     modifier = Modifier
@@ -931,14 +1179,26 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
                 ) {
                     Box(
                         modifier = Modifier
-                            .padding(8.dp)
+                            .padding(horizontal = 4.dp, vertical = 3.dp)
                             .fillMaxWidth()
                     ) {
-                        Text(participant.name,
+                        Row(
+                            modifier = Modifier.align(Alignment.CenterStart),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RenderLobbyAvatar(
+                                avatarData = participant.avatar,
+                                modifier = Modifier.size(width = 72.dp, height = 52.dp)
+                            )
+                        }
+
+                        Text(
+                            participant.name,
                             modifier = Modifier.align(Alignment.Center),
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 15.sp
                         )
+
                         Icon(
                             imageVector = Icons.Rounded.CheckCircle,
                             contentDescription = "Check",
@@ -947,24 +1207,221 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
                                 .alpha(if (participant.ready) 1.0f else 0.0f),
                             tint = Color(0xFF06402B)
                         )
-                        Text("—",
+
+                        Text(
+                            "—",
                             modifier = Modifier
                                 .align(Alignment.CenterEnd)
                                 .alpha(if (participant.ready) 0.0f else 1.0f)
                                 .padding(horizontal = 5.dp),
                             color = Color.DarkGray,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 25.sp)
+                            fontSize = 25.sp
+                        )
                     }
                 }
             }
         }
-        Text("3-6 players required to start", color = Color.White, modifier = Modifier.padding(8.dp).alpha(if (participants.all { it.ready }) 1.0f else 0.0f))
-        Button(onClick = {
-            me!!.ready = !me.ready
-            activity!!.setReady(me.ready)
-        }, modifier = Modifier.padding(bottom = 16.dp)) {
+
+        val playerCountValid = participants.size in 3..6
+        val everyoneReady = participants.isNotEmpty() && participants.all { it.ready }
+
+        val statusText = when {
+            me?.ready == true && !playerCountValid ->
+                "3-6 players are required to start"
+            me?.ready == true && playerCountValid && !everyoneReady ->
+                "We'll start once everyone is READY"
+            me?.ready != true ->
+                "Tap \"READY\" to start the match"
+            else -> null
+        }
+
+        if (statusText != null) {
+            Text(
+                statusText,
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+            )
+        } else {
+            Spacer(modifier = Modifier.height(28.dp))
+        }
+
+        Button(
+            onClick = {
+                me!!.ready = !me.ready
+                activity!!.setReady(me.ready)
+            },
+            modifier = Modifier.padding(bottom = 16.dp)
+        ) {
             Text(if (me?.ready == true) "CANCEL" else "READY")
         }
     }
+}
+
+private fun extractCrazy8DisplayName(data: String): String {
+    val legacy = decodeCrazy8PackedAvatarString(data)
+    return Regex("""(?:^|`)n,([^`]+)""").find(legacy)?.groupValues?.getOrNull(1) ?: "Player"
+}
+
+private fun avatarStringForLobby(raw: String): String {
+    val legacy = decodeCrazy8PackedAvatarString(raw)
+    return legacyCrazy8ToOpponentString(legacy)
+}
+
+private fun legacyCrazy8ToOpponentString(data: String): String {
+    val values = mutableMapOf<String, String>()
+
+    for (part in data.split('`')) {
+        val idx = part.indexOf(',')
+        if (idx == -1) continue
+        val key = part.substring(0, idx)
+        val value = part.substring(idx + 1)
+        values[key] = value
+    }
+
+    fun v(key: String, default: String): String {
+        return values[key] ?: default
+    }
+
+    return "body,${v("b", "4")}" +
+            "|eyes,${v("e", "0")}" +
+            "|mouth,${v("m", "2")}" +
+            "|acc,${v("a", "0")}" +
+            "|wins,${v("w", "0")}" +
+            "|bg_color,${v("bg", "0.0,0.0,0.0")}" +
+            "|body_color,${v("bc", "0.0,0.0,0.0")}" +
+            "|glasses,${v("g", "0")}" +
+            "|stache,${v("s", "0")}" +
+            "|backdrop,${v("d", "0")}" +
+            "|hair,${v("h", "3")}" +
+            "|clothes,${v("c", "2")}" +
+            "|hair_color,${v("hc", "0.0,0.0,0.0")}" +
+            "|clothes_color,${v("cc", "0.290639,0.935341,0.083265")}" +
+            "|n,${v("n", "")}"
+}
+
+private const val CRAZY8_PACKED_ALPHABET =
+    "0123456789QWERTYUIOPASDFGHJKLZXCVBNM" +
+            "qwertyuiopasdfghjklzxcvbnm" +
+            "!@#$%^*()-_=+[{]};.<>/?" +
+            "йцукенгшщзхъёфывапролджэячсмитьбю" +
+            "ЙЦУКЕНГШЩЗХЪЁФЫВАПРОЛДЖЭЯЧСМИТЬБЮ"
+
+private fun crazy8CharToInt(char: String): Int {
+    if (char.isEmpty()) return 0
+    val idx = CRAZY8_PACKED_ALPHABET.indexOf(char.take(1))
+    return if (idx >= 0) idx else 0
+}
+
+private fun crazy8CharToFloat(twoChars: String): Float {
+    if (twoChars.length < 2) return 0f
+
+    val n = CRAZY8_PACKED_ALPHABET.length
+    val first = CRAZY8_PACKED_ALPHABET.indexOf(twoChars.substring(0, 1)).coerceAtLeast(0)
+    val second = CRAZY8_PACKED_ALPHABET.indexOf(twoChars.substring(1, 2)).coerceAtLeast(0)
+
+    val numerator = second + first * n
+    val denominator = (n * n) - 1
+
+    return numerator.toFloat() / denominator.toFloat()
+}
+
+private fun decodeCrazy8PackedAvatarString(data: String): String {
+    if (data.contains("`n,")) return data
+
+    if (data.length < 34) {
+        return "b,4`e,0`m,2`a,0`w,0`bg,0.0,0.0,0.0`bc,0.0,0.0,0.0`g,0`s,0`d,0`h,3`c,2`hc,0.0,0.0,0.0`cc,0.290639,0.935341,0.083265`n,$data"
+    }
+
+    val token = data.substring(0, 34)
+    val name = data.substring(34)
+
+    val b = crazy8CharToInt(token.substring(0, 1))
+    val e = crazy8CharToInt(token.substring(1, 2))
+    val m = crazy8CharToInt(token.substring(2, 3))
+    val a = crazy8CharToInt(token.substring(3, 4))
+    val w = crazy8CharToInt(token.substring(4, 5))
+
+    val bgR = crazy8CharToFloat(token.substring(5, 7))
+    val bgG = crazy8CharToFloat(token.substring(7, 9))
+    val bgB = crazy8CharToFloat(token.substring(9, 11))
+
+    val bcR = crazy8CharToFloat(token.substring(11, 13))
+    val bcG = crazy8CharToFloat(token.substring(13, 15))
+    val bcB = crazy8CharToFloat(token.substring(15, 17))
+
+    val g = crazy8CharToInt(token.substring(17, 18))
+    val s = crazy8CharToInt(token.substring(18, 19))
+    val d = crazy8CharToInt(token.substring(19, 20))
+    val h = crazy8CharToInt(token.substring(20, 21))
+    val c = crazy8CharToInt(token.substring(21, 22))
+
+    val hcR = crazy8CharToFloat(token.substring(22, 24))
+    val hcG = crazy8CharToFloat(token.substring(24, 26))
+    val hcB = crazy8CharToFloat(token.substring(26, 28))
+
+    val ccR = crazy8CharToFloat(token.substring(28, 30))
+    val ccG = crazy8CharToFloat(token.substring(30, 32))
+    val ccB = crazy8CharToFloat(token.substring(32, 34))
+
+    return buildString {
+        append("b,$b")
+        append("`e,$e")
+        append("`m,$m")
+        append("`a,$a")
+        append("`w,$w")
+        append("`bg,$bgR,$bgG,$bgB")
+        append("`bc,$bcR,$bcG,$bcB")
+        append("`g,$g")
+        append("`s,$s")
+        append("`d,$d")
+        append("`h,$h")
+        append("`c,$c")
+        append("`hc,$hcR,$hcG,$hcB")
+        append("`cc,$ccR,$ccG,$ccB")
+        append("`n,$name")
+    }
+}
+
+private fun legacyAvatarStringForCrazy8(playerName: String): String {
+    val modern = AvatarView.buildAvatarString()
+    val values = mutableMapOf<String, String>()
+
+    for (part in modern.split("|")) {
+        val idx = part.indexOf(',')
+        if (idx == -1) continue
+        val key = part.substring(0, idx)
+        val value = part.substring(idx + 1)
+        values[key] = value
+    }
+
+    fun v(key: String, default: String): String {
+        return values[key] ?: default
+    }
+
+    fun color3(key: String, default: String): String {
+        val raw = values[key] ?: return default
+        val parts = raw.split(",")
+        if (parts.size < 3) return default
+        return "${parts[0]},${parts[1]},${parts[2]}"
+    }
+
+    return "b,${v("body", "4")}`" +
+            "e,${v("eyes", "0")}`" +
+            "m,${v("mouth", "2")}`" +
+            "a,${v("acc", "0")}`" +
+            "w,${v("wins", "0")}`" +
+            "bg,${color3("bg_color", "0.0,0.0,0.0")}`" +
+            "bc,${color3("body_color", "0.0,0.0,0.0")}`" +
+            "g,${v("glasses", "0")}`" +
+            "s,${v("stache", "0")}`" +
+            "d,${v("backdrop", "0")}`" +
+            "h,${v("hair", "3")}`" +
+            "c,${v("clothes", "2")}`" +
+            "hc,${color3("hair_color", "0.000000,0.000000,0.000000")}`" +
+            "cc,${color3("clothes_color", "0.290639,0.935341,0.083265")}`" +
+            "n,$playerName"
 }

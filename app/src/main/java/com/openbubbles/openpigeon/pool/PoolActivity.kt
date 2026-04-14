@@ -124,11 +124,11 @@ class PoolActivity : AppCompatActivity() {
 
     private fun vibrateCueTick() {
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val manager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            val manager = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
             manager.defaultVibrator
         } else {
             @Suppress("DEPRECATION")
-            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            getSystemService(VIBRATOR_SERVICE) as Vibrator
         }
 
         if (!vibrator.hasVibrator()) return
@@ -392,7 +392,7 @@ class PoolActivity : AppCompatActivity() {
         val settingsBtn = findViewById<ImageButton>(R.id.settingsButton)
         try {
             val bm = assets.open("global/settings.png")
-                .use { android.graphics.BitmapFactory.decodeStream(it) }
+                .use { BitmapFactory.decodeStream(it) }
             settingsBtn.setImageBitmap(bm)
         } catch (e: Exception) { e.printStackTrace() }
 
@@ -413,7 +413,7 @@ class PoolActivity : AppCompatActivity() {
         val rulesBtn = findViewById<ImageButton>(R.id.rulesButton)
         try {
             val bm = assets.open("global/rules.png")
-                .use { android.graphics.BitmapFactory.decodeStream(it) }
+                .use { BitmapFactory.decodeStream(it) }
             rulesBtn.setImageBitmap(bm)
         } catch (e: Exception) { e.printStackTrace() }
 
