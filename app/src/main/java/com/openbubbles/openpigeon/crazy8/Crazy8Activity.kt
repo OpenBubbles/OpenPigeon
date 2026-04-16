@@ -211,6 +211,10 @@ class Crazy8Activity : ComponentActivity() {
     var currentConnection: Connection? = null
     var name by mutableStateOf<String?>(null)
 
+    private var isConnecting = false
+    private var reconnectHandler = Handler(Looper.getMainLooper())
+    private var reconnectRunnable: Runnable? = null
+
     lateinit var settingsSheet: SettingsSheet
     private var settingsConfigured = false
     private var settingsNameEdit: android.widget.EditText? = null
@@ -333,6 +337,34 @@ class Crazy8Activity : ComponentActivity() {
                 )
             )
         )
+    }
+
+    private fun cancelReconnect() {
+        reconnectRunnable?.let { reconnectHandler.removeCallbacks(it) }
+        reconnectRunnable = null
+    }
+
+    private fun scheduleReconnect(delayMs: Long = 1200L) {
+        if (currentRoom.isBlank()) return
+        if (name.isNullOrBlank()) return
+        if (isConnecting) return
+        if (currentConnection != null && connected) return
+
+        cancelReconnect()
+
+        reconnectRunnable = Runnable {
+            if (isFinishing || isDestroyed) return@Runnable
+            if (currentRoom.isBlank()) return@Runnable
+            if (name.isNullOrBlank()) return@Runnable
+            if (isConnecting) return@Runnable
+            if (currentConnection != null && connected) return@Runnable
+
+            Log.i("Crazy8", "Attempting reconnect to room=$currentRoom")
+            connectedError = null
+            joinRoom(currentRoom)
+        }
+
+        reconnectHandler.postDelayed(reconnectRunnable!!, delayMs)
     }
 
     @SuppressLint("UseKtx")
@@ -487,41 +519,56 @@ class Crazy8Activity : ComponentActivity() {
     }
 
     var currentRoom = ""
+
     fun joinRoom(room: String) {
         currentRoom = room
         if (name == null) return
+        if (isConnecting) return
+        if (currentConnection != null && connected) return
+
+        isConnecting = true
+        connected = false
+        connectedError = null
+
         val userid = gameSessionIPC!!.getSenderUUID(sessionId)
         val auth = PlayerIO.calcAuth256(userid, BuildConfig.PIO_SHARED_SECRET)
         val authParams = hashMapOf(
             "userId" to userid,
             "auth" to auth
         )
+
         PlayerIO.authenticate(this, BuildConfig.PIO_GAME_ID, "mobile", authParams, null, object : Callback<Client>() {
             override fun onSuccess(p0: Client?) {
                 Log.i("PlayerIO", "Authenticated with playerIO!")
                 val joinData = mapOf(
                     "id" to userid,
-                    // avatar data
                     "name" to legacyAvatarStringForCrazy8(name ?: "Player"),
                     "version" to "52"
                 )
                 p0!!.multiplayer.createJoinRoom(room, "Chat", true, mapOf(), joinData, object : Callback<Connection>() {
                     override fun onSuccess(connection: Connection?) {
+                        isConnecting = false
+                        cancelReconnect()
                         setupConnection(connection!!)
                     }
 
                     override fun onError(p0: PlayerIOError?) {
+                        isConnecting = false
                         Log.e("PlayerIO", "Error joining $p0")
                         connectedError = p0.toString()
+                        scheduleReconnect()
                     }
                 })
             }
 
             override fun onError(p0: PlayerIOError?) {
+                isConnecting = false
                 Log.e("PlayerIO", "Error $p0")
                 connectedError = p0.toString()
+                scheduleReconnect()
             }
         })
+
         Log.i("Godot room", room)
     }
 
@@ -578,8 +625,11 @@ class Crazy8Activity : ComponentActivity() {
     var connectedError by mutableStateOf<String?>(null)
 
     var myId by mutableIntStateOf(0)
+
     fun setupConnection(connection: Connection) {
         currentConnection = connection
+        isConnecting = false
+        connectedError = null
         connection.send("p")
         connection.addMessageListener("*", object : MessageListener() {
             override fun onMessage(message: Message?) {
@@ -720,26 +770,33 @@ class Crazy8Activity : ComponentActivity() {
         })
         connection.addDisconnectListener(object : DisconnectListener() {
             override fun onDisconnect() {
-                //Disconnected from room...
                 Log.i("PlayerIO", "disconnected")
                 connected = false
                 currentConnection = null
+                isConnecting = false
+                scheduleReconnect()
             }
         })
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        cancelReconnect()
         currentConnection?.disconnect()
+        super.onDestroy()
     }
 
     override fun onResume() {
+        super.onResume()
+
         if (gameSessionIPC != null) {
             gameSessionIPC?.setSuppressNotifications(sessionId, true)
         } else {
             Log.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
         }
-        super.onResume()
+
+        if (currentConnection == null && currentRoom.isNotBlank() && !name.isNullOrBlank()) {
+            scheduleReconnect(200L)
+        }
     }
 
     override fun onPause() {
@@ -1226,20 +1283,23 @@ fun DirectionArrowOverlay(
         y = midY + py * rightSideOffsetPx - uy * with(density) { 4.dp.toPx() }
     )
 
-    // The vector asset points counterclockwise by default,
-    // so flip it when clockwise is true.
-    val baseRotation = if (clockwise) 0f else 180f
+    val beamAngleDeg = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
+
+    // Adjust this by 180 if the arrow asset is drawn facing the opposite direction.
+    val assetForwardOffset = 90f
+
+    val baseRotation = beamAngleDeg + assetForwardOffset
 
     val leftRotation = if (clockwise) {
-        baseRotation - 18f
+        baseRotation - 30f
     } else {
-        baseRotation + 18f
+        baseRotation + 30f
     }
 
     val rightRotation = if (clockwise) {
-        baseRotation + 28f
+        baseRotation + 30f
     } else {
-        baseRotation - 28f
+        baseRotation - 30f
     }
 
     Box(modifier = modifier) {
@@ -1443,7 +1503,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
 
             // Reverse the displayed opponent order so the visual table flow
             // matches the rest of the games better.
-            val opponents = game.participants.filter { !it.isMe }.asReversed()
+            val opponents = game.participants.filter { !it.isMe }
             val slots = opponentSlots(opponents.size)
 
             fun opponentCardX(xFrac: Float): androidx.compose.ui.unit.Dp {
