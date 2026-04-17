@@ -11,6 +11,7 @@ import androidx.core.content.edit
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -95,6 +96,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.ui.graphics.BlendMode
 import kotlin.math.PI
 import kotlin.math.cos
@@ -145,16 +147,25 @@ import androidx.compose.ui.zIndex
 import com.openbubbles.openpigeon.ui.RulesPopup
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 class CrazyParticipant(
-    val name: String,
+    name: String,
     val id: Int,
     val isMe: Boolean,
     ready: Boolean,
-    val avatar: String = "",
+    avatar: String = "",
 ) {
+    var name by mutableStateOf(name)
     var ready by mutableStateOf(ready)
     var cardCount by mutableIntStateOf(0)
+    var avatar by mutableStateOf(avatar)
 }
 
 data class CrazyMessage(val message: String, val sender: CrazyParticipant)
@@ -198,9 +209,16 @@ data class CrazyCard(val rank: Int, val file: Int) {
     }
 }
 
-class CrazyGame(val participants: List<CrazyParticipant>, turn: CrazyParticipant, card: CrazyCard, val hand: SnapshotStateList<CrazyCard>) {
+class CrazyGame(
+    val participants: List<CrazyParticipant>,
+    turn: CrazyParticipant,
+    card: CrazyCard,
+    val hand: SnapshotStateList<CrazyCard>,
+    clockwise: Boolean = true
+) {
     var turn by mutableStateOf(turn)
     var card by mutableStateOf(card)
+    var clockwise by mutableStateOf(clockwise)
 }
 
 
@@ -217,95 +235,52 @@ class Crazy8Activity : ComponentActivity() {
 
     lateinit var settingsSheet: SettingsSheet
     private var settingsConfigured = false
-    private var settingsNameEdit: android.widget.EditText? = null
-    private var settingsAvatarView: AvatarView? = null
+    private var settingsIdentityBeforeOpen: String? = null
 
     fun getPrefs(): SharedPreferences {
         return getSharedPreferences("crazy_prefs", Context.MODE_PRIVATE)
     }
 
     private fun refreshSettingsSheetValues() {
-        settingsNameEdit?.let { edit ->
-            val current = name ?: getPrefs().getString("name", "") ?: ""
-            if (edit.text?.toString() != current) {
-                edit.setText(current)
-                edit.setSelection(edit.text?.length ?: 0)
-            }
-        }
-
-        settingsAvatarView?.apply {
-            try {
-                applyFromAvatarData()
-            } catch (e: Exception) {
-                Log.e("Crazy8", "Failed to refresh settings avatar", e)
-            }
-        }
+        val current = name ?: getPrefs().getString("name", "") ?: ""
+        settingsSheet.setHeaderNameValue(current)
+        settingsSheet.refreshHeaderAvatar()
     }
 
     private fun setupSettingsSheet() {
         if (settingsConfigured) return
         settingsConfigured = true
 
-        val container = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.HORIZONTAL
-            layoutParams = android.widget.LinearLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            setPadding(0, 8, 0, 8)
-        }
-
-        val avatar = AvatarView(this).apply {
-            layoutParams = android.widget.LinearLayout.LayoutParams(150, 110).also {
-                it.marginEnd = 24
-            }
-            setBackgroundColor(android.graphics.Color.WHITE)
-            alpha = 1f
-
-            try {
-                applyFromAvatarData()
-            } catch (e: Exception) {
-                Log.e("Crazy8", "Failed to apply avatar preview", e)
-            }
-        }
-
-        val edit = androidx.appcompat.widget.AppCompatEditText(this).apply {
-            layoutParams = android.widget.LinearLayout.LayoutParams(
-                0,
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
-                1f
-            )
+        settingsSheet.configureHeaderNameField(
+            enabled = true,
+            value = name ?: getPrefs().getString("name", "") ?: "",
             hint = "Player name"
-            setSingleLine(true)
-            setText(name ?: getPrefs().getString("name", "") ?: "")
-        }
-
-        edit.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: android.text.Editable?) {
-                val newName = s?.toString()?.trim().orEmpty()
-                getPrefs().edit {
-                    putString("name", newName)
-                }
-                name = newName
+        ) { rawName ->
+            val newName = rawName.trim()
+            getPrefs().edit {
+                putString("name", newName)
             }
-        })
-
-        container.addView(avatar)
-        container.addView(edit)
-
-        settingsAvatarView = avatar
-        settingsNameEdit = edit
-
-        settingsSheet.addGameControl("Player", container)
+            name = newName
+        }
     }
 
     fun openSettings() {
         if (::settingsSheet.isInitialized) {
+            settingsIdentityBeforeOpen = legacyAvatarStringForCrazy8(name ?: "Player")
             refreshSettingsSheetValues()
             settingsSheet.open()
         }
+    }
+
+    fun onSettingsClosed() {
+        refreshSettingsSheetValues()
+
+        val currentPacked = legacyAvatarStringForCrazy8(name ?: "Player")
+        if (currentPacked != settingsIdentityBeforeOpen) {
+            sendAvatarUpdate()
+        }
+
+        settingsIdentityBeforeOpen = null
     }
 
     fun openRules() {
@@ -381,6 +356,9 @@ class Crazy8Activity : ComponentActivity() {
         AvatarData.init(applicationContext)
         val rootFrame = window.decorView.findViewById<FrameLayout>(android.R.id.content)
         settingsSheet = SettingsSheet(this, rootFrame)
+        settingsSheet.onClosed = {
+            onSettingsClosed()
+        }
         setupSettingsSheet()
 
         Timer().schedule(object: TimerTask() {
@@ -414,7 +392,7 @@ class Crazy8Activity : ComponentActivity() {
 
         setContent {
             val prefs = remember { getPrefs() }
-            
+
             Log.i("name", prefs.getString("name", "")!!)
             var thisName by remember { mutableStateOf(prefs.getString("name", "") ?: "") }
             if (name == null) {
@@ -602,6 +580,51 @@ class Crazy8Activity : ComponentActivity() {
         }
     }
 
+    // Tracks the avatar string most recently broadcast to other players so we
+    // don't spam the network when the polling loop re-reads the same value.
+    @Volatile
+    var lastBroadcastedAvatar: String? = null
+
+    fun applyPackedIdentityUpdate(senderId: Int, packed: String, includeSelf: Boolean = false) {
+        val updatedAvatar = avatarStringForLobby(packed)
+        val updatedName = extractCrazy8DisplayName(packed)
+
+        participants.find { it.id == senderId }?.let { participant ->
+            if (includeSelf || !participant.isMe) {
+                participant.avatar = updatedAvatar
+                participant.name = updatedName
+            }
+        }
+
+        game?.participants?.find { it.id == senderId }?.let { participant ->
+            if (includeSelf || !participant.isMe) {
+                participant.avatar = updatedAvatar
+                participant.name = updatedName
+            }
+        }
+    }
+
+    fun sendAvatarUpdate() {
+        val connection = currentConnection ?: return
+        val packed = legacyAvatarStringForCrazy8(name ?: "Player")
+        if (packed == lastBroadcastedAvatar) return
+
+        lastBroadcastedAvatar = packed
+
+        if (myId != 0) {
+            applyPackedIdentityUpdate(myId, packed, includeSelf = true)
+        }
+
+        thread {
+            try {
+                connection.send("name", packed)
+                connection.send("avatar", packed)
+            } catch (e: Exception) {
+                Log.e("Crazy8", "Failed to send avatar update", e)
+            }
+        }
+    }
+
     fun parseParticipant(id: Int, data: String, ready: Boolean): CrazyParticipant {
         return CrazyParticipant(
             name = extractCrazy8DisplayName(data),
@@ -665,7 +688,7 @@ class Crazy8Activity : ComponentActivity() {
                                 mutableStateListOf()
                             }
                             sortCrazyHandInPlace(myCards)
-                            game = CrazyGame(gameParticipants, turn, currentCard, myCards)
+                            game = CrazyGame(gameParticipants, turn, currentCard, myCards, clockwise = true)
                         }
                     }
                     "join" -> {
@@ -697,7 +720,7 @@ class Crazy8Activity : ComponentActivity() {
                             .map { CrazyCard.parse(it) }
                             .toMutableStateList()
                         sortCrazyHandInPlace(myCards)
-                        game = CrazyGame(gameParticipants, turn, currentCard, myCards)
+                        game = CrazyGame(gameParticipants, turn, currentCard, myCards, clockwise = true)
                     }
                     "move" -> {
                         game?.let { game ->
@@ -705,7 +728,11 @@ class Crazy8Activity : ComponentActivity() {
                             game.turn = game.participants.find { it.id == message.getInt(2) }!!
                             val move = message.getString(1).split("|")
                             if (move[0] != "-1,-1") {
-                                game.card = CrazyCard.parse(move[0])
+                                val playedCard = CrazyCard.parse(move[0])
+                                game.card = playedCard
+                                if (playedCard.file == 12) {
+                                    game.clockwise = !game.clockwise
+                                }
                                 moved.cardCount -= 1
                                 if (moved.cardCount == 0) {
                                     label = "${if (moved.isMe) "You" else moved.name} won!"
@@ -764,6 +791,11 @@ class Crazy8Activity : ComponentActivity() {
 
                         Log.i("Got message", decrypted)
                     }
+                    "name", "avatar" -> {
+                        val senderId = message.getInt(0)
+                        val packed = message.getString(1)
+                        applyPackedIdentityUpdate(senderId, packed)
+                    }
                     else -> { }
                 }
             }
@@ -774,6 +806,7 @@ class Crazy8Activity : ComponentActivity() {
                 connected = false
                 currentConnection = null
                 isConnecting = false
+                lastBroadcastedAvatar = null
                 scheduleReconnect()
             }
         })
@@ -814,7 +847,7 @@ fun RenderWaitingPreview() {
             CrazyParticipant("Testing", 0, true, false),
             CrazyParticipant("Testing", 1, false, true),
         )
-    ,  null)
+        ,  null)
 }
 
 @SuppressLint("UnrememberedMutableState")
@@ -844,42 +877,193 @@ fun RenderGamePreview() {
 }
 
 @Composable
-fun RenderCard(card: CrazyCard?, modifier: Modifier = Modifier) {
-    val colors = when (card?.rank ?: -1) {
-        0 -> listOf(
-            Color(0xFFff5f64),
-            Color(0xFFe11218),
+fun RenderCard(
+    card: CrazyCard?,
+    modifier: Modifier = Modifier,
+    lightweight: Boolean = false
+) {
+    val shape = remember { RoundedCornerShape(4.dp) }
+
+    val colors = remember(card?.rank) {
+        when (card?.rank ?: -1) {
+            0 -> listOf(
+                Color(0xFFff5f64),
+                Color(0xFFe11218),
+            )
+            1 -> listOf(
+                Color(0xFF6DB0DF),
+                Color(0xFF007FFF),
+            )
+            2 -> listOf(
+                Color(0xFFe6c600),
+                Color(0xFFccac00),
+            )
+            3 -> listOf(
+                Color(0xFF4ec160),
+                Color(0xFF1b8e2d),
+            )
+            5 -> listOf(
+                Color(0xFFFF0000),
+                Color(0xFFff9a00),
+                Color(0xFFd0de21),
+                Color(0xFF4fdc4a),
+                Color(0xFF3fdad8),
+                Color(0xFF2fc9e2),
+                Color(0xFF1c7fee),
+                Color(0xFF5f15f2),
+                Color(0xFFba0cf8),
+                Color(0xFFfb07d9),
+            )
+            else -> listOf(
+                Color(0xFF666666),
+                Color(0xFF444444),
+            )
+        }
+    }
+
+    val centerTextStyle = if (lightweight) {
+        TextStyle(
+            fontSize = 30.sp,
+            fontWeight = FontWeight.ExtraBold
         )
-        1 -> listOf(
-            Color(0xFF6DB0DF),
-            Color(0xFF007FFF),
-        )
-        2 -> listOf(
-            Color(0xFFe6c600),
-            Color(0xFFccac00),
-        )
-        3 -> listOf(
-            Color(0xFF4ec160),
-            Color(0xFF1b8e2d),
-        )
-        5 -> listOf(
-            Color(0xFFFF0000),
-            Color(0xFFff9a00),
-            Color(0xFFd0de21),
-            Color(0xFF4fdc4a),
-            Color(0xFF3fdad8),
-            Color(0xFF2fc9e2),
-            Color(0xFF1c7fee),
-            Color(0xFF5f15f2),
-            Color(0xFFba0cf8),
-            Color(0xFFfb07d9),
-        )
-        else -> listOf(
-            Color(0xFF666666),
-            Color(0xFF444444),
+    } else {
+        TextStyle(
+            fontSize = 35.sp,
+            fontWeight = FontWeight.ExtraBold,
+            shadow = Shadow(
+                color = Color.Black,
+                offset = Offset(3.0f, 5.0f),
+                blurRadius = 1f
+            )
         )
     }
 
+    val cornerTextStyle = TextStyle(
+        fontSize = 25.sp,
+        fontWeight = FontWeight.ExtraBold,
+        shadow = Shadow(
+            color = Color.Black,
+            offset = Offset(2.0f, 3.0f),
+            blurRadius = 1f
+        )
+    )
+
+    Box(
+        modifier = modifier
+            .size(80.dp, 110.dp)
+            .then(
+                if (lightweight) {
+                    Modifier
+                } else {
+                    Modifier.shadow(
+                        elevation = 5.dp,
+                        shape = shape,
+                        ambientColor = Color.Black.copy(alpha = 0.20f),
+                        spotColor = Color.Black.copy(alpha = 0.20f)
+                    )
+                }
+            )
+            .background(
+                brush = Brush.verticalGradient(colors),
+                shape = shape,
+            )
+            .border(
+                width = if (lightweight) 2.dp else 4.dp,
+                color = Color.White,
+                shape = shape
+            )
+            .then(
+                if (lightweight) {
+                    Modifier
+                } else {
+                    Modifier.drawWithContent {
+                        drawContent()
+                        drawRoundRect(
+                            color = Color.White.copy(alpha = 0.05f),
+                            size = Size(size.width, size.height * 0.26f),
+                            cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
+                        )
+                    }
+                }
+            )
+    ) {
+        if (card != null) {
+            Text(
+                card.displayName(),
+                modifier = Modifier.align(Alignment.Center),
+                color = Color.White,
+                style = centerTextStyle
+            )
+
+            if (!lightweight) {
+                Text(
+                    card.extraName(),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    color = Color.White,
+                    style = cornerTextStyle
+                )
+
+                Text(
+                    card.extraName(),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    color = Color.White,
+                    style = cornerTextStyle
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun RenderCardBack(
+    modifier: Modifier = Modifier,
+    lightweight: Boolean = false
+) {
+    val shape = remember { RoundedCornerShape(4.dp) }
+
+    Box(
+        modifier = modifier
+            .size(80.dp, 110.dp)
+            .then(
+                if (lightweight) {
+                    Modifier
+                } else {
+                    Modifier.shadow(
+                        elevation = 5.dp,
+                        shape = shape,
+                        ambientColor = Color.Black.copy(alpha = 0.20f),
+                        spotColor = Color.Black.copy(alpha = 0.20f)
+                    )
+                }
+            )
+            .background(
+                if (lightweight) Color(0xFF4A4A4A) else Color(0xFF444444),
+                shape
+            )
+            .border(
+                if (lightweight) 2.dp else 4.dp,
+                Color.White,
+                shape
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (!lightweight) {
+            Text(
+                "CRAZY 8",
+                color = Color.White.copy(alpha = 0.18f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+fun RenderCardBack(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .size(80.dp, 110.dp)
@@ -889,70 +1073,16 @@ fun RenderCard(card: CrazyCard?, modifier: Modifier = Modifier) {
                 ambientColor = Color.Black.copy(alpha = 0.20f),
                 spotColor = Color.Black.copy(alpha = 0.20f)
             )
-            .background(
-                brush = Brush.verticalGradient(colors),
-                shape = RoundedCornerShape(4.dp),
-            )
-            .border(width = 4.dp, color = Color.White, shape = RoundedCornerShape(4.dp))
-            .drawWithContent {
-                drawContent()
-                drawRoundRect(
-                    color = Color.White.copy(alpha = 0.05f),
-                    size = Size(size.width, size.height * 0.26f),
-                    cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
-                )
-            }
+            .background(Color(0xFF444444), RoundedCornerShape(4.dp))
+            .border(4.dp, Color.White, RoundedCornerShape(4.dp)),
+        contentAlignment = Alignment.Center
     ) {
-        if (card != null) {
-            Text(
-                card.displayName(),
-                modifier = Modifier.align(Alignment.Center),
-                color = Color.White,
-                style = TextStyle(
-                    fontSize = 35.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    shadow = Shadow(
-                        color = Color.Black,
-                        offset = Offset(3.0f, 5.0f),
-                        blurRadius = 1f
-                    )
-                )
-            )
-
-            Text(
-                card.extraName(),
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                color = Color.White,
-                style = TextStyle(
-                    fontSize = 25.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    shadow = Shadow(
-                        color = Color.Black,
-                        offset = Offset(2.0f, 3.0f),
-                        blurRadius = 1f
-                    )
-                )
-            )
-
-            Text(
-                card.extraName(),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                color = Color.White,
-                style = TextStyle(
-                    fontSize = 25.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    shadow = Shadow(
-                        color = Color.Black,
-                        offset = Offset(2.0f, 3.0f),
-                        blurRadius = 1f
-                    )
-                )
-            )
-        }
+        Text(
+            "CRAZY 8",
+            color = Color.White.copy(alpha = 0.18f),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -1020,12 +1150,13 @@ fun RenderLobbyAvatar(avatarData: String, modifier: Modifier = Modifier) {
 
 @Composable
 fun RenderDrawPile(
+    modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(92.dp, 122.dp)
             .then(
                 if (onClick != null) {
@@ -1288,18 +1419,22 @@ fun DirectionArrowOverlay(
     // Adjust this by 180 if the arrow asset is drawn facing the opposite direction.
     val assetForwardOffset = 90f
 
-    val baseRotation = beamAngleDeg + assetForwardOffset
+    // When the play direction is reversed, flip the arrows 180° so they point
+    // the opposite way around the table — this is what players expect a
+    // reverse card to do visually, not just re-splay the existing arrows.
+    val directionFlip = if (clockwise) 0f else 180f
+    val baseRotation = beamAngleDeg + assetForwardOffset + directionFlip
 
     val leftRotation = if (clockwise) {
         baseRotation - 30f
     } else {
-        baseRotation + 30f
+        baseRotation - 30f
     }
 
     val rightRotation = if (clockwise) {
         baseRotation + 30f
     } else {
-        baseRotation - 30f
+        baseRotation + 30f
     }
 
     Box(modifier = modifier) {
@@ -1379,6 +1514,102 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
     val handScrollState = rememberScrollState()
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val keyboardController = LocalSoftwareKeyboardController.current
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+
+    var drawPileCenter by remember { mutableStateOf<Offset?>(null) }
+    var discardPileCenter by remember { mutableStateOf<Offset?>(null) }
+    val handCardCenters = remember { mutableStateMapOf<Int, Offset>() }
+
+    var flyingCard by remember { mutableStateOf<CrazyCard?>(null) }
+    // Animatables let the animation driver own the values; reads happen inside
+    // offset { } / graphicsLayer { } lambdas so per-frame changes only
+    // invalidate layout/draw, never composition.
+    val flyingCardOffset = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
+    val flyingCardScaleAnim = remember { Animatable(1f) }
+    var hiddenHandIndex by remember { mutableStateOf<Int?>(null) }
+    var interactionLocked by remember { mutableStateOf(false) }
+    // Guards against rapid double-taps on the draw pile: a second tap before
+    // the server echoes the first "move" back would previously send two draw
+    // requests and the player would receive two cards.
+    var drawInFlight by remember { mutableStateOf(false) }
+    val opponentPileCenters = remember { mutableStateMapOf<Int, Offset>() }
+    var flyingBackside by remember { mutableStateOf(false) }
+    var previousOpponentCounts by remember(game) {
+        mutableStateOf(
+            game.participants
+                .filter { !it.isMe }
+                .associate { it.id to it.cardCount }
+        )
+    }
+
+    var previousHandSnapshot by remember(game) { mutableStateOf(game.hand.map { it.encode() }) }
+
+    suspend fun animateFlyingCard(
+        card: CrazyCard,
+        start: Offset,
+        end: Offset,
+        hideIndex: Int? = null,
+        startScale: Float = 1f,
+        endScale: Float = 1f,
+        durationMs: Int = 280
+    ) {
+        hiddenHandIndex = hideIndex
+        flyingCard = card
+        flyingBackside = false
+        flyingCardOffset.snapTo(start)
+        flyingCardScaleAnim.snapTo(startScale)
+
+        coroutineScope {
+            launch {
+                flyingCardOffset.animateTo(
+                    targetValue = end,
+                    animationSpec = tween(durationMillis = durationMs, easing = FastOutSlowInEasing)
+                )
+            }
+            launch {
+                flyingCardScaleAnim.animateTo(
+                    targetValue = endScale,
+                    animationSpec = tween(durationMillis = durationMs, easing = FastOutSlowInEasing)
+                )
+            }
+        }
+
+        flyingCard = null
+        flyingBackside = false
+        hiddenHandIndex = null
+    }
+
+    suspend fun animateOpponentFly(
+        card: CrazyCard?,
+        start: Offset,
+        end: Offset,
+        backside: Boolean,
+        durationMs: Int = 260
+    ) {
+        flyingBackside = backside
+        flyingCard = card
+        flyingCardOffset.snapTo(start)
+        flyingCardScaleAnim.snapTo(0.96f)
+
+        coroutineScope {
+            launch {
+                flyingCardOffset.animateTo(
+                    targetValue = end,
+                    animationSpec = tween(durationMillis = durationMs, easing = FastOutSlowInEasing)
+                )
+            }
+            launch {
+                flyingCardScaleAnim.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = durationMs, easing = FastOutSlowInEasing)
+                )
+            }
+        }
+
+        flyingCard = null
+        flyingBackside = false
+    }
 
     var chatRead by remember { mutableIntStateOf(0) }
     if (imeVisible) {
@@ -1386,7 +1617,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
     }
 
     val unread = messages.size - chatRead
-    val clockwise = true
+    val clockwise = game.clockwise
     val animatedBeamAngle = remember { Animatable(0f) }
 
     val rulesIcon = if (activity != null) {
@@ -1401,20 +1632,102 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
         null
     }
 
-    var liveLocalAvatar by remember { mutableStateOf(AvatarView.buildAvatarString()) }
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            val current = AvatarView.buildAvatarString()
-            if (current != liveLocalAvatar) {
-                liveLocalAvatar = current
-            }
-            delay(250)
-        }
+    fun avatarFor(participant: CrazyParticipant): String {
+        return participant.avatar
     }
 
-    fun avatarFor(participant: CrazyParticipant): String {
-        return if (participant.isMe) liveLocalAvatar else participant.avatar
+    LaunchedEffect(game.hand.map { it.encode() }.joinToString("|")) {
+        val currentSnapshot = game.hand.map { it.encode() }
+
+        if (currentSnapshot.size > previousHandSnapshot.size && drawPileCenter != null) {
+            // Server confirmed the draw: release the tap guard so the user
+            // can tap draw again on their next legitimate turn.
+            drawInFlight = false
+            val prevCounts = previousHandSnapshot.groupingBy { it }.eachCount().toMutableMap()
+
+            val targetIndex = currentSnapshot.indexOfFirst { enc ->
+                val count = prevCounts[enc] ?: 0
+                if (count > 0) {
+                    prevCounts[enc] = count - 1
+                    false
+                } else {
+                    true
+                }
+            }
+
+            if (targetIndex >= 0) {
+                var targetCenter: Offset? = null
+                repeat(12) {
+                    targetCenter = handCardCenters[targetIndex]
+                    if (targetCenter != null) return@repeat
+                    delay(16)
+                }
+
+                val card = game.hand.getOrNull(targetIndex)
+                if (card != null && targetCenter != null) {
+                    animateFlyingCard(
+                        card = card,
+                        start = drawPileCenter!!,
+                        end = targetCenter!!,
+                        hideIndex = targetIndex,
+                        startScale = 0.88f,
+                        endScale = 1f,
+                        durationMs = 300
+                    )
+                }
+            }
+        }
+
+        previousHandSnapshot = currentSnapshot
+    }
+
+    LaunchedEffect(
+        game.participants
+            .filter { !it.isMe }
+            .joinToString("|") { "${it.id}:${it.cardCount}" }
+    ) {
+        val opponentsNow = game.participants.filter { !it.isMe }
+
+        for (participant in opponentsNow) {
+            val oldCount = previousOpponentCounts[participant.id] ?: participant.cardCount
+            val newCount = participant.cardCount
+            val pileCenter = opponentPileCenters[participant.id]
+
+            if (pileCenter != null && drawPileCenter != null && discardPileCenter != null) {
+                if (newCount > oldCount) {
+                    repeat(newCount - oldCount) {
+                        animateOpponentFly(
+                            card = null,
+                            start = drawPileCenter!!,
+                            end = pileCenter,
+                            backside = true,
+                            durationMs = 240
+                        )
+                    }
+                } else if (newCount < oldCount) {
+                    repeat(oldCount - newCount) {
+                        animateOpponentFly(
+                            card = game.card,
+                            start = pileCenter,
+                            end = discardPileCenter!!,
+                            backside = false,
+                            durationMs = 240
+                        )
+                    }
+                }
+            }
+        }
+
+        previousOpponentCounts = opponentsNow.associate { it.id to it.cardCount }
+    }
+
+    // Safety net for drawInFlight: if for any reason the server response
+    // doesn't grow our hand (e.g. the turn simply advances), the flag still
+    // clears as soon as the turn leaves us, so the guard never gets stuck.
+    LaunchedEffect(game.turn.id) {
+        if (game.turn != me) {
+            drawInFlight = false
+        }
     }
 
     fun opponentSlots(count: Int): List<Float> {
@@ -1486,17 +1799,17 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                 .statusBarsPadding()
                 .onSizeChanged { boardSize.value = it }
         ) {
-            val density = LocalDensity.current
+            val boardDensity = LocalDensity.current
             val boardWidthPx = boardSize.value.width.toFloat()
             val boardHeightPx = boardSize.value.height.toFloat()
-            val boardWidthDp = with(density) { boardSize.value.width.toDp() }
+            val boardWidthDp = with(boardDensity) { boardSize.value.width.toDp() }
 
             val centerPile = Offset(
                 x = boardWidthPx * 0.50f,
                 y = boardHeightPx * 0.43f
             )
 
-            val topCardY = (-38).dp
+            val topCardY = 20.dp
             val topAvatarY = 60.dp
             val avatarWidth = 72.dp
             val avatarHeight = 52.dp
@@ -1535,7 +1848,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                 val xFrac = slots[index]
                 val avatarX = opponentAvatarX(xFrac)
 
-                return with(density) {
+                return with(boardDensity) {
                     Offset(
                         x = avatarX.toPx() + avatarWidth.toPx() / 2f,
                         y = topAvatarY.toPx() + avatarHeight.toPx() / 2f
@@ -1544,7 +1857,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
             }
 
             fun myAvatarCenterPx(): Offset {
-                return with(density) {
+                return with(boardDensity) {
                     Offset(
                         x = boardWidthPx * 0.50f,
                         y = boardHeightPx - 62.dp.toPx() - 52.dp.toPx() - 20.dp.toPx()
@@ -1641,6 +1954,13 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                 Box(
                     modifier = Modifier
                         .offset(x = cardX, y = topCardY)
+                        .onGloballyPositioned { coords ->
+                            val pos = coords.positionInRoot()
+                            opponentPileCenters[participant.id] = Offset(
+                                x = pos.x + coords.size.width / 2f,
+                                y = pos.y + coords.size.height / 2f
+                            )
+                        }
                         .zIndex(1f)
                 ) {
                     Column(
@@ -1648,7 +1968,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         (1..min(participant.cardCount, 10)).forEach {
-                            RenderCard(null)
+                            RenderCardBack(lightweight = true)
                         }
                     }
                 }
@@ -1688,13 +2008,32 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                 horizontalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 RenderDrawPile(
+                    modifier = Modifier.onGloballyPositioned { coords ->
+                        val pos = coords.positionInRoot()
+                        drawPileCenter = Offset(
+                            x = pos.x + coords.size.width / 2f,
+                            y = pos.y + coords.size.height / 2f
+                        )
+                    },
                     onClick = {
+                        if (interactionLocked) return@RenderDrawPile
+                        if (drawInFlight) return@RenderDrawPile
                         if (game.turn != me) return@RenderDrawPile
+                        drawInFlight = true
                         activity?.drawCard()
                     }
                 )
 
-                RenderCard(game.card)
+                RenderCard(
+                    game.card,
+                    modifier = Modifier.onGloballyPositioned { coords ->
+                        val pos = coords.positionInRoot()
+                        discardPileCenter = Offset(
+                            x = pos.x + coords.size.width / 2f,
+                            y = pos.y + coords.size.height / 2f
+                        )
+                    }
+                )
             }
         }
 
@@ -1731,7 +2070,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         .padding(top = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy((-25).dp, alignment = Alignment.CenterHorizontally)
                 ) {
-                    for (card in game.hand) {
+                    game.hand.forEachIndexed { index, card ->
                         val offsetY by animateDpAsState(
                             targetValue = if (selected.value == card) (-20).dp else 0.dp,
                             animationSpec = tween(
@@ -1760,9 +2099,32 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                                                 for (i in 0..1) {
                                                     val newCard = CrazyCard(x * 2 + i, card.file)
                                                     RenderCard(newCard, modifier = Modifier.clickable {
-                                                        game.hand.remove(card)
-                                                        activity!!.playCard(newCard)
-                                                        selectedWildcard.value = null
+                                                        val start = handCardCenters[index]
+                                                        val end = discardPileCenter
+
+                                                        if (start == null || end == null) {
+                                                            game.hand.remove(card)
+                                                            activity!!.playCard(newCard)
+                                                            selectedWildcard.value = null
+                                                            return@clickable
+                                                        }
+
+                                                        scope.launch {
+                                                            interactionLocked = true
+                                                            selectedWildcard.value = null
+                                                            animateFlyingCard(
+                                                                card = newCard,
+                                                                start = start,
+                                                                end = end,
+                                                                hideIndex = index,
+                                                                startScale = 1f,
+                                                                endScale = 0.96f,
+                                                                durationMs = 240
+                                                            )
+                                                            game.hand.remove(card)
+                                                            activity!!.playCard(newCard)
+                                                            interactionLocked = false
+                                                        }
                                                     })
                                                 }
                                             }
@@ -1778,21 +2140,55 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         }
 
                         RenderCard(card, modifier = Modifier
+                            .onGloballyPositioned { coords ->
+                                val pos = coords.positionInRoot()
+                                handCardCenters[index] = Offset(
+                                    x = pos.x + coords.size.width / 2f,
+                                    y = pos.y + coords.size.height / 2f
+                                )
+                            }
+                            .alpha(if (hiddenHandIndex == index) 0f else 1f)
                             .clickable {
+                                if (interactionLocked) return@clickable
                                 if (label != null) return@clickable
                                 if (game.turn != me) return@clickable
                                 if (!card.isCompatibleWith(game.card)) return@clickable
+
                                 if (selected.value != card) {
                                     selected.value = card
                                     return@clickable
                                 }
+
                                 selected.value = null
+
                                 if (card.rank == 5) {
                                     selectedWildcard.value = card
                                     return@clickable
                                 }
-                                game.hand.remove(card)
-                                activity!!.playCard(card)
+
+                                val start = handCardCenters[index]
+                                val end = discardPileCenter
+                                if (start == null || end == null) {
+                                    game.hand.remove(card)
+                                    activity!!.playCard(card)
+                                    return@clickable
+                                }
+
+                                scope.launch {
+                                    interactionLocked = true
+                                    animateFlyingCard(
+                                        card = card,
+                                        start = start,
+                                        end = end,
+                                        hideIndex = index,
+                                        startScale = 1f,
+                                        endScale = 0.96f,
+                                        durationMs = 240
+                                    )
+                                    game.hand.remove(card)
+                                    activity!!.playCard(card)
+                                    interactionLocked = false
+                                }
                             }
                             .drawWithContent {
                                 drawContent()
@@ -1884,8 +2280,41 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                 color = Color.White
             )
         }
+        if (flyingCard != null || flyingBackside) {
+            val cardWidthPx = with(density) { 80.dp.toPx() }
+            val cardHeightPx = with(density) { 110.dp.toPx() }
+
+            val flyingModifier = Modifier
+                .offset {
+                    val c = flyingCardOffset.value
+                    IntOffset(
+                        x = (c.x - cardWidthPx / 2f).roundToInt(),
+                        y = (c.y - cardHeightPx / 2f).roundToInt()
+                    )
+                }
+                .graphicsLayer {
+                    val s = flyingCardScaleAnim.value
+                    scaleX = s
+                    scaleY = s
+                }
+                .zIndex(20f)
+
+            if (flyingBackside) {
+                RenderCardBack(
+                    modifier = flyingModifier,
+                    lightweight = true
+                )
+            } else {
+                RenderCard(
+                    card = flyingCard,
+                    modifier = flyingModifier,
+                    lightweight = true
+                )
+            }
+        }
     }
 }
+
 @Composable
 fun ChatMessagesList(
     messages: SnapshotStateList<CrazyMessage>,
@@ -2115,137 +2544,137 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
                 .navigationBarsPadding()
                 .statusBarsPadding()
         ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-        ) {
-            IconButton(
-                onClick = {
-                    activity?.showLobbyChat = true
-                },
-                modifier = Modifier.align(Alignment.CenterStart)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                if (rulesIcon != null) {
-                    Image(
-                        bitmap = rulesIcon,
-                        contentDescription = "Rules",
-                        modifier = Modifier.size(36.dp),
-                        contentScale = ContentScale.Fit
-                    )
-                }
-            }
-
-            IconButton(
-                onClick = {
-                    activity?.let {
-                        it.showBurgerMenu = !it.showBurgerMenu
-                    }
-                },
-                modifier = Modifier.align(Alignment.CenterEnd)
-            ) {
-                if (burgerIcon != null) {
-                    Image(
-                        bitmap = burgerIcon,
-                        contentDescription = "Menu",
-                        modifier = Modifier.size(36.dp),
-                        contentScale = ContentScale.Fit
-                    )
-                }
-            }
-        }
-
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.Center
-        ) {
-            for (participant in participants) {
-                ElevatedCard(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 5.dp),
-                    shape = RoundedCornerShape(32.dp),
-                    elevation = CardDefaults.cardElevation(
-                        defaultElevation = 6.dp
-                    ),
+                IconButton(
+                    onClick = {
+                        activity?.showLobbyChat = true
+                    },
+                    modifier = Modifier.align(Alignment.CenterStart)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp, vertical = 3.dp)
-                            .fillMaxWidth()
-                    ) {
-                        RenderLobbyAvatar(
-                            avatarData = participant.avatar,
-                            modifier = Modifier
-                                .align(Alignment.CenterStart)
-                                .size(width = 72.dp, height = 52.dp)
+                    if (rulesIcon != null) {
+                        Image(
+                            bitmap = rulesIcon,
+                            contentDescription = "Rules",
+                            modifier = Modifier.size(36.dp),
+                            contentScale = ContentScale.Fit
                         )
+                    }
+                }
 
-                        val bubbleText = activity?.lobbySpeechBubbles?.get(participant.id)
-                        if (!bubbleText.isNullOrBlank()) {
-                            LobbyAvatarSpeechBubble(
-                                text = bubbleText,
+                IconButton(
+                    onClick = {
+                        activity?.let {
+                            it.showBurgerMenu = !it.showBurgerMenu
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                ) {
+                    if (burgerIcon != null) {
+                        Image(
+                            bitmap = burgerIcon,
+                            contentDescription = "Menu",
+                            modifier = Modifier.size(36.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                for (participant in participants) {
+                    ElevatedCard(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 5.dp),
+                        shape = RoundedCornerShape(32.dp),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = 6.dp
+                        ),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 4.dp, vertical = 3.dp)
+                                .fillMaxWidth()
+                        ) {
+                            RenderLobbyAvatar(
+                                avatarData = participant.avatar,
                                 modifier = Modifier
                                     .align(Alignment.CenterStart)
-                                    .offset(x = 42.dp, y = (-6).dp)
+                                    .size(width = 72.dp, height = 52.dp)
+                            )
+
+                            val bubbleText = activity?.lobbySpeechBubbles?.get(participant.id)
+                            if (!bubbleText.isNullOrBlank()) {
+                                LobbyAvatarSpeechBubble(
+                                    text = bubbleText,
+                                    modifier = Modifier
+                                        .align(Alignment.CenterStart)
+                                        .offset(x = 42.dp, y = (-6).dp)
+                                )
+                            }
+
+                            Text(
+                                participant.name,
+                                modifier = Modifier.align(Alignment.Center),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 15.sp
+                            )
+
+                            Icon(
+                                imageVector = Icons.Rounded.CheckCircle,
+                                contentDescription = "Check",
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .alpha(if (participant.ready) 1.0f else 0.0f),
+                                tint = Color(0xFF06402B)
+                            )
+
+                            Text(
+                                "—",
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .alpha(if (participant.ready) 0.0f else 1.0f)
+                                    .padding(horizontal = 5.dp),
+                                color = Color.DarkGray,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 25.sp
                             )
                         }
-
-                        Text(
-                            participant.name,
-                            modifier = Modifier.align(Alignment.Center),
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 15.sp
-                        )
-
-                        Icon(
-                            imageVector = Icons.Rounded.CheckCircle,
-                            contentDescription = "Check",
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .alpha(if (participant.ready) 1.0f else 0.0f),
-                            tint = Color(0xFF06402B)
-                        )
-
-                        Text(
-                            "—",
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .alpha(if (participant.ready) 0.0f else 1.0f)
-                                .padding(horizontal = 5.dp),
-                            color = Color.DarkGray,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 25.sp
-                        )
                     }
                 }
             }
-        }
 
-        val playerCountValid = participants.size in 3..6
-        val everyoneReady = participants.isNotEmpty() && participants.all { it.ready }
+            val playerCountValid = participants.size in 3..6
+            val everyoneReady = participants.isNotEmpty() && participants.all { it.ready }
 
-        val statusText = when {
-            me?.ready == true && !playerCountValid ->
-                "3-6 players are required to start"
-            me?.ready == true && playerCountValid && !everyoneReady ->
-                "We'll start once everyone is READY"
-            me?.ready != true ->
-                "Tap \"READY\" to start the match"
-            else -> null
-        }
+            val statusText = when {
+                me?.ready == true && !playerCountValid ->
+                    "3-6 players are required to start"
+                me?.ready == true && playerCountValid && !everyoneReady ->
+                    "We'll start once everyone is READY"
+                me?.ready != true ->
+                    "Tap \"READY\" to start the match"
+                else -> null
+            }
 
-        if (statusText != null) {
-            Text(
-                statusText,
-                color = Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
-            )
-        } else {
-            Spacer(modifier = Modifier.height(28.dp))
-        }
+            if (statusText != null) {
+                Text(
+                    statusText,
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+                )
+            } else {
+                Spacer(modifier = Modifier.height(28.dp))
+            }
 
             Button(
                 onClick = {
@@ -2272,7 +2701,7 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
                     fontWeight = FontWeight.ExtraBold
                 )
             }
-    }
+        }
         if (activity?.showLobbyChat == true) {
             WaitingRoomChatPane(
                 messages = activity.messages,
@@ -2334,7 +2763,7 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
             }
         }
     }
-    }
+}
 
 private fun extractCrazy8DisplayName(data: String): String {
     val legacy = decodeCrazy8PackedAvatarString(data)
@@ -2498,3 +2927,4 @@ private fun legacyAvatarStringForCrazy8(playerName: String): String {
             "cc,${color3("clothes_color", "0.290639,0.935341,0.083265")}`" +
             "n,$playerName"
 }
+

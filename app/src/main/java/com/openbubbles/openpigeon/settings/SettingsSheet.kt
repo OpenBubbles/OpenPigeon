@@ -16,6 +16,7 @@ import androidx.core.view.isVisible
 class SettingsSheet(
     private val context: Context,
     private val rootFrame: FrameLayout
+
 ) {
 
     // ── dp helpers ────────────────────────────────────────────────────────────
@@ -38,6 +39,13 @@ class SettingsSheet(
     private val card: LinearLayout
 
     private lateinit var mainPreview: AvatarView
+    private lateinit var headerRow: LinearLayout
+    private lateinit var headerNameContainer: LinearLayout
+    private lateinit var headerNameEdit: EditText
+
+    private var headerNameEnabled = false
+    private var suppressHeaderNameCallback = false
+    private var onHeaderNameChanged: ((String) -> Unit)? = null
     private lateinit var tabBar: LinearLayout
     private lateinit var pickerScroll: HorizontalScrollView
     private lateinit var pickerRow: LinearLayout
@@ -53,6 +61,9 @@ class SettingsSheet(
 
     private val extraRows = mutableListOf<View>()
     private var isOpen = false
+
+    var onClosed: (() -> Unit)? = null
+    private var hasNotifiedClosed = false
 
     private enum class Tab { BACKGROUND, BODY, HAIR, FACE, CLOTHING }
     private var currentTab = Tab.HAIR
@@ -138,6 +149,43 @@ class SettingsSheet(
         gameAvatarView?.applyFromAvatarData()
     }
 
+    fun configureHeaderNameField(
+        enabled: Boolean,
+        value: String = "",
+        hint: String = "Player name",
+        onChanged: ((String) -> Unit)? = null
+    ) {
+        headerNameEnabled = enabled
+        onHeaderNameChanged = onChanged
+
+        if (!::headerNameContainer.isInitialized || !::headerNameEdit.isInitialized) return
+
+        headerNameContainer.isVisible = enabled
+        if (enabled) {
+            headerNameEdit.hint = hint
+            setHeaderNameValue(value)
+        }
+    }
+
+    fun setHeaderNameValue(value: String) {
+        if (!::headerNameEdit.isInitialized) return
+
+        val current = headerNameEdit.text?.toString().orEmpty()
+        if (current == value) return
+
+        suppressHeaderNameCallback = true
+        headerNameEdit.setText(value)
+        headerNameEdit.setSelection(headerNameEdit.text?.length ?: 0)
+        suppressHeaderNameCallback = false
+    }
+
+    fun refreshHeaderAvatar() {
+        if (::mainPreview.isInitialized) {
+            mainPreview.applyFromAvatarData()
+        }
+        refreshGameAvatar()
+    }
+
     // ── Construction ──────────────────────────────────────────────────────────
     init {
         dimView = View(context).apply {
@@ -159,6 +207,10 @@ class SettingsSheet(
             elevation = dpf(16f)
             clipToOutline = true
             outlineProvider = ViewOutlineProvider.BACKGROUND
+
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { }
         }
         buildCardContent()
         setupDragToDismiss()
@@ -175,13 +227,68 @@ class SettingsSheet(
             background = GradientDrawable().apply { setColor(COL_HANDLE); cornerRadius = dpf(2f) }
         })
 
-        // Main preview
-        mainPreview = AvatarView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(110f), dp(88f)).also {
-                it.gravity = Gravity.CENTER_HORIZONTAL; it.bottomMargin = dp(12f)
+        // Header row: centered avatar preview, optional name field on the right
+        headerRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.CENTER_HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also {
+                it.leftMargin = dp(16f)
+                it.rightMargin = dp(16f)
+                it.bottomMargin = dp(12f)
             }
         }
-        card.addView(mainPreview)
+
+        mainPreview = AvatarView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(110f), dp(88f))
+        }
+
+        headerNameContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also {
+                it.leftMargin = dp(12f)
+            }
+            isVisible = false
+        }
+
+        headerNameEdit = EditText(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                dp(180f),
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            hint = "Player name"
+            setSingleLine(true)
+            setTextColor(Color.WHITE)
+            setHintTextColor(COL_LABEL)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#2a2a3a"))
+                cornerRadius = dpf(10f)
+                setStroke(dp(1f), COL_DIVIDER)
+            }
+            setPadding(dp(12f), dp(10f), dp(12f), dp(10f))
+
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    if (!headerNameEnabled) return
+                    if (suppressHeaderNameCallback) return
+                    onHeaderNameChanged?.invoke(s?.toString().orEmpty())
+                }
+            })
+        }
+
+        headerNameContainer.addView(headerNameEdit)
+        headerRow.addView(mainPreview)
+        headerRow.addView(headerNameContainer)
+        card.addView(headerRow)
 
         // Tab bar
         tabBar = LinearLayout(context).apply {
@@ -670,6 +777,7 @@ class SettingsSheet(
     fun open() {
         if (isOpen) return
         isOpen = true
+        hasNotifiedClosed = false
         rootFrame.addView(dimView)
         rootFrame.addView(card)
         dimView.isVisible = true
@@ -679,7 +787,7 @@ class SettingsSheet(
             selectTab(Tab.HAIR)
             val slideUp = ObjectAnimator.ofFloat(card, "translationY", card.height.toFloat(), 0f)
                 .apply { duration = 320; interpolator = DecelerateInterpolator(1.8f) }
-            val fadeIn  = ObjectAnimator.ofFloat(dimView, "alpha", 0f, 1f)
+            val fadeIn = ObjectAnimator.ofFloat(dimView, "alpha", 0f, 1f)
                 .apply { duration = 220 }
             AnimatorSet().apply { playTogether(slideUp, fadeIn); start() }
         }
@@ -687,6 +795,11 @@ class SettingsSheet(
 
     fun close() {
         if (!isOpen) return
+
+        if (::headerNameEdit.isInitialized) {
+            headerNameEdit.clearFocus()
+        }
+
         val slideDown = ObjectAnimator.ofFloat(card, "translationY", 0f, card.height.toFloat())
             .apply { duration = 260; interpolator = DecelerateInterpolator(1.4f) }
         val fadeOut = ObjectAnimator.ofFloat(dimView, "alpha", dimView.alpha, 0f)
@@ -704,7 +817,12 @@ class SettingsSheet(
         isOpen = false
         removeExtraRows()
         if (dimView.parent != null) rootFrame.removeView(dimView)
-        if (card.parent   != null) rootFrame.removeView(card)
+        if (card.parent != null) rootFrame.removeView(card)
+
+        if (!hasNotifiedClosed) {
+            hasNotifiedClosed = true
+            onClosed?.invoke()
+        }
     }
 
     // ── Palettes ──────────────────────────────────────────────────────────────
