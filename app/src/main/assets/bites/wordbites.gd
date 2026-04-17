@@ -1923,11 +1923,11 @@ func _populate_scoreboard(
 		word_panel.add_theme_stylebox_override("panel", word_panel_style)
 
 		var word_label := Label.new()
-		word_label.text = word
-		word_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		word_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-		word_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		word_label.add_theme_color_override("font_color", Color(0, 0, 0))
+			word_label.text = word
+			word_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+			word_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			word_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			word_label.add_theme_color_override("font_color", Color(0, 0, 0))
 		var base_font := word_label.get_theme_font("font")
 		var bold_var := FontVariation.new()
 		bold_var.base_font = base_font
