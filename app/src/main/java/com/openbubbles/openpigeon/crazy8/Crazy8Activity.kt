@@ -76,6 +76,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
@@ -152,6 +153,7 @@ import com.openbubbles.openpigeon.ui.RulesPopup
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntOffset
@@ -176,9 +178,19 @@ data class CrazyMessage(val message: String, val sender: CrazyParticipant)
 
 data class CrazyCard(val rank: Int, val file: Int) {
     companion object {
+        private fun normalizeFile(file: Int): Int {
+            return when (file) {
+                20 -> 11
+                21 -> 12
+                22 -> 13
+                23 -> 14
+                else -> file
+            }
+        }
+
         fun parse(data: String): CrazyCard {
             val parts = data.split(",")
-            return CrazyCard(parts[0].toInt(), parts[1].toInt())
+            return CrazyCard(parts[0].toInt(), normalizeFile(parts[1].toInt()))
         }
     }
 
@@ -679,6 +691,50 @@ class Crazy8Activity : ComponentActivity() {
     var connectedError by mutableStateOf<String?>(null)
 
     var myId by mutableIntStateOf(0)
+    private var fxCounter = 0
+
+    var headFx by mutableStateOf<CrazyHeadFx?>(null)
+    var reverseFx by mutableStateOf<CrazyReverseFx?>(null)
+
+    private fun nextFxKey(): Int {
+        fxCounter += 1
+        return fxCounter
+    }
+
+    fun showSkipFx(playerId: Int) {
+        val fx = CrazyHeadFx(
+            key = nextFxKey(),
+            playerId = playerId,
+            skip = true
+        )
+        headFx = fx
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (headFx?.key == fx.key) headFx = null
+        }, 780)
+    }
+
+    fun showPenaltyFx(playerId: Int, text: String) {
+        val fx = CrazyHeadFx(
+            key = nextFxKey(),
+            playerId = playerId,
+            text = text
+        )
+        headFx = fx
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (headFx?.key == fx.key) headFx = null
+        }, 1150)
+    }
+
+    fun showReverseFx(clockwise: Boolean) {
+        val fx = CrazyReverseFx(
+            key = nextFxKey(),
+            clockwise = clockwise
+        )
+        reverseFx = fx
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (reverseFx?.key == fx.key) reverseFx = null
+        }, 860)
+    }
 
     fun setupConnection(connection: Connection) {
         currentConnection = connection
@@ -786,18 +842,33 @@ class Crazy8Activity : ComponentActivity() {
                     "move" -> {
                         game?.let { game ->
                             val moved = game.participants.find { it.id == message.getInt(0) }!!
-                            val previousTurn = game.turn
+                            val wasClockwise = game.clockwise
                             val nextTurn = game.participants.find { it.id == message.getInt(2) }!!
                             game.turn = nextTurn
 
                             val move = message.getString(1).split("|")
+                            var playedFile = -1
+
                             if (move[0] != "-1,-1") {
                                 val playedCard = CrazyCard.parse(move[0])
+                                playedFile = playedCard.file
                                 game.card = playedCard
 
-                                if (playedCard.file == 12) {
+                                if (playedFile == 11) {
+                                    skippedPlayerId(
+                                        participants = game.participants,
+                                        movedId = moved.id,
+                                        nextTurnId = nextTurn.id,
+                                        clockwise = wasClockwise
+                                    )?.let { skippedId ->
+                                        this@Crazy8Activity.showSkipFx(skippedId)
+                                    }
+                                }
+
+                                if (playedFile == 12) {
                                     game.clockwise = !game.clockwise
                                     game.directionKnown = true
+                                    this@Crazy8Activity.showReverseFx(game.clockwise)
                                 }
 
                                 moved.cardCount -= 1
@@ -826,7 +897,16 @@ class Crazy8Activity : ComponentActivity() {
                                 }
                             } else if (move[1] == "c") {
                                 val added = game.participants.find { it.id == move[2].toInt() }!!
-                                added.cardCount += move.size - 3 // card, c, id
+                                val addedCount = move.size - 3 // card, c, id
+                                added.cardCount += addedCount
+
+                                if (addedCount > 0 && (playedFile == 13 || playedFile == 14)) {
+                                    this@Crazy8Activity.showPenaltyFx(
+                                        playerId = added.id,
+                                        text = "+$addedCount"
+                                    )
+                                }
+
                                 if (added.isMe) {
                                     game.hand.addAll(move.slice(3..<move.size).map { CrazyCard.parse(it) })
                                     sortCrazyHandInPlace(game.hand)
@@ -925,9 +1005,15 @@ fun RenderGamePreview() {
         CrazyParticipant("Testing", 0, true, false),
         CrazyParticipant("Testing", 1, false, true),
         CrazyParticipant("Testing", 2, false, true),
+        CrazyParticipant("Testing", 3, false, false),
+        CrazyParticipant("Testing", 4, false, true),
+        CrazyParticipant("Testing", 5, false, true),
     )
     participants[1].cardCount = 7
     participants[2]. cardCount = 7
+    participants[3]. cardCount = 7
+    participants[4]. cardCount = 7
+    participants[5]. cardCount = 7
     RenderGame(CrazyGame(
         participants,
         participants[1],
@@ -1300,7 +1386,7 @@ fun TurnConeOverlay(
 ) {
     val pulse = rememberInfiniteTransition(label = "turn_cone")
     val pulseAlpha by pulse.animateFloat(
-        initialValue = 0.16f,
+        initialValue = 0.20f,
         targetValue = 0.50f,
         animationSpec = infiniteRepeatable(
             animation = tween(900, easing = LinearEasing),
@@ -1309,9 +1395,14 @@ fun TurnConeOverlay(
         label = "turn_cone_alpha"
     )
 
-    Canvas(modifier = modifier) {
-        if (!isActive) return@Canvas
+    if (!isActive) return
 
+    Canvas(
+        modifier = modifier.blur(
+            radius = 16.dp,
+            edgeTreatment = BlurredEdgeTreatment.Unbounded
+        )
+    ) {
         val dx = to.x - from.x
         val dy = to.y - from.y
         val len = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
@@ -1320,120 +1411,39 @@ fun TurnConeOverlay(
         val px = -uy
         val py = ux
 
-        fun conePath(
-            startHalfWidth: Float,
-            endHalfWidth: Float,
-            startShift: Float = 0f,
-            rearScale: Float = 1f
-        ): Path {
-            val shiftedFrom = Offset(
-                x = from.x + ux * startShift,
-                y = from.y + uy * startShift
-            )
+        // Base dimensions for the single solid cone
+        val startHalfWidth = 28.dp.toPx()
+        val endHalfWidth = 60.dp.toPx()
 
-            val rearHalfWidth = startHalfWidth * rearScale
+        // Pull it back slightly to cover the player icon
+        val rearShift = (-10).dp.toPx()
+        val shiftedFrom = Offset(from.x + ux * rearShift, from.y + uy * rearShift)
 
-            val p1 = Offset(shiftedFrom.x + px * rearHalfWidth, shiftedFrom.y + py * rearHalfWidth)
-            val p2 = Offset(shiftedFrom.x - px * rearHalfWidth, shiftedFrom.y - py * rearHalfWidth)
-            val p3 = Offset(to.x - px * endHalfWidth, to.y - py * endHalfWidth)
-            val p4 = Offset(to.x + px * endHalfWidth, to.y + py * endHalfWidth)
+        val p1 = Offset(shiftedFrom.x + px * startHalfWidth, shiftedFrom.y + py * startHalfWidth)
+        val p2 = Offset(shiftedFrom.x - px * startHalfWidth, shiftedFrom.y - py * startHalfWidth)
+        val p3 = Offset(to.x - px * endHalfWidth, to.y - py * endHalfWidth)
+        val p4 = Offset(to.x + px * endHalfWidth, to.y + py * endHalfWidth)
 
-            return Path().apply {
-                moveTo(p1.x, p1.y)
-                lineTo(p2.x, p2.y)
-                lineTo(p3.x, p3.y)
-                lineTo(p4.x, p4.y)
-                close()
-            }
+        val path = Path().apply {
+            moveTo(p1.x, p1.y)
+            lineTo(p2.x, p2.y)
+            lineTo(p3.x, p3.y)
+            lineTo(p4.x, p4.y)
+            close()
         }
 
-        for (i in 0 until 16) {
-            val t = i / 15f
-            val inv = 1f - t
-
-            val startHalfWidth = lerp(
-                start = 34.dp.toPx(),
-                stop = 6.dp.toPx(),
-                fraction = t
-            )
-            val endHalfWidth = lerp(
-                start = 86.dp.toPx(),
-                stop = 26.dp.toPx(),
-                fraction = t
-            )
-
-            val alphaStart = pulseAlpha * inv * inv * 0.15f
-            val alphaMid = pulseAlpha * inv * 0.07f
-
-            drawPath(
-                path = conePath(
-                    startHalfWidth = startHalfWidth,
-                    endHalfWidth = endHalfWidth,
-                    startShift = 0f,
-                    rearScale = 1f
+        drawPath(
+            path = path,
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = pulseAlpha),
+                    Color.Transparent
                 ),
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = alphaStart),
-                        Color.White.copy(alpha = alphaMid),
-                        Color.Transparent
-                    ),
-                    start = from,
-                    end = to
-                ),
-                blendMode = BlendMode.Screen
-            )
-        }
-
-        for (i in 0 until 10) {
-            val t = i / 9f
-            val inv = 1f - t
-
-            val startHalfWidth = lerp(
-                start = 22.dp.toPx(),
-                stop = 5.dp.toPx(),
-                fraction = t
-            )
-            val endHalfWidth = lerp(
-                start = 50.dp.toPx(),
-                stop = 18.dp.toPx(),
-                fraction = t
-            )
-
-            val rearScale = lerp(
-                start = 1.45f,
-                stop = 1.02f,
-                fraction = t
-            )
-
-            val rearShift = lerp(
-                start = (-14).dp.toPx(),
-                stop = (-5).dp.toPx(),
-                fraction = t
-            )
-
-            drawPath(
-                path = conePath(
-                    startHalfWidth = startHalfWidth,
-                    endHalfWidth = endHalfWidth,
-                    startShift = rearShift,
-                    rearScale = rearScale
-                ),
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = pulseAlpha * inv * 0.075f),
-                        Color.White.copy(alpha = pulseAlpha * inv * 0.03f),
-                        Color.Transparent
-                    ),
-                    start = Offset(
-                        x = from.x + ux * rearShift,
-                        y = from.y + uy * rearShift
-                    ),
-                    end = to
-                ),
-                blendMode = BlendMode.Screen
-            )
-        }
+                start = shiftedFrom,
+                end = to
+            ),
+            blendMode = BlendMode.Screen
+        )
     }
 }
 
@@ -1460,8 +1470,8 @@ fun DirectionArrowOverlay(
     val midY = center.y + dy * midT
 
     val coneHalfWidthAtMid = lerp(
-        start = with(density) { 34.dp.toPx() },
-        stop = with(density) { 6.dp.toPx() },
+        start = with(density) { 5.dp.toPx() },
+        stop = with(density) { 5.dp.toPx() },
         fraction = midT
     )
 
@@ -1483,12 +1493,9 @@ fun DirectionArrowOverlay(
 
     val beamAngleDeg = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
 
-    // Adjust this by 180 if the arrow asset is drawn facing the opposite direction.
     val assetForwardOffset = 90f
 
-    // When the play direction is reversed, flip the arrows 180° so they point
-    // the opposite way around the table — this is what players expect a
-    // reverse card to do visually, not just re-splay the existing arrows.
+    // When the play direction is reversed, flip the arrows 180° so they point the opposite way around the table
     val directionFlip = if (clockwise) 0f else 180f
     val baseRotation = beamAngleDeg + assetForwardOffset + directionFlip
 
@@ -1601,6 +1608,46 @@ private fun cardScaleForHand(game: CrazyGame): Float {
     } * playerTightness
 }
 
+data class CrazyHeadFx(
+    val	key: Int,
+    val	playerId: Int,
+    val	text: String? = null,
+    val	skip: Boolean = false
+)
+
+data class CrazyReverseFx(
+    val	key: Int,
+    val	clockwise: Boolean
+)
+
+private fun skippedPlayerId(
+    participants: List<CrazyParticipant>,
+    movedId: Int,
+    nextTurnId: Int,
+    clockwise: Boolean
+): Int? {
+    val n = participants.size
+    if (n < 3) return null
+
+    val movedIndex = participants.indexOfFirst { it.id == movedId }
+    val nextIndex = participants.indexOfFirst { it.id == nextTurnId }
+    if (movedIndex == -1 || nextIndex == -1) return null
+
+    val skipIndex = if (clockwise) {
+        (movedIndex + 1) % n
+    } else {
+        (movedIndex - 1 + n) % n
+    }
+
+    val expectedNext = if (clockwise) {
+        (movedIndex + 2) % n
+    } else {
+        (movedIndex - 2 + n + n) % n
+    }
+
+    return if (nextIndex == expectedNext) participants[skipIndex].id else null
+}
+
 private data class CrazySeat(
     val cardCx: Float,
     val cardCy: Float,
@@ -1611,10 +1658,10 @@ private data class CrazySeat(
 
 private fun crazyOpponentSeats(count: Int): List<CrazySeat> {
     val top = CrazySeat(0.50f, 0.06f, 0.50f, 0.17f)
-    val leftMid = CrazySeat(0.00f, 0.24f, 0.18f, 0.30f)
-    val rightMid = CrazySeat(1.00f, 0.24f, 0.82f, 0.30f, true)
-    val bottomLeft = CrazySeat(0.00f, 0.66f, 0.18f, 0.72f)
-    val bottomRight = CrazySeat(1.00f, 0.66f, 0.82f, 0.72f, true)
+    val leftMid = CrazySeat(0.00f, 0.24f, 0.20f, 0.30f)
+    val rightMid = CrazySeat(1.00f, 0.24f, 0.80f, 0.30f, true)
+    val bottomLeft = CrazySeat(0.00f, 0.60f, 0.20f, 0.63f)
+    val bottomRight = CrazySeat(1.00f, 0.60f, 0.80f, 0.63f, true)
 
     return when (count) {
         2 -> listOf(leftMid, rightMid)
@@ -2134,13 +2181,6 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                 Box(
                     modifier = Modifier
                         .offset(x = avatarX, y = avatarY)
-                        .onGloballyPositioned { coords ->
-                            val pos = coords.positionInRoot()
-                            avatarCenters[participant.id] = Offset(
-                                x = pos.x + coords.size.width / 2f,
-                                y = pos.y + coords.size.height / 2f
-                            )
-                        }
                         .zIndex(6f)
                 ) {
                     val bubbleText = activity?.lobbySpeechBubbles?.get(participant.id)
@@ -2164,6 +2204,13 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                             modifier = Modifier
                                 .padding(top = 4.dp, bottom = 4.dp)
                                 .size(width = avatarWidth, height = avatarHeight)
+                                .onGloballyPositioned { coords ->
+                                    val pos = coords.positionInRoot()
+                                    avatarCenters[participant.id] = Offset(
+                                        x = pos.x + coords.size.width / 2f,
+                                        y = pos.y + coords.size.height / 2f
+                                    )
+                                }
                         )
 
                         Text(
@@ -2245,15 +2292,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (me != null) {
-                Box(
-                    modifier = Modifier.onGloballyPositioned { coords ->
-                        val pos = coords.positionInRoot()
-                        avatarCenters[me.id] = Offset(
-                            x = pos.x + coords.size.width / 2f,
-                            y = pos.y + coords.size.height / 2f
-                        )
-                    }
-                ) {
+                Box {
                     val bubbleText = activity?.lobbySpeechBubbles?.get(me.id)
 
                     if (!bubbleText.isNullOrBlank()) {
@@ -2268,6 +2307,13 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         modifier = Modifier
                             .padding(top = 4.dp, bottom = 4.dp)
                             .size(width = avatarWidth, height = avatarHeight)
+                            .onGloballyPositioned { coords ->
+                                val pos = coords.positionInRoot()
+                                avatarCenters[me.id] = Offset(
+                                    x = pos.x + coords.size.width / 2f,
+                                    y = pos.y + coords.size.height / 2f
+                                )
+                            }
                     )
                 }
 
@@ -2561,6 +2607,24 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
             )
         }
 
+        activity?.headFx?.let { fx ->
+            avatarCenters[fx.playerId]?.let { center ->
+                androidx.compose.runtime.key(fx.key) {
+                    if (fx.skip) {
+                        SkipHeadEffect(center)
+                    } else if (!fx.text.isNullOrBlank()) {
+                        PenaltyHeadEffect(center, fx.text)
+                    }
+                }
+            }
+        }
+
+        activity?.reverseFx?.let { fx ->
+            androidx.compose.runtime.key(fx.key) {
+                ReverseCenterEffect(fx.clockwise)
+            }
+        }
+
         if (flyingCard != null || flyingBackside) {
             val cardWidthPx = with(density) { 80.dp.toPx() }
             val cardHeightPx = with(density) { 110.dp.toPx() }
@@ -2792,6 +2856,144 @@ fun LobbyAvatarSpeechBubble(
                 maxLines = 2
             )
         }
+    }
+}
+
+@Composable
+fun SkipHeadEffect(center: Offset) {
+    val density = LocalDensity.current
+    val scale = remember { Animatable(1.2f) }
+    val alpha = remember { Animatable(1f) }
+
+    LaunchedEffect(Unit) {
+        launch {
+            scale.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(600, easing = FastOutSlowInEasing)
+            )
+        }
+        launch {
+            alpha.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(600)
+            )
+        }
+    }
+
+    Image(
+        painter = painterResource(id = R.drawable.skip),
+        contentDescription = null,
+        modifier = Modifier
+            .offset {
+                IntOffset(
+                    x = (center.x - with(density) { 24.dp.toPx() }).roundToInt(),
+                    y = (center.y - with(density) { 20.dp.toPx() }).roundToInt()
+                )
+            }
+            .size(48.dp)
+            .graphicsLayer {
+                scaleX = scale.value
+                scaleY = scale.value
+                this.alpha = alpha.value
+            }
+            .zIndex(30f),
+        contentScale = ContentScale.Fit
+    )
+}
+
+@Composable
+fun PenaltyHeadEffect(center: Offset, text: String) {
+    val density = LocalDensity.current
+    val rise = remember { Animatable(0f) }
+    val alpha = remember { Animatable(1f) }
+
+    LaunchedEffect(Unit) {
+        launch {
+            rise.animateTo(
+                targetValue = with(density) { (-34).dp.toPx() },
+                animationSpec = tween(760, easing = FastOutSlowInEasing)
+            )
+        }
+        launch {
+            alpha.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(980)
+            )
+        }
+    }
+
+    Text(
+        text = text,
+        modifier = Modifier
+            .offset {
+                IntOffset(
+                    x = (center.x - with(density) { 20.dp.toPx() }).roundToInt(),
+                    y = (center.y - with(density) { 52.dp.toPx() } + rise.value).roundToInt()
+                )
+            }
+            .graphicsLayer {
+                this.alpha = alpha.value
+            }
+            .zIndex(30f),
+        color = Color.White,
+        fontSize = 30.sp,
+        fontWeight = FontWeight.ExtraBold,
+        style = TextStyle(
+            shadow = Shadow(
+                color = Color.Black,
+                offset = Offset(2f, 3f),
+                blurRadius = 2f
+            )
+        )
+    )
+}
+
+@Composable
+fun ReverseCenterEffect(clockwise: Boolean) {
+    val scale = remember { Animatable(1f) }
+    val alpha = remember { Animatable(1f) }
+    val rotation = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+        launch {
+            scale.animateTo(
+                targetValue = 2.4f,
+                animationSpec = tween(700, easing = FastOutSlowInEasing)
+            )
+        }
+        launch {
+            alpha.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(780)
+            )
+        }
+        launch {
+            rotation.animateTo(
+                targetValue = if (clockwise) 360f else -360f,
+                animationSpec = tween(700, easing = FastOutSlowInEasing)
+            )
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .zIndex(30f),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.reverse),
+            contentDescription = null,
+            modifier = Modifier
+                .size(132.dp)
+                .graphicsLayer {
+                    scaleX = scale.value
+                    scaleY = scale.value
+                    rotationZ = rotation.value
+                    this.alpha = alpha.value
+                },
+            contentScale = ContentScale.Fit
+        )
     }
 }
 
@@ -3214,4 +3416,3 @@ private fun legacyAvatarStringForCrazy8(playerName: String): String {
             "cc,${color3("clothes_color", "0.290639,0.935341,0.083265")}`" +
             "n,$playerName"
 }
-

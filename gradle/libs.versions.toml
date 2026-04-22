@@ -21,6 +21,7 @@ media3CommonKtx = "1.6.0"
 viewpump = "2.1.0"
 godot = "4.6.1.stable"
 activityKtx = "1.9.1"
+ui = "1.10.6"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
@@ -48,6 +49,7 @@ androidx-ui-graphics-android = { group = "androidx.compose.ui", name = "ui-graph
 androidx-media3-common-ktx = { group = "androidx.media3", name = "media3-common-ktx", version.ref = "media3CommonKtx" }
 mixpanel-android = { module = "com.mixpanel.android:mixpanel-android", version.ref = "mixpanelAndroid" }
 viewpump = { module = "io.github.inflationx:viewpump", version.ref = "viewpump" }
+androidx-ui = { group = "androidx.compose.ui", name = "ui", version.ref = "ui" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

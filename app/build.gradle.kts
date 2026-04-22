@@ -127,6 +127,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics.android)
     implementation(libs.androidx.media3.common.ktx)
     implementation(files("libs/PlayerIO.aar"))
+    implementation(libs.androidx.ui)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
