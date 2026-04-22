@@ -678,6 +678,20 @@ class Crazy8Activity : ComponentActivity() {
         )
     }
 
+    fun upsertParticipant(id: Int, data: String, ready: Boolean) {
+        val incoming = parseParticipant(id, data, ready)
+        val existingIndex = participants.indexOfFirst { it.id == id }
+
+        if (existingIndex == -1) {
+            participants.add(incoming)
+        } else {
+            val existing = participants[existingIndex]
+            existing.name = incoming.name
+            existing.avatar = incoming.avatar
+            existing.ready = incoming.ready
+        }
+    }
+
     val messages = mutableStateListOf<CrazyMessage>()
 
     val participants = mutableStateListOf<CrazyParticipant>()
@@ -750,23 +764,17 @@ class Crazy8Activity : ComponentActivity() {
                         connected = true
                         myId = message.getInt(1)
                         participants.clear()
-                        participants.addAll(message.getString(0).split("|").map {
-                            val parts = it.split("&")
-                            parseParticipant(parts[0].toInt(), parts[1], parts[2] == "1")
-                        })
-                        Log.i("Crazy8Msg", "type=${message.type}")
-                        for (i in 0 until 8) {
-                            try {
-                                Log.i("Crazy8Msg", "idx=$i str=${message.getString(i)}")
-                            } catch (_: Exception) { }
-                            try {
-                                Log.i("Crazy8Msg", "idx=$i int=${message.getInt(i)}")
-                            } catch (_: Exception) { }
-                            try {
-                                Log.i("Crazy8Msg", "idx=$i bool=${message.getBoolean(i)}")
-                            } catch (_: Exception) { }
-                        }
+                        participants.addAll(
+                            message.getString(0)
+                                .split("|")
+                                .map {
+                                    val parts = it.split("&")
+                                    parseParticipant(parts[0].toInt(), parts[1], parts[2] == "1")
+                                }
+                                .distinctBy { it.id }
+                        )
                         if (message.type == "game_list") {
+                            label = null
                             val participantIds = message.getString(2).split(",").map { it.toInt() }.toList()
                             val gameParticipants = participants.filter { participantIds.contains(it.id) }
                             val turn = gameParticipants.find { it.id == message.getInt(4) }!!
@@ -802,7 +810,7 @@ class Crazy8Activity : ComponentActivity() {
                         }
                     }
                     "join" -> {
-                        participants.add(parseParticipant(message.getInt(0), message.getString(1), false))
+                        upsertParticipant(message.getInt(0), message.getString(1), false)
                     }
                     "ready" -> {
                         participants.find { it.id == message.getInt(0) }?.ready = true
@@ -814,6 +822,7 @@ class Crazy8Activity : ComponentActivity() {
                         participants.removeIf { it.id == message.getInt(0) }
                     }
                     "game_start" -> {
+                        label = null
                         val participantIds = message.getString(0).split(",").map { it.toInt() }.toList()
                         val gameParticipants = participants.filter { participantIds.contains(it.id) }
                         val turn = gameParticipants.find { it.id == message.getInt(2) }!!
@@ -879,6 +888,7 @@ class Crazy8Activity : ComponentActivity() {
                                             participant.ready = false
                                         }
                                         this@Crazy8Activity.game = null
+                                        label = null
                                     }, 6000)
                                 }
                             }
@@ -1382,7 +1392,8 @@ fun TurnConeOverlay(
     modifier: Modifier = Modifier,
     from: Offset,
     to: Offset,
-    isActive: Boolean
+    isActive: Boolean,
+    blurRadius: androidx.compose.ui.unit.Dp = 16.dp
 ) {
     val pulse = rememberInfiniteTransition(label = "turn_cone")
     val pulseAlpha by pulse.animateFloat(
@@ -1399,7 +1410,7 @@ fun TurnConeOverlay(
 
     Canvas(
         modifier = modifier.blur(
-            radius = 16.dp,
+            radius = blurRadius,
             edgeTreatment = BlurredEdgeTreatment.Unbounded
         )
     ) {
@@ -1716,6 +1727,15 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
         mutableStateOf(buildCrazyHandInstanceKeys(game.hand))
     }
 
+    val totalCardsOnBoard = game.hand.size + game.participants
+        .filter { !it.isMe }
+        .sumOf { it.cardCount }
+
+    val heavyLoad = totalCardsOnBoard >= 40
+    val handLightweight = heavyLoad || game.hand.size >= 12
+    val maxVisibleOpponentCards = if (heavyLoad) 6 else 10
+    val coneBlurRadius = if (heavyLoad) 8.dp else 16.dp
+
     suspend fun animateFlyingCard(
         card: CrazyCard,
         start: Offset,
@@ -1950,24 +1970,30 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
             val pileCenter = opponentPileCenters[participant.id]
 
             if (pileCenter != null && drawPileCenter != null && discardPileCenter != null) {
-                if (newCount > oldCount) {
-                    repeat(newCount - oldCount) {
+                val delta = newCount - oldCount
+                val animCount = when {
+                    kotlin.math.abs(delta) <= 2 -> kotlin.math.abs(delta)
+                    else -> 1
+                }
+
+                if (delta > 0) {
+                    repeat(animCount) {
                         animateOpponentFly(
                             card = null,
                             start = drawPileCenter!!,
                             end = pileCenter,
                             backside = true,
-                            durationMs = 240
+                            durationMs = if (animCount == 1) 180 else 240
                         )
                     }
-                } else if (newCount < oldCount) {
-                    repeat(oldCount - newCount) {
+                } else if (delta < 0) {
+                    repeat(animCount) {
                         animateOpponentFly(
                             card = game.card,
                             start = pileCenter,
                             end = discardPileCenter!!,
                             backside = false,
-                            durationMs = 240
+                            durationMs = if (animCount == 1) 180 else 240
                         )
                     }
                 }
@@ -2138,7 +2164,8 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                     modifier = Modifier.fillMaxSize(),
                     from = beamCenter,
                     to = animatedTarget,
-                    isActive = true
+                    isActive = true,
+                    blurRadius = coneBlurRadius
                 )
 
                 DirectionArrowOverlay(
@@ -2172,7 +2199,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         verticalArrangement = Arrangement.spacedBy((-100).dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        (1..min(participant.cardCount, 10)).forEach {
+                        (1..min(participant.cardCount, maxVisibleOpponentCards)).forEach {
                             RenderCardBack(lightweight = true)
                         }
                     }
@@ -2397,18 +2424,24 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         val cardKey = handKeys[index]
                         val isPlayable = card.isCompatibleWith(game.card)
 
-                        val offsetY by animateDpAsState(
-                            targetValue = when {
-                                selectedKey.value == cardKey -> (-20).dp
-                                isPlayable && game.turn == me -> (-6).dp
-                                else -> 0.dp
-                            },
-                            animationSpec = tween(
-                                durationMillis = 300,
-                                easing = FastOutSlowInEasing
-                            ),
-                            label = "offsetAnimation"
-                        )
+                        val targetOffsetY = when {
+                            selectedKey.value == cardKey -> (-20).dp
+                            !handLightweight && isPlayable && game.turn == me -> (-6).dp
+                            else -> 0.dp
+                        }
+
+                        val offsetY = if (handLightweight) {
+                            targetOffsetY
+                        } else {
+                            animateDpAsState(
+                                targetValue = targetOffsetY,
+                                animationSpec = tween(
+                                    durationMillis = 300,
+                                    easing = FastOutSlowInEasing
+                                ),
+                                label = "offsetAnimation"
+                            ).value
+                        }
 
                         val xDp = with(handDensity) { runningX.toDp() }
 
@@ -2510,9 +2543,10 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                                     handleCardTap(index, cardKey, card, isPlayable)
                                 }
                         ) {
-                            RenderCard(
-                                card,
-                                modifier = Modifier.drawWithContent {
+                            val faceModifier = if (handLightweight) {
+                                Modifier
+                            } else {
+                                Modifier.drawWithContent {
                                     drawContent()
                                     drawRoundRect(
                                         color = if (!isPlayable && game.turn == me) {
@@ -2523,6 +2557,12 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                                         cornerRadius = CornerRadius(4.dp.toPx())
                                     )
                                 }
+                            }
+
+                            RenderCard(
+                                card,
+                                modifier = faceModifier,
+                                lightweight = handLightweight
                             )
                         }
 
