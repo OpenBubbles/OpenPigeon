@@ -401,7 +401,7 @@ class SettingsSheet(
                 LinearLayout.LayoutParams.MATCH_PARENT, totalH
             ).also {
                 it.leftMargin  = outerPad; it.rightMargin  = outerPad
-                it.topMargin   = dp(8f);   it.bottomMargin = dp(12f)
+                it.topMargin   = dp(8f);   it.bottomMargin = dp(30f)
             }
             // Allow the thumb to draw outside the track bounds (into the padding)
             clipChildren = false

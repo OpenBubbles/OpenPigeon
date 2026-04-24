@@ -21,6 +21,7 @@ import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
+import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.ExperimentalGlanceRemoteViewsApi
 import androidx.glance.appwidget.GlanceRemoteViews
@@ -73,6 +74,7 @@ import com.openbubbles.openpigeon.pong.PongGame
 import com.openbubbles.openpigeon.pool.PoolGame
 import com.openbubbles.openpigeon.questions.QuestionsGame
 import com.openbubbles.openpigeon.reversi.ReversiGame
+import com.openbubbles.openpigeon.settings.AvatarSettingsActivity
 import com.openbubbles.openpigeon.wordbites.WordbitesGame
 import com.openbubbles.openpigeon.wordgames.WordGames
 import com.openbubbles.openpigeon.wordhunt.WordHuntGame
@@ -379,6 +381,9 @@ fun RenderKeyboard(extension: MadridExtension?) {
             Spacer(modifier = GlanceModifier.defaultWeight())
             Image(ImageProvider(R.drawable.madrid_icon), "OpenPigeon", modifier = GlanceModifier.width(50.dp).padding(8.dp).wrapContentHeight())
             Text("Games", style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(end = 6.dp))
+            Text("|", style = TextStyle(fontSize = 30.sp, color = ColorProvider(Color.Gray)))
+            Text("Settings", style = TextStyle(fontSize = 15.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(start = 6.dp, end = 6.dp)
+                    .clickable(onClick = actionStartActivity<AvatarSettingsActivity>()))
             Text("|", style = TextStyle(fontSize = 30.sp, color = ColorProvider(Color.Gray)))
             Text("About", style = TextStyle(fontSize = 15.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(start = 6.dp)
                 .clickable(onClick = androidx.glance.action.actionStartActivity<AboutActivity>()))

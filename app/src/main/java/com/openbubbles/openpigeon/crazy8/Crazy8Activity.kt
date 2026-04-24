@@ -936,6 +936,14 @@ class Crazy8Activity : ComponentActivity() {
         isConnecting = false
         connectedError = null
         connection.send("p")
+        lastBroadcastedAvatar = null
+
+        if (myId != 0) {
+            val packed = legacyAvatarStringForCrazy8(name ?: "Player")
+            applyPackedIdentityUpdate(myId, packed, includeSelf = true)
+        }
+
+        sendAvatarUpdate()
         connection.addMessageListener("*", object : MessageListener() {
             override fun onMessage(message: Message?) {
                 if (CRAZY8_VERBOSE_LOGS) {
@@ -955,6 +963,8 @@ class Crazy8Activity : ComponentActivity() {
                                 }
                                 .distinctBy { it.id }
                         )
+                        val currentPacked = legacyAvatarStringForCrazy8(name ?: "Player")
+                        applyPackedIdentityUpdate(myId, currentPacked, includeSelf = true)
                         if (message.type == "game_list") {
                             label = null
                             val reverse = message.getBoolean(5)
