@@ -1221,18 +1221,17 @@ fun RenderCard(
     modifier: Modifier = Modifier,
     lightweight: Boolean = false
 ) {
-    val shape = RoundedCornerShape(4.dp)
+    val shape = RoundedCornerShape(7.dp)
+    val label = card?.displayName().orEmpty()
 
     val bgColor = when (card?.rank ?: -1) {
-        0 -> Color(0xFFd93025)
+        0 -> Color(0xFFE53935)
         1 -> Color(0xFF1e88e5)
-        2 -> Color(0xFFd4ac0d)
-        3 -> Color(0xFF2e7d32)
-        5 -> Color(0xFF7b1fa2)
+        2 -> Color(0xFFFDD835)
+        3 -> Color(0xFF43A047)
+        5 -> Color(0xFF2B2B2B)
         else -> Color(0xFF555555)
     }
-
-    val centerSize = if (lightweight) 28.sp else 32.sp
 
     Box(
         modifier = modifier
@@ -1242,11 +1241,111 @@ fun RenderCard(
         contentAlignment = Alignment.Center
     ) {
         if (card != null) {
-            Text(
-                text = card.displayName(),
-                color = Color.White,
-                fontSize = centerSize,
-                fontWeight = FontWeight.ExtraBold
+            val isWildLook = card.rank == 5 || card.file == 14
+            val isIconCard = card.file == 11 || card.file == 12
+
+            if (isWildLook) {
+                Canvas(modifier = Modifier.size(54.dp)) {
+                    val colors = listOf(
+                        Color(0xFFE53935),
+                        Color(0xFF1E88E5),
+                        Color(0xFFFDD835),
+                        Color(0xFF43A047)
+                    )
+
+                    for (i in colors.indices) {
+                        drawArc(
+                            color = colors[i],
+                            startAngle = i * 90f,
+                            sweepAngle = 90f,
+                            useCenter = true,
+                            size = Size(size.width, size.height)
+                        )
+                    }
+
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.18f),
+                        radius = size.minDimension * 0.28f
+                    )
+                }
+            }
+
+            if (isIconCard) {
+                Image(
+                    painter = painterResource(
+                        id = if (card.file == 11) R.drawable.skip_white else R.drawable.reverse
+                    ),
+                    contentDescription = null,
+                    modifier = Modifier.size(if (card.file == 11) 46.dp else 52.dp),
+                    contentScale = ContentScale.Fit
+                )
+
+                Image(
+                    painter = painterResource(
+                        id = if (card.file == 11) R.drawable.skip_white else R.drawable.reverse
+                    ),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 6.dp, top = 4.dp)
+                        .size(if (card.file == 11) 24.dp else 20.dp),
+                    contentScale = ContentScale.Fit
+                )
+
+                Image(
+                    painter = painterResource(
+                        id = if (card.file == 11) R.drawable.skip_white else R.drawable.reverse
+                    ),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 6.dp, bottom = 4.dp)
+                        .size(if (card.file == 11) 24.dp else 20.dp)
+                        .rotate(180f),
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                Text(
+                    text = label,
+                    color = Color.White,
+                    fontSize = if (lightweight) 30.sp else 34.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    style = TextStyle(
+                        shadow = Shadow(
+                            color = Color.Black.copy(alpha = if (isWildLook) 0.45f else 0.35f),
+                            offset = Offset(1.5f, 2f),
+                            blurRadius = if (isWildLook) 2f else 1.5f
+                        )
+                    )
+                )
+
+                Text(
+                    text = label,
+                    color = Color.White,
+                    fontSize = 21.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 6.dp, top = 4.dp)
+                )
+
+                Text(
+                    text = label,
+                    color = Color.White,
+                    fontSize = 21.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 6.dp, bottom = 4.dp)
+                        .rotate(180f)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(5.dp)
+                    .border(1.dp, Color.White.copy(alpha = 0.28f), RoundedCornerShape(5.dp))
             )
         }
     }
@@ -1378,6 +1477,7 @@ fun RenderDrawPile(
                 }
             )
     ) {
+        // Back card (no text)
         Box(
             modifier = Modifier
                 .offset(x = (-3).dp, y = (-3).dp)
@@ -1388,9 +1488,18 @@ fun RenderDrawPile(
 
         Box(
             modifier = Modifier
-                .size(80.dp, 110.dp)
+                .size(80.dp, 110.dp),
+            contentAlignment = Alignment.Center
         ) {
             RenderCardBack(lightweight = true)
+
+            Text(
+                "CRAZY 8",
+                color = Color.White.copy(alpha = 0.22f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
         }
         if (shouldPulse) {
             Box(
