@@ -38,7 +38,10 @@
             android:exported="false"
             android:theme="@style/Theme.OpenBubblesSampleExtension"
             android:windowSoftInputMode="adjustResize" />
-
+        <activity
+            android:name=".settings.AvatarSettingsActivity"
+            android:theme="@style/Theme.OpenPigeon.Transparent"
+            android:exported="false" />
         <activity
             android:name=".GameNotFound"
             android:exported="false"

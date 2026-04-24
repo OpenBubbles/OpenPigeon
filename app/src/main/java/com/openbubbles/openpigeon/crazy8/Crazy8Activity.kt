@@ -1339,9 +1339,30 @@ fun RenderLobbyAvatar(avatarData: String, modifier: Modifier = Modifier) {
 @Composable
 fun RenderDrawPile(
     modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    shouldPulse: Boolean = false
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+
+    val pulseOverlayAlpha = remember { Animatable(0f) }
+
+    LaunchedEffect(shouldPulse) {
+        if (!shouldPulse) {
+            pulseOverlayAlpha.snapTo(0f)
+            return@LaunchedEffect
+        }
+
+        while (true) {
+            pulseOverlayAlpha.animateTo(
+                targetValue = 0.34f,
+                animationSpec = tween(620, easing = LinearEasing)
+            )
+            pulseOverlayAlpha.animateTo(
+                targetValue = 0.08f,
+                animationSpec = tween(620, easing = LinearEasing)
+            )
+        }
+    }
 
     Box(
         modifier = modifier
@@ -1370,6 +1391,21 @@ fun RenderDrawPile(
                 .size(80.dp, 110.dp)
         ) {
             RenderCardBack(lightweight = true)
+        }
+        if (shouldPulse) {
+            Box(
+                modifier = Modifier
+                    .size(80.dp, 110.dp)
+                    .background(
+                        Color.White.copy(alpha = pulseOverlayAlpha.value),
+                        RoundedCornerShape(4.dp)
+                    )
+                    .border(
+                        2.dp,
+                        Color.White.copy(alpha = pulseOverlayAlpha.value.coerceAtMost(0.42f)),
+                        RoundedCornerShape(4.dp)
+                    )
+            )
         }
     }
 }
@@ -2419,6 +2455,11 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         }
                 ) {
                     RenderDrawPile(
+                        shouldPulse = game.turn == me &&
+                                label == null &&
+                                !interactionLocked &&
+                                !drawInFlight &&
+                                game.hand.none { it.isCompatibleWith(game.card) },
                         onClick = {
                             if (interactionLocked) return@RenderDrawPile
                             if (drawInFlight) return@RenderDrawPile
