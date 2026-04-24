@@ -368,18 +368,26 @@ func _set_game_data(new_replay: String, saved: bool = false):
 		receivedMessage = new_replay
 		return
 	
+	turnNum = int(parsed["num"])
 	isTurn = parsed["isYourTurn"]
 	player = int(parsed["player"])
-	
-	if isTurn:
+
+	# Round 1 needs to be playable by both the sender and receiver.
+	# After round 1, keep the original opponent/player flip behavior.
+	if turnNum == 1:
+		isTurn = true
+	elif isTurn:
 		player = 2 if player == 1 else 1
+
+	if isTurn:
 		stop_waiting_animation()
 	else:
 		start_waiting_animation()
-	print("YOU ARE PLAYER " + str(player))	
+
+	print("YOU ARE PLAYER " + str(player))
 	my_player = parsed.get("myPlayerId", null)
+
 	if saved:
-		turnNum = int(parsed["num"])
 		if player == 1:
 			score2 = int(parsed["score2"])
 			skip_score2 = int(parsed["skip_score2"])
@@ -388,27 +396,26 @@ func _set_game_data(new_replay: String, saved: bool = false):
 		else:
 			score1 = int(parsed["score1"])
 			skip_score1 = int(parsed["skip_score1"])
-			replay = parsed["replay"]
+			replay = parsed["replay"] if "replay" in parsed else null
 			replay3 = parsed["replay3"] if "replay3" in parsed else null
 	else:
 		seed = int(parsed["seed"])
 		seed2 = int(parsed["seed2"])
-		turnNum = int(parsed["num"])
 		score1 = int(parsed["score1"])
 		score2 = int(parsed["score2"])
 		skip_score1 = int(parsed["skip_score1"])
 		skip_score2 = int(parsed["skip_score2"])
-		replay = parsed["replay"]
+		replay = parsed["replay"] if "replay" in parsed else null
 		replay2 = parsed["replay2"] if "replay2" in parsed else null
 		replay3 = parsed["replay3"] if "replay3" in parsed else null
 		replay4 = parsed["replay4"] if "replay4" in parsed else null
 	
 	receivedMessage = null
 	gameDataSet = true
+
 	if not saved:
 		refresh_ui_state()
 
-	
 func sendGameData() -> void:
 	turnNum += 1
 	var scoreKey: String
