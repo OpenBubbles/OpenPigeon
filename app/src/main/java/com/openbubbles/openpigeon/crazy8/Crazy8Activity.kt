@@ -730,16 +730,37 @@ class Crazy8Activity : ComponentActivity() {
     }
 
     fun sendMessage(message: String) {
+        val cleanMessage = message.trim()
+        if (cleanMessage.isEmpty()) return
+
+        val connection = currentConnection ?: return
+
+        if (myId != 0) {
+            val preview = cleanMessage.take(80)
+            lobbySpeechBubbles[myId] = preview
+
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (lobbySpeechBubbles[myId] == preview) {
+                    lobbySpeechBubbles.remove(myId)
+                }
+            }, 5000)
+        }
+
         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
         cipher.init(
             Cipher.ENCRYPT_MODE,
             SecretKeySpec(ByteArray(32) { 0x00 }, "AES"),
             IvParameterSpec(ByteArray(16) { 0x00 })
         )
-        val encrypted = cipher.doFinal(message.encodeToByteArray())
+
+        val encrypted = cipher.doFinal(cleanMessage.encodeToByteArray())
 
         sendAsync {
-            currentConnection?.send("emsg", encrypted)
+            try {
+                connection.send("emsg", encrypted)
+            } catch (e: Exception) {
+                Log.e("Crazy8", "Failed to send chat message", e)
+            }
         }
     }
 
@@ -1114,7 +1135,7 @@ class Crazy8Activity : ComponentActivity() {
                             if (lobbySpeechBubbles[sender.id] == decrypted.take(80)) {
                                 lobbySpeechBubbles.remove(sender.id)
                             }
-                        }, 3000)
+                        }, 5000)
 
                         if (CRAZY8_VERBOSE_LOGS) {
                             Log.i("Got message", decrypted)
@@ -2522,19 +2543,6 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         .offset(x = avatarX, y = avatarY)
                         .zIndex(6f)
                 ) {
-                    val bubbleText = activity?.lobbySpeechBubbles?.get(participant.id)
-
-                    if (!bubbleText.isNullOrBlank()) {
-                        LobbyAvatarSpeechBubble(
-                            text = bubbleText,
-                            flip = seat.bubbleFlip,
-                            modifier = Modifier.offset(
-                                x = if (seat.bubbleFlip) (-122).dp else 42.dp,
-                                y = (-6).dp
-                            )
-                        )
-                    }
-
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
@@ -2634,15 +2642,6 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
         ) {
             if (me != null) {
                 Box {
-                    val bubbleText = activity?.lobbySpeechBubbles?.get(me.id)
-
-                    if (!bubbleText.isNullOrBlank()) {
-                        LobbyAvatarSpeechBubble(
-                            text = bubbleText,
-                            modifier = Modifier.offset(x = 42.dp, y = (-6).dp)
-                        )
-                    }
-
                     RenderLobbyAvatar(
                         avatarData = avatarFor(me),
                         modifier = Modifier
@@ -3092,6 +3091,56 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
             )
         }
 
+        activity?.lobbySpeechBubbles?.forEach { entry ->
+            val playerId = entry.key
+            val bubbleText = entry.value
+            val center = avatarCenters[playerId]
+
+            if (!bubbleText.isNullOrBlank() && center != null) {
+                val screenWidthPx = boardSize.value.width.toFloat().coerceAtLeast(1f)
+                val screenHeightPx = boardSize.value.height.toFloat().coerceAtLeast(1f)
+
+                // Match iPhone behavior: decide by the avatar's actual screen position,
+                // not by player seat/index.
+                val bubbleToLeft = center.x > screenWidthPx * 0.50f
+
+                // Anchor the bubble tail near the avatar edge. When flipped, the bubble
+                // draws left from this anchor instead of being pushed left by a fixed width.
+                val avatarEdgeGapPx = with(density) { 34.dp.toPx() }
+
+                val xPx = if (bubbleToLeft) {
+                    center.x - avatarEdgeGapPx
+                } else {
+                    center.x + avatarEdgeGapPx
+                }
+
+                val yPx = when {
+                    center.y < with(density) { 150.dp.toPx() } -> {
+                        center.y + with(density) { 18.dp.toPx() }
+                    }
+                    center.y > screenHeightPx - with(density) { 190.dp.toPx() } -> {
+                        center.y - with(density) { 62.dp.toPx() }
+                    }
+                    else -> {
+                        center.y - with(density) { 24.dp.toPx() }
+                    }
+                }
+
+                LobbyAvatarSpeechBubble(
+                    text = bubbleText,
+                    flip = bubbleToLeft,
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                x = xPx.roundToInt(),
+                                y = yPx.roundToInt()
+                            )
+                        }
+                        .zIndex(29f)
+                )
+            }
+        }
+
         activity?.headFx?.let { fx ->
             avatarCenters[fx.playerId]?.let { center ->
                 androidx.compose.runtime.key(fx.key) {
@@ -3301,7 +3350,12 @@ fun LobbyAvatarSpeechBubble(
     Box(
         modifier = modifier
             .zIndex(2f)
-            .graphicsLayer { scaleX = if (flip) -1f else 1f }
+            .graphicsLayer {
+                // Match iPhone behavior: flip from the tail/anchor side,
+                // not from the middle of the bubble.
+                transformOrigin = TransformOrigin(0f, 0.5f)
+                scaleX = if (flip) -1f else 1f
+            }
     ) {
         Canvas(
             modifier = Modifier.matchParentSize()
@@ -3332,7 +3386,10 @@ fun LobbyAvatarSpeechBubble(
                 .widthIn(max = 180.dp)
                 .background(Color(0xFF1E88E5), shape = RoundedCornerShape(9.dp))
                 .padding(horizontal = 12.dp, vertical = 9.dp)
-                .graphicsLayer { scaleX = if (flip) -1f else 1f }
+                .graphicsLayer {
+                    // Flip text back so the bubble reverses, but the words do not.
+                    scaleX = if (flip) -1f else 1f
+                }
         ) {
             Text(
                 text = text,
