@@ -51,7 +51,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -60,7 +59,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -1244,6 +1242,22 @@ fun RenderCard(
             val isWildLook = card.rank == 5 || card.file == 14
             val isIconCard = card.file == 11 || card.file == 12
 
+            val innerLineColor = when (card.rank) {
+                0 -> Color(0xFFb71c1c)
+                1 -> Color(0xFF0d47a1)
+                2 -> Color(0xFFF9A825)
+                3 -> Color(0xFF1b5e20)
+                5 -> Color(0xFF000000)
+                else -> Color(0xFF333333)
+            }
+
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(10.dp)
+                    .border(2.dp, innerLineColor.copy(alpha = 0.55f), RoundedCornerShape(5.dp))
+            )
+
             if (isWildLook) {
                 Canvas(modifier = Modifier.size(54.dp)) {
                     val colors = listOf(
@@ -1300,8 +1314,7 @@ fun RenderCard(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(end = 6.dp, bottom = 4.dp)
-                        .size(if (card.file == 11) 24.dp else 20.dp)
-                        .rotate(180f),
+                        .size(if (card.file == 11) 24.dp else 20.dp),
                     contentScale = ContentScale.Fit
                 )
             } else {
@@ -1312,8 +1325,8 @@ fun RenderCard(
                     fontWeight = FontWeight.ExtraBold,
                     style = TextStyle(
                         shadow = Shadow(
-                            color = Color.Black.copy(alpha = if (isWildLook) 0.45f else 0.35f),
-                            offset = Offset(1.5f, 2f),
+                            color = Color.Black.copy(alpha = 0.6f),
+                            offset = Offset(4f, 4.5f),
                             blurRadius = if (isWildLook) 2f else 1.5f
                         )
                     )
@@ -1324,6 +1337,13 @@ fun RenderCard(
                     color = Color.White,
                     fontSize = 21.sp,
                     fontWeight = FontWeight.ExtraBold,
+                    style = TextStyle(
+                        shadow = Shadow(
+                            color = Color.Black.copy(alpha = 0.6f),
+                            offset = Offset(4f, 4.5f),
+                            blurRadius = 1f
+                        )
+                    ),
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(start = 6.dp, top = 4.dp)
@@ -1334,19 +1354,18 @@ fun RenderCard(
                     color = Color.White,
                     fontSize = 21.sp,
                     fontWeight = FontWeight.ExtraBold,
+                    style = TextStyle(
+                        shadow = Shadow(
+                            color = Color.Black.copy(alpha = 0.6f),
+                            offset = Offset(4f, 4.5f),
+                            blurRadius = 1f
+                        )
+                    ),
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(end = 6.dp, bottom = 4.dp)
-                        .rotate(180f)
                 )
             }
-
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .padding(5.dp)
-                    .border(1.dp, Color.White.copy(alpha = 0.28f), RoundedCornerShape(5.dp))
-            )
         }
     }
 }
@@ -2903,81 +2922,97 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                             }
                         }
                     }
-                    if (selectedWildcardIndex in game.hand.indices) {
-                        val wildcardKey = selectedWildcardKey.value ?: ""
-                        val wildcardBaseCard = game.hand[selectedWildcardIndex]
+                }
+            }
+        }
 
-                        AlertDialog(
-                            onDismissRequest = {
-                                selectedWildcardKey.value = null
-                                selectedKey.value = null
-                            },
-                            title = {
-                                Text(text = "Choose card")
-                            },
-                            text = {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    for (x in 0..1) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            for (i in 0..1) {
-                                                val newCard = CrazyCard(x * 2 + i, wildcardBaseCard.file)
+        if (selectedWildcardIndex in game.hand.indices) {
+            val wildcardKey = selectedWildcardKey.value ?: ""
+            val wildcardBaseCard = game.hand[selectedWildcardIndex]
 
-                                                RenderCard(
-                                                    newCard,
-                                                    modifier = Modifier.clickable {
-                                                        val start = handCardCenters[wildcardKey]
-                                                        val end = discardPileCenter
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.58f))
+                    .blur(0.dp)
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { }
+                    .zIndex(40f),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier.size(280.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Choose Color",
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.align(Alignment.Center),
+                        style = TextStyle(
+                            shadow = Shadow(
+                                color = Color.Black.copy(alpha = 0.7f),
+                                offset = Offset(2f, 3f),
+                                blurRadius = 2f
+                            )
+                        )
+                    )
 
-                                                        if (start == null || end == null) {
-                                                            if (selectedWildcardIndex in game.hand.indices) {
-                                                                game.hand.removeAt(selectedWildcardIndex)
-                                                            }
-                                                            activity?.playCard(newCard)
-                                                            selectedWildcardKey.value = null
-                                                            selectedKey.value = null
-                                                            return@clickable
-                                                        }
+                    for (slot in 0..3) {
+                        val newCard = CrazyCard(slot, wildcardBaseCard.file)
 
-                                                        scope.launch {
-                                                            interactionLocked = true
-                                                            selectedWildcardKey.value = null
+                        val cardOffset = when (slot) {
+                            0 -> Modifier.offset(y = (-110).dp)
+                            1 -> Modifier.offset(x = 110.dp)
+                            2 -> Modifier.offset(y = 110.dp)
+                            else -> Modifier.offset(x = (-110).dp)
+                        }
 
-                                                            animateFlyingCard(
-                                                                card = newCard,
-                                                                start = start,
-                                                                end = end,
-                                                                hideKey = wildcardKey,
-                                                                startScale = cardScaleForHand(game),
-                                                                endScale = cardScaleForHand(game) * 0.96f,
-                                                                durationMs = 240
-                                                            )
+                        RenderCard(
+                            newCard,
+                            modifier = cardOffset.clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }
+                            ) {
+                                val start = handCardCenters[wildcardKey]
+                                val end = discardPileCenter
 
-                                                            if (selectedWildcardIndex in game.hand.indices) {
-                                                                game.hand.removeAt(selectedWildcardIndex)
-                                                            }
-                                                            activity?.playCard(newCard)
-                                                            selectedKey.value = null
-                                                            interactionLocked = false
-                                                        }
-                                                    }
-                                                )
-                                            }
-                                        }
+                                if (start == null || end == null) {
+                                    if (selectedWildcardIndex in game.hand.indices) {
+                                        game.hand.removeAt(selectedWildcardIndex)
                                     }
-                                }
-                            },
-                            confirmButton = {
-                                TextButton(onClick = {
+                                    activity?.playCard(newCard)
                                     selectedWildcardKey.value = null
                                     selectedKey.value = null
-                                }) {
-                                    Text("Cancel")
+                                    return@clickable
                                 }
-                            },
+
+                                scope.launch {
+                                    interactionLocked = true
+                                    selectedWildcardKey.value = null
+
+                                    animateFlyingCard(
+                                        card = newCard,
+                                        start = start,
+                                        end = end,
+                                        hideKey = wildcardKey,
+                                        startScale = cardScaleForHand(game),
+                                        endScale = cardScaleForHand(game) * 0.96f,
+                                        durationMs = 240
+                                    )
+
+                                    if (selectedWildcardIndex in game.hand.indices) {
+                                        game.hand.removeAt(selectedWildcardIndex)
+                                    }
+
+                                    activity?.playCard(newCard)
+                                    selectedKey.value = null
+                                    interactionLocked = false
+                                }
+                            }
                         )
                     }
                 }
