@@ -26,7 +26,7 @@ class AboutActivity : Activity() {
                 Basketball - jakecrowley + ty8447
                 Checkers - jakecrowley + ty8447
                 Chess - chasedredmon + ty8447
-                Crazy 8 - Copper
+                Crazy 8 - Copper + ty8447
                 Cup Pong - jakecrowley + ty8447
                 Darts - jakecrowley + ty8447
                 Dots & Boxes - ty8447
