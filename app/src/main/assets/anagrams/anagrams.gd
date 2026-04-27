@@ -120,6 +120,12 @@ func _on_words_scroll_gui_input(event: InputEvent) -> void:
 		
 func _set_game_data(raw_text: String) -> void:
 	var res: Variant = JSON.parse_string(raw_text)
+	var my_score: int = 0
+	var my_words: int = 0
+	var my_wordlist_s: String = ""
+	var opp_score: int = 0
+	var opp_words: int = 0
+	var opp_wordlist_s: String = ""
 	if typeof(res) != TYPE_DICTIONARY:
 		print("[ANAGRAMS] Bad JSON for _set_game_data")
 		return
@@ -180,7 +186,15 @@ func _set_game_data(raw_text: String) -> void:
 			print("NO PLAYER IDS; using sender 'player' field as my slot -> my_player =", my_player)
 		else:
 			print("NO PLAYER IDS; keeping existing my_player =", my_player)
-
+	
+	if not spectator_mode:
+		is_my_turn = not my_has_data
+		my_score = 0
+		my_words = 0
+		my_wordlist_s = ""
+		opp_score = 0
+		opp_words = 0
+		opp_wordlist_s = ""
 	#spectator_mode = true
 	if spectator_mode:
 		is_my_turn = false
@@ -196,37 +210,29 @@ func _set_game_data(raw_text: String) -> void:
 		_populate_scoreboard(true, p1_entries, p1_words, p1_score)
 		var p2_entries := _build_word_entries_from_string(p2_wordlist_s)
 		_populate_scoreboard(false, p2_entries, p2_words, p2_score)
+
+	if my_player == 1:
+		my_score = p1_score
+		my_words = p1_words
+		my_wordlist_s = p1_wordlist_s
+		opp_score = p2_score
+		opp_words = p2_words
+		opp_wordlist_s = p2_wordlist_s
+	elif my_player == 2:
+		my_score = p2_score
+		my_words = p2_words
+		my_wordlist_s = p2_wordlist_s
+		opp_score = p1_score
+		opp_words = p1_words
+		opp_wordlist_s = p1_wordlist_s
+
+	if my_wordlist_s != "":
+		var my_entries := _build_word_entries_from_string(my_wordlist_s)
+		_populate_scoreboard(true, my_entries, my_words, my_score)
 		
-	if not spectator_mode:
-		var my_score: int = 0
-		var my_words: int = 0
-		var my_wordlist_s: String = ""
-		var opp_score: int = 0
-		var opp_words: int = 0
-		var opp_wordlist_s: String = ""
-
-		if my_player == 1:
-			my_score = p1_score
-			my_words = p1_words
-			my_wordlist_s = p1_wordlist_s
-			opp_score = p2_score
-			opp_words = p2_words
-			opp_wordlist_s = p2_wordlist_s
-		elif my_player == 2:
-			my_score = p2_score
-			my_words = p2_words
-			my_wordlist_s = p2_wordlist_s
-			opp_score = p1_score
-			opp_words = p1_words
-			opp_wordlist_s = p1_wordlist_s
-
-		if my_wordlist_s != "":
-			var my_entries := _build_word_entries_from_string(my_wordlist_s)
-			_populate_scoreboard(true, my_entries, my_words, my_score)
-			
-		if opp_wordlist_s != "":
-			var opp_entries := _build_word_entries_from_string(opp_wordlist_s)
-			_populate_scoreboard(false, opp_entries, opp_words, opp_score)
+	if opp_wordlist_s != "":
+		var opp_entries := _build_word_entries_from_string(opp_wordlist_s)
+		_populate_scoreboard(false, opp_entries, opp_words, opp_score)
 
 	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
 		var avatar_string = res[opponent_avatar_key]
@@ -236,7 +242,12 @@ func _set_game_data(raw_text: String) -> void:
 	game_ended = await check_win()
 	print("Game Ended: ", game_ended)
 	_init_screens()
-	if not is_my_turn and not game_over:
+
+	if spectator_mode:
+		stop_waiting()
+	elif game_over:
+		stop_waiting()
+	elif my_has_data:
 		start_waiting()
 	else:
 		stop_waiting()
@@ -838,7 +849,7 @@ func _populate_scoreboard(
 	var total_words: int
 	var final_score: int
 
-	if is_player and word_entries.is_empty():
+	if is_player and word_entries.is_empty() and total_words_override < 0 and final_score_override < 0:
 		words = game_screen.get_word_history()
 		total_words = game_screen.get_word_count()
 		final_score = game_screen.get_final_score()
