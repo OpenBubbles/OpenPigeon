@@ -12,7 +12,7 @@ func set_wind(wind_value: float) -> void:
 		
 	var abs_wind = abs(wind_value)
 	var raw_fill = abs_wind * CENTER_X
-	var fill_width: int = int(round(raw_fill / 10.0) * 10.0)
+	var fill_width: float = clampf(raw_fill, 0.0, CENTER_X)
 	
 	if wind_value >= 0:
 		clip_rect.position.x = CENTER_X
