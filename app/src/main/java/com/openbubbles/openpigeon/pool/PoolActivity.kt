@@ -476,11 +476,40 @@ class PoolActivity : AppCompatActivity() {
             true
         }
 
-        findViewById<Button>(R.id.skip_replay).setOnClickListener {
-            synchronized(this@PoolActivity) {
-                skipReplayRequested = true
-                finishReplay()
+        val skipReplayButton = findViewById<ImageButton>(R.id.skip_replay)
+
+        try {
+            val normal = assets.open("global/next.png").use { BitmapFactory.decodeStream(it) }
+            val pressed = assets.open("global/next_pressed.png").use { BitmapFactory.decodeStream(it) }
+
+            skipReplayButton.setImageBitmap(normal)
+            skipReplayButton.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            skipReplayButton.scaleType = ImageView.ScaleType.FIT_CENTER
+
+            skipReplayButton.setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        skipReplayButton.setImageBitmap(pressed)
+                        true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        skipReplayButton.setImageBitmap(normal)
+                        synchronized(this@PoolActivity) {
+                            replayWasSkipped = true
+                            skipReplayRequested = true
+                            finishReplay()
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        skipReplayButton.setImageBitmap(normal)
+                        true
+                    }
+                    else -> true
+                }
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
 
         val container = findViewById<FrameLayout>(R.id.cueContainer)
@@ -646,6 +675,16 @@ class PoolActivity : AppCompatActivity() {
     override fun onResume() {
         if (gameSessionIPC != null) {
             gameSessionIPC?.setSuppressNotifications(sessionId, true)
+
+            if (replayWasSkipped) {
+                replayWasSkipped = false
+                val currentMessage = gameSessionIPC!!.getCurrentMessage(sessionId)
+                if (currentMessage.isNotEmpty()) {
+                    synchronized(this) {
+                        handleMessage(currentMessage)
+                    }
+                }
+            }
         } else {
             Log.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
         }
@@ -688,6 +727,8 @@ class PoolActivity : AppCompatActivity() {
     var isFirst = false
     var wasFirst = false
     var skipReplayRequested = false
+    var replayWasSkipped = false
+    var skipReplayFadeStarted = false
 
     fun animateShoot(power: Float, hit: BallHit) {
         var cancelled = false
@@ -731,6 +772,26 @@ class PoolActivity : AppCompatActivity() {
     fun playNextReplay() {
         if (skipReplayRequested) return
         mode = PoolMode.ReplayAiming
+        if (!skipReplayFadeStarted) {
+            skipReplayFadeStarted = true
+
+            val skipBtn = findViewById<ImageButton>(R.id.skip_replay)
+
+            runOnUiThread {
+                skipBtn.animate().cancel()
+                skipBtn.alpha = 0f
+                skipBtn.visibility = View.VISIBLE
+
+                skipBtn.postDelayed({
+                    if (replaying && !skipReplayRequested) {
+                        skipBtn.animate()
+                            .alpha(1f)
+                            .setDuration(300L)
+                            .start()
+                    }
+                }, 1000L)
+            }
+        }
         renderer.cueRot = replayHits[0].direction
         runOnUiThread { renderer.setCueVisible(true) }
         val handler = Handler(mainLooper)
@@ -801,10 +862,13 @@ class PoolActivity : AppCompatActivity() {
         runOnUiThread {
             val controls = findViewById<LinearLayout>(R.id.controls)
             controls.visibility = View.VISIBLE
-            findViewById<Button>(R.id.skip_replay).visibility = View.GONE
+            val skipBtn = findViewById<ImageButton>(R.id.skip_replay)
+            skipBtn.visibility = View.GONE
+            skipBtn.alpha = 1f
         }
         replaying = false
         skipReplayRequested = false
+        skipReplayFadeStarted = false
 
         Log.i("Pool", "Scratch $scratch")
 
@@ -964,7 +1028,7 @@ class PoolActivity : AppCompatActivity() {
 
             val currentMessage = gameSessionIPC!!.getCurrentMessage(sessionId)
             val myId      = gameSessionIPC!!.getSenderUUID(sessionId)
-            val myAvatarKey = if (currentMessage["player1"] == myId) "avatar1" else "avatar2"
+            val myAvatarKey = if (player == 1) "avatar1" else "avatar2"
 
             val msgUpdates = mapOf(
                 "player"      to if (currentMessage["player"] == "2") "1" else "2",
@@ -1107,8 +1171,37 @@ class PoolActivity : AppCompatActivity() {
     var player = 0
     var uuid1: String? = null
     var uuid2: String? = null
+
+    private fun resolveMyPlayerSlot(msg: Map<String, String>): Int {
+        val myId = gameSessionIPC?.getSenderUUID(sessionId) ?: ""
+        val p1 = msg["player1"].orEmpty()
+        val p2 = msg["player2"].orEmpty()
+        val sender = msg["sender"].orEmpty()
+        val senderPlayer = msg["player"]?.toIntOrNull() ?: 1
+
+        if (myId.isNotEmpty()) {
+            if (myId == p1) return 1
+            if (myId == p2) return 2
+        }
+
+        if (sender.isNotEmpty()) {
+            if (sender == p1) return 2
+            if (sender == p2) return 1
+        }
+
+        return if (senderPlayer == 2) 1 else 2
+    }
+
     fun handleMessage(msg: Map<String, String>) {
         if (table == 0L) return; // we are dead
+        disableSend = false
+        skipReplayRequested = false
+        replaying = false
+        skipReplayFadeStarted = false
+        cancelAllShots()
+        cancelAllShots = {}
+        didIWin = null
+        call8Ball = false
         clearBalls(table)
         poolBalls.clear()
         cueBall = null
@@ -1117,23 +1210,18 @@ class PoolActivity : AppCompatActivity() {
         val num = msg["num"]!!
         uuid1 = msg["player1"]
         uuid2 = msg["player2"]
-        val myUuid = gameSessionIPC?.getSenderUUID(sessionId)
-        val oppAvatarKey = when (myUuid) {
-            uuid1 -> "avatar2"
-            uuid2 -> "avatar1"
-            else -> {
-                if (player == 1) "avatar2" else "avatar1"
-            }
-        }
+
+        player = resolveMyPlayerSlot(msg)
+
+        val oppAvatarKey = if (player == 1) "avatar2" else "avatar1"
         msg[oppAvatarKey]?.takeIf { it.isNotBlank() }?.let { avatarStr ->
             runOnUiThread { settingsSheet.applyOpponentAvatarString(avatarStr) }
         }
+
         Log.i("number", "$num")
         if (num == "2") {
             isFirst = true // for replay
         }
-        val playerA = msg["player"]!!.toInt()
-        player = if (playerA == 1) 2 else 1
 
         scratch = false
 
@@ -1203,7 +1291,7 @@ class PoolActivity : AppCompatActivity() {
         } else {
             if (!isYourTurn) {
                 runOnUiThread {
-                    findViewById<Button>(R.id.skip_replay).visibility = View.GONE
+                    findViewById<ImageButton>(R.id.skip_replay).visibility = View.GONE
                     setCueUiVisible(false)
                 }
 
@@ -1226,7 +1314,7 @@ class PoolActivity : AppCompatActivity() {
                 renderer.setCueVisible(true)
                 val label = findViewById<TextView>(R.id.state_label)
                 label.visibility = View.GONE
-                findViewById<Button>(R.id.skip_replay).visibility = View.GONE
+                findViewById<ImageButton>(R.id.skip_replay).visibility = View.GONE
             }
             isFirst = true
 
@@ -1243,7 +1331,7 @@ class PoolActivity : AppCompatActivity() {
 
         if (!isYourTurn) {
             runOnUiThread {
-                findViewById<Button>(R.id.skip_replay).visibility = View.GONE
+                findViewById<ImageButton>(R.id.skip_replay).visibility = View.GONE
                 setCueUiVisible(false)
                 if (didIWin != null) {
                     val label = findViewById<TextView>(R.id.state_label)
@@ -1264,7 +1352,9 @@ class PoolActivity : AppCompatActivity() {
                 label.visibility = View.GONE
                 val controls = findViewById<LinearLayout>(R.id.controls)
                 controls.visibility = View.INVISIBLE
-                findViewById<Button>(R.id.skip_replay).visibility = View.VISIBLE
+                val skipBtn = findViewById<ImageButton>(R.id.skip_replay)
+                skipBtn.visibility = View.INVISIBLE
+                skipBtn.alpha = 0f
             }
 
             replaying = true

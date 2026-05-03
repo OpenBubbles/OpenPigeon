@@ -151,13 +151,15 @@
         android:text="Waiting for opponent..."
         android:textColor="@color/white" />
 
-    <Button
+    <ImageButton
         android:id="@+id/skip_replay"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="100dp"
-        android:text="Skip" />
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="center"
+        android:layout_marginTop="8dp"
+        android:background="@android:color/transparent"
+        android:scaleType="fitCenter"
+        android:contentDescription="Skip Replay" />
 
     <FrameLayout
         android:id="@+id/cueOverlay"
