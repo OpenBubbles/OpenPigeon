@@ -1,13 +1,13 @@
-[gd_scene load_steps=23 format=3 uid="uid://b5cgft50kgoc8"]
+[gd_scene format=3 uid="uid://b5cgft50kgoc8"]
 
 [ext_resource type="Script" uid="uid://dh7rsnax7enhf" path="res://mancala/mancala.gd" id="1_wkq4n"]
 [ext_resource type="Texture2D" uid="uid://bje0kd0ednpdh" path="res://mancala/board.png" id="2_d7lhj"]
 [ext_resource type="Shader" uid="uid://dp420yt4x20py" path="res://mancala/vignette.gdshader" id="2_miqih"]
-[ext_resource type="Texture2D" uid="uid://jk4e6m7vh6ay" path="res://mancala/next.png" id="4_elfvu"]
+[ext_resource type="Texture2D" uid="uid://jk4e6m7vh6ay" path="res://global/next.png" id="4_elfvu"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="4_miqih"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="5_elfvu"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="6_1ko3n"]
-[ext_resource type="Texture2D" uid="uid://3wlutur5yw1f" path="res://mancala/next_pressed.png" id="6_xpj4b"]
+[ext_resource type="Texture2D" uid="uid://3wlutur5yw1f" path="res://global/next_pressed.png" id="6_xpj4b"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_elfvu"]
 shader = ExtResource("2_miqih")

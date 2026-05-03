@@ -1,12 +1,12 @@
-[gd_scene load_steps=55 format=3 uid="uid://boa2cnt5daakv"]
+[gd_scene format=3 uid="uid://boa2cnt5daakv"]
 
 [ext_resource type="Script" uid="uid://dk82qyx6ut4l5" path="res://basketball/basketball.gd" id="1_oq83f"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_banb7"]
 [ext_resource type="Script" uid="uid://bn3bvbnu1sr7k" path="res://basketball/ball.gd" id="2_j8ag5"]
-[ext_resource type="Texture2D" uid="uid://uxlguvauwvmq" path="res://basketball/next.png" id="2_jqehr"]
+[ext_resource type="Texture2D" uid="uid://jk4e6m7vh6ay" path="res://global/next.png" id="2_jqehr"]
 [ext_resource type="Texture2D" uid="uid://daj3ssi0w1lee" path="res://basketball/basketball_floor.png" id="2_ryf8r"]
 [ext_resource type="Texture2D" uid="uid://dutexrlgv763w" path="res://basketball/brickwall.jpeg" id="3_7e2oe"]
-[ext_resource type="Texture2D" uid="uid://bi1qiwxpfjoyd" path="res://basketball/next_pressed.png" id="3_diu2m"]
+[ext_resource type="Texture2D" uid="uid://3wlutur5yw1f" path="res://global/next_pressed.png" id="3_diu2m"]
 [ext_resource type="Texture2D" uid="uid://ermcfvwnyb8n" path="res://basketball/balldimpled.png" id="3_edmja"]
 [ext_resource type="Texture2D" uid="uid://dhj26lkqags20" path="res://basketball/backboard.png" id="3_julsv"]
 [ext_resource type="Texture2D" uid="uid://jkmn81x6v6s" path="res://basketball/AdobeStock_530856469.png" id="8_banb7"]
@@ -94,12 +94,6 @@ expand_margin_bottom = 5.0
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_3ufe5"]
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_jqehr"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_diu2m"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="ViewportTexture" id="ViewportTexture_ofxhw"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
@@ -110,6 +104,12 @@ viewport_path = NodePath("SubViewportContainer/SubViewport")
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="ViewportTexture" id="ViewportTexture_0odob"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_u7o17"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_mvivv"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_julsv"]
@@ -200,29 +200,29 @@ albedo_texture = ExtResource("9_lrgjq")
 size = Vector2(1.632, 0.5)
 orientation = 2
 
-[node name="BasketballScene" type="Node3D"]
+[node name="BasketballScene" type="Node3D" unique_id=459033890]
 script = ExtResource("1_oq83f")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=13928237]
 environment = SubResource("Environment_impb6")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=105486252]
 transform = Transform3D(0.94785994, 0.31868216, 0.0017488081, -0.018200383, 0.048653334, 0.9986497, 0.3181669, -0.94661206, 0.05191669, 0, 3.63211, -1.4355421)
 light_color = Color(1, 0.916, 0.64, 1)
 light_energy = 0.5
 shadow_enabled = true
 
-[node name="DirectionalLight3D2" type="DirectionalLight3D" parent="."]
+[node name="DirectionalLight3D2" type="DirectionalLight3D" parent="." unique_id=498429871]
 transform = Transform3D(0.9478601, 0.3186824, 0.0017488871, -0.31596655, 0.93903863, 0.13554317, 0.041552946, -0.12902847, 0.99077, 0, 1.6744473, -1.4355421)
 light_color = Color(1, 0.748, 0.64, 1)
 light_energy = 0.3
 
-[node name="Camera3D" type="Camera3D" parent="."]
+[node name="Camera3D" type="Camera3D" parent="." unique_id=768734679]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0.49)
 fov = 55.5
 far = 7.0
 
-[node name="MainOverlay" type="Control" parent="."]
+[node name="MainOverlay" type="Control" parent="." unique_id=1758196496]
 unique_name_in_owner = true
 layout_mode = 3
 anchors_preset = 15
@@ -232,7 +232,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 1
 
-[node name="MarginContainer" type="MarginContainer" parent="MainOverlay"]
+[node name="MarginContainer" type="MarginContainer" parent="MainOverlay" unique_id=1716434225]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -244,12 +244,12 @@ theme_override_constants/margin_top = 20
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 20
 
-[node name="CenterContainer" type="CenterContainer" parent="MainOverlay/MarginContainer"]
+[node name="CenterContainer" type="CenterContainer" parent="MainOverlay/MarginContainer" unique_id=1024388049]
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 
-[node name="WinLossLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer"]
+[node name="WinLossLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer" unique_id=231935317]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -258,7 +258,7 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_u7o17")
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="SentLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer"]
+[node name="SentLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer" unique_id=2132727370]
 unique_name_in_owner = true
 visible = false
 z_index = 2
@@ -269,7 +269,7 @@ text = "SENT"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="waitingLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer"]
+[node name="waitingLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer" unique_id=1305240193]
 unique_name_in_owner = true
 visible = false
 z_index = 1
@@ -281,7 +281,7 @@ text = "WAITING FOR OPPONENT..."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="RoundUI" type="PanelContainer" parent="MainOverlay/MarginContainer/CenterContainer"]
+[node name="RoundUI" type="PanelContainer" parent="MainOverlay/MarginContainer/CenterContainer" unique_id=1931932601]
 unique_name_in_owner = true
 visible = false
 z_index = 1
@@ -289,17 +289,17 @@ custom_minimum_size = Vector2(444, 282)
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_0e03b")
 
-[node name="MarginContainer" type="MarginContainer" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI"]
+[node name="MarginContainer" type="MarginContainer" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI" unique_id=806331448]
 layout_mode = 2
 theme_override_constants/margin_left = 0
 theme_override_constants/margin_top = 20
 theme_override_constants/margin_right = 0
 theme_override_constants/margin_bottom = 20
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer" unique_id=323345205]
 layout_mode = 2
 
-[node name="RoundLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer/VBoxContainer"]
+[node name="RoundLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer/VBoxContainer" unique_id=1274204673]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
@@ -307,7 +307,7 @@ size_flags_vertical = 0
 text = "Round 1"
 label_settings = SubResource("LabelSettings_lrgjq")
 
-[node name="GoalLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer/VBoxContainer"]
+[node name="GoalLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer/VBoxContainer" unique_id=237767714]
 layout_mode = 2
 size_flags_vertical = 3
 theme_override_font_sizes/font_size = 5
@@ -317,7 +317,7 @@ label_settings = SubResource("LabelSettings_kluaa")
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="StartButton" type="Button" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer/VBoxContainer"]
+[node name="StartButton" type="Button" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer/VBoxContainer" unique_id=2034094030]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(100, 33)
 layout_mode = 2
@@ -336,35 +336,35 @@ theme_override_styles/disabled = SubResource("StyleBoxEmpty_ofxhw")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_3ufe5")
 text = "Start"
 
-[node name="SkipButton" type="TextureButton" parent="MainOverlay/MarginContainer/CenterContainer"]
+[node name="SkipButton" type="TextureButton" parent="MainOverlay/MarginContainer/CenterContainer" unique_id=1385579892]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 texture_normal = ExtResource("2_jqehr")
 texture_pressed = ExtResource("3_diu2m")
 
-[node name="TopHBoxContainer" type="HBoxContainer" parent="MainOverlay/MarginContainer"]
+[node name="TopHBoxContainer" type="HBoxContainer" parent="MainOverlay/MarginContainer" unique_id=1380088050]
 custom_minimum_size = Vector2(0, 80)
 layout_mode = 2
 size_flags_vertical = 0
 mouse_filter = 2
 
-[node name="YouContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/TopHBoxContainer"]
+[node name="YouContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/TopHBoxContainer" unique_id=612659195]
 layout_mode = 2
 
-[node name="PlayerAvatarDisplay" parent="MainOverlay/MarginContainer/TopHBoxContainer/YouContainer" instance=ExtResource("2_banb7")]
+[node name="PlayerAvatarDisplay" parent="MainOverlay/MarginContainer/TopHBoxContainer/YouContainer" unique_id=1701829756 instance=ExtResource("2_banb7")]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(96, 90)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_jqehr")
-texture_pressed = SubResource("ViewportTexture_diu2m")
-texture_hover = SubResource("ViewportTexture_ofxhw")
+texture_normal = SubResource("ViewportTexture_ofxhw")
+texture_pressed = SubResource("ViewportTexture_3ufe5")
+texture_hover = SubResource("ViewportTexture_yj865")
 ignore_texture_size = true
 is_display_only = true
 
-[node name="YouLabel" type="Label" parent="MainOverlay/MarginContainer/TopHBoxContainer/YouContainer"]
+[node name="YouLabel" type="Label" parent="MainOverlay/MarginContainer/TopHBoxContainer/YouContainer" unique_id=1613717902]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
@@ -373,36 +373,36 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="Control" type="Control" parent="MainOverlay/MarginContainer/TopHBoxContainer"]
+[node name="Control" type="Control" parent="MainOverlay/MarginContainer/TopHBoxContainer" unique_id=1797717990]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 
-[node name="OppContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/TopHBoxContainer"]
+[node name="OppContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/TopHBoxContainer" unique_id=1955044481]
 layout_mode = 2
 
-[node name="OppAvatarDisplay" parent="MainOverlay/MarginContainer/TopHBoxContainer/OppContainer" instance=ExtResource("2_banb7")]
+[node name="OppAvatarDisplay" parent="MainOverlay/MarginContainer/TopHBoxContainer/OppContainer" unique_id=1649654123 instance=ExtResource("2_banb7")]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(96, 90)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_3ufe5")
-texture_pressed = SubResource("ViewportTexture_yj865")
-texture_hover = SubResource("ViewportTexture_0odob")
+texture_normal = SubResource("ViewportTexture_0odob")
+texture_pressed = SubResource("ViewportTexture_u7o17")
+texture_hover = SubResource("ViewportTexture_mvivv")
 ignore_texture_size = true
 is_display_only = true
 controlled_by_data = true
 
-[node name="Control" type="Control" parent="MainOverlay/MarginContainer/TopHBoxContainer/OppContainer"]
+[node name="Control" type="Control" parent="MainOverlay/MarginContainer/TopHBoxContainer/OppContainer" unique_id=1939412001]
 custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
 
-[node name="DotTimer" type="Timer" parent="MainOverlay"]
+[node name="DotTimer" type="Timer" parent="MainOverlay" unique_id=1995939339]
 unique_name_in_owner = true
 wait_time = 0.75
 
-[node name="WaitBlur" type="ColorRect" parent="MainOverlay"]
+[node name="WaitBlur" type="ColorRect" parent="MainOverlay" unique_id=1616983862]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
@@ -414,7 +414,7 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 
-[node name="SpecLabel" type="Label" parent="MainOverlay"]
+[node name="SpecLabel" type="Label" parent="MainOverlay" unique_id=1981103108]
 unique_name_in_owner = true
 visible = false
 layout_mode = 0
@@ -427,73 +427,73 @@ text = "Spectating..."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="floor" type="MeshInstance3D" parent="."]
+[node name="floor" type="MeshInstance3D" parent="." unique_id=785632409]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0046854, -0.6, -1.52002)
 material_override = SubResource("StandardMaterial3D_julsv")
 mesh = SubResource("PlaneMesh_10mmx")
 
-[node name="StaticBody3D" type="StaticBody3D" parent="floor"]
+[node name="StaticBody3D" type="StaticBody3D" parent="floor" unique_id=1667942140]
 collision_layer = 3
 collision_mask = 3
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="floor/StaticBody3D"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="floor/StaticBody3D" unique_id=412479145]
 shape = SubResource("ConcavePolygonShape3D_10mmx")
 
-[node name="wall2" type="MeshInstance3D" parent="."]
+[node name="wall2" type="MeshInstance3D" parent="." unique_id=2026791393]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.746, 0, -1.11)
 mesh = SubResource("PlaneMesh_impb6")
 skeleton = NodePath("../wall")
 
-[node name="StaticBody3D" type="StaticBody3D" parent="wall2"]
+[node name="StaticBody3D" type="StaticBody3D" parent="wall2" unique_id=1198465411]
 collision_layer = 3
 collision_mask = 3
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="wall2/StaticBody3D"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="wall2/StaticBody3D" unique_id=698133288]
 shape = SubResource("ConcavePolygonShape3D_hvw6b")
 
-[node name="wall3" type="MeshInstance3D" parent="."]
+[node name="wall3" type="MeshInstance3D" parent="." unique_id=1615491717]
 transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 3.746, 0, -1.11)
 mesh = SubResource("PlaneMesh_impb6")
 skeleton = NodePath("../wall")
 
-[node name="StaticBody3D" type="StaticBody3D" parent="wall3"]
+[node name="StaticBody3D" type="StaticBody3D" parent="wall3" unique_id=1721981589]
 collision_layer = 3
 collision_mask = 3
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="wall3/StaticBody3D"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="wall3/StaticBody3D" unique_id=323067472]
 shape = SubResource("ConcavePolygonShape3D_8nfq6")
 
-[node name="wall" type="MeshInstance3D" parent="."]
+[node name="wall" type="MeshInstance3D" parent="." unique_id=2101423278]
 transform = Transform3D(1, 0, 0, 0, 0.24642593, 0, 0, 0, 1, 0.010828614, 0.027707396, -4.5087376)
 material_override = SubResource("StandardMaterial3D_jqehr")
 mesh = SubResource("PlaneMesh_512qa")
 skeleton = NodePath("../Camera3D")
 
-[node name="StaticBody3D" type="StaticBody3D" parent="wall"]
+[node name="StaticBody3D" type="StaticBody3D" parent="wall" unique_id=971062488]
 collision_layer = 3
 collision_mask = 3
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="wall/StaticBody3D"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="wall/StaticBody3D" unique_id=1190363750]
 shape = SubResource("ConcavePolygonShape3D_g73cu")
 
-[node name="backboard" type="MeshInstance3D" parent="."]
+[node name="backboard" type="MeshInstance3D" parent="." unique_id=345131718]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.227, -3.834)
 material_override = SubResource("StandardMaterial3D_7e2oe")
 cast_shadow = 0
 mesh = SubResource("BoxMesh_nih06")
 
-[node name="StaticBody3D" type="StaticBody3D" parent="backboard"]
+[node name="StaticBody3D" type="StaticBody3D" parent="backboard" unique_id=1579610600]
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_koq1v")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="backboard/StaticBody3D"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="backboard/StaticBody3D" unique_id=478288399]
 shape = SubResource("ConcavePolygonShape3D_me8a1")
 
-[node name="hoop_collision" type="Node3D" parent="."]
+[node name="hoop_collision" type="Node3D" parent="." unique_id=1803706582]
 visible = false
 
-[node name="HoopCollisionSphere1" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere1" type="RigidBody3D" parent="hoop_collision" unique_id=1451571190]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.974, -3.35)
 collision_layer = 3
 collision_mask = 3
@@ -501,171 +501,171 @@ physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 contact_monitor = true
 
-[node name="HoopCollisionSphere2" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere2" type="RigidBody3D" parent="hoop_collision" unique_id=1639624363]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.135, 0.845, -3.518)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere2"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere2" unique_id=1085681003]
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere2"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere2" unique_id=78912472]
 use_collision = true
 radius = 0.012
 radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere3" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere3" type="RigidBody3D" parent="hoop_collision" unique_id=264768332]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.845, -3.66)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere3"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere3" unique_id=1007937632]
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere3"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere3" unique_id=161517949]
 use_collision = true
 radius = 0.012
 radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere4" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere4" type="RigidBody3D" parent="hoop_collision" unique_id=438103615]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.144, 0.845, -3.518)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere4"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere4" unique_id=2026629995]
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere4"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere4" unique_id=1259178244]
 use_collision = true
 radius = 0.012
 radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere5" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere5" type="RigidBody3D" parent="hoop_collision" unique_id=1739256216]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.11, 0.91, -3.422)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere5"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere5" unique_id=1765690489]
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere5"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere5" unique_id=1172407850]
 use_collision = true
 radius = 0.012
 radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere6" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere6" type="RigidBody3D" parent="hoop_collision" unique_id=862883525]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.093, 0.91, -3.63)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere6"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere6" unique_id=1950303145]
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere6"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere6" unique_id=1326778340]
 use_collision = true
 radius = 0.012
 radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere7" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere7" type="RigidBody3D" parent="hoop_collision" unique_id=1225270201]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.117, 0.91, -3.417)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere7"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere7" unique_id=1060240946]
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere7"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere7" unique_id=526940561]
 use_collision = true
 radius = 0.012
 radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere8" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere8" type="RigidBody3D" parent="hoop_collision" unique_id=730030078]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.117, 0.91, -3.63)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere8"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere8" unique_id=1016087540]
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere8"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere8" unique_id=453121068]
 use_collision = true
 radius = 0.012
 radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere9" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere9" type="RigidBody3D" parent="hoop_collision" unique_id=2059265216]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.845, -3.391)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere9"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere9" unique_id=1367198192]
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere9"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere9" unique_id=1698870513]
 use_collision = true
 radius = 0.012
 radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere10" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere10" type="RigidBody3D" parent="hoop_collision" unique_id=966415189]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.918, -3.371)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere10"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere10" unique_id=1088286697]
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere10"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere10" unique_id=733484668]
 use_collision = true
 radius = 0.012
 radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere11" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere11" type="RigidBody3D" parent="hoop_collision" unique_id=1995788995]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -3.709)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere11"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere11" unique_id=693618503]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -1.7978063e-11, 0, -0.018390656)
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere11"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere11" unique_id=533907867]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -1.7978063e-11, 0, -0.018390656)
 use_collision = true
 radius = 0.012
@@ -673,18 +673,18 @@ radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere12" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere12" type="RigidBody3D" parent="hoop_collision" unique_id=33738579]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.141, 1, -3.654)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere12"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere12" unique_id=978147445]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.00070886314, 0, -0.01330781)
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere12"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere12" unique_id=2024375648]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.00070886314, 0, -0.01330781)
 use_collision = true
 radius = 0.012
@@ -692,18 +692,18 @@ radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere13" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere13" type="RigidBody3D" parent="hoop_collision" unique_id=918371164]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.141, 1, -3.366)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere13"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere13" unique_id=570745059]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.00070886314, 0, 0.01330781)
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere13"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere13" unique_id=1325686653]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.00070886314, 0, 0.01330781)
 use_collision = true
 radius = 0.012
@@ -711,18 +711,18 @@ radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere14" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere14" type="RigidBody3D" parent="hoop_collision" unique_id=1149908337]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.141, 1, -3.654)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere14"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere14" unique_id=1741956311]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.00070886314, 0, -0.01330781)
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere14"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere14" unique_id=1648385812]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.00070886314, 0, -0.01330781)
 use_collision = true
 radius = 0.012
@@ -730,18 +730,18 @@ radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere15" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere15" type="RigidBody3D" parent="hoop_collision" unique_id=190411673]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.141, 1, -3.366)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere15"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere15" unique_id=1097316560]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.00070886314, 0, 0.01330781)
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere15"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere15" unique_id=1232368756]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.00070886314, 0, 0.01330781)
 use_collision = true
 radius = 0.012
@@ -749,18 +749,18 @@ radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere16" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere16" type="RigidBody3D" parent="hoop_collision" unique_id=256106943]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.199, 1, -3.51)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere16"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere16" unique_id=1137863157]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.0010004789, 0, 0)
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere16"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere16" unique_id=1308173387]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.0010004789, 0, 0)
 use_collision = true
 radius = 0.012
@@ -768,18 +768,18 @@ radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere17" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere17" type="RigidBody3D" parent="hoop_collision" unique_id=1041951391]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -3.311)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere17"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere17" unique_id=1490284832]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -1.7978063e-11, 0, 0.018390656)
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere17"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere17" unique_id=2067408530]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -1.7978063e-11, 0, 0.018390656)
 use_collision = true
 radius = 0.012
@@ -787,18 +787,18 @@ radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="HoopCollisionSphere18" type="RigidBody3D" parent="hoop_collision"]
+[node name="HoopCollisionSphere18" type="RigidBody3D" parent="hoop_collision" unique_id=918173785]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.199, 1, -3.51)
 collision_layer = 3
 collision_mask = 3
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere18"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere18" unique_id=1995839677]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.0010004789, 0, 0)
 shape = SubResource("SphereShape3D_j8ag5")
 
-[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere18"]
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere18" unique_id=1174425709]
 transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.0010004789, 0, 0)
 use_collision = true
 radius = 0.012
@@ -806,30 +806,30 @@ radial_segments = 24
 rings = 24
 material = SubResource("StandardMaterial3D_10mmx")
 
-[node name="Ball" type="RigidBody3D" parent="."]
+[node name="Ball" type="RigidBody3D" parent="." unique_id=849225373]
 unique_name_in_owner = true
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.091, -0.45, 2.16719)
 physics_material_override = SubResource("PhysicsMaterial_10mmx")
 freeze = true
 script = ExtResource("2_j8ag5")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Ball"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ball" unique_id=442660925]
 shape = SubResource("SphereShape3D_10mmx")
 
-[node name="CSGSphere3D" type="MeshInstance3D" parent="Ball"]
+[node name="CSGSphere3D" type="MeshInstance3D" parent="Ball" unique_id=2008296069]
 material_override = SubResource("StandardMaterial3D_edmja")
 mesh = SubResource("SphereMesh_jqehr")
 
-[node name="net" type="MeshInstance3D" parent="."]
+[node name="net" type="MeshInstance3D" parent="." unique_id=1563928305]
 transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, -0.0094685, 0.776366, -3.30605)
 material_override = SubResource("StandardMaterial3D_0e03b")
 cast_shadow = 0
 mesh = SubResource("PlaneMesh_impb6")
 skeleton = NodePath("../wall")
 
-[node name="pole" type="Node3D" parent="."]
+[node name="pole" type="Node3D" parent="." unique_id=524519822]
 
-[node name="CSGCylinder3D" type="CSGCylinder3D" parent="pole"]
+[node name="CSGCylinder3D" type="CSGCylinder3D" parent="pole" unique_id=156016418]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.00985837, 0, -4.24123)
 cast_shadow = 0
 use_collision = true
@@ -837,13 +837,13 @@ radius = 0.04
 sides = 25
 material = SubResource("StandardMaterial3D_lrgjq")
 
-[node name="Scoreboard" type="MeshInstance3D" parent="."]
+[node name="Scoreboard" type="MeshInstance3D" parent="." unique_id=742659836]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0010493998, 1.8829808, -4.06871)
 material_override = SubResource("StandardMaterial3D_kluaa")
 mesh = SubResource("PlaneMesh_banb7")
 skeleton = NodePath("../Camera3D")
 
-[node name="Time" type="Label3D" parent="Scoreboard"]
+[node name="Time" type="Label3D" parent="Scoreboard" unique_id=1248981394]
 unique_name_in_owner = true
 transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.0010318127, -0.054722667, 0.0031547546)
 modulate = Color(0.85, 0.68000007, 0, 1)
@@ -852,7 +852,7 @@ font = ExtResource("8_kluaa")
 font_size = 23
 outline_size = 0
 
-[node name="Off_Time" type="Label3D" parent="Scoreboard"]
+[node name="Off_Time" type="Label3D" parent="Scoreboard" unique_id=272311975]
 transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.0010318127, -0.054722667, 0.0031547546)
 modulate = Color(0.45223302, 0.3534233, 0, 0.13725491)
 text = "88:88"
@@ -860,7 +860,7 @@ font = ExtResource("8_kluaa")
 font_size = 23
 outline_size = 0
 
-[node name="YouScore" type="Label3D" parent="Scoreboard"]
+[node name="YouScore" type="Label3D" parent="Scoreboard" unique_id=994698007]
 unique_name_in_owner = true
 transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, -0.544, -0.084, 0.003)
 modulate = Color(0.77, 0, 0, 1)
@@ -869,7 +869,7 @@ font = ExtResource("8_kluaa")
 font_size = 28
 outline_size = 0
 
-[node name="Off_Segment" type="Label3D" parent="Scoreboard"]
+[node name="Off_Segment" type="Label3D" parent="Scoreboard" unique_id=1223897268]
 transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, -0.544, -0.084, 0.003)
 modulate = Color(0.44705883, 0, 0, 0.13725491)
 text = "88"
@@ -877,7 +877,7 @@ font = ExtResource("8_kluaa")
 font_size = 28
 outline_size = 0
 
-[node name="OppScore" type="Label3D" parent="Scoreboard"]
+[node name="OppScore" type="Label3D" parent="Scoreboard" unique_id=943597829]
 unique_name_in_owner = true
 transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.56, -0.084, 0.003)
 modulate = Color(0.76862746, 0, 0, 1)
@@ -886,7 +886,7 @@ font = ExtResource("8_kluaa")
 font_size = 28
 outline_size = 0
 
-[node name="Off_Segment2" type="Label3D" parent="Scoreboard"]
+[node name="Off_Segment2" type="Label3D" parent="Scoreboard" unique_id=1269249005]
 transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.56, -0.085, 0.003)
 modulate = Color(0.44894964, 1.3055467e-06, 9.62615e-08, 0.13725491)
 text = "88"
@@ -894,9 +894,9 @@ font = ExtResource("8_kluaa")
 font_size = 28
 outline_size = 0
 
-[node name="StaticBody3D" type="StaticBody3D" parent="Scoreboard"]
+[node name="StaticBody3D" type="StaticBody3D" parent="Scoreboard" unique_id=609243326]
 collision_layer = 3
 collision_mask = 3
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Scoreboard/StaticBody3D"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Scoreboard/StaticBody3D" unique_id=364059761]
 shape = SubResource("ConcavePolygonShape3D_g73cu")
