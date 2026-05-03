@@ -15,6 +15,15 @@ shader_parameter/vignette_intensity = 0.1
 shader_parameter/vignette_opacity = 0.412
 shader_parameter/vignette_rgb = Color(0, 0, 0, 1)
 
+[sub_resource type="ViewportTexture" id="ViewportTexture_xpj4b"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_1ko3n"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_8oayu"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_xpj4b"]
 corner_radius_top_left = 8
 corner_radius_top_right = 8
@@ -67,6 +76,15 @@ expand_margin_top = 10.0
 expand_margin_right = 20.0
 expand_margin_bottom = 10.0
 
+[sub_resource type="ViewportTexture" id="ViewportTexture_0pvrk"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_u2n3q"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_qrx05"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_qrx05"]
 texture = ExtResource("5_elfvu")
 
@@ -102,7 +120,7 @@ expand_margin_top = 10.0
 expand_margin_right = 20.0
 expand_margin_bottom = 10.0
 
-[node name="MancalaBoard" type="Control"]
+[node name="MancalaBoard" type="Control" unique_id=1088694969]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -112,7 +130,7 @@ grow_vertical = 2
 mouse_filter = 1
 script = ExtResource("1_wkq4n")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="ColorRect" parent="." unique_id=394025918]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
@@ -123,7 +141,7 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.439216, 0.294118, 0.290196, 1)
 
-[node name="Vignette" type="ColorRect" parent="."]
+[node name="Vignette" type="ColorRect" parent="." unique_id=992755931]
 material = SubResource("ShaderMaterial_elfvu")
 layout_mode = 1
 anchors_preset = 15
@@ -134,7 +152,7 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.439216, 0.294118, 0.290196, 1)
 
-[node name="MarginContainer" type="MarginContainer" parent="."]
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=321333679]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -144,15 +162,15 @@ grow_vertical = 2
 theme_override_constants/margin_left = 20
 theme_override_constants/margin_right = 20
 
-[node name="InfoHBoxContainer" type="HBoxContainer" parent="MarginContainer"]
+[node name="InfoHBoxContainer" type="HBoxContainer" parent="MarginContainer" unique_id=1971428324]
 layout_mode = 2
 alignment = 1
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/InfoHBoxContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/InfoHBoxContainer" unique_id=955054968]
 layout_mode = 2
 size_flags_vertical = 4
 
-[node name="YouLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/VBoxContainer"]
+[node name="YouLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/VBoxContainer" unique_id=1917252504]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
@@ -161,19 +179,22 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="PlayerAvatarDisplay" parent="MarginContainer/InfoHBoxContainer/VBoxContainer" instance=ExtResource("6_1ko3n")]
+[node name="PlayerAvatarDisplay" parent="MarginContainer/InfoHBoxContainer/VBoxContainer" unique_id=151015637 instance=ExtResource("6_1ko3n")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_xpj4b")
+texture_pressed = SubResource("ViewportTexture_1ko3n")
+texture_hover = SubResource("ViewportTexture_8oayu")
 is_display_only = true
 
-[node name="GameAreaCenterContainer" type="CenterContainer" parent="MarginContainer/InfoHBoxContainer"]
+[node name="GameAreaCenterContainer" type="CenterContainer" parent="MarginContainer/InfoHBoxContainer" unique_id=1577027218]
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
 
-[node name="BoardSprite" type="TextureRect" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+[node name="BoardSprite" type="TextureRect" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer" unique_id=17397257]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(350, 800)
 layout_mode = 2
@@ -184,10 +205,10 @@ texture = ExtResource("2_d7lhj")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="PitsContainer" type="Node2D" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+[node name="PitsContainer" type="Node2D" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer" unique_id=1311673729]
 unique_name_in_owner = true
 
-[node name="ReplayButton" type="Button" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+[node name="ReplayButton" type="Button" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer" unique_id=924564102]
 visible = false
 layout_mode = 2
 mouse_filter = 2
@@ -196,12 +217,12 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_xpj4b")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_8aurd")
 theme_override_styles/hover = SubResource("StyleBoxFlat_elfvu")
 
-[node name="ReplayButtonWrapper" type="Control" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+[node name="ReplayButtonWrapper" type="Control" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer" unique_id=1763130880]
 visible = false
 layout_mode = 2
 mouse_filter = 2
 
-[node name="SentLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+[node name="SentLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer" unique_id=1971626510]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -211,7 +232,7 @@ text = "SENT"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="WinLossLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+[node name="WinLossLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer" unique_id=851411848]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -220,7 +241,7 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_1ko3n")
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="FreeTurnLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+[node name="FreeTurnLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer" unique_id=815482313]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -230,30 +251,33 @@ text = "Free Turn."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="SkipButton" type="TextureButton" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer"]
+[node name="SkipButton" type="TextureButton" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer" unique_id=465759711]
 unique_name_in_owner = true
 layout_mode = 2
 texture_normal = ExtResource("4_elfvu")
 texture_pressed = ExtResource("6_xpj4b")
 texture_hover = ExtResource("4_elfvu")
 
-[node name="VBoxContainer2" type="VBoxContainer" parent="MarginContainer/InfoHBoxContainer"]
+[node name="VBoxContainer2" type="VBoxContainer" parent="MarginContainer/InfoHBoxContainer" unique_id=196445751]
 layout_mode = 2
 size_flags_vertical = 4
 
-[node name="Label" type="Control" parent="MarginContainer/InfoHBoxContainer/VBoxContainer2"]
+[node name="Label" type="Control" parent="MarginContainer/InfoHBoxContainer/VBoxContainer2" unique_id=743121182]
 custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
 
-[node name="OppAvatarDisplay" parent="MarginContainer/InfoHBoxContainer/VBoxContainer2" instance=ExtResource("6_1ko3n")]
+[node name="OppAvatarDisplay" parent="MarginContainer/InfoHBoxContainer/VBoxContainer2" unique_id=1528264790 instance=ExtResource("6_1ko3n")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
+texture_normal = SubResource("ViewportTexture_0pvrk")
+texture_pressed = SubResource("ViewportTexture_u2n3q")
+texture_hover = SubResource("ViewportTexture_qrx05")
 is_display_only = true
 controlled_by_data = true
 
-[node name="SpecLabel" type="Label" parent="MarginContainer"]
+[node name="SpecLabel" type="Label" parent="MarginContainer" unique_id=1510871011]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -263,7 +287,7 @@ text = "Spectating..."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="."]
+[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="." unique_id=1486170544]
 custom_minimum_size = Vector2(0, 100)
 layout_mode = 1
 anchors_preset = 12
@@ -275,14 +299,14 @@ grow_horizontal = 2
 grow_vertical = 0
 theme_override_constants/separation = 10
 
-[node name="MarginContainer" type="MarginContainer" parent="BottomItemHBoxContainer"]
+[node name="MarginContainer" type="MarginContainer" parent="BottomItemHBoxContainer" unique_id=180367315]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/margin_left = 40
 theme_override_constants/margin_right = 40
 theme_override_constants/margin_bottom = 30
 
-[node name="RulesButton" type="Button" parent="BottomItemHBoxContainer/MarginContainer"]
+[node name="RulesButton" type="Button" parent="BottomItemHBoxContainer/MarginContainer" unique_id=1812479207]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -294,7 +318,7 @@ theme_override_styles/pressed = SubResource("StyleBoxTexture_u2n3q")
 theme_override_styles/hover = SubResource("StyleBoxTexture_0pvrk")
 theme_override_styles/focus = SubResource("StyleBoxFlat_8oayu")
 
-[node name="SettingsButton" type="Button" parent="BottomItemHBoxContainer/MarginContainer"]
+[node name="SettingsButton" type="Button" parent="BottomItemHBoxContainer/MarginContainer" unique_id=1512050168]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -306,7 +330,7 @@ theme_override_styles/pressed = SubResource("StyleBoxTexture_elfvu")
 theme_override_styles/hover = SubResource("StyleBoxTexture_miqih")
 theme_override_styles/focus = SubResource("StyleBoxFlat_0pvrk")
 
-[node name="WaitBlur" type="ColorRect" parent="."]
+[node name="WaitBlur" type="ColorRect" parent="." unique_id=247621496]
 unique_name_in_owner = true
 visible = false
 layout_mode = 1
@@ -318,7 +342,7 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 
-[node name="WaitForOpponentLabel" type="Label" parent="."]
+[node name="WaitForOpponentLabel" type="Label" parent="." unique_id=1149696269]
 unique_name_in_owner = true
 visible = false
 layout_mode = 0
@@ -333,6 +357,6 @@ text = "WAITING FOR OPPONENT..."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="DotTimer" type="Timer" parent="."]
+[node name="DotTimer" type="Timer" parent="." unique_id=314080679]
 unique_name_in_owner = true
 wait_time = 0.75
