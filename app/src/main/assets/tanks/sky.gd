@@ -12,6 +12,7 @@ var terrain_base_y: float = 0.0
 @export var max_alpha: float = 0.75
 @export var density: float = 1.0
 @export var spread: float = 1.0
+@export var mountain_terrain_overlap_px: float = 24.0
 
 # Speed tuning
 @export var base_speed_px: float = 100.0
@@ -60,6 +61,8 @@ func _apply_viewport() -> void:
 
 	_setup_cloud(c1)
 	_setup_cloud(c2)
+	
+	_anchor_mountains_to_terrain()
 
 func set_terrain_height(y: float) -> void:
 	terrain_base_y = y
@@ -72,7 +75,7 @@ func _anchor_mountains_to_terrain() -> void:
 	mountains.size.x = _vp_size.x
 	
 	# If terrain_base_y hasn't been set yet, default to screen bottom
-	var target_y = terrain_base_y if terrain_base_y > 0 else _vp_size.y
+	var target_y = (terrain_base_y + mountain_terrain_overlap_px) if terrain_base_y > 0 else _vp_size.y
 	
 	# Align the BOTTOM of the mountain texture with the terrain's base_y
 	mountains.global_position.y = target_y - mountains.size.y

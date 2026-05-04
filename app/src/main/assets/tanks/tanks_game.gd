@@ -7,6 +7,7 @@ class_name TanksGame
 @onready var rules_button: Button = %RulesButton
 @onready var settings_button: Button = %SettingsButton
 @onready var sent_label: Label = %SentLabel
+@onready var win_loss_label: Label = %WinLossLabel
 @onready var waiting_label: Label = %WaitForOpponentLabel
 @onready var waiting_blur: Control = %WaitBlur
 @onready var dot_timer: Timer = %DotTimer
@@ -52,39 +53,22 @@ const HEALTH_TEX := {
 const TANK1_COLOR := Color(0.25, 0.55, 1.0, 1.0) # Blue
 const TANK2_COLOR := Color(1.0, 0.25, 0.25, 1.0) # Red
 
-const BOARD_X_MIN := -187.0
-const BOARD_X_MAX := 187.0
-const BOARD_X_WIDTH := BOARD_X_MAX - BOARD_X_MIN # 374.0
+const BOARD_X_MIN := -220.0
+const BOARD_X_MAX := 220.0
+const BOARD_X_WIDTH := BOARD_X_MAX - BOARD_X_MIN # 440.0  (iOS board_size = 220 half-width)
 
 const SHOT_FIXED_DT := 1.0 / 60.0
 
 # --- Physics constants (measured directly from iOS via Frida) ---
-#
-# Confirmed by per-frame trace of the bullet body across 4 shots
-# (powers 0.50, 0.55, 0.75, 1.00; both players; one wind value):
-#
-#   Δvy / Δt = -200.800 px/s² in every frame (5 sig figs, all shots).
-#   Δvx / Δt = wind_value × 11.9367 in every frame, no other horizontal force.
-#   Velocity magnitude at frame 0 (after 1 step of integration):
-#     power=0.50 → v0 = 229.978
-#     power=0.55 → v0 = 247.030
-#     power=0.75 → v0 = 315.017
-#     power=1.00 → v0 = 400.000
-#   Linear fit: v0 = 340.0047 * power_01 + 60.0029 (RMS error 0.0195)
-#   v²-linear fit was 250× worse → speed truly is linear in power.
-#
-# All values are in iOS pixel units (the binary runs Box2D in raw screen pixels).
-# Bullet has effective gravityScale=1.0
-
-const SHOT_GRAVITY_UNITS := -200.8       # bullet vertical accel, px/s²
+const SHOT_GRAVITY_UNITS := -200.8       # bullet vertical accel, px/s^2
 const SHOT_SPEED_SLOPE_01 := 340.0047    # v0 = SLOPE * power_01 + INTERCEPT
 const SHOT_SPEED_INTERCEPT := 60.0029
 const SHOT_WIND_AX_PER_UNIT := 11.9367   # bullet ax = wind_value × this
 const SHOT_LINEAR_DAMPING := 0.0
 const SHOT_MUZZLE_OFFSET_UNITS := 20.0
 const SHOT_BULLET_RADIUS_UNITS := 1.0    # iOS bullet fixture radius
-const SHOT_TANK_HALF_W_UNITS := 11.5     # iOS tank box half-width
-const SHOT_TANK_HALF_H_UNITS := 6.0      # iOS tank box half-height
+const SHOT_TANK_HALF_W_UNITS := 11.5     # iOS tank box half width
+const SHOT_TANK_HALF_H_UNITS := 6.0      # iOS tank box half height
 const SHOT_SAFE_TRAVEL_UNITS := 40.0
 const SHOT_OUT_Y_UNITS := 2500.0
 const SHOT_OUT_X_UNITS := 5000.0
@@ -248,7 +232,6 @@ func _visual_deg_from_protocol_rot(player_idx: int, rot_rad: float) -> float:
 func _get_launch_speed_units(power_01: float) -> float:
 	power_01 = clampf(power_01, 0.0, 1.0)
 	# Measured directly from iOS across 4 shots: v0 = 340.0047 * power_01 + 60.0029
-	# Verified at p=0.5, 0.55, 0.75, 1.0 with RMS error 0.0195 — exact linear fit.
 	return SHOT_SPEED_SLOPE_01 * power_01 + SHOT_SPEED_INTERCEPT
 
 func _get_shot_spawn_screen_position(tank: Tank, launch_angle: float) -> Vector2:
@@ -413,10 +396,13 @@ func _apply_health_from_board(board: Dictionary) -> void:
 	_set_health_tex(opp_health, opp_hp)
 
 func _apply_tank_colors() -> void:
+	var hp1: int = int(core.current_board.get("tank1hp", 3)) if core != null else 3
+	var hp2: int = int(core.current_board.get("tank2hp", 3)) if core != null else 3
+
 	if is_instance_valid(tank_p1):
-		tank_p1.set_player_color(TANK1_COLOR)
+		tank_p1.set_player_color(Color.BLACK if hp1 <= 0 else TANK1_COLOR)
 	if is_instance_valid(tank_p2):
-		tank_p2.set_player_color(TANK2_COLOR)
+		tank_p2.set_player_color(Color.BLACK if hp2 <= 0 else TANK2_COLOR)
 
 func _on_board_loaded(board: Dictionary) -> void:
 	_apply_health_from_board(board)
@@ -935,22 +921,67 @@ func _circle_intersects_tank(center: Vector2, radius: float, tank: Tank) -> bool
 
 	return _circle_intersects_rect(center, radius, rect)
 
-# iOS-spec hit check: bullet circle (r=1.0 iOS-units) vs tank box
-# (half-extents 11.5 × 6.0 iOS-units, centered on tank.global_position).
 func _bullet_hits_tank_ios(bullet_screen_pos: Vector2, tank: Tank) -> bool:
 	if not is_instance_valid(tank):
 		return false
 	var ppu := _get_pixels_per_board_unit()
 	var hw_px := SHOT_TANK_HALF_W_UNITS * ppu
-	var hh_px := SHOT_TANK_HALF_H_UNITS * ppu
+	var full_h_px := SHOT_TANK_HALF_H_UNITS * 2.0 * ppu
 	var radius_px := SHOT_BULLET_RADIUS_UNITS * ppu
-	var top_left := tank.global_position - Vector2(hw_px, hh_px)
-	var rect := Rect2(top_left, Vector2(hw_px * 2.0, hh_px * 2.0))
+	# top_left.y is full_h_px above tank position (since y down means -y is up)
+	var top_left := tank.global_position - Vector2(hw_px, full_h_px)
+	var rect := Rect2(top_left, Vector2(hw_px * 2.0, full_h_px))
 	return _circle_intersects_rect(bullet_screen_pos, radius_px, rect)
 	
+func _bullet_swept_hits_tank_ios(prev_pos: Vector2, curr_pos: Vector2, tank: Tank) -> bool:
+	if not is_instance_valid(tank):
+		return false
+	# If we don't have a valid prev_pos, fall back to point in time check
+	if prev_pos.x == INF or prev_pos.y == INF:
+		return _bullet_hits_tank_ios(curr_pos, tank)
+	var ppu := _get_pixels_per_board_unit()
+	var hw_px := SHOT_TANK_HALF_W_UNITS * ppu
+	var full_h_px := SHOT_TANK_HALF_H_UNITS * 2.0 * ppu
+	var radius_px := SHOT_BULLET_RADIUS_UNITS * ppu
+	var top_left := tank.global_position - Vector2(hw_px, full_h_px)
+	var rect := Rect2(top_left, Vector2(hw_px * 2.0, full_h_px))
+	return _segment_circle_intersects_rect(prev_pos, curr_pos, radius_px, rect)
+
+func _segment_circle_intersects_rect(a: Vector2, b: Vector2, r: float, rect: Rect2) -> bool:
+	var seg_min := Vector2(min(a.x, b.x) - r, min(a.y, b.y) - r)
+	var seg_max := Vector2(max(a.x, b.x) + r, max(a.y, b.y) + r)
+	if seg_max.x < rect.position.x or seg_min.x > rect.position.x + rect.size.x:
+		return false
+	if seg_max.y < rect.position.y or seg_min.y > rect.position.y + rect.size.y:
+		return false
+	# Endpoint check (covers stationary or near-stationary case)
+	if _circle_intersects_rect(a, r, rect) or _circle_intersects_rect(b, r, rect):
+		return true
+	# Subdivide segment based on length and radius
+	var seg_len := a.distance_to(b)
+	if seg_len <= 0.0001:
+		return false
+	var step_count := int(ceil(seg_len / max(r * 0.5, 1.0)))
+	step_count = clamp(step_count, 4, 64)
+	for i in range(1, step_count):
+		var t := float(i) / float(step_count)
+		var p := a.lerp(b, t)
+		if _circle_intersects_rect(p, r, rect):
+			return true
+	return false
+	
 func _play_impact_feedback(impact_pos: Vector2, target_hit: String) -> void:
-	_start_camera_shake(5.0 if target_hit.begins_with("tank") else 3.0)
+	var is_tank_hit := target_hit.begins_with("tank")
+	_haptic_explosion(1.0 if is_tank_hit else 0.65, 55 if is_tank_hit else 35)
+	_start_camera_shake(5.0 if is_tank_hit else 3.0)
 	_spawn_impact_fx(impact_pos, target_hit)
+
+func _haptic_explosion(strength: float = 1.0, duration_ms: int = 45) -> void:
+	if not (OS.has_feature("android") or OS.has_feature("ios")):
+		return
+
+	strength = clampf(strength, 0.0, 1.0)
+	Input.vibrate_handheld(duration_ms, strength)
 
 
 func _start_camera_shake(strength: float = 4.0) -> void:
@@ -1056,7 +1087,7 @@ class TankBullet extends Node2D:
 	var position_units: Vector2 = Vector2.ZERO
 	var velocity_units: Vector2 = Vector2.ZERO
 	var gravity_units: float = SHOT_GRAVITY_UNITS
-	var wind_accel_units: float = 0.0     # iOS units/s², set as wind_value * SHOT_WIND_AX_PER_UNIT
+	var wind_accel_units: float = 0.0     # iOS units/s^2, set as wind_value * SHOT_WIND_AX_PER_UNIT
 
 	var _distance_traveled_units: float = 0.0
 	var _trail: Line2D
@@ -1137,10 +1168,12 @@ class TankBullet extends Node2D:
 		return total
 
 	func _step_simulation() -> void:
+
 		velocity_units.y += gravity_units * SHOT_FIXED_DT
 		velocity_units.x += wind_accel_units * SHOT_FIXED_DT
 
 		var step_units := velocity_units * SHOT_FIXED_DT
+		var prev_global_position := global_position
 		position_units += step_units
 		_distance_traveled_units += step_units.length()
 
@@ -1148,9 +1181,10 @@ class TankBullet extends Node2D:
 
 		_update_trail(global_position)
 
-		_check_collisions()
+		_check_collisions(prev_global_position)
 
-	func _check_collisions() -> void:
+
+	func _check_collisions(prev_pos: Vector2 = Vector2.INF) -> void:
 		if _distance_traveled_units < SHOT_SAFE_TRAVEL_UNITS:
 			return
 
@@ -1160,17 +1194,15 @@ class TankBullet extends Node2D:
 			_trigger_impact("out")
 			return
 
-		# iOS-spec hit detection: bullet circle (r=1.0 iOS-units) vs tank box
-		# (half-extents 11.5×6.0 iOS-units, centered on tank.global_position).
-		# Matches Box2D's contact result for the iOS fixtures.
+		# iOS-spec hit detection: bullet circle (r=1.0 iOS units) vs tank box (half extents 11.5×6.0 iOS-units, centered on tank's body origin = terrain surface y at tank.x). Uses swept-circle vs box check to match iOS's continuous-collision behavior despite our discrete time steps
 		var ppu := game._get_pixels_per_board_unit()
 		var radius_px := SHOT_BULLET_RADIUS_UNITS * ppu
 
-		if game._bullet_hits_tank_ios(global_position, game.tank_p1):
+		if game._bullet_swept_hits_tank_ios(prev_pos, global_position, game.tank_p1):
 			_trigger_impact("tank1")
 			return
 
-		if game._bullet_hits_tank_ios(global_position, game.tank_p2):
+		if game._bullet_swept_hits_tank_ios(prev_pos, global_position, game.tank_p2):
 			_trigger_impact("tank2")
 			return
 
@@ -1245,13 +1277,13 @@ func _play_round_sequence() -> void:
 	var b := core.current_board
 	var wind_val := float(b.get("wind", 0.0))
 	
-	# Determine shot order. Usually, the active player goes first.
+	# Determine shot order. Usually, the active player goes first
 	var p1_idx := core.player
 	var p2_idx := 2 if core.player == 1 else 1
 	
 	# Get data for both tanks
-	# If it's a replay, these come from 'b'. 
-	# If it's a fresh shot, p1_idx's data comes from the current barrel/slider.
+	# If it's a replay, these come from 'b'
+	# If it's a fresh shot, p1_idx's data comes from the current barrel/slider
 	var t1_tank = tank_p1 if p1_idx == 1 else tank_p2
 	var t1_rot = t1_tank.barrel_pivot.rotation
 	var t1_pow = power_slider.value / 100.0
@@ -1340,6 +1372,7 @@ func _damage_tank(idx: int) -> void:
 	current_hp = max(0, current_hp - 1)
 	core.current_board[key] = current_hp
 	_apply_health_from_board(core.current_board)
+	_apply_tank_colors()
 	print("Tank ", idx, " hit! HP remaining: ", current_hp)
 	
 func _finish_round_or_show_result() -> bool:
@@ -1407,17 +1440,17 @@ func _check_win_condition() -> bool:
 	if is_instance_valid(_aim_label):
 		_aim_label.visible = false
 
-	if is_instance_valid(waiting_label):
-		waiting_label.text = result_text
-		waiting_label.visible = true
-		waiting_label.modulate.a = 1.0
-		waiting_label.scale = Vector2.ZERO
-		waiting_label.add_theme_color_override("font_color", result_color)
+	if is_instance_valid(win_loss_label):
+		win_loss_label.text = result_text
+		win_loss_label.visible = true
+		win_loss_label.modulate.a = 1.0
+		win_loss_label.scale = Vector2.ZERO
+		win_loss_label.add_theme_color_override("font_color", result_color)
 		await get_tree().process_frame
-		waiting_label.pivot_offset = waiting_label.size / 2.0
+		win_loss_label.pivot_offset = waiting_label.size / 2.0
 
 		var tween_in := create_tween()
-		tween_in.tween_property(waiting_label, "scale", Vector2.ONE, 0.6) \
+		tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
 			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 
 	if is_instance_valid(waiting_blur):

@@ -2,8 +2,8 @@ extends Node2D
 class_name PowerIndicator
 
 @export var max_length: float = 250.0
-@export var base_width: float = 2.0
-@export var head_width: float = 14.0
+@export var base_width: float = 3.5
+@export var head_width: float = 16.0
 @export var head_length: float = 30.0
 
 @export var visual_scale: float = 20.0 

@@ -28,12 +28,14 @@ var world_width: float = 1024.0
 var world_height: float = 576.0
 var base_y: float = 380.0
 
-const BOARD_X_MIN := -187.0
-const BOARD_X_MAX := 187.0
+const BOARD_X_MIN := -220.0
+const BOARD_X_MAX := 220.0
 const BOARD_X_WIDTH := BOARD_X_MAX - BOARD_X_MIN
 
-@export var tower_width_units: float = 70.0
-@export var tower_height_units: float = 140.0
+const IOS_TANK_BASE_Y_UNITS := 7.0
+
+@export var tower_width_units: float = 65.0
+@export var tower_height_units: float = 316.898
 
 var _trans_left: float = 0.0
 var _trans_right: float = 0.0
@@ -55,9 +57,11 @@ func _on_viewport_size_changed() -> void:
 	_apply_viewport()
 	_rebuild()
 
-func apply_board(height_value_px: float, flip_view: bool) -> void:
-	height_px = height_value_px
+func apply_board(height_value_units: float, flip_view: bool) -> void:
+	flipped = flip_view
+	height_px = height_value_units * get_pixels_per_board_unit()
 	_apply_viewport()
+	height_px = height_value_units * get_pixels_per_board_unit()
 	_rebuild()
 
 func _apply_viewport() -> void:
@@ -146,6 +150,9 @@ func _rebuild() -> void:
 		" | actual height: ", get_tower_height_px(),
 		" | pixels/unit: ", get_pixels_per_board_unit()
 	)
+	
+func get_tower_fixture_center_y() -> float:
+	return base_y - (IOS_TANK_BASE_Y_UNITS * get_pixels_per_board_unit())
 	
 func get_tower_rect() -> Rect2:
 	if not is_instance_valid(tower_root) or not is_instance_valid(tower) or tower.texture == null:
