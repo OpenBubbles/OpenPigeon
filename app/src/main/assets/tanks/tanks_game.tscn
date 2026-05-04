@@ -53,24 +53,24 @@ colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 1)
 
 [sub_resource type="GradientTexture2D" id="GradientTexture2D_7jppp"]
 gradient = SubResource("Gradient_blwoc")
-width = 10
-height = 28
+width = 18
+height = 36
 
 [sub_resource type="Gradient" id="Gradient_knpvn"]
 colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 1)
 
 [sub_resource type="GradientTexture2D" id="GradientTexture2D_ngt5w"]
 gradient = SubResource("Gradient_knpvn")
-width = 10
-height = 28
+width = 18
+height = 36
 
 [sub_resource type="Gradient" id="Gradient_qlxma"]
 colors = PackedColorArray(0.3854925, 0.38549247, 0.38549247, 1, 0.38431373, 0.38431373, 0.38431373, 1)
 
 [sub_resource type="GradientTexture2D" id="GradientTexture2D_8kvy3"]
 gradient = SubResource("Gradient_qlxma")
-width = 10
-height = 28
+width = 18
+height = 36
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_blwoc"]
 bg_color = Color(0.7581918, 0.7581918, 0.7581917, 1)
@@ -377,6 +377,7 @@ theme_override_styles/hover = SubResource("StyleBoxTexture_t7yy8")
 layout_mode = 2
 size_flags_vertical = 8
 mouse_filter = 2
+theme_override_constants/separation = -4
 
 [node name="PowerLabel" type="RichTextLabel" parent="MarginContainer/Controls" unique_id=244262187]
 unique_name_in_owner = true
@@ -388,14 +389,9 @@ fit_content = true
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Spacer2" type="Control" parent="MarginContainer/Controls" unique_id=990678402]
-custom_minimum_size = Vector2(0, 10)
-layout_mode = 2
-mouse_filter = 2
-
 [node name="PowerSlider" type="HSlider" parent="MarginContainer/Controls" unique_id=1251560292]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(300, 40)
+custom_minimum_size = Vector2(300, 70)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -405,6 +401,7 @@ theme_override_icons/grabber_highlight = SubResource("GradientTexture2D_ngt5w")
 theme_override_icons/grabber_disabled = SubResource("GradientTexture2D_8kvy3")
 theme_override_styles/slider = SubResource("StyleBoxFlat_blwoc")
 rounded = true
+scrollable = false
 
 [node name="Spacer" type="Control" parent="MarginContainer/Controls" unique_id=1777210889]
 custom_minimum_size = Vector2(0, 80)
@@ -421,7 +418,7 @@ theme_override_colors/font_focus_color = Color(0, 0, 0, 1)
 theme_override_colors/font_pressed_color = Color(0, 0, 0, 1)
 theme_override_colors/font_hover_color = Color(0, 0, 0, 1)
 theme_override_colors/font_hover_pressed_color = Color(0, 0, 0, 1)
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 26
 theme_override_styles/normal = SubResource("StyleBoxFlat_j7ea1")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_g5fg3")
 theme_override_styles/hover = SubResource("StyleBoxFlat_yjlgf")

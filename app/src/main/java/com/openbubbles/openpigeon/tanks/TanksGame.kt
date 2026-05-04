@@ -10,6 +10,8 @@ import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 
 class TanksGame : Game {
     override fun getVersion(): String {
@@ -31,7 +33,47 @@ class TanksGame : Game {
         return R.drawable.tanks
     }
 
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
+        return super.getNewGameData(context)?.apply {
+            put("avatar2", AvatarView.buildAvatarString())
+        }
+    }
+
     override fun getDefaultReplay(): String {
-        return ""
+        fun rand(min: Double, max: Double): Double {
+            return min + Math.random() * (max - min)
+        }
+
+        fun fmt(d: Double): String {
+            return String.format("%.6f", d)
+        }
+
+        val height = rand(0.0, 100.0)
+        val wind = rand(-1.0, 1.0)
+
+        val tank1x = rand(-200.0, -80.0)
+        val tank2x = rand(80.0, 200.0)
+
+        val tank1rot = rand(0.0, Math.PI)
+        val tank2rot = rand(-Math.PI, 0.0)
+
+        val tank1power = rand(0.4, 1.0)
+        val tank2power = rand(0.4, 1.0)
+
+        val tank1hp = 3
+        val tank2hp = 3
+
+        return "board:" +
+                "height,${fmt(height)}&" +
+                "wind,${fmt(wind)}&" +
+                "tank1x,${fmt(tank1x)}&" +
+                "tank1rot,${fmt(tank1rot)}&" +
+                "tank1power,${fmt(tank1power)}&" +
+                "tank1hp,$tank1hp&" +
+                "tank2x,${fmt(tank2x)}&" +
+                "tank2rot,${fmt(tank2rot)}&" +
+                "tank2power,${fmt(tank2power)}&" +
+                "tank2hp,$tank2hp"
     }
 }
