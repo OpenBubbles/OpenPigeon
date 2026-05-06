@@ -293,7 +293,7 @@ func _connect_app_plugin_or_dev() -> void:
 			"isYourTurn": true,
 			"avatar1": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657",
 			"avatar2": "",
-			"replay": "board:height,0.0&wind,0.0&tank1x,-150.0&tank1rot,4.960246&tank1power,0.82741&tank1hp,3&tank2x,150.0&tank2rot,-4.960246&tank2power,0.82741&tank2hp,2|shoot:1"
+			"replay": "board:height,0.0&wind,-1.0&tank1x,-150.0&tank1rot,4.960246&tank1power,0.82741&tank1hp,3&tank2x,150.0&tank2rot,-4.960246&tank2power,0.82741&tank2hp,2|shoot:1"
 		})
 		#var dev := JSON.stringify({ #PLAYER 1
 			#"myPlayerId": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb",
@@ -1287,6 +1287,15 @@ func _on_replay_action(_action: Dictionary) -> void:
 	# Execute ONLY the opponent's shot
 	await _execute_shot(opp_idx, rot, pwr, wind_val)
 
+	if core.player == 1:
+		var new_wind: float = randf_range(-1.0, 1.0)
+		core.current_board["wind"] = new_wind
+		var w_visual: float = -new_wind if _view_flipped else new_wind
+		if is_instance_valid(sky):
+			sky.set_wind(w_visual)
+		if is_instance_valid(wind_indicator):
+			wind_indicator.set_wind(w_visual)
+
 	if await _finish_round_or_show_result():
 		return
 	
@@ -1509,9 +1518,6 @@ func _on_send_pressed() -> void:
 	var wind_val: float = float(core.current_board.get("wind", 0.0))
 
 	await _execute_shot(core.player, my_play_rot, my_pwr, wind_val)
-	if core.player == 1:
-		core.current_board["wind"] = randf_range(-1.0, 1.0)
-
 	core.set_my_aim(my_send_rot, my_pwr)
 
 	var avatar_str := ""
