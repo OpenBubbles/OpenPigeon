@@ -261,7 +261,8 @@ size_flags_horizontal = 4
 size_flags_vertical = 6
 script = ExtResource("7_blwoc")
 
-[node name="ColorRect" type="TextureRect" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/Wind/WindIndicator" unique_id=1830656793]
+[node name="WindBG" type="TextureRect" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/Wind/WindIndicator" unique_id=1830656793]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -273,6 +274,7 @@ expand_mode = 5
 stretch_mode = 5
 
 [node name="ClipRect" type="Control" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/Wind/WindIndicator" unique_id=1277963275]
+unique_name_in_owner = true
 clip_children = 1
 clip_contents = true
 custom_minimum_size = Vector2(0, 20)
@@ -288,6 +290,7 @@ grow_vertical = 2
 pivot_offset = Vector2(0, 20)
 
 [node name="ArrowSprite" type="TextureRect" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/Wind/WindIndicator/ClipRect" unique_id=1758679129]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 20)
 layout_mode = 1
 anchors_preset = 15

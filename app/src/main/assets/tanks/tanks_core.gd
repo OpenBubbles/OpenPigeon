@@ -141,22 +141,12 @@ func build_outbound_payload(my_avatar_str: String = "") -> Dictionary:
 	var replay_string: String = ""
 
 	if use_hardcoded_test:
-		replay_string = "board:height,0&wind,0&tank1x,-140.662827&tank1rot,090.000000&tank1power,1.000000&tank1hp,2&tank2x,116.385284&tank2rot,90.000000&tank2power,0.500000&tank2hp,2|shoot:1"
+		replay_string = "board:height,0&wind,0.2&tank1x,-140.662827&tank1rot,090.000000&tank1power,1.000000&tank1hp,2&tank2x,116.385284&tank2rot,90.000000&tank2power,0.500000&tank2hp,2|shoot:1"
 	else:
 		var out_board: Dictionary = current_board.duplicate(true)
 		
 		# --- RADIANS CALCULATION ---
 		var send_rot: float = _my_rot
-		
-		# If Player 2, we mirror the local rotation horizontally 
-		# before sending so the opponent sees the correct arc.
-		if player == 2:
-			# Mirroring across the vertical axis in Godot space
-			send_rot = -PI - send_rot
-			
-		# Normalize to ensure we are in the -2PI to 2PI range
-		send_rot = fposmod(send_rot + PI, TAU) - PI
-		# ---------------------------
 
 		if player == 1:
 			out_board["tank1rot"] = send_rot

@@ -192,10 +192,17 @@ func _screen_x_to_game_x(screen_x: float) -> float:
 	return remap(screen_x, 0.0, terrain.get_world_width(), BOARD_X_MIN, BOARD_X_MAX)
 	
 func _units_vec_to_screen_delta(units: Vector2) -> Vector2:
+	var x_sign: float = -1.0 if _view_flipped else 1.0
 	return Vector2(
-		_board_units_to_screen_px(units.x),
+		x_sign * _board_units_to_screen_px(units.x),
 		-_board_units_to_screen_px(units.y)
 	)
+	
+func _bullet_global_to_terrain_screen_pos(bullet_global_pos: Vector2) -> Vector2:
+	if not _view_flipped or not is_instance_valid(world):
+		return bullet_global_pos
+	var vp_w: float = get_viewport().get_visible_rect().size.x
+	return Vector2(vp_w - bullet_global_pos.x, bullet_global_pos.y)
 
 func _get_original_launch_angle(player_idx: int, rot_rad: float) -> float:
 	if player_idx == 1:
@@ -209,8 +216,7 @@ func _protocol_rot_from_visual_deg(player_idx: int, visual_deg: float) -> float:
 	if player_idx == 1:
 		return a
 
-	return -PI - a
-
+	return a - 2.0 * PI
 
 func _launch_angle_from_protocol_rot(player_idx: int, rot_rad: float) -> float:
 	if player_idx == 1:
@@ -220,8 +226,13 @@ func _launch_angle_from_protocol_rot(player_idx: int, rot_rad: float) -> float:
 
 
 func _visual_deg_from_protocol_rot(player_idx: int, rot_rad: float) -> float:
-	var launch_angle := _launch_angle_from_protocol_rot(player_idx, rot_rad)
-	var deg := rad_to_deg(launch_angle)
+	var a_rad: float
+	if player_idx == 1:
+		a_rad = rot_rad
+	else:
+		a_rad = rot_rad + 2.0 * PI
+
+	var deg := rad_to_deg(a_rad)
 	deg = fposmod(deg, 360.0)
 
 	if deg > 180.0:
@@ -236,8 +247,9 @@ func _get_launch_speed_units(power_01: float) -> float:
 
 func _get_shot_spawn_screen_position(tank: Tank, launch_angle: float) -> Vector2:
 	var muzzle_base: Vector2 = tank.barrel_pivot.global_position
+	var x_sign: float = -1.0 if _view_flipped else 1.0
 	var muzzle_offset_screen: Vector2 = Vector2(
-		cos(launch_angle),
+		x_sign * cos(launch_angle),
 		-sin(launch_angle)
 	) * _board_units_to_screen_px(SHOT_MUZZLE_OFFSET_UNITS)
 
@@ -374,7 +386,7 @@ func _on_fire_button_up() -> void:
 
 func _data_deg_to_visual_deg(data_deg: float) -> float:
 	data_deg = clamp(data_deg, 0.0, 180.0)
-	if _view_flipped:
+	if _view_flipped or core.player == 1:
 		return 180.0 - data_deg
 	return data_deg
 
@@ -412,13 +424,15 @@ func _on_board_loaded(board: Dictionary) -> void:
 	print("Wind Speed: ", w)
 	if is_instance_valid(terrain):
 		terrain.apply_board(h, false)
-
+		
+	var w_visual: float = -w if _view_flipped else w
 	if is_instance_valid(sky):
-		sky.set_wind(w)
+		sky.set_wind(w_visual)
+
 		
 	if is_instance_valid(wind_indicator):
-		wind_indicator.set_wind(w)
-		print("Setting Wind: ", w)
+		wind_indicator.set_wind(w_visual)
+		print("Setting Wind (visual): ", w_visual, " (raw: ", w, ")")
 
 	_apply_tank_colors()
 
@@ -469,8 +483,11 @@ func _apply_tanks_from_board(board: Dictionary) -> void:
 	var r1: float = float(board.get("tank1rot", 0.0))
 	var r2: float = float(board.get("tank2rot", 0.0))
 
-	tank_p1.set_barrel_display_deg(_visual_deg_from_protocol_rot(1, r1))
-	tank_p2.set_barrel_display_deg(_visual_deg_from_protocol_rot(2, r2))
+	var p1_visual_deg: float = _visual_deg_from_protocol_rot(1, r1)
+	var p2_visual_deg: float = 180.0 - _visual_deg_from_protocol_rot(2, r2)
+
+	tank_p1.set_barrel_display_deg(p1_visual_deg)
+	tank_p2.set_barrel_display_deg(p2_visual_deg)
 
 	tank_p1.z_index = 20
 	tank_p2.z_index = 20
@@ -525,6 +542,9 @@ func _apply_tank_facing(_flip_view: bool) -> void:
 
 	tank_p2.body.scale.x = -tank_p2.body.scale.x
 	tank_p2.barrel_sprite.scale.y = -tank_p2.barrel_sprite.scale.y
+
+	if not _flip_view:
+		tank_p1.barrel_sprite.scale.y = -tank_p1.barrel_sprite.scale.y
 	
 func _update_aim_label_visibility() -> void:
 	if not is_instance_valid(_aim_label):
@@ -1054,7 +1074,8 @@ func _spawn_muzzle_flash(muzzle_pos: Vector2, launch_angle: float) -> void:
 	root.z_index = 950
 	add_child(root)
 
-	var forward := Vector2(cos(launch_angle), -sin(launch_angle))
+	var x_sign: float = -1.0 if _view_flipped else 1.0
+	var forward := Vector2(x_sign * cos(launch_angle), -sin(launch_angle))
 	var side := Vector2(-forward.y, forward.x)
 
 	for i in range(12):
@@ -1188,7 +1209,8 @@ class TankBullet extends Node2D:
 		if _distance_traveled_units < SHOT_SAFE_TRAVEL_UNITS:
 			return
 
-		var pos_units_x := game._screen_x_to_game_x(global_position.x)
+		var terrain_pos: Vector2 = game._bullet_global_to_terrain_screen_pos(global_position)
+		var pos_units_x := game._screen_x_to_game_x(terrain_pos.x)
 
 		if abs(position_units.y) > SHOT_OUT_Y_UNITS or abs(pos_units_x) > SHOT_OUT_X_UNITS:
 			_trigger_impact("out")
@@ -1208,13 +1230,13 @@ class TankBullet extends Node2D:
 
 		if is_instance_valid(game.terrain) and game.terrain.has_tower():
 			var tower_rect := game.terrain.get_tower_rect()
-			if game._circle_intersects_rect(global_position, radius_px, tower_rect):
+			if game._circle_intersects_rect(terrain_pos, radius_px, tower_rect):
 				_trigger_impact("tower")
 				return
 
 		if is_instance_valid(game.terrain):
-			var ground_y := game.terrain.get_surface_y_at_screen_x(global_position.x)
-			if global_position.y >= ground_y:
+			var ground_y := game.terrain.get_surface_y_at_screen_x(terrain_pos.x)
+			if terrain_pos.y >= ground_y:
 				_trigger_impact("ground")
 				return
 
@@ -1257,6 +1279,11 @@ func _on_replay_action(_action: Dictionary) -> void:
 	var rot := float(b.get("tank%drot" % opp_idx, 0.0))
 	var pwr := float(b.get("tank%dpower" % opp_idx, 0.5))
 	
+	if core.player == 1:
+		var replay_visual_deg := _visual_deg_from_protocol_rot(opp_idx, rot)
+		replay_visual_deg = 180.0 - replay_visual_deg
+		rot = _protocol_rot_from_visual_deg(opp_idx, replay_visual_deg)
+	
 	# Execute ONLY the opponent's shot
 	await _execute_shot(opp_idx, rot, pwr, wind_val)
 
@@ -1285,7 +1312,7 @@ func _play_round_sequence() -> void:
 	# If it's a replay, these come from 'b'
 	# If it's a fresh shot, p1_idx's data comes from the current barrel/slider
 	var t1_tank = tank_p1 if p1_idx == 1 else tank_p2
-	var t1_rot = t1_tank.barrel_pivot.rotation
+	var t1_rot = _protocol_rot_from_visual_deg(p1_idx, t1_tank.get_barrel_display_deg())
 	var t1_pow = power_slider.value / 100.0
 	
 	var t2_rot = float(b.get("tank%drot" % p2_idx, 0.0))
@@ -1343,6 +1370,10 @@ func _execute_shot(player_idx: int, rot_rad: float, power_01: float, wind_val: f
 	await get_tree().create_timer(0.2).timeout
 
 	var launch_angle := _launch_angle_from_protocol_rot(player_idx, rot_rad)
+	
+	if player_idx == 2:
+		launch_angle = PI - launch_angle
+		
 	var muzzle_pos := _get_shot_spawn_screen_position(tank, launch_angle)
 	_spawn_muzzle_flash(muzzle_pos, launch_angle)
 
@@ -1470,13 +1501,18 @@ func _on_send_pressed() -> void:
 	await _set_ui_visible(false)
 
 	var my_tank: Tank = tank_p1 if core.player == 1 else tank_p2
-	var my_rot: float = _protocol_rot_from_visual_deg(core.player, my_tank.get_barrel_display_deg())
+	var my_visual_deg: float = my_tank.get_barrel_display_deg()
+	var my_play_rot: float = _protocol_rot_from_visual_deg(core.player, my_visual_deg)
+	var my_send_deg: float = _visual_deg_to_data_deg(my_visual_deg)
+	var my_send_rot: float = _protocol_rot_from_visual_deg(core.player, my_send_deg)
 	var my_pwr: float = power_slider.value / 100.0
 	var wind_val: float = float(core.current_board.get("wind", 0.0))
 
-	await _execute_shot(core.player, my_rot, my_pwr, wind_val)
+	await _execute_shot(core.player, my_play_rot, my_pwr, wind_val)
+	if core.player == 1:
+		core.current_board["wind"] = randf_range(-1.0, 1.0)
 
-	core.set_my_aim(my_rot, my_pwr)
+	core.set_my_aim(my_send_rot, my_pwr)
 
 	var avatar_str := ""
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
