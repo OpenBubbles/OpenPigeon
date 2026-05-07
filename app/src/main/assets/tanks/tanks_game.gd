@@ -88,6 +88,7 @@ func _ready() -> void:
 	core = TanksCore.new()
 	add_child(core)
 	core.replay_true.connect(_on_has_replay)
+	core.winner_true.connect(_has_winner)
 	core.turn_changed.connect(_on_turn_changed)
 	core.board_loaded.connect(_on_board_loaded)
 	core.replay_action.connect(_on_replay_action)
@@ -403,6 +404,8 @@ func _apply_health_from_board(board: Dictionary) -> void:
 
 	var my_hp: int = hp1 if core.player == 1 else hp2
 	var opp_hp: int = hp2 if core.player == 1 else hp1
+	
+	print("My HP: ", my_hp, " Opp HP: ", opp_hp)
 
 	_set_health_tex(player_health, my_hp)
 	_set_health_tex(opp_health, opp_hp)
@@ -410,7 +413,7 @@ func _apply_health_from_board(board: Dictionary) -> void:
 func _apply_tank_colors() -> void:
 	var hp1: int = int(core.current_board.get("tank1hp", 3)) if core != null else 3
 	var hp2: int = int(core.current_board.get("tank2hp", 3)) if core != null else 3
-
+	print ("HP 1: ", hp1, " HP2: ", hp2)
 	if is_instance_valid(tank_p1):
 		tank_p1.set_player_color(Color.BLACK if hp1 <= 0 else TANK1_COLOR)
 	if is_instance_valid(tank_p2):
@@ -678,6 +681,9 @@ func _handle_aim_click() -> void:
 	
 func _on_has_replay(r: bool) -> void:
 	has_replay = r
+	
+func _has_winner(w: bool) -> void:
+	game_over = w
 
 func _on_turn_changed(v: bool) -> void:
 	if _is_playing_round or has_replay or core.current_board.is_empty():
@@ -686,7 +692,7 @@ func _on_turn_changed(v: bool) -> void:
 		await _set_ui_visible(false)
 		_update_aim_label_visibility()
 		return
-
+		
 	if v:
 		stop_waiting_animation()
 		can_interact = true
@@ -694,8 +700,9 @@ func _on_turn_changed(v: bool) -> void:
 	else:
 		can_interact = false
 		await _set_ui_visible(false)
-		start_waiting_animation()
-
+		if not game_over:
+			start_waiting_animation()	
+	
 	_update_aim_label_visibility()
 
 func _send_payload(payload: Dictionary) -> bool:
@@ -1029,11 +1036,28 @@ func _spawn_impact_fx(impact_pos: Vector2, target_hit: String) -> void:
 	root.z_index = 900
 	add_child(root)
 
-	var is_tank_hit := target_hit.begins_with("tank")
-	var count: int = 34 if is_tank_hit else 18
-	var max_dist: float = 58.0 if is_tank_hit else 34.0
-	var dot_size: float = 7.0 if is_tank_hit else 5.5
-	var duration: float = 0.48 if is_tank_hit else 0.38
+	var is_tank_death := target_hit == "tank_death"
+	var is_tank_hit := target_hit.begins_with("tank") and not is_tank_death
+
+	var count: int
+	var max_dist: float
+	var dot_size: float
+	var duration: float
+	if is_tank_death:
+		count = 70
+		max_dist = 110.0
+		dot_size = 9.0
+		duration = 0.75
+	elif is_tank_hit:
+		count = 34
+		max_dist = 58.0
+		dot_size = 7.0
+		duration = 0.48
+	else:
+		count = 18
+		max_dist = 34.0
+		dot_size = 5.5
+		duration = 0.38
 
 	for i in range(count):
 		var dot := ColorRect.new()
@@ -1042,7 +1066,7 @@ func _spawn_impact_fx(impact_pos: Vector2, target_hit: String) -> void:
 		dot.pivot_offset = dot.size * 0.5
 		dot.position = -dot.pivot_offset
 
-		if is_tank_hit:
+		if is_tank_death or is_tank_hit:
 			if i % 4 == 0:
 				dot.color = Color(1.0, 0.18, 0.03, 0.95)
 			elif i % 4 == 1:
@@ -1272,22 +1296,31 @@ func _on_replay_action(_action: Dictionary) -> void:
 	var b := core.current_board
 	var wind_val := float(b.get("wind", 0.0))
 	
-	# The opponent is the "other" player
-	var opp_idx := 2 if core.player == 1 else 1
-	
-	# Get opponent's stats from the board data
-	var rot := float(b.get("tank%drot" % opp_idx, 0.0))
-	var pwr := float(b.get("tank%dpower" % opp_idx, 0.5))
-	
-	if core.player == 1:
-		var replay_visual_deg := _visual_deg_from_protocol_rot(opp_idx, rot)
-		replay_visual_deg = 180.0 - replay_visual_deg
-		rot = _protocol_rot_from_visual_deg(opp_idx, replay_visual_deg)
-	
-	# Execute ONLY the opponent's shot
-	await _execute_shot(opp_idx, rot, pwr, wind_val)
+	var is_own_replay: bool = not core.is_my_turn
+	var shooter_idx: int = core.player if is_own_replay else (2 if core.player == 1 else 1)
 
-	if core.player == 1:
+	var rot := float(b.get("tank%drot" % shooter_idx, 0.0))
+	var pwr := float(b.get("tank%dpower" % shooter_idx, 0.5))
+	print("Seeing Core Player: ", core.player)
+	
+	if (core.player == 1 and not is_own_replay) or (core.player == 2 and is_own_replay):
+		print("Flipping Thing Called")
+		var replay_visual_deg := _visual_deg_from_protocol_rot(shooter_idx, rot)
+		replay_visual_deg = 180.0 - replay_visual_deg
+		rot = _protocol_rot_from_visual_deg(shooter_idx, replay_visual_deg)
+	
+	await _execute_shot(shooter_idx, rot, pwr, wind_val)
+
+	var post_shot: Dictionary = core.consume_post_shot_board()
+	if not post_shot.is_empty():
+		if post_shot.has("tank1hp"):
+			core.current_board["tank1hp"] = int(post_shot["tank1hp"])
+		if post_shot.has("tank2hp"):
+			core.current_board["tank2hp"] = int(post_shot["tank2hp"])
+		_apply_health_from_board(core.current_board)
+		_apply_tank_colors()
+
+	if not is_own_replay and core.player == 1:
 		var new_wind: float = randf_range(-1.0, 1.0)
 		core.current_board["wind"] = new_wind
 		var w_visual: float = -new_wind if _view_flipped else new_wind
@@ -1415,6 +1448,17 @@ func _damage_tank(idx: int) -> void:
 	_apply_tank_colors()
 	print("Tank ", idx, " hit! HP remaining: ", current_hp)
 	
+	if current_hp <= 0:
+		var tank_node: Tank = tank_p1 if idx == 1 else tank_p2
+		var death_pos: Vector2 = tank_node.global_position if is_instance_valid(tank_node) else get_viewport().get_visible_rect().size * 0.5
+		_play_death_feedback(death_pos)
+
+func _play_death_feedback(at_pos: Vector2) -> void:
+	# Bigger shake, stronger vibration, a beefier secondary explosion.
+	_haptic_explosion(1.0, 180)
+	_start_camera_shake(14.0)
+	_spawn_impact_fx(at_pos, "tank_death")
+	
 func _finish_round_or_show_result() -> bool:
 	if await _check_win_condition():
 		can_interact = false
@@ -1424,8 +1468,8 @@ func _finish_round_or_show_result() -> bool:
 	return false
 
 func _check_win_condition() -> bool:
-	if game_over:
-		return true
+	#if game_over:
+		#return true
 
 	var hp1: int = int(core.current_board.get("tank1hp", 3))
 	var hp2: int = int(core.current_board.get("tank2hp", 3))
@@ -1517,16 +1561,44 @@ func _on_send_pressed() -> void:
 	var my_pwr: float = power_slider.value / 100.0
 	var wind_val: float = float(core.current_board.get("wind", 0.0))
 
+	var pre_shot_board: Dictionary = core.current_board.duplicate(true)
+	pre_shot_board["tank%drot" % core.player] = my_send_rot
+	pre_shot_board["tank%dpower" % core.player] = my_pwr
+
 	await _execute_shot(core.player, my_play_rot, my_pwr, wind_val)
+
+	var post_shot_board: Dictionary = core.current_board.duplicate(true)
+	post_shot_board["tank%drot" % core.player] = my_send_rot
+	post_shot_board["tank%dpower" % core.player] = my_pwr
+
 	core.set_my_aim(my_send_rot, my_pwr)
 
 	var avatar_str := ""
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		avatar_str = player_avatar_display.get_avatar_data_string()
 
-	core.request_send(avatar_str)
-	if await _finish_round_or_show_result():
+	var replay_string := "board:" + core._compose_board_kv(pre_shot_board)
+	replay_string += "|shoot:" + str(core.player)
+	replay_string += "|board:" + core._compose_board_kv(post_shot_board)
+
+	var payload := {
+		"replay": replay_string
+	}
+
+	var avatar_key := "avatar1" if core.player == 1 else "avatar2"
+	if avatar_str != "":
+		payload[avatar_key] = avatar_str
+
+	var finished := await _finish_round_or_show_result()
+
+	if game_over and win_loss_state != "" and core.my_id != "":
+		payload["winner"] = core.my_id + "|" + win_loss_state
+
+	_send_payload(payload)
+
+	if finished:
 		return
+
 	play_sent_animation()
 
 	_is_playing_round = false

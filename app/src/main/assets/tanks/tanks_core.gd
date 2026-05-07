@@ -7,6 +7,7 @@ signal board_loaded(board: Dictionary)
 signal replay_action(action: Dictionary)
 signal turn_changed(is_my_turn: bool)
 signal replay_true(has_replay: bool)
+signal winner_true(has_winner: bool)
 signal outbound_ready(payload: Dictionary)
 signal outbound_edit_requested(payload: Dictionary)
 
@@ -17,12 +18,14 @@ var player: int = 1
 var spectator_mode: bool = false
 var is_my_turn: bool = false
 var has_replay: bool = false
+var has_winner: bool = false
 var is_your_turn: bool = false
 var turn_owner: int = 1
 
 var my_id: String = ""
 var p1_id: String = ""
 var p2_id: String = ""
+var winner: String = ""
 
 var avatar1_str: String = ""
 var avatar2_str: String = ""
@@ -30,6 +33,7 @@ var avatar2_str: String = ""
 var replay_raw: String = ""
 var steps: Array = []
 var current_board: Dictionary = {}
+var _post_shot_board: Dictionary = {}
 
 var _my_selection_ready: bool = false
 var _my_rot: float = 0.0
@@ -51,6 +55,7 @@ func ingest_game_data(raw_text: String) -> void:
 	avatar1_str = String(d.get("avatar1", ""))
 	avatar2_str = String(d.get("avatar2", ""))
 	replay_raw = String(d.get("replay", ""))
+	winner = String(d.get("winner", ""))
 
 	is_your_turn = _to_bool(d.get("isYourTurn", false), false)
 	turn_owner = clamp(_to_int(d.get("player", 1), 1), 1, 2)
@@ -78,13 +83,17 @@ func ingest_game_data(raw_text: String) -> void:
 		emit_signal("opponent_avatar_ready", opponent_data)
 
 	steps = _parse_replay(replay_raw)
-	current_board = _find_last_board(steps)
+	current_board = _find_first_board(steps)
+	_post_shot_board = _find_post_shot_board(steps)
 
 	is_my_turn = is_your_turn
 	has_replay = replay_raw.contains("shoot:1")
+	has_winner = not winner.is_empty()
+	
 	emit_signal("replay_true", has_replay)
 	emit_signal("turn_changed", is_my_turn)
 	emit_signal("state_changed")
+	emit_signal("winner_true", has_winner)
 
 	_play_steps_into_signals(steps)
 
@@ -439,6 +448,35 @@ func _find_last_board(parsed_steps: Array) -> Dictionary:
 		if String(st.get("type", "")) == "board":
 			return st.get("data", {}) as Dictionary
 	return {}
+	
+func _find_first_board(parsed_steps: Array) -> Dictionary:
+	for st_v in parsed_steps:
+		var st: Dictionary = st_v as Dictionary
+		if String(st.get("type", "")) == "board":
+			return st.get("data", {}) as Dictionary
+	return {}
+
+func _find_post_shot_board(parsed_steps: Array) -> Dictionary:
+	var seen_shoot: bool = false
+	for st_v in parsed_steps:
+		var st: Dictionary = st_v as Dictionary
+		var t: String = String(st.get("type", ""))
+		if t == "shoot":
+			seen_shoot = true
+		elif t == "board" and seen_shoot:
+			return st.get("data", {}) as Dictionary
+	return {}
+
+func _has_shoot_event(raw: String) -> bool:
+	for part in raw.split("|", false):
+		if String(part).strip_edges().begins_with("shoot:"):
+			return true
+	return false
+
+func consume_post_shot_board() -> Dictionary:
+	var b: Dictionary = _post_shot_board
+	_post_shot_board = {}
+	return b
 
 func _play_steps_into_signals(parsed_steps: Array) -> void:
 	for st_v in parsed_steps:

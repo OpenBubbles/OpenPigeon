@@ -115,14 +115,11 @@ func _process(delta: float) -> void:
 	var a: float = clamp(wind_smooth * delta, 0.0, 1.0)
 	_wind_smoothed = lerp(_wind_smoothed, wind, a)
 
-	var dir: float = sign(_wind_smoothed)
-	if dir == 0.0:
-		dir = 1.0
+	var wind_uv_speed: float = (_wind_smoothed * base_speed_px) / _vp_size.x
+	var baseline_dir: float = clamp(_wind_smoothed * 4.0, -1.0, 1.0)
+	var final_uv_speed: float = wind_uv_speed + (min_drift_uv * baseline_dir)
 
 	var mag: float = abs(_wind_smoothed)
-
-	var added_uv_speed: float = (mag * base_speed_px) / _vp_size.x
-	var final_uv_speed: float = (min_drift_uv + added_uv_speed) * dir
 
 	_set_layer_params(c1, final_uv_speed, density, max_alpha, spread, whip_strength, whip_speed, mag)
 	_set_layer_params(c2, final_uv_speed * layer2_speed_mult, density * layer2_alpha_mult, max_alpha, spread * 1.25, whip_strength * 1.2, whip_speed, mag)
