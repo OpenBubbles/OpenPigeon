@@ -142,14 +142,15 @@ func _flash_textbox_red() -> void:
 	text_box.modulate = Color(1, 0.6, 0.6, 1)
 	t.tween_property(text_box, "modulate", Color(1, 1, 1, 1), 0.25).set_delay(0.15)
 
-func _sanitize_input(raw: String) -> String:
+func _sanitize_input(raw: String, final_pass: bool = false) -> String:
 	var s := raw
 	s = s.replace("\r", " ").replace("\n", " ")
 
-	var re := RegEx.new()
-	re.compile("\\s+")
-	s = re.sub(s, " ", true)
-	s = s.strip_edges()
+	if final_pass:
+		var re := RegEx.new()
+		re.compile("[ ]+")
+		s = re.sub(s, " ", true)
+		s = s.strip_edges()
 
 	s = s.replace("^&*", "⋆")
 	s = s.replace("|", "¦")
@@ -161,7 +162,9 @@ func _sanitize_input(raw: String) -> String:
 
 	var MAX := 140
 	if s.length() > MAX:
-		s = s.substr(0, MAX).strip_edges()
+		s = s.substr(0, MAX)
+		if final_pass:
+			s = s.strip_edges()
 
 	return s
 	
@@ -439,7 +442,7 @@ func _on_send_pressed() -> void:
 		return
 
 	var raw := text_box.text
-	var cleaned := _sanitize_input(raw)
+	var cleaned := _sanitize_input(raw, true)
 
 	if cleaned == "":
 		_flash_textbox_red()
