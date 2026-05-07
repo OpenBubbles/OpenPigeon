@@ -281,6 +281,7 @@ clip_children = 1
 clip_contents = true
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 1
+anchors_preset = 0
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -425,6 +426,7 @@ text = "Fire!"
 [node name="WaitBlur" type="ColorRect" parent="." unique_id=810597666]
 unique_name_in_owner = true
 visible = false
+z_index = 80
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -437,6 +439,7 @@ color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 [node name="WaitForOpponentLabel" type="Label" parent="." unique_id=1637633089]
 unique_name_in_owner = true
 visible = false
+z_index = 100
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -462,7 +465,6 @@ wait_time = 0.75
 
 [node name="SpecLabel" type="Label" parent="." unique_id=1674530875]
 unique_name_in_owner = true
-visible = false
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
@@ -480,6 +482,7 @@ vertical_alignment = 1
 [node name="WinLossLabel" type="Label" parent="." unique_id=725603060]
 unique_name_in_owner = true
 visible = false
+z_index = 120
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -500,6 +503,7 @@ vertical_alignment = 1
 [node name="SentLabel" type="Label" parent="." unique_id=1136453592]
 unique_name_in_owner = true
 visible = false
+z_index = 90
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5

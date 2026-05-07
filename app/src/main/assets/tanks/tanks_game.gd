@@ -23,6 +23,7 @@ class_name TanksGame
 @onready var power_slider: Slider = %PowerSlider
 @onready var power_label: RichTextLabel = %PowerLabel
 @onready var wind_indicator: WindIndicator = %WindIndicator
+@onready var spec_label: Label = %SpecLabel
 
 const RULES_POPUP_SCENE := preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE := preload("res://global/settings_popup.tscn")
@@ -311,6 +312,10 @@ func _connect_app_plugin_or_dev() -> void:
 func _set_game_data(raw_text: String) -> void:
 	core.ingest_game_data(raw_text)
 	_apply_view_flip()
+	
+	if is_instance_valid(spec_label):
+		spec_label.visible = core.spectator_mode
+	
 	_update_avatars()
 
 	_apply_health_colors()
@@ -686,7 +691,7 @@ func _has_winner(w: bool) -> void:
 	game_over = w
 
 func _on_turn_changed(v: bool) -> void:
-	if _is_playing_round or has_replay or core.current_board.is_empty():
+	if _is_playing_round or has_replay or core.current_board.is_empty() or core.spectator_mode:
 		can_interact = false
 		stop_waiting_animation()
 		await _set_ui_visible(false)
@@ -1593,7 +1598,7 @@ func _on_send_pressed() -> void:
 
 	if game_over and win_loss_state != "" and core.my_id != "":
 		payload["winner"] = core.my_id + "|" + win_loss_state
-
+	
 	_send_payload(payload)
 
 	if finished:

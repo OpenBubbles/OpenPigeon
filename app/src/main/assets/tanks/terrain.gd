@@ -17,6 +17,14 @@ var tower: Sprite2D
 
 @export var edge_enabled: bool = true
 
+const IOS_TOWER_HALF_W_UNITS := 32.5
+const IOS_TOWER_PILLAR_ABOVE_PLATEAU_UNITS := 134.0
+const IOS_TOWER_VISUAL_HEIGHT_UNITS := 134.0
+@export var tower_cap_jut_out_px: int = 28
+@export var tower_cap_extra_height_px: int = 40
+
+var _current_height_units: float = 0.0
+
 @export var tower_y_offset: float = 0.0
 @export var tower_edge_pad: float = 0.0
 @export var mirror_tower_with_terrain: bool = false
@@ -33,9 +41,6 @@ const BOARD_X_MAX := 220.0
 const BOARD_X_WIDTH := BOARD_X_MAX - BOARD_X_MIN
 
 const IOS_TANK_BASE_Y_UNITS := 7.0
-
-@export var tower_width_units: float = 65.0
-@export var tower_height_units: float = 316.898
 
 var _trans_left: float = 0.0
 var _trans_right: float = 0.0
@@ -59,6 +64,7 @@ func _on_viewport_size_changed() -> void:
 
 func apply_board(height_value_units: float, flip_view: bool) -> void:
 	flipped = flip_view
+	_current_height_units = height_value_units
 	height_px = height_value_units * get_pixels_per_board_unit()
 	_apply_viewport()
 	height_px = height_value_units * get_pixels_per_board_unit()
@@ -143,13 +149,6 @@ func _rebuild() -> void:
 			edge.points = top
 
 	_place_tower_centered(tower_center_x, y_high)
-	print(
-		"Tower target width px: ", get_tower_target_width_px(),
-		" | actual width: ", get_tower_width_px(),
-		" | target height px: ", get_tower_target_height_px(),
-		" | actual height: ", get_tower_height_px(),
-		" | pixels/unit: ", get_pixels_per_board_unit()
-	)
 	
 func get_tower_fixture_center_y() -> float:
 	return base_y - (IOS_TANK_BASE_Y_UNITS * get_pixels_per_board_unit())
@@ -158,14 +157,17 @@ func get_tower_rect() -> Rect2:
 	if not is_instance_valid(tower_root) or not is_instance_valid(tower) or tower.texture == null:
 		return Rect2()
 
-	var tex_size := Vector2(float(tower.texture.get_width()), float(tower.texture.get_height()))
-	var scaled_size := Vector2(
-		tex_size.x * abs(tower.scale.x),
-		tex_size.y * abs(tower.scale.y)
-	)
+	var ppu: float = get_pixels_per_board_unit()
+	var half_w_px: float = IOS_TOWER_HALF_W_UNITS * ppu
+	var pillar_above_px: float = IOS_TOWER_PILLAR_ABOVE_PLATEAU_UNITS * ppu
 
-	var top_left := tower_root.global_position + tower.position
-	return Rect2(top_left, scaled_size)
+	var tower_center_x: float = world_width * 0.5
+	var top_y: float = _y_high - pillar_above_px      # 134 units above plateau surface
+	var bottom_y: float = _y_low                       # lower ground level
+
+	var rect_pos := Vector2(tower_center_x - half_w_px, top_y)
+	var rect_size := Vector2(half_w_px * 2.0, bottom_y - top_y)
+	return Rect2(rect_pos, rect_size)
 
 func has_tower() -> bool:
 	return is_instance_valid(tower_root) and is_instance_valid(tower) and tower.texture != null
@@ -179,6 +181,7 @@ func _place_tower_centered(tower_center_x: float, y_high: float) -> void:
 		tx = world_width - tx
 
 	tower_root.position = Vector2(tx, y_high + tower_y_offset)
+	tower_root.z_index = 25
 
 	if tower.texture != null:
 		var w: float = float(tower.texture.get_width()) * tower.scale.x
@@ -226,39 +229,36 @@ func get_pixels_per_board_unit() -> float:
 	return world_width / BOARD_X_WIDTH
 
 func get_tower_target_width_px() -> float:
-	return tower_width_units * get_pixels_per_board_unit()
-	
+	# Always 65 iOS units wide (half-width 32.5).
+	return IOS_TOWER_HALF_W_UNITS * 2.0 * get_pixels_per_board_unit()
+
 func get_tower_target_height_px() -> float:
-	return tower_height_units * get_pixels_per_board_unit()
+	# Always 134 iOS units tall — the visible pillar above the plateau,
+	# constant regardless of H.
+	return IOS_TOWER_VISUAL_HEIGHT_UNITS * get_pixels_per_board_unit()
 
 func _apply_tower_scale() -> void:
 	if not is_instance_valid(tower) or tower.texture == null:
 		return
-	
+
 	var tex_w: float = float(tower.texture.get_width())
 	var tex_h: float = float(tower.texture.get_height())
 	if tex_w <= 0.0 or tex_h <= 0.0:
 		return
-	
+
 	var target_w: float = get_tower_target_width_px()
 	var target_h: float = get_tower_target_height_px()
-	
-	var scale_from_w: float = target_w / tex_w
-	var scale_from_h: float = target_h / tex_h
-	
-	# Prefer uniform scaling. If the source art ratio is correct,
-	# these should be the same or extremely close.
-	var uniform_scale: float = scale_from_w
-	
+
+	var bottom_col_src_w_px: float = max(1.0, tex_w - 2.0 * float(tower_cap_jut_out_px))
+	var bottom_col_src_h_px: float = max(1.0, tex_h - float(tower_cap_extra_height_px))
+
+	var scale_x: float = target_w / bottom_col_src_w_px
+	var scale_y: float = target_h / bottom_col_src_h_px
+
 	var sign_x: float = -1.0 if tower.scale.x < 0.0 else 1.0
 	var sign_y: float = -1.0 if tower.scale.y < 0.0 else 1.0
-	tower.scale = Vector2(sign_x * uniform_scale, sign_y * uniform_scale)
-	
-	# Debug warning if source art aspect ratio does not match 70x140
-	if abs(scale_from_w - scale_from_h) > 0.01:
-		print("WARNING: Tower art aspect ratio does not match target 70x140 units.")
-		print("scale_from_w: ", scale_from_w, " | scale_from_h: ", scale_from_h)
-	
+	tower.scale = Vector2(sign_x * scale_x, sign_y * scale_y)
+		
 func get_tower_width_px() -> float:
 	if not is_instance_valid(tower) or tower.texture == null:
 		return 0.0

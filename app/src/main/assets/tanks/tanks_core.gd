@@ -62,16 +62,6 @@ func ingest_game_data(raw_text: String) -> void:
 
 	_resolve_player_identity(is_your_turn, turn_owner)
 	
-	if my_id != "" and p1_id != "" and p2_id != "":
-		player = (1 if my_id == p1_id else (2 if my_id == p2_id else 0))
-		if player == 0:
-			spectator_mode = true
-			#you_label.text = ""
-			#spec_label.show()
-			player = 1
-	else:
-		player = (3 - turn_owner) if is_your_turn else turn_owner
-	
 	if player == 1:
 		opponent_avatar_key = "avatar2"
 	else:
@@ -251,7 +241,11 @@ func _resolve_player_identity(is_your_turn_in: bool, turn_owner_in: int) -> void
 			spectator_mode = true
 			player = 1
 	else:
-		player = (3 - turn_owner_in) if is_your_turn_in else turn_owner_in
+		if my_id != "" and p1_id != "" and p2_id != "" and my_id != p1_id and my_id != p2_id:
+			spectator_mode = true
+			player = 1
+		else:
+			player = (3 - turn_owner_in) if is_your_turn_in else turn_owner_in
 		
 func _ensure_avatar_wrapper(avatar: Control) -> Control:
 	var parent: Node = avatar.get_parent()
