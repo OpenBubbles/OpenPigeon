@@ -75,6 +75,7 @@ import com.openbubbles.openpigeon.pool.PoolGame
 import com.openbubbles.openpigeon.questions.QuestionsGame
 import com.openbubbles.openpigeon.reversi.ReversiGame
 import com.openbubbles.openpigeon.settings.AvatarSettingsActivity
+import com.openbubbles.openpigeon.tanks.TanksGame
 import com.openbubbles.openpigeon.wordbites.WordbitesGame
 import com.openbubbles.openpigeon.wordgames.WordGames
 import com.openbubbles.openpigeon.wordhunt.WordHuntGame
@@ -104,6 +105,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             Crazy8Game(),
             ConnectGame(),
             PaintGame(),
+            TanksGame(),
             FillerGame(),
             CheckersGame(),
             ChessGame(),
@@ -428,7 +430,7 @@ fun RenderKeyboardConfig(extension: MadridExtension?, game: Game) {
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Vertical.CenterVertically) {
                 Image(ImageProvider(game.gamePoster(null)), game.getName(), modifier = GlanceModifier.width(50.dp).padding(8.dp).wrapContentHeight())
-                Text(game.displayName(), style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray), fontWeight = FontWeight.Bold),)
+                Text(game.displayName(), style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray), fontWeight = FontWeight.Bold))
             }
             Image(ImageProvider(R.drawable.ios_back), "Back", modifier = GlanceModifier.padding(start = 10.dp)
                 .clickable(onClick = actionRunCallback<GoBackCallback>()))
