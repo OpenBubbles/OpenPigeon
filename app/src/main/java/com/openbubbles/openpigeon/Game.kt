@@ -82,8 +82,17 @@ interface Game {
 
     fun getDisplaySubtitle(context: Context, message: Map<String, String>): String {
         message["winner"]?.let {
+            val myId = getSenderUUID(context)
+            val player1 = message["player1"]
+            val player2 = message["player2"]
+
+            // Spectator override
+            if (player1 != null && player2 != null && myId != player1 && myId != player2) {
+                return "Game Over"
+            }
+
             val parts = it.split("|")
-            var iWon = getSenderUUID(context) == parts[0]
+            var iWon = myId == parts[0]
             if (parts[1] == "-1") {
                 iWon = !iWon
             }
@@ -92,14 +101,36 @@ interface Game {
             }
             return if (iWon) "You Won!" else "You Lost!"
         }
-        return if (message["caption"]?.startsWith("Let's") == true) message["caption"]!! else
-            if (message["sender"] == getSenderUUID(context)) "Opponent's Move." else "Your Move."
+        return if (message["caption"]?.startsWith("Let's") == true) {
+            message["caption"]!!
+        } else {
+            val myId = getSenderUUID(context)
+            val player1 = message["player1"]
+            val player2 = message["player2"]
+
+            if (player1 != null && player2 != null && myId != player1 && myId != player2) {
+                "Spectating Game"
+            } else if (message["sender"] == myId) {
+                "Opponent's Move."
+            } else {
+                "Your Move."
+            }
+        }
     }
 
     fun getWinStateImage(context: Context, message: Map<String, String>): Int? {
         message["winner"]?.let {
+            val myId = getSenderUUID(context)
+            val player1 = message["player1"]
+            val player2 = message["player2"]
+
+            // Spectator override
+            if (player1 != null && player2 != null && myId != player1 && myId != player2) {
+                return R.drawable.game_end
+            }
+
             val parts = it.split("|")
-            var iWon = getSenderUUID(context) == parts[0]
+            var iWon = myId == parts[0]
             if (parts[1] == "-1") {
                 iWon = !iWon
             }
