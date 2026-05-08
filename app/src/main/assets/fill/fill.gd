@@ -365,7 +365,7 @@ func update_ui_from_board_state():
 	print("253 UI Updated! Left Score (Me): %d, Right Score (Opp): %d" % [my_count, op_count])
 	
 func _get_score_text_color(bg_color_index: int) -> Color:
-	if bg_color_index == 2: # Yellow
+	if bg_color_index == 1 or bg_color_index == 2: # Yellow
 		return Color(0.2, 0.2, 0.2) # dark gray
 	return Color.WHITE
 			

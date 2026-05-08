@@ -205,7 +205,7 @@ custom_minimum_size = Vector2(8, 0)
 layout_mode = 2
 
 [node name="LeftPlayer" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3/HBoxContainer" unique_id=1257557358]
-custom_minimum_size = Vector2(48, 32)
+custom_minimum_size = Vector2(56, 38)
 layout_mode = 2
 size_flags_horizontal = 0
 size_flags_vertical = 4
@@ -245,7 +245,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 size_flags_horizontal = 4
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 24
 text = "
 "
 horizontal_alignment = 1
@@ -256,7 +256,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 
 [node name="RightPlayer" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3/HBoxContainer" unique_id=1274846624]
-custom_minimum_size = Vector2(48, 32)
+custom_minimum_size = Vector2(56, 38)
 layout_mode = 2
 size_flags_horizontal = 8
 size_flags_vertical = 4
@@ -296,7 +296,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 size_flags_horizontal = 4
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 24
 horizontal_alignment = 1
 vertical_alignment = 1
 
