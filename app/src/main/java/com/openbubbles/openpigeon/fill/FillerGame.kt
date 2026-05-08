@@ -6,6 +6,7 @@ import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.godot.GodotGameActivity
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
+import kotlin.random.Random
 
 class FillerGame : Game {
     override fun getVersion(): String {
@@ -31,6 +32,9 @@ class FillerGame : Game {
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
         AvatarData.init(context)
         return super.getNewGameData(context)?.apply {
+            val seed = Random.nextInt()
+
+            put("seed", seed.toString())
             put("avatar2", AvatarView.buildAvatarString())
         }
     }

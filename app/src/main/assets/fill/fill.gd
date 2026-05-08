@@ -52,8 +52,8 @@ var is_my_turn: bool = false
 var spectator_mode: bool = false
 var avatar_key = 0
 
-var left_start := Vector2i(0, BOARD_HEIGHT - 1)
-var right_start := Vector2i(BOARD_WIDTH - 1, 0)
+var left_start: Vector2i
+var right_start: Vector2i
 var left_color: int
 var right_color: int
 var my_count: int
@@ -91,45 +91,141 @@ func _ready():
 			print("AppPlugin Connected")
 	else:
 		#call_deferred("_set_game_data", '{ "isYourTurn": true, "player": "2", "seed": "1796765200", "replay": "board:4,5,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,3,3,3,3,3,4,3,3,3,3,3,3,3,4,3,3,3,3,3,3,3|move:5|board:5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,3,5,5,5,5,3,3,3,3,3,5,3,3,3,3,3,3,3,5,3,3,3,3,3,3,3", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player2": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player1": "f7898779-d537-4b0f-8c51-d604e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
-		call_deferred("_set_game_data", '{ "isYourTurn": true, "player": "2", "seed": "1796765200", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player2": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
+		call_deferred("_set_game_data", '{ "isYourTurn": true, "player": "2", "seed": "0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player2": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
 		
 	if rules_button:
 		rules_button.pressed.connect(on_rules_button_pressed)
 	if settings_button:
 		settings_button.pressed.connect(_on_settings_button_pressed)
+
+func _update_start_positions() -> void:
+	if player == 2:
+		left_start = Vector2i(BOARD_WIDTH - 1, BOARD_HEIGHT - 1)
+		right_start = Vector2i(0, 0)
+	else:
+		left_start = Vector2i(0, 0)
+		right_start = Vector2i(BOARD_WIDTH - 1, BOARD_HEIGHT - 1)
 		
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
 		background.color = Color(0.08, 0.08, 0.08) if is_dark else Color("#e5e5e5")
 
+const FILLER_NUM_PIECES := 6
+const FILLER_POLISH_ITERATIONS := 15
+
+const _DRAND48_A: int = 0x5DEECE66D
+const _DRAND48_C: int = 0xB
+const _DRAND48_MASK: int = (1 << 48) - 1
+const _DRAND48_M24: int = (1 << 24) - 1
+const _DRAND48_DENOM: float = 281474976710656.0
+
+var _drand48_state: int = 0
+
+func _filler_srand48(seed_val: int) -> void:
+	var s32: int = seed_val & 0xFFFFFFFF
+	_drand48_state = ((s32 << 16) | 0x330E) & _DRAND48_MASK
+
+func _filler_drand48() -> float:
+	var a_hi: int = _DRAND48_A >> 24
+	var a_lo: int = _DRAND48_A & _DRAND48_M24
+	var x_hi: int = (_drand48_state >> 24) & _DRAND48_M24
+	var x_lo: int = _drand48_state & _DRAND48_M24
+
+	var low: int = (a_lo * x_lo) + _DRAND48_C
+	var new_lo: int = low & _DRAND48_M24
+	var carry: int = low >> 24
+
+	var new_hi: int = (a_hi * x_lo + a_lo * x_hi + carry) & _DRAND48_M24
+
+	_drand48_state = ((new_hi << 24) | new_lo) & _DRAND48_MASK
+	return float(_drand48_state) / _DRAND48_DENOM
+
+func _filler_rand_piece() -> int:
+	return int(floor(_filler_drand48() * float(FILLER_NUM_PIECES)))
+
+func _filler_iterate_check(b: Array, i: int, j: int, c: int, temp_array: Array) -> void:
+	if i < 0 or i >= BOARD_HEIGHT or j < 0 or j >= BOARD_WIDTH:
+		return
+	for pt in temp_array:
+		if pt[0] == i and pt[1] == j:
+			return
+	if b[i][j] != c:
+		return
+	temp_array.append([i, j])
+	if j >= 1:
+		_filler_iterate_check(b, i, j - 1, c, temp_array)
+	if j + 1 < BOARD_WIDTH:
+		_filler_iterate_check(b, i, j + 1, c, temp_array)
+	if i >= 1:
+		_filler_iterate_check(b, i - 1, j, c, temp_array)
+	if i + 1 < BOARD_HEIGHT:
+		_filler_iterate_check(b, i + 1, j, c, temp_array)
+
 func generate_gamepigeon_board(seed_val: int) -> Array:
-	var result := []
-	var rng = RandomNumberGenerator.new()
-	rng.seed = int(seed_val)
+	_filler_srand48(seed_val)
 
-	for y in range(BOARD_HEIGHT):
-		result.append([])
-		for x in range(BOARD_WIDTH):
-			var forbidden := []
-			if x > 0:
-				forbidden.append(result[y][x - 1])
-			if y > 0:
-				forbidden.append(result[y - 1][x])
+	var b: Array = []
+	for i in range(BOARD_HEIGHT):
+		var row: Array = []
+		for j in range(BOARD_WIDTH):
+			row.append(_filler_rand_piece())
+		b.append(row)
 
-			var options := COLORS.filter(func(c): return not forbidden.has(c))
-			if options.is_empty():
-				print("Retrying board gen due to no valid options")
-				return generate_gamepigeon_board(seed_val + 1)
+	var pmask: Array = []
+	for i in range(BOARD_HEIGHT):
+		var mrow: Array = []
+		for j in range(BOARD_WIDTH):
+			mrow.append(false)
+		pmask.append(mrow)
+	pmask[0][0] = true
+	pmask[1][0] = true
+	pmask[0][1] = true
+	pmask[BOARD_HEIGHT - 1][BOARD_WIDTH - 1] = true  # (6,7)
+	pmask[BOARD_HEIGHT - 1][BOARD_WIDTH - 2] = true  # (6,6)
+	pmask[BOARD_HEIGHT - 2][BOARD_WIDTH - 1] = true  # (5,7)
 
-			var chosen = options[rng.randi_range(0, options.size() - 1)]
-			result[y].append(chosen)
+	while true:
+		b[0][0] = _filler_rand_piece()
+		b[0][1] = _filler_rand_piece()
+		b[1][0] = _filler_rand_piece()
+		var a: int = b[0][0]
+		var bb: int = b[0][1]
+		var cc: int = b[1][0]
+		if a != bb and a != cc and bb != cc:
+			break
 
-	return result
+	while true:
+		b[BOARD_HEIGHT - 1][BOARD_WIDTH - 1] = _filler_rand_piece()
+		b[BOARD_HEIGHT - 1][BOARD_WIDTH - 2] = _filler_rand_piece()
+		b[BOARD_HEIGHT - 2][BOARD_WIDTH - 1] = _filler_rand_piece()
+		var a2: int = b[BOARD_HEIGHT - 1][BOARD_WIDTH - 1]
+		var b2: int = b[BOARD_HEIGHT - 1][BOARD_WIDTH - 2]
+		var c2: int = b[BOARD_HEIGHT - 2][BOARD_WIDTH - 1]
+		if a2 != b2 and a2 != c2 and b2 != c2:
+			break
 
-func generate_filler_colors(seed_val: int = -1):
-	if seed_val >= 0:
+	for _iter in range(FILLER_POLISH_ITERATIONS):
+		for i in range(BOARD_HEIGHT):
+			for j in range(BOARD_WIDTH):
+				var temp_array: Array = []
+				_filler_iterate_check(b, i, j, b[i][j], temp_array)
+				if temp_array.size() >= 2:
+					for pt in temp_array:
+						var pr: int = pt[0]
+						var pc: int = pt[1]
+						if not pmask[pr][pc]:
+							b[pr][pc] = _filler_rand_piece()
+
+	return b
+	
+const _NO_SEED_SENTINEL: int = -9223372036854775808
+
+func generate_filler_colors(seed_val: int = _NO_SEED_SENTINEL):
+	if seed_val != _NO_SEED_SENTINEL:
+		# Real seed
 		color_board = generate_gamepigeon_board(seed_val)
 	else:
+		# Fallback
 		color_board.clear()
 		for y in range(BOARD_HEIGHT):
 			color_board.append([])
@@ -147,22 +243,17 @@ func generate_filler_colors(seed_val: int = -1):
 
 				var chosen = options[randi() % options.size()]
 				color_board[y].append(chosen)
-	
 
 func apply_colors_to_cells():
-	var display_board = color_board
-	print("184 player num: ", player)
-
 	for y in range(BOARD_HEIGHT):
 		for x in range(BOARD_WIDTH):
 			var cell = board[y][x]
-			if not is_instance_valid(cell): continue
-			
-			var idx = display_board[y][x]
-			var c = COLOR_MAP.get(idx, Color.GRAY)
+			if not is_instance_valid(cell):
+				continue
+
 			var bg = cell.find_child("Btn_Color", true)
 			if bg:
-				bg.modulate = c
+				bg.modulate = COLOR_MAP.get(color_board[y][x], Color.GRAY)
 
 func setup_board_structure():
 	if not grid:
@@ -174,20 +265,22 @@ func setup_board_structure():
 	for y in range(BOARD_HEIGHT):
 		board.append([])
 		for x in range(BOARD_WIDTH):
+			board[y].append(null)
+
+	for y in range(BOARD_HEIGHT - 1, -1, -1):
+		for x in range(BOARD_WIDTH):
 			var cell_scene = preload("res://fill/Cell.tscn")
 			var cell = cell_scene.instantiate()
 			if cell:
 				grid.add_child(cell)
-				board[y].append(cell)
+				board[y][x] = cell
 				cell.set_meta("pos", Vector2i(x, y))
 
 				var highlight = cell.find_child("Highlight")
 				if highlight and highlight is TextureRect:
 					highlight.texture = create_radial_gradient_texture(64)
 					highlight.visible = false
-			else:
-				board[y].append(null)
-
+					
 func setup_color_selector():
 	if not color_selector:
 		print("237 not color selector!")
@@ -253,13 +346,28 @@ func update_ui_from_board_state():
 	left_color = my_current_color
 	right_color = opponent_current_color
 	
-	left_score_label.text = str(my_count)
-	right_score_label.text = str(op_count)
+	left_score_label.text = "%02d" % my_count
+	right_score_label.text = "%02d" % op_count
 	left_bg.color = COLOR_MAP.get(left_color, Color.GRAY)
 	right_bg.color = COLOR_MAP.get(right_color, Color.GRAY)
 	
+	left_score_label.add_theme_color_override(
+		"font_color",
+		_get_score_text_color(left_color)
+	)
+
+	right_score_label.add_theme_color_override(
+		"font_color",
+		_get_score_text_color(right_color)
+	)
+	
 	update_color_selector_states()
 	print("253 UI Updated! Left Score (Me): %d, Right Score (Opp): %d" % [my_count, op_count])
+	
+func _get_score_text_color(bg_color_index: int) -> Color:
+	if bg_color_index == 2: # Yellow
+		return Color(0.2, 0.2, 0.2) # dark gray
+	return Color.WHITE
 			
 func _parse_avatar_string(data_string: String) -> Dictionary:
 	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
@@ -592,9 +700,18 @@ func create_radial_gradient_texture(gradsize: int) -> Texture2D:
 
 	var tex = ImageTexture.create_from_image(img)
 	return tex
+	
+func _apply_visual_board_transform() -> void:
+	if not is_instance_valid(grid):
+		return
+
+	await get_tree().process_frame
+	grid.pivot_offset = grid.size / 2.0
+	grid.rotation_degrees = 180.0 if player == 2 else 0.0
 
 func _set_game_data(new_game_data_json: String):
 	var parsed = JSON.parse_string(new_game_data_json)
+	print("RAW INCOMING DATA: ", parsed)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return
 
@@ -622,10 +739,11 @@ func _set_game_data(new_game_data_json: String):
 			player = 1
 	else:
 		spectator_mode = true
-		#is_my_turn = is_your_turn
 		you_label.text = ""
 		spec_label.show()
 		player = 1
+		
+	_update_start_positions()
 	
 	if opponent_avatar_key != "" and data.has(opponent_avatar_key):
 		var avatar_string = data[opponent_avatar_key]
@@ -638,8 +756,14 @@ func _set_game_data(new_game_data_json: String):
 		await parse_replay_string(replay_str, is_my_turn)
 	else:
 		print("New Board Generation")
-		generate_filler_colors(int(data.get("seed", -1)))
+		if data.has("seed") and str(data["seed"]).is_valid_int():
+			print("Seed from JSON: ", data.get("seed", "MISSING"), " (type: ", typeof(data.get("seed", null)), ")")
+			generate_filler_colors(int(data["seed"]))
+		else:
+			print("Seed from JSON: ", data.get("seed", "MISSING"), " (type: ", typeof(data.get("seed", null)), ")")
+			generate_filler_colors()
 		apply_colors_to_cells()
+		await _apply_visual_board_transform()
 		update_ui_from_board_state()
 		
 	if not spectator_mode and is_my_turn and not game_over:
@@ -655,6 +779,13 @@ func _set_game_data(new_game_data_json: String):
 		stop_waiting_animation()
 		hide_color_selector()
 		game_over = true
+		
+	print("PLAYER DEBUG → player:", player, 
+	  "| my_player_id:", my_player_id, 
+	  "| player1_id:", player1_id, 
+	  "| player2_id:", player2_id,
+	  "| is_my_turn:", is_my_turn,
+	  "| spectator:", spectator_mode)
 		
 func init_color_selector_collapsed():
 	if not is_instance_valid(color_selector):
@@ -672,60 +803,39 @@ func parse_replay_string(replay_str: String, play_animation: bool):
 		print("Invalid replay format")
 		return
 
-	if play_animation and parts[0].begins_with("board:"):
-		var vals = parts[0].substr(6).split(",")
-		var flat: Array[int] = []
-		for v in vals:
-			if v != "": flat.append(int(v))
-		
-		color_board.clear()
-		for y in range(BOARD_HEIGHT):
-			color_board.append([])
-			for x in range(BOARD_WIDTH):
-				var row_from_bottom = (BOARD_HEIGHT - 1) - y
-				var base_flat_i = row_from_bottom * BOARD_WIDTH + x
-				
-				var final_flat_i: int
-				if player == 2:
-					final_flat_i = (flat.size() - 1) - base_flat_i
-				else:
-					final_flat_i = base_flat_i
-					
-				color_board[y].append(flat[final_flat_i] if final_flat_i < flat.size() else 0)
-		
-		apply_colors_to_cells()
-		update_ui_from_board_state()
+	var board_part: String = parts[0] if play_animation else parts[2]
+	if not board_part.begins_with("board:"):
+		return
 
-	if parts[2].begins_with("board:"):
-		var vals = parts[2].substr(6).split(",")
-		var flat: Array[int] = []
-		for v in vals:
-			if v != "": flat.append(int(v))
+	var vals = board_part.substr(6).split(",")
+	color_board.clear()
 
-		color_board.clear()
-		for y in range(BOARD_HEIGHT):
-			color_board.append([])
-			for x in range(BOARD_WIDTH):
-				var row_from_bottom = (BOARD_HEIGHT - 1) - y
-				var base_flat_i = row_from_bottom * BOARD_WIDTH + x
-				
-				var final_flat_i: int
-				if player == 2:
-					final_flat_i = (flat.size() - 1) - base_flat_i
-				else:
-					final_flat_i = base_flat_i
-				
-				color_board[y].append(flat[final_flat_i] if final_flat_i < flat.size() else 0)
+	for y in range(BOARD_HEIGHT):
+		color_board.append([])
+		for x in range(BOARD_WIDTH):
+			var flat_i := y * BOARD_WIDTH + x
+			color_board[y].append(int(vals[flat_i]) if flat_i < vals.size() and vals[flat_i] != "" else 0)
+
+	apply_colors_to_cells()
+	await _apply_visual_board_transform()
+	update_ui_from_board_state()
 
 	if play_animation:
-		var opponent_start_pos = right_start
-		await play_move_animation(opponent_start_pos)
-		
-		update_ui_from_board_state()
-	else:
-		apply_colors_to_cells()
-		update_ui_from_board_state()
+		await play_move_animation(right_start)
+		if parts[2].begins_with("board:"):
+			vals = parts[2].substr(6).split(",")
+			color_board.clear()
 
+			for y in range(BOARD_HEIGHT):
+				color_board.append([])
+				for x in range(BOARD_WIDTH):
+					var flat_i := y * BOARD_WIDTH + x
+					color_board[y].append(int(vals[flat_i]) if flat_i < vals.size() and vals[flat_i] != "" else 0)
+
+			apply_colors_to_cells()
+			await _apply_visual_board_transform()
+			update_ui_from_board_state()
+			
 func get_color_from_position(pos: Vector2i) -> int:
 	if pos.y >= 0 and pos.y < BOARD_HEIGHT and pos.x >= 0 and pos.x < BOARD_WIDTH:
 		return color_board[pos.y][pos.x]
@@ -775,11 +885,9 @@ func get_connected_cells(pos: Vector2i, target_color: int, visited = null) -> Ar
 
 func get_current_board_as_array(player_num: int) -> Array:
 	var flat_board := []
-	for y in range(BOARD_HEIGHT - 1, -1, -1):
+	for y in range(BOARD_HEIGHT):
 		for x in range(BOARD_WIDTH):
 			flat_board.append(color_board[y][x])
-	if player_num == 2:
-		flat_board.reverse()
 
 	print("Current Board Layout Sent: ", flat_board)
 	return flat_board
