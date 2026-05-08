@@ -9,8 +9,9 @@ import com.openbubbles.openpigeon.godot.GodotGameActivity
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
 import kotlin.random.Random
+import com.openbubbles.openpigeon.DynamicPreviewGame
 
-class FillerGame : Game {
+class FillerGame : Game, DynamicPreviewGame {
     override fun getVersion(): String {
         return "5"
     }

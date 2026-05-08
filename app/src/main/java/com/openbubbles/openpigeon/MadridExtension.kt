@@ -463,7 +463,7 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
     }, horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
         Box(modifier = GlanceModifier.defaultWeight()) {
             val game = session?.getGame()
-            val previewBitmap = if (extension != null && game is FillerGame) {
+            val previewBitmap = if (extension != null && game is DynamicPreviewGame) {
                 game.gamePreviewBitmap(extension.context, session.currentMessage)
             } else {
                 null
