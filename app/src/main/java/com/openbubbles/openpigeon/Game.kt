@@ -20,6 +20,11 @@ interface Game {
     fun gameClass(): Class<*>
 
     fun gamePoster(config: Map<String, String>?): Int
+
+    fun gamePreviewBitmap(context: Context, message: Map<String, String>): Bitmap? {
+        return null
+    }
+
     fun displayName(): String
 
     fun getVersion(): String
@@ -148,11 +153,13 @@ interface Game {
             "data" to Cryption.encrypt(encodeQuery(message).replace("+", "%20"))
         ))
 
+        val bm = gamePreviewBitmap(context, message)
+            ?: if (currentSession == null) BitmapFactory.decodeResource(context.resources, gamePoster(message)) else null
+
         var imageEncoded: String? = null
-        if (currentSession == null) {
-            val bm = BitmapFactory.decodeResource(context.resources, gamePoster(message))
+        if (bm != null) {
             val baos = ByteArrayOutputStream()
-            bm.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+            bm.compress(Bitmap.CompressFormat.PNG, 90, baos)
             val b = baos.toByteArray()
             imageEncoded = Base64.encodeToString(b, Base64.NO_WRAP)
         }

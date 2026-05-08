@@ -1,5 +1,8 @@
+@file:Suppress("RestrictedApi")
+
 package com.openbubbles.openpigeon
 
+import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -349,6 +352,7 @@ class ChangePageCallback : ActionCallback {
     }
 }
 
+@SuppressLint("RestrictedApi")
 @Composable
 fun RenderKeyboard(extension: MadridExtension?) {
     val itemsPerRow = 5
@@ -458,8 +462,23 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
         }
     }, horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
         Box(modifier = GlanceModifier.defaultWeight()) {
-            Image(ImageProvider(session?.getGame()?.gamePoster(session.currentMessage) ?: R.drawable.empty),
-                session?.getGame()?.getName() ?: "Game", contentScale = ContentScale.Crop)
+            val game = session?.getGame()
+            val previewBitmap = if (extension != null && game is FillerGame) {
+                game.gamePreviewBitmap(extension.context, session.currentMessage)
+            } else {
+                null
+            }
+
+            Image(
+                if (previewBitmap != null) {
+                    ImageProvider(previewBitmap)
+                } else {
+                    ImageProvider(game?.gamePoster(session.currentMessage) ?: R.drawable.empty)
+                },
+                game?.getName() ?: "Game",
+                contentScale = ContentScale.Crop,
+                modifier = GlanceModifier.fillMaxSize()
+            )
             val winMode = session?.getGame()?.getWinStateImage(extension!!.context, session.currentMessage)
             if (winMode != null) {
                 Image(ImageProvider(winMode), message?.caption ?: "Game Over", contentScale = ContentScale.Crop,
@@ -469,7 +488,8 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
         Text((session?.getGame()?.getDisplaySubtitle(extension!!.context, session.currentMessage) ?: message?.caption ?: "Game Name").uppercase(),
             style = TextStyle(fontSize = 16.sp, color = ColorProvider(Color.Gray),
                 textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
-            modifier = GlanceModifier.padding(vertical = 10.dp))
+            modifier = GlanceModifier.fillMaxWidth().padding(vertical = 10.dp)
+        )
     }
 }
 
