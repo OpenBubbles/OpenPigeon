@@ -11,7 +11,7 @@ OpenPigeon is fully open-source, and we're actively looking for game developers 
 - 20 Questions
 - Anagrams
 - Archery
-- Basketball
+- Basketball (Normal and Moving)
 - Checkers (Normal and Newbie)
 - Chess
 - Crazy 8
@@ -25,6 +25,7 @@ OpenPigeon is fully open-source, and we're actively looking for game developers 
 - Paintball
 - Reversi
 - Sea Battle (all sizes)
+- Tanks
 - Wordbites
 - Word Hunt (all modes)
 
