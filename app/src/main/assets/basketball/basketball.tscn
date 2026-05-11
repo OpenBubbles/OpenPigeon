@@ -9,6 +9,7 @@
 [ext_resource type="Texture2D" uid="uid://3wlutur5yw1f" path="res://global/next_pressed.png" id="3_diu2m"]
 [ext_resource type="Texture2D" uid="uid://ermcfvwnyb8n" path="res://basketball/balldimpled.png" id="3_edmja"]
 [ext_resource type="Texture2D" uid="uid://dhj26lkqags20" path="res://basketball/backboard.png" id="3_julsv"]
+[ext_resource type="Texture2D" uid="uid://t4lc50ypi7ry" path="res://basketball/backboard_moving.png" id="7_jqehr"]
 [ext_resource type="Texture2D" uid="uid://jkmn81x6v6s" path="res://basketball/AdobeStock_530856469.png" id="8_banb7"]
 [ext_resource type="FontFile" uid="uid://dk1un3cvg4j5k" path="res://basketball/segment-eglas.ttf" id="8_kluaa"]
 [ext_resource type="Texture2D" uid="uid://bxkp6dpfg4vlk" path="res://basketball/scoreboard.png" id="9_lrgjq"]
@@ -94,6 +95,12 @@ expand_margin_bottom = 5.0
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_3ufe5"]
 
+[sub_resource type="ViewportTexture" id="ViewportTexture_jqehr"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_diu2m"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
 [sub_resource type="ViewportTexture" id="ViewportTexture_ofxhw"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
@@ -104,12 +111,6 @@ viewport_path = NodePath("SubViewportContainer/SubViewport")
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="ViewportTexture" id="ViewportTexture_0odob"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_u7o17"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_mvivv"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_julsv"]
@@ -145,7 +146,7 @@ orientation = 2
 [sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_g73cu"]
 data = PackedVector3Array(3.7485, -12, 0, -3.7485, -12, 0, 3.7485, 12, 0, -3.7485, -12, 0, -3.7485, 12, 0, 3.7485, 12, 0)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7e2oe"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_diu2m"]
 albedo_texture = ExtResource("3_julsv")
 uv1_scale = Vector3(0.995, 1.575, 2.445)
 uv1_offset = Vector3(-0.5, 0.5, 0)
@@ -165,15 +166,22 @@ bounce = 0.5
 [sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_me8a1"]
 data = PackedVector3Array(-0.494, 0.307, 0.0145, 0.494, 0.307, 0.0145, -0.494, -0.307, 0.0145, 0.494, 0.307, 0.0145, 0.494, -0.307, 0.0145, -0.494, -0.307, 0.0145, 0.494, 0.307, -0.0145, -0.494, 0.307, -0.0145, 0.494, -0.307, -0.0145, -0.494, 0.307, -0.0145, -0.494, -0.307, -0.0145, 0.494, -0.307, -0.0145, 0.494, 0.307, 0.0145, 0.494, 0.307, -0.0145, 0.494, -0.307, 0.0145, 0.494, 0.307, -0.0145, 0.494, -0.307, -0.0145, 0.494, -0.307, 0.0145, -0.494, 0.307, -0.0145, -0.494, 0.307, 0.0145, -0.494, -0.307, -0.0145, -0.494, 0.307, 0.0145, -0.494, -0.307, 0.0145, -0.494, -0.307, -0.0145, 0.494, 0.307, 0.0145, -0.494, 0.307, 0.0145, 0.494, 0.307, -0.0145, -0.494, 0.307, 0.0145, -0.494, 0.307, -0.0145, 0.494, 0.307, -0.0145, -0.494, -0.307, 0.0145, 0.494, -0.307, 0.0145, -0.494, -0.307, -0.0145, 0.494, -0.307, 0.0145, 0.494, -0.307, -0.0145, -0.494, -0.307, -0.0145)
 
-[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_10mmx"]
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_ios_guide"]
 friction = 0.5
-bounce = 0.8
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_j8ag5"]
 margin = 0.004
 radius = 0.012
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_10mmx"]
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_ios_rim"]
+friction = 0.5
+bounce = 0.5
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_10mmx"]
+friction = 0.5
+bounce = 0.45
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_10mmx"]
 radius = 0.1
@@ -199,6 +207,14 @@ albedo_texture = ExtResource("9_lrgjq")
 [sub_resource type="PlaneMesh" id="PlaneMesh_banb7"]
 size = Vector2(1.632, 0.5)
 orientation = 2
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_u7o17"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_7e2oe"]
+albedo_texture = ExtResource("7_jqehr")
+uv1_scale = Vector3(0.995, 1.575, 2.445)
+uv1_offset = Vector3(-0.5, 0.5, 0)
+uv1_triplanar = true
 
 [node name="BasketballScene" type="Node3D" unique_id=459033890]
 script = ExtResource("1_oq83f")
@@ -358,9 +374,9 @@ custom_minimum_size = Vector2(96, 90)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_ofxhw")
-texture_pressed = SubResource("ViewportTexture_3ufe5")
-texture_hover = SubResource("ViewportTexture_yj865")
+texture_normal = SubResource("ViewportTexture_jqehr")
+texture_pressed = SubResource("ViewportTexture_diu2m")
+texture_hover = SubResource("ViewportTexture_ofxhw")
 ignore_texture_size = true
 is_display_only = true
 
@@ -387,9 +403,9 @@ custom_minimum_size = Vector2(96, 90)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_0odob")
-texture_pressed = SubResource("ViewportTexture_u7o17")
-texture_hover = SubResource("ViewportTexture_mvivv")
+texture_normal = SubResource("ViewportTexture_3ufe5")
+texture_pressed = SubResource("ViewportTexture_yj865")
+texture_hover = SubResource("ViewportTexture_0odob")
 ignore_texture_size = true
 is_display_only = true
 controlled_by_data = true
@@ -416,11 +432,10 @@ color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 
 [node name="SpecLabel" type="Label" parent="MainOverlay" unique_id=1981103108]
 unique_name_in_owner = true
-visible = false
 layout_mode = 0
 offset_top = 129.0
 offset_right = 648.0
-offset_bottom = 198.0
+offset_bottom = 349.0
 size_flags_vertical = 0
 theme_override_font_sizes/font_size = 50
 text = "Spectating..."
@@ -477,8 +492,9 @@ collision_mask = 3
 shape = SubResource("ConcavePolygonShape3D_g73cu")
 
 [node name="backboard" type="MeshInstance3D" parent="." unique_id=345131718]
+unique_name_in_owner = true
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.227, -3.834)
-material_override = SubResource("StandardMaterial3D_7e2oe")
+material_override = SubResource("StandardMaterial3D_diu2m")
 cast_shadow = 0
 mesh = SubResource("BoxMesh_nih06")
 
@@ -491,28 +507,37 @@ physics_material_override = SubResource("PhysicsMaterial_koq1v")
 shape = SubResource("ConcavePolygonShape3D_me8a1")
 
 [node name="hoop_collision" type="Node3D" parent="." unique_id=1803706582]
+unique_name_in_owner = true
 visible = false
 
 [node name="HoopCollisionSphere1" type="RigidBody3D" parent="hoop_collision" unique_id=1451571190]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.974, -3.35)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 freeze = true
 contact_monitor = true
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere1" unique_id=1864577705]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere1" unique_id=456359513]
+visible = false
+radius = 0.012
+material = SubResource("StandardMaterial3D_10mmx")
 
 [node name="HoopCollisionSphere2" type="RigidBody3D" parent="hoop_collision" unique_id=1639624363]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.135, 0.845, -3.518)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere2" unique_id=1085681003]
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere2" unique_id=78912472]
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -522,14 +547,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.845, -3.66)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere3" unique_id=1007937632]
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere3" unique_id=161517949]
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -539,14 +564,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.144, 0.845, -3.518)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere4" unique_id=2026629995]
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere4" unique_id=1259178244]
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -556,14 +581,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.11, 0.91, -3.422)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere5" unique_id=1765690489]
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere5" unique_id=1172407850]
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -573,14 +598,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.093, 0.91, -3.63)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere6" unique_id=1950303145]
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere6" unique_id=1326778340]
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -590,14 +615,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.117, 0.91, -3.417)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere7" unique_id=1060240946]
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere7" unique_id=526940561]
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -607,14 +632,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.117, 0.91, -3.63)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere8" unique_id=1016087540]
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere8" unique_id=453121068]
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -624,14 +649,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.845, -3.391)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere9" unique_id=1367198192]
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere9" unique_id=1698870513]
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -641,14 +666,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.918, -3.371)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere10" unique_id=1088286697]
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere10" unique_id=733484668]
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -658,16 +683,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -3.709)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere11" unique_id=693618503]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -1.7978063e-11, 0, -0.018390656)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere11" unique_id=533907867]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -1.7978063e-11, 0, -0.018390656)
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -677,16 +700,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.141, 1, -3.654)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere12" unique_id=978147445]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.00070886314, 0, -0.01330781)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere12" unique_id=2024375648]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.00070886314, 0, -0.01330781)
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -696,16 +717,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.141, 1, -3.366)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere13" unique_id=570745059]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.00070886314, 0, 0.01330781)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere13" unique_id=1325686653]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.00070886314, 0, 0.01330781)
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -715,16 +734,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.141, 1, -3.654)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere14" unique_id=1741956311]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.00070886314, 0, -0.01330781)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere14" unique_id=1648385812]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.00070886314, 0, -0.01330781)
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -734,16 +751,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.141, 1, -3.366)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere15" unique_id=1097316560]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.00070886314, 0, 0.01330781)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere15" unique_id=1232368756]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.00070886314, 0, 0.01330781)
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -753,16 +768,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.199, 1, -3.51)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere16" unique_id=1137863157]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.0010004789, 0, 0)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere16" unique_id=1308173387]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, 0.0010004789, 0, 0)
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -772,16 +785,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -3.311)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere17" unique_id=1490284832]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -1.7978063e-11, 0, 0.018390656)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere17" unique_id=2067408530]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -1.7978063e-11, 0, 0.018390656)
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -791,16 +802,14 @@ material = SubResource("StandardMaterial3D_10mmx")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.199, 1, -3.51)
 collision_layer = 3
 collision_mask = 3
-physics_material_override = SubResource("PhysicsMaterial_10mmx")
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 freeze = true
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="hoop_collision/HoopCollisionSphere18" unique_id=1995839677]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.0010004789, 0, 0)
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="hoop_collision/HoopCollisionSphere18" unique_id=1174425709]
-transform = Transform3D(0.99497247, 0, 0, 0, 1, 0, 0, 0, 1.0924153, -0.0010004789, 0, 0)
-use_collision = true
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -821,6 +830,7 @@ material_override = SubResource("StandardMaterial3D_edmja")
 mesh = SubResource("SphereMesh_jqehr")
 
 [node name="net" type="MeshInstance3D" parent="." unique_id=1563928305]
+unique_name_in_owner = true
 transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, -0.0094685, 0.776366, -3.30605)
 material_override = SubResource("StandardMaterial3D_0e03b")
 cast_shadow = 0
@@ -828,11 +838,12 @@ mesh = SubResource("PlaneMesh_impb6")
 skeleton = NodePath("../wall")
 
 [node name="pole" type="Node3D" parent="." unique_id=524519822]
+unique_name_in_owner = true
+visible = false
 
 [node name="CSGCylinder3D" type="CSGCylinder3D" parent="pole" unique_id=156016418]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.00985837, 0, -4.24123)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.00985837, 0.26211584, -4.24123)
 cast_shadow = 0
-use_collision = true
 radius = 0.04
 sides = 25
 material = SubResource("StandardMaterial3D_lrgjq")
@@ -900,3 +911,348 @@ collision_mask = 3
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Scoreboard/StaticBody3D" unique_id=364059761]
 shape = SubResource("ConcavePolygonShape3D_g73cu")
+
+[node name="pole_moving" type="Node3D" parent="." unique_id=1017260519]
+unique_name_in_owner = true
+
+[node name="CSGCylinder3D" type="CSGCylinder3D" parent="pole_moving" unique_id=1166600000]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0.262, -4.241)
+cast_shadow = 0
+radius = 0.04
+sides = 25
+material = SubResource("StandardMaterial3D_lrgjq")
+
+[node name="CSGCylinder3D2" type="CSGCylinder3D" parent="pole_moving" unique_id=912721698]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0.262, -4.241)
+cast_shadow = 0
+radius = 0.04
+sides = 25
+material = SubResource("StandardMaterial3D_lrgjq")
+
+[node name="CSGCylinder3D3" type="CSGCylinder3D" parent="pole_moving" unique_id=297425796]
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0, 1.229, -4.241)
+cast_shadow = 0
+radius = 0.04
+height = 2.5
+sides = 25
+material = SubResource("StandardMaterial3D_lrgjq")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="pole_moving" unique_id=581355320]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.25, 1.229, -4.24)
+radius = 0.075
+material = SubResource("StandardMaterial3D_u7o17")
+
+[node name="CSGSphere3D2" type="CSGSphere3D" parent="pole_moving" unique_id=668384865]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.25, 1.229, -4.24)
+radius = 0.075
+material = SubResource("StandardMaterial3D_u7o17")
+
+[node name="MovingHoopRoot" type="Node3D" parent="." unique_id=523878272]
+unique_name_in_owner = true
+
+[node name="backboard_moving" type="MeshInstance3D" parent="MovingHoopRoot" unique_id=501594754]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.227, -3.834)
+material_override = SubResource("StandardMaterial3D_7e2oe")
+cast_shadow = 0
+mesh = SubResource("BoxMesh_nih06")
+skeleton = NodePath("../..")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="MovingHoopRoot/backboard_moving" unique_id=210372230]
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_koq1v")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/backboard_moving/StaticBody3D" unique_id=627654398]
+shape = SubResource("ConcavePolygonShape3D_me8a1")
+
+[node name="hoop_collision_moving" type="Node3D" parent="MovingHoopRoot" unique_id=420262889]
+unique_name_in_owner = true
+
+[node name="HoopCollisionSphere1" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=2128835413]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.974, -3.35)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere1" unique_id=1625600962]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere1" unique_id=1741454485]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere2" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=1459613277]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.135, 0.845, -3.518)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere2" unique_id=2078213233]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere2" unique_id=814192688]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere3" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=209151181]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.845, -3.66)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere3" unique_id=589772357]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere3" unique_id=1727608702]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere4" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=1827385344]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.144, 0.845, -3.518)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere4" unique_id=211090587]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere4" unique_id=358973664]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere5" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=446937056]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.11, 0.91, -3.422)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere5" unique_id=1600050368]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere5" unique_id=853838463]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere6" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=1507460916]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.093, 0.91, -3.63)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere6" unique_id=1975750751]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere6" unique_id=776442072]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere7" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=544140533]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.117, 0.91, -3.417)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere7" unique_id=1777048964]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere7" unique_id=1430065851]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere8" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=1108479422]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.117, 0.91, -3.63)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere8" unique_id=952926654]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere8" unique_id=466521601]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere9" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=1935722354]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.845, -3.391)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere9" unique_id=1240461477]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere9" unique_id=266470025]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere10" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=424201124]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.918, -3.371)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_guide")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere10" unique_id=2101245922]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere10" unique_id=650249604]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+material = SubResource("StandardMaterial3D_10mmx")
+
+[node name="HoopCollisionSphere11" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=881212865]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -3.709)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere11" unique_id=351216754]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere11" unique_id=1088174204]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+
+[node name="HoopCollisionSphere12" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=985851906]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.141, 1, -3.654)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere12" unique_id=1734150755]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere12" unique_id=717744055]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+
+[node name="HoopCollisionSphere13" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=978852615]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.141, 1, -3.366)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere13" unique_id=1226592137]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere13" unique_id=1835700991]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+
+[node name="HoopCollisionSphere14" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=1614071671]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.141, 1, -3.654)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere14" unique_id=1976189953]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere14" unique_id=1394586947]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+
+[node name="HoopCollisionSphere15" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=394824369]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.141, 1, -3.366)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere15" unique_id=540814508]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere15" unique_id=1555650469]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+
+[node name="HoopCollisionSphere16" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=734775831]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.199, 1, -3.51)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere16" unique_id=1249131276]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere16" unique_id=705174531]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+
+[node name="HoopCollisionSphere17" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=965561888]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -3.311)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere17" unique_id=978406109]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere17" unique_id=1374515315]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+
+[node name="HoopCollisionSphere18" type="AnimatableBody3D" parent="MovingHoopRoot/hoop_collision_moving" unique_id=1866735838]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.199, 1, -3.51)
+collision_layer = 3
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_ios_rim")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere18" unique_id=800786363]
+shape = SubResource("SphereShape3D_j8ag5")
+
+[node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere18" unique_id=1430031992]
+visible = false
+radius = 0.012
+radial_segments = 24
+rings = 24
+
+[node name="net_moving" type="MeshInstance3D" parent="MovingHoopRoot" unique_id=1672269509]
+unique_name_in_owner = true
+transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, -0.0094685, 0.776366, -3.30605)
+material_override = SubResource("StandardMaterial3D_0e03b")
+cast_shadow = 0
+mesh = SubResource("PlaneMesh_impb6")
+skeleton = NodePath("../../wall")

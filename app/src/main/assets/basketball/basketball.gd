@@ -20,7 +20,28 @@ const MIN_DRAG_DISTANCE := 30.0
 @onready var round_container: PanelContainer = %RoundUI
 @onready var round_label: Label = %RoundLabel
 
+@onready var static_backboard: MeshInstance3D = %backboard
+@onready var static_hoop_collision: Node3D = %hoop_collision
+@onready var static_net: MeshInstance3D = %net
+@onready var static_pole: Node3D = %pole
+
+@onready var moving_hoop_root: Node3D = %MovingHoopRoot
+@onready var moving_backboard: Node3D = %backboard_moving
+@onready var moving_hoop_collision: Node3D = %hoop_collision_moving
+@onready var moving_net: Node3D = %net_moving
+@onready var moving_pole: Node3D = %pole_moving
+
+var hoop_time: int = 0
+var _hoop_acc: float = 0.0
+var hoop_center_tween: Tween
+
+const HOOP_AMPLITUDE := 1.0
+const HOOP_PERIOD_FRAMES := 510.0
+const HOOP_QUARTER_FRAMES := 127.5
+const HOOP_THREE_QUARTER_FRAMES := 382.5
+
 var replayTimers: Array[Timer] = []
+var replayEndTimer: Timer = null
 var replayPlaying = false
 var replayFinished = false
 var gamePlaying = false
@@ -31,6 +52,9 @@ var sent_tween: Tween
 var dot_count: int = 0
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 var spectator_mode: bool = false
+var allow_waiting_from_loaded_data: bool = false
+var loaded_has_winner: bool = false
+var winner_sent: bool = false
 
 var replay = null
 var replay2 = null
@@ -49,6 +73,7 @@ var turnNum = null
 var appPlugin = null
 var has_connected = false
 var dev_data = ""
+var game_mode: String = "n"
 
 var youScoreLabel: Label3D
 var oppScoreLabel: Label3D
@@ -82,6 +107,7 @@ func _ready() -> void:
 		else:
 			print("App plugin is not available")
 			dev_data = '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "18", "skip_score2": "46", "player": "2", "score1": "18", "score2": "23", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "n", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Let\'s play Basketball!", "game_name": "Basketball", "replay": "60,0.264,0,0"}'
+			#dev_data = '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "18", "skip_score2": "46", "player": "2", "score1": "18", "score2": "23", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "h", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Let\'s play Basketball!", "game_name": "Basketball", "replay": "60,0.264,0,0"}'
 			_set_game_data(dev_data, true)
 
 		if is_instance_valid(start_button):
@@ -96,22 +122,48 @@ func _ready() -> void:
 
 	refresh_ui_state()
 
-var didIWin = false
 func showWinner():
 	if myScore == oppScore:
 		winner_label.set_text("DRAW!")
-		didIWin = 0
+		_show_win_burst(player_avatar_display)
+		_show_win_burst(opp_avatar_display)
 	elif myScore > oppScore:
-		winner_label.set_text("YOU WIN!")
+		if spectator_mode:
+			winner_label.set_text("PLAYER 1 WINS!")
+		else:
+			winner_label.set_text("YOU WIN!")
 		winner_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 		_show_win_burst(player_avatar_display)
-		didIWin = 1
 	else:
-		winner_label.set_text("YOU LOSE!")
+		if spectator_mode:
+			winner_label.set_text("PLAYER 2 WINS!")
+		else:
+			winner_label.set_text("YOU LOSE!")
 		winner_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
 		_show_win_burst(opp_avatar_display)
-		didIWin = -1
 	winner_label.visible = true
+	
+func _apply_basketball_mode() -> void:
+	var hard_mode := game_mode == "h"
+
+	static_backboard.visible = not hard_mode
+	static_hoop_collision.visible = not hard_mode
+	static_net.visible = not hard_mode
+	static_pole.visible = not hard_mode
+
+	moving_hoop_root.visible = hard_mode
+	moving_backboard.visible = hard_mode
+	moving_hoop_collision.visible = hard_mode
+	moving_net.visible = hard_mode
+	moving_pole.visible = hard_mode
+
+	if not hard_mode:
+		hoop_time = 0
+		_hoop_acc = 0.0
+		if hoop_center_tween and hoop_center_tween.is_running():
+			hoop_center_tween.kill()
+		if is_instance_valid(moving_hoop_root):
+			moving_hoop_root.position.x = 0.0
 		
 func getReplay(player_num: int):
 	if player_num == 1:
@@ -126,10 +178,29 @@ func getReplay(player_num: int):
 		
 var drag_start_pos = Vector2.ZERO
 var dragging = false
+
+func _is_touch_on_current_ball(screen_pos: Vector2) -> bool:
+	if player == null or currentBall[player] == null:
+		return false
+
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return false
+
+	var ball_screen_pos := camera.unproject_position(currentBall[player].global_position)
+	var buffer := 120.0
+
+	return screen_pos.distance_to(ball_screen_pos) <= buffer
+
 func _input(event: InputEvent) -> void:
+	if spectator_mode:
+		return
 	if player != null and gamePlaying and event is InputEventMouseButton and currentBall[player] != null:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
+				if not _is_touch_on_current_ball(event.position):
+					return
+
 				drag_start_pos = event.position
 				dragging = true
 			else:
@@ -156,22 +227,30 @@ func interpolate_x_delta(value: float) -> float:
 	var t = inverse_lerp(-200.0, 200.0, value)
 	return lerp(-1, 1, t)
 
-func playReplay(player_num: int, replay_str: String):	
+func playReplay(player_num: int, replay_str: String) -> float:
 	replayPlaying = true
 	var replayShots = replay_str.split('|')
 	var replayBallNum = 0
+	var last_time_delay: float = 0.0
+
 	for shot in replayShots:
 		var shotSplit = shot.split(',')
+		if shotSplit.size() < 4:
+			continue
 
 		var timeDelay: float = float(shotSplit[0]) / 60.0
 		var x_delta: float = float(shotSplit[1])
 		var did_go_in: bool = bool(int(shotSplit[3]))
+		last_time_delay = max(last_time_delay, timeDelay)
 		
 		var shotTimer = Timer.new()
 		replayTimers.append(shotTimer)
 		self.add_child(shotTimer)
 		shotTimer.one_shot = true
-		shotTimer.timeout.connect(func(): currentBall[player_num].shoot(x_delta))
+		shotTimer.timeout.connect(func():
+			if currentBall[player_num] != null:
+				currentBall[player_num].shoot(x_delta)
+		)
 		shotTimer.set_wait_time(timeDelay)
 		shotTimer.start()
 		
@@ -185,34 +264,58 @@ func playReplay(player_num: int, replay_str: String):
 			timer.start()
 			
 		replayBallNum += 1
-		
-func skipReplay():
+
+	return last_time_delay
+	
+func _schedule_replay_auto_finish(delay_seconds: float) -> void:
+	if replayEndTimer != null and is_instance_valid(replayEndTimer):
+		replayEndTimer.stop()
+		replayEndTimer.queue_free()
+
+	replayEndTimer = Timer.new()
+	replayTimers.append(replayEndTimer)
+	add_child(replayEndTimer)
+	replayEndTimer.one_shot = true
+	replayEndTimer.timeout.connect(func():
+		if replayPlaying:
+			_finish_replay(true)
+	)
+	replayEndTimer.wait_time = max(delay_seconds + 2.5, 1.0)
+	replayEndTimer.start()
+	
+func _finish_replay(finalize_scores: bool = true) -> void:
 	for timer in replayTimers:
-		timer.stop()
-		timer.queue_free()
+		if is_instance_valid(timer):
+			timer.stop()
+			timer.queue_free()
 	replayTimers.clear()
-	
-	if currentBall[1] != null:
-		currentBall[1].queue_free()
-		currentBall[1] = null
-		
-	if currentBall[2] != null:
-		currentBall[2].queue_free()
-		currentBall[2] = null
-	
-	if turnNum == 3:
-		setScore(1, score1)
-		setScore(2, score2)
-	elif turnNum == 5:
-		setScore(1, skip_score1)
-		setScore(2, skip_score2)
-		
+	replayEndTimer = null
+
+	clearBalls()
+
+	if finalize_scores:
+		if turnNum == 3:
+			setScore(1, score1)
+			setScore(2, score2)
+			isTurn = true
+		elif turnNum >= 5:
+			setScore(1, skip_score1)
+			setScore(2, skip_score2)
+			game_over = true
+			isTurn = not spectator_mode
+			showWinner()
+
 	timeRemainingLabel.text = "00:00"
-		
 	hideUI()
 	replayPlaying = false
 	replayFinished = true
+	elapsedTime = 0.0
+	stop_waiting_animation()
+
 	refresh_ui_state()
+	
+func skipReplay():
+	_finish_replay(true)
 	
 func refresh_ui_state() -> void:
 	if gamePlaying or replayPlaying:
@@ -226,39 +329,80 @@ func refresh_ui_state() -> void:
 		var r_self = getReplay(player)
 		var r_other = getReplay(other_player)
 
+		if spectator_mode:
+			r_self = getReplay(1)
+			r_other = getReplay(2)
+
 		if not isNullOrEmpty(r_self) and not isNullOrEmpty(r_other):
-			print("Starting replay playback (self + other)")
+			print("Starting replay playback")
 			stop_waiting_animation()
 			round_container.visible = false
 
 			ballNum = {1: 1, 2: 1}
 
-			if turnNum == 5:
+			if turnNum >= 5:
+				print("Turn Number > 5")
 				setScore(1, score1)
 				setScore(2, score2)
 			else:
+				print("Turn Number < 5")
 				setScore(1, 0)
 				setScore(2, 0)
+
+			hoop_time = 0
+			_hoop_acc = 0.0
+			elapsedTime = 0.0
+			if hoop_center_tween and hoop_center_tween.is_running():
+				hoop_center_tween.kill()
+			if is_instance_valid(moving_hoop_root):
+				moving_hoop_root.position.x = 0.0
 
 			clearBalls()
 			spawnBall(1)
 			spawnBall(2)
-			playReplay(1, getReplay(1))
-			playReplay(2, getReplay(2))
+			print("PLAYING REPLAY>>>")
+			var replay1_end: float = playReplay(1, r_self if spectator_mode else getReplay(1))
+			var replay2_end: float = playReplay(2, r_other if spectator_mode else getReplay(2))
+			_schedule_replay_auto_finish(max(replay1_end, replay2_end))
 
 			skip_button.visible = true
 			return
-		else:
-			print("Replay not ready yet (missing self/other replay)")
+
+		if not isNullOrEmpty(r_self) and isNullOrEmpty(r_other):
+			print("We already played, opponent replay missing")
 			round_container.visible = false
 			skip_button.visible = false
-			start_waiting_animation()
+
+			if turnNum >= 4:
+				setScore(1, skip_score1 if skip_score1 != null else 0)
+				setScore(2, skip_score2 if skip_score2 != null else 0)
+			else:
+				setScore(1, score1 if score1 != null else 0)
+				setScore(2, score2 if score2 != null else 0)
+
+			if allow_waiting_from_loaded_data:
+				start_waiting_animation()
+
 			return
+
+		print("Opponent has not played yet, allowing us to play")
+		stop_waiting_animation()
 
 	if isTurn == false:
 		print("Is Turn False")
 		round_container.visible = false
 		skip_button.visible = false
+
+		if turnNum != null:
+			if turnNum >= 4:
+				setScore(1, skip_score1 if skip_score1 != null else 0)
+				setScore(2, skip_score2 if skip_score2 != null else 0)
+			else:
+				setScore(1, score1 if score1 != null else 0)
+				setScore(2, score2 if score2 != null else 0)
+
+		if not spectator_mode and allow_waiting_from_loaded_data:
+			start_waiting_animation()
 		return
 
 	print("Is Turn True")
@@ -267,17 +411,18 @@ func refresh_ui_state() -> void:
 	if turnNum >= 3:
 		print("Turn >= 3")
 
-		if isNullOrEmpty(getReplay(other_player)):
-			print("Null getReplay(other_player) -> waiting")
+		if spectator_mode:
 			round_container.visible = false
-			skip_button.visible = false
-			start_waiting_animation()
+			waiting_blur.visible = false
 			return
 
-		if turnNum == 5:
+		if turnNum >= 5:
 			game_over = true
 			showWinner()
 			return
+
+		setScore(1, score1)
+		setScore(2, score2)
 
 		waiting_blur.visible = true
 		round_label.text = "Round 2"
@@ -362,6 +507,11 @@ var my_player
 func _set_game_data(new_replay: String, saved: bool = false):
 	var parsed = JSON.parse_string(new_replay)
 	print("NEW REPLAY: " + str(parsed))
+	loaded_has_winner = parsed.has("winner") and not isNullOrEmpty(str(parsed["winner"]))
+	winner_sent = loaded_has_winner
+	
+	game_mode = str(parsed.get("mode", "n"))
+	_apply_basketball_mode()
 	
 	if gamePlaying == true:
 		print("Message received during game, saving!")
@@ -371,6 +521,7 @@ func _set_game_data(new_replay: String, saved: bool = false):
 	turnNum = int(parsed["num"])
 	isTurn = parsed["isYourTurn"]
 	player = int(parsed["player"])
+	print("Turn Num: ", turnNum, " IsTurn: ", isTurn, " Player: ", player)
 
 	# Round 1 needs to be playable by both the sender and receiver.
 	# After round 1, keep the original opponent/player flip behavior.
@@ -379,13 +530,45 @@ func _set_game_data(new_replay: String, saved: bool = false):
 	elif isTurn:
 		player = 2 if player == 1 else 1
 
-	if isTurn:
-		stop_waiting_animation()
-	else:
-		start_waiting_animation()
+	stop_waiting_animation()
 
 	print("YOU ARE PLAYER " + str(player))
 	my_player = parsed.get("myPlayerId", null)
+	
+	var player1_id := str(parsed.get("player1", ""))
+	var player2_id := str(parsed.get("player2", ""))
+	var my_player_id := str(my_player)
+
+	spectator_mode = false
+	if my_player_id != "" and player1_id != "" and player2_id != "":
+		if my_player_id != player1_id and my_player_id != player2_id:
+			spectator_mode = true
+
+	if spectator_mode:
+		player = 1
+		isTurn = false
+		gamePlaying = false
+		print("SPECTATOR MODE ACTIVE")
+		if is_instance_valid(spectator_label):
+			spectator_label.show()
+	else:
+		if is_instance_valid(spectator_label):
+			spectator_label.hide()
+
+	if spectator_mode:
+		if parsed.has("avatar1") and is_instance_valid(player_avatar_display):
+			var p1_data: Dictionary = _parse_avatar_string(str(parsed["avatar1"]))
+			player_avatar_display.call_deferred("update_avatar_from_data", p1_data)
+		if parsed.has("avatar2") and is_instance_valid(opp_avatar_display):
+			var p2_data: Dictionary = _parse_avatar_string(str(parsed["avatar2"]))
+			opp_avatar_display.call_deferred("update_avatar_from_data", p2_data)
+	else:
+		var opponent_avatar_key := "avatar2" if player == 1 else "avatar1"
+		if parsed.has(opponent_avatar_key):
+			var avatar_string: String = str(parsed[opponent_avatar_key])
+			var opponent_data: Dictionary = _parse_avatar_string(avatar_string)
+			if is_instance_valid(opp_avatar_display):
+				opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
 	if saved:
 		if player == 1:
@@ -412,9 +595,17 @@ func _set_game_data(new_replay: String, saved: bool = false):
 	
 	receivedMessage = null
 	gameDataSet = true
+	
+	if turnNum >= 5:
+		if isNullOrEmpty(replay3) and not isNullOrEmpty(replay):
+			replay3 = replay
+		if isNullOrEmpty(replay4) and not isNullOrEmpty(replay2):
+			replay4 = replay2
 
 	if not saved:
+		allow_waiting_from_loaded_data = true
 		refresh_ui_state()
+		allow_waiting_from_loaded_data = false
 
 func sendGameData() -> void:
 	turnNum += 1
@@ -432,10 +623,15 @@ func sendGameData() -> void:
 		replayKey: myReplay.substr(0, len(myReplay)-1),
 		"round": "1" if turnNum+1 <= 3 else "2"
 	}
+	
+	if turnNum >= 5:
+		var oppFinalScore : int = skip_score1 if player == 2 else skip_score2
+		var winNum = 1 if myScore > oppFinalScore else (-1 if myScore < oppFinalScore else 0)
+		gameData["winner"] = str(my_player) + "|" + str(winNum)
+		print("My Final Score: ", myScore, " Opp Final Score: ", oppFinalScore, " winNum: ", winNum)
 	if game_over:
 		stop_waiting_animation()
 		showWinner()
-		gameData["winner"] = my_player + "|" + ("1" if didIWin else "-1")
 	else:
 		play_sent_animation()
 	var avatar_key := ("avatar1" if player == 1 else "avatar2")
@@ -450,6 +646,8 @@ func sendGameData() -> void:
 		print("App not connected! " + game_data)
 	
 func start_button_pressed():
+	if spectator_mode:
+		return
 	round_container.visible = false
 	waiting_blur.visible = false
 	print("Start Button Pressed")
@@ -464,12 +662,26 @@ func startGame() -> void:
 	replayFinished = false
 	receivedMessage = null
 	replayTimers.clear()
+	hoop_time = 0
+	_hoop_acc = 0.0
+	if hoop_center_tween and hoop_center_tween.is_running():
+		hoop_center_tween.kill()
+	if is_instance_valid(moving_hoop_root):
+		moving_hoop_root.position.x = 0.0
 	spawnBall(player)
+	
+func _haptic_explosion(strength: float = 0.35, duration_ms: int = 22) -> void:
+	if not (OS.has_feature("android") or OS.has_feature("ios")):
+		return
+
+	strength = clampf(strength, 0.0, 1.0)
+	Input.vibrate_handheld(duration_ms, strength)
 	
 func incrementScore(player_num: int) -> void:
 	if player_num == player:
 		myScore += 1
 		youScoreLabel.text = str(myScore).pad_zeros(2)
+		_haptic_explosion()
 	else:
 		oppScore += 1
 		oppScoreLabel.text = str(oppScore).pad_zeros(2)
@@ -477,10 +689,13 @@ func incrementScore(player_num: int) -> void:
 func setScore(player_num: int, score: int) -> void:
 	print("SETTING SCORE FOR PLAYER " + str(player_num) + " to " + str(score))
 	if player_num == player:
+		_haptic_explosion()
 		myScore = score
+		print("MY SCORE: ", myScore)
 		youScoreLabel.text = str(myScore).pad_zeros(2)
 	else:
 		oppScore = score
+		print("OPP SCORE: ", oppScore)
 		oppScoreLabel.text = str(oppScore).pad_zeros(2)
 	
 func isNullOrEmpty(str) -> bool:
@@ -500,6 +715,46 @@ func hideUI() -> void:
 	skip_button.visible = false
 
 func _process(delta: float) -> void:
+	if game_mode == "h" and is_instance_valid(moving_hoop_root):
+		if gamePlaying or replayPlaying:
+			if hoop_center_tween and hoop_center_tween.is_running():
+				hoop_center_tween.kill()
+
+			_hoop_acc += delta * 60.0
+
+			while _hoop_acc >= 1.0:
+				hoop_time += 1
+				_hoop_acc -= 1.0
+
+			var t := hoop_time % 480
+			var hoop_pos := 0.0
+
+			if t < 120:
+				hoop_pos = float(t) / 120.0
+			elif t < 240:
+				hoop_pos = 1.0 - float(t - 120) / 120.0
+			elif t < 360:
+				hoop_pos = -float(t - 240) / 120.0
+			else:
+				hoop_pos = -1.0 + float(t - 360) / 120.0
+
+			moving_hoop_root.position.x = hoop_pos
+		else:
+			hoop_time = 0
+			_hoop_acc = 0.0
+
+			if abs(moving_hoop_root.position.x) > 0.001:
+				if hoop_center_tween == null or not hoop_center_tween.is_running():
+					hoop_center_tween = create_tween()
+					hoop_center_tween.tween_property(
+						moving_hoop_root,
+						"position:x",
+						0.0,
+						0.35
+					)
+			else:
+				moving_hoop_root.position.x = 0.0
+	
 	if gamePlaying or replayPlaying:
 		elapsedTime += delta
 		timeRemainingLabel.text = "00:" + str(int(ceil(45.0 - elapsedTime))).pad_zeros(2)
@@ -515,6 +770,7 @@ func _process(delta: float) -> void:
 				_set_game_data(receivedMessage, true)
 			
 			if wasReplayPlaying == false:
+				print("SENDING DATA")
 				sendGameData()
 				if player == 1:
 					if turnNum <= 3:
@@ -529,16 +785,8 @@ func _process(delta: float) -> void:
 					skip_score2 = myScore
 					replay4 = myReplay
 			else:
-				hideUI()
-				replayTimers.clear()
-				replayPlaying = false
-				replayFinished = true
-				if turnNum == 3:
-					setScore(1, score1)
-					setScore(2, score2)
-				elif turnNum == 5:
-					setScore(1, skip_score1)
-					setScore(2, skip_score2)
+				_finish_replay(true)
+				return
 				
 			clearBalls()
 			isTurn = false			
@@ -573,6 +821,8 @@ func play_sent_animation() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
+
+		if not replayPlaying and not gamePlaying and isTurn == false:
 			start_waiting_animation()
 	)
 	
