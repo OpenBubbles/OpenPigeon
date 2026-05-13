@@ -27,7 +27,7 @@ import kotlin.math.max
 class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thread(), SurfaceHolder.Callback {
     var running = true
 
-    val bitmap: Bitmap = BitmapFactory.decodeResource(activity.resources, R.drawable.pool_transparent)
+    var bitmap: Bitmap = BitmapFactory.decodeResource(activity.resources, R.drawable.pool_transparent)
     val cue: Bitmap = BitmapFactory.decodeResource(activity.resources, R.drawable.cue)
 
     init {

@@ -136,6 +136,10 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         }
 
         fun findByName(name: String): Game? {
+            if (name == "pool3") {
+                return games.find { it is PoolGame }
+            }
+
             return games.find { it.getName() == name }
         }
 
@@ -451,7 +455,11 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
             val intent = Intent(extension.context, if (session?.getGame()?.isSupported(session.currentMessage) == true) session.getGame()!!.gameClass() else GameNotFound::class.java).apply {
                 putExtra("SESSION", message?.session ?: "")
                 putExtra("GAME", session?.getGame()?.getName())
-                putExtra("DISPLAY_GAME", session?.currentMessage?.get("game_name"))
+                putExtra("DISPLAY_GAME", run {
+                    val game = session?.currentMessage?.get("game")
+                    val gameName = session?.currentMessage?.get("game_name")
+                    if (game == "pool3") "8 Ball+" else gameName
+                })
                 data = "data://${System.currentTimeMillis()}".toUri()
             }
             it.clickable(onClick =

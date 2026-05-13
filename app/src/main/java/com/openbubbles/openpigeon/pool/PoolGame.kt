@@ -17,31 +17,41 @@ class PoolGame : Game {
         return "5"
     }
 
-    override fun getName(): String {
-        return "pool"
-    }
-
-    override fun displayName(): String {
-        return "8 Ball"
-    }
-
     override fun isConfigurable(): Boolean {
         return true
     }
-
-    var hard = false
+    var plusMode = "8 Ball"
+    var difficulty = "Normal"
 
     @Composable
     override fun Configuration(
         context: Context?,
     ) {
         Box(modifier = GlanceModifier.padding(16.dp)) {
-            RenderConfigOption(this, "Difficulty", listOf("Normal", "Hard"), if (hard) "Hard" else "Normal")
+            RenderConfigOption(this, "Game Mode", listOf("8 Ball", "8 Ball+"), plusMode)
+        }
+        Box(modifier = GlanceModifier.padding(16.dp)) {
+            RenderConfigOption(this, "Difficulty", listOf("Normal", "Hard"), difficulty)
         }
     }
 
     override fun setConfigOption(name: String, value: String) {
-        hard = value == "Hard"
+        when (name.lowercase()) {
+            "game mode" -> plusMode = value
+            "difficulty" -> difficulty = value
+            else -> {
+                println("Warning: unknown config option ‘$name’")
+            }
+        }
+        println("Config option '$name' set to '$value'")
+    }
+
+    override fun getName(): String {
+        return "pool"
+    }
+
+    override fun displayName(): String {
+        return plusMode
     }
 
     override fun gameClass(): Class<*> {
@@ -49,14 +59,52 @@ class PoolGame : Game {
     }
 
     override fun gamePoster(config: Map<String, String>?): Int {
-        return R.drawable.pool_image
+        val game = config?.get("game") ?: "pool"
+        val mode = config?.get("mode") ?: "n"
+
+        return when {
+            game == "pool3" && mode == "h" ->
+                R.drawable.pool_plus_hard_preview
+
+            game == "pool3" ->
+                R.drawable.pool_plus_normal_preview
+
+            mode == "h" ->
+                R.drawable.pool_hard_preview
+
+            else ->
+                R.drawable.pool_normal_preview
+        }
+    }
+
+    override fun playName(): String {
+        return plusMode
+    }
+
+    override fun getDisplaySubtitle(context: Context, message: Map<String, String>): String {
+        message["winner"]?.let {
+            return super.getDisplaySubtitle(context, message)
+        }
+
+        message["caption"]?.takeIf { it.startsWith("Let's") }?.let {
+            val gameMode = if (message["game"] == "pool3") "8 Ball+" else "8 Ball"
+            return "Let's play $gameMode!"
+        }
+
+        return super.getDisplaySubtitle(context, message)
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
         AvatarData.init(context)
+
+        val selectedGameName = if (plusMode == "8 Ball+") "pool3" else "pool"
+
         return super.getNewGameData(context)?.apply {
-            // mode h for hard
-            put("mode", if (hard) "h" else "n")
+            put("game", selectedGameName)
+            put("game_name", plusMode)
+            put("caption", "Let's play $plusMode!")
+
+            put("mode", if (difficulty == "Hard") "h" else "n")
             put("v2", "2")
             put("v3", "2")
             put("v4", "2")

@@ -20,6 +20,7 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.Window
 import android.widget.Button
+import java.util.Locale
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -717,7 +718,7 @@ class PoolActivity : AppCompatActivity() {
     }
 
     fun clampCueBallPosition(x: Float, y: Float): Pair<Float, Float> {
-        val maxX = if (scratch && isFirst) breakLineX else cueBallMaxX
+        val maxX = if (scratch && isFirst && !isEightBallPlus) breakLineX else cueBallMaxX
         val clampedX = min(maxX, max(cueBallMinX, x))
         val clampedY = min(cueBallMaxY, max(cueBallMinY, y))
         return Pair(clampedX, clampedY)
@@ -1131,6 +1132,87 @@ class PoolActivity : AppCompatActivity() {
         }.joinToString("")
     }
 
+    private fun generateRandomRack(seed: Int): String {
+        val rng = Drand48()
+
+        rng.srand48(seed.toLong())
+        data class Slot(val x: Float, val y: Float)
+
+        val slots = mutableListOf<Slot>()
+        val maxAttempts = 10_000
+        var attempts = 0
+
+        while (slots.size < 30 && attempts < maxAttempts) {
+            attempts++
+
+            val rx = rng.drand48()
+            val ry = rng.drand48()
+
+            val x = String.format(
+                Locale.US,
+                "%f",
+                rx * (cueBallMaxX - cueBallMinX).toDouble() + cueBallMinX
+            ).toFloat()
+
+            val y = String.format(
+                Locale.US,
+                "%f",
+                ry * (cueBallMaxY - cueBallMinY).toDouble() + cueBallMinY
+            ).toFloat()
+
+            val tooClose = slots.any { s ->
+                val dx = s.x - x
+                val dy = s.y - y
+                sqrt(dx * dx + dy * dy) < 30.0f
+            }
+
+            if (!tooClose) {
+                slots.add(Slot(x, y))
+            }
+        }
+
+        Log.i("PoolPlus", "Generated ${slots.size} slots for seed=$seed after $attempts attempts")
+
+        if (slots.size < 30) {
+            Log.e("PoolPlus", "Failed to generate 30 slots after $attempts attempts; got ${slots.size}")
+        }
+
+        val ballsLeft = mutableListOf(
+            1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15,
+            1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15
+        )
+
+        val builder = StringBuilder()
+
+        for (i in 0 until slots.size) {
+            rng.srand48(seed.toLong())
+
+            val x = slots[i].x
+            val y = slots[i].y
+
+            val ballNum: Int = when (i) {
+                0 -> 8
+                1 -> 0
+                else -> {
+                    val pick = (rng.drand48() * ballsLeft.size).toInt()
+                    val n = ballsLeft[pick]
+                    ballsLeft.removeAt(pick)
+                    n
+                }
+            }
+
+            builder.append("#")
+            builder.append(String.format(Locale.US, "%f", x))
+            builder.append(",")
+            builder.append(String.format(Locale.US, "%f", y))
+            builder.append(",0.000000,1.000000,")
+            builder.append(ballNum)
+            builder.append(",0.000000,0.000000,0.000000")
+        }
+
+        return builder.toString()
+    }
+
     private fun buildBalls(balls: String, skew: String?) {
         val ballsThatShouldNotGoIn = skew?.let {
             val items = arrayListOf<Int>()
@@ -1171,6 +1253,7 @@ class PoolActivity : AppCompatActivity() {
     var player = 0
     var uuid1: String? = null
     var uuid2: String? = null
+    var isEightBallPlus = false
 
     private fun resolveMyPlayerSlot(msg: Map<String, String>): Int {
         val myId = gameSessionIPC?.getSenderUUID(sessionId) ?: ""
@@ -1206,7 +1289,22 @@ class PoolActivity : AppCompatActivity() {
         poolBalls.clear()
         cueBall = null
         replayHits.clear()
+        val gameName = msg["game"] ?: msg["name"] ?: msg["gameName"] ?: baseGame.getName()
+        isEightBallPlus = gameName == "pool3"
+
+        Log.i("PoolMode", "gameName=$gameName isEightBallPlus=$isEightBallPlus")
         isHard = msg["mode"]!! != "n"
+
+        renderer.bitmap = BitmapFactory.decodeResource(
+            resources,
+            when {
+                isEightBallPlus && isHard -> R.drawable.pool_transparent_plus_hard
+                isEightBallPlus -> R.drawable.pool_transparent_plus
+                isHard -> R.drawable.pool_transparent_hard
+                else -> R.drawable.pool_transparent
+            }
+        )
+
         val num = msg["num"]!!
         uuid1 = msg["player1"]
         uuid2 = msg["player2"]
@@ -1293,6 +1391,10 @@ class PoolActivity : AppCompatActivity() {
                 runOnUiThread {
                     findViewById<ImageButton>(R.id.skip_replay).visibility = View.GONE
                     setCueUiVisible(false)
+
+                    val label = findViewById<TextView>(R.id.state_label)
+                    label.visibility = View.VISIBLE
+                    label.text = "Waiting for opponent..."
                 }
 
                 mode = PoolMode.Disabled
@@ -1304,9 +1406,21 @@ class PoolActivity : AppCompatActivity() {
             }
             iAmStripes = null
             updateBallTypeUi()
-            finalBalls = "#632.746155,178.000000,0.000000,0.801981,9,5.632916,7.415801,5.384167#632.746155,199.000000,0.000000,0.050000,10,-1.479509,5.981912,-0.639594#632.746155,220.000000,0.000000,0.145560,7,-4.857441,-3.796834,-5.439248#632.746155,241.000000,0.000000,0.050000,6,3.548234,-7.060621,-3.771457#632.746155,262.000000,0.000000,0.964504,1,7.809305,-4.673173,7.553514#614.559570,188.500000,0.000000,0.868768,12,6.889496,7.963203,-4.292648#614.559570,209.500000,0.000000,0.759525,13,4.140916,-0.562560,-5.371364#614.559570,230.500000,0.000000,0.839745,15,-7.863293,-3.022674,-7.419384#614.559570,251.500000,0.000000,1.153367,11,-5.802108,7.468212,-7.951379#596.373047,199.000000,0.000000,1.053345,4,1.589040,2.324956,0.526632#596.373047,220.000000,0.000000,1.437710,8,3.826384,-4.029884,3.487882#596.373047,241.000000,0.000000,1.085851,3,4.912686,3.917787,5.660569#578.186523,209.500000,0.000000,1.100000,2,-5.776122,-4.926837,0.760138#578.186523,230.500000,0.000000,0.900000,5,-1.848043,-0.386153,6.410922#560.000000,220.000000,0.000000,1.000000,14,2.079596,7.069168,-7.283604#205.000000,220.000000,0.000000,0.990000,0,4.519086,0.074793,-2.054408"
+            if (isEightBallPlus) {
+                val seedStr = msg["seed"]
+                val seed = seedStr?.toIntOrNull()
+                if (seed == null) {
+                    Log.e("PoolPlus", "pool3 game without valid seed (got '$seedStr'); falling back to normal rack")
+                    finalBalls = "#632.746155,178.000000,0.000000,0.801981,9,5.632916,7.415801,5.384167#632.746155,199.000000,0.000000,0.050000,10,-1.479509,5.981912,-0.639594#632.746155,220.000000,0.000000,0.145560,7,-4.857441,-3.796834,-5.439248#632.746155,241.000000,0.000000,0.050000,6,3.548234,-7.060621,-3.771457#632.746155,262.000000,0.000000,0.964504,1,7.809305,-4.673173,7.553514#614.559570,188.500000,0.000000,0.868768,12,6.889496,7.963203,-4.292648#614.559570,209.500000,0.000000,0.759525,13,4.140916,-0.562560,-5.371364#614.559570,230.500000,0.000000,0.839745,15,-7.863293,-3.022674,-7.419384#614.559570,251.500000,0.000000,1.153367,11,-5.802108,7.468212,-7.951379#596.373047,199.000000,0.000000,1.053345,4,1.589040,2.324956,0.526632#596.373047,220.000000,0.000000,1.437710,8,3.826384,-4.029884,3.487882#596.373047,241.000000,0.000000,1.085851,3,4.912686,3.917787,5.660569#578.186523,209.500000,0.000000,1.100000,2,-5.776122,-4.926837,0.760138#578.186523,230.500000,0.000000,0.900000,5,-1.848043,-0.386153,6.410922#560.000000,220.000000,0.000000,1.000000,14,2.079596,7.069168,-7.283604#205.000000,220.000000,0.000000,0.990000,0,4.519086,0.074793,-2.054408"
+                } else {
+                    Log.i("PoolPlus", "Generating 8 Ball+ rack with seed=$seed")
+                    finalBalls = generateRandomRack(seed)
+                }
+            } else {
+                finalBalls = "#632.746155,178.000000,0.000000,0.801981,9,5.632916,7.415801,5.384167#632.746155,199.000000,0.000000,0.050000,10,-1.479509,5.981912,-0.639594#632.746155,220.000000,0.000000,0.145560,7,-4.857441,-3.796834,-5.439248#632.746155,241.000000,0.000000,0.050000,6,3.548234,-7.060621,-3.771457#632.746155,262.000000,0.000000,0.964504,1,7.809305,-4.673173,7.553514#614.559570,188.500000,0.000000,0.868768,12,6.889496,7.963203,-4.292648#614.559570,209.500000,0.000000,0.759525,13,4.140916,-0.562560,-5.371364#614.559570,230.500000,0.000000,0.839745,15,-7.863293,-3.022674,-7.419384#614.559570,251.500000,0.000000,1.153367,11,-5.802108,7.468212,-7.951379#596.373047,199.000000,0.000000,1.053345,4,1.589040,2.324956,0.526632#596.373047,220.000000,0.000000,1.437710,8,3.826384,-4.029884,3.487882#596.373047,241.000000,0.000000,1.085851,3,4.912686,3.917787,5.660569#578.186523,209.500000,0.000000,1.100000,2,-5.776122,-4.926837,0.760138#578.186523,230.500000,0.000000,0.900000,5,-1.848043,-0.386153,6.410922#560.000000,220.000000,0.000000,1.000000,14,2.079596,7.069168,-7.283604#205.000000,220.000000,0.000000,0.990000,0,4.519086,0.074793,-2.054408"
+            }
             buildBalls(finalBalls, null)
-            scratch = true
+            scratch = !isEightBallPlus
 
             mode = PoolMode.Aiming
             runOnUiThread {
