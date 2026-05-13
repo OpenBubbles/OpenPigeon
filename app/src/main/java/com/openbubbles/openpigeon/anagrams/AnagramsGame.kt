@@ -4,24 +4,14 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
-import androidx.glance.Image
-import androidx.glance.ImageProvider
-import androidx.glance.action.ActionParameters
-import androidx.glance.action.actionParametersOf
-import androidx.glance.action.clickable
-import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.layout.Box
-import androidx.glance.layout.Row
 import androidx.glance.layout.padding
-import com.openbubbles.openpigeon.ConfigureCallback
 import com.openbubbles.openpigeon.Game
-import com.openbubbles.openpigeon.GameNotFound
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
-import kotlin.random.Random
 
 class AnagramsGame : Game {
     var mode = "6 Letters" // "6 Letters" or "7 Letters"
