@@ -4,7 +4,7 @@ class_name Cups
 var prev_cups: Array
 var cups_in_play: Array = [0,1,2,3,4,5,6,7,8,9]
 var random_positions: Dictionary = {}
-var mirror_x: bool = false
+var mirror_x: bool = false  # legacy flag, kept for compatibility; unused
 
 func _ready():
 	for cup in get_children():
@@ -45,16 +45,36 @@ func set_cups_in_play(cups: Array):
 	else:
 		arrangeCups()
 
+const CUP_REMOVE_LIFT_HEIGHT: float = 0.18      # solo-cup height, meters
+const CUP_REMOVE_LIFT_DURATION: float = 0.18    # quick pop up
+const CUP_REMOVE_SLIDE_DURATION: float = 0.22   # zip off-screen
+const CUP_REMOVE_EXIT_X: float = 2.0            # far outside table bounds
+
 func remove_cup(cup_num: int):
 	var cup: StaticBody3D = get_node("cup" + str(cup_num))
 	cup.name = "cupremoved"
-	var cup_mesh: ArrayMesh = cup.get_child(0).mesh
-	cup_mesh.surface_get_material(0).transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_DEPTH_PRE_PASS
 	cup.get_child(0).use_collision = false
-	var fade_out = get_tree().create_tween()
-	fade_out.tween_property(cup_mesh.surface_get_material(0), "albedo_color", Color(1, 1, 1, 0), 0.25).set_trans(Tween.TRANS_SINE)
-	fade_out.set_loops(1)
-	fade_out.play()
+
+	# Pick exit direction from current LOCAL x. Local space works for both
+	# my_cups and replay_cups: the replay side is rotated 180 deg around Y,
+	# so a local +x exit visually goes to the opponent's right (= our left),
+	# which matches "nearest screen edge" on that side too.
+	var start_pos: Vector3 = cup.position
+	var exit_x_sign: float = 1.0 if start_pos.x >= 0.0 else -1.0
+	var lifted_pos: Vector3 = start_pos + Vector3(0.0, CUP_REMOVE_LIFT_HEIGHT, 0.0)
+	var exit_pos: Vector3 = Vector3(exit_x_sign * CUP_REMOVE_EXIT_X, lifted_pos.y, lifted_pos.z)
+
+	var anim = get_tree().create_tween()
+	anim.tween_property(cup, "position", lifted_pos, CUP_REMOVE_LIFT_DURATION) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	anim.tween_property(cup, "position", exit_pos, CUP_REMOVE_SLIDE_DURATION) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	anim.tween_callback(func():
+		if is_instance_valid(cup):
+			cup.visible = false
+	)
+	anim.play()
+
 	cups_in_play.remove_at(cups_in_play.find(cup_num-1))
 
 	# In random mode, cups never rerack
@@ -63,6 +83,10 @@ func remove_cup(cup_num: int):
 	print(cups_in_play)
 
 func _arrange_random() -> void:
+	# Apply the seed-derived layout in this Cups node's LOCAL space.
+	# The opposing Cups container (replay_cups) is rotated 180 deg around Y
+	# at the scene level, so the same local positions land on the opposite
+	# end of the table automatically. No code-side mirroring needed.
 	for cup_idx in cups_in_play:
 		if not random_positions.has(cup_idx):
 			continue
@@ -71,11 +95,7 @@ func _arrange_random() -> void:
 			cup_node = get_child(cup_idx)
 		if cup_node == null:
 			continue
-		var pos: Vector3 = random_positions[cup_idx]
-		if mirror_x:
-			pos.x = -pos.x
-			pos.z = -1.89 - pos.z
-		cup_node.position = pos
+		cup_node.position = random_positions[cup_idx]
 
 func arrangeCups():
 	var num_cups = len(cups_in_play)

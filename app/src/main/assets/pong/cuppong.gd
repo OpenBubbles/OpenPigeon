@@ -127,9 +127,78 @@ func _ready():
 	_enforce_mobile_lighting_settings()
 	
 func _enforce_mobile_lighting_settings() -> void:
-	var vp = get_viewport()
+	# --- Viewport: solid AA, no temporal jitter (TAA flickers on mobile) ---
+	var vp := get_viewport()
 	vp.msaa_3d = Viewport.MSAA_4X
+	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
+	vp.use_taa = false
+	vp.use_debanding = true
+	# One directional light shadow is all this scene has, but positional
+	# atlas size affects directional too on the mobile renderer. Keep a
+	# decent size with minimal subdivisions so the directional tile is
+	# big and stable.
+	vp.positional_shadow_atlas_size = 2048
+	vp.positional_shadow_atlas_quad_0 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_4
+	vp.positional_shadow_atlas_quad_1 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED
+	vp.positional_shadow_atlas_quad_2 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED
+	vp.positional_shadow_atlas_quad_3 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED
+
+	# --- Directional sun: kill cascade thrashing ---
+	# Default PSSM uses up to 4 cascades, and objects near a split boundary
+	# can flicker as the renderer ping-pongs them between cascades. The
+	# playable area here is only a few meters across, so a single orthogonal
+	# shadow frustum gives us a rock-stable, high-quality shadow with no
+	# splits to thrash.
+	if is_instance_valid(sun):
+		sun.shadow_enabled = true
+		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+		sun.directional_shadow_max_distance = 8.0
+		sun.directional_shadow_fade_start = 0.95
+		sun.directional_shadow_blend_splits = false
+		# Use Godot's default biases (0.1 / 2.0); the cascade-thrash fix above
+		# is what actually stabilizes shadows here. Don't tighten bias unless
+		# acne shows up.
+		sun.shadow_bias = 0.1
+		sun.shadow_normal_bias = 2.0
+		# Small blur smooths jagged shadow edges without making them mushy.
+		sun.shadow_blur = 1.0
+		sun.shadow_opacity = 1.0
+		sun.shadow_transmittance_bias = 0.05
+
+	# --- Environment: disable mobile-fragile post-FX ---
+	if is_instance_valid(env) and env.environment != null:
+		var e: Environment = env.environment
+		e.ssao_enabled = false
+		e.ssil_enabled = false
+		e.sdfgi_enabled = false
+		e.glow_enabled = false
+		e.fog_enabled = false
+		e.volumetric_fog_enabled = false
+		# Make sure we have some ambient so cup interiors aren't pitch black.
+		if e.ambient_light_source == Environment.AMBIENT_SOURCE_DISABLED:
+			e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+			e.ambient_light_color = Color(0.6, 0.6, 0.65)
+			e.ambient_light_energy = 0.35
+
+	# --- Anti-flicker on small static meshes ---
+	# Tell every MeshInstance3D / CSGMesh3D that they're static so the
+	# renderer can cache their data, and disable GI to remove any chance
+	# of GI probe sampling drift.
+	_apply_static_geometry_hints(self)
+
 	Engine.physics_jitter_fix = 0.5
+
+func _apply_static_geometry_hints(root: Node) -> void:
+	for child in root.get_children():
+		if child is GeometryInstance3D:
+			var gi: GeometryInstance3D = child
+			gi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+			# Static lighting hint is harmless for things that never move
+			# (the table, cups before being thrown off) and is ignored by
+			# moving meshes that get re-baked each frame anyway.
+			# We don't toggle cast_shadow here because some nodes (like the
+			# ball's fake-shadow decal) may have it intentionally disabled.
+		_apply_static_geometry_hints(child)
 		
 func _create_debug_overlay() -> void:
 	if not _debug_perf:
