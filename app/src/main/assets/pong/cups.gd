@@ -3,13 +3,15 @@ class_name Cups
 
 var prev_cups: Array
 var cups_in_play: Array = [0,1,2,3,4,5,6,7,8,9]
-	
+var random_positions: Dictionary = {}
+var mirror_x: bool = false
+
 func _ready():
 	for cup in get_children():
 		var mesh3d: CSGMesh3D = cup.get_child(0)
 		mesh3d.mesh = mesh3d.mesh.duplicate()
 		mesh3d.mesh.surface_set_material(0, mesh3d.mesh.surface_get_material(0).duplicate())
-	
+
 func reset_cups(cups: Array):
 	var all_cups = get_children()
 	for cup_idx in range(len(all_cups)):
@@ -23,7 +25,12 @@ func reset_cups(cups: Array):
 		cup_mesh.surface_get_material(0).albedo_color = Color(1, 1, 1, 1)
 	cups_in_play = [0,1,2,3,4,5,6,7,8,9]
 	set_cups_in_play(cups)
-	
+
+func apply_random_positions(positions: Array) -> void:
+	random_positions.clear()
+	for i in range(min(positions.size(), 10)):
+		random_positions[i] = positions[i]
+
 func set_cups_in_play(cups: Array):
 	for cup_idx in cups_in_play:
 		if cup_idx not in cups:
@@ -32,8 +39,12 @@ func set_cups_in_play(cups: Array):
 			cup.name = "cupremoved"
 			cup.get_child(0).use_collision = false
 	cups_in_play = cups
-	arrangeCups()
-	
+
+	if random_positions.size() > 0:
+		_arrange_random()
+	else:
+		arrangeCups()
+
 func remove_cup(cup_num: int):
 	var cup: StaticBody3D = get_node("cup" + str(cup_num))
 	cup.name = "cupremoved"
@@ -45,9 +56,27 @@ func remove_cup(cup_num: int):
 	fade_out.set_loops(1)
 	fade_out.play()
 	cups_in_play.remove_at(cups_in_play.find(cup_num-1))
-	arrangeCups()
+
+	# In random mode, cups never rerack
+	if random_positions.size() == 0:
+		arrangeCups()
 	print(cups_in_play)
-	
+
+func _arrange_random() -> void:
+	for cup_idx in cups_in_play:
+		if not random_positions.has(cup_idx):
+			continue
+		var cup_node: Node = get_node_or_null("cup" + str(cup_idx + 1))
+		if cup_node == null:
+			cup_node = get_child(cup_idx)
+		if cup_node == null:
+			continue
+		var pos: Vector3 = random_positions[cup_idx]
+		if mirror_x:
+			pos.x = -pos.x
+			pos.z = -1.89 - pos.z
+		cup_node.position = pos
+
 func arrangeCups():
 	var num_cups = len(cups_in_play)
 	

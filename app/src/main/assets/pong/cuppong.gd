@@ -52,6 +52,7 @@ var my_cups: Cups
 var replay_cups: Cups
 var current_ball: PongBall
 var winner: String = ""
+var _current_seed: int = 0
 
 var my_uuid: String = ""
 var game_over: bool = false
@@ -119,7 +120,8 @@ func _ready():
 	else:
 		print("App plugin is not available")
 		#board:0,1,2,3,4,5,6,7,8,9&0,1,2,3,4,5,6,7,8,9|move:K;AEDSK;AEDSLaC~DgLbFdCRLdHdCgLeI~BSLfKFBhLgL7ATLhM\'AiLiN zULjO0zkLlPtyWLmPTymLnP5xZLoP1xpLpPJw2LqPbwsLrOCv5LsNNvwLuMJu9LvLruALwJ7t(LxIltFLyGys-LzEwsKL9CIskL;BAsGLRA_suL1A siL*A_sgL;A_sgMdA_siMgA_skMiA_skMiA_skMiA_sk2&25|move:K;AEDSK-DgC K_FtCAK(HsB5K!JbBoK9KRAUK7L AdK4NgzJK2Ocy(K0O5yyKYPxx4KVPVxoKTP5wVKRP0wfKOPGvMKMO.u.KKOwuEKINFt!KFMAtwKDLhs3KBJUspKzH\'rWKxGjriKuEfqQKsB~qcJ(A(qaJ)BjqmKeBnqsKnBeqqKuA_qpKxA_qmKyA_qlKyA_qlKyA_ql6&24,28|move:K;AEDSK\'B9DyK-EjC*K_GpCGK)IhB\'K*J5BNK!LrBgK9MLAWK8NPApK6ODz4K4PdzyK2PKy*K1P2yHKZP5ybKXPTxRKWPsxlKUOYw1KSN_wwKRM-v@KPL7vGKNKGvbKMI*uSKKHkunKIFot4KHDetzLSB8tnK5BotALtA-tALoA-tELkA_tGLiA_tILhA_tJLhA_tJLhA_tJ0&24|move:K;AEDSK(C(DdK6FhCMKZHhB;KSI*BJKLKIA-KEL9AGKxNaz)KpN.zDKiO1y*KbPuyBJ_PUx@J9P5xAJ2P1w!JWPIwzJPPav~JIOAvzJBNLu~JuMHuzJnLpt~JhJ4tAJaIis!I)GvsBI8Esr*ITEvrOIAFHrxIgGErgH9Hlq!HPH0qUHwIeqDHcIoqmG5Ikp-GMH*p1GtHFpKGaG4puF3F)pdFKE!o9FrDSoSE\'CloCE1ALolEJyXn EqwUn1D\'uDnLD1r\'nv&24|board:1,3,4,5,7,8,9&0,1,2,3,4,5,6,7,8,9
-		_set_game_data('{"isYourTurn":true,"skip_score1":"0","skip_score2":"0","player":"1","replay":"board:0,1,3,5,6,7,8,9&0,1,2,3,4,5,6,7,8,9|move:K;AEDSLaDmDeLcFACRLdHyCjLeJgBXLgKVBpLhL;A3LiNjAvLjOez9LlO7zBLmPyy_LnPWyILoP5ybLqP0xQLrPFxjLsO-wYLtOtwrLvNCv6LwMxvALxLdu)LyJQuJLzH)udLBGdtTLCD;tnK\'C;tHLgC9tALsCYtxLhCItZK;CstFK*B7tsK(ButuK;A_tFLeA_tOLhA_tOLhA_tNLhA_tN0&24,27,31|move:K;AEDSK-C-DhK)FlCVK@HkCmK9I_B0K6KLBsK3L@A6K0NcAyKXN;z@KVO2zFKSPvy.KPPVyMKMP5yeKJP1xTKGPIxmKDO;w1KBOzwvKyNJv~KvMFvDKsLmu.KpJ1uMKnIfugKkGrtWKhEotqKgDhtHKgC uxKgCPvnKhB;wcKhBqw(KhAsx3KhBoyQKhB3zCKiCgAoKiCqBaKiCmB8KiB(CTKiBGDEKjA5EqKjA3E;KjBpF4&24,29,38|board:1,3,5,6,7,8,9&0,1,2,3,4,5,6,7,8,9","score1":"0","score2":"0","num":"2","game":"beer","mode":"n","seed":"-1429210425","round":"1","seed2":"0"}')
+		#_set_game_data('{"isYourTurn":true,"skip_score1":"0","skip_score2":"0","player":"1","replay":"board:0,1,3,5,6,7,8,9&0,1,2,3,4,5,6,7,8,9|move:K;AEDSLaDmDeLcFACRLdHyCjLeJgBXLgKVBpLhL;A3LiNjAvLjOez9LlO7zBLmPyy_LnPWyILoP5ybLqP0xQLrPFxjLsO-wYLtOtwrLvNCv6LwMxvALxLdu)LyJQuJLzH)udLBGdtTLCD;tnK\'C;tHLgC9tALsCYtxLhCItZK;CstFK*B7tsK(ButuK;A_tFLeA_tOLhA_tOLhA_tNLhA_tN0&24,27,31|move:K;AEDSK-C-DhK)FlCVK@HkCmK9I_B0K6KLBsK3L@A6K0NcAyKXN;z@KVO2zFKSPvy.KPPVyMKMP5yeKJP1xTKGPIxmKDO;w1KBOzwvKyNJv~KvMFvDKsLmu.KpJ1uMKnIfugKkGrtWKhEotqKgDhtHKgC uxKgCPvnKhB;wcKhBqw(KhAsx3KhBoyQKhB3zCKiCgAoKiCqBaKiCmB8KiB(CTKiBGDEKjA5EqKjA3E;KjBpF4&24,29,38|board:1,3,5,6,7,8,9&0,1,2,3,4,5,6,7,8,9","score1":"0","score2":"0","num":"2","game":"beer","mode":"h","seed":"-1429210425","round":"1","seed2":"0"}')
+		_set_game_data('{"isYourTurn":true,"skip_score1":"0","skip_score2":"0","player":"2","score1":"0","score2":"0","num":"1","game":"beer","mode":"h","seed":"-472793889","seed2":"0"}')
 	if _debug_perf:
 		_create_debug_overlay()
 	_enforce_mobile_lighting_settings()
@@ -322,7 +324,72 @@ func _on_dot_timer_timeout():
 	for i in range(dot_count):
 		dots += "."
 	waiting_label.text = BASE_WAIT_TEXT + dots
+	
+func _generate_random_cup_positions(seed_value: int) -> Array:
+	var rng := Drand48.new()
+	rng.srand48(seed_value)
 
+	const TARGET_COUNT: int = 10
+	const MIN_DIST: float = 0.136
+	const X_BASE: float = -0.426
+	const X_SCALE: float = 0.852
+	const Z_BASE: float = -1.907
+	const Z_SCALE: float = -0.4207
+	const Y_FIXED: float = -0.597
+
+	var positions: Array = []
+	var max_attempts: int = 5000
+
+	while positions.size() < TARGET_COUNT and max_attempts > 0:
+		max_attempts -= 1
+		var rx: float = rng.drand48()
+		var rz: float = rng.drand48()
+		var x: float = X_BASE + X_SCALE * rx
+		var z: float = Z_BASE + Z_SCALE * rz
+
+		var ok: bool = true
+		for p in positions:
+			var dx: float = p.x - x
+			var dz: float = p.z - z
+			if sqrt(dx * dx + dz * dz) < MIN_DIST:
+				ok = false
+				break
+
+		if ok:
+			positions.append(Vector3(x, Y_FIXED, z))
+
+	return positions
+	
+func _apply_mode_board_layout() -> void:
+	if mode == "h":
+		var seed_value: int = _current_seed
+		var positions: Array = _generate_random_cup_positions(seed_value)
+		
+		# Debug: print raw iOS positions and their bounds
+		print("=== Random cup positions for seed %d ===" % seed_value)
+		var min_x := 999.0; var max_x := -999.0
+		var min_z := 999.0; var max_z := -999.0
+		for i in range(positions.size()):
+			var p: Vector3 = positions[i]
+			print("  [%d] x=%.4f y=%.4f z=%.4f" % [i, p.x, p.y, p.z])
+			min_x = min(min_x, p.x); max_x = max(max_x, p.x)
+			min_z = min(min_z, p.z); max_z = max(max_z, p.z)
+		print("  bounds: x=[%.3f, %.3f] z=[%.3f, %.3f]" % [min_x, max_x, min_z, max_z])
+		print("  normal-mode bounds: x=[-0.142, 0.142] z=[-2.207, -1.967]")
+
+		my_cups.mirror_x = false
+		replay_cups.mirror_x = true
+		my_cups.apply_random_positions(positions)
+		replay_cups.apply_random_positions(positions)
+
+		my_cups.set_cups_in_play(my_cups.cups_in_play)
+		replay_cups.set_cups_in_play(replay_cups.cups_in_play)
+	else:
+		my_cups.random_positions.clear()
+		replay_cups.random_positions.clear()
+		my_cups.arrangeCups()
+		replay_cups.arrangeCups()
+		
 func _process_game_state():
 	if played_replay == false:
 		if not replay_string.is_empty():
@@ -508,11 +575,12 @@ func throw_finished():
 		if throws[-1]["cup"] == -1:
 			_handle_game_over_i_lost()
 		elif len(my_cups.cups_in_play) == 0:
-			my_cups.reset_cups([0,1,2])
-			replay_cups.reset_cups([0,1,2])
-			overtime_label.popup()
-			await get_tree().create_timer(1.5).timeout
-			num_balls = 0
+			if mode != "h":
+				my_cups.reset_cups([0,1,2])
+				replay_cups.reset_cups([0,1,2])
+				overtime_label.popup()
+				await get_tree().create_timer(1.5).timeout
+				num_balls = 0
 	
 	if num_balls > 0 and not game_over:
 		if preview_ball != null and is_instance_valid(preview_ball):
@@ -555,6 +623,23 @@ func set_boards(parsed_replay: Dictionary):
 	elif player == 2:
 		my_board = parsed_replay["p2_board"]
 		other_board = parsed_replay["p1_board"]
+
+	# Random mode: seed-driven cup placement, no reracking.
+	if mode == "h":
+		var seed_value: int = int(parsed_replay.get("seed", 0))
+		# Fall back to the top-level seed from _set_game_data if needed.
+		if seed_value == 0 and _current_seed != 0:
+			seed_value = _current_seed
+		var positions: Array = _generate_random_cup_positions(seed_value)
+		my_cups.mirror_x = false
+		replay_cups.mirror_x = true
+		my_cups.apply_random_positions(positions)
+		replay_cups.apply_random_positions(positions)
+	else:
+		# Normal mode: clear any previous random state.
+		my_cups.random_positions.clear()
+		replay_cups.random_positions.clear()
+
 	my_cups.prev_cups = my_board
 	my_cups.set_cups_in_play(my_board)
 	replay_cups.set_cups_in_play(other_board)
@@ -568,6 +653,8 @@ func _set_game_data(new_replay: String):
 	player = int(parsed["player"])
 	replay_string = parsed["replay"] if "replay" in parsed else ""
 	mode = parsed["mode"]
+	_current_seed = int(parsed.get("seed", "0"))
+	_apply_mode_board_layout()
 	winner = parsed["winner"] if "winner" in parsed else ""
 	if winner != "":
 		game_over = check_winner()
