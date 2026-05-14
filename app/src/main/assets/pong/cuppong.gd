@@ -95,7 +95,7 @@ const IOS_DRAG_DEAD_DIST: float = 0.18
 # Aim-assist lerp toward the nearest cup, matching the typical case
 @export var ios_aim_assist: float = 0.28
 # Screen-pixel -> world-meter conversion. Tune up for easier throws
-@export var ios_screen_to_world_scale: float = 0.0045
+@export var ios_screen_to_world_scale: float = 0.0030
 
 var player: int
 var is_my_turn: int
@@ -1135,8 +1135,9 @@ func _watch_ios_ball_until_finished(b: PongBall) -> void:
 
 		if still_time >= 0.4 or out_of_play or elapsed >= max_wait_time:
 			if is_instance_valid(b):
-				b.queue_free()
-			throw_finished()
+				b.remove()
+			else:
+				throw_finished()
 			return
 
 func _ios_find_nearest_cup_xz(ball_pos: Vector3) -> Vector3:
