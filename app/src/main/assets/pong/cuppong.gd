@@ -8,7 +8,6 @@ var _debug_label: Label
 var _frame_accum := 0.0
 var _frame_count := 0
 var _max_delta := 0.0
-var _last_long_frame_ms := 0.0
 #---------------------------------------------
 
 var REPLAY_FRAME_DURATION: float = 0.03
@@ -64,21 +63,6 @@ var start_replay_boards: String = "0,1,2,3,4,5,6,7,8,9&0,1,2,3,4,5,6,7,8,9"
 @export var player_ball_start_pos: Vector3 = Vector3(0.0, -0.55, -1.00)
 @export var second_ball_offset: Vector3 = Vector3(0.28, 0.0, 0.0)
 
-@export var min_drag_distance: float = 15.0 #Min Distance Required to be considered a throw
-@export var min_speed_for_throw: float = 250.0 #Speed Deadband to prevent tapping on throw
-@export var max_force_x: float = 0.40 #Absolute Max Force in x dir
-@export var max_force_y: float = 1.1 #Absolute Max Force in y dir
-@export var max_throw_speed_x: float = 2000.0 #How fast does this need to be flicked for 100% strength in x dir (lower is easy full power)
-@export var max_throw_speed_y: float = 3800.0 #How fast does this need to be flicked for 100% strength in y dir (lower is easy full power)
-@export var vertical_power_curve: float = 1.3 #Shape how the speed maps to the vertical force (lower is more sensitive)
-@export var horizontal_power_curve: float = 1 #Shape how the speed maps to the horizontal force (lower is more sensitive)
-@export var throw_power_scale: float = 0.65 #Global Scale Multiplier
-
-var last_drag_distance: float = 0.0
-var last_drag_duration: float = 0.0
-var last_drag_speed_x: float = 0.0	# px/s
-var last_drag_speed_y: float = 0.0	# px/s (screen space, before inversion)
-
 var preview_ball: PongBall = null
 var num_balls: int = 2
 var throws: Array[Dictionary] = []
@@ -90,6 +74,29 @@ var drag_start_pos = Vector2.ZERO
 var drag_start_time: float = 0.0
 var dragging = false
 var ball_ready: bool = false
+var ball_popo: Vector3 = Vector3.ZERO   # ball position at touch-down
+
+const IOS_H_SCALE: float = 0.65          # horizontal scale before distance
+const IOS_POWER_SLOPE: float = -5.7      # distance -> forward force
+const IOS_POWER_FLOOR: float = -3.85     # max forward force magnitude
+const IOS_X_NORM: float = 3.62           # X-target normalizer
+const IOS_X_GAIN: float = 2.08           # 1.3 * 1.6
+const IOS_Z_NORM: float = -3.62
+const IOS_Z_BIAS: float = -1.05
+const IOS_Z_GAIN: float = 1.3
+const IOS_Z_SPLIT: float = -2.0          # threshold: long vs short arc branch
+const IOS_LONG_GAIN: float = 1.3
+const IOS_LONG_Y: float = 4.12
+const IOS_SHORT_GAIN: float = 1.35
+const IOS_SHORT_Y_OFFSET: float = -3.0
+const IOS_BALL_Y_AIM_OFFSET: float = 0.45
+const IOS_DRAG_DEAD_DIST: float = 0.18
+
+# Aim-assist lerp toward the nearest cup, matching the typical case
+@export var ios_aim_assist: float = 0.28
+# Screen-pixel -> world-meter conversion. Tune up for easier throws
+@export var ios_screen_to_world_scale: float = 0.0045
+
 var player: int
 var is_my_turn: int
 var replay_string: String
@@ -127,45 +134,32 @@ func _ready():
 	_enforce_mobile_lighting_settings()
 	
 func _enforce_mobile_lighting_settings() -> void:
-	# --- Viewport: solid AA, no temporal jitter (TAA flickers on mobile) ---
+	if is_instance_valid(camera):
+		camera.near = 0.1
+		camera.far = 20.0
+
 	var vp := get_viewport()
 	vp.msaa_3d = Viewport.MSAA_4X
 	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
 	vp.use_taa = false
 	vp.use_debanding = true
-	# One directional light shadow is all this scene has, but positional
-	# atlas size affects directional too on the mobile renderer. Keep a
-	# decent size with minimal subdivisions so the directional tile is
-	# big and stable.
 	vp.positional_shadow_atlas_size = 2048
 	vp.positional_shadow_atlas_quad_0 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_4
 	vp.positional_shadow_atlas_quad_1 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED
 	vp.positional_shadow_atlas_quad_2 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED
 	vp.positional_shadow_atlas_quad_3 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED
 
-	# --- Directional sun: kill cascade thrashing ---
-	# Default PSSM uses up to 4 cascades, and objects near a split boundary
-	# can flicker as the renderer ping-pongs them between cascades. The
-	# playable area here is only a few meters across, so a single orthogonal
-	# shadow frustum gives us a rock-stable, high-quality shadow with no
-	# splits to thrash.
 	if is_instance_valid(sun):
 		sun.shadow_enabled = true
 		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
-		sun.directional_shadow_max_distance = 8.0
+		sun.directional_shadow_max_distance = 6.0
 		sun.directional_shadow_fade_start = 0.95
 		sun.directional_shadow_blend_splits = false
-		# Use Godot's default biases (0.1 / 2.0); the cascade-thrash fix above
-		# is what actually stabilizes shadows here. Don't tighten bias unless
-		# acne shows up.
 		sun.shadow_bias = 0.1
 		sun.shadow_normal_bias = 2.0
-		# Small blur smooths jagged shadow edges without making them mushy.
-		sun.shadow_blur = 1.0
-		sun.shadow_opacity = 1.0
-		sun.shadow_transmittance_bias = 0.05
+		sun.shadow_blur = 2.0
+		sun.shadow_opacity = 0.85
 
-	# --- Environment: disable mobile-fragile post-FX ---
 	if is_instance_valid(env) and env.environment != null:
 		var e: Environment = env.environment
 		e.ssao_enabled = false
@@ -174,37 +168,61 @@ func _enforce_mobile_lighting_settings() -> void:
 		e.glow_enabled = false
 		e.fog_enabled = false
 		e.volumetric_fog_enabled = false
-		# Make sure we have some ambient so cup interiors aren't pitch black.
 		if e.ambient_light_source == Environment.AMBIENT_SOURCE_DISABLED:
 			e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 			e.ambient_light_color = Color(0.6, 0.6, 0.65)
 			e.ambient_light_energy = 0.35
 
-	# --- Anti-flicker on small static meshes ---
-	# Tell every MeshInstance3D / CSGMesh3D that they're static so the
-	# renderer can cache their data, and disable GI to remove any chance
-	# of GI probe sampling drift.
-	_apply_static_geometry_hints(self)
+	_stabilized_mats.clear()
+	_stabilize_geometry(self)
 
 	Engine.physics_jitter_fix = 0.5
+
+var _stabilized_mats: Dictionary = {}
+
+func _stabilize_geometry(root: Node) -> void:
+	for child in root.get_children():
+		if child is GeometryInstance3D:
+			var gi: GeometryInstance3D = child
+			gi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+
+			var mesh: Mesh = null
+			if gi is MeshInstance3D:
+				mesh = (gi as MeshInstance3D).mesh
+			elif gi is CSGMesh3D:
+				mesh = (gi as CSGMesh3D).mesh
+
+			if mesh != null:
+				for s in range(mesh.get_surface_count()):
+					var src_mat: Material = mesh.surface_get_material(s)
+					if src_mat == null or not (src_mat is BaseMaterial3D):
+						continue
+					var key: String = str(src_mat.get_instance_id()) + "_" + str(s)
+					var new_mat: BaseMaterial3D
+					if _stabilized_mats.has(key):
+						new_mat = _stabilized_mats[key]
+					else:
+						new_mat = (src_mat as BaseMaterial3D).duplicate()
+						new_mat.metallic_specular = 0.0
+						_stabilized_mats[key] = new_mat
+					mesh.surface_set_material(s, new_mat)
+		_stabilize_geometry(child)
+
 
 func _apply_static_geometry_hints(root: Node) -> void:
 	for child in root.get_children():
 		if child is GeometryInstance3D:
 			var gi: GeometryInstance3D = child
 			gi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-			# Static lighting hint is harmless for things that never move
-			# (the table, cups before being thrown off) and is ignored by
-			# moving meshes that get re-baked each frame anyway.
-			# We don't toggle cast_shadow here because some nodes (like the
-			# ball's fake-shadow decal) may have it intentionally disabled.
 		_apply_static_geometry_hints(child)
 		
 func _create_debug_overlay() -> void:
 	if not _debug_perf:
 		return
 	
-	var parent: Node = main_overlay if is_instance_valid(main_overlay) else get_tree().root
+	var parent: Node = get_tree().root
+	if is_instance_valid(main_overlay):
+		parent = main_overlay
 	var label := Label.new()
 	label.name = "PerfOverlay"
 	label.text = "Perf..."
@@ -243,17 +261,15 @@ func _process(delta: float) -> void:
 		var avg_ms := avg_dt * 1000.0
 		var max_ms := _max_delta * 1000.0
 		var mem_static_mb := Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0
-		var draw_calls := Performance.get_monitor(1000)        # RENDER_TOTAL_DRAW_CALLS_IN_FRAME
-		var render_objects := Performance.get_monitor(1001)    # RENDER_TOTAL_OBJECTS_IN_FRAME
-		var render_primitives := Performance.get_monitor(1002) # RENDER_PRIMITIVES_IN_FRAME
-		var render_2d_items := Performance.get_monitor(1003)   # RENDER_2D_ITEMS_IN_FRAME
-		var render_2d_calls := Performance.get_monitor(1004)   # RENDER_2D_DRAW_CALLS_IN_FRAME
+		var draw_calls := Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
+		var render_objects := Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)
+		var render_primitives := Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
 		var ball_count := 0
 		for child in get_children():
 			if child is PongBall and child != ball:
 				ball_count += 1
 
-				_debug_label.text = (
+		_debug_label.text = (
 			"FPS: %d\n" +
 			"avg dt: %.2f ms\n" +
 			"max dt: %.2f ms\n" +
@@ -261,12 +277,6 @@ func _process(delta: float) -> void:
 			"Draw Calls: %d\n" +
 			"Render Obj: %d\n" +
 			"Primitives: %d\n" +
-			"2D Items: %d\n" +
-			"2D Calls: %d\n" +
-			"DragDist: %.1f px\n" +
-			"DragDur: %.3f s\n" +
-			"DragVx: %.1f px/s\n" +
-			"DragVy: %.1f px/s\n" +
 			"Balls: %d"
 		) % [
 			fps,
@@ -276,12 +286,6 @@ func _process(delta: float) -> void:
 			draw_calls,
 			render_objects,
 			render_primitives,
-			render_2d_items,
-			render_2d_calls,
-			last_drag_distance,
-			last_drag_duration,
-			last_drag_speed_x,
-			last_drag_speed_y,
 			ball_count
 		]
 		
@@ -434,7 +438,6 @@ func _apply_mode_board_layout() -> void:
 		var seed_value: int = _current_seed
 		var positions: Array = _generate_random_cup_positions(seed_value)
 		
-		# Debug: print raw iOS positions and their bounds
 		print("=== Random cup positions for seed %d ===" % seed_value)
 		var min_x := 999.0; var max_x := -999.0
 		var min_z := 999.0; var max_z := -999.0
@@ -693,10 +696,10 @@ func set_boards(parsed_replay: Dictionary):
 		my_board = parsed_replay["p2_board"]
 		other_board = parsed_replay["p1_board"]
 
-	# Random mode: seed-driven cup placement, no reracking.
+	# Random mode:
 	if mode == "h":
 		var seed_value: int = int(parsed_replay.get("seed", 0))
-		# Fall back to the top-level seed from _set_game_data if needed.
+		# Fall back to the default seed from _set_game_data if needed
 		if seed_value == 0 and _current_seed != 0:
 			seed_value = _current_seed
 		var positions: Array = _generate_random_cup_positions(seed_value)
@@ -705,7 +708,7 @@ func set_boards(parsed_replay: Dictionary):
 		my_cups.apply_random_positions(positions)
 		replay_cups.apply_random_positions(positions)
 	else:
-		# Normal mode: clear any previous random state.
+		# Normal mode
 		my_cups.random_positions.clear()
 		replay_cups.random_positions.clear()
 
@@ -818,9 +821,9 @@ func conv(input_float: float) -> String:
 	var char2: String = CHARMAP[second_idx]
 	return char1 + char2
 	
-func convback(str: String) -> float:
-	var first_idx = CHARMAP.find(str[0])
-	var second_idx = CHARMAP.find(str[1])
+func convback(enc: String) -> float:
+	var first_idx = CHARMAP.find(enc[0])
+	var second_idx = CHARMAP.find(enc[1])
 	return float(second_idx + first_idx * CHARMAP_LEN) / float(CHARMAP_LEN * CHARMAP_LEN - 1)
 	
 func spawn_ball(is_replay: bool = false) -> RigidBody3D:
@@ -1031,94 +1034,129 @@ func _on_replay_finished(new_ball: PongBall, move: Array, final_move: bool):
 		played_replay = true
 		_process_game_state()
 		
-func convert_arr(str: String):
+func convert_arr(csv: String):
 	var result = []
-	if len(str) > 0:
-		for elem in str.split(','):
+	if len(csv) > 0:
+		for elem in csv.split(','):
 			result.append(int(elem))
 	return result
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _settings_open or spectator_mode:
+	if _settings_open or spectator_mode or not ball_ready or current_ball == null:
 		return
-
-	if not ball_ready or current_ball == null:
-		return
-
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		var mb: InputEventMouseButton = event
 		if mb.pressed:
-			print("START DRAG: " + str(mb.position))
+			ball_popo = current_ball.global_position
 			drag_start_pos = mb.position
-			drag_start_time = Time.get_ticks_msec() / 1000.0
 			dragging = true
+		elif dragging:
+			dragging = false
+			_ios_throw_release(mb.position)
+			
+func _screen_drag_to_world_delta(screen_start: Vector2, screen_end: Vector2) -> Vector2:
+	var sdx: float = screen_end.x - screen_start.x
+	var sdy: float = screen_end.y - screen_start.y
+	return Vector2(-sdx * ios_screen_to_world_scale, -sdy * ios_screen_to_world_scale)
+	
+func _ios_throw_release(release_screen_pos: Vector2) -> void:
+	if current_ball == null:
+		return
+
+	var screen_delta: Vector2 = release_screen_pos - drag_start_pos
+	var dx_world: float = -screen_delta.x * ios_screen_to_world_scale
+	var dz_world: float = -screen_delta.y * ios_screen_to_world_scale
+	var drag_len: float = sqrt(dx_world * dx_world + dz_world * dz_world)
+	if drag_len < IOS_DRAG_DEAD_DIST:
+		ball_ready = true   # let the player try again
+		return
+
+	# Forward force from drag distance
+	var scaled_dx: float = dx_world * IOS_H_SCALE
+	var dist: float = sqrt(scaled_dx * scaled_dx + dz_world * dz_world) * 0.9   # ratio=1.0 case
+	var forward_force: float = max(dist * IOS_POWER_SLOPE, IOS_POWER_FLOOR)
+	var abs_force: float = abs(forward_force)
+
+	# Preaim X/Z targets
+	var angle_factor: float = (dx_world / drag_len) if drag_len > 1e-6 else 0.0
+	var fx_target: float = abs_force / IOS_X_NORM * IOS_X_GAIN * angle_factor
+	var ios_fz_target: float = IOS_Z_BIAS + (abs_force / IOS_Z_NORM) * IOS_Z_GAIN
+	var forward_z_target: float = ball_popo.z + (abs(ios_fz_target) - abs(IOS_Z_BIAS))
+
+	# Aim assist
+	var target_cup: Vector3 = _ios_find_nearest_cup_xz(current_ball.global_position)
+	var final_x: float = lerp(fx_target, target_cup.x, ios_aim_assist)
+	var final_z: float = lerp(forward_z_target, target_cup.z, ios_aim_assist)
+
+	# Long vs short arc branch
+	var ball_pos: Vector3 = current_ball.global_position
+	var fx_impulse: float
+	var fy_impulse: float
+	var fz_impulse: float
+	if ios_fz_target <= IOS_Z_SPLIT:
+		fx_impulse = (final_x - ball_pos.x) * IOS_LONG_GAIN
+		fy_impulse = IOS_LONG_Y
+		fz_impulse = (final_z - ball_pos.z) * IOS_LONG_GAIN
+	else:
+		fx_impulse = (final_x - ball_pos.x) * IOS_SHORT_GAIN
+		fy_impulse = 4.0 * ((abs(final_z) - 1.05) / -7.2 + 1.0) + IOS_SHORT_Y_OFFSET
+		fz_impulse = (final_z - ball_pos.z) * IOS_SHORT_GAIN
+
+	# Fire
+	var thrown_ball: PongBall = current_ball
+	thrown_ball.freeze = false
+	thrown_ball.apply_impulse(Vector3(fx_impulse, fy_impulse, fz_impulse))
+	thrown_ball.thrown = true
+	ball_ready = false
+	current_ball = null
+	_watch_ios_ball_until_finished(thrown_ball)
+	
+func _watch_ios_ball_until_finished(b: PongBall) -> void:
+	var min_wait_time: float = 1.0
+	var max_wait_time: float = 5.0
+	var still_time: float = 0.0
+	var elapsed: float = 0.0
+
+	while is_instance_valid(b):
+		await get_tree().create_timer(0.1).timeout
+		elapsed += 0.1
+
+		if elapsed < min_wait_time:
+			continue
+
+		var speed := b.linear_velocity.length()
+		var too_slow := speed < 0.08
+		var out_of_play := b.global_position.y < -1.2 or b.global_position.z > 0.75 or b.global_position.z < -2.6
+
+		if too_slow:
+			still_time += 0.1
 		else:
-			if dragging:
-				var drag_end_time: float = Time.get_ticks_msec() / 1000.0
-				var drag_duration: float = max(drag_end_time - drag_start_time, 0.016)
+			still_time = 0.0
 
-				var drag_end_pos: Vector2 = mb.position
-				var drag_distance: float = drag_end_pos.distance_to(drag_start_pos)
+		if still_time >= 0.4 or out_of_play or elapsed >= max_wait_time:
+			if is_instance_valid(b):
+				b.queue_free()
+			throw_finished()
+			return
 
-				# --- store debug info ---
-				last_drag_distance = drag_distance
-				last_drag_duration = drag_duration
-				var t: float = max(drag_duration, 0.0001)
-				var raw_dx: float = drag_end_pos.x - drag_start_pos.x
-				var raw_dy: float = drag_end_pos.y - drag_start_pos.y
-				last_drag_speed_x = raw_dx / t          # px/s
-				last_drag_speed_y = raw_dy / t          # px/s (screen-space)
-				# -------------------------
-
-				if drag_distance < min_drag_distance:
-					print("Tap detected, ignoring throw.")
-					dragging = false
-					return
-
-				print("END DRAG: " + str(mb.position))
-				var delta: Vector2 = drag_end_pos - drag_start_pos
-				delta.y = -delta.y
-
-				print("X delta: " + str(delta.x) + ", Y delta: " + str(delta.y))
-				var delta_lerp: Vector2 = interpolate_delta(delta.x, delta.y, drag_duration)
-				print("Delta interpolated: " + str(delta_lerp) + " duration: " + str(drag_duration))
-
-				if delta_lerp == Vector2.ZERO:
-					print("Too slow flick, ignoring throw.")
-					dragging = false
-					return
-
-				current_ball.throw(delta_lerp.x, delta_lerp.y)
-
-				dragging = false
-				ball_ready = false
-				current_ball = null
-
-func interpolate_delta(x_delta: float, y_delta: float, duration: float) -> Vector2:
-	var t: float = max(duration, 0.016)
-	var vx: float = x_delta / t
-	var vy: float = y_delta / t
-
-	var speed_x: float = abs(vx)
-	var speed_y: float = abs(vy)
-
-	if speed_x < min_speed_for_throw and speed_y < min_speed_for_throw:
-		return Vector2.ZERO
-
-	var norm_vx: float = clamp(speed_x / max_throw_speed_x, 0.0, 1.0)
-	var norm_vy: float = clamp(speed_y / max_throw_speed_y, 0.0, 1.0)
-
-	var x_curve: float = pow(norm_vx, horizontal_power_curve)
-	var y_curve: float = pow(norm_vy, vertical_power_curve)
-
-	var x_force_mag: float = lerp(0.0, max_force_x, x_curve) * throw_power_scale
-	var y_force_mag: float = lerp(0.0, max_force_y, y_curve) * throw_power_scale
-
-	var x_sign: float = sign(x_delta)
-	var y_sign: float = sign(y_delta)
-
-	return Vector2(x_sign * x_force_mag, y_sign * y_force_mag)
-
+func _ios_find_nearest_cup_xz(ball_pos: Vector3) -> Vector3:
+	var probe: Vector3 = ball_pos + Vector3(0.0, IOS_BALL_Y_AIM_OFFSET, 0.0)
+	var best: Vector3 = ball_pos + Vector3(0.0, 0.0, -2.0)
+	var best_d: float = INF
+	if not is_instance_valid(my_cups):
+		return best
+	for cup in my_cups.get_children():
+		if cup == null or not (cup is Node3D):
+			continue
+		if cup.name == &"cupremoved" or not (cup as Node3D).visible:
+			continue
+		var p: Vector3 = (cup as Node3D).global_position
+		var d: float = probe.distance_to(p)
+		if d < best_d:
+			best_d = d
+			best = p
+	return best
+	
 func _on_settings_button_pressed() -> void:
 	if not is_instance_valid(settings_button):
 		return

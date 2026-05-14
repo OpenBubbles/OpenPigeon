@@ -1,12 +1,8 @@
 class_name Drand48
 extends RefCounted
 
-# POSIX drand48 implementation. Bit-exact with iOS libc.
-# state = (state * 0x5DEECE66D + 0xB) mod 2^48
-# srand48(seed): state = (seed_low_32 << 16) | 0x330E
-
 var _state: int = 0
-const _MASK: int = (1 << 48) - 1     # 0xFFFFFFFFFFFF
+const _MASK: int = (1 << 48) - 1
 const _MULT: int = 0x5DEECE66D
 const _INC: int = 0xB
 

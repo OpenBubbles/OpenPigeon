@@ -11,6 +11,7 @@ var replay_poses: Array[Vector3]
 func _ready() -> void:
 	self.game = get_parent()
 	self.physics_material_override = self.physics_material_override.duplicate()
+	self.mass = 1.0
 
 var frame_num: int = 2
 var num_collisions: int = 0
@@ -23,6 +24,12 @@ func _physics_process(delta: float) -> void:
 			frame_num += 1
 			
 		var collisions = get_colliding_bodies()
+		if collisions.size() > 0 and not thrown:
+			pass  # ignore pre-throw contacts (sitting on table)
+		elif collisions.size() > 0:
+			print("ball_contact pos=(%.3f, %.3f, %.3f) vel=%s  hit_count=%d" % [position.x, position.y, position.z, str(linear_velocity), collisions.size()])
+			for c in collisions:
+				print("  collider name='%s' parent='%s' parent_path='%s'" % [c.name, c.get_parent().name if c.get_parent() else "<no parent>", str(c.get_path())])
 		if hit_cup == null:
 			if len(collisions) == 1:
 				for collision in collisions:
