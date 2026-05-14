@@ -7,7 +7,7 @@ var games: Dictionary = {
 	"basketball": "res://basketball/basketball.tscn",
 	"sea": "res://battleship/battleship.tscn",
 	"darts": "res://darts/DartsScene.tscn",
-	"beer": "res://pong/cuppong.tscn",
+	"beer": "res://pong/cuppong.scn",
 	"archery": "res://archery/archery.tscn",
 	"reversi": "res://reversi/reversi.tscn",
 	"fill": "res://fill/fill.tscn",
