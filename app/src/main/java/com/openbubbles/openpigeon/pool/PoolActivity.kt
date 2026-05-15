@@ -1135,7 +1135,6 @@ class PoolActivity : AppCompatActivity() {
     private fun generateRandomRack(seed: Int): String {
         val rng = Drand48()
 
-        rng.srand48(seed.toLong())
         data class Slot(val x: Float, val y: Float)
 
         val slots = mutableListOf<Slot>()
@@ -1207,7 +1206,16 @@ class PoolActivity : AppCompatActivity() {
             builder.append(String.format(Locale.US, "%f", y))
             builder.append(",0.000000,1.000000,")
             builder.append(ballNum)
-            builder.append(",0.000000,0.000000,0.000000")
+            val rotX = rng.drand48() * 64.0 - 32.0
+            val rotY = rng.drand48() * 64.0 - 32.0
+            val rotZ = rng.drand48() * 64.0 - 32.0
+
+            builder.append(",")
+            builder.append(String.format(Locale.US, "%.6f", rotX))
+            builder.append(",")
+            builder.append(String.format(Locale.US, "%.6f", rotY))
+            builder.append(",")
+            builder.append(String.format(Locale.US, "%.6f", rotZ))
         }
 
         return builder.toString()

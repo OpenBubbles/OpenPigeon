@@ -45,12 +45,14 @@ class FillerGame : Game, DynamicPreviewGame {
 
     override fun gamePreviewBitmap(context: Context, message: Map<String, String>): Bitmap? {
         return try {
+            val player = message["player"]?.toIntOrNull() ?: 2
+
             val replayBoard = extractLatestReplayBoard(message["replay"])
             if (replayBoard != null) {
-                FillerPreviewRenderer.renderBoard(replayBoard)
+                FillerPreviewRenderer.renderBoard(replayBoard, player)
             } else {
                 val seed = message["seed"]?.toIntOrNull() ?: return null
-                FillerPreviewRenderer.render(seed)
+                FillerPreviewRenderer.render(seed, player)
             }
         } catch (e: Exception) {
             Log.w("FillerGame", "Failed to build dynamic Filler preview, falling back to static image", e)

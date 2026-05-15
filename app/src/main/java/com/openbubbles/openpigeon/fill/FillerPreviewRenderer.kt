@@ -28,21 +28,21 @@ object FillerPreviewRenderer {
 
     private var state = 0L
 
-    fun render(seed: Int): Bitmap {
-        return renderBoardArray(generateBoard(seed))
+    fun render(seed: Int, player: Int = 1): Bitmap {
+        return renderBoardArray(generateBoard(seed), player)
     }
 
-    fun renderBoard(flatBoard: IntArray): Bitmap {
+    fun renderBoard(flatBoard: IntArray, player: Int = 1): Bitmap {
         val board = Array(BOARD_HEIGHT) { y ->
             IntArray(BOARD_WIDTH) { x ->
                 flatBoard.getOrElse(y * BOARD_WIDTH + x) { 0 }.coerceIn(0, colors.lastIndex)
             }
         }
 
-        return renderBoardArray(board)
+        return renderBoardArray(board, player)
     }
 
-    private fun renderBoardArray(board: Array<IntArray>): Bitmap {
+    private fun renderBoardArray(board: Array<IntArray>, player: Int): Bitmap {
         val cell = 36
         val padding = 18
         val width = BOARD_WIDTH * cell + padding * 2
@@ -65,12 +65,15 @@ object FillerPreviewRenderer {
 
         for (y in 0 until BOARD_HEIGHT) {
             for (x in 0 until BOARD_WIDTH) {
+                val drawX = if (player == 2) (BOARD_WIDTH - 1) - x else x
+                val drawY = if (player == 2) y else (BOARD_HEIGHT - 1) - y
+                print("Player: $player, drawX: $drawX, drawY: $drawY, x: $x, y: $y")
                 paint.color = colors[board[y][x].coerceIn(0, colors.lastIndex)]
                 canvas.drawRect(
-                    (padding + x * cell).toFloat(),
-                    (padding + y * cell).toFloat(),
-                    (padding + (x + 1) * cell).toFloat(),
-                    (padding + (y + 1) * cell).toFloat(),
+                    (padding + drawX * cell).toFloat(),
+                    (padding + drawY * cell).toFloat(),
+                    (padding + (drawX + 1) * cell).toFloat(),
+                    (padding + (drawY + 1) * cell).toFloat(),
                     paint
                 )
             }
