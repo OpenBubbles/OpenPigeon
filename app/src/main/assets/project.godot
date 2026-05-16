@@ -39,8 +39,13 @@ window/handheld/orientation=1
 
 project/assembly_name="GamePidgeon Checkers"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot-box2d/plugin.cfg")
+
 [physics]
 
+2d/physics_engine="Box2D"
 3d/physics_engine="Jolt Physics"
 
 [rendering]
