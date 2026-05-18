@@ -39,6 +39,9 @@ const HOOP_AMPLITUDE := 1.0
 const HOOP_PERIOD_FRAMES := 510.0
 const HOOP_QUARTER_FRAMES := 127.5
 const HOOP_THREE_QUARTER_FRAMES := 382.5
+const SCORE_RADIUS_X := 0.32
+const SCORE_RADIUS_Z := 0.26
+const SCORE_MIN_DOWN_VELOCITY := -0.05
 
 var replayTimers: Array[Timer] = []
 var replayEndTimer: Timer = null
@@ -349,6 +352,60 @@ func _finish_replay(finalize_scores: bool = true) -> void:
 
 	refresh_ui_state()
 	
+func _get_active_hoop_collision_root() -> Node3D:
+	if game_mode == "h" and is_instance_valid(moving_hoop_collision):
+		return moving_hoop_collision
+	return static_hoop_collision
+
+
+func _get_active_hoop_center() -> Vector3:
+	var root := _get_active_hoop_collision_root()
+	if not is_instance_valid(root):
+		return Vector3.ZERO
+
+	var total := Vector3.ZERO
+	var count := 0
+
+	for child in root.get_children():
+		if child is Node3D and child.name.begins_with("HoopCollisionSphere"):
+			total += (child as Node3D).global_position
+			count += 1
+
+	if count <= 0:
+		return root.global_position
+
+	return total / float(count)
+
+
+func _check_ball_score_crossing(ball: BasketballBall) -> void:
+	if not is_instance_valid(ball):
+		return
+	if ball.get_meta("score_counted", false):
+		return
+
+	var prev_pos: Vector3 = ball.get_meta("last_score_pos", ball.global_position)
+	var curr_pos: Vector3 = ball.global_position
+	ball.set_meta("last_score_pos", curr_pos)
+
+	var hoop_center := _get_active_hoop_center()
+
+	if prev_pos.y <= hoop_center.y:
+		return
+	if curr_pos.y > hoop_center.y:
+		return
+	if ball.linear_velocity.y > SCORE_MIN_DOWN_VELOCITY:
+		return
+
+	var dx := absf(curr_pos.x - hoop_center.x)
+	var dz := absf(curr_pos.z - hoop_center.z)
+
+	if dx <= SCORE_RADIUS_X and dz <= SCORE_RADIUS_Z:
+		ball.set_meta("score_counted", true)
+
+		var ball_player: int = int(ball.get_meta("player_num", 0))
+		if ball_player != 0:
+			incrementScore(ball_player)
+	
 func skipReplay():
 	_finish_replay(true)
 	
@@ -534,6 +591,9 @@ func spawnBall(player_num: int, didGoInReplay = null) -> BasketballBall:
 	new_ball.name = "Ball_P" + str(player_num) + "_" + str(ballNum[player_num])
 
 	add_child(new_ball)
+	new_ball.set_meta("player_num", player_num)
+	new_ball.set_meta("score_counted", false)
+	new_ball.set_meta("last_score_pos", new_ball.global_position)
 	ballNum[player_num] += 1
 	currentBall[player_num] = new_ball
 	return new_ball
@@ -750,21 +810,24 @@ func hideUI() -> void:
 	skip_button.visible = false
 	
 func _physics_process(delta: float) -> void:
-	if game_mode != "h" or not is_instance_valid(moving_hoop_root):
-		return
+	if game_mode == "h" and is_instance_valid(moving_hoop_root):
+		if gamePlaying or replayPlaying:
+			if hoop_center_tween and hoop_center_tween.is_running():
+				hoop_center_tween.kill()
 
-	if gamePlaying or replayPlaying:
-		if hoop_center_tween and hoop_center_tween.is_running():
-			hoop_center_tween.kill()
+			_hoop_acc += delta * 60.0
 
-		_hoop_acc += delta * 60.0
+			while _hoop_acc >= 1.0:
+				hoop_time += 1
+				_hoop_acc -= 1.0
 
-		while _hoop_acc >= 1.0:
-			hoop_time += 1
-			_hoop_acc -= 1.0
+			_set_moving_hoop_x(_hard_hoop_x_from_tick(hoop_time))
 
-		_set_moving_hoop_x(_hard_hoop_x_from_tick(hoop_time))
-
+	if gamePlaying:
+		for node in get_children():
+			if node is BasketballBall and node.name.begins_with("Ball_P"):
+				_check_ball_score_crossing(node)
+				
 func _process(delta: float) -> void:
 	if game_mode == "h" and is_instance_valid(moving_hoop_root):
 		if not gamePlaying and not replayPlaying:
