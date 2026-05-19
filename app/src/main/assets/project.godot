@@ -41,7 +41,10 @@ project/assembly_name="GamePidgeon Checkers"
 
 [physics]
 
+2d/physics_engine="Box2D"
 3d/physics_engine="Jolt Physics"
+box_2d/solver/velocity_iterations=60
+box_2d/solver/position_iterations=60
 
 [rendering]
 
