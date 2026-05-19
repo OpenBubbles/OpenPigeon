@@ -39,6 +39,9 @@ const HOOP_AMPLITUDE := 1.0
 const HOOP_PERIOD_FRAMES := 510.0
 const HOOP_QUARTER_FRAMES := 127.5
 const HOOP_THREE_QUARTER_FRAMES := 382.5
+const SCORE_RADIUS_X := 0.32
+const SCORE_RADIUS_Z := 0.26
+const SCORE_MIN_DOWN_VELOCITY := -0.05
 
 var replayTimers: Array[Timer] = []
 var replayEndTimer: Timer = null
@@ -106,8 +109,8 @@ func _ready() -> void:
 				appPlugin.onReady()
 		else:
 			print("App plugin is not available")
-			dev_data = '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "18", "skip_score2": "46", "player": "2", "score1": "18", "score2": "23", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "n", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Let\'s play Basketball!", "game_name": "Basketball", "replay": "60,0.264,0,0"}'
-			#dev_data = '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "18", "skip_score2": "46", "player": "2", "score1": "18", "score2": "23", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "h", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Let\'s play Basketball!", "game_name": "Basketball", "replay": "60,0.264,0,0"}'
+			#dev_data = '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "18", "skip_score2": "46", "player": "2", "score1": "18", "score2": "23", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "n", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Let\'s play Basketball!", "game_name": "Basketball", "replay": "60,0.264,0,0"}'
+			dev_data = '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "18", "skip_score2": "46", "player": "2", "score1": "18", "score2": "23", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "h", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Let\'s play Basketball!", "game_name": "Basketball", "replay": "60,0.264,0,0"}'
 			_set_game_data(dev_data, true)
 
 		if is_instance_valid(start_button):
@@ -143,6 +146,35 @@ func showWinner():
 		_show_win_burst(opp_avatar_display)
 	winner_label.visible = true
 	
+func _set_collision_shapes_enabled(root: Node, enabled: bool) -> void:
+	if not is_instance_valid(root):
+		return
+
+	for child in root.get_children():
+		if child is CollisionShape3D:
+			child.disabled = not enabled
+		_set_collision_shapes_enabled(child, enabled)
+
+
+func _hard_hoop_x_from_tick(tick: int) -> float:
+	var t: int = tick % 480
+
+	if t < 120:
+		return float(t) / 120.0
+	elif t < 240:
+		return 1.0 - float(t - 120) / 120.0
+	elif t < 360:
+		return -float(t - 240) / 120.0
+
+	return -1.0 + float(t - 360) / 120.0
+
+func _set_moving_hoop_x(x_pos: float) -> void:
+	if not is_instance_valid(moving_hoop_root):
+		return
+
+	moving_hoop_root.position.x = x_pos
+	moving_hoop_root.force_update_transform()
+	
 func _apply_basketball_mode() -> void:
 	var hard_mode := game_mode == "h"
 
@@ -163,7 +195,13 @@ func _apply_basketball_mode() -> void:
 		if hoop_center_tween and hoop_center_tween.is_running():
 			hoop_center_tween.kill()
 		if is_instance_valid(moving_hoop_root):
-			moving_hoop_root.position.x = 0.0
+			_set_moving_hoop_x(0.0)
+			
+	_set_collision_shapes_enabled(static_hoop_collision, not hard_mode)
+	_set_collision_shapes_enabled(static_backboard, not hard_mode)
+
+	_set_collision_shapes_enabled(moving_hoop_collision, hard_mode)
+	_set_collision_shapes_enabled(moving_backboard, hard_mode)
 		
 func getReplay(player_num: int):
 	if player_num == 1:
@@ -314,6 +352,60 @@ func _finish_replay(finalize_scores: bool = true) -> void:
 
 	refresh_ui_state()
 	
+func _get_active_hoop_collision_root() -> Node3D:
+	if game_mode == "h" and is_instance_valid(moving_hoop_collision):
+		return moving_hoop_collision
+	return static_hoop_collision
+
+
+func _get_active_hoop_center() -> Vector3:
+	var root := _get_active_hoop_collision_root()
+	if not is_instance_valid(root):
+		return Vector3.ZERO
+
+	var total := Vector3.ZERO
+	var count := 0
+
+	for child in root.get_children():
+		if child is Node3D and child.name.begins_with("HoopCollisionSphere"):
+			total += (child as Node3D).global_position
+			count += 1
+
+	if count <= 0:
+		return root.global_position
+
+	return total / float(count)
+
+
+func _check_ball_score_crossing(ball: BasketballBall) -> void:
+	if not is_instance_valid(ball):
+		return
+	if ball.get_meta("score_counted", false):
+		return
+
+	var prev_pos: Vector3 = ball.get_meta("last_score_pos", ball.global_position)
+	var curr_pos: Vector3 = ball.global_position
+	ball.set_meta("last_score_pos", curr_pos)
+
+	var hoop_center := _get_active_hoop_center()
+
+	if prev_pos.y <= hoop_center.y:
+		return
+	if curr_pos.y > hoop_center.y:
+		return
+	if ball.linear_velocity.y > SCORE_MIN_DOWN_VELOCITY:
+		return
+
+	var dx := absf(curr_pos.x - hoop_center.x)
+	var dz := absf(curr_pos.z - hoop_center.z)
+
+	if dx <= SCORE_RADIUS_X and dz <= SCORE_RADIUS_Z:
+		ball.set_meta("score_counted", true)
+
+		var ball_player: int = int(ball.get_meta("player_num", 0))
+		if ball_player != 0:
+			incrementScore(ball_player)
+	
 func skipReplay():
 	_finish_replay(true)
 	
@@ -355,7 +447,7 @@ func refresh_ui_state() -> void:
 			if hoop_center_tween and hoop_center_tween.is_running():
 				hoop_center_tween.kill()
 			if is_instance_valid(moving_hoop_root):
-				moving_hoop_root.position.x = 0.0
+				_set_moving_hoop_x(0.0)
 
 			clearBalls()
 			spawnBall(1)
@@ -499,6 +591,9 @@ func spawnBall(player_num: int, didGoInReplay = null) -> BasketballBall:
 	new_ball.name = "Ball_P" + str(player_num) + "_" + str(ballNum[player_num])
 
 	add_child(new_ball)
+	new_ball.set_meta("player_num", player_num)
+	new_ball.set_meta("score_counted", false)
+	new_ball.set_meta("last_score_pos", new_ball.global_position)
 	ballNum[player_num] += 1
 	currentBall[player_num] = new_ball
 	return new_ball
@@ -667,7 +762,7 @@ func startGame() -> void:
 	if hoop_center_tween and hoop_center_tween.is_running():
 		hoop_center_tween.kill()
 	if is_instance_valid(moving_hoop_root):
-		moving_hoop_root.position.x = 0.0
+		_set_moving_hoop_x(0.0)
 	spawnBall(player)
 	
 func _haptic_explosion(strength: float = 0.35, duration_ms: int = 22) -> void:
@@ -713,8 +808,8 @@ func clearBalls() -> void:
 func hideUI() -> void:
 	round_container.visible = false
 	skip_button.visible = false
-
-func _process(delta: float) -> void:
+	
+func _physics_process(delta: float) -> void:
 	if game_mode == "h" and is_instance_valid(moving_hoop_root):
 		if gamePlaying or replayPlaying:
 			if hoop_center_tween and hoop_center_tween.is_running():
@@ -726,20 +821,16 @@ func _process(delta: float) -> void:
 				hoop_time += 1
 				_hoop_acc -= 1.0
 
-			var t := hoop_time % 480
-			var hoop_pos := 0.0
+			_set_moving_hoop_x(_hard_hoop_x_from_tick(hoop_time))
 
-			if t < 120:
-				hoop_pos = float(t) / 120.0
-			elif t < 240:
-				hoop_pos = 1.0 - float(t - 120) / 120.0
-			elif t < 360:
-				hoop_pos = -float(t - 240) / 120.0
-			else:
-				hoop_pos = -1.0 + float(t - 360) / 120.0
-
-			moving_hoop_root.position.x = hoop_pos
-		else:
+	if gamePlaying:
+		for node in get_children():
+			if node is BasketballBall and node.name.begins_with("Ball_P"):
+				_check_ball_score_crossing(node)
+				
+func _process(delta: float) -> void:
+	if game_mode == "h" and is_instance_valid(moving_hoop_root):
+		if not gamePlaying and not replayPlaying:
 			hoop_time = 0
 			_hoop_acc = 0.0
 
@@ -753,7 +844,7 @@ func _process(delta: float) -> void:
 						0.35
 					)
 			else:
-				moving_hoop_root.position.x = 0.0
+				_set_moving_hoop_x(0.0)
 	
 	if gamePlaying or replayPlaying:
 		elapsedTime += delta
