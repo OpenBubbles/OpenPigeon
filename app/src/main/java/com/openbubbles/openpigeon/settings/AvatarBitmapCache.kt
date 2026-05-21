@@ -3,6 +3,7 @@ package com.openbubbles.openpigeon.settings
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import com.openbubbles.openpigeon.R
 
 object AvatarBitmapCache {
 
@@ -21,23 +22,36 @@ object AvatarBitmapCache {
 
     fun load(context: Context) {
         if (loaded) return
-        loaded = true
 
-        val assets = context.applicationContext.assets
-        val base   = "global/avatar_textures"
+        val res = context.resources
 
-        fun bmp(path: String): Bitmap? = try {
-            assets.open(path).use { BitmapFactory.decodeStream(it) }
-        } catch (e: Exception) { e.printStackTrace(); null }
+        fun bmp(id: Int): Bitmap? = try {
+            BitmapFactory.decodeResource(res, id)
+        } catch (e: Exception) {
+            android.util.Log.e("AvatarBitmapCache", "Failed loading drawable resource: $id", e)
+            null
+        }
 
-        bmFaces      = bmp("$base/body/avatar_faces.png")
-        bmTorso      = bmp("$base/body/avatar_torso.png")
-        bmHairBack   = bmp("$base/hair/avatar_hair_back.png")
-        bmHairFront  = bmp("$base/hair/avatar_hair_front.png")
-        bmEyes       = bmp("$base/face/avatar_eyes.png")
-        bmMouth      = bmp("$base/face/avatar_mouth.png")
-        bmClothing   = bmp("$base/clothing/avatar_clothing_base.png")
-        bmClothingDt = bmp("$base/clothing/avatar_clothing_details.png")
-        bmBackground = bmp("$base/backgrounds/background_sheet.png")
+        bmFaces      = bmp(R.drawable.avatar_faces)
+        bmTorso      = bmp(R.drawable.avatar_torso)
+        bmHairBack   = bmp(R.drawable.avatar_hair_back)
+        bmHairFront  = bmp(R.drawable.avatar_hair_front)
+        bmEyes       = bmp(R.drawable.avatar_eyes)
+        bmMouth      = bmp(R.drawable.avatar_mouth)
+        bmClothing   = bmp(R.drawable.avatar_clothing_base)
+        bmClothingDt = bmp(R.drawable.avatar_clothing_details)
+        bmBackground = bmp(R.drawable.background_sheet)
+
+        loaded = listOf(
+            bmFaces,
+            bmTorso,
+            bmHairBack,
+            bmHairFront,
+            bmEyes,
+            bmMouth,
+            bmClothing,
+            bmClothingDt,
+            bmBackground
+        ).all { it != null }
     }
 }

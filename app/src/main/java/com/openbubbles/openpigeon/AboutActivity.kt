@@ -6,15 +6,16 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.core.net.toUri
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-
+import java.util.Calendar
 
 class AboutActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val currentYear = Calendar.getInstance().get(Calendar.YEAR)
         MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
             .setTitle("OpenPigeon")
             .setMessage("""
-                Copyright (c) 2025 OpenPigeon Contributors
+                Copyright (c) $currentYear OpenPigeon Contributors
                 
                 OpenPigeon is fully open-source, and we're looking for game developers to contribute their favorite games. If you're interested, find out more on GitHub.
 

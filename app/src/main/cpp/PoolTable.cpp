@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <iostream>
 #include <android/log.h>
+#include <inttypes.h>
 
 PoolTable::PoolTable()
     : world(b2Vec2_zero),
@@ -163,7 +164,7 @@ bool PoolTable::update() {
 
     startFrame += 1;
     if (startFrame == 60) {
-        __android_log_print(ANDROID_LOG_VERBOSE, "Me", "Frames %llu", timeSinceEpochMillisec() - startTime);
+        __android_log_print(ANDROID_LOG_VERBOSE, "Me", "Frames %" PRIu64, timeSinceEpochMillisec() - startTime);
     }
 
     world.Step(1.f / 60, 60, 60);
