@@ -1,2 +1,4 @@
 /build
 app/src/main/cpp/CMakeLists.txt
+temp_apk/
+temp_apk.zip
