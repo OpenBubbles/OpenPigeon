@@ -2,6 +2,7 @@ package com.openbubbles.openpigeon.settings
 
 import android.app.Activity
 import android.os.Bundle
+import android.os.Build
 import android.widget.FrameLayout
 
 class AvatarSettingsActivity : Activity() {
@@ -21,12 +22,22 @@ class AvatarSettingsActivity : Activity() {
             AvatarView.buildAvatarString()
             AvatarData.init(applicationContext)
 
-            finish()
-            overridePendingTransition(0, 0)
+            finishWithoutAnimation()
         }
 
         root.post {
             sheet.open()
+        }
+    }
+
+    private fun finishWithoutAnimation() {
+        finish()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0)
+        } else {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
         }
     }
 

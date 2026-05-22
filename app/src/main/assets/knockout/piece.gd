@@ -54,6 +54,7 @@ func _apply_phys_now() -> void:
 	lock_rotation = bool(phys.get("LOCK_ROTATION", false))
 	can_sleep = bool(phys.get("CAN_SLEEP", false))
 	linear_damp = float(phys.get("LINEAR_DAMP", 0.25))
+	linear_damp_mode = RigidBody2D.DAMP_MODE_REPLACE
 	angular_damp = float(phys.get("ANGULAR_DAMP", 0.45))
 
 	# Collider radius (if present / circular)
@@ -122,13 +123,15 @@ func _make_circle_poly(r: float, segs: int = 28) -> PackedVector2Array:
 	return pts
 	
 func _integrate_forces(state: PhysicsDirectBodyState2D) -> void:
+	var dt: float = state.step
+	var damp_ratio: float = 1.0 / (1.0 + 1.35 * dt)
+	state.linear_velocity *= damp_ratio
 	if state.linear_velocity.length() < IOS_STOP_LINEAR_SPEED:
 		state.linear_velocity = Vector2.ZERO
 	if absf(state.angular_velocity) < IOS_STOP_ANGULAR_SPEED:
 		state.angular_velocity = 0.0
 
 func _physics_process(_dt: float) -> void:
-	# If we start moving, fade the arrow for readability
 	if arrow_root and arrow_root.visible and not _arrow_faded_this_move:
 		if linear_velocity.length() > 1.0 or absf(angular_velocity) > 0.05:
 			_fade_out_arrow(0.18)

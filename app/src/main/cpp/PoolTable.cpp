@@ -8,14 +8,15 @@
 #include <cstdint>
 #include <iostream>
 #include <android/log.h>
-#include <inttypes.h>
+#include <cinttypes>
 
 PoolTable::PoolTable()
-    : world(b2Vec2_zero),
-      wallData({
-          .type = PoolData::Type::Wall,
-          .data = nullptr,
-      }){
+        : world(b2Vec2_zero),
+          wallData({
+              .type = PoolData::Type::Wall,
+              .data = nullptr,
+              }),
+          isFirst(false) {
 
     world.SetContactListener(&contactListener);
 

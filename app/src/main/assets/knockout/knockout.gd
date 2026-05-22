@@ -38,16 +38,17 @@ const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_ani
 @onready var right_preserver := %RightPreserver
 @onready var safe_zone_polygon := %SafeZonePolygon
 @onready var _texrect := %TextureRect
-var _board_scale_node: Control = null   # our new, safe scaler parent for the board image
+var _board_scale_node: Control = null
+const PDIFF_ENABLED := false
+var _pdiff = null
+var _pdiff_active := false
+const PDIFF_DEV_REPLAY := "board:1#-41.490452,-18.381981,2,2.568027,0.311887,11.024456#35.786495,56.762127,1,0.193446,3.140568,125.850670|shoot:1|board:2#-24.121695,-12.309731,2,1.882683,0.311887,0.000000#-135.776291,51.576973,1,4.711365,-0.038352,95.461876|board:2#-24.121695,-12.309731,2,1.882683,0.311887,0.000000#-135.776291,51.576973,1,4.711365,-0.038352,95.461876"
 
 # Debug/watch state
-var _inside_our_scale_write := 0
-var _watch_prev_tr_scale := Vector2(-999, -999)
-var _watch_prev_sc_scale := Vector2(-999, -999)
-const LOGICAL_BOARD_SIZE := Vector2(220.0, 220.0)
-const IOS_BOARD_TEXTURE_SIZE := Vector2(220.0, 220.0)
+const LOGICAL_BOARD_SIZE := Vector2(375.0, 375.0)
+const IOS_BOARD_TEXTURE_SIZE := LOGICAL_BOARD_SIZE
 const IOS_BOARD_TEXTURE_OFFSET := Vector2.ZERO
-const IOS_PENGUIN_VISUAL_SIZE := Vector2(25.0, 25.0)
+const IOS_PENGUIN_VISUAL_SIZE := Vector2(50.0, 50.0)
 
 const ZOOM_START := 1
 const ZOOM_DUR := 0.22
@@ -62,6 +63,14 @@ var _kill_detection_enabled := true
 
 const DEBUG_DRAW_ZONES := false
 
+const Z_BACKGROUND := -100
+const Z_WATER_RIPPLE := 0
+const Z_BOARD := 10
+const Z_ARROWS := 20
+const Z_PIECES := 30
+const Z_BLUR := 99
+const Z_UI_TOP := 100
+
 var _current_board_index: int = 0
 var _safe_area: Area2D
 var _safe_poly: CollisionPolygon2D
@@ -71,47 +80,39 @@ var _hole_polys: Array[CollisionPolygon2D] = []
 const ARROW_COLOR_MAP1 := Color(0,0,0,1)
 const ARROW_COLOR_MAP2 := Color(0.95, 0.95, 0.95, 1.0)
 const ARROW_COLOR_MAP3 := Color(0.92, 0.92, 0.92, 1.0)
+const ARROW_COLOR_PLAYER2 := Color("#61779e")
 const SEND_RED := Color("#d62828")
 const SEND_GREEN := Color("#14532d")
 
 var current_scale: float = ZOOM_START
-const DEBUG_KILL := true
+const DEBUG_KILL := false
 
 
 # --- Replay state ---
 var last_pre_round: Dictionary = {}      # {"round": int, "pieces": Array[Dictionary]}
-var last_post_round: Dictionary = {}     # same shape; board #2 (or #3) snapshot after physics
+var last_post_round: Dictionary = {}     # same shape; board #2 snapshot after physics
+var last_pending_setup_round: Dictionary = {} # board after replay where only one player has aimed
 var current_round_index: int = 0
 
-# --- Physics (ONE source of truth) ---
-# Values verified by live Frida instrumentation of iOS Knockout 2026-05-15:
-#   b2World @ 60Hz: dt=1/60, velIters=60, posIters=60, gravity=(0,0)
-#   Penguin body: type=DYN, linDamp=1.35, angDamp=0, allowSleep=false,
-#                 fixedRotation=false, bullet=true (CCD)
-#   Penguin fixture: friction=1.0, restit=1.0, density=1.0,
-#                    shape=circle radius=12.5, filter cat=0x1 mask=0xffff
-#   Shoot:    body.linearVelocity = 2 * dist * unit_aim_dir
-#   Damping ratio per frame: 1/(1 + 1.35*1/60) = 0.9780 (empirically confirmed)
-const PPM                 := 32.0          # only used for mass estimate
-const PIECE_RADIUS_PX     := 12.5          # iOS Box2D circle radius (was 24.0)
-const FRICTION            := 1.0           # iOS PhysicsMaterial.friction
-const RESTITUTION         := 1.0           # iOS PhysicsMaterial.bounce (fully elastic)
-const LINEAR_DAMP         := 1.35          # iOS linearDamping
-const ANGULAR_DAMP        := 0.0           # iOS angularDamping
+const PPM                 := 32.0
+const PIECE_RADIUS_PX     := 12.5
+const FRICTION            := 1.0
+const RESTITUTION         := 1.0
+const LINEAR_DAMP         := 1.35
+const ANGULAR_DAMP        := 0.0
 const DENSITY             := 1.0
 const GRAVITY_SCALE       := 0.0
-const CCD_MODE            := RigidBody2D.CCD_MODE_CAST_RAY   # iOS bullet=true
-const LOCK_ROTATION       := false         # iOS fixedRotation=false
+const CCD_MODE            := RigidBody2D.CCD_MODE_CAST_RAY
+const LOCK_ROTATION       := false
 const IOS_STOP_LINEAR_SPEED := 1.0
 const IOS_STOP_ANGULAR_SPEED := 0.08
 const CAN_SLEEP := false
 
 var PIECE_RADIUS := PIECE_RADIUS_PX
-const ROUND_SNAP_AFTER: float = 1.4      # seconds: snap to post board after physics play
-var _staged_launch_mode: bool = false       # true after we auto-play locally
-var _staged_pre_board_str: String = ""      # serialized first board captured before auto-play
-var _staged_next_index: int = 0             # next board index after auto-play
-#const DEV_REPLAY_STRING := "board:2#77.861351,66.122459,1,-0.876164,-2.354301,104.423691#23.355244,93.006905,2,1.830075,-1.580594,61.118755#-4.830564,36.334606,2,2.219335,0.272333,38.293098#-18.615202,-35.732677,2,2.316064,0.583284,79.135498#99.505798,94.505386,2,2.833030,-1.843283,72.001610|shoot:1|board:3#68.967499,51.041775,1,-0.956223,-2.354301,0.000000#50.799763,68.490479,2,0.031407,-1.832990,21.633646#-33.968060,-1.493485,2,1.201969,0.854556,49.784225#22.491690,-81.952728,2,2.664457,1.825102,79.211861#64.293983,-6.814495,2,-0.272487,1.906639,43.372223|board:3#68.967499,51.041775,1,-0.956223,-2.354301,0.000000#50.799763,68.490479,2,0.031407,-1.832990,21.633646#-33.968060,-1.493485,2,1.201969,0.854556,49.784225#22.491690,-81.952728,2,2.664457,1.825102,79.211861#64.293983,-6.814495,2,-0.272487,1.906639,43.372223"
+const ROUND_SNAP_AFTER: float = 1.4
+var _staged_launch_mode: bool = false
+var _staged_pre_board_str: String = ""
+var _staged_next_index: int = 0
 
 var _water_kill_areas: Array[Area2D] = []
 var _base_iceberg_poly: PackedVector2Array = []
@@ -147,6 +148,8 @@ var avatar_key = 0
 var player = 1
 var sent_tween: Tween
 var dot_count = 0
+var _aim_instruction_label: Label = null
+var _aim_instruction_tween: Tween = null
 var _resize_pending := false
 
 func _on_viewport_resize() -> void:
@@ -164,8 +167,10 @@ func _apply_resize_refresh() -> void:
 	_resize_pending = false
 	_target_physical_size = get_viewport_rect().size.x
 	_recalc_board_base_scale_factor()
+	_ensure_board_scaler()
+	_layout_board_centered()
 	_apply_board_index_immediate(_current_board_index)
-	print("Call 157")
+	_apply_board_draw_order()
 	_refresh_safe_polys_for_transform()
 	_seed_area_overlaps()
 
@@ -263,20 +268,89 @@ func _style_button(btn: Button, base: Color) -> void:
 	btn.add_theme_stylebox_override("disabled", disabled)
 	btn.add_theme_color_override("font_color", Color.WHITE)
 
+func _arrow_color_for_piece(piece: Node) -> Color:
+	if int(piece.get_meta("player", -1)) == 2:
+		return ARROW_COLOR_PLAYER2
+
+	if map_mode == 2:
+		return ARROW_COLOR_MAP2
+	if map_mode == 3:
+		return ARROW_COLOR_MAP3
+
+	return ARROW_COLOR_MAP1
+
 func _apply_arrow_color_for_current_map() -> void:
-	var c := ARROW_COLOR_MAP1
-	if map_mode == 2: c = ARROW_COLOR_MAP2
-	elif map_mode == 3: c = ARROW_COLOR_MAP3
+	if not is_instance_valid(piece_container):
+		return
+
 	for piece in piece_container.get_children():
 		var arrow := piece.get_node_or_null("Arrow") as CanvasItem
-		if arrow: arrow.modulate = c
-
+		if arrow:
+			var old_alpha := arrow.modulate.a
+			arrow.modulate = _arrow_color_for_piece(piece)
+			arrow.modulate.a = old_alpha
+			
 func _apply_send_button_color_for_current_map() -> void:
 	if not is_instance_valid(send_button): return
 	if map_mode == 2:
 		_style_button(send_button, SEND_RED)
 	elif map_mode == 3:
 		_style_button(send_button, SEND_GREEN)
+
+func _can_show_aim_ui() -> bool:
+	return (
+		is_my_turn
+		and not spectator_mode
+		and not game_over
+		and not _replay_in_progress
+		and not _is_zooming
+	)
+
+
+func _update_aim_instruction_label() -> void:
+	if not is_instance_valid(_aim_instruction_label):
+		_aim_instruction_label = Label.new()
+		_aim_instruction_label.name = "AimInstructionLabel"
+		_aim_instruction_label.text = "Adjust power and direction\nfor all your penguins."
+		_aim_instruction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_aim_instruction_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_aim_instruction_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_aim_instruction_label.add_theme_font_size_override("font_size", 28)
+		_aim_instruction_label.add_theme_color_override("font_color", Color.WHITE)
+		_aim_instruction_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.75))
+		_aim_instruction_label.add_theme_constant_override("shadow_offset_x", 2)
+		_aim_instruction_label.add_theme_constant_override("shadow_offset_y", 2)
+		_aim_instruction_label.z_as_relative = false
+		_aim_instruction_label.z_index = Z_UI_TOP
+		_aim_instruction_label.visible = false
+		_aim_instruction_label.modulate.a = 0.0
+		add_child(_aim_instruction_label)
+
+		_aim_instruction_label.anchor_left = 0.0
+		_aim_instruction_label.anchor_right = 1.0
+		_aim_instruction_label.anchor_top = 1.0
+		_aim_instruction_label.anchor_bottom = 1.0
+		_aim_instruction_label.offset_left = 36.0
+		_aim_instruction_label.offset_right = -36.0
+		_aim_instruction_label.offset_top = -190.0
+		_aim_instruction_label.offset_bottom = -95.0
+
+	var should_show := (
+		_can_show_aim_ui()
+		and not _owned_live_pieces().is_empty()
+		and not _all_my_arrows_visible()
+	)
+
+	if _aim_instruction_tween and _aim_instruction_tween.is_running():
+		_aim_instruction_tween.kill()
+
+	if should_show:
+		_aim_instruction_label.visible = true
+		_aim_instruction_tween = create_tween()
+		_aim_instruction_tween.tween_property(_aim_instruction_label, "modulate:a", 1.0, 0.22)
+	else:
+		_aim_instruction_label.visible = false
+		_aim_instruction_label.modulate.a = 0.0
 
 # Rebuild base polygons from the image ONCE (or when the texture/map changes).
 func _rebuild_base_polys_from_png(alpha_threshold: float = 0.1, simplify_epsilon: float = 1.5) -> void:
@@ -337,92 +411,80 @@ func _rebuild_base_polys_from_png(alpha_threshold: float = 0.1, simplify_epsilon
 	else:
 		_base_hole_polys.clear()
 
-	var bounding_rect: Rect2 = _get_poly_bounds(best)
-	print("BASE POLYGON BUILT (Image Coords): %s ; holes=%d" % [bounding_rect, _base_hole_polys.size()])
-
-
 # Recompute transformed (BoardZoom-local & global) polygons when transforms/layout change.
 func _refresh_safe_polys_for_transform() -> void:
-	# Build/refresh BoardZoom-local polygons and wire them to Areas (no per-frame tests).
 	_ensure_debug_preview_hosted_in_board_zoom()
+
 	if _base_iceberg_poly.is_empty():
 		if is_instance_valid(safe_zone_polygon):
 			safe_zone_polygon.polygon = PackedVector2Array()
 			print("311 Call")
-		# Tear down old areas if any
 		_destroy_safe_hole_areas()
 		print("313 CALL")
 		return
-	print("CALL 314")
+
 	var texrect := _get_texrect()
 	if not is_instance_valid(board_zoom) or not is_instance_valid(texrect) or not texrect.texture:
 		print("EXITING 316")
 		return
-	print("CALL 318")
-	# Map: Image space -> TextureRect draw space -> BoardZoom local
+
 	var xf: Transform2D = board_zoom.get_global_transform().affine_inverse() * texrect.get_global_transform()
 	var tex_draw_rect: Rect2 = _texrect_draw_rect(texrect, null)
 	var img_size := Vector2(texrect.texture.get_size())
 	var tex_scale := tex_draw_rect.size / img_size if img_size.x > 0.0 and img_size.y > 0.0 else Vector2.ONE
-	
-	# The inverse scale and pivot are the keys to fixing the "double scaling" problem correctly.
-	var inv_zoom_scale := Vector2.ONE
-	if board_zoom.scale.x != 0.0 and board_zoom.scale.y != 0.0:
-		inv_zoom_scale = Vector2.ONE / board_zoom.scale
-	var pivot := board_zoom.pivot_offset
 
-	# Outer polygon in BoardZoom local (unscaled and correctly positioned)
 	var local_poly := PackedVector2Array()
 	for v_img in _base_iceberg_poly:
 		var p_tex := tex_draw_rect.position + (v_img * tex_scale)
-		var scaled_pt := xf * p_tex
-		# Scale the point around the pivot to correct its position
-		local_poly.append(pivot + ((scaled_pt - pivot) * inv_zoom_scale))
+		local_poly.append(xf * p_tex)
 
-	# Optional outward offset (amount must also be in the unscaled space)
-	var offset_amount = 1.0 * inv_zoom_scale.x
+	var offset_amount := 1.0
 	var final_poly := local_poly
 	var expanded := Geometry2D.offset_polygon(local_poly, offset_amount)
 	if expanded is Array and expanded.size() > 0:
 		final_poly = expanded[0]
 
-	# (Map 2) hole polygons in BoardZoom local (unscaled and correctly positioned)
 	var hole_locals: Array[PackedVector2Array] = []
 	if map_mode == 2 and not _base_hole_polys.is_empty():
 		for hole_img in _base_hole_polys:
 			var hl := PackedVector2Array()
 			for v_img in hole_img:
 				var p_tex := tex_draw_rect.position + (v_img * tex_scale)
-				var scaled_pt := xf * p_tex
-				# Scale the point around the pivot here as well
-				hl.append(pivot + ((scaled_pt - pivot) * inv_zoom_scale))
-			
-			var shrink_amount = -1.0 * inv_zoom_scale.x
+				hl.append(xf * p_tex)
+
+			var shrink_amount := -1.0
 			var shrunk := Geometry2D.offset_polygon(hl, shrink_amount)
 			hole_locals.append(shrunk[0] if (shrunk is Array and shrunk.size() > 0) else hl)
 
 	_last_safe_poly = final_poly
 	_last_hole_polys_cached = hole_locals.duplicate()
 
-	# Existing preview node
 	if is_instance_valid(safe_zone_polygon):
 		safe_zone_polygon.polygon = final_poly
 		safe_zone_polygon.visible = DEBUG_DRAW_ZONES
 		if safe_zone_polygon is Polygon2D:
 			safe_zone_polygon.color = Color(0, 1, 0, 0.10)
 
-	# Build/update Areas
 	_build_safe_area(final_poly)
 	_build_hole_areas(hole_locals)
 
-	# Update debug overlay shapes
 	if _kill_debug_showing:
 		_ensure_kill_overlay()
 		_safe_debug_poly.polygon = final_poly
 		_safe_debug_outline.points = final_poly
 		_set_hole_debug_polys(hole_locals)
 		_update_hole_outlines(hole_locals)
-		
+
+func _ensure_piece_container_hosted_in_board_zoom() -> void:
+	if not is_instance_valid(piece_container) or not is_instance_valid(board_zoom):
+		return
+
+	if piece_container.get_parent() != board_zoom:
+		piece_container.reparent(board_zoom)
+
+	piece_container.position = LOGICAL_BOARD_SIZE * 0.5
+	piece_container.scale = Vector2.ONE
+
 func _texture_to_image_or_fallback(tex: Texture2D) -> Image:
 	var img: Image = null
 	if tex:
@@ -541,19 +603,179 @@ func _apply_piece_container_scale_for_board() -> void:
 	if not is_instance_valid(piece_container):
 		return
 
-	var target := _target_scale_for_index(_current_board_index)
-	piece_container.scale = Vector2.ONE * target
-	piece_container.position = LOGICAL_BOARD_SIZE * 0.5
+	piece_container.scale = Vector2.ONE
+	_resync_piece_sprite_sizes()
 	
 func _target_scale_for_index(i: int) -> float:
-	return _board_base_scale_factor * _board_scale_for_index(i)
+	return _board_scale_for_index(i)
 	
 func _recalc_board_base_scale_factor() -> void:
-	_board_base_scale_factor = 1.0 if LOGICAL_BOARD_SIZE.x <= 0.0 else _target_physical_size / LOGICAL_BOARD_SIZE.x
+	var vp := get_viewport_rect().size
+	_board_base_scale_factor = 1.0
+
+	if LOGICAL_BOARD_SIZE.x > 0.0:
+		_board_base_scale_factor = vp.x / LOGICAL_BOARD_SIZE.x
+
 	if DEBUG_SHRINK:
-		print("[SHRINK] _recalc_board_base_scale_factor | target_px=", _target_physical_size, " | base_factor=", _board_base_scale_factor)
+		print("[SHRINK] _recalc_board_base_scale_factor",
+			" | base_factor=", _board_base_scale_factor,
+			" | viewport=", vp,
+			" | logical=", LOGICAL_BOARD_SIZE
+		)
 		
+func _pin_control_rect(c: Control, pos: Vector2, sz: Vector2) -> void:
+	if not is_instance_valid(c):
+		return
+
+	c.anchor_left = 0.0
+	c.anchor_top = 0.0
+	c.anchor_right = 0.0
+	c.anchor_bottom = 0.0
+
+	c.offset_left = pos.x
+	c.offset_top = pos.y
+	c.offset_right = pos.x + sz.x
+	c.offset_bottom = pos.y + sz.y
+
+	c.custom_minimum_size = sz
+	c.size = sz
+	c.position = pos
+	c.pivot_offset = sz * 0.5
+
+func _layout_board_centered() -> void:
+	if not is_instance_valid(board_zoom):
+		return
+
+	var vp := get_viewport_rect().size
+	var board_pos := Vector2(
+		roundf((vp.x - LOGICAL_BOARD_SIZE.x) * 0.5),
+		roundf((vp.y - LOGICAL_BOARD_SIZE.y) * 0.5)
+	)
+
+	var zoom_scale := _board_base_scale_factor * current_scale
+
+	board_zoom.set_as_top_level(true)
+	_pin_control_rect(board_zoom, board_pos, LOGICAL_BOARD_SIZE)
+	board_zoom.clip_contents = false
+	board_zoom.scale = Vector2.ONE * zoom_scale
+	board_zoom.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
+
+	if is_instance_valid(_board_scale_node):
+		_pin_control_rect(_board_scale_node, Vector2.ZERO, LOGICAL_BOARD_SIZE)
+		_board_scale_node.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
+
+	var texrect := _get_texrect()
+	if is_instance_valid(texrect):
+		_pin_control_rect(texrect, Vector2.ZERO, LOGICAL_BOARD_SIZE)
+		texrect.scale = Vector2.ONE
+		texrect.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
+
+	if is_instance_valid(piece_container):
+		piece_container.position = LOGICAL_BOARD_SIZE * 0.5
+		piece_container.scale = Vector2.ONE
+
+	_apply_board_draw_order()
+	
+func _set_canvas_z(item: CanvasItem, z: int) -> void:
+	if not is_instance_valid(item):
+		return
+
+	item.z_as_relative = false
+	item.z_index = z
+
+func _apply_top_ui_draw_order() -> void:
+	if is_instance_valid(waiting_blur):
+		_set_canvas_z(waiting_blur, Z_BLUR)
+
+	if is_instance_valid(win_loss_label):
+		_set_canvas_z(win_loss_label, Z_UI_TOP)
+
+	if is_instance_valid(waiting_label):
+		_set_canvas_z(waiting_label, Z_UI_TOP)
+
+	if is_instance_valid(sent_label):
+		_set_canvas_z(sent_label, Z_UI_TOP)
+
+	if is_instance_valid(_aim_instruction_label):
+		_set_canvas_z(_aim_instruction_label, Z_UI_TOP)
+		
+func _apply_water_ripple_draw_order(root: Node) -> void:
+	if not is_instance_valid(root):
+		return
+
+	for child in root.get_children():
+		if child is CanvasItem:
+			var ci := child as CanvasItem
+			var n := String(child.name).to_lower()
+
+			if child != background and child != waiting_blur:
+				if n.find("ripple") >= 0 or n.find("water") >= 0:
+					_set_canvas_z(ci, Z_WATER_RIPPLE)
+
+		_apply_water_ripple_draw_order(child)
+
+func _apply_piece_draw_order() -> void:
+	if not is_instance_valid(piece_container):
+		return
+
+	# Container is the absolute piece layer.
+	piece_container.z_as_relative = false
+	piece_container.z_index = Z_PIECES
+
+	for piece in piece_container.get_children():
+		if piece == _mushroom_layer:
+			if piece is CanvasItem:
+				var mushroom_ci := piece as CanvasItem
+				mushroom_ci.z_as_relative = true
+				mushroom_ci.z_index = -1
+			continue
+
+		if piece is CanvasItem:
+			var piece_ci := piece as CanvasItem
+			piece_ci.z_as_relative = true
+			piece_ci.z_index = 0
+
+		var arrow := piece.get_node_or_null("Arrow") as CanvasItem
+		if arrow:
+			arrow.z_as_relative = false
+			arrow.z_index = Z_ARROWS
+
+		var sprite := piece.get_node_or_null("Sprite2D") as CanvasItem
+		if sprite:
+			sprite.z_as_relative = true
+			sprite.z_index = 1
+
+		var ring := piece.get_node_or_null("HighlightRing") as CanvasItem
+		if ring:
+			ring.z_as_relative = true
+			ring.z_index = 2
+				
+func _apply_board_draw_order() -> void:
+	if is_instance_valid(background):
+		_set_canvas_z(background, Z_BACKGROUND)
+
+	_apply_water_ripple_draw_order(self)
+
+	if is_instance_valid(game_board):
+		_set_canvas_z(game_board, Z_BOARD)
+
+	if is_instance_valid(board_zoom):
+		_set_canvas_z(board_zoom, Z_BOARD)
+
+	if is_instance_valid(_board_scale_node):
+		_set_canvas_z(_board_scale_node, Z_BOARD)
+
+	var texrect := _get_texrect()
+	if is_instance_valid(texrect):
+		_set_canvas_z(texrect, Z_BOARD)
+
+	_apply_piece_draw_order()
+	_apply_top_ui_draw_order()
+	
 func _physics_process(delta: float) -> void:
+	if _pdiff_active and _pdiff != null:
+		_pdiff.tick(_collect_diff_pieces())
+ 
 	_kill_check_accum += delta
 	if _kill_check_accum >= KILL_CHECK_INTERVAL:
 		_kill_check_accum = 0.0
@@ -561,6 +783,41 @@ func _physics_process(delta: float) -> void:
 		if not _kill_detection_enabled:
 			return
 		_fallback_kill_pass()
+		
+func _resync_piece_sprite_sizes() -> void:
+	if not is_instance_valid(piece_container):
+		return
+
+	for piece in piece_container.get_children():
+		if not (piece is RigidBody2D):
+			continue
+
+		var sprite := piece.find_child("Sprite2D", true, false) as Sprite2D
+		if sprite == null or sprite.texture == null:
+			continue
+
+		var ts: Vector2 = sprite.texture.get_size()
+		if ts.x <= 0.0 or ts.y <= 0.0:
+			continue
+
+		# This is logical board-space size. BoardZoom handles screen-width scaling.
+		sprite.scale = IOS_PENGUIN_VISUAL_SIZE / ts
+		sprite.centered = true
+		sprite.position = Vector2.ZERO
+		
+func _collect_diff_pieces() -> Array:
+	var p1: Array = []
+	var p2: Array = []
+	for c in piece_container.get_children():
+		if c is RigidBody2D and c.has_meta("player"):
+			if int(c.get_meta("player", 1)) == 1:
+				p1.append(c)
+			else:
+				p2.append(c)
+	var out: Array = []
+	out.append_array(p1)
+	out.append_array(p2)
+	return out
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -570,26 +827,25 @@ func _unhandled_input(event: InputEvent) -> void:
 func _fallback_kill_pass() -> void:
 	if _last_safe_poly.is_empty() or not is_instance_valid(board_zoom):
 		return
-	var to_bz := board_zoom.get_global_transform().affine_inverse()
-
+	var to_bz: Transform2D = board_zoom.get_global_transform().affine_inverse()
 	for n in piece_container.get_children():
 		if not (n is RigidBody2D): continue
 		if n.get_meta("dying", false): continue
-
-		var p_bz := to_bz * (n as Node2D).global_position
-		var in_safe := Geometry2D.is_point_in_polygon(p_bz, _last_safe_poly)
-		var in_hole := false
+		var p_bz: Vector2 = to_bz * (n as Node2D).global_position
+		var in_safe: bool = Geometry2D.is_point_in_polygon(p_bz, _last_safe_poly)
+		var in_hole: bool = false
 		for hp in _last_hole_polys_cached:
 			if not hp.is_empty() and Geometry2D.is_point_in_polygon(p_bz, hp):
 				in_hole = true
 				break
-
 		if (not in_safe) or in_hole:
 			if DEBUG_KILL:
 				print("[KILL] fallback → ", n.name, " in_safe=", in_safe, " in_hole=", in_hole, " pos=", p_bz)
 			_safe_kill(n)
-
-					
+			
+func _align_piece_container_to_texrect() -> void:
+	_ensure_piece_container_hosted_in_board_zoom()
+	
 func _get_poly_bounds(poly: PackedVector2Array) -> Rect2:
 	if poly.is_empty():
 		return Rect2()
@@ -668,16 +924,20 @@ func _apply_ios_board_texture_layout() -> void:
 	if not is_instance_valid(texrect):
 		return
 
-	texrect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	texrect.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	texrect.custom_minimum_size = IOS_BOARD_TEXTURE_SIZE
-	texrect.size = IOS_BOARD_TEXTURE_SIZE
-	texrect.position = IOS_BOARD_TEXTURE_OFFSET
+	if DEBUG_SHRINK and texrect.texture:
+		print("[BOARD_TEX] native_texture_size=", texrect.texture.get_size(),
+			" | rect_size=", LOGICAL_BOARD_SIZE,
+			" | logical=", LOGICAL_BOARD_SIZE
+		)
+
+	_pin_control_rect(texrect, Vector2.ZERO, LOGICAL_BOARD_SIZE)
 	texrect.scale = Vector2.ONE
-	texrect.pivot_offset = IOS_BOARD_TEXTURE_SIZE * 0.5
+	texrect.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
 	texrect.stretch_mode = TextureRect.STRETCH_SCALE
+	texrect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	texrect.modulate = Color.WHITE
-			
+	_set_canvas_z(texrect, Z_BOARD)
+	
 func _get_texrect() -> TextureRect:
 	if is_instance_valid(_texrect):
 		return _texrect
@@ -696,55 +956,58 @@ func _get_texrect() -> TextureRect:
 
 func _ensure_board_scaler() -> void:
 	if is_instance_valid(_board_scale_node):
+		_pin_control_rect(_board_scale_node, Vector2.ZERO, LOGICAL_BOARD_SIZE)
+		_apply_ios_board_texture_layout()
+		_apply_board_draw_order()
 		return
 
-	# Use an existing BoardScaler if present
 	var existing := game_board.get_node_or_null("BoardScaler") as Control
 	if is_instance_valid(existing):
 		_board_scale_node = existing
-		_board_scale_node.custom_minimum_size = LOGICAL_BOARD_SIZE
-		_board_scale_node.size = LOGICAL_BOARD_SIZE
-		_board_scale_node.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
+		_pin_control_rect(_board_scale_node, Vector2.ZERO, LOGICAL_BOARD_SIZE)
+
 		if not is_instance_valid(_texrect):
 			_texrect = existing.get_node_or_null("TextureRect") as TextureRect
+
 		_apply_ios_board_texture_layout()
+		_apply_board_draw_order()
 		print("[SHRINK] Using existing BoardScaler.")
 		return
 
-	# Otherwise inject one
 	var tex := _get_texrect()
 	if not is_instance_valid(tex):
 		push_warning("[SHRINK] _ensure_board_scaler: no TextureRect to wrap.")
 		return
+
 	var wrapper := Control.new()
 	wrapper.name = "BoardScaler"
-	wrapper.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	wrapper.size_flags_vertical   = Control.SIZE_SHRINK_CENTER
-	wrapper.custom_minimum_size = LOGICAL_BOARD_SIZE
-	wrapper.size = LOGICAL_BOARD_SIZE
-	wrapper.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
+	_pin_control_rect(wrapper, Vector2.ZERO, LOGICAL_BOARD_SIZE)
+
 	game_board.add_child(wrapper)
 	game_board.move_child(wrapper, tex.get_index())
+
 	tex.reparent(wrapper)
 	tex.position = Vector2.ZERO
 	tex.scale = Vector2.ONE
+
 	_board_scale_node = wrapper
 	_apply_ios_board_texture_layout()
+	_apply_board_draw_order()
 	print("[SHRINK] BoardScaler injected.")
-
+	
 func _ready():
 	# Wait a single frame for the viewport size to be accurate before we do any calculations.
 	await get_tree().process_frame
 	Engine.physics_ticks_per_second = 60
 	# 1. Dynamically set the board's target size based on the screen width.
-	_target_physical_size = get_viewport_rect().size.x
+	_recalc_board_base_scale_factor()
 
 	# 2. Standard scene and UI setup.
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_map_theme(map_mode)
 	_apply_bg_for_dark(is_dark)
-	background.z_index = -10
 	self.z_index = 10
+	_apply_board_draw_order()
 	randomize()
 	print("Knockout Scene ready!")
 
@@ -767,25 +1030,23 @@ func _ready():
 		_apply_ios_board_texture_layout()
 
 	if is_instance_valid(board_zoom):
-		board_zoom.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		board_zoom.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		board_zoom.custom_minimum_size = LOGICAL_BOARD_SIZE
+		board_zoom.set_as_top_level(true)
 		board_zoom.clip_contents = false
-		# BoardZoom's scale is now ONLY for gameplay zoom.
-		board_zoom.scale = Vector2.ONE * ZOOM_START
 		current_scale = ZOOM_START
-		board_zoom.pivot_offset = board_zoom.custom_minimum_size * 0.5
+		board_zoom.scale = Vector2.ONE * (_board_base_scale_factor * current_scale)
+		board_zoom.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
 		board_zoom.resized.connect(func():
-			board_zoom.pivot_offset = board_zoom.size * 0.5
+			_layout_board_centered()
 		)
 	
-	piece_container.position = board_zoom.custom_minimum_size * 0.5
+	_ensure_board_scaler()
+	_apply_ios_board_texture_layout()
+	_layout_board_centered()
+	_ensure_piece_container_hosted_in_board_zoom()
 	_ensure_debug_preview_hosted_in_board_zoom()
 	_set_kill_debug_visible(false)
 	_ensure_kill_overlay()
-	_ensure_board_scaler()
-	_apply_ios_board_texture_layout()
-
+	_apply_board_draw_order()
 	
 	# 4. Calculate the base scale factor and apply the initial board state.
 	_recalc_board_base_scale_factor()
@@ -798,7 +1059,9 @@ func _ready():
 	# 6. Final game initialization steps.
 	_board_initialized = true
 	print("Board initialized and scaled.")
-
+	if PDIFF_ENABLED:
+		await get_tree().create_timer(0.4).timeout   # let board settle/layout
+		
 	if _pending_replay_str != "":
 		parse_replay_string(_pending_replay_str)
 		_pending_replay_str = ""
@@ -818,14 +1081,15 @@ func _ready():
 			"myPlayerId": "TEST",
 			"player2": "TEST",
 			"mode": "1",
-			"replay": "board:4#37.539143,-8.839409,2,-1.826400,0.240102,150.000000#-2.334054,31.629789,2,-0.341834,1.387752,150.000000#14.126378,6.386063,2,-1.925762,0.535761,150.000000#-58.224808,-9.362088,2,0.077105,0.422993,25.539886#-38.761223,-62.057194,1,2.583204,1.675026,50.333553#-38.610645,53.053349,1,1.908417,-0.746181,28.071648#-20.340647,14.575293,1,2.246337,-0.158717,22.626064#19.219790,-25.383921,1,2.874317,2.551210,24.942951|shoot:1|board:5#-34.870914,18.695574,2,1.285144,-0.411801,39.101284#-39.166138,-17.333841,1,2.870959,1.675026,0.000000#-2.886599,42.180504,1,0.524401,-0.746181,0.000000#11.933084,13.791970,1,0.984539,-0.158717,0.000000#-4.856493,-15.605420,1,3.700285,2.551210,0.000000|board:5#-34.870914,18.695574,2,1.285144,-0.411801,39.101284#-39.166138,-17.333841,1,2.870959,1.675026,0.000000#-2.886599,42.180504,1,0.524401,-0.746181,0.000000#11.933084,13.791970,1,0.984539,-0.158717,0.000000#-4.856493,-15.605420,1,3.700285,2.551210,0.000000"
+			"replay": "board:1#-41.490452,-18.381981,2,2.568027,0.311887,11.024456#35.786495,56.762127,1,0.193446,3.140568,125.850670|shoot:1|board:2#-24.121695,-12.309731,2,1.882683,0.311887,0.000000#-135.776291,51.576973,1,4.711365,-0.038352,95.461876|board:2#-24.121695,-12.309731,2,1.882683,0.311887,0.000000#-135.776291,51.576973,1,4.711365,-0.038352,95.461876"
 		}
 		_set_game_data(JSON.stringify(dev_payload))
 
 	call_deferred("_seed_area_overlaps")
-	if piece_container.get_parent() != board_zoom:
-		piece_container.reparent(board_zoom)
-	piece_container.position = board_zoom.custom_minimum_size * 0.5
+	_ensure_piece_container_hosted_in_board_zoom()
+	_resync_piece_sprite_sizes()
+	_refresh_safe_polys_for_transform()
+	_seed_area_overlaps()
 
 func _seed_area_overlaps() -> void:
 	if not is_instance_valid(_safe_area): return
@@ -839,16 +1103,18 @@ func _apply_bg_for_dark(is_dark: bool) -> void:
 # --- Game Data Handling ---
 
 func _animate_and_fire_from_current_arrows() -> void:
+	_stop_all_highlights()
+	_recompute_send_button_visibility()
+
 	var pieces: Array[RigidBody2D] = []
 	for c in piece_container.get_children():
 		if c is RigidBody2D and c.has_meta("player"):
 			pieces.append(c)
 
-	# Make sure arrows are visible for the pre-play animation
 	for p in pieces:
 		var ang_deg: float = float(p.get_meta("shoot_dir", 0.0))
-		var pow_px: float  = float(p.get_meta("power", 0.0))
-		_set_piece_arrow_from_data(p, deg_to_rad(ang_deg), pow_px, 0.18)
+		var pow_px: float = float(p.get_meta("power", 0.0))
+		_set_piece_arrow_from_data(p, deg_to_rad(ang_deg), pow_px, 0.22)
 
 	await get_tree().create_timer(0.5).timeout
 
@@ -856,6 +1122,7 @@ func _animate_and_fire_from_current_arrows() -> void:
 	for p in pieces:
 		var ang_deg: float = float(p.get_meta("shoot_dir", 0.0))
 		_rotate_piece_to_dir(rot_tw, p, deg_to_rad(ang_deg), 0.5)
+
 	if rot_tw.is_running():
 		await rot_tw.finished
 
@@ -863,43 +1130,46 @@ func _animate_and_fire_from_current_arrows() -> void:
 
 	for p in pieces:
 		var ang_deg: float = float(p.get_meta("shoot_dir", 0.0))
-		var pow_px: float  = float(p.get_meta("power", 0.0))
+		var pow_px: float = float(p.get_meta("power", 0.0))
 		_fire_piece_from_arrow(p, deg_to_rad(ang_deg), pow_px)
 
 	await _wait_for_pieces_to_settle(10.0, 8, IOS_STOP_LINEAR_SPEED, IOS_STOP_ANGULAR_SPEED)
-
-
+	
 # After physics settles, move pieces to the next-board inset, shrink board, and enable re-aiming
 func _stage_after_local_play(next_idx: int) -> void:
 	_dbg_board_state("staging pre-shrink")
+
+	_is_zooming = true
+	_update_piece_interactivity()
+	_stop_all_highlights()
+
 	for c in piece_container.get_children():
 		if c is RigidBody2D and c.has_meta("player"):
 			var rb := c as RigidBody2D
-			var new_pos := _inset_pos_for_board(rb.position, next_idx)
 			rb.freeze = true
-			rb.position = new_pos
 			rb.linear_velocity = Vector2.ZERO
 			rb.angular_velocity = 0.0
 			rb.freeze = false
 
 	_hide_all_arrows_and_refresh_highlights()
 
-	# Do NOT zoom; only tween the board index (BoardScaler handles the image size)
 	var will_shrink := _clamp_board_index(next_idx) != _current_board_index
 	if will_shrink:
 		_set_kill_detection_enabled(false)
 
-	await _tween_board_index_to(next_idx, 0.18)  # re-enables inside
+	await _tween_board_index_to(next_idx, 0.42)
 
-	# Safety in case tween was a no-op (target == current)
 	if will_shrink and _kill_detection_enabled == false:
 		_set_kill_detection_enabled(true)
 
+	_is_zooming = false
 	_staged_launch_mode = true
 	_staged_next_index = next_idx
-	_update_piece_interactivity()
-	_recompute_send_button_visibility()
 
+	_update_piece_interactivity()
+	call_deferred("_apply_turn_highlights_based_on_arrows")
+	_recompute_send_button_visibility()
+	
 func _set_game_data(new_game_data_json: String):
 	var parsed = JSON.parse_string(new_game_data_json)
 	if typeof(parsed) != TYPE_DICTIONARY:
@@ -972,15 +1242,15 @@ func send_game() -> void:
 	# If we already auto-played locally, this click FINALIZES and sends.
 	if _staged_launch_mode:
 		var payload: Dictionary = {}
-		var post_str := _serialize_current_board(_staged_next_index, false, true)
-		var staged_replay_str := "%s|shoot:1|%s|%s" % [_staged_pre_board_str, post_str, post_str]
+		var post_str := _serialize_current_board(_staged_next_index, true, true)
+		var setup_str := _serialize_current_board(_staged_next_index, false, true)
+		var staged_replay_str := "%s|shoot:1|%s|%s" % [_staged_pre_board_str, post_str, setup_str]
 		payload["replay"] = staged_replay_str
 
 		avatar_key = ("avatar1" if player == 1 else "avatar2")
 		if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 			payload[avatar_key] = player_avatar_display.get_avatar_data_string()
 
-		# (Optional) Check win now (in case local round ended the game)
 		game_ended = await check_win()
 		if game_ended and win_loss_state != "":
 			payload["winner"] = my_player_id + "|" + win_loss_state
@@ -1003,6 +1273,13 @@ func send_game() -> void:
 	# Not staged yet → decide whether to auto-play first or just send normally.
 	var my_ready := _all_my_arrows_visible()
 	var opp_ready := _all_opponent_arrows_nonzero()
+	
+	print("[Send] readiness | staged=", _staged_launch_mode,
+		" | my_ready=", my_ready,
+		" | opp_ready=", opp_ready,
+		" | current_idx=", _current_board_index,
+		" | has_last_pre=", not last_pre_round.is_empty()
+	)
 
 	# If EVERYONE has set arrows, we do the local play NOW, then let user re-aim.
 	if my_ready and opp_ready:
@@ -1128,14 +1405,12 @@ func _update_piece_interactivity() -> void:
 			var owner_id: int = int(piece.get_meta("player", -1))
 			var can_control: bool = (
 				owner_id == player
-				and is_my_turn
-				and not spectator_mode
-				and not game_over
-				and not _replay_in_progress            # <-- add
+				and _can_show_aim_ui()
 			)
 			piece.set_controlled_by_me(can_control)
-	_recompute_send_button_visibility()
 
+	_recompute_send_button_visibility()
+	
 func parse_replay_string(replay: String) -> void:
 	var chunks: PackedStringArray = replay.split("|", false)
 	var boards: Array[Dictionary] = []
@@ -1157,19 +1432,55 @@ func parse_replay_string(replay: String) -> void:
 
 	last_pre_round = boards[0]
 	last_post_round = boards[1] if (boards.size() > 1) else {}
+	last_pending_setup_round = {}
+
+	# If the replay includes a final setup board where only one player has aimed,
+	# preserve it so it can be restored after the replay finishes.
+	if shoot_flag and boards.size() >= 3:
+		var possible_setup: Dictionary = boards[boards.size() - 1]
+		var filled_players := {}
+
+		for pd in possible_setup.get("pieces", []):
+			var power_val := float(pd.get("power", 0.0))
+			if power_val > 0.5:
+				filled_players[int(pd.get("player", -1))] = true
+
+		if filled_players.size() == 1:
+			last_pending_setup_round = possible_setup.duplicate(true)
+			print("[REPLAY] Preserved pending setup board | filled_players=", filled_players.keys())
 
 	var pre_idx := int(last_pre_round.get("round", 0))
+	print("[REPLAY] parse | pre_idx=", pre_idx,
+		" | boards=", boards.size(),
+		" | shoot_flag=", shoot_flag,
+		" | has_pending_setup=", not last_pending_setup_round.is_empty()
+	)
+
+	_replay_in_progress = shoot_flag
+
 	_apply_board_index_immediate(pre_idx)
+	_dbg_board_state("parse after pre_idx apply")
 
 	_setup_board_from_board_dict(last_pre_round)
+	await get_tree().process_frame
+
+	_ensure_piece_container_hosted_in_board_zoom()
+	_resync_piece_sprite_sizes()
+	_apply_aim_data_from_board_dict(last_pre_round, false)
+	_refresh_safe_polys_for_transform()
+	_seed_area_overlaps()
 
 	if shoot_flag:
-		_replay_in_progress = true
 		_update_piece_interactivity()
 		_stop_all_highlights()
 		await get_tree().process_frame
 		_play_round_from_replay(last_pre_round)
-
+	else:
+		_replay_in_progress = false
+		_update_piece_interactivity()
+		call_deferred("_apply_turn_highlights_based_on_arrows")
+		_recompute_send_button_visibility()
+		
 func _parse_board_chunk(body: String) -> Dictionary:
 	var round_num: int = 0
 	var rest: String = body
@@ -1279,44 +1590,58 @@ func _set_kill_detection_enabled(on: bool) -> void:
 			a.set_deferred("monitorable", on)
 
 func _recompute_send_button_visibility() -> void:
+	var can_aim := _can_show_aim_ui()
+	var my_ready := _all_my_arrows_visible()
+
 	var should_show := (
-		is_my_turn
-		and not spectator_mode
-		and not game_over
-		and not _replay_in_progress
-		and _all_my_arrows_visible()
+		can_aim
+		and my_ready
 	)
+
 	_animate_send_button(should_show)
+
 	if is_instance_valid(send_button):
 		send_button.text = "Send" if _staged_launch_mode else "Launch"
-	
+
+	_update_aim_instruction_label()
+		
 func _apply_zoom(target_zoom_level: float, dur: float = ZOOM_DUR) -> void:
-	if not is_instance_valid(board_zoom) or game_over: return
-	
-	# The scale is simply the target zoom level. The screen-fit logic is handled by the TextureRect.
-	var target_scale_vector := Vector2.ONE * target_zoom_level
+	if not is_instance_valid(board_zoom) or game_over:
+		return
+
+	var target_scale_vector := Vector2.ONE * (_board_base_scale_factor * target_zoom_level)
 
 	if DEBUG_SHRINK:
-		print("[SHRINK] _apply_zoom start | current bz.scale=", board_zoom.scale, " -> target=", target_scale_vector, " dur=", dur)
+		print("[SHRINK] _apply_zoom start",
+			" | current bz.scale=", board_zoom.scale,
+			" | base=", _board_base_scale_factor,
+			" | zoom=", target_zoom_level,
+			" | target=", target_scale_vector,
+			" | dur=", dur
+		)
 
 	_is_zooming = true
 	_set_kill_detection_enabled(false)
+
 	var tw := create_tween()
 	tw.tween_property(board_zoom, "scale", target_scale_vector, dur)\
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		.set_trans(Tween.TRANS_SINE)\
+		.set_ease(Tween.EASE_OUT)
+
 	await tw.finished
+
 	_is_zooming = false
-	
-	# The 'current_scale' variable correctly tracks the zoom level.
 	current_scale = target_zoom_level
 
 	if DEBUG_SHRINK:
-		print("[SHRINK] _apply_zoom done  | bz.scale=", board_zoom.scale)
-	print("Call 1191")
+		print("[SHRINK] _apply_zoom done | bz.scale=", board_zoom.scale)
+
+	_layout_board_centered()
+	_apply_board_draw_order()
 	_refresh_safe_polys_for_transform()
 	_seed_area_overlaps()
 	_set_kill_detection_enabled(true)
-
+	
 func _apply_map_theme(mode: int) -> void:
 	if is_instance_valid(background):
 		match mode:
@@ -1335,7 +1660,6 @@ func _apply_map_theme(mode: int) -> void:
 			texrect.texture = new_tex
 			_rebuild_base_polys_from_png()
 			_apply_board_index_immediate(_current_board_index)
-			print("Call 1214")
 			_refresh_safe_polys_for_transform()
 
 
@@ -1350,7 +1674,46 @@ func _apply_map_theme(mode: int) -> void:
 func _setup_board_from_board_dict(bd: Dictionary) -> void:
 	var arr: Array = bd.get("pieces", [])
 	_setup_board_from_data(arr)
+	
+func _apply_aim_data_from_board_dict(bd: Dictionary, show_arrows: bool = false) -> void:
+	var arr: Array = bd.get("pieces", [])
+	var pieces: Array[Node] = []
 
+	for c in piece_container.get_children():
+		if c is RigidBody2D and c.has_meta("player"):
+			pieces.append(c)
+
+	var count: int = min(pieces.size(), arr.size())
+	for i in count:
+		var piece := pieces[i]
+		var pd: Dictionary = arr[i]
+
+		var shoot_dir_rad := float(pd.get("shoot_dir", 0.0))
+		var power_val := float(pd.get("power", 0.0))
+
+		piece.set_meta("shoot_dir", rad_to_deg(shoot_dir_rad))
+		piece.set_meta("power", power_val)
+
+		var arrow := piece.get_node_or_null("Arrow") as CanvasItem
+
+		if show_arrows and power_val > 0.5:
+			_set_piece_arrow_from_data(piece, shoot_dir_rad, power_val, 0.18)
+		else:
+			if piece.has_method("hide_arrow"):
+				piece.call("hide_arrow")
+			elif arrow:
+				arrow.visible = false
+
+			if arrow:
+				arrow.z_as_relative = false
+				arrow.z_index = Z_ARROWS
+				arrow.modulate = _arrow_color_for_piece(piece)
+				arrow.modulate.a = 1.0
+
+	_apply_piece_draw_order()
+	_apply_arrow_color_for_current_map()
+	_recompute_send_button_visibility()
+	
 func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 	if not _board_initialized:
 		await get_tree().process_frame
@@ -1362,8 +1725,6 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 			child.queue_free()
 	await get_tree().process_frame
 
-	var use_idx := _current_board_index
-
 	for piece_data in board_data:
 		var piece_instance: RigidBody2D = PieceScene.instantiate()
 
@@ -1372,7 +1733,7 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 		piece_instance.set_meta("player", player_num)
 
 		var raw_pos: Vector2 = piece_data.get("pos", Vector2.ZERO)
-		piece_instance.position = _inset_pos_for_board(raw_pos, use_idx)
+		piece_instance.position = raw_pos
 		piece_instance.rotation = float(piece_data.get("rotation", 0.0))
 
 		# Cache arrows from incoming data (keep visuals hidden unless we’re replaying)
@@ -1393,9 +1754,9 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 			var tex_size: Vector2 = sprite.texture.get_size() if sprite.texture else Vector2.ZERO
 			if tex_size.x > 0.0 and tex_size.y > 0.0:
 				sprite.scale = IOS_PENGUIN_VISUAL_SIZE / tex_size
-				print("[PIECE SIZE] tex=", tex_size, " scale=", sprite.scale, " visual_px=", tex_size * sprite.scale, " collision_radius=", PIECE_RADIUS_PX)
-			sprite.modulate = Color.WHITE
-			sprite.z_index = 1
+				sprite.modulate = Color.WHITE
+				sprite.z_as_relative = true
+				sprite.z_index = 1
 
 		var collision_shape := piece_instance.find_child("CollisionShape2D", true, false) as CollisionShape2D
 		if collision_shape and collision_shape.shape is CircleShape2D:
@@ -1420,10 +1781,10 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 
 		var arrow := piece_instance.get_node_or_null("Arrow") as CanvasItem
 		if arrow:
-			match map_mode:
-				2: arrow.modulate = ARROW_COLOR_MAP2
-				3: arrow.modulate = ARROW_COLOR_MAP3
-				_: arrow.modulate = ARROW_COLOR_MAP1
+			arrow.z_as_relative = false
+			arrow.z_index = Z_ARROWS
+			arrow.modulate = _arrow_color_for_piece(piece_instance)
+			arrow.modulate.a = 1.0
 			# Keep arrows hidden unless we’re animating a replay
 			arrow.visible = false
 
@@ -1435,22 +1796,49 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 			piece_instance.connect("aim_changed", Callable(self, "_on_piece_aim_changed"))
 
 		call_deferred("_try_watch_arrow_for_piece", piece_instance)
+	_apply_piece_draw_order()
+	_apply_top_ui_draw_order()
 
 func _on_piece_aim_changed(_angle_deg: float, _pow: float) -> void:
 	_recompute_send_button_visibility()
 
 func _set_piece_arrow_from_data(piece: Node, shoot_dir_rad: float, pow_px: float, fade_sec: float) -> void:
 	var angle_deg: float = rad_to_deg(shoot_dir_rad)
+	piece.set_meta("shoot_dir", angle_deg)
+	piece.set_meta("power", pow_px)
+
+	var arrow := piece.get_node_or_null("Arrow") as CanvasItem
+	var was_visible := arrow != null and arrow.visible and arrow.modulate.a > 0.05
+
 	if piece.has_method("show_arrow_from_replay"):
 		piece.call("show_arrow_from_replay", angle_deg, pow_px, fade_sec)
-	else:
-		piece.set_meta("shoot_dir", angle_deg)
-		piece.set_meta("power", pow_px)
-		var arrow := piece.get_node_or_null("Arrow") as CanvasItem
-		if arrow:
-			arrow.modulate.a = 1.0
+	elif arrow:
+		arrow.visible = pow_px > 0.5
+
+	arrow = piece.get_node_or_null("Arrow") as CanvasItem
+	if arrow:
+		arrow.z_as_relative = false
+		arrow.z_index = Z_ARROWS
+		arrow.modulate = _arrow_color_for_piece(piece)
+
+		if pow_px > 0.5:
 			arrow.visible = true
 
+			if fade_sec > 0.0 and not was_visible:
+				arrow.modulate.a = 0.0
+				var tw := create_tween()
+				tw.tween_property(arrow, "modulate:a", 1.0, fade_sec)\
+					.set_trans(Tween.TRANS_SINE)\
+					.set_ease(Tween.EASE_OUT)
+			else:
+				arrow.modulate.a = 1.0
+		else:
+			arrow.visible = false
+			arrow.modulate.a = 1.0
+
+	_apply_piece_draw_order()
+	_recompute_send_button_visibility()
+	
 func _rotate_piece_to_dir(tw: Tween, piece: Node, shoot_dir_rad: float, dur: float) -> void:
 	if not (piece is Node2D):
 		return
@@ -1466,25 +1854,16 @@ func _rotate_piece_to_dir(tw: Tween, piece: Node, shoot_dir_rad: float, dur: flo
 func _fire_piece_from_arrow(piece: Node, shoot_dir_rad: float, pow_px: float) -> void:
 	if pow_px <= 0.5:
 		return
-
 	if piece is RigidBody2D:
 		var rb := piece as RigidBody2D
-
 		rb.freeze = false
 		rb.sleeping = false
 		rb.angular_velocity = 0.0
-
-		# iOS raw: body.angle = ar + PI/2.
-		# Our parsed replay flips Y, so Godot uses: shoot_dir - PI/2.
 		rb.rotation = shoot_dir_rad + PIECE_HEADING_OFFSET
-
-		# iOS raw: linearVelocity = 2 * dist * unit_aim_dir.
-		# In Godot coordinates, shoot_dir_rad is already the Y-flipped aim angle.
 		rb.linear_velocity = Vector2(cos(shoot_dir_rad), sin(shoot_dir_rad)) * (pow_px * 2.0)
-
 	if piece.has_method("fade_out_arrow_for_shot"):
 		piece.call("fade_out_arrow_for_shot", 0.18)
-	
+		
 func _hide_all_arrows_and_refresh_highlights() -> void:
 	for piece in piece_container.get_children():
 		if piece.has_method("hide_arrow"):
@@ -1495,7 +1874,7 @@ func _hide_all_arrows_and_refresh_highlights() -> void:
 				arrow.visible = false
 		piece.set_meta("power", 0.0)
 		piece.set_meta("shoot_dir", 0.0)
-		
+	_apply_piece_draw_order()
 	call_deferred("_apply_turn_highlights_based_on_arrows")
 	_recompute_send_button_visibility()
 	
@@ -1546,24 +1925,24 @@ func _safe_kill(n: Node) -> void:
 		call_deferred("_kill_piece", n)
 		
 func _on_replay_round_finished() -> void:
-	# Hide arrows + drop replay flag
 	_hide_all_arrows_and_refresh_highlights()
-	_replay_in_progress = false
 
-	# NEW — check win BEFORE enabling re-aim or shrinking
+	_replay_in_progress = false
+	_is_zooming = true
+	_update_piece_interactivity()
+	_stop_all_highlights()
+	_recompute_send_button_visibility()
+
 	if check_win():
-		# lock controls/UI because game_over is now true inside check_win()
+		_is_zooming = false
 		_update_piece_interactivity()
 		_recompute_send_button_visibility()
 		return
 
-	# Not over → now allow interaction and continue with shrink
-	_update_piece_interactivity()
-	_recompute_send_button_visibility()
-
 	var next_idx := _current_board_index + 1
 	if not last_post_round.is_empty():
 		next_idx = int(last_post_round.get("round", _current_board_index + 1))
+	_dbg_board_state("replay_finished computed next_idx=%d" % next_idx)
 
 	var will_shrink := _clamp_board_index(next_idx) != _current_board_index
 	if will_shrink:
@@ -1572,14 +1951,43 @@ func _on_replay_round_finished() -> void:
 	await get_tree().create_timer(0.05).timeout
 
 	if not last_post_round.is_empty():
+		_dbg_board_state("before post snapshot")
 		_apply_post_round_snapshot(last_post_round, next_idx)
+		_dbg_board_state("after post snapshot")
 
 	_dbg_board_state("before shrink tween")
-	await _tween_board_index_to(next_idx, 0.18)  # re-enables at the end
+	await _tween_board_index_to(next_idx, 0.42)
+	_dbg_board_state("after shrink tween")
 
 	if will_shrink and _kill_detection_enabled == false:
 		_set_kill_detection_enabled(true)
 
+	if not last_pending_setup_round.is_empty():
+		var setup_idx := int(last_pending_setup_round.get("round", _current_board_index))
+
+		if setup_idx != _current_board_index:
+			_apply_board_index_immediate(setup_idx)
+
+		_apply_post_round_snapshot(last_pending_setup_round, setup_idx)
+
+		# Store opponent aim data, but keep arrows hidden until Launch starts the next replay.
+		_apply_aim_data_from_board_dict(last_pending_setup_round, false)
+
+		last_pre_round = last_pending_setup_round.duplicate(true)
+		last_post_round = {}
+		last_pending_setup_round = {}
+
+		_staged_launch_mode = false
+		_staged_pre_board_str = ""
+		_staged_next_index = setup_idx
+
+		print("[REPLAY] Applied pending setup board after replay. Opponent arrows are stored but hidden.")
+
+	_is_zooming = false
+	_update_piece_interactivity()
+	call_deferred("_apply_turn_highlights_based_on_arrows")
+	_recompute_send_button_visibility()
+	
 func _piece_is_moving(rb: RigidBody2D, v_thresh := IOS_STOP_LINEAR_SPEED, w_thresh := IOS_STOP_ANGULAR_SPEED) -> bool:
 	if rb.has_meta("dying") and rb.get_meta("dying"):
 		return false
@@ -1613,7 +2021,6 @@ func _wait_for_pieces_to_settle(timeout_sec: float = 10.0, still_frames_needed: 
 
 func _apply_post_round_snapshot(post_board: Dictionary, board_idx: int = -1) -> void:
 	var arr: Array = post_board.get("pieces", [])
-	var use_idx := _clamp_board_index(board_idx) if (board_idx >= 0) else _current_board_index
 
 	# Collect only piece bodies
 	var children_pieces: Array[Node] = []
@@ -1625,7 +2032,7 @@ func _apply_post_round_snapshot(post_board: Dictionary, board_idx: int = -1) -> 
 	for i in count:
 		var piece_node := children_pieces[i]
 		var pd: Dictionary = arr[i]
-		var pos: Vector2 = _inset_pos_for_board(pd["pos"], use_idx)
+		var pos: Vector2 = pd["pos"]
 		var rot: float = float(pd["rotation"])
 
 		if piece_node is RigidBody2D:
@@ -1678,122 +2085,195 @@ func _play_round_from_replay(pre_board: Dictionary) -> void:
 		await rotation_tween.finished
 
 	await get_tree().create_timer(0.5).timeout
+ 
+	if PDIFF_ENABLED and _pdiff != null:
+		_pdiff.start("replay idx=%d" % _current_board_index)
+		_pdiff_active = true
+		# Disable kill detection so the recording isn't truncated when pieces
+		# leave the board edge. Kill detection re-enables at the bottom.
+		_set_kill_detection_enabled(false)
+ 
 	for i in count:
 		var piece := pieces[i]
 		if not is_instance_valid(piece): continue
 		var pd: Dictionary = pre_arr[i]
 		_fire_piece_from_arrow(piece, float(pd["shoot_dir"]), float(pd["power"]))
-
+ 
 	await _wait_for_pieces_to_settle(10.0, 8, IOS_STOP_LINEAR_SPEED, IOS_STOP_ANGULAR_SPEED)
+ 
+	if PDIFF_ENABLED and _pdiff != null:
+		_pdiff_active = false
+		_pdiff.stop()
+		_pdiff.report()
+		# Re-enable kill detection so the next round / normal gameplay works.
+		_set_kill_detection_enabled(true)
+ 
 	_on_replay_round_finished()
 	
 func _clamp_board_index(i: int) -> int:
 	return clamp(i, 0, BOARD_MAX_INDEX)
 
 func _board_size_for_index(i: int) -> float:
-	return IOS_BOARD_TEXTURE_SIZE.x * _board_scale_for_index(i)
+	return LOGICAL_BOARD_SIZE.x * _board_scale_for_index(i)
 
 func _board_scale_for_index(i: int) -> float:
-	var idx := _clamp_board_index(i)
-	return maxf(0.0, 1.0 - (float(idx) * 0.1))
+	return maxf(0.0, 1.0 - float(_clamp_board_index(i)) * 0.1)
 
 func _apply_board_index_immediate(i: int) -> void:
+	var old_idx := _current_board_index
 	_current_board_index = _clamp_board_index(i)
-	var texrect := _get_texrect()
+
+	_dbg_board_state("apply_immediate BEFORE old=%d new=%d" % [old_idx, _current_board_index])
+
 	_ensure_board_scaler()
+	_layout_board_centered()
 
 	if is_instance_valid(_board_scale_node):
-		_board_scale_node.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
 		var target := _target_scale_for_index(_current_board_index)
-		_inside_our_scale_write += 1
 		_board_scale_node.scale = Vector2.ONE * target
-		_inside_our_scale_write -= 1
+		_board_scale_node.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
+
+		print("[SHRINK] apply_immediate SET scaler.scale=", _board_scale_node.scale,
+			" | idx=", _current_board_index,
+			" | base=", _board_base_scale_factor,
+			" | melt_scale=", _board_scale_for_index(_current_board_index),
+			" | target=", target
+		)
 
 	_apply_piece_container_scale_for_board()
+	_apply_ios_board_texture_layout()
+	_layout_board_centered()
 
-	# keep the TextureRect itself at (1,1) so outside writes won’t affect the visual size
-	if is_instance_valid(texrect) and texrect.scale != Vector2.ONE:
-		texrect.scale = Vector2.ONE
-
-	if DEBUG_SHRINK:
-		print("[SHRINK] _apply_board_index_immediate | idx=", _current_board_index,
-			" | scaler.scale=", ( _board_scale_node.scale if is_instance_valid(_board_scale_node) else Vector2.ONE ),
-			" | texrect.scale=", ( texrect.scale if is_instance_valid(texrect) else Vector2.ONE ))
-	print("Call 1577")
 	_refresh_safe_polys_for_transform()
-
-func _tween_board_index_to(i: int, dur: float = 0.18) -> void:
+	_dbg_board_state("apply_immediate AFTER")
+	
+func _tween_board_index_to(i: int, dur: float = 0.42) -> void:
 	var target_idx := _clamp_board_index(i)
 	if target_idx == _current_board_index:
+		print("[SHRINK] tween skipped because target == current | idx=", target_idx)
+		_dbg_board_state("tween skipped")
 		return
 
-	var texrect := _get_texrect()
 	_ensure_board_scaler()
+	_layout_board_centered()
+
 	var scaler := _board_scale_node
-	if is_instance_valid(scaler):
-		_is_zooming = true
-		_set_kill_detection_enabled(false)
+	if not is_instance_valid(scaler):
+		push_warning("[SHRINK] tween failed: no BoardScaler")
+		_current_board_index = target_idx
+		return
 
-		var s0 := _target_scale_for_index(_current_board_index)
-		var s1 := _target_scale_for_index(target_idx)
+	_is_zooming = true
+	_set_kill_detection_enabled(false)
+
+	var start_idx := _current_board_index
+	var s0 := scaler.scale.x
+	var s1 := _target_scale_for_index(target_idx)
+
+	print("[SHRINK] TWEEN START",
+		" | idx ", start_idx, " -> ", target_idx,
+		" | base=", _board_base_scale_factor,
+		" | board_zoom.scale=", board_zoom.scale if is_instance_valid(board_zoom) else Vector2.ZERO,
+		" | scaler.current=", scaler.scale,
+		" | s0_actual=", s0,
+		" | s1_target=", s1,
+		" | expected_start_px=", LOGICAL_BOARD_SIZE * _board_base_scale_factor * current_scale * s0,
+		" | expected_end_px=", LOGICAL_BOARD_SIZE * _board_base_scale_factor * current_scale * s1
+	)
+
+	_dbg_board_state("tween BEFORE")
+
+	var last_bucket := [-1]
+
+	var update_scale := func(t: float) -> void:
+		var step_scale: float = lerp(s0, s1, t)
+
+		scaler.scale = Vector2.ONE * step_scale
+		scaler.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
+
+		if is_instance_valid(piece_container):
+			piece_container.position = LOGICAL_BOARD_SIZE * 0.5
+			piece_container.scale = Vector2.ONE
+
+		_resync_piece_sprite_sizes()
+
 		if DEBUG_SHRINK:
-			print("[SHRINK] tweening board index: ", _current_board_index, " -> ", target_idx,
-				" | scaler.start=", scaler.scale, " | s0=", s0, " | s1=", s1)
+			var bucket := int(floor(t * 4.0))
+			if bucket != int(last_bucket[0]):
+				last_bucket[0] = bucket
+				print("[SHRINK] TWEEN STEP",
+					" | t=", String.num(t, 3),
+					" | step_scale=", step_scale,
+					" | board_px=", LOGICAL_BOARD_SIZE * _board_base_scale_factor * current_scale * step_scale,
+					" | scaler.scale=", scaler.scale
+				)
 
-		var tw := create_tween()
-		tw.tween_method(
-			func(t: float) -> void:
-				_inside_our_scale_write += 1
-				var step_scale : float = lerp(s0, s1, t)
-				scaler.scale = Vector2.ONE * step_scale
-				piece_container.scale = Vector2.ONE * step_scale
-				piece_container.position = LOGICAL_BOARD_SIZE * 0.5
-				_inside_our_scale_write -= 1
-				print("Call 1604")
-				_refresh_safe_polys_for_transform(),
-			0.0, 1.0, dur
-		).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-		await tw.finished
-		_is_zooming = false
+	var tw := create_tween()
+	tw.tween_method(update_scale, 0.0, 1.0, dur)\
+		.set_trans(Tween.TRANS_CUBIC)\
+		.set_ease(Tween.EASE_IN_OUT)
+
+	await tw.finished
 
 	_current_board_index = target_idx
-	_apply_piece_container_scale_for_board()
-	print("Call 1612")
+	scaler.scale = Vector2.ONE * _target_scale_for_index(_current_board_index)
+	scaler.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
+
+	_layout_board_centered()
+
+	if is_instance_valid(piece_container):
+		piece_container.position = LOGICAL_BOARD_SIZE * 0.5
+		piece_container.scale = Vector2.ONE
+
+	_resync_piece_sprite_sizes()
+
+	_is_zooming = false
+
 	_refresh_safe_polys_for_transform()
 	_seed_area_overlaps()
 	_set_kill_detection_enabled(true)
 	_fallback_kill_pass()
-	_dbg_board_state("after index commit")
 
-func _inset_pos_for_board(pos: Vector2, _board_idx: int) -> Vector2:
-	return pos
-
+	print("[SHRINK] TWEEN FINISHED | committed target_idx=", target_idx)
+	_dbg_board_state("tween AFTER COMMIT")
+	
 # --- Piece Highlighting ---
 func _apply_turn_highlights_based_on_arrows() -> void:
-	if not is_my_turn or spectator_mode or game_over or _replay_in_progress:
+	if not _can_show_aim_ui():
 		_stop_all_highlights()
+		_recompute_send_button_visibility()
 		return
 
 	for piece in piece_container.get_children():
 		var owner_id: int = int(piece.get_meta("player", -1))
 		var ring := piece.get_node_or_null("HighlightRing") as TextureRect
 		var anim := piece.get_node_or_null("HighlightAnimator") as AnimationPlayer
+
 		if owner_id != player:
-			if anim: anim.stop()
-			if ring: ring.visible = false
+			if anim:
+				anim.stop()
+			if ring:
+				ring.visible = false
 			continue
+
 		var arrow := piece.get_node_or_null("Arrow") as CanvasItem
 		var arrow_visible := (arrow != null and arrow.visible)
 
 		if arrow_visible:
-			if anim: anim.stop()
-			if ring: ring.visible = false
+			if anim:
+				anim.stop()
+			if ring:
+				ring.visible = false
 		else:
 			if ring and anim:
+				ring.z_as_relative = true
+				ring.z_index = 2
 				ring.visible = true
 				if anim.has_animation("ring_anim"):
 					anim.play("ring_anim")
 
+	_recompute_send_button_visibility()
+	
 func _stop_all_highlights() -> void:
 	for piece in piece_container.get_children():
 		var ring := piece.get_node_or_null("HighlightRing") as TextureRect
@@ -1815,20 +2295,26 @@ func _on_arrow_visibility_changed(piece: Node) -> void:
 	var arrow := piece.get_node_or_null("Arrow") as CanvasItem
 	if not arrow:
 		return
-	if _replay_in_progress:
-		return
+
 	if arrow.visible:
+		arrow.z_as_relative = false
+		arrow.z_index = Z_ARROWS
+		arrow.modulate = _arrow_color_for_piece(piece)
+		arrow.modulate.a = maxf(arrow.modulate.a, 1.0)
 		_stop_highlight_for_piece(piece)
 	else:
-		if is_my_turn and not spectator_mode and not game_over and int(piece.get_meta("player", -1)) == player:
+		if _can_show_aim_ui() and int(piece.get_meta("player", -1)) == player:
 			var ring := piece.get_node_or_null("HighlightRing") as TextureRect
 			var anim := piece.get_node_or_null("HighlightAnimator") as AnimationPlayer
 			if ring and anim:
+				ring.z_as_relative = true
+				ring.z_index = 2
 				ring.visible = true
 				if anim.has_animation("ring_anim"):
 					anim.play("ring_anim")
-	_recompute_send_button_visibility()
 
+	_recompute_send_button_visibility()
+		
 func _try_watch_arrow_for_piece(piece: Node) -> void:
 	await get_tree().process_frame
 	var arrow := piece.get_node_or_null("Arrow") as CanvasItem
@@ -2280,162 +2766,116 @@ func _spawn_mushrooms_for_map3() -> void:
 		if m.has_method("set_piece_container"):
 			m.set_piece_container(piece_container)
 
-#DEV CODE
-
-# --- Dev replay override (for visual verification) ---
-const DEV_USE_HARDCODED_REPLAY := false  # set true to force one of the dev strings below
-const DEV_REPLAY_MODE := "line"      # "corners" | "down" | "right" | "left" | "up" | "all_dirs"
-
-# Corner anchors (relative to board center). Tweak if the board is larger/smaller.
-const DEV_CORNER_UL := Vector2(-140, -140)
-const DEV_CORNER_UR := Vector2( 140, -140)
-const DEV_CORNER_LR := Vector2( 140,  140)
-const DEV_CORNER_LL := Vector2(-150,  150)
-const DEV_CORNER_CC := Vector2(0,  0)
-
-# Convenience (radians)
-const RAD_RIGHT := 0.0
-const RAD_DOWN := -PI * 0.5
-const RAD_LEFT := PI
-const RAD_UP := PI * 0.5
-
-# Base layout used by all tests (two P1, two P2)
-const _DEV_BASE_LAYOUT := [
-	{ "pos": DEV_CORNER_UL, "player": 1 },
-	{ "pos": DEV_CORNER_UR, "player": 2 },
-	{ "pos": DEV_CORNER_LR, "player": 1 },
-	{ "pos": DEV_CORNER_LL, "player": 2 },
-]
-
-# 1) Corners only (no shooting) — place pieces, verify positions
-var DEV_REPLAY_CORNERS := "board:2#" \
-+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0,0.0,0.0#" \
-+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0,0.0,0.0#" \
-+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0,0.0,0.0#" \
-+ str(DEV_CORNER_CC.x)  + "," + str(DEV_CORNER_CC.y)  + ",1,0.0,0.0,0.0#" \
-+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0,0.0,0.0" \
-+ "|shoot:0"
-
-var DEV_REPLAY_LINE_X := "board:6#" \
-+ "-210,210"  + ",2,0.0,0.0,0.0#" \
-+ "-200,-200"  + ",1,0.0,0.0,0.0#" \
-+ "-180,-180"  + ",2,0.0,0.0,0.0#" \
-+ "-160,-160"  + ",1,0.0,0.0,0.0#" \
-+ "-140,-140"  + ",2,0.0,0.0,0.0#" \
-+ "-120,-120"  + ",1,0.0,0.0,0.0#" \
-+ "-100,-100"  + ",2,0.0,0.0,0.0#" \
-+ "-80,-80"  + ",1,0.0,0.0,0.0#" \
-+ "-60,-60"  + ",2,0.0,0.0,0.0#" \
-+ "-40,-40"  + ",1,0.0,0.0,0.0#" \
-+ "-20,-20"  + ",2,0.0,0.0,0.0#" \
-+ "0,0"  + ",1,0.0,0.0,0.0#" \
-+ "20,20"  + ",1,0.0,0.0,0.0#" \
-+ "40,40"  + ",1,0.0,0.0,0.0#" \
-+ "60,60"  + ",2,0.0,0.0,0.0#" \
-+ "80,80"  + ",1,0.0,0.0,0.0#" \
-+ "100,100"  + ",2,0.0,0.0,0.0#" \
-+ "120,120"  + ",1,0.0,0.0,0.0#" \
-+ "140,140"  + ",2,0.0,0.0,0.0#" \
-+ "160,160"  + ",1,0.0,0.0,0.0#" \
-+ "180,180"  + ",2,0.0,0.0,0.0#" \
-+ "200,200"  + ",2,0.0,0.0,0.0#" \
-+ "210,-210"  + ",1,0.0,0.0,0.0#" \
-+ "|shoot:0"
-
-# 2) Cardinal movement helpers (same starting layout, different shot dirs)
-const _DEV_POWER := 60.0  # moderate power for clear motion without insta-fall
-
-var DEV_REPLAY_DOWN  := "board:0#" \
-+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) \
-+ "|shoot:1"
-
-var DEV_REPLAY_RIGHT := "board:2#" \
-+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) \
-+ "|shoot:1"
-
-var DEV_REPLAY_LEFT  := "board:2#" \
-+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) \
-+ "|shoot:1"
-
-var DEV_REPLAY_UP    := "board:2#" \
-+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) \
-+ "|shoot:1"
-
-# Optional: one-shot where each piece moves a different cardinal direction
-var DEV_REPLAY_ALL_DIRS := "board:2#" \
-+ str(DEV_CORNER_UL.x)  + "," + str(DEV_CORNER_UL.y)  + ",1,0.0," + str(RAD_DOWN)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_UR.x)  + "," + str(DEV_CORNER_UR.y)  + ",2,0.0," + str(RAD_RIGHT) + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LR.x)  + "," + str(DEV_CORNER_LR.y)  + ",1,0.0," + str(RAD_LEFT)  + "," + str(_DEV_POWER) + "#" \
-+ str(DEV_CORNER_LL.x)  + "," + str(DEV_CORNER_LL.y)  + ",2,0.0," + str(RAD_UP)    + "," + str(_DEV_POWER) \
-+ "|shoot:1"
-
 const DEBUG_SHRINK := true
-func _dbg_board_state(where: String) -> void:
-	if not DEBUG_SHRINK: return
-	var texrect := _get_texrect()
-	var bz_scale := board_zoom.scale if is_instance_valid(board_zoom) else Vector2.ONE
-	var tx_scale := texrect.scale if is_instance_valid(texrect) else Vector2.ONE
-	var sc_scale := _board_scale_node.scale if is_instance_valid(_board_scale_node) else Vector2.ONE
-	print("[SHRINK] ", where,
-		" | idx=", _current_board_index,
-		" | zoom_level=", current_scale,
-		" | board_zoom.scale=", bz_scale,
-		" | scaler.scale=", sc_scale,
-		" | texrect.scale=", tx_scale,
-		" | base_factor=", _board_base_scale_factor
+func _control_global_aabb(c: Control) -> Rect2:
+	var xf := c.get_global_transform()
+	var pts := [
+		xf * Vector2.ZERO,
+		xf * Vector2(c.size.x, 0.0),
+		xf * c.size,
+		xf * Vector2(0.0, c.size.y)
+	]
+
+	var min_p: Vector2 = pts[0]
+	var max_p: Vector2 = pts[0]
+	for p in pts:
+		min_p.x = minf(min_p.x, p.x)
+		min_p.y = minf(min_p.y, p.y)
+		max_p.x = maxf(max_p.x, p.x)
+		max_p.y = maxf(max_p.y, p.y)
+
+	return Rect2(min_p, max_p - min_p)
+
+
+func _dbg_control_state(where: String, label: String, c: Control) -> void:
+	if not DEBUG_SHRINK:
+		return
+	if not is_instance_valid(c):
+		print("[SHRINK] ", where, " | ", label, " = null")
+		return
+
+	var r := _control_global_aabb(c)
+	print("[SHRINK] ", where, " | ", label,
+		" | pos=", c.position,
+		" | size=", c.size,
+		" | scale=", c.scale,
+		" | pivot=", c.pivot_offset,
+		" | global_pos=", c.global_position,
+		" | global_rect_pos=", r.position,
+		" | global_rect_size=", r.size
 	)
 
-func _process(_dt: float) -> void:
-	_watch_board_nodes()
 
-func _watch_board_nodes() -> void:
-	var tex := _get_texrect()
-	var tr_s := tex.scale if is_instance_valid(tex) else Vector2.ZERO
-	var sc_s := _board_scale_node.scale if is_instance_valid(_board_scale_node) else Vector2.ZERO
+func _dbg_piece_container_state(where: String) -> void:
+	if not DEBUG_SHRINK:
+		return
+	if not is_instance_valid(piece_container):
+		print("[SHRINK] ", where, " | PieceContainer = null")
+		return
 
-	# TextureRect.scale watcher (should stay at 1,1)
-	if tr_s != _watch_prev_tr_scale:
-		if _inside_our_scale_write == 0:
-			print("[WATCH] TextureRect.scale changed -> ", tr_s,
-				" | idx=", _current_board_index,
-				" | board_zoom.scale=", (board_zoom.scale if is_instance_valid(board_zoom) else Vector2.ONE),
-				" | scaler.scale=", sc_s)
-			print_stack()
-		_watch_prev_tr_scale = tr_s
+	if piece_container is Node2D:
+		var pc := piece_container as Node2D
+		print("[SHRINK] ", where, " | PieceContainer",
+			" | pos=", pc.position,
+			" | scale=", pc.scale,
+			" | global_pos=", pc.global_position,
+			" | global_scale=", pc.global_transform.get_scale()
+		)
 
-	# BoardScaler.scale watcher (the one that actually drives board size)
-	if sc_s != _watch_prev_sc_scale:
-		if _inside_our_scale_write == 0:
-			# NEW: do not auto-restore while we are tweening/shrinking
-			if _is_zooming:
-				_watch_prev_sc_scale = sc_s
-				return
-			var expected := _target_scale_for_index(_current_board_index)
-			print("[WATCH-EXT] BoardScaler.scale changed EXTERNALLY -> ", sc_s,
-				" | expected=", expected, " | idx=", _current_board_index)
-			print_stack()
-			if absf(sc_s.x - expected) > 0.0005 or absf(sc_s.y - expected) > 0.0005:
-				print("[WATCH-EXT] Restoring BoardScaler.scale to expected: ", expected)
-				_inside_our_scale_write += 1
-				_board_scale_node.scale = Vector2.ONE * expected
-				_inside_our_scale_write -= 1
-		else:
-			pass
+	var printed := 0
+	for n in piece_container.get_children():
+		if not (n is RigidBody2D):
+			continue
+		var rb := n as RigidBody2D
+		print("[SHRINK] ", where, " | piece#", printed,
+			" | local_pos=", rb.position,
+			" | global_pos=", rb.global_position,
+			" | scale=", rb.scale,
+			" | global_scale=", rb.global_transform.get_scale(),
+			" | rot=", rb.rotation
+		)
+		printed += 1
+		if printed >= 4:
+			break
 
-		_watch_prev_sc_scale = sc_s
 
+func _dbg_board_state(where: String) -> void:
+	if not DEBUG_SHRINK:
+		return
+
+	var texrect := _get_texrect()
+	var board_scale := _board_scale_for_index(_current_board_index)
+	var target_scale := _target_scale_for_index(_current_board_index)
+	var expected_visual := LOGICAL_BOARD_SIZE * _board_base_scale_factor * current_scale * target_scale
+
+	print("")
+	print("[SHRINK] ==================== ", where, " ====================")
+	print("[SHRINK] idx=", _current_board_index,
+		" | logical=", LOGICAL_BOARD_SIZE,
+		" | board_scale=", board_scale,
+		" | base_factor=", _board_base_scale_factor,
+		" | target_scale=", target_scale,
+		" | expected_visual_px=", expected_visual,
+		" | viewport=", get_viewport_rect().size
+	)
+
+	if is_instance_valid(board_zoom):
+		_dbg_control_state(where, "BoardZoom", board_zoom)
+
+	if is_instance_valid(_board_scale_node):
+		_dbg_control_state(where, "BoardScaler", _board_scale_node)
+	else:
+		print("[SHRINK] ", where, " | BoardScaler = null")
+
+	if is_instance_valid(texrect):
+		_dbg_control_state(where, "TextureRect", texrect)
+	else:
+		print("[SHRINK] ", where, " | TextureRect = null")
+
+	_dbg_piece_container_state(where)
+	print("[SHRINK] ===========================================================")
+	print("")
+	
 var _kill_debug_showing := false
 var _kill_overlay_root: Node2D
 var _safe_debug_poly: Polygon2D
