@@ -27,32 +27,101 @@ class AboutActivity : Activity() {
         val currentYear = Calendar.getInstance().get(Calendar.YEAR)
         val versionText = "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
 
+        showAboutDialog(currentYear, versionText)
+    }
+
+    private fun showAboutDialog(currentYear: Int, versionText: String) {
         MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
             .setTitle("OpenPigeon")
             .setMessage(buildAboutMessage(currentYear, versionText))
             .setPositiveButton("Done") { _, _ ->
                 finishAndRemoveTask()
             }
-            .setNegativeButton("GitHub") { _, _ ->
+            .setNegativeButton("More…") { _, _ ->
+                showMoreOptions(currentYear, versionText)
+            }
+            .setNeutralButton("GitHub") { _, _ ->
                 val intent = Intent(Intent.ACTION_VIEW)
                 intent.data = "https://github.com/OpenBubbles/OpenPigeon".toUri()
                 startActivity(intent)
                 finishAndRemoveTask()
             }
-            .setNeutralButton("Attributions") { _, _ ->
-                val inputStream = assets.open("attributions.html")
-                val bytes = inputStream.readBytes().decodeToString()
-                val url = "data:text/html;charset=utf8,$bytes"
-
-                startActivity(
-                    Intent.makeMainSelectorActivity(
-                        Intent.ACTION_MAIN, Intent.CATEGORY_APP_BROWSER
-                    )
-                        .setData(url.toUri())
-                )
-            }
             .setCancelable(false)
             .show()
+    }
+
+    private fun showMoreOptions(currentYear: Int, versionText: String) {
+        val options = arrayOf("Attributions", "Reset Stats", "Reset Avatar", "Reset Tutorial", "Reset Everything", "Back")
+        MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
+            .setTitle("More options")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showAttributions()
+                    1 -> confirmReset("Reset stats?", "This will clear your win counts for all games. This cannot be undone.", currentYear, versionText) {
+                        resetStats(); showAboutDialog(currentYear, versionText)
+                    }
+                    2 -> confirmReset("Reset avatar?", "This will reset your avatar to defaults. This cannot be undone.", currentYear, versionText) {
+                        resetAvatar(); showAboutDialog(currentYear, versionText)
+                    }
+                    3 -> confirmReset("Reset tutorial?", "The welcome tutorial will appear again next time you open the game picker.", currentYear, versionText) {
+                        resetTutorial(); showAboutDialog(currentYear, versionText)
+                    }
+                    4 -> confirmReset("Reset everything?", "This will clear your stats, avatar, and tutorial state. This cannot be undone.", currentYear, versionText) {
+                        resetStats(); resetAvatar(); resetTutorial()
+                        showAboutDialog(currentYear, versionText)
+                    }
+                    5 -> showAboutDialog(currentYear, versionText)
+                }
+            }
+            .setCancelable(true)
+            .setOnCancelListener { showAboutDialog(currentYear, versionText) }
+            .show()
+    }
+
+    private fun confirmReset(
+        title: String,
+        message: String,
+        currentYear: Int,
+        versionText: String,
+        onConfirm: () -> Unit
+    ) {
+        MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("Reset") { _, _ -> onConfirm() }
+            .setNegativeButton("Cancel") { _, _ -> showAboutDialog(currentYear, versionText) }
+            .setOnCancelListener { showAboutDialog(currentYear, versionText) }
+            .show()
+    }
+
+    private fun showAttributions() {
+        val inputStream = assets.open("attributions.html")
+        val bytes = inputStream.readBytes().decodeToString()
+        val url = "data:text/html;charset=utf8,$bytes"
+
+        startActivity(
+            Intent.makeMainSelectorActivity(
+                Intent.ACTION_MAIN, Intent.CATEGORY_APP_BROWSER
+            )
+                .setData(url.toUri())
+        )
+    }
+
+    private fun resetStats() {
+        getSharedPreferences("game_stats", MODE_PRIVATE).edit().clear().apply()
+    }
+
+    private fun resetAvatar() {
+        getSharedPreferences("avatar_settings", MODE_PRIVATE).edit().clear().apply()
+        // Also delete the Godot settings.cfg so it gets regenerated from defaults next time
+        val cfgFile = java.io.File(filesDir, "settings.cfg")
+        if (cfgFile.exists()) cfgFile.delete()
+    }
+
+    private fun resetTutorial() {
+        getSharedPreferences("openpigeon", MODE_PRIVATE).edit()
+            .putBoolean("tutorial_seen", false)
+            .apply()
     }
 }
 
