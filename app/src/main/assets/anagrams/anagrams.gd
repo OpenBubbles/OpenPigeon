@@ -83,18 +83,24 @@ func _ready() -> void:
 		await get_tree().process_frame
 		_set_game_data(dev)
 	if is_instance_valid(full_word_list):
-		# Let the parent ScrollContainer receive mouse events
 		full_word_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 		var parent := full_word_list.get_parent()
 		if parent is ScrollContainer:
 			_words_scroll = parent
+			_words_scroll.drag_to_scroll = true
+			_words_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 			if not _words_scroll.gui_input.is_connected(_on_words_scroll_gui_input):
 				_words_scroll.gui_input.connect(_on_words_scroll_gui_input)
 		else:
 			print("Warning: FullWordList parent is not a ScrollContainer, drag scroll disabled.")
 	if is_instance_valid(words_scroll):
 		words_scroll.drag_to_scroll = true
+		words_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	if is_instance_valid(words_screen):
+		words_screen.mouse_filter = Control.MOUSE_FILTER_STOP
+		if not words_screen.gui_input.is_connected(_on_words_scroll_gui_input):
+			words_screen.gui_input.connect(_on_words_scroll_gui_input)
 	_apply_score_box_style(main_score_box)
 	_apply_score_box_style(player_score_box)
 	_apply_score_box_style(opp_score_box)
@@ -103,20 +109,44 @@ func _on_words_scroll_gui_input(event: InputEvent) -> void:
 	if _words_scroll == null:
 		return
 
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_words_scroll.scroll_vertical -= 90
+			get_viewport().set_input_as_handled()
+			return
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_words_scroll.scroll_vertical += 90
+			get_viewport().set_input_as_handled()
+			return
+		elif event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				_is_dragging_words = true
+				_last_drag_pos = event.position
+				_words_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+			else:
+				_is_dragging_words = false
+				_words_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+			get_viewport().set_input_as_handled()
+			return
+
+	elif event is InputEventMouseMotion and _is_dragging_words:
+		_words_scroll.scroll_vertical -= int(event.relative.y)
+		get_viewport().set_input_as_handled()
+		return
+
+	elif event is InputEventScreenTouch:
 		if event.pressed:
 			_is_dragging_words = true
 			_last_drag_pos = event.position
-			# Optional: stop other controls from handling this click
-			_words_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
 		else:
 			_is_dragging_words = false
-			_words_scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+		get_viewport().set_input_as_handled()
+		return
 
-	elif event is InputEventMouseMotion and _is_dragging_words:
-		# Drag direction: dragging up should scroll down (like touch scrolling)
-		var delta_y : float = event.relative.y
-		_words_scroll.scroll_vertical -= int(delta_y)
+	elif event is InputEventScreenDrag and _is_dragging_words:
+		_words_scroll.scroll_vertical -= int(event.relative.y)
+		get_viewport().set_input_as_handled()
+		return
 		
 func _set_game_data(raw_text: String) -> void:
 	var res: Variant = JSON.parse_string(raw_text)
@@ -175,16 +205,29 @@ func _set_game_data(raw_text: String) -> void:
 			my_has_data = (p2_wordlist_s != "" or p2_words_s != "" or p2_score_s != "")
 			spectator_mode = false
 			print("SETTING FOR ID PLAYER 2 (my_id matches player2)")
+		elif p1_id == "":
+			my_player = 1
+			opponent_avatar_key = "avatar2"
+			my_has_data = (p1_wordlist_s != "" or p1_words_s != "" or p1_score_s != "")
+			spectator_mode = false
+			print("SETTING FOR OPEN PLAYER 1 SLOT (player2 is filled, my_id matches neither)")
+		elif p2_id == "":
+			my_player = 2
+			opponent_avatar_key = "avatar1"
+			my_has_data = (p2_wordlist_s != "" or p2_words_s != "" or p2_score_s != "")
+			spectator_mode = false
+			print("SETTING FOR OPEN PLAYER 2 SLOT (player1 is filled, my_id matches neither)")
 		else:
 			my_player = 0
 			spectator_mode = true
-			print("SETTING FOR SPECTATOR (my_id matches neither player1 nor player2)")
+			print("SETTING FOR SPECTATOR (both player IDs filled and my_id matches neither)")
 	else:
 		if my_player == 0:
 			my_player = 1 if sender_player == 2 else 2
 			spectator_mode = false
 			print("NO PLAYER IDS; using sender 'player' field as my slot -> my_player =", my_player)
 		else:
+			spectator_mode = false
 			print("NO PLAYER IDS; keeping existing my_player =", my_player)
 	
 	if not spectator_mode:
@@ -562,8 +605,10 @@ func _populate_full_word_list() -> void:
 		var points := int(entry["points"])
 
 		var row := HBoxContainer.new()
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 		var word_panel := PanelContainer.new()
+		word_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		word_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 
 		var word_panel_style := StyleBoxFlat.new()
@@ -582,6 +627,7 @@ func _populate_full_word_list() -> void:
 		word_panel.add_theme_stylebox_override("panel", word_panel_style)
 
 		var word_label := Label.new()
+		word_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		word_label.text = word
 		word_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		word_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -590,17 +636,19 @@ func _populate_full_word_list() -> void:
 		row.add_child(word_panel)
 
 		var spacer := Control.new()
+		spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(spacer)
 
 		var points_label := Label.new()
+		points_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		points_label.text = str(points)
 		points_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		points_label.size_flags_horizontal = Control.SIZE_SHRINK_END
 		row.add_child(points_label)
 
 		full_word_list.add_child(row)
-
+		
 func _build_all_possible_words() -> Array:
 	var result: Array = []
 

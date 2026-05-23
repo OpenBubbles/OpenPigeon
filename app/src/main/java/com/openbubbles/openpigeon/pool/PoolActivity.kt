@@ -771,17 +771,21 @@ class PoolActivity : AppCompatActivity() {
 
     var cancelAllShots: () -> Unit = { }
     fun playNextReplay() {
-        if (skipReplayRequested) return
+        if (skipReplayRequested || replayHits.isEmpty()) return
         mode = PoolMode.ReplayAiming
         if (!skipReplayFadeStarted) {
             skipReplayFadeStarted = true
 
+            val controls = findViewById<LinearLayout>(R.id.controls)
             val skipBtn = findViewById<ImageButton>(R.id.skip_replay)
 
             runOnUiThread {
+                controls.visibility = View.VISIBLE
+
                 skipBtn.animate().cancel()
                 skipBtn.alpha = 0f
                 skipBtn.visibility = View.VISIBLE
+                skipBtn.bringToFront()
 
                 skipBtn.postDelayed({
                     if (replaying && !skipReplayRequested) {
@@ -815,7 +819,6 @@ class PoolActivity : AppCompatActivity() {
             handler.removeCallbacksAndMessages(null)
         }
     }
-
     var scratch = false
 
     fun tableIsScratch(): Boolean {
@@ -932,20 +935,23 @@ class PoolActivity : AppCompatActivity() {
             finishReplay()
         } else {
             val scratch = tableIsScratch()
-            val blackBall = poolBalls.find { it.number == 8 }!!
+            val blackBall = poolBalls.find { it.number == 8 }
             val cueBall = cueBall ?: return
+            val blackBallSunk = blackBall == null || blackBall.sunk
             Log.i(
                 "POOL_DEBUG",
-                "FINAL_STATE cueBall.sunk=${cueBall.sunk} blackBall.sunk=${blackBall.sunk} scratch=$scratch"
+                "FINAL_STATE cueBall.sunk=${cueBall.sunk} blackBall.sunk=$blackBallSunk scratch=$scratch wasFirst=$wasFirst"
             )
 
             mode = PoolMode.Disabled
             closeCuePopup()
 
             var winState: Boolean? = null
-            if (blackBall.sunk) {
+            if (blackBallSunk) {
                 if (
+                    wasFirst ||
                     iAmStripes == null ||
+                    blackBall == null ||
                     poolBalls.count { !it.sunk && ((iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid)) } != 0 ||
                     cueBall.sunk ||
                     calledPocket.isEmpty() ||
@@ -1036,7 +1042,7 @@ class PoolActivity : AppCompatActivity() {
                 "num"         to (currentMessage["num"]?.toInt()!! + 1).toString(),
                 "sender"      to myId,
                 "replay"      to replays,
-                myAvatarKey   to AvatarView.buildAvatarString(),   // ← our avatar
+                myAvatarKey   to AvatarView.buildAvatarString(),
             ).toMutableMap()
 
             if (winState != null) {
@@ -1048,7 +1054,6 @@ class PoolActivity : AppCompatActivity() {
             }
         }
     }
-
     var iAmStripes: Boolean? = null
 
     data class PoolBall(val number: Int, val data: FloatBuffer, val resources: Resources, val density: Float) {
@@ -1469,12 +1474,13 @@ class PoolActivity : AppCompatActivity() {
             closeCuePopup()
         } else {
             runOnUiThread {
-                setCueUiVisible(true)
+                setCueUiVisible(false)
                 val label = findViewById<TextView>(R.id.state_label)
                 label.visibility = View.GONE
                 val controls = findViewById<LinearLayout>(R.id.controls)
-                controls.visibility = View.INVISIBLE
+                controls.visibility = View.VISIBLE
                 val skipBtn = findViewById<ImageButton>(R.id.skip_replay)
+                skipBtn.animate().cancel()
                 skipBtn.visibility = View.INVISIBLE
                 skipBtn.alpha = 0f
             }
