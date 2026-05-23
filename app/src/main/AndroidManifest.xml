@@ -41,19 +41,31 @@
         <activity
             android:name=".settings.AvatarSettingsActivity"
             android:theme="@style/Theme.OpenPigeon.Transparent"
-            android:exported="false" />
+            android:exported="false"
+            android:taskAffinity="com.openbubbles.openpigeon.utility"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
         <activity
             android:name=".GameNotFound"
             android:exported="false"
-            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert" />
+            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert"
+            android:taskAffinity="com.openbubbles.openpigeon.utility"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
         <activity
             android:name=".questions.SecretWordActivity"
             android:exported="false"
-            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert" />
+            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert"
+            android:taskAffinity="com.openbubbles.openpigeon.utility"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
         <activity
             android:name=".AboutActivity"
             android:exported="false"
-            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert" />
+            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert"
+            android:taskAffinity="com.openbubbles.openpigeon.utility"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
 
         <activity
             android:name=".MainEntryActivity"

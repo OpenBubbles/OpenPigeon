@@ -236,7 +236,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
                     putExtra("DISPLAY_GAME", session.currentMessage["game_name"])
                     data = "data://${System.currentTimeMillis()}".toUri()
                 }
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             context.startActivity(intent)
         } else {
             Log.e("Game","null")
@@ -463,6 +463,7 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
                     if (game == "pool3") "8 Ball+" else gameName
                 })
                 data = "data://${System.currentTimeMillis()}".toUri()
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             }
             it.clickable(onClick =
                 actionStartActivity(intent)
