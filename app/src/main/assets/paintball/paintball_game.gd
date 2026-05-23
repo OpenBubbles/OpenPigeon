@@ -187,6 +187,9 @@ var _opp_splat: Sprite3D = null
 var _opp_splat_tween: Tween = null
 
 var sent_tween: Tween = null
+var _opp_avatar_texture_normal: Texture2D = null
+var _opp_avatar_texture_pressed: Texture2D = null
+var _opp_avatar_texture_hover: Texture2D = null
 var dot_count: int = 0
 
 # -------------------------------------------------------------------
@@ -220,19 +223,6 @@ func _ready() -> void:
 	_require_new_shoot_selection = true
 	ui.show_fire_button(false)
 
-	print("[GAME] buttons collected:", _buttons.size())
-	for b in _buttons:
-		if is_instance_valid(b):
-			print("[GAME]  -", b.name, " kind=", int(b.kind), " lane=", int(b.lane))
-
-	buttons.connect_button_signals()
-
-	# UI boot
-	await ui.init_fire_button()
-	ui.init_player_splat_overlay()
-	ui.init_opponent_splat()
-	ui.apply_hearts_from_hp()
-
 	# UI signals
 	if is_instance_valid(dot_timer):
 		dot_timer.timeout.connect(ui.on_dot_timer_timeout)
@@ -248,9 +238,10 @@ func _ready() -> void:
 		_opp_sprite_start_pos = opponent_sprite.global_position
 		print("[DBG][READY] cached _opp_sprite_start_pos=", _opp_sprite_start_pos)
 
-
-	if is_instance_valid(fp_aim_sprite):
-		_fp_aim_base_scale = fp_aim_sprite.scale
+	if is_instance_valid(opp_avatar_display):
+		_opp_avatar_texture_normal = opp_avatar_display.get("texture_normal") as Texture2D
+		_opp_avatar_texture_pressed = opp_avatar_display.get("texture_pressed") as Texture2D
+		_opp_avatar_texture_hover = opp_avatar_display.get("texture_hover") as Texture2D
 
 	# Fire button
 	if fire_button is Button:
@@ -258,11 +249,25 @@ func _ready() -> void:
 	elif fire_button is BaseButton:
 		(fire_button as BaseButton).pressed.connect(_on_fire_pressed)
 
+	# Important: load/parse game data before any await that allows the screen to draw.
 	_connect_app_plugin_or_dev()
 
+	# UI boot after data request/parse.
+	await ui.init_fire_button()
+	ui.init_player_splat_overlay()
+	ui.init_opponent_splat()
+	ui.apply_hearts_from_hp()
+	
 func _process(delta: float) -> void:		
 	if shots != null:
 		shots.tick(delta)
+		
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_RESUMED:
+		var appPlugin := Engine.get_singleton("AppPlugin")
+		if appPlugin:
+			print("[APP] Resumed; refreshing paintball data")
+			appPlugin.onReady()
 
 # -------------------------------------------------------------------
 # Modules bootstrapping
@@ -316,7 +321,7 @@ func _set_game_data(raw_text: String) -> void:
 
 	# UI reflect
 	ui.apply_hearts_from_hp()
-
+		
 # -------------------------------------------------------------------
 # Button clicked entry point
 # -------------------------------------------------------------------
@@ -638,9 +643,5 @@ func _on_settings_button_pressed() -> void:
 	ui.on_settings_button_pressed()
 
 func _on_theme_changed(_theme: Variant = null) -> void:
-	# Keep it simple: when a theme changes, refresh avatars
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("update_display_from_settings"):
 		player_avatar_display.update_display_from_settings()
-
-	if is_instance_valid(opp_avatar_display) and opp_avatar_display.has_method("update_display_from_settings"):
-		opp_avatar_display.update_display_from_settings()

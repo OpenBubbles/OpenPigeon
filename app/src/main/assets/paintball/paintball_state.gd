@@ -194,19 +194,41 @@ func set_game_data(raw_text: String) -> void:
 	g.is_your_turn = res_bool(res, "isYourTurn", false)
 	g.winner = res_str(res, "winner", "")
 
-	if g.my_id != "" and g.p1_id != "" and g.p2_id != "":
-		g.playernum = (1 if g.my_id == g.p1_id else (2 if g.my_id == g.p2_id else 0))
-		if g.playernum == 0:
+	g.spectator_mode = false
+
+	if g.my_id != "":
+		if g.my_id == g.p1_id:
+			g.playernum = 1
+		elif g.my_id == g.p2_id:
+			g.playernum = 2
+		elif g.p1_id != "" and g.p2_id != "":
+			g.playernum = 0
 			g.spectator_mode = true
 			if is_instance_valid(g.you_label):
 				g.you_label.text = ""
 			if is_instance_valid(g.spec_label):
 				g.spec_label.show()
-			g.playernum = 1
+		else:
+			g.playernum = (1 if g.turn_owner == 2 else 2)
 	else:
-		g.playernum = (1 if g.turn_owner == 2 else 2)
+		if g.p1_id == "" and g.p2_id != "":
+			g.playernum = 1 if g.is_your_turn else 2
+		elif g.p2_id == "" and g.p1_id != "":
+			g.playernum = 2 if g.is_your_turn else 1
+		else:
+			g.playernum = (1 if g.turn_owner == 2 else 2)
+
+	if g.playernum == 0:
+		g.playernum = 1
 
 	g.is_my_turn = g.is_your_turn
+	if g.is_my_turn:
+		if g.sent_tween and g.sent_tween.is_running():
+			g.sent_tween.kill()
+		if is_instance_valid(g.sent_label):
+			g.sent_label.visible = false
+			g.sent_label.modulate.a = 1.0
+		g.stop_waiting_animation()
 	if g.is_my_turn:
 	# If it's my turn, we must not be "in replay playback"
 		g._is_replay_playback = false
@@ -237,11 +259,12 @@ func set_game_data(raw_text: String) -> void:
 			g.start_waiting_animation()
 
 	var opponent_avatar_key: String = ("avatar2" if g.playernum == 1 else "avatar1")
-	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
-		var avatar_string: String = res_str(res, opponent_avatar_key, "")
+	var avatar_string: String = res_str(res, opponent_avatar_key, "").strip_edges()
+
+	if avatar_string != "" and is_instance_valid(g.opp_avatar_display):
 		var opponent_data = parse_avatar_string(avatar_string)
-		if is_instance_valid(g.opp_avatar_display):
-			g.opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+		if g.opp_avatar_display.has_method("update_avatar_from_data"):
+			g.opp_avatar_display.update_avatar_from_data(opponent_data)
 
 	var replay_str: String = res_str(res, "replay", "")
 	print("[REPLAY] raw=", replay_str)

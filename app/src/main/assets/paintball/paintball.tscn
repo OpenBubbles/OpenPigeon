@@ -12,7 +12,7 @@
 [ext_resource type="Texture2D" uid="uid://b4pov3uhlycas" path="res://paintball/heart.png" id="7_gayi8"]
 [ext_resource type="Texture2D" uid="uid://e7w14yawuau4" path="res://paintball/move_1.png" id="7_w8qcd"]
 [ext_resource type="Texture2D" uid="uid://cdkfuv11gsbcu" path="res://paintball/tires.png" id="8_03t0m"]
-[ext_resource type="Script" uid="uid://byegu0rn0h53p" path="res://paintball/player.gd" id="8_vrfh0"]
+[ext_resource type="Script" path="res://paintball/player.gd" id="8_vrfh0"]
 [ext_resource type="Texture2D" uid="uid://bktf2mvjevotp" path="res://paintball/soft_shadow.png" id="9_ohmqa"]
 [ext_resource type="Texture2D" uid="uid://smg1prb0w6xu" path="res://paintball/move_2.png" id="9_wuh8u"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="12_vevvc"]

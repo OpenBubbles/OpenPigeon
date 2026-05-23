@@ -207,9 +207,11 @@ func play_sent_animation() -> void:
 		if is_instance_valid(g.sent_label):
 			g.sent_label.visible = false
 			g.sent_label.modulate.a = 1.0
+
+		if not g.is_my_turn and not g.game_over:
 			start_waiting_animation()
 	)
-
+	
 func start_waiting_animation() -> void:
 	if not is_instance_valid(g.waiting_label) or not is_instance_valid(g.waiting_blur) or not is_instance_valid(g.dot_timer):
 		print("Warning: Waiting animation nodes are not valid.")
