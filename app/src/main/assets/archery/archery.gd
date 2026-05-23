@@ -42,6 +42,8 @@ var _top_bar_inited: bool = false
 @export var sensitivity: float = 1.5
 @export var damping_factor: float = 0.9
 @export var max_speed: float = 1000.0
+@export var aim_chaos_strength: float = 55.0
+@export var aim_chaos_speed: float = 2.2
 
 @export var target: Target
 @export var arrow: Arrow
@@ -72,6 +74,8 @@ var game_over: bool = false
 var appPlugin = null
 var num_shots: int = 0
 var aim_tween: Tween = null
+var aim_zoom_tween: Tween = null
+var bow_fully_drawn: bool = false
 var shots: Array[Arrow] = []
 var moves: Array[Vector3] = []
 var current_arrow: Arrow = null
@@ -169,6 +173,8 @@ func _ready() -> void:
 		camera.fov = CAMERA_DEFAULT_FOV
 		var center := _get_bullseye_center_world()
 		camera.look_at(center - Vector3(0.0, CAMERA_LOOK_AT_Y_OFFSET, 0.0), Vector3.UP)
+	
+	update_distance()
 
 func check_winner(completed_round: int = set_num) -> bool:
 	print("check_winner: completed_round=", completed_round, " you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
@@ -278,11 +284,6 @@ func _process_game_state() -> void:
 	else:
 		if not replay.is_empty() and not played_replay:
 			print("PROCESS_GAME_STATE: replay present but _should_play_replay=false; skipping replay (likely our own last turn).")
-
-	# IMPORTANT: do NOT call check_winner() here.
-	# Winners are evaluated only:
-	#  - after our own set is fully scored (_award_set_points_and_continue)
-	#  - after a replay actually ends a set (inside play_replay).
 
 	if (not isTurn or spectator_mode) and not game_over:
 		print("PROCESS_GAME_STATE: not our turn and game_over=", game_over, "; showing waiting UI")
@@ -924,6 +925,9 @@ func play_replay() -> void:
 	replay_in_progress = false
 
 func update_distance() -> void:
+	if not is_instance_valid(distance_label):
+		return
+
 	match set_num:
 		1:
 			distance_label.text = "50ft"
@@ -1141,6 +1145,7 @@ func add_score(score: int, you: bool = true) -> void:
 	)
 
 var aim_cursor_velocity: Vector2 = Vector2.ZERO
+var aim_chaos_time: float = 0.0
 var is_dragging: bool = false
 var initial_pos: Vector2 = Vector2.ZERO
 
@@ -1157,6 +1162,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_LEFT and current_arrow != null:
 			if event.pressed:
 				reset_aim_tween()
+				bow_fully_drawn = false
+
 				if not is_instance_valid(aim_cursor):
 					return
 
@@ -1167,8 +1174,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				is_dragging = true
 				initial_pos = event.position
 				aim_cursor_velocity = Vector2.ZERO
+				aim_chaos_time = randf() * 10.0
 
-				camera_zoom(41.5)
+				camera_zoom(41.5, true)
 				start_aim_timer()
 				_fade_top_bar(false)
 				print("started dragging")
@@ -1185,13 +1193,25 @@ func _unhandled_input(event: InputEvent) -> void:
 
 			if aim_cursor_velocity.length() > max_speed:
 				aim_cursor_velocity = aim_cursor_velocity.normalized() * max_speed
-
+				
 func _process(delta: float) -> void:
 	if not is_dragging:
 		aim_cursor_velocity *= pow(damping_factor, delta)
+	else:
+		aim_chaos_time += delta * aim_chaos_speed
 
 	if is_instance_valid(aim_cursor):
-		aim_cursor.position += aim_cursor_velocity * delta
+		var move_velocity := aim_cursor_velocity
+
+		if is_dragging:
+			var wobble := Vector2(
+				sin(aim_chaos_time * 1.37) + sin(aim_chaos_time * 2.11 + 1.8),
+				cos(aim_chaos_time * 1.61 + 0.6) + sin(aim_chaos_time * 2.47)
+			) * aim_chaos_strength
+
+			move_velocity += wobble
+
+		aim_cursor.position += move_velocity * delta
 
 		var viewport_size := get_viewport().get_visible_rect().size
 		aim_cursor.position.x = clampf(aim_cursor.position.x, 0.0, viewport_size.x)
@@ -1204,12 +1224,26 @@ func _process(delta: float) -> void:
 			if is_equal_approx(target.global_position.z, -14.4329) \
 			else Vector2(-75.0, -110.0)
 		wind_panel_container.position = target_2d_pos + offset
+		
+func camera_zoom(val: float, marks_draw_complete: bool = false) -> void:
+	if not is_instance_valid(camera):
+		return
 
-func camera_zoom(val: float) -> void:
-	var _tween = create_tween()
-	_tween.set_loops(1)
-	_tween.tween_property(camera, "fov", val, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	_tween.play()
+	if aim_zoom_tween != null:
+		aim_zoom_tween.kill()
+		aim_zoom_tween = null
+
+	if marks_draw_complete:
+		bow_fully_drawn = false
+
+	aim_zoom_tween = create_tween()
+	aim_zoom_tween.set_loops(1)
+	aim_zoom_tween.tween_property(camera, "fov", val, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	aim_zoom_tween.connect("finished", func() -> void:
+		if marks_draw_complete and is_dragging:
+			bow_fully_drawn = true
+		aim_zoom_tween = null
+	)
 
 func calc_shot_pos() -> Vector3:
 	var screen_pos: Vector2
@@ -1302,8 +1336,21 @@ func shoot_dart() -> void:
 	if game_over:
 		print("shoot_dart: game_over=true, ignoring shot.")
 		return
+
+	if not bow_fully_drawn:
+		print("shoot_dart: released before bow fully drawn; cancelling shot.")
+		is_dragging = false
+		bow_fully_drawn = false
+		reset_aim_tween()
+		if is_instance_valid(aim_cursor):
+			aim_cursor.visible = false
+		aim_cursor_velocity = Vector2.ZERO
+		_fade_top_bar(true)
+		camera_zoom(CAMERA_DEFAULT_FOV)
+		return
 		
 	is_dragging = false
+	bow_fully_drawn = false
 	if is_instance_valid(aim_progress_bar):
 		aim_progress_bar.visible = false
 		aim_progress_bar.value = 0.0
@@ -1369,7 +1416,7 @@ func shoot_dart() -> void:
 	shots.append(shot_arrow)
 	moves.append(shot_pos)
 	current_arrow = null
-
+	
 func reset_aim_tween() -> void:
 	if is_instance_valid(aim_progress_bar):
 		aim_progress_bar.value = 0.0
