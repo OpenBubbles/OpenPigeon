@@ -158,10 +158,14 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
     var configuringGame: Game? = null
     var currentPage: Int = 0
+    var showingTutorial: Boolean = false
+    var tutorialStep: Int = 0
 
     @Composable
     fun MainKeyboard() {
-        if (configuringGame != null) {
+        if (showingTutorial) {
+            RenderKeyboardTutorial(this@MadridExtension)
+        } else if (configuringGame != null) {
             RenderKeyboardConfig(this@MadridExtension, configuringGame!!)
         } else {
             RenderKeyboard(this@MadridExtension)
@@ -209,7 +213,9 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         val dpWidth = displayMetrics.widthPixels / displayMetrics.density
 
         currentUserCount = userCount
-
+        val sharedPrefs = context.getSharedPreferences("openpigeon", Context.MODE_PRIVATE)
+        showingTutorial = !sharedPrefs.getBoolean("tutorial_seen", false)
+        if (showingTutorial) tutorialStep = 0
         val result = runBlocking {
             keyboardRemoteViews.compose(context, DpSize(dpWidth.dp, 300.dp)) {
                 MainKeyboard()
@@ -355,6 +361,105 @@ class ChangePageCallback : ActionCallback {
             it.currentPage = parameters[page]!!
             it.updateKeyboard()
         }
+    }
+}
+
+class DismissTutorialCallback : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        val sharedPrefs = context.getSharedPreferences("openpigeon", Context.MODE_PRIVATE)
+        sharedPrefs.edit().putBoolean("tutorial_seen", true).apply()
+
+        MadridExtensionService.extension?.let {
+            it.showingTutorial = false
+            it.updateKeyboard()
+        }
+    }
+}
+
+class NextTutorialStepCallback : ActionCallback {
+    override suspend fun onAction(
+        context: Context,
+        glanceId: GlanceId,
+        parameters: ActionParameters
+    ) {
+        MadridExtensionService.extension?.let {
+            it.tutorialStep += 1
+            it.updateKeyboard()
+        }
+    }
+}
+
+private data class TutorialStep(val title: String, val body: String)
+
+private val tutorialSteps = listOf(
+    TutorialStep(
+        "Welcome to OpenPigeon!",
+        "Tap any game below to start playing with your friends. Use the arrows at the top to see more games."
+    ),
+    TutorialStep(
+        "Make it yours",
+        "Tap Settings in the top bar to customize your avatar. It shows up in every game."
+    ),
+    TutorialStep(
+        "Feedback welcome",
+        "Find a bug or have an idea? Reach us on Discord or GitHub. We'd love to hear from you!"
+    )
+)
+
+@Composable
+fun RenderKeyboardTutorial(extension: MadridExtension?) {
+    val step = (extension?.tutorialStep ?: 0).coerceIn(0, tutorialSteps.size - 1)
+    val isLastStep = step == tutorialSteps.size - 1
+    val current = tutorialSteps[step]
+
+    Column(
+        modifier = GlanceModifier.fillMaxSize().padding(16.dp),
+        horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+        verticalAlignment = Alignment.Vertical.CenterVertically
+    ) {
+        Image(
+            ImageProvider(R.drawable.madrid_icon),
+            "OpenPigeon",
+            modifier = GlanceModifier.width(60.dp).height(60.dp).padding(bottom = 8.dp)
+        )
+        Text(
+            current.title,
+            style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                color = ColorProvider(Color.Gray), textAlign = TextAlign.Center),
+            modifier = GlanceModifier.padding(bottom = 8.dp)
+        )
+        Text(
+            current.body,
+            style = TextStyle(fontSize = 14.sp,
+                color = ColorProvider(Color.Gray), textAlign = TextAlign.Center),
+            modifier = GlanceModifier.padding(horizontal = 24.dp, vertical = 12.dp)
+        )
+
+        Row(modifier = GlanceModifier.padding(bottom = 12.dp)) {
+            for (i in tutorialSteps.indices) {
+                Box(modifier = GlanceModifier.width(8.dp).height(8.dp).cornerRadius(4.dp)
+                    .background(if (i == step) Color.DarkGray else Color.LightGray)) { }
+                if (i < tutorialSteps.size - 1) Spacer(modifier = GlanceModifier.width(6.dp))
+            }
+        }
+
+        Text(
+            if (isLastStep) "Got it" else "Next",
+            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                color = ColorProvider(Color.White), textAlign = TextAlign.Center),
+            modifier = GlanceModifier
+                .padding(horizontal = 24.dp, vertical = 10.dp)
+                .background(Color.DarkGray)
+                .cornerRadius(8.dp)
+                .clickable(onClick =
+                    if (isLastStep) actionRunCallback<DismissTutorialCallback>()
+                    else actionRunCallback<NextTutorialStepCallback>()
+                )
+        )
     }
 }
 
