@@ -213,6 +213,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         val displayMetrics = context.resources.displayMetrics
         val dpWidth = displayMetrics.widthPixels / displayMetrics.density
 
+        com.openbubbles.openpigeon.settings.GameStats.init(context)
         currentUserCount = userCount
         val sharedPrefs = context.getSharedPreferences("openpigeon", Context.MODE_PRIVATE)
         showingTutorial = !sharedPrefs.getBoolean("tutorial_seen", false)
@@ -329,17 +330,52 @@ private val gameName = ActionParameters.Key<String>("game_name")
 
 @Composable
 fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: GlanceModifier = GlanceModifier) {
+    val wins = extension?.let {
+        com.openbubbles.openpigeon.settings.GameStats.init(it.context)
+        com.openbubbles.openpigeon.settings.GameStats.getWins(game.getName())
+    } ?: 0
+
     Column(modifier = modifier.wrapContentHeight().padding(1.dp), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
-        Image(
-            ImageProvider(game.gamePoster(null)),
-            contentDescription = game.displayName(),
-            modifier = GlanceModifier.wrapContentHeight().clickable(
-                onClick = actionRunCallback<ChooseGameCallback>(actionParametersOf(
-                    gameName to game.getName()
-                ))
-            ).height(80.dp).cornerRadius(5.dp),
-            contentScale = ContentScale.Crop,
-        )
+        Box(
+            modifier = GlanceModifier.wrapContentHeight(),
+            contentAlignment = Alignment.TopEnd
+        ) {
+            Image(
+                ImageProvider(game.gamePoster(null)),
+                contentDescription = game.displayName(),
+                modifier = GlanceModifier.wrapContentHeight().clickable(
+                    onClick = actionRunCallback<ChooseGameCallback>(actionParametersOf(
+                        gameName to game.getName()
+                    ))
+                ).height(80.dp).cornerRadius(5.dp),
+                contentScale = ContentScale.Crop,
+            )
+            if (wins > 0) {
+                Row(
+                    modifier = GlanceModifier
+                        .padding(4.dp)
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .cornerRadius(4.dp)
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.Vertical.CenterVertically
+                ) {
+                    Image(
+                        ImageProvider(R.drawable.crown_24px),
+                        "Wins",
+                        modifier = GlanceModifier.width(12.dp).height(12.dp)
+                    )
+                    Spacer(modifier = GlanceModifier.width(2.dp))
+                    Text(
+                        wins.toString(),
+                        style = TextStyle(
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorProvider(Color.White)
+                        )
+                    )
+                }
+            }
+        }
         Text(game.displayName().uppercase(),
             style = TextStyle(
                 color = ColorProvider(Color.Gray),

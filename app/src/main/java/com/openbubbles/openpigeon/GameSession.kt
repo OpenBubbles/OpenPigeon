@@ -31,8 +31,45 @@ class GameSession(var handle: IMessageViewHandle) {
             }
         }
 
+        // Detect win transition: winner field newly appeared
+        val hadWinnerBefore = currentMessage["winner"] != null
+        val hasWinnerNow = newMessage["winner"] != null
+        if (!hadWinnerBefore && hasWinnerNow) {
+            recordWinIfApplicable(newMessage)
+        }
+
         messageUpdated(newMessage)
         currentMessage = newMessage
+    }
+
+    private fun recordWinIfApplicable(message: Map<String, String>) {
+        val context = MadridExtensionService.extension?.context ?: return
+        val game = MadridExtension.findByName(message["game"] ?: return) ?: return
+        val myId = game.getSenderUUID(context)
+        val winnerField = message["winner"] ?: return
+
+        // winner format: "<sender_uuid>|<flag>" where flag -1 inverts who won, 0 = draw
+        val parts = winnerField.split("|")
+        if (parts.size < 2) return
+
+        val claimedWinner = parts[0]
+        val flag = parts[1]
+
+        if (flag == "0") return // Draw, no win to record
+
+        var iWon = myId == claimedWinner
+        if (flag == "-1") iWon = !iWon
+
+        // Spectator check: don't record wins for games we aren't in
+        val player1 = message["player1"]
+        val player2 = message["player2"]
+        if (player1 != null && player2 != null && myId != player1 && myId != player2) return
+
+        if (iWon) {
+            com.openbubbles.openpigeon.settings.GameStats.init(context)
+            com.openbubbles.openpigeon.settings.GameStats.incrementWins(game.getName())
+            Log.i("GameStats", "Recorded win for ${game.getName()}, total=${com.openbubbles.openpigeon.settings.GameStats.getWins(game.getName())}")
+        }
     }
 
     fun updateSession(context: Context, updates: Map<String, String>, mySession: String, finished: () -> Unit) {
