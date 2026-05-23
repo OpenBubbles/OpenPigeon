@@ -13,6 +13,7 @@ class GameSession(var handle: IMessageViewHandle) {
 
     var messageUpdated: (new: MutableMap<String, String>) -> Unit = {}
     var currentMessage: MutableMap<String, String> = mutableMapOf()
+    private var outcomeRecorded: Boolean = false
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
     var liveRemoteViews = GlanceRemoteViews()
 
@@ -31,10 +32,15 @@ class GameSession(var handle: IMessageViewHandle) {
             }
         }
 
-        // Detect win transition: winner field newly appeared
-        val hadWinnerBefore = currentMessage["winner"] != null
+        // Detect win transition: winner field newly appeared in this session.
+        // First-message-with-winner means we're opening an already-finished game;
+        // seed outcomeRecorded=true so we don't count it as a fresh win.
+        val isFirstMessage = currentMessage.isEmpty()
         val hasWinnerNow = newMessage["winner"] != null
-        if (!hadWinnerBefore && hasWinnerNow) {
+        if (isFirstMessage && hasWinnerNow) {
+            outcomeRecorded = true
+        } else if (!outcomeRecorded && hasWinnerNow) {
+            outcomeRecorded = true
             recordWinIfApplicable(newMessage)
         }
 
