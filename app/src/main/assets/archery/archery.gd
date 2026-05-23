@@ -39,11 +39,9 @@ var _top_bar_inited: bool = false
 @onready var aim_cursor: Sprite2D = %AimCursor
 @onready var aim_progress_bar: TextureProgressBar = aim_cursor.get_node("TextureProgressBar")
 
-@export var sensitivity: float = 1.5
-@export var damping_factor: float = 0.9
+@export var sensitivity: float = 4.9
+@export var damping_factor: float = 0.4
 @export var max_speed: float = 1000.0
-@export var aim_chaos_strength: float = 55.0
-@export var aim_chaos_speed: float = 2.2
 
 @export var target: Target
 @export var arrow: Arrow
@@ -1145,7 +1143,6 @@ func add_score(score: int, you: bool = true) -> void:
 	)
 
 var aim_cursor_velocity: Vector2 = Vector2.ZERO
-var aim_chaos_time: float = 0.0
 var is_dragging: bool = false
 var initial_pos: Vector2 = Vector2.ZERO
 
@@ -1174,7 +1171,6 @@ func _unhandled_input(event: InputEvent) -> void:
 				is_dragging = true
 				initial_pos = event.position
 				aim_cursor_velocity = Vector2.ZERO
-				aim_chaos_time = randf() * 10.0
 
 				camera_zoom(41.5, true)
 				start_aim_timer()
@@ -1197,21 +1193,9 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if not is_dragging:
 		aim_cursor_velocity *= pow(damping_factor, delta)
-	else:
-		aim_chaos_time += delta * aim_chaos_speed
 
 	if is_instance_valid(aim_cursor):
-		var move_velocity := aim_cursor_velocity
-
-		if is_dragging:
-			var wobble := Vector2(
-				sin(aim_chaos_time * 1.37) + sin(aim_chaos_time * 2.11 + 1.8),
-				cos(aim_chaos_time * 1.61 + 0.6) + sin(aim_chaos_time * 2.47)
-			) * aim_chaos_strength
-
-			move_velocity += wobble
-
-		aim_cursor.position += move_velocity * delta
+		aim_cursor.position += aim_cursor_velocity * delta
 
 		var viewport_size := get_viewport().get_visible_rect().size
 		aim_cursor.position.x = clampf(aim_cursor.position.x, 0.0, viewport_size.x)
@@ -1224,7 +1208,7 @@ func _process(delta: float) -> void:
 			if is_equal_approx(target.global_position.z, -14.4329) \
 			else Vector2(-75.0, -110.0)
 		wind_panel_container.position = target_2d_pos + offset
-		
+
 func camera_zoom(val: float, marks_draw_complete: bool = false) -> void:
 	if not is_instance_valid(camera):
 		return
