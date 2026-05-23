@@ -88,6 +88,7 @@ import org.json.JSONObject
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
+import androidx.core.content.edit
 
 
 class MadridExtension(val context: Context) : IMadridExtension.Stub() {
@@ -371,7 +372,7 @@ class DismissTutorialCallback : ActionCallback {
         parameters: ActionParameters
     ) {
         val sharedPrefs = context.getSharedPreferences("openpigeon", Context.MODE_PRIVATE)
-        sharedPrefs.edit().putBoolean("tutorial_seen", true).apply()
+        sharedPrefs.edit { putBoolean("tutorial_seen", true) }
 
         MadridExtensionService.extension?.let {
             it.showingTutorial = false
