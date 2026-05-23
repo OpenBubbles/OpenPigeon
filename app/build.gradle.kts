@@ -1,3 +1,6 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.Properties
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.Sync
@@ -33,6 +36,12 @@ val debugGodotAssetsDir = generatedGodotRoot.map { it.dir("debug") }
 val releaseGodotAssetsDir = generatedGodotRoot.map { it.dir("release") }
 val godotExportZip = layout.buildDirectory.file("intermediates/godot/release/godot_export.zip")
 
+fun releaseDateCode(): Int {
+    val datePart = SimpleDateFormat("yyMMdd", Locale.US).format(Date())
+    val dailyRelease = (project.findProperty("dailyRelease") as String?) ?: "01"
+    return "$datePart$dailyRelease".toInt()
+}
+
 android {
     namespace = "com.openbubbles.openpigeon"
     compileSdk = 35
@@ -40,9 +49,9 @@ android {
     defaultConfig {
         applicationId = "com.openbubbles.openpigeon"
         minSdk = 26
-        versionCode = 1
+        versionCode = releaseDateCode()
         targetSdk = 35
-        versionName = "1.0"
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
