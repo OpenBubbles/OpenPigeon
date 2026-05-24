@@ -964,36 +964,44 @@ class PoolActivity : AppCompatActivity() {
                 }
             }
 
-            if (poolBalls.any { it.sunk } && !scratch && winState == null) {
-                if (iAmStripes == null && !wasFirst) {
-                    // first sunk ball that is a stripe or not
-                    iAmStripes = poolBalls.find {
-                        Log.i("order", "${it.sunkOrder}")
-                        it.sunkOrder == 0
-                    }!!.isStripe
-                    updateBallTypeUi()
+            if (!scratch && winState == null) {
+                val sunkPlayableBalls = poolBalls
+                    .filter { it.sunk && (it.isStripe || it.isSolid) }
+                    .sortedBy { it.sunkOrder }
+
+                val madeTurnBall = if (iAmStripes == null) {
+                    sunkPlayableBalls.isNotEmpty()
+                } else {
+                    sunkPlayableBalls.any { (iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid) }
                 }
 
-                val stripes = iAmStripes
-                val hasMoreBalls = stripes == null || poolBalls.count { !it.sunk && ((stripes && it.isStripe) || (!stripes && it.isSolid)) } != 0
-                if (!hasMoreBalls) {
-                    call8Ball = true
+                if (madeTurnBall) {
+                    if (iAmStripes == null && !wasFirst) {
+                        iAmStripes = sunkPlayableBalls.first().isStripe
+                        updateBallTypeUi()
+                    }
+
+                    val stripes = iAmStripes
+                    val hasMoreBalls = stripes == null || poolBalls.count { !it.sunk && ((stripes && it.isStripe) || (!stripes && it.isSolid)) } != 0
+                    if (!hasMoreBalls) {
+                        call8Ball = true
+                        mode = PoolMode.Aiming
+                        runOnUiThread {
+                            val label = findViewById<TextView>(R.id.state_label)
+                            label.visibility = View.VISIBLE
+                            label.text = "Choose a pocket"
+                        }
+                        return
+                    }
+
+                    // you get another turn only if you made your own ball, or a valid open-table ball
                     mode = PoolMode.Aiming
                     runOnUiThread {
-                        val label = findViewById<TextView>(R.id.state_label)
-                        label.visibility = View.VISIBLE
-                        label.text = "Choose a pocket"
+                        setCueUiVisible(true)
+                        renderer.setCueVisible(true)
                     }
                     return
                 }
-
-                // you get another turn
-                mode = PoolMode.Aiming
-                runOnUiThread {
-                    setCueUiVisible(true)
-                    renderer.setCueVisible(true)
-                }
-                return
             }
             closeCuePopup()
             runOnUiThread {
@@ -1227,21 +1235,43 @@ class PoolActivity : AppCompatActivity() {
     }
 
     private fun buildBalls(balls: String, skew: String?) {
-        val ballsThatShouldNotGoIn = skew?.let {
-            val items = arrayListOf<Int>()
-            for (ball in skew.split("#")) {
-                if (ball == "")
+        data class FinalBall(val number: Int, val x: Float, val y: Float)
+
+        val finalBalls: MutableList<FinalBall>? = skew?.let {
+            val result = mutableListOf<FinalBall>()
+
+            for (finalBall in it.split("#")) {
+                if (finalBall == "")
                     continue
-                val details = ball.split(",")
-                items.add(details[4].toInt())
+
+                val details = finalBall.split(",")
+                if (details.size < 5)
+                    continue
+
+                result.add(
+                    FinalBall(
+                        details[4].toInt(),
+                        details[0].toFloat(),
+                        details[1].toFloat()
+                    )
+                )
             }
-            items
+
+            result
         }
 
         for (ball in balls.split("#")) {
             if (ball == "")
                 continue
+
             val details = ball.split(",")
+            if (details.size < 5)
+                continue
+
+            val x = details[0].toFloat()
+            val y = details[1].toFloat()
+            val rot = details[2].toFloat()
+            val density = details[3].toFloat()
             val number = details[4].toInt()
 
             val buffer = ByteBuffer.allocateDirect(4 /*f32*/ * 7)
@@ -1249,15 +1279,58 @@ class PoolActivity : AppCompatActivity() {
 
             val floatBuffer = buffer.asFloatBuffer()
 
-            // 5, 6, 7 are rotation_3d
-            Log.i("Making ball", "x: ${details[0].toFloat()} y: ${details[1].toFloat()} rot: ${details[2].toFloat()} density: ${details[3].toFloat()} number: $number")
+            val shouldGoInMode = if (finalBalls == null) {
+                0
+            } else {
+                var bestIndex = -1
+                var bestDist = Float.POSITIVE_INFINITY
 
-            val shouldGoInMode = if (ballsThatShouldNotGoIn == null) 0 else if (ballsThatShouldNotGoIn.contains(number)) 2 else 1
-            makeBall(table, details[0].toFloat(), details[1].toFloat(), details[2].toFloat(), details[3].toFloat(), number, shouldGoInMode, floatBuffer)
-            val ball = PoolBall(number, floatBuffer, resources, details[3].toFloat())
-            poolBalls.add(ball)
+                for (i in finalBalls.indices) {
+                    val finalBall = finalBalls[i]
+                    if (finalBall.number != number)
+                        continue
+
+                    val dx = finalBall.x - x
+                    val dy = finalBall.y - y
+                    val dist = dx * dx + dy * dy
+
+                    if (dist < bestDist) {
+                        bestDist = dist
+                        bestIndex = i
+                    }
+                }
+
+                if (bestIndex >= 0) {
+                    finalBalls.removeAt(bestIndex)
+                    2
+                } else {
+                    1
+                }
+            }
+
+            Log.i(
+                "ReplayBallMode",
+                "number=$number shouldGoInMode=$shouldGoInMode x=$x y=$y remainingFinalMatches=${finalBalls?.count { it.number == number } ?: -1}"
+            )
+
+            Log.i("Making ball", "x: $x y: $y rot: $rot density: $density number: $number")
+
+            makeBall(
+                table,
+                x,
+                y,
+                rot,
+                density,
+                number,
+                shouldGoInMode,
+                floatBuffer
+            )
+
+            val poolBall = PoolBall(number, floatBuffer, resources, density)
+            poolBalls.add(poolBall)
+
             if (number == 0) {
-                cueBall = ball
+                cueBall = poolBall
             }
         }
     }

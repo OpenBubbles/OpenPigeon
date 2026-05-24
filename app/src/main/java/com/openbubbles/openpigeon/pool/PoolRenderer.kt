@@ -48,6 +48,62 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         private const val WORLD_HEIGHT = 441.189f
     }
 
+    private data class PoolWallSegment(
+        val ax: Float,
+        val ay: Float,
+        val bx: Float,
+        val by: Float
+    )
+
+    private val iosAimWallSegments = listOf(
+        PoolWallSegment(370.000000f, 50.000000f, 75.000000f, 50.000000f),
+        PoolWallSegment(414.000000f, 50.000000f, 709.000000f, 50.000000f),
+        PoolWallSegment(75.000000f, 50.000000f, 63.130043f, 33.903290f),
+        PoolWallSegment(63.130043f, 33.903290f, 54.456924f, 19.282175f),
+        PoolWallSegment(54.456924f, 19.282175f, 27.072823f, 9.736966f),
+        PoolWallSegment(50.000000f, 75.000000f, 33.903290f, 63.130043f),
+        PoolWallSegment(33.903290f, 63.130043f, 19.282175f, 54.456924f),
+        PoolWallSegment(19.282175f, 54.456924f, 9.736966f, 27.072823f),
+        PoolWallSegment(27.072823f, 9.736966f, 9.736966f, 27.072823f),
+        PoolWallSegment(709.000000f, 50.000000f, 720.869934f, 33.903290f),
+        PoolWallSegment(720.869934f, 33.903290f, 729.543030f, 19.282177f),
+        PoolWallSegment(729.543030f, 19.282177f, 756.927124f, 9.736967f),
+        PoolWallSegment(734.000000f, 75.000000f, 750.096680f, 63.130039f),
+        PoolWallSegment(750.096680f, 63.130039f, 764.717773f, 54.456917f),
+        PoolWallSegment(764.717773f, 54.456917f, 774.263000f, 27.072817f),
+        PoolWallSegment(756.927124f, 9.736967f, 774.263000f, 27.072817f),
+        PoolWallSegment(709.000000f, 390.000000f, 720.869934f, 406.096710f),
+        PoolWallSegment(720.869934f, 406.096710f, 729.543030f, 420.717834f),
+        PoolWallSegment(729.543030f, 420.717834f, 756.927124f, 430.263031f),
+        PoolWallSegment(734.000000f, 365.000000f, 750.096680f, 376.869965f),
+        PoolWallSegment(750.096680f, 376.869965f, 764.717773f, 385.543091f),
+        PoolWallSegment(764.717773f, 385.543091f, 774.263000f, 412.927185f),
+        PoolWallSegment(756.927124f, 430.263031f, 774.263000f, 412.927185f),
+        PoolWallSegment(75.000000f, 390.000000f, 63.130043f, 406.096710f),
+        PoolWallSegment(63.130043f, 406.096710f, 54.456924f, 420.717834f),
+        PoolWallSegment(54.456924f, 420.717834f, 27.072823f, 430.263031f),
+        PoolWallSegment(50.000000f, 365.000000f, 33.903290f, 376.869965f),
+        PoolWallSegment(33.903290f, 376.869965f, 19.282175f, 385.543091f),
+        PoolWallSegment(19.282175f, 385.543091f, 9.736966f, 412.927185f),
+        PoolWallSegment(27.072823f, 430.263031f, 9.736966f, 412.927185f),
+        PoolWallSegment(370.000000f, 50.000000f, 376.160095f, 34.155334f),
+        PoolWallSegment(376.160095f, 34.155334f, 370.340881f, 17.121933f),
+        PoolWallSegment(370.340881f, 17.121933f, 392.000000f, 0.000000f),
+        PoolWallSegment(414.000000f, 50.000000f, 408.504089f, 33.912899f),
+        PoolWallSegment(408.504089f, 33.912899f, 415.026520f, 17.136196f),
+        PoolWallSegment(415.026520f, 17.136196f, 392.000000f, 0.000000f),
+        PoolWallSegment(370.000000f, 390.000000f, 376.160095f, 405.844666f),
+        PoolWallSegment(376.160095f, 405.844666f, 370.340881f, 422.878052f),
+        PoolWallSegment(370.340881f, 422.878052f, 392.000000f, 440.000000f),
+        PoolWallSegment(414.000000f, 390.000000f, 408.504089f, 406.087097f),
+        PoolWallSegment(408.504089f, 406.087097f, 415.026520f, 422.863800f),
+        PoolWallSegment(415.026520f, 422.863800f, 392.000000f, 440.000000f),
+        PoolWallSegment(75.000000f, 390.000000f, 370.000000f, 390.000000f),
+        PoolWallSegment(414.000000f, 390.000000f, 709.000000f, 390.000000f),
+        PoolWallSegment(50.000000f, 75.000000f, 50.000000f, 365.000000f),
+        PoolWallSegment(734.000000f, 75.000000f, 734.000000f, 365.000000f)
+    )
+
     // 1.0f = maximum fitted size. Smaller values leave room for UI around the table.
     var tableVisualScale = 1f
 
@@ -104,49 +160,40 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
     }
 
     private fun rayEndAtTableEdge(startX: Float, startY: Float, dirX: Float, dirY: Float): Pair<Float, Float> {
-        val ballRadius = 10f
-        val markerRadius = 9f
-
-        val minX = 40f + ballRadius + markerRadius
-        val maxX = 744f - ballRadius - markerRadius
-        val minY = 40f + ballRadius + markerRadius
-        val maxY = 400f - ballRadius - markerRadius
-
         var bestT = Float.POSITIVE_INFINITY
+        var bestX = startX
+        var bestY = startY
 
-        fun consider(t: Float, y: Float) {
-            if (t > 0f && y in minY..maxY && t < bestT) {
+        fun cross(ax: Float, ay: Float, bx: Float, by: Float): Float {
+            return ax * by - ay * bx
+        }
+
+        for (seg in iosAimWallSegments) {
+            val sx = seg.bx - seg.ax
+            val sy = seg.by - seg.ay
+            val denom = cross(dirX, dirY, sx, sy)
+
+            if (abs(denom) < 0.0001f)
+                continue
+
+            val qx = seg.ax - startX
+            val qy = seg.ay - startY
+
+            val t = cross(qx, qy, sx, sy) / denom
+            val u = cross(qx, qy, dirX, dirY) / denom
+
+            if (t > 0.001f && u >= -0.001f && u <= 1.001f && t < bestT) {
                 bestT = t
+                bestX = startX + dirX * t
+                bestY = startY + dirY * t
             }
-        }
-
-        fun considerY(t: Float, x: Float) {
-            if (t > 0f && x in minX..maxX && t < bestT) {
-                bestT = t
-            }
-        }
-
-        if (dirX > 0f) {
-            val t = (maxX - startX) / dirX
-            consider(t, startY + dirY * t)
-        } else if (dirX < 0f) {
-            val t = (minX - startX) / dirX
-            consider(t, startY + dirY * t)
-        }
-
-        if (dirY > 0f) {
-            val t = (maxY - startY) / dirY
-            considerY(t, startX + dirX * t)
-        } else if (dirY < 0f) {
-            val t = (minY - startY) / dirY
-            considerY(t, startX + dirX * t)
         }
 
         if (!bestT.isFinite()) {
             return Pair(startX, startY)
         }
 
-        return Pair(startX + dirX * bestT, startY + dirY * bestT)
+        return Pair(bestX, bestY)
     }
     private fun drawAimAssist(canvas: Canvas) {
         if (activity.mode != PoolActivity.PoolMode.Aiming) return
@@ -197,8 +244,10 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
             val edge = rayEndAtTableEdge(cueBall.x, cueBall.y, dirX, dirY)
 
             val markerRadius = 9f
-            val lineEndX = edge.first - dirX * markerRadius
-            val lineEndY = edge.second - dirY * markerRadius
+            val markerX = edge.first - dirX * markerRadius
+            val markerY = edge.second - dirY * markerRadius
+            val lineEndX = markerX - dirX * markerRadius
+            val lineEndY = markerY - dirY * markerRadius
 
             canvas.drawLine(
                 cueBall.x + dirX * 10f,
@@ -208,7 +257,7 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                 paint
             )
 
-            canvas.drawCircle(edge.first, edge.second, markerRadius, paint)
+            canvas.drawCircle(markerX, markerY, markerRadius, paint)
             return
         }
 
