@@ -50,6 +50,13 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import kotlin.math.floor
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import kotlin.math.ceil
+import android.graphics.drawable.GradientDrawable
+import android.os.Looper
+import android.view.Gravity
 
 class PoolActivity : AppCompatActivity() {
     lateinit var sessionId: String
@@ -60,6 +67,8 @@ class PoolActivity : AppCompatActivity() {
     private var darkMode = false
 
     var table: Long = 0L
+
+    @Volatile var poolActivityClosing = false
 
     lateinit var renderer: PoolRenderer
 
@@ -78,6 +87,11 @@ class PoolActivity : AppCompatActivity() {
     var touchDownCueX = 0f
 
     private var lastCueHapticStep = -1
+
+    private val stateLabelHandler = Handler(Looper.getMainLooper())
+    private var waitingDotsRunnable: Runnable? = null
+    private var stateLabelAnimator: ValueAnimator? = null
+    private var sentWaitingSequenceActive = false
 
     fun isPoolDarkModeEnabled(): Boolean {
         return darkMode
@@ -139,6 +153,190 @@ class PoolActivity : AppCompatActivity() {
         } else {
             @Suppress("DEPRECATION")
             vibrator.vibrate(6)
+        }
+    }
+
+    private fun stateLabelDp(value: Float): Int {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            value,
+            resources.displayMetrics
+        ).toInt()
+    }
+
+    private fun applyStateLabelBackground(label: TextView) {
+        label.background = GradientDrawable().apply {
+            setColor(0xBB000000.toInt())
+            cornerRadius = stateLabelDp(14f).toFloat()
+        }
+        label.maxLines = 1
+    }
+
+    private fun resetStateLabelLayout(label: TextView) {
+        label.animate().cancel()
+        label.alpha = 1f
+        label.scaleX = 1f
+        label.scaleY = 1f
+        label.minWidth = 0
+        label.gravity = Gravity.CENTER
+        label.textAlignment = View.TEXT_ALIGNMENT_CENTER
+        label.setTextColor(0xFFFFFFFF.toInt())
+        applyStateLabelBackground(label)
+
+        val params = label.layoutParams
+        params.width = FrameLayout.LayoutParams.WRAP_CONTENT
+        label.layoutParams = params
+    }
+
+    private fun measureStateLabelWidth(label: TextView, text: CharSequence): Int {
+        return ceil(
+            label.paint.measureText(text.toString()) + label.paddingLeft + label.paddingRight
+        ).toInt()
+    }
+
+    private fun stopStateLabelAnimation() {
+        waitingDotsRunnable?.let { stateLabelHandler.removeCallbacks(it) }
+        stateLabelHandler.removeCallbacksAndMessages(null)
+        waitingDotsRunnable = null
+        stateLabelAnimator?.cancel()
+        stateLabelAnimator = null
+        sentWaitingSequenceActive = false
+    }
+
+    private fun setStateLabelText(text: CharSequence, visible: Boolean = true) {
+        stopStateLabelAnimation()
+
+        val label = findViewById<TextView>(R.id.state_label)
+        resetStateLabelLayout(label)
+        label.text = text
+        label.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    private fun startWaitingDots(label: TextView) {
+        var dots = 1
+
+        waitingDotsRunnable?.let { stateLabelHandler.removeCallbacks(it) }
+
+        val runnable = object : Runnable {
+            override fun run() {
+                if (waitingDotsRunnable !== this) return
+
+                if (label.visibility == View.VISIBLE) {
+                    label.text = "WAITING FOR OPPONENT" + ".".repeat(dots)
+                    dots = if (dots >= 3) 1 else dots + 1
+                }
+
+                stateLabelHandler.postDelayed(this, 900L)
+            }
+        }
+
+        waitingDotsRunnable = runnable
+        stateLabelHandler.post(runnable)
+    }
+
+    private fun showWaitingLabelAnimated() {
+        runOnUiThread {
+            stopStateLabelAnimation()
+
+            val label = findViewById<TextView>(R.id.state_label)
+            resetStateLabelLayout(label)
+
+            val waitingWidth = measureStateLabelWidth(label, "WAITING FOR OPPONENT...")
+            val params = label.layoutParams
+            params.width = waitingWidth
+            label.layoutParams = params
+
+            label.visibility = View.VISIBLE
+            startWaitingDots(label)
+        }
+    }
+
+    private fun playSentThenWaitingAnimation() {
+        runOnUiThread {
+            stopStateLabelAnimation()
+            sentWaitingSequenceActive = true
+
+            val label = findViewById<TextView>(R.id.state_label)
+            resetStateLabelLayout(label)
+
+            val sentWidth = measureStateLabelWidth(label, "Sent ✔")
+            val waitingWidth = measureStateLabelWidth(label, "WAITING FOR OPPONENT...")
+
+            val params = label.layoutParams
+            params.width = sentWidth
+            label.layoutParams = params
+
+            label.text = "Sent"
+            label.alpha = 0f
+            label.setTextColor(0xFFFFFFFF.toInt())
+            label.visibility = View.VISIBLE
+
+            label.animate()
+                .alpha(1f)
+                .setDuration(250L)
+                .start()
+
+            stateLabelHandler.postDelayed({
+                if (!sentWaitingSequenceActive) return@postDelayed
+
+                val sentCheck = SpannableString("Sent ✔")
+                sentCheck.setSpan(
+                    ForegroundColorSpan(0xFF7257D8.toInt()),
+                    5,
+                    6,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                label.text = sentCheck
+            }, 1000L)
+
+            stateLabelHandler.postDelayed({
+                if (!sentWaitingSequenceActive) return@postDelayed
+
+                val oldWidth = label.width.takeIf { it > 0 } ?: sentWidth
+
+                val widthParams = label.layoutParams
+                widthParams.width = oldWidth
+                label.layoutParams = widthParams
+
+                label.animate().cancel()
+                label.alpha = 1f
+                label.text = "WAITING FOR OPPONENT."
+                label.setTextColor(0x00FFFFFF)
+
+                stateLabelAnimator = ValueAnimator.ofInt(oldWidth, waitingWidth).apply {
+                    duration = 420L
+                    addUpdateListener { animation ->
+                        val animatedParams = label.layoutParams
+                        animatedParams.width = animation.animatedValue as Int
+                        label.layoutParams = animatedParams
+                    }
+                    doOnEnd {
+                        if (!sentWaitingSequenceActive) return@doOnEnd
+
+                        stateLabelAnimator = null
+
+                        val finalParams = label.layoutParams
+                        finalParams.width = waitingWidth
+                        label.layoutParams = finalParams
+
+                        ValueAnimator.ofInt(0, 255).apply {
+                            duration = 180L
+                            addUpdateListener { textAnimation ->
+                                val alpha = textAnimation.animatedValue as Int
+                                label.setTextColor((alpha shl 24) or 0x00FFFFFF)
+                            }
+                            doOnEnd {
+                                if (sentWaitingSequenceActive) {
+                                    label.setTextColor(0xFFFFFFFF.toInt())
+                                    startWaitingDots(label)
+                                }
+                            }
+                            start()
+                        }
+                    }
+                    start()
+                }
+            }, 2000L)
         }
     }
 
@@ -315,6 +513,7 @@ class PoolActivity : AppCompatActivity() {
             val leftRail = findViewById<FrameLayout>(R.id.leftRail)
             val rightRail = findViewById<FrameLayout>(R.id.rightRail)
             val views = listOf(leftRail, rightRail)
+            syncCueRailsToTable()
 
             if (visible) {
                 for (view in views) {
@@ -343,6 +542,60 @@ class PoolActivity : AppCompatActivity() {
                 }
                 closeCuePopup()
             }
+        }
+    }
+
+    fun syncCueRailsToTable() {
+        runOnUiThread {
+            if (!::renderer.isInitialized) return@runOnUiThread
+
+            val root = findViewById<FrameLayout>(R.id.poolRoot)
+            val leftRail = findViewById<FrameLayout>(R.id.leftRail)
+            val rightRail = findViewById<FrameLayout>(R.id.rightRail)
+
+            if (root.width == 0 || leftRail.width == 0 || rightRail.width == 0) return@runOnUiThread
+
+            @Suppress("DEPRECATION")
+            val isRotated = when (windowManager.defaultDisplay.rotation) {
+                android.view.Surface.ROTATION_90,
+                android.view.Surface.ROTATION_180,
+                android.view.Surface.ROTATION_270 -> true
+                else -> false
+            }
+
+            if (!isRotated) {
+                leftRail.translationX = 0f
+                rightRail.translationX = 0f
+                leftRail.translationY = 0f
+                rightRail.translationY = 0f
+                return@runOnUiThread
+            }
+
+            val bounds = renderer.tableScreenBounds
+            if (bounds.width() <= 0f || bounds.height() <= 0f) return@runOnUiThread
+
+            val powerSliderGap = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                6f,
+                resources.displayMetrics
+            )
+
+            val cueAimGap = TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP,
+                50f,
+                resources.displayMetrics
+            )
+
+            val railOffsetY = 55f
+
+            val leftTarget = max(0f, bounds.left - leftRail.width - powerSliderGap)
+            val rightDefaultLeft = root.width - rightRail.width
+            val rightTarget = min(rightDefaultLeft.toFloat(), bounds.right + cueAimGap)
+
+            leftRail.translationX = leftTarget
+            rightRail.translationX = rightTarget - rightDefaultLeft
+            leftRail.translationY = railOffsetY
+            rightRail.translationY = railOffsetY
         }
     }
 
@@ -384,6 +637,8 @@ class PoolActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content)) { _, insets ->
             insets
         }
+
+        applyStateLabelBackground(findViewById(R.id.state_label))
 
         AvatarData.init(applicationContext)
 
@@ -560,6 +815,11 @@ class PoolActivity : AppCompatActivity() {
         val view = findViewById<SurfaceView>(R.id.surfaceView)
         renderer = PoolRenderer(view.holder, this)
 
+        view.post {
+            renderer.transform
+            syncCueRailsToTable()
+        }
+
         view.setOnTouchListener { v, event ->
             val inverted = Matrix()
             renderer.transform.invert(inverted)
@@ -663,14 +923,32 @@ class PoolActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
-        if (::settingsSheet.isInitialized) settingsSheet.detach()
-        Log.i("Table", "Destroying")
-        if (table != 0L) {
-            destroyPoolTable(table)
-            table = 0L
+        poolActivityClosing = true
+        disableSend = true
+        skipReplayRequested = true
+        mode = PoolMode.Disabled
+        stopStateLabelAnimation()
+
+        cancelAllShots()
+        cancelAllShots = {}
+
+        if (::renderer.isInitialized) {
+            renderer.running = false
         }
-        renderer.running = false
+
+        if (::settingsSheet.isInitialized) settingsSheet.detach()
+
+        Log.i("Table", "Destroying")
+
+        synchronized(this) {
+            if (table != 0L) {
+                val oldTable = table
+                table = 0L
+                destroyPoolTable(oldTable)
+            }
+        }
+
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -707,8 +985,14 @@ class PoolActivity : AppCompatActivity() {
 
     data class BallHit(val direction: Float, val power: Float, val spinX: Float, val spinY: Float, var wasStripes: Boolean?) {
         fun hit(activity: PoolActivity) {
+            if (activity.poolActivityClosing || activity.table == 0L) {
+                Log.w("PoolLifecycle", "Skipping hitBall because activity is closing or table is destroyed")
+                return
+            }
+
             if (!activity.replaying)
                 activity.scratch = false
+
             activity.mode = PoolMode.Playing
             Log.i("Hitting ball", "Direction: $direction power: $power spinX: $spinX spinY: $spinY scratch: $wasStripes first ${activity.isFirst}")
             activity.hitBall(activity.table, 0 /*white*/, direction, power, spinX, spinY, activity.isFirst)
@@ -740,7 +1024,7 @@ class PoolActivity : AppCompatActivity() {
         }
         animator.doOnEnd {
             synchronized(this@PoolActivity) {
-                if (cancelled || skipReplayRequested) return@synchronized
+                if (cancelled || skipReplayRequested || poolActivityClosing || table == 0L) return@synchronized
                 val cueBall = cueBall ?: return@synchronized
                 renderer.cuePos = floatArrayOf(cueBall.x, cueBall.y)
                 if (scratch && !replaying) {
@@ -771,7 +1055,7 @@ class PoolActivity : AppCompatActivity() {
 
     var cancelAllShots: () -> Unit = { }
     fun playNextReplay() {
-        if (skipReplayRequested || replayHits.isEmpty()) return
+        if (poolActivityClosing || table == 0L || skipReplayRequested || replayHits.isEmpty()) return
         mode = PoolMode.ReplayAiming
         if (!skipReplayFadeStarted) {
             skipReplayFadeStarted = true
@@ -801,12 +1085,12 @@ class PoolActivity : AppCompatActivity() {
         runOnUiThread { renderer.setCueVisible(true) }
         val handler = Handler(mainLooper)
         handler.postDelayed({
-            if (skipReplayRequested || replayHits.isEmpty()) return@postDelayed
+            if (poolActivityClosing || table == 0L || skipReplayRequested || replayHits.isEmpty()) return@postDelayed
             val animator = ValueAnimator.ofFloat(0f, replayHits[0].power)
             animator.duration = 300L
             animator.addUpdateListener { animation -> setCueDrawAmount(animation.animatedValue as Float) }
             animator.doOnEnd {
-                if (skipReplayRequested || replayHits.isEmpty()) return@doOnEnd
+                if (poolActivityClosing || table == 0L || skipReplayRequested || replayHits.isEmpty()) return@doOnEnd
                 val hit = replayHits.removeAt(0)
                 animateShoot(hit.power, hit)
             }
@@ -892,6 +1176,7 @@ class PoolActivity : AppCompatActivity() {
             runOnUiThread {
                 val label = findViewById<TextView>(R.id.state_label)
                 label.visibility = View.VISIBLE
+                stopStateLabelAnimation()
                 if (didIWin!!) {
                     label.text = "You won!"
                 } else {
@@ -911,6 +1196,7 @@ class PoolActivity : AppCompatActivity() {
                 renderer.setCueVisible(true)
                 val label = findViewById<TextView>(R.id.state_label)
                 label.visibility = View.VISIBLE
+                stopStateLabelAnimation()
                 label.text = "Choose a pocket"
             }
             return
@@ -1006,9 +1292,7 @@ class PoolActivity : AppCompatActivity() {
             closeCuePopup()
             runOnUiThread {
                 setCueUiVisible(false)
-                val label = findViewById<TextView>(R.id.state_label)
-                label.visibility = View.VISIBLE
-                label.text = "Waiting for opponent..."
+                playSentThenWaitingAnimation()
             }
 
             // send replay
@@ -1478,9 +1762,7 @@ class PoolActivity : AppCompatActivity() {
                     findViewById<ImageButton>(R.id.skip_replay).visibility = View.GONE
                     setCueUiVisible(false)
 
-                    val label = findViewById<TextView>(R.id.state_label)
-                    label.visibility = View.VISIBLE
-                    label.text = "Waiting for opponent..."
+                    showWaitingLabelAnimated()
                 }
 
                 mode = PoolMode.Disabled
@@ -1533,14 +1815,11 @@ class PoolActivity : AppCompatActivity() {
             runOnUiThread {
                 findViewById<ImageButton>(R.id.skip_replay).visibility = View.GONE
                 setCueUiVisible(false)
+
                 if (didIWin != null) {
-                    val label = findViewById<TextView>(R.id.state_label)
-                    label.visibility = View.VISIBLE
-                    if (didIWin!!) {
-                        label.text = "You won!"
-                    } else {
-                        label.text = "They won!"
-                    }
+                    setStateLabelText(if (didIWin!!) "You won!" else "They won!")
+                } else if (!sentWaitingSequenceActive) {
+                    showWaitingLabelAnimated()
                 }
             }
             mode = PoolMode.Disabled
@@ -1548,8 +1827,7 @@ class PoolActivity : AppCompatActivity() {
         } else {
             runOnUiThread {
                 setCueUiVisible(false)
-                val label = findViewById<TextView>(R.id.state_label)
-                label.visibility = View.GONE
+                setStateLabelText("", false)
                 val controls = findViewById<LinearLayout>(R.id.controls)
                 controls.visibility = View.VISIBLE
                 val skipBtn = findViewById<ImageButton>(R.id.skip_replay)

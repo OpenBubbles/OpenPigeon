@@ -10,6 +10,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.util.Log
 import android.view.SurfaceHolder
+import android.view.Surface
 import androidx.core.animation.doOnEnd
 import com.openbubbles.openpigeon.R
 import kotlin.math.PI
@@ -42,6 +43,8 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
     var cueAlpha = 1.0f
     var cuePos = floatArrayOf(0f, 0f)
     var scratchRingPhase = 0f
+
+    @Volatile var tableScreenBounds: RectF = RectF()
 
     companion object {
         private const val WORLD_WIDTH = 784.743f
@@ -106,9 +109,12 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
 
     // 1.0f = maximum fitted size. Smaller values leave room for UI around the table.
     var tableVisualScale = 1f
+    var rotatedTableVisualScale = 0.88f
 
-    // Positive moves the table downward on screen, negative upward.
+    // Positive moves the table downward/rightward on screen, negative upward/leftward.
     var tableOffsetYPx = 0f
+    var rotatedTableOffsetXPx = 0f
+    var rotatedTableOffsetYPx = 0f
 
     private fun sideUiInsetPx(): Float {
         return TypedValue.applyDimension(
@@ -123,27 +129,53 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
             val surfaceWidth = holder.surfaceFrame.width().toFloat()
             val surfaceHeight = holder.surfaceFrame.height().toFloat()
 
-            val rotatedWidth = WORLD_HEIGHT
-            val rotatedHeight = WORLD_WIDTH
+            @Suppress("DEPRECATION")
+            val screenRotationDegrees = when (activity.windowManager.defaultDisplay.rotation) {
+                Surface.ROTATION_90 -> 90f
+                Surface.ROTATION_180 -> 180f
+                Surface.ROTATION_270 -> 270f
+                else -> 0f
+            }
+
+            val tableRotation = -90f - screenRotationDegrees
+
+            val fitBounds = RectF(0f, 0f, WORLD_WIDTH, WORLD_HEIGHT)
+            val fitMatrix = Matrix().apply {
+                postScale(1f, -1f)
+                postRotate(tableRotation)
+            }
+            fitMatrix.mapRect(fitBounds)
 
             val sideInset = sideUiInsetPx()
             val availableWidth = max(1f, surfaceWidth - sideInset * 2f)
 
             val fitScale = min(
-                availableWidth / rotatedWidth,
-                surfaceHeight / rotatedHeight
+                availableWidth / fitBounds.width(),
+                surfaceHeight / fitBounds.height()
             )
 
-            val scale = fitScale * tableVisualScale
-            val visualWidth = rotatedWidth * scale
-            val visualHeight = rotatedHeight * scale
+            val isRotated = screenRotationDegrees != 0f
+            val scale = fitScale * if (isRotated) rotatedTableVisualScale else tableVisualScale
+            val visualWidth = fitBounds.width() * scale
+            val visualHeight = fitBounds.height() * scale
 
-            val left = sideInset + (availableWidth - visualWidth) * 0.5f
-            val top = (surfaceHeight - visualHeight) * 0.5f + tableOffsetYPx
+            val offsetX = if (isRotated) rotatedTableOffsetXPx else 0f
+            val offsetY = if (isRotated) rotatedTableOffsetYPx else tableOffsetYPx
+
+            val left = sideInset + (availableWidth - visualWidth) * 0.5f + offsetX
+            val top = (surfaceHeight - visualHeight) * 0.5f + offsetY
 
             postScale(scale, -scale)
-            postRotate(-90f)
-            postTranslate(left + visualWidth, top + visualHeight)
+            postRotate(tableRotation)
+
+            val drawBounds = RectF(0f, 0f, WORLD_WIDTH, WORLD_HEIGHT)
+            mapRect(drawBounds)
+
+            postTranslate(left - drawBounds.left, top - drawBounds.top)
+
+            val finalBounds = RectF(0f, 0f, WORLD_WIDTH, WORLD_HEIGHT)
+            mapRect(finalBounds)
+            tableScreenBounds = finalBounds
         }
 
     fun angleDifference(a: Double, b: Double): Double {
@@ -368,6 +400,10 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         synchronized(activity) {
             canvas.drawColor(getBackgroundColor())
 
+            if (activity.poolActivityClosing || activity.table == 0L) {
+                return@synchronized
+            }
+
             canvas.save()
             canvas.concat(transform)
 
@@ -533,6 +569,8 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         Log.d("Surface", "Changed width: $width, Height: $height")
+        transform
+        activity.syncCueRailsToTable()
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
