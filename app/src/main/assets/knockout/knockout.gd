@@ -68,6 +68,7 @@ const Z_WATER_RIPPLE := 0
 const Z_BOARD := 10
 const Z_ARROWS := 20
 const Z_PIECES := 30
+const Z_TEXT := 50
 const Z_BLUR := 99
 const Z_UI_TOP := 100
 
@@ -81,11 +82,13 @@ const ARROW_COLOR_MAP1 := Color(0,0,0,1)
 const ARROW_COLOR_MAP2 := Color(0.95, 0.95, 0.95, 1.0)
 const ARROW_COLOR_MAP3 := Color(0.92, 0.92, 0.92, 1.0)
 const ARROW_COLOR_PLAYER2 := Color("#61779e")
+const SEND_WHITE := Color("#ffffff")
+const SEND_BLUE := Color("#5798f6")
 const SEND_RED := Color("#d62828")
 const SEND_GREEN := Color("#14532d")
 
 var current_scale: float = ZOOM_START
-const DEBUG_KILL := false
+const DEBUG_KILL := true
 
 
 # --- Replay state ---
@@ -111,6 +114,8 @@ const CAN_SLEEP := false
 var PIECE_RADIUS := PIECE_RADIUS_PX
 const ROUND_SNAP_AFTER: float = 1.4
 var _staged_launch_mode: bool = false
+var _goal_popup_shown: bool = false
+var _pending_goal_popup: bool = false
 var _staged_pre_board_str: String = ""
 var _staged_next_index: int = 0
 
@@ -151,6 +156,11 @@ var dot_count = 0
 var _aim_instruction_label: Label = null
 var _aim_instruction_tween: Tween = null
 var _resize_pending := false
+var _loading_board_data := false
+var _incoming_data_seq := 0
+
+func _is_stale_data_seq(data_seq: int) -> bool:
+	return data_seq >= 0 and data_seq != _incoming_data_seq
 
 func _on_viewport_resize() -> void:
 	if not _board_initialized:
@@ -256,6 +266,10 @@ func _style_button(btn: Button, base: Color) -> void:
 	normal.corner_radius_top_right = 10
 	normal.corner_radius_bottom_left = 10
 	normal.corner_radius_bottom_right = 10
+	normal.content_margin_left = 24
+	normal.content_margin_right = 24
+	normal.content_margin_top = 12
+	normal.content_margin_bottom = 12
 	var hover := normal.duplicate()
 	hover.bg_color = base.lerp(Color.WHITE, 0.08)
 	var pressed := normal.duplicate()
@@ -267,6 +281,13 @@ func _style_button(btn: Button, base: Color) -> void:
 	btn.add_theme_stylebox_override("pressed", pressed)
 	btn.add_theme_stylebox_override("disabled", disabled)
 	btn.add_theme_color_override("font_color", Color.WHITE)
+
+func _aim_label_base_color() -> Color:
+	if map_mode == 2:
+		return SEND_RED
+	if map_mode == 3:
+		return SEND_GREEN
+	return SEND_WHITE
 
 func _arrow_color_for_piece(piece: Node) -> Color:
 	if int(piece.get_meta("player", -1)) == 2:
@@ -304,9 +325,9 @@ func _can_show_aim_ui() -> bool:
 		and not game_over
 		and not _replay_in_progress
 		and not _is_zooming
+		and not _loading_board_data
 	)
-
-
+	
 func _update_aim_instruction_label() -> void:
 	if not is_instance_valid(_aim_instruction_label):
 		_aim_instruction_label = Label.new()
@@ -316,12 +337,9 @@ func _update_aim_instruction_label() -> void:
 		_aim_instruction_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		_aim_instruction_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_aim_instruction_label.add_theme_font_size_override("font_size", 28)
-		_aim_instruction_label.add_theme_color_override("font_color", Color.WHITE)
-		_aim_instruction_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.75))
-		_aim_instruction_label.add_theme_constant_override("shadow_offset_x", 2)
-		_aim_instruction_label.add_theme_constant_override("shadow_offset_y", 2)
+		_aim_instruction_label.add_theme_color_override("font_color", _aim_label_base_color())
 		_aim_instruction_label.z_as_relative = false
-		_aim_instruction_label.z_index = Z_UI_TOP
+		_aim_instruction_label.z_index = Z_TEXT
 		_aim_instruction_label.visible = false
 		_aim_instruction_label.modulate.a = 0.0
 		add_child(_aim_instruction_label)
@@ -582,19 +600,22 @@ func _build_hole_areas(hole_polys: Array[PackedVector2Array]) -> void:
 		_hole_polys   = _hole_polys.slice(0, hole_polys.size())
 
 func _on_safe_area_body_exited(body: Node) -> void:
-	if not _kill_detection_enabled: return
+	if _loading_board_data or not _kill_detection_enabled:
+		return
 	if body is RigidBody2D and body.get_parent() == piece_container:
 		if DEBUG_KILL: print("[KILL] SafeArea.body_exited →", body.name)
 		_safe_kill(body)
 
 func _on_hole_body_entered(body: Node) -> void:
-	if not _kill_detection_enabled: return
+	if _loading_board_data or not _kill_detection_enabled:
+		return
 	if body is RigidBody2D and body.get_parent() == piece_container:
 		if DEBUG_KILL: print("[KILL] HoleArea.body_entered →", body.name)
 		_safe_kill(body)
 
 func _on_water_kill_body_entered(body: Node) -> void:
-	if not _kill_detection_enabled: return
+	if _loading_board_data or not _kill_detection_enabled:
+		return
 	if body is RigidBody2D and body.get_parent() == piece_container:
 		if DEBUG_KILL: print("[KILL] Water.body_entered →", body.name)
 		_safe_kill(body)
@@ -825,7 +846,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_set_kill_debug_visible(not _kill_debug_showing)
 
 func _fallback_kill_pass() -> void:
-	if _last_safe_poly.is_empty() or not is_instance_valid(board_zoom):
+	if _loading_board_data or _last_safe_poly.is_empty() or not is_instance_valid(board_zoom):
 		return
 	var to_bz: Transform2D = board_zoom.get_global_transform().affine_inverse()
 	for n in piece_container.get_children():
@@ -996,6 +1017,8 @@ func _ensure_board_scaler() -> void:
 	print("[SHRINK] BoardScaler injected.")
 	
 func _ready():
+	modulate.a = 0.0
+
 	# Wait a single frame for the viewport size to be accurate before we do any calculations.
 	await get_tree().process_frame
 	Engine.physics_ticks_per_second = 60
@@ -1004,7 +1027,6 @@ func _ready():
 
 	# 2. Standard scene and UI setup.
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
-	_apply_map_theme(map_mode)
 	_apply_bg_for_dark(is_dark)
 	self.z_index = 10
 	_apply_board_draw_order()
@@ -1063,7 +1085,7 @@ func _ready():
 		await get_tree().create_timer(0.4).timeout   # let board settle/layout
 		
 	if _pending_replay_str != "":
-		parse_replay_string(_pending_replay_str)
+		parse_replay_string(_pending_replay_str, _incoming_data_seq)
 		_pending_replay_str = ""
 		
 	var appPlugin = Engine.get_singleton("AppPlugin")
@@ -1078,9 +1100,10 @@ func _ready():
 		var dev_payload := {
 			"isYourTurn": true,
 			"player": "1",
-			"myPlayerId": "TEST",
-			"player2": "TEST",
-			"mode": "1",
+			"myPlayerId": "TEST2",
+			"player1": "TEST1",
+			"player2": "TEST2",
+			"mode": "3",
 			"replay": "board:1#-41.490452,-18.381981,2,2.568027,0.311887,11.024456#35.786495,56.762127,1,0.193446,3.140568,125.850670|shoot:1|board:2#-24.121695,-12.309731,2,1.882683,0.311887,0.000000#-135.776291,51.576973,1,4.711365,-0.038352,95.461876|board:2#-24.121695,-12.309731,2,1.882683,0.311887,0.000000#-135.776291,51.576973,1,4.711365,-0.038352,95.461876"
 		}
 		_set_game_data(JSON.stringify(dev_payload))
@@ -1153,7 +1176,7 @@ func _stage_after_local_play(next_idx: int) -> void:
 
 	_hide_all_arrows_and_refresh_highlights()
 
-	var will_shrink := _clamp_board_index(next_idx) != _current_board_index
+	var will_shrink := _clamp_board_index(next_idx) != _clamp_board_index(_current_board_index)
 	if will_shrink:
 		_set_kill_detection_enabled(false)
 
@@ -1177,34 +1200,56 @@ func _set_game_data(new_game_data_json: String):
 
 	_stop_all_highlights()
 	stop_waiting_animation()
+	_incoming_data_seq += 1
+	var data_seq := _incoming_data_seq
+
+	_loading_board_data = false
+	_replay_in_progress = false
+	_staged_launch_mode = false
+	_staged_pre_board_str = ""
+	_staged_next_index = 0
 
 	var data: Dictionary = parsed
 	is_your_turn = data.get("isYourTurn", false)
 	print("INCOMING RAW DATA: ", data)
 	var replay_str: String = data.get("replay", "")
-	var player1_id: String = data.get("player1", "")
-	var player2_id: String = data.get("player2", "")
-	my_player_id = data.get("myPlayerId", "")
-	var opponent_avatar_key = ""
+	var player1_id: String = str(data.get("player1", ""))
+	var player2_id: String = str(data.get("player2", ""))
+	my_player_id = str(data.get("myPlayerId", ""))
 	map_mode = int(data.get("map", data.get("mode", map_mode)))
 	_apply_map_theme(map_mode)
-	
-	if my_player_id == player1_id or my_player_id == player2_id or player1_id == "":
-		is_my_turn = is_your_turn
-		if my_player_id == player1_id:
-			player = 1; opponent_avatar_key = "avatar2"
-		elif my_player_id == player2_id:
-			player = 2; opponent_avatar_key = "avatar1"
-		else:
-			player = 1
-		print("P1ID: " , player1_id, " | P2ID: ", player2_id, " | Player: ", player)
-	else:
-		#spectator_mode = true
-		you_label.text = ""
-		#is_my_turn = false
-		is_my_turn = is_your_turn
-		spec_label.show()
+
+	spectator_mode = false
+	if my_player_id != "" and player1_id != "" and player2_id != "":
+		spectator_mode = my_player_id != player1_id and my_player_id != player2_id
+
+	if spectator_mode:
 		player = 1
+		is_my_turn = false
+		you_label.text = ""
+		spec_label.show()
+	else:
+		is_my_turn = is_your_turn
+		if my_player_id != "" and my_player_id == player1_id:
+			player = 1
+		elif my_player_id != "" and my_player_id == player2_id:
+			player = 2
+		elif player1_id != "" and player2_id == "":
+			player = 2
+		elif player1_id == "" and player2_id != "":
+			player = 1
+		else:
+			player = int(data.get("player", player))
+
+		if is_instance_valid(spec_label):
+			spec_label.hide()
+
+	print("P1ID: ", player1_id, " | P2ID: ", player2_id, " | MyID: ", my_player_id, " | Player: ", player, " | spectator=", spectator_mode)
+	
+	# Brand-new-to-me game: my_player_id isn't recognized as an assigned slot yet.
+	# Spectators never see the goal popup.
+	if not spectator_mode and (my_player_id == "" or (my_player_id != player1_id and my_player_id != player2_id)):
+		_pending_goal_popup = true
 
 	if player == 1:
 		left_preserver.texture = BLACK_PRESERVER_TEX
@@ -1213,45 +1258,83 @@ func _set_game_data(new_game_data_json: String):
 		left_preserver.texture = GRAY_PRESERVER_TEX
 		right_preserver.texture = BLACK_PRESERVER_TEX
 
-	if opponent_avatar_key != "" and data.has(opponent_avatar_key):
-		var avatar_string = data[opponent_avatar_key]
-		var opponent_data = _parse_avatar_string(avatar_string)
-		if is_instance_valid(opp_avatar_display):
-			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+	if spectator_mode:
+		if data.has("avatar1") and is_instance_valid(player_avatar_display):
+			player_avatar_display.call_deferred("update_avatar_from_data", _parse_avatar_string(str(data["avatar1"])))
+		if data.has("avatar2") and is_instance_valid(opp_avatar_display):
+			opp_avatar_display.call_deferred("update_avatar_from_data", _parse_avatar_string(str(data["avatar2"])))
+	else:
+		var opponent_avatar_key := "avatar2" if player == 1 else "avatar1"
+		if data.has(opponent_avatar_key) and is_instance_valid(opp_avatar_display):
+			opp_avatar_display.call_deferred("update_avatar_from_data", _parse_avatar_string(str(data[opponent_avatar_key])))
+			print("[AVATAR] Updated opponent avatar from ", opponent_avatar_key)
 
 	if replay_str != "":
 		if _board_initialized:
-			parse_replay_string(replay_str)
+			parse_replay_string(replay_str, data_seq)
 		else:
 			_pending_replay_str = replay_str
 	else:
 		print("New Game - No replay string found.")
 
-	call_deferred("_apply_turn_highlights_based_on_arrows")
 	_update_piece_interactivity()
 
-	if not is_my_turn and not game_over and not spectator_mode:
-		start_waiting_animation()
+	if spectator_mode:
+		is_my_turn = false
+		stop_waiting_animation()
+		_stop_all_highlights()
 		_recompute_send_button_visibility()
+	else:
+		call_deferred("_apply_turn_highlights_based_on_arrows")
+
+		if not is_my_turn and not game_over:
+			start_waiting_animation()
+			_recompute_send_button_visibility()
+
+	if replay_str == "":
+		modulate.a = 1.0
 
 func send_game() -> void:
 	print("[Send] send_game() called")
 	_stop_all_highlights()
 	await get_tree().process_frame
+	
+	# When the scene stayed open, old hide/reset logic can wipe the opponent's
+	# stored power meta after a received replay. Restore opponent setup data from
+	# last_pre_round before checking readiness.
+	if not last_pre_round.is_empty():
+		var pending_arr: Array = last_pre_round.get("pieces", [])
+		var live_pieces: Array[Node] = []
+
+		for c in piece_container.get_children():
+			if c is RigidBody2D and c.has_meta("player"):
+				live_pieces.append(c)
+
+		var restore_count: int = min(live_pieces.size(), pending_arr.size())
+		for i in restore_count:
+			var piece := live_pieces[i]
+			var pd: Dictionary = pending_arr[i]
+
+			if int(piece.get_meta("player", -1)) == player:
+				continue
+
+			var pending_power := float(pd.get("power", 0.0))
+			if pending_power > 0.5 and float(piece.get_meta("power", 0.0)) <= 0.5:
+				piece.set_meta("shoot_dir", rad_to_deg(float(pd.get("shoot_dir", 0.0))))
+				piece.set_meta("power", pending_power)
 
 	# If we already auto-played locally, this click FINALIZES and sends.
 	if _staged_launch_mode:
 		var payload: Dictionary = {}
-		var post_str := _serialize_current_board(_staged_next_index, true, true)
 		var setup_str := _serialize_current_board(_staged_next_index, false, true)
-		var staged_replay_str := "%s|shoot:1|%s|%s" % [_staged_pre_board_str, post_str, setup_str]
+		var staged_replay_str := "%s|shoot:1|%s|%s" % [_staged_pre_board_str, setup_str, setup_str]
 		payload["replay"] = staged_replay_str
 
 		avatar_key = ("avatar1" if player == 1 else "avatar2")
 		if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 			payload[avatar_key] = player_avatar_display.get_avatar_data_string()
 
-		game_ended = await check_win()
+		game_ended = check_win()
 		if game_ended and win_loss_state != "":
 			payload["winner"] = my_player_id + "|" + win_loss_state
 
@@ -1271,7 +1354,7 @@ func send_game() -> void:
 		return
 
 	# Not staged yet → decide whether to auto-play first or just send normally.
-	var my_ready := _all_my_arrows_visible()
+	var my_ready := _all_my_arrows_visible() and _all_my_piece_powers_nonzero()
 	var opp_ready := _all_opponent_arrows_nonzero()
 	
 	print("[Send] readiness | staged=", _staged_launch_mode,
@@ -1301,7 +1384,7 @@ func send_game() -> void:
 			return
 
 		# 3) Stage the "post" board at next index and let the player aim again.
-		var next_idx: int = int(min(_current_board_index + 1, BOARD_MAX_INDEX))
+		var next_idx: int = _next_board_index_after_round(_current_board_index)
 		await _stage_after_local_play(next_idx)
 
 		# Done: DO NOT send yet. The next click will send the 3-chunk payload.
@@ -1315,7 +1398,7 @@ func send_game() -> void:
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload2[avatar_key] = player_avatar_display.get_avatar_data_string()
 
-	game_ended = await check_win()
+	game_ended = check_win()
 	if game_ended and win_loss_state != "":
 		payload2["winner"] = my_player_id + "|" + win_loss_state
 
@@ -1347,15 +1430,15 @@ func _build_replay_string() -> String:
 		var b0 := _serialize_current_board(0, false, true)
 		return "%s|%s" % [b0, b0]
 
-	# 3) Full round ready: everyone has arrows -> pre | shoot:1 | post | post
+	# 3) Full round ready fallback. Normal flow should stage locally first,
+	# but if this path is used, duplicate the current setup-style board like iOS.
 	if my_ready and opp_ready:
 		var pre := _serialize_current_board(idx, false, true)
-		var next_idx: int = int(min(idx + 1, BOARD_MAX_INDEX))
-		var post := _serialize_current_board(next_idx, true, true) # zero powers in post
-		return "%s|shoot:1|%s|%s" % [pre, post, post]
+		var setup := _serialize_current_board(idx, false, true)
+		return "%s|shoot:1|%s|%s" % [pre, setup, setup]
 
-	# 4) Default hand-off: I’ve set my arrows, opponent hasn’t → send a single pre board (no shoot)
-	return _serialize_current_board(idx, false, true)
+	var b4 := _serialize_current_board(idx, false, true)
+	return "%s|%s" % [b4, b4]
 
 func _serialize_current_board(board_idx: int, zero_power: bool, include_index: bool = true) -> String:
 	var parts := PackedStringArray()
@@ -1396,6 +1479,63 @@ func _all_opponent_arrows_nonzero() -> bool:
 		if float(n.get_meta("power", 0.0)) <= 0.0:
 			return false
 	return any  # true only if there was at least one opponent piece and none had zero power
+	
+func _other_player_id() -> int:
+	return 2 if player == 1 else 1
+
+
+func _next_board_index_after_round(from_idx: int) -> int:
+	return int(max(0, from_idx)) + 1
+
+
+func _board_player_power_state(bd: Dictionary, owner_id: int) -> Dictionary:
+	var any_piece := false
+	var any_power := false
+	var all_power := true
+
+	for pd in bd.get("pieces", []):
+		if int(pd.get("player", -1)) != owner_id:
+			continue
+
+		any_piece = true
+		var power_val := float(pd.get("power", 0.0))
+		if power_val > 0.5:
+			any_power = true
+		else:
+			all_power = false
+
+	return {
+		"any_piece": any_piece,
+		"any_power": any_power,
+		"all_power": any_piece and all_power
+	}
+
+
+func _board_all_players_powered(bd: Dictionary) -> bool:
+	var p1 := _board_player_power_state(bd, 1)
+	var p2 := _board_player_power_state(bd, 2)
+	return bool(p1["all_power"]) and bool(p2["all_power"])
+
+func _all_my_arrows_visible() -> bool:
+	var mine := _owned_live_pieces()
+	if mine.is_empty():
+		return false
+	for p in mine:
+		var arrow := p.get_node_or_null("Arrow") as CanvasItem
+		if arrow == null or not arrow.visible:
+			return false
+	return true
+
+func _all_my_piece_powers_nonzero() -> bool:
+	var mine := _owned_live_pieces()
+	if mine.is_empty():
+		return false
+
+	for p in mine:
+		if float(p.get_meta("power", 0.0)) <= 0.5:
+			return false
+
+	return true
 
 # --- Replay Parsing & Board Setup ---
 
@@ -1404,14 +1544,27 @@ func _update_piece_interactivity() -> void:
 		if piece.has_method("set_controlled_by_me"):
 			var owner_id: int = int(piece.get_meta("player", -1))
 			var can_control: bool = (
-				owner_id == player
+				not spectator_mode
+				and owner_id == player
 				and _can_show_aim_ui()
 			)
 			piece.set_controlled_by_me(can_control)
 
+	if spectator_mode:
+		_stop_all_highlights()
+
 	_recompute_send_button_visibility()
 	
-func parse_replay_string(replay: String) -> void:
+func parse_replay_string(replay: String, data_seq: int = -1) -> void:
+	if _is_stale_data_seq(data_seq):
+		return
+
+	_loading_board_data = true
+	_set_kill_detection_enabled(false)
+	_staged_launch_mode = false
+	_staged_pre_board_str = ""
+	_staged_next_index = 0
+
 	var chunks: PackedStringArray = replay.split("|", false)
 	var boards: Array[Dictionary] = []
 	var shoot_flag := false
@@ -1428,58 +1581,101 @@ func parse_replay_string(replay: String) -> void:
 
 	if boards.is_empty():
 		push_warning("Replay had no valid boards.")
+		_loading_board_data = false
+		_replay_in_progress = false
+		_set_kill_detection_enabled(not game_over)
 		return
 
 	last_pre_round = boards[0]
 	last_post_round = boards[1] if (boards.size() > 1) else {}
 	last_pending_setup_round = {}
 
-	# If the replay includes a final setup board where only one player has aimed,
-	# preserve it so it can be restored after the replay finishes.
+	var pre_idx := int(last_pre_round.get("round", 0))
+	var complete_board_without_shoot := (not shoot_flag) and _board_all_players_powered(last_pre_round)
+
+	if complete_board_without_shoot:
+		last_post_round = {}
+		print("[REPLAY] Complete setup board without shoot token. Playing it locally.")
+
 	if shoot_flag and boards.size() >= 3:
 		var possible_setup: Dictionary = boards[boards.size() - 1]
-		var filled_players := {}
+		var p1_state := _board_player_power_state(possible_setup, 1)
+		var p2_state := _board_player_power_state(possible_setup, 2)
 
-		for pd in possible_setup.get("pieces", []):
-			var power_val := float(pd.get("power", 0.0))
-			if power_val > 0.5:
-				filled_players[int(pd.get("player", -1))] = true
-
-		if filled_players.size() == 1:
+		if bool(p1_state["any_power"]) != bool(p2_state["any_power"]):
 			last_pending_setup_round = possible_setup.duplicate(true)
-			print("[REPLAY] Preserved pending setup board | filled_players=", filled_players.keys())
+			print("[REPLAY] Preserved pending setup board | p1=", p1_state, " | p2=", p2_state)
 
-	var pre_idx := int(last_pre_round.get("round", 0))
+	var should_play_round := shoot_flag or complete_board_without_shoot
+
 	print("[REPLAY] parse | pre_idx=", pre_idx,
 		" | boards=", boards.size(),
 		" | shoot_flag=", shoot_flag,
+		" | complete_no_shoot=", complete_board_without_shoot,
+		" | should_play=", should_play_round,
 		" | has_pending_setup=", not last_pending_setup_round.is_empty()
 	)
 
-	_replay_in_progress = shoot_flag
+	_replay_in_progress = should_play_round
 
 	_apply_board_index_immediate(pre_idx)
+	if _is_stale_data_seq(data_seq):
+		return
+
 	_dbg_board_state("parse after pre_idx apply")
 
-	_setup_board_from_board_dict(last_pre_round)
+	await _setup_board_from_board_dict(last_pre_round)
+	if _is_stale_data_seq(data_seq):
+		return
+
 	await get_tree().process_frame
+	if _is_stale_data_seq(data_seq):
+		return
 
 	_ensure_piece_container_hosted_in_board_zoom()
 	_resync_piece_sprite_sizes()
 	_apply_aim_data_from_board_dict(last_pre_round, false)
 	_refresh_safe_polys_for_transform()
+
+	_set_kill_detection_enabled(false)
+
+	for i in range(3):
+		await get_tree().physics_frame
+		if _is_stale_data_seq(data_seq):
+			return
+
 	_seed_area_overlaps()
 
-	if shoot_flag:
+	_loading_board_data = false
+	_set_kill_detection_enabled(not game_over)
+	modulate.a = 1.0
+
+	if should_play_round:
 		_update_piece_interactivity()
 		_stop_all_highlights()
 		await get_tree().process_frame
-		_play_round_from_replay(last_pre_round)
+		if _is_stale_data_seq(data_seq):
+			return
+		_play_round_from_replay(last_pre_round, data_seq)
 	else:
 		_replay_in_progress = false
 		_update_piece_interactivity()
 		call_deferred("_apply_turn_highlights_based_on_arrows")
 		_recompute_send_button_visibility()
+		_maybe_show_pending_goal_popup()
+		
+func _maybe_show_pending_goal_popup() -> void:
+	if not _pending_goal_popup or _goal_popup_shown:
+		return
+	_pending_goal_popup = false
+	# Wait several physics frames so the safe area has stable overlap state
+	# with all the freshly-spawned pieces before we add popup nodes to the tree.
+	for i in range(4):
+		await get_tree().physics_frame
+	# Final sanity: pieces should now be reliably "inside" the safe area.
+	_seed_area_overlaps()
+	await get_tree().process_frame
+	_show_goal_popup()
 		
 func _parse_board_chunk(body: String) -> Dictionary:
 	var round_num: int = 0
@@ -1522,33 +1718,30 @@ func _owned_live_pieces() -> Array:
 		out.append(n)
 	return out
 
-func _all_my_arrows_visible() -> bool:
-	var mine := _owned_live_pieces()
-	if mine.is_empty():
-		return false
-	for p in mine:
-		var arrow := p.get_node_or_null("Arrow") as CanvasItem
-		if arrow == null or not arrow.visible:
-			return false
-	return true
-
 func _animate_send_button(should_show: bool) -> void:
 	if not is_instance_valid(send_button):
 		return
+
 	send_button.set_as_top_level(true)
 
-	if not send_button.has_meta("home_pos"):
-		send_button.set_meta("home_pos", send_button.global_position)
+	if not send_button.has_meta("home_y"):
+		send_button.set_meta("home_y", send_button.global_position.y)
 
 	if send_button.has_meta("sb_tween"):
 		var old_tw: Variant = send_button.get_meta("sb_tween")
 		if old_tw is Tween and (old_tw as Tween).is_running():
 			(old_tw as Tween).kill()
 
-	var home: Vector2 = send_button.get_meta("home_pos")
-	var vp := get_viewport_rect()
+	var vp: Rect2 = get_viewport_rect()
+	var button_width: float = maxf(send_button.size.x, send_button.get_combined_minimum_size().x)
+	var home_y: float = float(send_button.get_meta("home_y"))
+	var home: Vector2 = Vector2(
+		roundf((vp.size.x - button_width) * 0.5),
+		home_y
+	)
+
 	var off_y: float = vp.size.y + send_button.size.y + 30.0
-	var start_pos := Vector2(home.x, off_y)
+	var start_pos: Vector2 = Vector2(home.x, off_y)
 	var is_send_visible := send_button.visible
 
 	if should_show:
@@ -1565,7 +1758,7 @@ func _animate_send_button(should_show: bool) -> void:
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	else:
 		if is_send_visible:
-			var end_pos := Vector2(home.x, off_y)
+			var end_pos: Vector2 = Vector2(home.x, off_y)
 			var t_out := create_tween()
 			send_button.set_meta("sb_tween", t_out)
 			t_out.tween_property(send_button, "global_position", end_pos, 0.25)\
@@ -1590,21 +1783,30 @@ func _set_kill_detection_enabled(on: bool) -> void:
 			a.set_deferred("monitorable", on)
 
 func _recompute_send_button_visibility() -> void:
+	if spectator_mode:
+		_animate_send_button(false)
+
+		if is_instance_valid(_aim_instruction_label):
+			_aim_instruction_label.visible = false
+			_aim_instruction_label.modulate.a = 0.0
+
+		return
+
 	var can_aim := _can_show_aim_ui()
-	var my_ready := _all_my_arrows_visible()
+	var my_ready := _all_my_arrows_visible() and _all_my_piece_powers_nonzero()
 
 	var should_show := (
 		can_aim
 		and my_ready
 	)
 
-	_animate_send_button(should_show)
-
 	if is_instance_valid(send_button):
 		send_button.text = "Send" if _staged_launch_mode else "Launch"
 
+	_animate_send_button(should_show)
+
 	_update_aim_instruction_label()
-		
+	
 func _apply_zoom(target_zoom_level: float, dur: float = ZOOM_DUR) -> void:
 	if not is_instance_valid(board_zoom) or game_over:
 		return
@@ -1673,7 +1875,7 @@ func _apply_map_theme(mode: int) -> void:
 
 func _setup_board_from_board_dict(bd: Dictionary) -> void:
 	var arr: Array = bd.get("pieces", [])
-	_setup_board_from_data(arr)
+	await _setup_board_from_data(arr)
 	
 func _apply_aim_data_from_board_dict(bd: Dictionary, show_arrows: bool = false) -> void:
 	var arr: Array = bd.get("pieces", [])
@@ -1691,24 +1893,23 @@ func _apply_aim_data_from_board_dict(bd: Dictionary, show_arrows: bool = false) 
 		var shoot_dir_rad := float(pd.get("shoot_dir", 0.0))
 		var power_val := float(pd.get("power", 0.0))
 
-		piece.set_meta("shoot_dir", rad_to_deg(shoot_dir_rad))
-		piece.set_meta("power", power_val)
-
 		var arrow := piece.get_node_or_null("Arrow") as CanvasItem
+		var should_show_arrow := show_arrows and power_val > 0.5
 
-		if show_arrows and power_val > 0.5:
+		if should_show_arrow:
 			_set_piece_arrow_from_data(piece, shoot_dir_rad, power_val, 0.18)
 		else:
-			if piece.has_method("hide_arrow"):
-				piece.call("hide_arrow")
-			elif arrow:
-				arrow.visible = false
-
 			if arrow:
+				arrow.visible = false
 				arrow.z_as_relative = false
 				arrow.z_index = Z_ARROWS
 				arrow.modulate = _arrow_color_for_piece(piece)
 				arrow.modulate.a = 1.0
+
+		# Important: set these AFTER hiding the arrow.
+		# Some piece-side hide logic can reset power to 0, which makes opponent readiness fail.
+		piece.set_meta("shoot_dir", rad_to_deg(shoot_dir_rad))
+		piece.set_meta("power", power_val)
 
 	_apply_piece_draw_order()
 	_apply_arrow_color_for_current_map()
@@ -1889,6 +2090,8 @@ func _wire_water_kill_areas() -> void:
 				a.body_entered.connect(cb)
 
 func _kill_piece(rb: RigidBody2D) -> void:
+	if _loading_board_data or not _kill_detection_enabled:
+		return
 	if not is_instance_valid(rb): return
 	if rb.get_meta("dying", false): return
 	rb.set_meta("dying", true)
@@ -1921,10 +2124,15 @@ func _kill_piece(rb: RigidBody2D) -> void:
 		rb.queue_free()
 		
 func _safe_kill(n: Node) -> void:
+	if _loading_board_data or not _kill_detection_enabled:
+		return
 	if n is RigidBody2D:
 		call_deferred("_kill_piece", n)
 		
-func _on_replay_round_finished() -> void:
+func _on_replay_round_finished(data_seq: int = -1) -> void:
+	if _is_stale_data_seq(data_seq):
+		return
+
 	_hide_all_arrows_and_refresh_highlights()
 
 	_replay_in_progress = false
@@ -1939,16 +2147,19 @@ func _on_replay_round_finished() -> void:
 		_recompute_send_button_visibility()
 		return
 
-	var next_idx := _current_board_index + 1
+	var next_idx := _next_board_index_after_round(_current_board_index)
 	if not last_post_round.is_empty():
-		next_idx = int(last_post_round.get("round", _current_board_index + 1))
+		next_idx = int(last_post_round.get("round", _next_board_index_after_round(_current_board_index)))
+
 	_dbg_board_state("replay_finished computed next_idx=%d" % next_idx)
 
-	var will_shrink := _clamp_board_index(next_idx) != _current_board_index
+	var will_shrink := _clamp_board_index(next_idx) != _clamp_board_index(_current_board_index)
 	if will_shrink:
 		_set_kill_detection_enabled(false)
 
 	await get_tree().create_timer(0.05).timeout
+	if _is_stale_data_seq(data_seq):
+		return
 
 	if not last_post_round.is_empty():
 		_dbg_board_state("before post snapshot")
@@ -1957,6 +2168,9 @@ func _on_replay_round_finished() -> void:
 
 	_dbg_board_state("before shrink tween")
 	await _tween_board_index_to(next_idx, 0.42)
+	if _is_stale_data_seq(data_seq):
+		return
+
 	_dbg_board_state("after shrink tween")
 
 	if will_shrink and _kill_detection_enabled == false:
@@ -1970,7 +2184,6 @@ func _on_replay_round_finished() -> void:
 
 		_apply_post_round_snapshot(last_pending_setup_round, setup_idx)
 
-		# Store opponent aim data, but keep arrows hidden until Launch starts the next replay.
 		_apply_aim_data_from_board_dict(last_pending_setup_round, false)
 
 		last_pre_round = last_pending_setup_round.duplicate(true)
@@ -1984,6 +2197,14 @@ func _on_replay_round_finished() -> void:
 		print("[REPLAY] Applied pending setup board after replay. Opponent arrows are stored but hidden.")
 
 	_is_zooming = false
+
+	if spectator_mode:
+		is_my_turn = false
+		_stop_all_highlights()
+		_update_piece_interactivity()
+		_recompute_send_button_visibility()
+		return
+
 	_update_piece_interactivity()
 	call_deferred("_apply_turn_highlights_based_on_arrows")
 	_recompute_send_button_visibility()
@@ -2019,7 +2240,7 @@ func _wait_for_pieces_to_settle(timeout_sec: float = 10.0, still_frames_needed: 
 
 	await get_tree().create_timer(0.35).timeout
 
-func _apply_post_round_snapshot(post_board: Dictionary, board_idx: int = -1) -> void:
+func _apply_post_round_snapshot(post_board: Dictionary, _board_idx: int = -1) -> void:
 	var arr: Array = post_board.get("pieces", [])
 
 	# Collect only piece bodies
@@ -2047,15 +2268,18 @@ func _apply_post_round_snapshot(post_board: Dictionary, board_idx: int = -1) -> 
 			piece_node.position = pos
 			piece_node.rotation = rot
 
-func _play_round_from_replay(pre_board: Dictionary) -> void:
+func _play_round_from_replay(pre_board: Dictionary, data_seq: int = -1) -> void:
+	if _is_stale_data_seq(data_seq):
+		return
+
 	print("[REPLAY] Starting round playback.")
 	_replay_in_progress = true
 	_update_piece_interactivity()
 	_stop_all_highlights()
 	_recompute_send_button_visibility()
+
 	var pre_arr: Array = pre_board.get("pieces", [])
 
-	# Only gather actual piece bodies (have the "player" meta)
 	var pieces: Array[RigidBody2D] = []
 	for child in piece_container.get_children():
 		if child is RigidBody2D and child.has_meta("player"):
@@ -2063,7 +2287,7 @@ func _play_round_from_replay(pre_board: Dictionary) -> void:
 
 	var count: int = min(pieces.size(), pre_arr.size())
 	if count == 0:
-		_on_replay_round_finished()
+		_on_replay_round_finished(data_seq)
 		return
 
 	for i in count:
@@ -2073,6 +2297,8 @@ func _play_round_from_replay(pre_board: Dictionary) -> void:
 		_set_piece_arrow_from_data(piece, float(pd["shoot_dir"]), float(pd["power"]), 0.18)
 
 	await get_tree().create_timer(0.5).timeout
+	if _is_stale_data_seq(data_seq):
+		return
 
 	var rotation_tween := create_tween().set_parallel()
 	for i in count:
@@ -2083,32 +2309,35 @@ func _play_round_from_replay(pre_board: Dictionary) -> void:
 
 	if rotation_tween.is_running():
 		await rotation_tween.finished
+	if _is_stale_data_seq(data_seq):
+		return
 
 	await get_tree().create_timer(0.5).timeout
- 
+	if _is_stale_data_seq(data_seq):
+		return
+
 	if PDIFF_ENABLED and _pdiff != null:
 		_pdiff.start("replay idx=%d" % _current_board_index)
 		_pdiff_active = true
-		# Disable kill detection so the recording isn't truncated when pieces
-		# leave the board edge. Kill detection re-enables at the bottom.
 		_set_kill_detection_enabled(false)
- 
+
 	for i in count:
 		var piece := pieces[i]
 		if not is_instance_valid(piece): continue
 		var pd: Dictionary = pre_arr[i]
 		_fire_piece_from_arrow(piece, float(pd["shoot_dir"]), float(pd["power"]))
- 
+
 	await _wait_for_pieces_to_settle(10.0, 8, IOS_STOP_LINEAR_SPEED, IOS_STOP_ANGULAR_SPEED)
- 
+	if _is_stale_data_seq(data_seq):
+		return
+
 	if PDIFF_ENABLED and _pdiff != null:
 		_pdiff_active = false
 		_pdiff.stop()
 		_pdiff.report()
-		# Re-enable kill detection so the next round / normal gameplay works.
 		_set_kill_detection_enabled(true)
- 
-	_on_replay_round_finished()
+
+	_on_replay_round_finished(data_seq)
 	
 func _clamp_board_index(i: int) -> int:
 	return clamp(i, 0, BOARD_MAX_INDEX)
@@ -2120,10 +2349,11 @@ func _board_scale_for_index(i: int) -> float:
 	return maxf(0.0, 1.0 - float(_clamp_board_index(i)) * 0.1)
 
 func _apply_board_index_immediate(i: int) -> void:
-	var old_idx := _current_board_index
-	_current_board_index = _clamp_board_index(i)
+	var old_idx: int = _current_board_index
+	_current_board_index = int(max(0, i))
+	var visual_idx: int = _clamp_board_index(_current_board_index)
 
-	_dbg_board_state("apply_immediate BEFORE old=%d new=%d" % [old_idx, _current_board_index])
+	_dbg_board_state("apply_immediate BEFORE old=%d new=%d visual=%d" % [old_idx, _current_board_index, visual_idx])
 
 	_ensure_board_scaler()
 	_layout_board_centered()
@@ -2135,6 +2365,7 @@ func _apply_board_index_immediate(i: int) -> void:
 
 		print("[SHRINK] apply_immediate SET scaler.scale=", _board_scale_node.scale,
 			" | idx=", _current_board_index,
+			" | visual_idx=", visual_idx,
 			" | base=", _board_base_scale_factor,
 			" | melt_scale=", _board_scale_for_index(_current_board_index),
 			" | target=", target
@@ -2148,11 +2379,9 @@ func _apply_board_index_immediate(i: int) -> void:
 	_dbg_board_state("apply_immediate AFTER")
 	
 func _tween_board_index_to(i: int, dur: float = 0.42) -> void:
-	var target_idx := _clamp_board_index(i)
-	if target_idx == _current_board_index:
-		print("[SHRINK] tween skipped because target == current | idx=", target_idx)
-		_dbg_board_state("tween skipped")
-		return
+	var target_raw_idx: int = int(max(0, i))
+	var target_visual_idx: int = _clamp_board_index(target_raw_idx)
+	var current_visual_idx: int = _clamp_board_index(_current_board_index)
 
 	_ensure_board_scaler()
 	_layout_board_centered()
@@ -2160,7 +2389,19 @@ func _tween_board_index_to(i: int, dur: float = 0.42) -> void:
 	var scaler := _board_scale_node
 	if not is_instance_valid(scaler):
 		push_warning("[SHRINK] tween failed: no BoardScaler")
-		_current_board_index = target_idx
+		_current_board_index = target_raw_idx
+		return
+
+	if target_visual_idx == current_visual_idx:
+		_current_board_index = target_raw_idx
+		scaler.scale = Vector2.ONE * _target_scale_for_index(_current_board_index)
+		scaler.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
+		_layout_board_centered()
+		_resync_piece_sprite_sizes()
+		_refresh_safe_polys_for_transform()
+		_seed_area_overlaps()
+		print("[SHRINK] tween skipped because visual target == current | raw_idx=", _current_board_index, " | visual_idx=", target_visual_idx)
+		_dbg_board_state("tween skipped")
 		return
 
 	_is_zooming = true
@@ -2168,10 +2409,11 @@ func _tween_board_index_to(i: int, dur: float = 0.42) -> void:
 
 	var start_idx := _current_board_index
 	var s0 := scaler.scale.x
-	var s1 := _target_scale_for_index(target_idx)
+	var s1 := _target_scale_for_index(target_raw_idx)
 
 	print("[SHRINK] TWEEN START",
-		" | idx ", start_idx, " -> ", target_idx,
+		" | idx ", start_idx, " -> ", target_raw_idx,
+		" | visual ", current_visual_idx, " -> ", target_visual_idx,
 		" | base=", _board_base_scale_factor,
 		" | board_zoom.scale=", board_zoom.scale if is_instance_valid(board_zoom) else Vector2.ZERO,
 		" | scaler.current=", scaler.scale,
@@ -2215,7 +2457,7 @@ func _tween_board_index_to(i: int, dur: float = 0.42) -> void:
 
 	await tw.finished
 
-	_current_board_index = target_idx
+	_current_board_index = target_raw_idx
 	scaler.scale = Vector2.ONE * _target_scale_for_index(_current_board_index)
 	scaler.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
 
@@ -2234,12 +2476,12 @@ func _tween_board_index_to(i: int, dur: float = 0.42) -> void:
 	_set_kill_detection_enabled(true)
 	_fallback_kill_pass()
 
-	print("[SHRINK] TWEEN FINISHED | committed target_idx=", target_idx)
+	print("[SHRINK] TWEEN FINISHED | committed raw_idx=", _current_board_index, " | visual_idx=", _clamp_board_index(_current_board_index))
 	_dbg_board_state("tween AFTER COMMIT")
 	
 # --- Piece Highlighting ---
 func _apply_turn_highlights_based_on_arrows() -> void:
-	if not _can_show_aim_ui():
+	if spectator_mode or not _can_show_aim_ui():
 		_stop_all_highlights()
 		_recompute_send_button_visibility()
 		return
@@ -2296,6 +2538,11 @@ func _on_arrow_visibility_changed(piece: Node) -> void:
 	if not arrow:
 		return
 
+	if spectator_mode:
+		_stop_highlight_for_piece(piece)
+		_recompute_send_button_visibility()
+		return
+
 	if arrow.visible:
 		arrow.z_as_relative = false
 		arrow.z_index = Z_ARROWS
@@ -2314,7 +2561,7 @@ func _on_arrow_visibility_changed(piece: Node) -> void:
 					anim.play("ring_anim")
 
 	_recompute_send_button_visibility()
-		
+	
 func _try_watch_arrow_for_piece(piece: Node) -> void:
 	await get_tree().process_frame
 	var arrow := piece.get_node_or_null("Arrow") as CanvasItem
@@ -2340,8 +2587,8 @@ func _animate_win_loss_label(text: String, color: Color) -> void:
 	
 	win_loss_label.scale = Vector2.ZERO
 	win_loss_label.pivot_offset = win_loss_label.size / 2.0
-	var tween := create_tween()
-	tween.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	var win_loss_tween := create_tween()
+	win_loss_tween.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 
 func check_win() -> bool:
 	if _replay_in_progress:
@@ -2595,67 +2842,230 @@ Higher power slides farther but is harder to control; edges are risky!
 [/font_size]
 """
 
-func _parse_avatar_string(data_string: String) -> Dictionary:
-	var hair_map = ["Spiky", "Long", "Bun", "Bald"]
-	var body_map = ["Default", "Smiling", "Winking", "Surprised", "Frowning", "Tongue Out", "Cute"]
-	var eyes_map = ["Open", "Closed", "Winking"]
-	var mouth_map = ["Plain", "Smile", "Frown"]
-	var clothing_map = ["T-Shirt", "Sweater", "Tank Top"]
-	var backdrop_map = ["Plain", "Pattern 1", "Pattern 2", "Pattern 3", "Pattern 4", "Pattern 5", "Pattern 6", "Pattern 7", "Pattern 8", "Pattern 9"]
+func _show_goal_popup() -> void:
+	if _goal_popup_shown:
+		return
+	_goal_popup_shown = true
 
-	var data = {}
-	var parts = data_string.split("|")
-	for part in parts:
-		var key_value = part.split(",")
+	var viewport_size := get_viewport_rect().size
+	var popup_width: float = viewport_size.x * 0.8
+	var popup_height: float = 320.0
+
+	# Dim overlay
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.z_index = 99
+
+	# Card
+	var popup := PanelContainer.new()
+	popup.custom_minimum_size = Vector2(popup_width, popup_height)
+	popup.z_index = 100
+
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color.WHITE
+	card_style.corner_radius_top_left = 16
+	card_style.corner_radius_top_right = 16
+	card_style.corner_radius_bottom_left = 16
+	card_style.corner_radius_bottom_right = 16
+	card_style.shadow_size = 8
+	card_style.shadow_color = Color(0, 0, 0, 0.3)
+	popup.add_theme_stylebox_override("panel", card_style)
+
+	# Vertical layout inside the card
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 16)
+	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	popup.add_child(vbox)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 24)
+	margin.add_theme_constant_override("margin_right", 24)
+	margin.add_theme_constant_override("margin_top", 24)
+	margin.add_theme_constant_override("margin_bottom", 24)
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	popup.add_child(margin)
+
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 16)
+	margin.add_child(inner)
+
+	var title := Label.new()
+	title.text = "Goal:"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_color_override("font_color", Color.BLACK)
+	title.add_theme_font_size_override("font_size", 36)
+	var bold_font := ThemeDB.fallback_font.duplicate() as FontVariation
+	if bold_font == null:
+		bold_font = FontVariation.new()
+		bold_font.base_font = ThemeDB.fallback_font
+	bold_font.variation_embolden = 1.0
+	title.add_theme_font_override("font", bold_font)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inner.add_child(title)
+
+	# Body — center
+	var body_wrap := CenterContainer.new()
+	body_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inner.add_child(body_wrap)
+
+	var body := Label.new()
+	body.text = "Push your opponent out into the water before they push you out."
+	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.add_theme_color_override("font_color", Color.BLACK)
+	body.add_theme_font_size_override("font_size", 20)
+	body.custom_minimum_size = Vector2(popup_width - 96, 0)
+	body_wrap.add_child(body)
+
+	# Start button — bottom center, map-specific styling
+	var btn_wrap := CenterContainer.new()
+	inner.add_child(btn_wrap)
+
+	var start_btn := Button.new()
+	start_btn.text = "Start"
+	start_btn.custom_minimum_size = Vector2(160, 56)
+	start_btn.focus_mode = Control.FOCUS_NONE
+	start_btn.add_theme_font_size_override("font_size", 24)
+
+	var btn_bg: Color
+	var btn_text: Color
+	match map_mode:
+		2:
+			btn_bg = SEND_RED
+			btn_text = Color("#ffd938")
+		3:
+			btn_bg = SEND_GREEN
+			btn_text = Color.WHITE
+		_:
+			btn_bg = SEND_BLUE
+			btn_text = Color.WHITE
+
+	var btn_normal := StyleBoxFlat.new()
+	btn_normal.bg_color = btn_bg
+	btn_normal.corner_radius_top_left = 12
+	btn_normal.corner_radius_top_right = 12
+	btn_normal.corner_radius_bottom_left = 12
+	btn_normal.corner_radius_bottom_right = 12
+	var btn_hover := btn_normal.duplicate()
+	btn_hover.bg_color = btn_bg.lerp(Color.WHITE, 0.08)
+	var btn_pressed := btn_normal.duplicate()
+	btn_pressed.bg_color = btn_bg.darkened(0.12)
+	start_btn.add_theme_stylebox_override("normal", btn_normal)
+	start_btn.add_theme_stylebox_override("hover", btn_hover)
+	start_btn.add_theme_stylebox_override("pressed", btn_pressed)
+	start_btn.add_theme_color_override("font_color", btn_text)
+	start_btn.add_theme_color_override("font_hover_color", btn_text)
+	start_btn.add_theme_color_override("font_pressed_color", btn_text)
+
+	btn_wrap.add_child(start_btn)
+
+	# Add to this scene (not viewport root) so we don't disturb top-level transforms.
+	add_child(dim)
+	add_child(popup)
+
+	popup.set_as_top_level(true)
+	dim.set_as_top_level(true)
+	dim.z_index = 200
+	popup.z_index = 201
+	popup.size = Vector2(popup_width, popup_height)
+	popup.position = (viewport_size / 2) - (popup.size / 2)
+	popup.set_pivot_offset(popup.size / 2)
+	popup.scale = Vector2.ZERO
+
+	var popup_tween := create_tween()
+	popup_tween.tween_property(popup, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+	start_btn.pressed.connect(func():
+		dim.queue_free()
+		popup.queue_free()
+	)
+
+func _parse_avatar_string(data_string: String) -> Dictionary:
+	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
+	var body_map: Array     = AvatarThumbnail.avatar_fshape_regions.keys()
+	var eyes_map: Array     = AvatarThumbnail.avatar_eyes_regions.keys()
+	var mouth_map: Array    = AvatarThumbnail.avatar_mouth_regions.keys()
+	var clothing_map: Array = AvatarThumbnail.avatar_clothing_regions.keys()
+	var backdrop_map: Array = ["Plain"]
+	backdrop_map.append_array(AvatarThumbnail.avatar_background_regions.keys())
+
+	var data: Dictionary = {
+		"fshape_style":   body_map[0]     if body_map.size()     > 0 else "Default",
+		"hair_style":     hair_map[0]     if hair_map.size()     > 0 else "hair1",
+		"eyes_style":     eyes_map[0]     if eyes_map.size()     > 0 else "eyes1",
+		"mouth_style":    mouth_map[0]    if mouth_map.size()    > 0 else "mouth1",
+		"clothing_style": clothing_map[0] if clothing_map.size() > 0 else "clothing1",
+		"bg_style":       "Plain",
+		"fshape_color":   Color(0.88, 0.67, 0.41),
+		"hair_color":     Color(0.17, 0.14, 0.17),
+		"clothing_color": Color(0.63, 0.24, 0.24),
+		"bg_color":       Color(0.31, 0.36, 0.54),
+	}
+
+	if data_string.is_empty():
+		return data
+
+	var read_color = func(vals: Array) -> Color:
+		if vals.size() >= 3:
+			return Color(vals[0].to_float(), vals[1].to_float(), vals[2].to_float())
+		return Color.WHITE
+
+	for part in data_string.split("|", false):
+		var key_value := part.split(",", false)
 		if key_value.size() < 2:
 			continue
 
-		var key = key_value[0]
-		var values = key_value.slice(1)
+		var key := key_value[0]
 
 		match key:
-			"hair":
-				var index = int(values[0])
-				if index >= 0 and index < hair_map.size():
-					data["hair_style"] = hair_map[index]
-				else:
-					print("Warning: Invalid hair index received: ", index)
-			"body":
-				var index = int(values[0])
-				if index >= 0 and index < body_map.size():
-					data["body_style"] = body_map[index]
-				else:
-					print("Warning: Invalid body index received: ", index)
-			"eyes":
-				var index = int(values[0])
-				if index >= 0 and index < eyes_map.size():
-					data["eyes_style"] = eyes_map[index]
-				else:
-					print("Warning: Invalid eyes index received: ", index)
-			"mouth":
-				var index = int(values[0])
-				if index >= 0 and index < mouth_map.size():
-					data["mouth_style"] = mouth_map[index]
-				else:
-					print("Warning: Invalid mouth index received: ", index)
-			"clothes":
-				var index = int(values[0])
-				if index >= 0 and index < clothing_map.size():
-					data["clothing_style"] = clothing_map[index]
-				else:
-					print("Warning: Invalid clothes index received: ", index)
-			"backdrop":
-				var backdrop_index = int(values[0])
-				if backdrop_index >= 0 and backdrop_index < backdrop_map.size():
-					data["bg_style"] = backdrop_map[backdrop_index]
-				else:
-					print("Warning: Invalid backdrop index received: ", backdrop_index)
-			"bg_color", "body_color", "hair_color", "clothes_color":
-				if values.size() >= 3:
-					var color_key = key.replace("_color", "") + "_color"
-					data[color_key] = Color(float(values[0]), float(values[1]), float(values[2]))
-	return data
+			"fshape", "body":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < body_map.size():
+					data["fshape_style"] = String(body_map[i])
 
+			"fshape_color", "body_color":
+				data["fshape_color"] = read_color.call(key_value.slice(1))
+
+			"hair":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < hair_map.size():
+					data["hair_style"] = String(hair_map[i])
+
+			"hair_color":
+				data["hair_color"] = read_color.call(key_value.slice(1))
+
+			"eyes":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < eyes_map.size():
+					data["eyes_style"] = String(eyes_map[i])
+
+			"mouth":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < mouth_map.size():
+					data["mouth_style"] = String(mouth_map[i])
+
+			"clothes":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < clothing_map.size():
+					data["clothing_style"] = String(clothing_map[i])
+
+			"clothes_color":
+				data["clothing_color"] = read_color.call(key_value.slice(1))
+
+			"bg_color":
+				data["bg_color"] = read_color.call(key_value.slice(1))
+
+			"backdrop":
+				var i := key_value[1].to_int()
+				if i >= 0 and i < backdrop_map.size():
+					data["bg_style"] = String(backdrop_map[i])
+
+			_:
+				pass
+
+	return data
+	
 func _on_settings_button_pressed() -> void:
 	settings_button.pivot_offset = settings_button.size / 2.0
 	tween = create_tween()
@@ -2766,7 +3176,7 @@ func _spawn_mushrooms_for_map3() -> void:
 		if m.has_method("set_piece_container"):
 			m.set_piece_container(piece_container)
 
-const DEBUG_SHRINK := true
+const DEBUG_SHRINK := false
 func _control_global_aabb(c: Control) -> Rect2:
 	var xf := c.get_global_transform()
 	var pts := [
@@ -2908,16 +3318,16 @@ func _ensure_kill_overlay() -> void:
 		_safe_debug_outline.z_index = 502
 		_kill_overlay_root.add_child(_safe_debug_outline)
 
-func _set_kill_debug_visible(show: bool) -> void:
-	_kill_debug_showing = show
-	if is_instance_valid(_safe_debug_poly): _safe_debug_poly.visible = show
-	if is_instance_valid(_safe_debug_outline): _safe_debug_outline.visible = show
+func _set_kill_debug_visible(should_show: bool) -> void:
+	_kill_debug_showing = should_show
+	if is_instance_valid(_safe_debug_poly): _safe_debug_poly.visible = should_show
+	if is_instance_valid(_safe_debug_outline): _safe_debug_outline.visible = should_show
 	for p in _hole_debug_nodes:
-		if is_instance_valid(p): p.visible = show
+		if is_instance_valid(p): p.visible = should_show
 	for l in _hole_debug_outlines:
-		if is_instance_valid(l): l.visible = show
+		if is_instance_valid(l): l.visible = should_show
 	for d in _center_debug_nodes:
-		if is_instance_valid(d): d.visible = show
+		if is_instance_valid(d): d.visible = should_show
 
 func _update_hole_outlines(hole_locals: Array[PackedVector2Array]) -> void:
 	# grow outlines to match holes
