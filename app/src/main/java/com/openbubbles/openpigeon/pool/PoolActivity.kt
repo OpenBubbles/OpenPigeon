@@ -38,6 +38,9 @@ import com.openbubbles.openpigeon.godot.GameSessionIPC
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -66,6 +69,17 @@ class PoolActivity : AppCompatActivity() {
 
     private lateinit var settingsSheet: SettingsSheet
     private var darkMode = false
+
+    private var musicEnabled = false
+    private var musicTrack: AudioTrack? = null
+    private var currentMusicTrackPath: String? = null
+    private fun currentPoolMusicTrack(): String {
+        return if (isNineBall) {
+            "pool/9ball.wav"
+        } else {
+            "pool/8ball.wav"
+        }
+    }
 
     var table: Long = 0L
 
@@ -114,6 +128,223 @@ class PoolActivity : AppCompatActivity() {
         }
 
         root.setBackgroundResource(bgRes)
+    }
+
+    private data class WavLoopData(
+        val pcm: ByteArray,
+        val sampleRate: Int,
+        val channelMask: Int,
+        val encoding: Int,
+        val frameCount: Int
+    )
+
+    private fun applyMusicEnabled(enabled: Boolean) {
+        musicEnabled = enabled
+
+        getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("pool/music_enabled", enabled)
+            .apply()
+
+        if (enabled) {
+            startPoolMusic()
+        } else {
+            stopPoolMusic()
+        }
+    }
+
+    private fun startPoolMusic() {
+        if (!musicEnabled || poolActivityClosing || musicTrack != null) return
+
+        playPoolMusicTrack()
+    }
+
+    private fun playPoolMusicTrack() {
+        releasePoolMusicPlayer()
+
+        if (!musicEnabled || poolActivityClosing) return
+
+        val trackPath = currentPoolMusicTrack()
+        currentMusicTrackPath = trackPath
+
+        try {
+            val wav = loadPcm16Wav(trackPath)
+
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_GAME)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(wav.sampleRate)
+                        .setChannelMask(wav.channelMask)
+                        .setEncoding(wav.encoding)
+                        .build()
+                )
+                .setBufferSizeInBytes(wav.pcm.size)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+
+            track.write(wav.pcm, 0, wav.pcm.size)
+            track.setLoopPoints(0, wav.frameCount, -1)
+            track.setVolume(0.55f)
+
+            musicTrack = track
+            track.play()
+        } catch (e: Exception) {
+            Log.e("PoolMusic", "Unable to play music track $trackPath", e)
+
+            musicEnabled = false
+            currentMusicTrackPath = null
+
+            getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("pool/music_enabled", false)
+                .apply()
+        }
+    }
+
+    private fun pausePoolMusic() {
+        try {
+            musicTrack?.let { track ->
+                if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                    track.pause()
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("PoolMusic", "Unable to pause music", e)
+        }
+    }
+
+    private fun resumePoolMusic() {
+        if (!musicEnabled || poolActivityClosing) return
+
+        try {
+            val track = musicTrack
+
+            if (track == null) {
+                startPoolMusic()
+            } else if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                track.play()
+            }
+        } catch (e: Exception) {
+            Log.w("PoolMusic", "Unable to resume music, restarting", e)
+            releasePoolMusicPlayer()
+            startPoolMusic()
+        }
+    }
+
+    private fun stopPoolMusic() {
+        releasePoolMusicPlayer()
+    }
+
+    private fun releasePoolMusicPlayer() {
+        val track = musicTrack ?: return
+        musicTrack = null
+        currentMusicTrackPath = null
+
+        try {
+            track.pause()
+        } catch (_: Exception) {
+        }
+
+        track.release()
+    }
+
+    private fun restartPoolMusicForCurrentMode() {
+        if (!musicEnabled) return
+
+        val trackPath = currentPoolMusicTrack()
+        if (musicTrack != null && currentMusicTrackPath == trackPath) return
+
+        releasePoolMusicPlayer()
+        startPoolMusic()
+    }
+
+    private fun loadPcm16Wav(path: String): WavLoopData {
+        val bytes = assets.open(path).use { it.readBytes() }
+
+        if (bytes.size < 44 || chunkName(bytes, 0) != "RIFF" || chunkName(bytes, 8) != "WAVE") {
+            throw IllegalArgumentException("Invalid WAV file: $path")
+        }
+
+        var offset = 12
+        var audioFormat = 0
+        var channelCount = 0
+        var sampleRate = 0
+        var bitsPerSample = 0
+        var dataStart = -1
+        var dataSize = 0
+
+        while (offset + 8 <= bytes.size) {
+            val name = chunkName(bytes, offset)
+            val size = readLeInt(bytes, offset + 4)
+            val start = offset + 8
+
+            if (start + size > bytes.size) break
+
+            when (name) {
+                "fmt " -> {
+                    audioFormat = readLeShort(bytes, start)
+                    channelCount = readLeShort(bytes, start + 2)
+                    sampleRate = readLeInt(bytes, start + 4)
+                    bitsPerSample = readLeShort(bytes, start + 14)
+                }
+                "data" -> {
+                    dataStart = start
+                    dataSize = size
+                }
+            }
+
+            offset = start + size + (size and 1)
+        }
+
+        if (audioFormat != 1 || bitsPerSample != 16 || channelCount !in 1..2 || dataStart < 0 || dataSize <= 0) {
+            throw IllegalArgumentException("WAV must be 16-bit PCM mono/stereo: $path")
+        }
+
+        val pcm = bytes.copyOfRange(dataStart, dataStart + dataSize)
+        val frameSize = channelCount * 2
+        val frameCount = pcm.size / frameSize
+        val channelMask = if (channelCount == 1) {
+            AudioFormat.CHANNEL_OUT_MONO
+        } else {
+            AudioFormat.CHANNEL_OUT_STEREO
+        }
+
+        return WavLoopData(
+            pcm = pcm,
+            sampleRate = sampleRate,
+            channelMask = channelMask,
+            encoding = AudioFormat.ENCODING_PCM_16BIT,
+            frameCount = frameCount
+        )
+    }
+
+    private fun readLeShort(bytes: ByteArray, offset: Int): Int {
+        return (bytes[offset].toInt() and 0xff) or
+                ((bytes[offset + 1].toInt() and 0xff) shl 8)
+    }
+
+    private fun readLeInt(bytes: ByteArray, offset: Int): Int {
+        return (bytes[offset].toInt() and 0xff) or
+                ((bytes[offset + 1].toInt() and 0xff) shl 8) or
+                ((bytes[offset + 2].toInt() and 0xff) shl 16) or
+                ((bytes[offset + 3].toInt() and 0xff) shl 24)
+    }
+
+    private fun chunkName(bytes: ByteArray, offset: Int): String {
+        return String(
+            byteArrayOf(
+                bytes[offset],
+                bytes[offset + 1],
+                bytes[offset + 2],
+                bytes[offset + 3]
+            )
+        )
     }
 
     private fun updateBallTypeUi() {
@@ -746,6 +977,15 @@ class PoolActivity : AppCompatActivity() {
         applyDarkMode(darkSwitch.isChecked)
 
         settingsSheet.addGameControl("Dark Mode", darkSwitch)
+
+        val musicSwitch = SwitchCompat(this)
+        musicSwitch.isChecked = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+            .getBoolean("pool/music_enabled", true)
+        musicEnabled = musicSwitch.isChecked
+        musicSwitch.setOnCheckedChangeListener { _, checked -> applyMusicEnabled(checked) }
+
+        settingsSheet.addGameControl("Music", musicSwitch)
+
         val gameAvatarAnchor = findViewById<FrameLayout>(R.id.gameAvatarAnchor)
         settingsSheet.attachGameAvatar(gameAvatarAnchor)
         val oppAvatarAnchor = findViewById<FrameLayout>(R.id.oppAvatarAnchor)
@@ -1105,13 +1345,10 @@ class PoolActivity : AppCompatActivity() {
         mode = PoolMode.Disabled
         stopStateLabelAnimation()
         stopNineBallBarRefresh()
+        stopPoolMusic()
 
         cancelAllShots()
         cancelAllShots = {}
-
-        if (isNineBall) {
-            stopNineBallBarRefresh()
-        }
 
         if (::renderer.isInitialized) {
             renderer.running = false
@@ -1148,11 +1385,13 @@ class PoolActivity : AppCompatActivity() {
         } else {
             Log.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
         }
+        resumePoolMusic()
         super.onResume()
     }
 
     override fun onPause() {
-        gameSessionIPC!!.setSuppressNotifications(sessionId, false)
+        pausePoolMusic()
+        gameSessionIPC?.setSuppressNotifications(sessionId, false)
         super.onPause()
     }
 
@@ -1989,6 +2228,8 @@ class PoolActivity : AppCompatActivity() {
             iAmStripes = null
             updateBallTypeUi()
         }
+
+        restartPoolMusicForCurrentMode()
 
         Log.i("PoolMode", "gameName=$gameName isNineBall=$isNineBall isEightBallPlus=$isEightBallPlus")
         isHard = msg["mode"]!! != "n"
