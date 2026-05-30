@@ -57,6 +57,7 @@ import kotlin.math.ceil
 import android.graphics.drawable.GradientDrawable
 import android.os.Looper
 import android.view.Gravity
+import kotlin.random.Random
 
 class PoolActivity : AppCompatActivity() {
     lateinit var sessionId: String
@@ -120,6 +121,15 @@ class PoolActivity : AppCompatActivity() {
             val playerBall = findViewById<ImageView>(R.id.playerBallType)
             val oppBall    = findViewById<ImageView>(R.id.oppBallType)
 
+            if (isNineBall) {
+                playerBall.visibility = View.GONE
+                oppBall.visibility = View.GONE
+                return@runOnUiThread
+            }
+
+            playerBall.visibility = View.VISIBLE
+            oppBall.visibility = View.VISIBLE
+
             when (iAmStripes) {
                 null  -> {
                     playerBall.setImageResource(R.drawable.pool_ball_empty)
@@ -135,6 +145,74 @@ class PoolActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun updateNineBallBar() {
+        runOnUiThread {
+            val bar = findViewById<LinearLayout>(R.id.nineBallBar)
+
+            if (!isNineBall) {
+                bar.visibility = View.GONE
+                return@runOnUiThread
+            }
+
+            bar.visibility = View.VISIBLE
+
+            if (bar.childCount != 9) {
+                bar.removeAllViews()
+
+                for (number in 1..9) {
+                    val image = ImageView(this).apply {
+                        tag = number
+                        setImageResource(PoolBall.ballOrder[number])
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                        layoutParams = LinearLayout.LayoutParams(
+                            stateLabelDp(20f),
+                            stateLabelDp(20f)
+                        ).apply {
+                            topMargin = stateLabelDp(1f)
+                            bottomMargin = stateLabelDp(1f)
+                        }
+                    }
+
+                    bar.addView(image)
+                }
+            }
+
+            for (i in 0 until bar.childCount) {
+                val image = bar.getChildAt(i) as ImageView
+                val number = image.tag as Int
+                image.alpha = if (poolBalls.any { it.number == number && !it.sunk }) 1f else 0.22f
+            }
+        }
+    }
+
+    private val nineBallBarRefreshHandler = Handler(Looper.getMainLooper())
+    private var nineBallBarRefreshActive = false
+
+    private fun startNineBallBarRefresh() {
+        if (!isNineBall || nineBallBarRefreshActive) return
+
+        nineBallBarRefreshActive = true
+        nineBallBarRefreshHandler.post(object : Runnable {
+            override fun run() {
+                if (!nineBallBarRefreshActive) return
+
+                updateNineBallBar()
+                nineBallBarRefreshHandler.postDelayed(this, 120L)
+            }
+        })
+    }
+
+    private fun stopNineBallBarRefresh() {
+        if (!nineBallBarRefreshActive) {
+            updateNineBallBar()
+            return
+        }
+
+        nineBallBarRefreshActive = false
+        nineBallBarRefreshHandler.removeCallbacksAndMessages(null)
+        updateNineBallBar()
     }
 
     private fun vibrateCueTick() {
@@ -512,8 +590,14 @@ class PoolActivity : AppCompatActivity() {
         runOnUiThread {
             val leftRail = findViewById<FrameLayout>(R.id.leftRail)
             val rightRail = findViewById<FrameLayout>(R.id.rightRail)
-            val views = listOf(leftRail, rightRail)
+            val cueView = findViewById<FrameLayout>(R.id.cueView)
+            val views = listOf<View>(leftRail, cueView)
+
             syncCueRailsToTable()
+
+            rightRail.animate().cancel()
+            rightRail.alpha = 1f
+            rightRail.visibility = View.VISIBLE
 
             if (visible) {
                 for (view in views) {
@@ -542,6 +626,8 @@ class PoolActivity : AppCompatActivity() {
                 }
                 closeCuePopup()
             }
+
+            updateNineBallBar()
         }
     }
 
@@ -928,9 +1014,14 @@ class PoolActivity : AppCompatActivity() {
         skipReplayRequested = true
         mode = PoolMode.Disabled
         stopStateLabelAnimation()
+        stopNineBallBarRefresh()
 
         cancelAllShots()
         cancelAllShots = {}
+
+        if (isNineBall) {
+            stopNineBallBarRefresh()
+        }
 
         if (::renderer.isInitialized) {
             renderer.running = false
@@ -994,7 +1085,15 @@ class PoolActivity : AppCompatActivity() {
                 activity.scratch = false
 
             activity.mode = PoolMode.Playing
+
+            if (activity.isNineBall) {
+                activity.startNineBallBarRefresh()
+            }
+
             Log.i("Hitting ball", "Direction: $direction power: $power spinX: $spinX spinY: $spinY scratch: $wasStripes first ${activity.isFirst}")
+            if (activity.isNineBall) {
+                activity.nineBallTargetAtShot = activity.lowestNineBallNumber() ?: 9
+            }
             activity.hitBall(activity.table, 0 /*white*/, direction, power, spinX, spinY, activity.isFirst)
             activity.wasFirst = activity.isFirst
             activity.isFirst = false
@@ -1105,8 +1204,29 @@ class PoolActivity : AppCompatActivity() {
     }
     var scratch = false
 
+    fun lowestNineBallNumber(): Int? {
+        return poolBalls
+            .filter { !it.sunk && it.number in 1..9 }
+            .minOfOrNull { it.number }
+    }
+
     fun tableIsScratch(): Boolean {
         val cueBall = cueBall ?: return false
+
+        if (isNineBall) {
+            val scratch =
+                cueBall.sunk ||
+                        !cueBall.hitBall ||
+                        cueBall.ballHit != nineBallTargetAtShot
+
+            Log.i(
+                "POOL9_DEBUG",
+                "SCRATCH_CHECK cueBall.sunk=${cueBall.sunk} hitBall=${cueBall.hitBall} ballHit=${cueBall.ballHit} target=$nineBallTargetAtShot scratch=$scratch"
+            )
+
+            return scratch
+        }
+
         var scratch = !cueBall.hitBall || cueBall.sunk
 
         if (cueBall.ballHit != -1) {
@@ -1119,7 +1239,6 @@ class PoolActivity : AppCompatActivity() {
                     scratch = false
                 }
             } else if (iAmStripes != null && ((!ballHit.isSolid && !iAmStripes!!) || (!ballHit.isStripe && iAmStripes!!))) {
-                // we hit the wrong ball
                 scratch = true
             }
         }
@@ -1138,6 +1257,10 @@ class PoolActivity : AppCompatActivity() {
         disableSend = true
         mode = PoolMode.Disabled
         setCueUiVisible(false)
+        if (isNineBall) {
+            stopNineBallBarRefresh()
+        }
+
         cancelAllShots()
         cancelAllShots = {}
 
@@ -1166,11 +1289,16 @@ class PoolActivity : AppCompatActivity() {
 
         buildBalls(finalBalls, null)
         for (ball in poolBalls) {
-            val old = oldBalls.find { it.number == ball.number }
-            if (old == null) continue
-            // prevent a flash as Box2d gets it's bearings
+            val old = oldBalls.find { it.number == ball.number } ?: continue
+
+            if (isNineBall && old.sunk) {
+                continue
+            }
+
             ball.data.put(old.data)
         }
+
+        updateNineBallBar()
 
         if (didIWin != null) {
             runOnUiThread {
@@ -1182,6 +1310,17 @@ class PoolActivity : AppCompatActivity() {
                 } else {
                     label.text = "They won!"
                 }
+            }
+            return
+        }
+
+        if (isNineBall) {
+            updateNineBallBar()
+            mode = PoolMode.Aiming
+            runOnUiThread {
+                setCueUiVisible(true)
+                renderer.setCueVisible(true)
+                setStateLabelText("", false)
             }
             return
         }
@@ -1221,66 +1360,31 @@ class PoolActivity : AppCompatActivity() {
             finishReplay()
         } else {
             val scratch = tableIsScratch()
-            val blackBall = poolBalls.find { it.number == 8 }
             val cueBall = cueBall ?: return
-            val blackBallSunk = blackBall == null || blackBall.sunk
-            Log.i(
-                "POOL_DEBUG",
-                "FINAL_STATE cueBall.sunk=${cueBall.sunk} blackBall.sunk=$blackBallSunk scratch=$scratch wasFirst=$wasFirst"
-            )
 
             mode = PoolMode.Disabled
             closeCuePopup()
 
             var winState: Boolean? = null
-            if (blackBallSunk) {
-                if (
-                    wasFirst ||
-                    iAmStripes == null ||
-                    blackBall == null ||
-                    poolBalls.count { !it.sunk && ((iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid)) } != 0 ||
-                    cueBall.sunk ||
-                    calledPocket.isEmpty() ||
-                    blackBall.holeX != calledPocket[0].toFloat() ||
-                    blackBall.holeY != calledPocket[1].toFloat()
-                ) {
-                    winState = false
-                } else {
-                    winState = true
-                }
-            }
 
-            if (!scratch && winState == null) {
-                val sunkPlayableBalls = poolBalls
-                    .filter { it.sunk && (it.isStripe || it.isSolid) }
+            if (isNineBall) {
+                val sunkNumberedBalls = poolBalls
+                    .filter { it.sunk && it.number in 1..9 }
                     .sortedBy { it.sunkOrder }
 
-                val madeTurnBall = if (iAmStripes == null) {
-                    sunkPlayableBalls.isNotEmpty()
-                } else {
-                    sunkPlayableBalls.any { (iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid) }
+                val nineBallSunk = sunkNumberedBalls.any { it.number == 9 }
+
+                Log.i(
+                    "POOL9_DEBUG",
+                    "FINAL_STATE cueBall.sunk=${cueBall.sunk} nineBallSunk=$nineBallSunk scratch=$scratch target=$nineBallTargetAtShot sunk=${sunkNumberedBalls.map { it.number }}"
+                )
+
+                if (nineBallSunk) {
+                    winState = !scratch
                 }
 
-                if (madeTurnBall) {
-                    if (iAmStripes == null && !wasFirst) {
-                        iAmStripes = sunkPlayableBalls.first().isStripe
-                        updateBallTypeUi()
-                    }
-
-                    val stripes = iAmStripes
-                    val hasMoreBalls = stripes == null || poolBalls.count { !it.sunk && ((stripes && it.isStripe) || (!stripes && it.isSolid)) } != 0
-                    if (!hasMoreBalls) {
-                        call8Ball = true
-                        mode = PoolMode.Aiming
-                        runOnUiThread {
-                            val label = findViewById<TextView>(R.id.state_label)
-                            label.visibility = View.VISIBLE
-                            label.text = "Choose a pocket"
-                        }
-                        return
-                    }
-
-                    // you get another turn only if you made your own ball, or a valid open-table ball
+                if (!scratch && winState == null && sunkNumberedBalls.isNotEmpty()) {
+                    updateNineBallBar()
                     mode = PoolMode.Aiming
                     runOnUiThread {
                         setCueUiVisible(true)
@@ -1288,11 +1392,70 @@ class PoolActivity : AppCompatActivity() {
                     }
                     return
                 }
-            }
-            closeCuePopup()
-            runOnUiThread {
-                setCueUiVisible(false)
-                playSentThenWaitingAnimation()
+            } else {
+                val blackBall = poolBalls.find { it.number == 8 }
+                val blackBallSunk = blackBall == null || blackBall.sunk
+
+                Log.i(
+                    "POOL_DEBUG",
+                    "FINAL_STATE cueBall.sunk=${cueBall.sunk} blackBall.sunk=$blackBallSunk scratch=$scratch wasFirst=$wasFirst"
+                )
+
+                if (blackBallSunk) {
+                    if (
+                        wasFirst ||
+                        iAmStripes == null ||
+                        blackBall == null ||
+                        poolBalls.count { !it.sunk && ((iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid)) } != 0 ||
+                        cueBall.sunk ||
+                        calledPocket.isEmpty() ||
+                        blackBall.holeX != calledPocket[0].toFloat() ||
+                        blackBall.holeY != calledPocket[1].toFloat()
+                    ) {
+                        winState = false
+                    } else {
+                        winState = true
+                    }
+                }
+
+                if (!scratch && winState == null) {
+                    val sunkPlayableBalls = poolBalls
+                        .filter { it.sunk && (it.isStripe || it.isSolid) }
+                        .sortedBy { it.sunkOrder }
+
+                    val madeTurnBall = if (iAmStripes == null) {
+                        sunkPlayableBalls.isNotEmpty()
+                    } else {
+                        sunkPlayableBalls.any { (iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid) }
+                    }
+
+                    if (madeTurnBall) {
+                        if (iAmStripes == null && !wasFirst) {
+                            iAmStripes = sunkPlayableBalls.first().isStripe
+                            updateBallTypeUi()
+                        }
+
+                        val stripes = iAmStripes
+                        val hasMoreBalls = stripes == null || poolBalls.count { !it.sunk && ((stripes && it.isStripe) || (!stripes && it.isSolid)) } != 0
+                        if (!hasMoreBalls) {
+                            call8Ball = true
+                            mode = PoolMode.Aiming
+                            runOnUiThread {
+                                val label = findViewById<TextView>(R.id.state_label)
+                                label.visibility = View.VISIBLE
+                                label.text = "Choose a pocket"
+                            }
+                            return
+                        }
+
+                        mode = PoolMode.Aiming
+                        runOnUiThread {
+                            setCueUiVisible(true)
+                            renderer.setCueVisible(true)
+                        }
+                        return
+                    }
+                }
             }
 
             // send replay
@@ -1306,9 +1469,11 @@ class PoolActivity : AppCompatActivity() {
                     replay
                 }
             }.joinToString("|")
-            replays += "|balls:${exportBalls(scratch)}&stripes:${if (iAmStripes == null) 0 else if (iAmStripes!!) player else if (player == 1) 2 else 1}"
+            val shouldCenterScratch = scratch && winState == null
 
-            if (scratch) {
+            replays += "|balls:${exportBalls(shouldCenterScratch)}&stripes:${if (iAmStripes == null) 0 else if (iAmStripes!!) player else if (player == 1) 2 else 1}"
+
+            if (shouldCenterScratch) {
                 replays += "&move:1"
             }
 
@@ -1343,6 +1508,13 @@ class PoolActivity : AppCompatActivity() {
 
             gameSessionIPC!!.updateSession(msgUpdates, sessionId) {
                 Log.i("openpigeon-${baseGame.getName()}", "Game session updated")
+
+                if (winState == null) {
+                    runOnUiThread {
+                        setCueUiVisible(false)
+                        playSentThenWaitingAnimation()
+                    }
+                }
             }
         }
     }
@@ -1415,14 +1587,68 @@ class PoolActivity : AppCompatActivity() {
     val outgoingReplayHits = arrayListOf<BallHit>()
 
     private var finalBalls = ""
+
+    private val nineBallFrontBallX = 560.000000f
+    private val nineBallFrontBallY = 220.000000f
+    private val nineBallCueBallX = 205.000000f
+    private val nineBallCueBallMinY = 110.000000
+    private val nineBallCueBallMaxY = 330.000000
+
+    private fun buildDefaultNineBallRack(): String {
+        val cueY = Random.nextDouble(nineBallCueBallMinY, nineBallCueBallMaxY)
+
+        return "#632.746155,220.000000,0.000000,0.716767,5,6.796000,-0.621908,3.502472" +
+                "#614.559570,209.500000,0.000000,0.863119,8,5.764651,3.187424,7.145291" +
+                "#614.559570,230.500000,0.000000,0.666108,6,-0.455535,7.249262,-1.390415" +
+                "#596.373047,199.000000,0.000000,0.907943,7,-6.769609,1.087264,-3.765822" +
+                "#596.373047,220.000000,0.000000,1.264982,9,6.340362,-4.153222,-7.661037" +
+                "#596.373047,241.000000,0.000000,1.046328,4,-6.964514,-7.698694,-1.881179" +
+                "#578.186523,209.500000,0.000000,0.406139,2,4.660657,-4.275956,3.727190" +
+                "#578.186523,230.500000,0.000000,1.083360,3,-3.806327,-4.462822,0.955941" +
+                "#560.000000,220.000000,0.000000,1.000000,1,7.747318,6.809052,1.118692" +
+                String.format(
+                    Locale.US,
+                    "#%.6f,%.6f,0.000000,0.990000,0,5.006198,-0.734911,-5.935992",
+                    nineBallCueBallX,
+                    cueY
+                )
+    }
+
     var cueBall: PoolBall? = null
 
+    private fun setDefaultNineBallBreakCueRotation() {
+        if (!isNineBall || !isFirst) return
+
+        val cue = cueBall ?: return
+
+        val dx = nineBallFrontBallX - cue.x
+        val dy = nineBallFrontBallY - cue.y
+
+        renderer.cuePos = floatArrayOf(cue.x, cue.y)
+        renderer.cueRot = atan2(dy, dx)
+
+        Log.i(
+            "POOL9_DEBUG",
+            "DEFAULT_BREAK_AIM cue=(${cue.x},${cue.y}) front=($nineBallFrontBallX,$nineBallFrontBallY) dx=$dx dy=$dy cueRot=${renderer.cueRot}"
+        )
+    }
+
     private fun exportBalls(centerScratch: Boolean): String {
-        return poolBalls.filter { !it.sunk || (centerScratch && it.number == 0) }.map {
+        return poolBalls.filter {
+            !it.sunk ||
+                    (centerScratch && it.number == 0) ||
+                    (isNineBall && centerScratch && it.number in 1..9)
+        }.map {
             val density = if (isFirst) it.density else 1
+
             if (centerScratch && it.number == 0) {
                 Log.i("White", "scratching")
                 return@map "#392.000000,220.000000,0.000000,$density,0,5.632916,7.415801,5.384167"
+            }
+
+            if (isNineBall && centerScratch && it.sunk && it.number in 1..9) {
+                Log.i("POOL9_DEBUG", "Respotted fouled pocketed ball ${it.number}")
+                return@map "#560.000000,220.000000,0.000000,1.000000,${it.number},5.632916,7.415801,5.384167"
             }
 
             "#${it.x},${it.y},${it.rot},$density,${it.number},5.632916,7.415801,5.384167"
@@ -1610,6 +1836,9 @@ class PoolActivity : AppCompatActivity() {
                 floatBuffer
             )
 
+            floatBuffer.put(3, -1f)
+            floatBuffer.put(4, -1f)
+
             val poolBall = PoolBall(number, floatBuffer, resources, density)
             poolBalls.add(poolBall)
 
@@ -1617,6 +1846,8 @@ class PoolActivity : AppCompatActivity() {
                 cueBall = poolBall
             }
         }
+
+        updateNineBallBar()
     }
 
     var isHard = false
@@ -1624,6 +1855,8 @@ class PoolActivity : AppCompatActivity() {
     var uuid1: String? = null
     var uuid2: String? = null
     var isEightBallPlus = false
+    var isNineBall = false
+    var nineBallTargetAtShot = 1
 
     private fun resolveMyPlayerSlot(msg: Map<String, String>): Int {
         val myId = gameSessionIPC?.getSenderUUID(sessionId) ?: ""
@@ -1660,9 +1893,14 @@ class PoolActivity : AppCompatActivity() {
         cueBall = null
         replayHits.clear()
         val gameName = msg["game"] ?: msg["name"] ?: msg["gameName"] ?: baseGame.getName()
+        isNineBall = gameName == "pool2"
         isEightBallPlus = gameName == "pool3"
+        if (isNineBall) {
+            iAmStripes = null
+            updateBallTypeUi()
+        }
 
-        Log.i("PoolMode", "gameName=$gameName isEightBallPlus=$isEightBallPlus")
+        Log.i("PoolMode", "gameName=$gameName isNineBall=$isNineBall isEightBallPlus=$isEightBallPlus")
         isHard = msg["mode"]!! != "n"
 
         renderer.bitmap = BitmapFactory.decodeResource(
@@ -1723,7 +1961,7 @@ class PoolActivity : AppCompatActivity() {
                     }
                 }
 
-                if (output["stripes"] != null) {
+                if (!isNineBall && output["stripes"] != null) {
                     val stripes = output["stripes"]!!.toInt()
                     iAmStripes = if(stripes == 0) null else player == stripes
                     updateBallTypeUi()
@@ -1746,8 +1984,8 @@ class PoolActivity : AppCompatActivity() {
                             output["p"]!!.toFloat(),
                             output["x"]!!.toFloat(),
                             output["y"]!!.toFloat(),
-                            output["s"]!!.toInt().let { stripes ->
-                                if(stripes == 0) null else player == stripes
+                            output["s"]?.toIntOrNull()?.let { stripes ->
+                                if (stripes == 0) null else player == stripes
                             }
                         )
                     )
@@ -1758,6 +1996,12 @@ class PoolActivity : AppCompatActivity() {
             }
         } else {
             if (!isYourTurn) {
+                if (isNineBall) {
+                    finalBalls = buildDefaultNineBallRack()
+                    buildBalls(finalBalls, null)
+                    updateNineBallBar()
+                }
+
                 runOnUiThread {
                     findViewById<ImageButton>(R.id.skip_replay).visibility = View.GONE
                     setCueUiVisible(false)
@@ -1774,7 +2018,9 @@ class PoolActivity : AppCompatActivity() {
             }
             iAmStripes = null
             updateBallTypeUi()
-            if (isEightBallPlus) {
+            if (isNineBall) {
+                finalBalls = buildDefaultNineBallRack()
+            } else if (isEightBallPlus) {
                 val seedStr = msg["seed"]
                 val seed = seedStr?.toIntOrNull()
                 if (seed == null) {
@@ -1788,17 +2034,25 @@ class PoolActivity : AppCompatActivity() {
                 finalBalls = "#632.746155,178.000000,0.000000,0.801981,9,5.632916,7.415801,5.384167#632.746155,199.000000,0.000000,0.050000,10,-1.479509,5.981912,-0.639594#632.746155,220.000000,0.000000,0.145560,7,-4.857441,-3.796834,-5.439248#632.746155,241.000000,0.000000,0.050000,6,3.548234,-7.060621,-3.771457#632.746155,262.000000,0.000000,0.964504,1,7.809305,-4.673173,7.553514#614.559570,188.500000,0.000000,0.868768,12,6.889496,7.963203,-4.292648#614.559570,209.500000,0.000000,0.759525,13,4.140916,-0.562560,-5.371364#614.559570,230.500000,0.000000,0.839745,15,-7.863293,-3.022674,-7.419384#614.559570,251.500000,0.000000,1.153367,11,-5.802108,7.468212,-7.951379#596.373047,199.000000,0.000000,1.053345,4,1.589040,2.324956,0.526632#596.373047,220.000000,0.000000,1.437710,8,3.826384,-4.029884,3.487882#596.373047,241.000000,0.000000,1.085851,3,4.912686,3.917787,5.660569#578.186523,209.500000,0.000000,1.100000,2,-5.776122,-4.926837,0.760138#578.186523,230.500000,0.000000,0.900000,5,-1.848043,-0.386153,6.410922#560.000000,220.000000,0.000000,1.000000,14,2.079596,7.069168,-7.283604#205.000000,220.000000,0.000000,0.990000,0,4.519086,0.074793,-2.054408"
             }
             buildBalls(finalBalls, null)
-            scratch = !isEightBallPlus
+            scratch = isNineBall || !isEightBallPlus
 
             mode = PoolMode.Aiming
+            isFirst = true
+
             runOnUiThread {
                 setCueUiVisible(true)
                 renderer.setCueVisible(true)
+
+                if (isNineBall) {
+                    findViewById<SurfaceView>(R.id.surfaceView).post {
+                        setDefaultNineBallBreakCueRotation()
+                    }
+                }
+
                 val label = findViewById<TextView>(R.id.state_label)
                 label.visibility = View.GONE
                 findViewById<ImageButton>(R.id.skip_replay).visibility = View.GONE
             }
-            isFirst = true
 
             if (!renderer.isAlive) {
                 renderer.start()

@@ -12,7 +12,7 @@ import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
 
-class PoolGame : Game {
+open class PoolGame : Game {
     override fun getVersion(): String {
         return "5"
     }
@@ -87,7 +87,11 @@ class PoolGame : Game {
         }
 
         message["caption"]?.takeIf { it.startsWith("Let's") }?.let {
-            val gameMode = if (message["game"] == "pool3") "8 Ball+" else "8 Ball"
+            val gameMode = when (message["game"]) {
+                "pool3" -> "8 Ball+"
+                "pool2" -> "9 Ball"
+                else -> "8 Ball"
+            }
             return "Let's play $gameMode!"
         }
 
@@ -115,5 +119,59 @@ class PoolGame : Game {
 
     override fun getDefaultReplay(): String {
         return "board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0"
+    }
+}
+
+class NineBallGame : PoolGame() {
+    override fun getName(): String {
+        return "pool2"
+    }
+
+    override fun displayName(): String {
+        return "9 Ball"
+    }
+
+    override fun playName(): String {
+        return "9 Ball"
+    }
+
+    @Composable
+    override fun Configuration(context: Context?) {
+        Box(modifier = GlanceModifier.padding(16.dp)) {
+            RenderConfigOption(this, "Difficulty", listOf("Normal", "Hard"), difficulty)
+        }
+    }
+
+    override fun setConfigOption(name: String, value: String) {
+        when (name.lowercase()) {
+            "difficulty" -> difficulty = value
+            else -> println("Warning: unknown config option ‘$name’")
+        }
+    }
+
+    override fun gamePoster(config: Map<String, String>?): Int {
+        val mode = config?.get("mode") ?: if (difficulty == "Hard") "h" else "n"
+
+        return if (mode == "h") {
+            R.drawable.pool_hard_preview
+        } else {
+            R.drawable.pool_normal_preview
+        }
+    }
+
+    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+        AvatarData.init(context)
+
+        return super.getNewGameData(context)?.apply {
+            put("game", "pool2")
+            put("game_name", "9 Ball")
+            put("caption", "Let's play 9 Ball!")
+            put("mode", if (difficulty == "Hard") "h" else "n")
+            put("v2", "2")
+            put("v3", "2")
+            put("v4", "2")
+            put("v5", "2")
+            put("avatar2", AvatarView.buildAvatarString())
+        }
     }
 }

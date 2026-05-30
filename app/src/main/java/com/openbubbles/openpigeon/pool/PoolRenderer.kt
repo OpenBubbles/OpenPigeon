@@ -43,6 +43,8 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
     var cueAlpha = 1.0f
     var cuePos = floatArrayOf(0f, 0f)
     var scratchRingPhase = 0f
+    var nineBallTargetRingPhase = 0f
+
 
     @Volatile var tableScreenBounds: RectF = RectF()
 
@@ -305,7 +307,27 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         val stripes = activity.iAmStripes
         val ball = closestBall
 
-        if (stripes == null) {
+        if (activity.isNineBall) {
+            val target = activity.lowestNineBallNumber()
+
+            if (target != null && ball.number != target) {
+                canvas.drawLine(
+                    hitPointX - 10f,
+                    hitPointY - 10f,
+                    hitPointX + 10f,
+                    hitPointY + 10f,
+                    paint
+                )
+                canvas.drawLine(
+                    hitPointX + 10f,
+                    hitPointY - 10f,
+                    hitPointX - 10f,
+                    hitPointY + 10f,
+                    paint
+                )
+                return
+            }
+        } else if (stripes == null) {
             // Open table: allow trajectories for solids and stripes, but not the 8-ball.
             if (ball.number == 8) {
                 canvas.drawLine(
@@ -419,6 +441,8 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
             drawPockets(canvas)
             canvas.drawBitmap(bitmap, null, RectF(-0.057f, -0.189f, WORLD_WIDTH, WORLD_HEIGHT), null)
 
+            drawNineBallTargetRing(canvas)
+
             for (ball in activity.poolBalls) {
                 if (ball.sunk) continue
                 ball.draw(canvas)
@@ -514,6 +538,35 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                 style = Paint.Style.STROKE
                 isAntiAlias = true
                 alpha = 180
+            }
+        )
+    }
+
+    private fun drawNineBallTargetRing(canvas: Canvas) {
+        if (!(activity.isNineBall && activity.mode == PoolActivity.PoolMode.Aiming)) return
+
+        val target = activity.lowestNineBallNumber() ?: return
+        val ball = activity.poolBalls.find { it.number == target && !it.sunk } ?: return
+
+        nineBallTargetRingPhase += 0.015f
+        if (nineBallTargetRingPhase > 1f) {
+            nineBallTargetRingPhase -= 1f
+        }
+
+        val phase = nineBallTargetRingPhase
+        val radius = 10f + (1f - phase) * 10f
+        val alpha = ((1f - phase) * 210f).roundToInt().coerceIn(0, 210)
+
+        canvas.drawCircle(
+            ball.x,
+            ball.y,
+            radius,
+            Paint().apply {
+                color = Color.WHITE
+                strokeWidth = 2.5f
+                style = Paint.Style.STROKE
+                isAntiAlias = true
+                this.alpha = alpha
             }
         )
     }
