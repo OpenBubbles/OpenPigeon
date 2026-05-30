@@ -761,29 +761,119 @@ class PoolActivity : AppCompatActivity() {
 
         rulesBtn.setOnClickListener {
             val root = findViewById<FrameLayout>(android.R.id.content)
-            RulesPopup.show(
-                context  = this,
-                rootView = root,
-                title    = "Pool Rules",
-                sections = listOf(
-                    RulesPopup.Section("Objective",
-                        "Be the first player to sink all your group of balls, then pocket the 8-ball to win."),
-                    RulesPopup.Section("Ball Groups",
-                        "• Solids: balls 1–7\n• Stripes: balls 9–15\n• Your group is decided by the first ball you legally pocket."),
-                    RulesPopup.Section("How to Play",
+
+            val title = when {
+                isNineBall -> "9 Ball Rules"
+                isEightBallPlus -> "8 Ball+ Rules"
+                else -> "8 Ball Rules"
+            }
+
+            val sections = when {
+                isNineBall -> listOf(
+                    RulesPopup.Section(
+                        "Objective",
+                        "Pocket the 9-ball legally to win."
+                    ),
+                    RulesPopup.Section(
+                        "Ball Order",
+                        "• Balls are numbered 1–9.\n" +
+                                "• You must always hit the lowest-numbered ball on the table first.\n" +
+                                "• Other balls may be pocketed after the lowest ball is contacted."
+                    ),
+                    RulesPopup.Section(
+                        "How to Play",
                         "• Aim the cue by rotating it around the cue ball.\n" +
                                 "• Pull back the cue strip on the left to set your power.\n" +
                                 "• Tap the cue dial on the right to set spin.\n" +
-                                "• Release to shoot."),
-                    RulesPopup.Section("Fouls (Scratch)",
+                                "• Release to shoot."
+                    ),
+                    RulesPopup.Section(
+                        "Fouls (Scratch)",
+                        "• Sinking the cue ball.\n" +
+                                "• Not hitting any ball.\n" +
+                                "• Hitting a ball other than the lowest-numbered ball first.\n" +
+                                "On a foul, your opponent gets cue ball placement."
+                    ),
+                    RulesPopup.Section(
+                        "Winning",
+                        "Legally pocket the 9-ball to win. Pocketing the 9-ball on a foul does not win the game."
+                    ),
+                )
+
+                isEightBallPlus -> listOf(
+                    RulesPopup.Section(
+                        "Objective",
+                        "Be the first player to sink all your group of balls, then pocket the 8-ball to win."
+                    ),
+                    RulesPopup.Section(
+                        "8 Ball+ Setup",
+                        "8 Ball+ uses normal 8 Ball rules, but the balls are randomized across the table instead of starting in a standard rack."
+                    ),
+                    RulesPopup.Section(
+                        "Ball Groups",
+                        "• Solids: balls 1–7\n" +
+                                "• Stripes: balls 9–15\n" +
+                                "• Your group is decided by the first ball you legally pocket."
+                    ),
+                    RulesPopup.Section(
+                        "How to Play",
+                        "• Aim the cue by rotating it around the cue ball.\n" +
+                                "• Pull back the cue strip on the left to set your power.\n" +
+                                "• Tap the cue dial on the right to set spin.\n" +
+                                "• Release to shoot."
+                    ),
+                    RulesPopup.Section(
+                        "Fouls (Scratch)",
                         "• Hitting the wrong group first.\n" +
                                 "• Sinking the cue ball.\n" +
                                 "• Not hitting any ball.\n" +
-                                "On a foul your opponent places the cue ball anywhere behind the break line."),
-                    RulesPopup.Section("Winning",
+                                "On a foul, your opponent gets cue ball placement."
+                    ),
+                    RulesPopup.Section(
+                        "Winning",
                         "Sink the 8-ball after clearing all your group balls. " +
-                                "Sinking the 8-ball early, or on a scratch, loses the game immediately."),
+                                "Sinking the 8-ball early, or on a scratch, loses the game immediately."
+                    ),
                 )
+
+                else -> listOf(
+                    RulesPopup.Section(
+                        "Objective",
+                        "Be the first player to sink all your group of balls, then pocket the 8-ball to win."
+                    ),
+                    RulesPopup.Section(
+                        "Ball Groups",
+                        "• Solids: balls 1–7\n" +
+                                "• Stripes: balls 9–15\n" +
+                                "• Your group is decided by the first ball you legally pocket."
+                    ),
+                    RulesPopup.Section(
+                        "How to Play",
+                        "• Aim the cue by rotating it around the cue ball.\n" +
+                                "• Pull back the cue strip on the left to set your power.\n" +
+                                "• Tap the cue dial on the right to set spin.\n" +
+                                "• Release to shoot."
+                    ),
+                    RulesPopup.Section(
+                        "Fouls (Scratch)",
+                        "• Hitting the wrong group first.\n" +
+                                "• Sinking the cue ball.\n" +
+                                "• Not hitting any ball.\n" +
+                                "On a foul your opponent places the cue ball anywhere behind the break line."
+                    ),
+                    RulesPopup.Section(
+                        "Winning",
+                        "Sink the 8-ball after clearing all your group balls. " +
+                                "Sinking the 8-ball early, or on a scratch, loses the game immediately."
+                    ),
+                )
+            }
+
+            RulesPopup.show(
+                context = this,
+                rootView = root,
+                title = title,
+                sections = sections
             )
         }
 
