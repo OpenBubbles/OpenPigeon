@@ -404,9 +404,9 @@ class Crazy8Activity : ComponentActivity() {
     private var settingsIdentityBeforeOpen: String? = null
 
     private var crazy8ActivityClosing = false
+    private val MusicTrackPath = "crazy8/crazy8.wav"
     private var musicEnabled = false
     private var musicTrack: AudioTrack? = null
-    private val crazy8MusicTrack = "crazy8/crazy8.wav"
 
     fun getPrefs(): SharedPreferences {
         return getSharedPreferences("crazy_prefs", MODE_PRIVATE)
@@ -423,22 +423,33 @@ class Crazy8Activity : ComponentActivity() {
     private fun applyMusicEnabled(enabled: Boolean) {
         musicEnabled = enabled
 
-        getPrefs().edit {
-            putBoolean("music_enabled", enabled)
-        }
+        getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("global/music_enabled", enabled)
+            .apply()
 
         if (enabled) {
-            startCrazy8Music()
+            startMusic()
         } else {
-            stopCrazy8Music()
+            stopMusic()
         }
     }
 
-    private fun startCrazy8Music() {
-        if (!musicEnabled || crazy8ActivityClosing || musicTrack != null) return
+    private fun startMusic() {
+        if (!musicEnabled || musicTrack != null) return
+
+        playMusicTrack()
+    }
+
+    private fun playMusicTrack() {
+        releaseMusicPlayer()
+
+        if (!musicEnabled) return
+
+        val trackPath = MusicTrackPath
 
         try {
-            val wav = loadPcm16Wav(crazy8MusicTrack)
+            val wav = loadPcm16Wav(trackPath)
 
             val track = AudioTrack.Builder()
                 .setAudioAttributes(
@@ -458,40 +469,25 @@ class Crazy8Activity : ComponentActivity() {
                 .setTransferMode(AudioTrack.MODE_STATIC)
                 .build()
 
-            if (track.state != AudioTrack.STATE_INITIALIZED) {
-                track.release()
-                throw IllegalStateException("AudioTrack failed to initialize")
-            }
-
-            val written = track.write(wav.pcm, 0, wav.pcm.size)
-            if (written <= 0) {
-                track.release()
-                throw IllegalStateException("AudioTrack write failed: $written")
-            }
-
-            val loopResult = track.setLoopPoints(0, wav.frameCount, -1)
-            if (loopResult != AudioTrack.SUCCESS) {
-                OpenPigeonLog.w("Crazy8Music", "Loop points failed: $loopResult")
-            }
-
+            track.write(wav.pcm, 0, wav.pcm.size)
+            track.setLoopPoints(0, wav.frameCount, -1)
             track.setVolume(0.55f)
 
             musicTrack = track
             track.play()
-
-            OpenPigeonLog.e(
-                "Crazy8Music",
-                "Started $crazy8MusicTrack sampleRate=${wav.sampleRate} frames=${wav.frameCount} written=$written playState=${track.playState}"
-            )
         } catch (e: Exception) {
-            OpenPigeonLog.e("Crazy8Music", "Unable to play music track $crazy8MusicTrack", e)
+            OpenPigeonLog.e("Music", "Unable to play music track $trackPath", e)
 
             musicEnabled = false
-            musicTrack = null
+
+            getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("global/music_enabled", false)
+                .apply()
         }
     }
 
-    private fun pauseCrazy8Music() {
+    private fun pauseMusic() {
         try {
             musicTrack?.let { track ->
                 if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
@@ -499,29 +495,33 @@ class Crazy8Activity : ComponentActivity() {
                 }
             }
         } catch (e: Exception) {
-            OpenPigeonLog.w("Crazy8Music", "Unable to pause music", e)
+            OpenPigeonLog.w("Music", "Unable to pause music", e)
         }
     }
 
-    private fun resumeCrazy8Music() {
-        if (!musicEnabled || crazy8ActivityClosing) return
+    private fun resumeMusic() {
+        if (!musicEnabled) return
 
         try {
             val track = musicTrack
 
             if (track == null) {
-                startCrazy8Music()
+                startMusic()
             } else if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
                 track.play()
             }
         } catch (e: Exception) {
-            OpenPigeonLog.w("Crazy8Music", "Unable to resume music, restarting", e)
-            stopCrazy8Music()
-            startCrazy8Music()
+            OpenPigeonLog.w("Music", "Unable to resume music, restarting", e)
+            releaseMusicPlayer()
+            startMusic()
         }
     }
 
-    private fun stopCrazy8Music() {
+    private fun stopMusic() {
+        releaseMusicPlayer()
+    }
+
+    private fun releaseMusicPlayer() {
         val track = musicTrack ?: return
         musicTrack = null
 
@@ -531,6 +531,15 @@ class Crazy8Activity : ComponentActivity() {
         }
 
         track.release()
+    }
+
+    private fun restartMusicForCurrentMode() {
+        if (!musicEnabled) return
+
+        if (musicTrack != null) return
+
+        releaseMusicPlayer()
+        startMusic()
     }
 
     private fun loadPcm16Wav(path: String): WavLoopData {
@@ -639,7 +648,8 @@ class Crazy8Activity : ComponentActivity() {
         }
 
         val musicSwitch = SwitchCompat(this)
-        musicSwitch.isChecked = getPrefs().getBoolean("music_enabled", true)
+        musicSwitch.isChecked = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+            .getBoolean("global/music_enabled", true)
         musicEnabled = musicSwitch.isChecked
         musicSwitch.setOnCheckedChangeListener { _, checked ->
             applyMusicEnabled(checked)
@@ -648,7 +658,7 @@ class Crazy8Activity : ComponentActivity() {
         settingsSheet.addGameControl("Music", musicSwitch)
 
         if (musicEnabled) {
-            startCrazy8Music()
+            startMusic()
         }
     }
 
@@ -1390,7 +1400,7 @@ class Crazy8Activity : ComponentActivity() {
 
     override fun onDestroy() {
         crazy8ActivityClosing = true
-        stopCrazy8Music()
+        stopMusic()
         cancelReconnect()
         reconnectHandler.removeCallbacks(pingRunnable)
         networkExecutor.shutdownNow()
@@ -1411,11 +1421,22 @@ class Crazy8Activity : ComponentActivity() {
             scheduleReconnect(200L)
         }
 
-        resumeCrazy8Music()
+        val globalMusicEnabled = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+            .getBoolean("global/music_enabled", true)
+
+        if (musicEnabled != globalMusicEnabled) {
+            musicEnabled = globalMusicEnabled
+
+            if (!musicEnabled) {
+                stopMusic()
+            }
+        }
+
+        resumeMusic()
     }
 
     override fun onPause() {
-        pauseCrazy8Music()
+        pauseMusic()
         gameSessionIPC!!.setSuppressNotifications(sessionId, false)
         super.onPause()
     }

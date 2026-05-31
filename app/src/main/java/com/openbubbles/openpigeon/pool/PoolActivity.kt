@@ -73,7 +73,7 @@ class PoolActivity : AppCompatActivity() {
     private var musicEnabled = false
     private var musicTrack: AudioTrack? = null
     private var currentMusicTrackPath: String? = null
-    private fun currentPoolMusicTrack(): String {
+    private fun currentMusicTrack(): String {
         return if (isNineBall) {
             "pool/9ball.wav"
         } else {
@@ -143,28 +143,28 @@ class PoolActivity : AppCompatActivity() {
 
         getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
             .edit()
-            .putBoolean("pool/music_enabled", enabled)
+            .putBoolean("global/music_enabled", enabled)
             .apply()
 
         if (enabled) {
-            startPoolMusic()
+            startMusic()
         } else {
-            stopPoolMusic()
+            stopMusic()
         }
     }
 
-    private fun startPoolMusic() {
+    private fun startMusic() {
         if (!musicEnabled || poolActivityClosing || musicTrack != null) return
 
-        playPoolMusicTrack()
+        playMusicTrack()
     }
 
-    private fun playPoolMusicTrack() {
-        releasePoolMusicPlayer()
+    private fun playMusicTrack() {
+        releaseMusicPlayer()
 
         if (!musicEnabled || poolActivityClosing) return
 
-        val trackPath = currentPoolMusicTrack()
+        val trackPath = currentMusicTrack()
         currentMusicTrackPath = trackPath
 
         try {
@@ -195,7 +195,7 @@ class PoolActivity : AppCompatActivity() {
             musicTrack = track
             track.play()
         } catch (e: Exception) {
-            OpenPigeonLog.e("PoolMusic", "Unable to play music track $trackPath", e)
+            OpenPigeonLog.e("Music", "Unable to play music track $trackPath", e)
 
             musicEnabled = false
             currentMusicTrackPath = null
@@ -207,7 +207,7 @@ class PoolActivity : AppCompatActivity() {
         }
     }
 
-    private fun pausePoolMusic() {
+    private fun pauseMusic() {
         try {
             musicTrack?.let { track ->
                 if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
@@ -215,33 +215,33 @@ class PoolActivity : AppCompatActivity() {
                 }
             }
         } catch (e: Exception) {
-            OpenPigeonLog.w("PoolMusic", "Unable to pause music", e)
+            OpenPigeonLog.w("Music", "Unable to pause music", e)
         }
     }
 
-    private fun resumePoolMusic() {
+    private fun resumeMusic() {
         if (!musicEnabled || poolActivityClosing) return
 
         try {
             val track = musicTrack
 
             if (track == null) {
-                startPoolMusic()
+                startMusic()
             } else if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
                 track.play()
             }
         } catch (e: Exception) {
-            OpenPigeonLog.w("PoolMusic", "Unable to resume music, restarting", e)
-            releasePoolMusicPlayer()
-            startPoolMusic()
+            OpenPigeonLog.w("Music", "Unable to resume music, restarting", e)
+            releaseMusicPlayer()
+            startMusic()
         }
     }
 
-    private fun stopPoolMusic() {
-        releasePoolMusicPlayer()
+    private fun stopMusic() {
+        releaseMusicPlayer()
     }
 
-    private fun releasePoolMusicPlayer() {
+    private fun releaseMusicPlayer() {
         val track = musicTrack ?: return
         musicTrack = null
         currentMusicTrackPath = null
@@ -254,14 +254,14 @@ class PoolActivity : AppCompatActivity() {
         track.release()
     }
 
-    private fun restartPoolMusicForCurrentMode() {
+    private fun restartMusicForCurrentMode() {
         if (!musicEnabled) return
 
-        val trackPath = currentPoolMusicTrack()
+        val trackPath = currentMusicTrack()
         if (musicTrack != null && currentMusicTrackPath == trackPath) return
 
-        releasePoolMusicPlayer()
-        startPoolMusic()
+        releaseMusicPlayer()
+        startMusic()
     }
 
     private fun loadPcm16Wav(path: String): WavLoopData {
@@ -980,7 +980,7 @@ class PoolActivity : AppCompatActivity() {
 
         val musicSwitch = SwitchCompat(this)
         musicSwitch.isChecked = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-            .getBoolean("pool/music_enabled", true)
+            .getBoolean("global/music_enabled", true)
         musicEnabled = musicSwitch.isChecked
         musicSwitch.setOnCheckedChangeListener { _, checked -> applyMusicEnabled(checked) }
 
@@ -1345,7 +1345,7 @@ class PoolActivity : AppCompatActivity() {
         mode = PoolMode.Disabled
         stopStateLabelAnimation()
         stopNineBallBarRefresh()
-        stopPoolMusic()
+        stopMusic()
 
         cancelAllShots()
         cancelAllShots = {}
@@ -1385,12 +1385,12 @@ class PoolActivity : AppCompatActivity() {
         } else {
             OpenPigeonLog.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
         }
-        resumePoolMusic()
+        resumeMusic()
         super.onResume()
     }
 
     override fun onPause() {
-        pausePoolMusic()
+        pauseMusic()
         gameSessionIPC?.setSuppressNotifications(sessionId, false)
         super.onPause()
     }
@@ -2229,7 +2229,7 @@ class PoolActivity : AppCompatActivity() {
             updateBallTypeUi()
         }
 
-        restartPoolMusicForCurrentMode()
+        restartMusicForCurrentMode()
 
         OpenPigeonLog.i("PoolMode", "gameName=$gameName isNineBall=$isNineBall isEightBallPlus=$isEightBallPlus")
         isHard = msg["mode"]!! != "n"
