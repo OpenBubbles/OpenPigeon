@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.util.Calendar
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 
 class AboutActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,30 +52,60 @@ class AboutActivity : Activity() {
     }
 
     private fun showMoreOptions(currentYear: Int, versionText: String) {
-        val options = arrayOf("Attributions", "Reset Stats", "Reset Avatar", "Reset Tutorial", "Reset Everything", "Back")
+        val options = arrayOf(
+            "Attributions",
+            "Send Diagnostic Report",
+            "Reset Stats",
+            "Reset Avatar",
+            "Reset Tutorial",
+            "Reset Everything",
+            "Back"
+        )
+
         MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
             .setTitle("More options")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> showAttributions()
-                    1 -> confirmReset("Reset stats?", "This will clear your win counts for all games. This cannot be undone.", currentYear, versionText) {
+                    1 -> confirmDiagnosticReport(currentYear, versionText)
+                    2 -> confirmReset("Reset stats?", "This will clear your win counts for all games. This cannot be undone.", currentYear, versionText) {
                         resetStats(); showAboutDialog(currentYear, versionText)
                     }
-                    2 -> confirmReset("Reset avatar?", "This will reset your avatar to defaults. This cannot be undone.", currentYear, versionText) {
+                    3 -> confirmReset("Reset avatar?", "This will reset your avatar to defaults. This cannot be undone.", currentYear, versionText) {
                         resetAvatar(); showAboutDialog(currentYear, versionText)
                     }
-                    3 -> confirmReset("Reset tutorial?", "The welcome tutorial will appear again next time you open the game picker.", currentYear, versionText) {
+                    4 -> confirmReset("Reset tutorial?", "The welcome tutorial will appear again next time you open the game picker.", currentYear, versionText) {
                         resetTutorial(); showAboutDialog(currentYear, versionText)
                     }
-                    4 -> confirmReset("Reset everything?", "This will clear your stats, avatar, and tutorial state. This cannot be undone.", currentYear, versionText) {
+                    5 -> confirmReset("Reset everything?", "This will clear your stats, avatar, and tutorial state. This cannot be undone.", currentYear, versionText) {
                         resetStats(); resetAvatar(); resetTutorial()
                         showAboutDialog(currentYear, versionText)
                     }
-                    5 -> showAboutDialog(currentYear, versionText)
+                    6 -> showAboutDialog(currentYear, versionText)
                 }
             }
             .setCancelable(true)
             .setOnCancelListener { showAboutDialog(currentYear, versionText) }
+            .show()
+    }
+
+    private fun confirmDiagnosticReport(currentYear: Int, versionText: String) {
+        MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
+            .setTitle("Send diagnostic report?")
+            .setMessage(
+                "This creates a recent diagnostic report from app warnings, errors, and safe app events. " +
+                        "It is designed to exclude personal information like names, messages, session IDs, room IDs, avatars, emails, URLs, IP addresses, and auth tokens."
+            )
+            .setPositiveButton("Send") { _, _ ->
+                OpenPigeonLog.shareReport(this)
+                showAboutDialog(currentYear, versionText)
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                showAboutDialog(currentYear, versionText)
+            }
+            .setOnCancelListener {
+                showAboutDialog(currentYear, versionText)
+            }
             .show()
     }
 

@@ -1,7 +1,7 @@
 package com.openbubbles.openpigeon.wordgames
 
 import android.content.Context
-import android.util.Log
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,7 +45,7 @@ class WordGames : Game {
 
     @Composable
     override fun Configuration(context: Context?) {
-        Log.d(TAG, "Configuration() composable ENTER")
+        OpenPigeonLog.d(TAG, "Configuration() composable ENTER")
 
         val choices = listOf(
             GameChoice(
@@ -68,7 +68,7 @@ class WordGames : Game {
         Box(modifier = GlanceModifier.padding(16.dp)) {
             Row(modifier = GlanceModifier.padding(horizontal = 8.dp)) {
                 choices.forEach { choice ->
-                    Log.d(
+                    OpenPigeonLog.d(
                         TAG,
                         "Rendering choice: gameName=${choice.game.getName()}, label=${choice.label}"
                     )
@@ -111,7 +111,7 @@ class WordGames : Game {
             }
         }
 
-        Log.d(TAG, "Configuration() composable EXIT")
+        OpenPigeonLog.d(TAG, "Configuration() composable EXIT")
     }
 
     override fun setConfigOption(name: String, value: String) {

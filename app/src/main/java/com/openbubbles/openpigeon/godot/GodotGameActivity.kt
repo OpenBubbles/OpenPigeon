@@ -2,7 +2,7 @@ package com.openbubbles.openpigeon.godot
 
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -47,9 +47,9 @@ class GodotGameActivity : GodotActivity() {
         if (gameSessionIPC != null) {
             gameSessionIPC?.setSuppressNotifications(sessionId, true)
         } else if (::baseGame.isInitialized) {
-            Log.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
+            OpenPigeonLog.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
         } else {
-            Log.w("openpigeon-godot", "onResume called before baseGame was initialized!")
+            OpenPigeonLog.w("openpigeon-godot", "onResume called before baseGame was initialized!")
         }
         super.onResume()
     }
@@ -70,27 +70,27 @@ class GodotGameActivity : GodotActivity() {
         val gname = intent.getStringExtra("GAME")
 
         if (sid.isNullOrEmpty() || gname.isNullOrEmpty()) {
-            Log.e("openpigeon-godot", "Missing SESSION or GAME in intent; finishing.")
+            OpenPigeonLog.e("openpigeon-godot", "Missing SESSION or GAME in intent; finishing.")
             activity?.finish()
             return
         }
 
         sessionId = sid
         baseGame = MadridExtension.findByName(gname)!!
-        Log.i("openpigeon-${baseGame.getName()}", "GodotGameActivity opened with session: $sessionId")
+        OpenPigeonLog.i("openpigeon-${baseGame.getName()}", "GodotGameActivity opened with session: $sessionId")
         GameSessionIPC(applicationContext) { gameSessionIPC ->
             this.gameSessionIPC = gameSessionIPC
             val currentMessage = gameSessionIPC.getCurrentMessage(sessionId)
             if (currentMessage.isNotEmpty()) {
                 gameSessionIPC.lockMsgHandle(sessionId)
                 gameSessionIPC.setSuppressNotifications(sessionId, true)
-                Log.i("openpigeon-${baseGame.getName()}", "player: ${(currentMessage["player"]?.toIntOrNull() ?: -1)}, replay: ${currentMessage["replay"]}")
+                OpenPigeonLog.i("openpigeon-${baseGame.getName()}", "player: ${(currentMessage["player"]?.toIntOrNull() ?: -1)}, replay: ${currentMessage["replay"]}")
                 sendGameData(isYourTurn(currentMessage), currentMessage.toMutableMap())
 
                 gameSessionIPC.onMessageUpdated(sessionId) { new: Map<String, String> ->
                     val yourTurn = isYourTurn(new)
                     if(yourTurn) {
-                        Log.i(
+                        OpenPigeonLog.i(
                             "openpigeon-${baseGame.getName()}",
                             "onMessageUpdated -> isYourTurn: ${yourTurn}, message: $new"
                         )
@@ -98,7 +98,7 @@ class GodotGameActivity : GodotActivity() {
                     }
                 }
             } else {
-                Log.e("openpigeon-${baseGame.getName()}", "$sessionId does not exist!")
+                OpenPigeonLog.e("openpigeon-${baseGame.getName()}", "$sessionId does not exist!")
                 activity?.finish()
             }
         }

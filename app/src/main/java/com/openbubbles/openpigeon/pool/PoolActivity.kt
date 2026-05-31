@@ -10,7 +10,7 @@ import android.graphics.Matrix
 import android.graphics.RectF
 import android.os.Bundle
 import android.os.Handler
-import android.util.Log
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import android.util.TypedValue
 import com.openbubbles.openpigeon.settings.AvatarView
 import android.widget.ImageButton
@@ -195,7 +195,7 @@ class PoolActivity : AppCompatActivity() {
             musicTrack = track
             track.play()
         } catch (e: Exception) {
-            Log.e("PoolMusic", "Unable to play music track $trackPath", e)
+            OpenPigeonLog.e("PoolMusic", "Unable to play music track $trackPath", e)
 
             musicEnabled = false
             currentMusicTrackPath = null
@@ -215,7 +215,7 @@ class PoolActivity : AppCompatActivity() {
                 }
             }
         } catch (e: Exception) {
-            Log.w("PoolMusic", "Unable to pause music", e)
+            OpenPigeonLog.w("PoolMusic", "Unable to pause music", e)
         }
     }
 
@@ -231,7 +231,7 @@ class PoolActivity : AppCompatActivity() {
                 track.play()
             }
         } catch (e: Exception) {
-            Log.w("PoolMusic", "Unable to resume music, restarting", e)
+            OpenPigeonLog.w("PoolMusic", "Unable to resume music, restarting", e)
             releasePoolMusicPlayer()
             startPoolMusic()
         }
@@ -1307,7 +1307,7 @@ class PoolActivity : AppCompatActivity() {
                 }
                 lastAngle = position
                 // this is our direction vector
-                Log.i("Point", "${points[0]} ${points[1]}")
+                OpenPigeonLog.i("Point", "${points[0]} ${points[1]}")
             }
             true
         }
@@ -1325,14 +1325,14 @@ class PoolActivity : AppCompatActivity() {
                 gameSessionIPC.lockMsgHandle(sessionId)
                 gameSessionIPC.setSuppressNotifications(sessionId, true)
                 gameSessionIPC.onMessageUpdated(sessionId) {
-                    Log.i("what", "sdf")
+                    OpenPigeonLog.i("what", "sdf")
                     synchronized(this) {
                         handleMessage(it)
                     }
                 }
                 handleMessage(currentMessage)
             } else {
-                Log.e("openpigeon-${baseGame.getName()}", "$sessionId does not exist!")
+                OpenPigeonLog.e("openpigeon-${baseGame.getName()}", "$sessionId does not exist!")
                 finish()
             }
         }
@@ -1356,7 +1356,7 @@ class PoolActivity : AppCompatActivity() {
 
         if (::settingsSheet.isInitialized) settingsSheet.detach()
 
-        Log.i("Table", "Destroying")
+        OpenPigeonLog.i("Table", "Destroying")
 
         synchronized(this) {
             if (table != 0L) {
@@ -1383,7 +1383,7 @@ class PoolActivity : AppCompatActivity() {
                 }
             }
         } else {
-            Log.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
+            OpenPigeonLog.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
         }
         resumePoolMusic()
         super.onResume()
@@ -1406,7 +1406,7 @@ class PoolActivity : AppCompatActivity() {
     data class BallHit(val direction: Float, val power: Float, val spinX: Float, val spinY: Float, var wasStripes: Boolean?) {
         fun hit(activity: PoolActivity) {
             if (activity.poolActivityClosing || activity.table == 0L) {
-                Log.w("PoolLifecycle", "Skipping hitBall because activity is closing or table is destroyed")
+                OpenPigeonLog.w("PoolLifecycle", "Skipping hitBall because activity is closing or table is destroyed")
                 return
             }
 
@@ -1419,7 +1419,7 @@ class PoolActivity : AppCompatActivity() {
                 activity.startNineBallBarRefresh()
             }
 
-            Log.i("Hitting ball", "Direction: $direction power: $power spinX: $spinX spinY: $spinY scratch: $wasStripes first ${activity.isFirst}")
+            OpenPigeonLog.i("Hitting ball", "Direction: $direction power: $power spinX: $spinX spinY: $spinY scratch: $wasStripes first ${activity.isFirst}")
             if (activity.isNineBall) {
                 activity.nineBallTargetAtShot = activity.lowestNineBallNumber() ?: 9
             }
@@ -1548,7 +1548,7 @@ class PoolActivity : AppCompatActivity() {
                         !cueBall.hitBall ||
                         cueBall.ballHit != nineBallTargetAtShot
 
-            Log.i(
+            OpenPigeonLog.i(
                 "POOL9_DEBUG",
                 "SCRATCH_CHECK cueBall.sunk=${cueBall.sunk} hitBall=${cueBall.hitBall} ballHit=${cueBall.ballHit} target=$nineBallTargetAtShot scratch=$scratch"
             )
@@ -1572,7 +1572,7 @@ class PoolActivity : AppCompatActivity() {
             }
         }
 
-        Log.i(
+        OpenPigeonLog.i(
             "POOL_DEBUG",
             "SCRATCH_CHECK cueBall.sunk=${cueBall.sunk} blackBall.sunk=${poolBalls.find { it.number == 8 }?.sunk} ballHit=${cueBall.ballHit} scratch=$scratch"
         )
@@ -1610,7 +1610,7 @@ class PoolActivity : AppCompatActivity() {
         skipReplayRequested = false
         skipReplayFadeStarted = false
 
-        Log.i("Pool", "Scratch $scratch")
+        OpenPigeonLog.i("Pool", "Scratch $scratch")
 
         clearBalls(table)
         val oldBalls = poolBalls
@@ -1703,7 +1703,7 @@ class PoolActivity : AppCompatActivity() {
 
                 val nineBallSunk = sunkNumberedBalls.any { it.number == 9 }
 
-                Log.i(
+                OpenPigeonLog.i(
                     "POOL9_DEBUG",
                     "FINAL_STATE cueBall.sunk=${cueBall.sunk} nineBallSunk=$nineBallSunk scratch=$scratch target=$nineBallTargetAtShot sunk=${sunkNumberedBalls.map { it.number }}"
                 )
@@ -1725,7 +1725,7 @@ class PoolActivity : AppCompatActivity() {
                 val blackBall = poolBalls.find { it.number == 8 }
                 val blackBallSunk = blackBall == null || blackBall.sunk
 
-                Log.i(
+                OpenPigeonLog.i(
                     "POOL_DEBUG",
                     "FINAL_STATE cueBall.sunk=${cueBall.sunk} blackBall.sunk=$blackBallSunk scratch=$scratch wasFirst=$wasFirst"
                 )
@@ -1788,7 +1788,7 @@ class PoolActivity : AppCompatActivity() {
             }
 
             // send replay
-            Log.i("sending replay", "here")
+            OpenPigeonLog.i("sending replay", "here")
             var replays = outgoingReplayHits.mapIndexed { index, hit ->
                 val wasStripes = if (hit.wasStripes == null) 0 else if (hit.wasStripes!!) player else if (player == 1) 2 else 1
                 val replay = "&d:${hit.direction}&x:${hit.spinX}&y:${hit.spinY}&p:${hit.power}&s:$wasStripes"
@@ -1836,7 +1836,7 @@ class PoolActivity : AppCompatActivity() {
             }
 
             gameSessionIPC!!.updateSession(msgUpdates, sessionId) {
-                Log.i("openpigeon-${baseGame.getName()}", "Game session updated")
+                OpenPigeonLog.i("openpigeon-${baseGame.getName()}", "Game session updated")
 
                 if (winState == null) {
                     runOnUiThread {
@@ -1956,7 +1956,7 @@ class PoolActivity : AppCompatActivity() {
         renderer.cuePos = floatArrayOf(cue.x, cue.y)
         renderer.cueRot = atan2(dy, dx)
 
-        Log.i(
+        OpenPigeonLog.i(
             "POOL9_DEBUG",
             "DEFAULT_BREAK_AIM cue=(${cue.x},${cue.y}) front=($nineBallFrontBallX,$nineBallFrontBallY) dx=$dx dy=$dy cueRot=${renderer.cueRot}"
         )
@@ -1971,12 +1971,12 @@ class PoolActivity : AppCompatActivity() {
             val density = if (isFirst) it.density else 1
 
             if (centerScratch && it.number == 0) {
-                Log.i("White", "scratching")
+                OpenPigeonLog.i("White", "scratching")
                 return@map "#392.000000,220.000000,0.000000,$density,0,5.632916,7.415801,5.384167"
             }
 
             if (isNineBall && centerScratch && it.sunk && it.number in 1..9) {
-                Log.i("POOL9_DEBUG", "Respotted fouled pocketed ball ${it.number}")
+                OpenPigeonLog.i("POOL9_DEBUG", "Respotted fouled pocketed ball ${it.number}")
                 return@map "#560.000000,220.000000,0.000000,1.000000,${it.number},5.632916,7.415801,5.384167"
             }
 
@@ -2022,10 +2022,10 @@ class PoolActivity : AppCompatActivity() {
             }
         }
 
-        Log.i("PoolPlus", "Generated ${slots.size} slots for seed=$seed after $attempts attempts")
+        OpenPigeonLog.i("PoolPlus", "Generated ${slots.size} slots for seed=$seed after $attempts attempts")
 
         if (slots.size < 30) {
-            Log.e("PoolPlus", "Failed to generate 30 slots after $attempts attempts; got ${slots.size}")
+            OpenPigeonLog.e("PoolPlus", "Failed to generate 30 slots after $attempts attempts; got ${slots.size}")
         }
 
         val ballsLeft = mutableListOf(
@@ -2147,12 +2147,12 @@ class PoolActivity : AppCompatActivity() {
                 }
             }
 
-            Log.i(
+            OpenPigeonLog.i(
                 "ReplayBallMode",
                 "number=$number shouldGoInMode=$shouldGoInMode x=$x y=$y remainingFinalMatches=${finalBalls?.count { it.number == number } ?: -1}"
             )
 
-            Log.i("Making ball", "x: $x y: $y rot: $rot density: $density number: $number")
+            OpenPigeonLog.i("Making ball", "x: $x y: $y rot: $rot density: $density number: $number")
 
             makeBall(
                 table,
@@ -2231,7 +2231,7 @@ class PoolActivity : AppCompatActivity() {
 
         restartPoolMusicForCurrentMode()
 
-        Log.i("PoolMode", "gameName=$gameName isNineBall=$isNineBall isEightBallPlus=$isEightBallPlus")
+        OpenPigeonLog.i("PoolMode", "gameName=$gameName isNineBall=$isNineBall isEightBallPlus=$isEightBallPlus")
         isHard = msg["mode"]!! != "n"
 
         renderer.bitmap = BitmapFactory.decodeResource(
@@ -2255,7 +2255,7 @@ class PoolActivity : AppCompatActivity() {
             runOnUiThread { settingsSheet.applyOpponentAvatarString(avatarStr) }
         }
 
-        Log.i("number", "$num")
+        OpenPigeonLog.i("number", "$num")
         if (num == "2") {
             isFirst = true // for replay
         }
@@ -2296,7 +2296,7 @@ class PoolActivity : AppCompatActivity() {
                     val stripes = output["stripes"]!!.toInt()
                     iAmStripes = if(stripes == 0) null else player == stripes
                     updateBallTypeUi()
-                    Log.i("Me", "$iAmStripes")
+                    OpenPigeonLog.i("Me", "$iAmStripes")
                 }
 
                 if (output["move"] != null) {
@@ -2355,10 +2355,10 @@ class PoolActivity : AppCompatActivity() {
                 val seedStr = msg["seed"]
                 val seed = seedStr?.toIntOrNull()
                 if (seed == null) {
-                    Log.e("PoolPlus", "pool3 game without valid seed (got '$seedStr'); falling back to normal rack")
+                    OpenPigeonLog.e("PoolPlus", "pool3 game without valid seed (got '$seedStr'); falling back to normal rack")
                     finalBalls = "#632.746155,178.000000,0.000000,0.801981,9,5.632916,7.415801,5.384167#632.746155,199.000000,0.000000,0.050000,10,-1.479509,5.981912,-0.639594#632.746155,220.000000,0.000000,0.145560,7,-4.857441,-3.796834,-5.439248#632.746155,241.000000,0.000000,0.050000,6,3.548234,-7.060621,-3.771457#632.746155,262.000000,0.000000,0.964504,1,7.809305,-4.673173,7.553514#614.559570,188.500000,0.000000,0.868768,12,6.889496,7.963203,-4.292648#614.559570,209.500000,0.000000,0.759525,13,4.140916,-0.562560,-5.371364#614.559570,230.500000,0.000000,0.839745,15,-7.863293,-3.022674,-7.419384#614.559570,251.500000,0.000000,1.153367,11,-5.802108,7.468212,-7.951379#596.373047,199.000000,0.000000,1.053345,4,1.589040,2.324956,0.526632#596.373047,220.000000,0.000000,1.437710,8,3.826384,-4.029884,3.487882#596.373047,241.000000,0.000000,1.085851,3,4.912686,3.917787,5.660569#578.186523,209.500000,0.000000,1.100000,2,-5.776122,-4.926837,0.760138#578.186523,230.500000,0.000000,0.900000,5,-1.848043,-0.386153,6.410922#560.000000,220.000000,0.000000,1.000000,14,2.079596,7.069168,-7.283604#205.000000,220.000000,0.000000,0.990000,0,4.519086,0.074793,-2.054408"
                 } else {
-                    Log.i("PoolPlus", "Generating 8 Ball+ rack with seed=$seed")
+                    OpenPigeonLog.i("PoolPlus", "Generating 8 Ball+ rack with seed=$seed")
                     finalBalls = generateRandomRack(seed)
                 }
             } else {

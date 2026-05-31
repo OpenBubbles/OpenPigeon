@@ -1,6 +1,6 @@
 package com.openbubbles.openpigeon.godot
 
-import android.util.Log
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import org.godotengine.godot.Godot
 import org.godotengine.godot.plugin.GodotPlugin
 import org.godotengine.godot.plugin.SignalInfo
@@ -31,6 +31,36 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
 
     override fun getPluginSignals() = setOf(SET_GAME_DATA_SIGNAL, SWITCH_GAME_SIGNAL)
 
+    @UsedByGodot
+    fun log(level: String, tag: String, message: String) {
+        OpenPigeonLog.godotLog(level, tag, message)
+    }
+
+    @UsedByGodot
+    fun event(tag: String, message: String) {
+        OpenPigeonLog.godotEvent(tag, message)
+    }
+
+    @UsedByGodot
+    fun d(tag: String, message: String) {
+        OpenPigeonLog.godotD(tag, message)
+    }
+
+    @UsedByGodot
+    fun i(tag: String, message: String) {
+        OpenPigeonLog.godotI(tag, message)
+    }
+
+    @UsedByGodot
+    fun w(tag: String, message: String) {
+        OpenPigeonLog.godotW(tag, message)
+    }
+
+    @UsedByGodot
+    fun e(tag: String, message: String) {
+        OpenPigeonLog.godotE(tag, message)
+    }
+
     override fun onGodotMainLoopStarted() {
         super.onGodotMainLoopStarted()
         mainLoopStarted = true
@@ -59,7 +89,7 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
 
     @UsedByGodot
     fun updateGameData(updates: String) {
-        Log.d("openpigeon-${gameActivity.baseGame.getName()}", "updateGameData: $updates")
+        OpenPigeonLog.d("openpigeon-${gameActivity.baseGame.getName()}", "updateGameData: $updates")
         val gameSessionIPC = gameActivity.gameSessionIPC!!
         val currentMessage = gameSessionIPC.getCurrentMessage(gameActivity.sessionId)
 
@@ -75,7 +105,7 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
         }
 
         gameActivity.gameSessionIPC!!.updateSession(msgUpdates, gameActivity.sessionId) {
-            Log.i("openpigeon-${gameActivity.baseGame.getName()}", "Game session updated")
+            OpenPigeonLog.i("openpigeon-${gameActivity.baseGame.getName()}", "Game session updated")
         }
     }
 
@@ -103,7 +133,7 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
             }
         }.toString()
 
-        Log.i("openpigeon-${gameActivity.baseGame.getName()}", "Set game data: ${this.replay}")
+        OpenPigeonLog.i("openpigeon-${gameActivity.baseGame.getName()}", "Set game data: ${this.replay}")
         if (mainLoopStarted)
             emitSignal(SET_GAME_DATA_SIGNAL.name, this.replay)
     }

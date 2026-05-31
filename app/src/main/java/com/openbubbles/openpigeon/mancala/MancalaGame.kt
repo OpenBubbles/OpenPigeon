@@ -1,7 +1,7 @@
 package com.openbubbles.openpigeon.mancala
 
 import android.content.Context
-import android.util.Log
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
@@ -157,7 +157,7 @@ class MancalaGame : Game {
             }
             // Pits 6 and 13 (store pits) remain empty
         }
-            Log.d("MancalaGame", "Generated Board Array (pits): $pits")
+            OpenPigeonLog.d("MancalaGame", "Generated Board Array (pits): $pits")
 
         // Build the board string
         return pits.joinToString("&") { pit ->

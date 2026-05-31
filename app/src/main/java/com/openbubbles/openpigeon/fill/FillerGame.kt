@@ -2,7 +2,7 @@ package com.openbubbles.openpigeon.fill
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.util.Log
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.godot.GodotGameActivity
@@ -55,7 +55,7 @@ class FillerGame : Game, DynamicPreviewGame {
                 FillerPreviewRenderer.render(seed, player)
             }
         } catch (e: Exception) {
-            Log.w("FillerGame", "Failed to build dynamic Filler preview, falling back to static image", e)
+            OpenPigeonLog.w("FillerGame", "Failed to build dynamic Filler preview, falling back to static image", e)
             null
         }
     }

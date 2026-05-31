@@ -8,7 +8,7 @@ import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
-import android.util.Log
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import android.view.SurfaceHolder
 import android.view.Surface
 import androidx.core.animation.doOnEnd
@@ -616,18 +616,18 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
-        Log.d("Surface", "Created")
+        OpenPigeonLog.d("Surface", "Created")
         hasSurface = true
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        Log.d("Surface", "Changed width: $width, Height: $height")
+        OpenPigeonLog.d("Surface", "Changed width: $width, Height: $height")
         transform
         activity.syncCueRailsToTable()
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
-        Log.d("Surface", "Destroyed")
+        OpenPigeonLog.d("Surface", "Destroyed")
         hasSurface = false
     }
 }

@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://bl7f2ncc3fndd"
-path="res://.godot/imported/crazy8.wav-dbb4b8459277ce8968b87998fc783de5.sample"
+uid="uid://rt04l3ootmn5"
+path="res://.godot/imported/crazy8.wav-cef4fdfa39622269bcf4a1d6c2a41a45.sample"
 
 [deps]
 
-source_file="res://global/music/crazy8.wav"
-dest_files=["res://.godot/imported/crazy8.wav-dbb4b8459277ce8968b87998fc783de5.sample"]
+source_file="res://crazy8/crazy8.wav"
+dest_files=["res://.godot/imported/crazy8.wav-cef4fdfa39622269bcf4a1d6c2a41a45.sample"]
 
 [params]
 

@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://ccgetrgfwx8be"
-path="res://.godot/imported/wordhunt.wav-aeb35eb6dffa207db1a9d760a89f3502.sample"
+uid="uid://c7s6tfgx1u77y"
+path="res://.godot/imported/wordhunt.wav-65cf11c8ba9132f869a93a2489b415f9.sample"
 
 [deps]
 
-source_file="res://global/music/wordhunt.wav"
-dest_files=["res://.godot/imported/wordhunt.wav-aeb35eb6dffa207db1a9d760a89f3502.sample"]
+source_file="res://wordhunt/wordhunt.wav"
+dest_files=["res://.godot/imported/wordhunt.wav-65cf11c8ba9132f869a93a2489b415f9.sample"]
 
 [params]
 

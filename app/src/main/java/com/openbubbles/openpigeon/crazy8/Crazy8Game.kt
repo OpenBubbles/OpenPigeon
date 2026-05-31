@@ -1,7 +1,7 @@
 package com.openbubbles.openpigeon.crazy8
 
 import android.content.Context
-import android.util.Log
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.settings.AvatarData
@@ -44,7 +44,7 @@ class Crazy8Game : Game {
             put("room", "$id${annendum}")
             put("avatar2", AvatarView.buildAvatarString())
         }
-        Log.i("what", data.toString())
+        OpenPigeonLog.i("what", data.toString())
         return data
     }
 

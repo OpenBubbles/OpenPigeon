@@ -1,7 +1,7 @@
 package com.openbubbles.openpigeon
 
 import android.content.Context
-import android.util.Log
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import com.bluebubbles.messaging.IMessageViewHandle
 import com.bluebubbles.messaging.MadridMessage
 import androidx.core.net.toUri
@@ -23,12 +23,12 @@ class GameSession(var handle: IMessageViewHandle) {
         val decrypted = Cryption.decrypt(data)
         val parsed = "data://$decrypted".toUri()
         val newMessage: MutableMap<String, String> = mutableMapOf()
-        Log.i("openpigeon", "New game! $parsed")
+        OpenPigeonLog.i("openpigeon", "New game! $parsed")
         for (key in parsed.queryParameterNames) {
             try {
                 newMessage[key] = parsed.getQueryParameter(key)!!
             } catch (exc: Exception) {
-                Log.e("openpigeon-gamesession", "Exception parsing $key: $exc")
+                OpenPigeonLog.e("openpigeon-gamesession", "Exception parsing $key: $exc")
             }
         }
 
@@ -74,7 +74,7 @@ class GameSession(var handle: IMessageViewHandle) {
         if (iWon) {
             com.openbubbles.openpigeon.settings.GameStats.init(context)
             com.openbubbles.openpigeon.settings.GameStats.incrementWins(game.getName())
-            Log.i("GameStats", "Recorded win for ${game.getName()}, total=${com.openbubbles.openpigeon.settings.GameStats.getWins(game.getName())}")
+            OpenPigeonLog.i("GameStats", "Recorded win for ${game.getName()}, total=${com.openbubbles.openpigeon.settings.GameStats.getWins(game.getName())}")
         }
     }
 

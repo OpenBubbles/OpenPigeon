@@ -47,7 +47,13 @@ enabled=PackedStringArray("res://addons/godot-box2d/plugin.cfg")
 
 2d/physics_engine="Box2D"
 3d/physics_engine="Jolt Physics"
-2d/default_linear_damp=1.35
+2d/default_linear_damp=0.0
+2d/sleep_threshold_linear=0.32
+2d/solver/solver_iterations=60
+2d/solver/contact_recycle_radius=0.0
+2d/solver/contact_max_separation=0.16
+2d/solver/contact_max_allowed_penetration=0.16
+2d/solver/default_contact_bias=0.2
 box_2d/solver/velocity_iterations=60
 box_2d/solver/position_iterations=60
 

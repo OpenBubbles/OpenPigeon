@@ -36,19 +36,28 @@ const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_ani
 @onready var piece_container := %PieceContainer
 @onready var left_preserver := %LeftPreserver
 @onready var right_preserver := %RightPreserver
-@onready var safe_zone_polygon := %SafeZonePolygon
+@onready var safe_zone_polygon := get_node_or_null("%SafeZonePolygon")
 @onready var _texrect := %TextureRect
 var _board_scale_node: Control = null
 const PDIFF_ENABLED := false
 var _pdiff = null
 var _pdiff_active := false
 const PDIFF_DEV_REPLAY := "board:1#-41.490452,-18.381981,2,2.568027,0.311887,11.024456#35.786495,56.762127,1,0.193446,3.140568,125.850670|shoot:1|board:2#-24.121695,-12.309731,2,1.882683,0.311887,0.000000#-135.776291,51.576973,1,4.711365,-0.038352,95.461876|board:2#-24.121695,-12.309731,2,1.882683,0.311887,0.000000#-135.776291,51.576973,1,4.711365,-0.038352,95.461876"
+const DEBUG_FORCE_HARD_IOS_REPLAY_ON_SEND := false
+const DEBUG_FORCE_HARD_IOS_REPLAY_ON_RECEIVE := false
+const DEBUG_FORCE_LOCAL_STAGE_FROM_REPLAY := false
+
+const HARD_IOS_PRE_BOARD := "board:0#-138.823730,133.264023,2,1.727390,-0.630656,131.028214#135.506699,61.788300,2,-2.355294,-2.820334,91.171158#-107.856918,7.059479,2,1.836725,-0.088173,80.168335#45.392624,-59.802856,2,-0.793487,2.069189,83.454941#-19.757950,-92.666412,1,2.169308,-4.769942,79.023689#87.108963,132.070343,1,1.353860,-2.215844,118.031143#137.202286,-26.021454,1,-3.022536,-3.560767,104.367134#96.805923,-132.769928,1,-0.813220,-4.125651,122.623123"
+
+const HARD_IOS_POST_BOARD := "board:1#-23.821400,28.208681,2,1.912212,0.721843,33.735352#50.774029,54.407021,2,-1.819099,-2.302348,54.300423#-52.573368,41.975292,2,0.984728,-0.418193,50.418179#-12.703999,-4.678997,2,2.924726,0.757986,26.443672#-25.962086,-42.779411,1,-2.447427,-4.769942,0.000000#11.077361,57.876549,1,-0.385686,-2.215844,0.000000#2.528792,34.842903,1,-1.296190,-3.560767,0.000000#36.689594,-29.160236,1,-0.896523,-4.125651,0.000000"
+
+const HARD_IOS_REPLAY := HARD_IOS_PRE_BOARD + "|shoot:1|" + HARD_IOS_POST_BOARD + "|" + HARD_IOS_POST_BOARD
 
 # Debug/watch state
 const LOGICAL_BOARD_SIZE := Vector2(375.0, 375.0)
 const IOS_BOARD_TEXTURE_SIZE := LOGICAL_BOARD_SIZE
 const IOS_BOARD_TEXTURE_OFFSET := Vector2.ZERO
-const IOS_PENGUIN_VISUAL_SIZE := Vector2(50.0, 50.0)
+const IOS_PENGUIN_VISUAL_SIZE := Vector2(25.0, 25.0)
 
 const ZOOM_START := 1
 const ZOOM_DUR := 0.22
@@ -97,19 +106,66 @@ var last_post_round: Dictionary = {}     # same shape; board #2 snapshot after p
 var last_pending_setup_round: Dictionary = {} # board after replay where only one player has aimed
 var current_round_index: int = 0
 
+const IOS_SHOOT_DELAY_SEC := 1.5
 const PPM                 := 32.0
-const PIECE_RADIUS_PX     := 12.5
+
+const IOS_PIECE_RADIUS_PX := 12.5
+const IOS_PIECE_DIAMETER_PX := IOS_PIECE_RADIUS_PX * 2.0
+
+# Keep the live collider exactly equal to the iOS radius.
+# Do not pad this while Box2D is active.
+const PIECE_RADIUS_PX := IOS_PIECE_RADIUS_PX
+const PIECE_DIAMETER_PX := IOS_PIECE_DIAMETER_PX
+const DEBUG_PAIR_CONTACT_CROSSINGS := false
+const PAIR_CONTACT_ENTER_DIST := IOS_PIECE_DIAMETER_PX
+const PAIR_CONTACT_EXIT_DIST := IOS_PIECE_DIAMETER_PX + 2.5
+
+const IOS_COLLISION_TANGENT_IMPULSE_SCALE := 1.28
+const IOS_COLLISION_RESTITUTION := 0.85
+const IOS_COLLISION_FRICTION := 0.065
+const IOS_COLLISION_SPIN_JT_LIMIT := 5716.91
+var _pair_contact_state: Dictionary = {}
+var _replay_trace_start_ms: int = 0
+var _replay_trace_start_physics_frame: int = 0
+
 const FRICTION            := 1.0
 const RESTITUTION         := 1.0
 const LINEAR_DAMP         := 1.35
-const ANGULAR_DAMP        := 0.0
+const ANGULAR_DAMP        := 2.0
 const DENSITY             := 1.0
 const GRAVITY_SCALE       := 0.0
-const CCD_MODE            := RigidBody2D.CCD_MODE_CAST_RAY
+const CCD_MODE            := RigidBody2D.CCD_MODE_DISABLED
 const LOCK_ROTATION       := false
 const IOS_STOP_LINEAR_SPEED := 1.0
 const IOS_STOP_ANGULAR_SPEED := 0.08
+const POWER_TO_VELOCITY := 2.0
+const IOS_ARROW_SHOT_ALPHA := 0.8
+const IOS_ARROW_SHOT_FADE_SEC := 0.5
+const KPHYS_TRACE_ENABLED := false
+const KPHYS_TRACE_DURATION_SEC := 6.5
 const CAN_SLEEP := false
+const DEBUG_ALL_PIECE_TRACE := false
+const DEBUG_TRACE_ID_POST_DIFF := false
+
+# Exact iOS Box2D body values validated from b2Body::ResetMassData.
+# radius = 12.5
+# mass = PI * r^2 * density = 490.873871
+# inertia = mass * 0.5 * r^2 = 38349.519531
+# inertia / mass = 78.125
+const PIECE_MASS := 490.873871
+const PIECE_INERTIA_PX := 38349.519531
+
+const MANUAL_PIECE_COLLISIONS := false
+
+# Temporary tuning switch. Keep this true while matching piece-to-piece collisions.
+const DISABLE_KILL_ZONES_FOR_COLLISION_TUNING := true
+const DEBUG_PIECE_CONTACTS := false
+const DEBUG_CONTACT_SIGNALS := false
+const DEBUG_COLLISION_LAB := false
+const COLLISION_LAB_JUNK_BOARD := "board:0#-120.000000,-120.000000,1,0.000000,0.000000,0.000000#120.000000,120.000000,2,0.000000,0.000000,0.000000"
+const COLLISION_LAB_SHOT_BOARD := "board:0#-60.000000,0.000000,1,0.000000,0.000000,80.000000#40.000000,0.000000,2,0.000000,0.000000,0.000001"
+const COLLISION_LAB_IOS_SEND_REPLAY := COLLISION_LAB_JUNK_BOARD + "|" + COLLISION_LAB_SHOT_BOARD + "|shoot:1"
+const COLLISION_LAB_REPLAY := "board:0#-60.000000,0.000000,1,0.000000,0.000000,80.000000#40.000000,0.000000,2,0.000000,0.000000,0.000001|shoot:1|"
 
 var PIECE_RADIUS := PIECE_RADIUS_PX
 const ROUND_SNAP_AFTER: float = 1.4
@@ -128,7 +184,7 @@ var _last_hole_polys_cached: Array[PackedVector2Array] = []
 var _kill_check_accum := 0.0
 
 # Throttle kill checks to reduce per-frame cost
-const KILL_CHECK_INTERVAL := 0.05
+const KILL_CHECK_INTERVAL := 0.016
 
 # --- Game State Variables ---
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
@@ -158,6 +214,7 @@ var _aim_instruction_tween: Tween = null
 var _resize_pending := false
 var _loading_board_data := false
 var _incoming_data_seq := 0
+var _last_received_num: int = 0
 
 func _is_stale_data_seq(data_seq: int) -> bool:
 	return data_seq >= 0 and data_seq != _incoming_data_seq
@@ -194,6 +251,168 @@ func _poly_area(poly: PackedVector2Array) -> float:
 		var q: Vector2 = poly[(i + 1) % n]
 		sum += p.x * q.y - q.x * p.y
 	return absf(sum) * 0.5
+	
+func _trace_pair_contact_crossings(tag: String, duration_sec: float = KPHYS_TRACE_DURATION_SEC) -> void:
+	if not DEBUG_PAIR_CONTACT_CROSSINGS:
+		return
+
+	_pair_contact_state.clear()
+
+	var start_ms: int = Time.get_ticks_msec()
+	var frame_idx: int = 0
+	var prev_positions: Dictionary = {}
+	var prev_velocities: Dictionary = {}
+	var prev_angular_velocities: Dictionary = {}
+
+	_replay_trace_start_ms = start_ms
+	_replay_trace_start_physics_frame = Engine.get_physics_frames()
+
+	print("[PAIR_CONTACT_TRACE_START]",
+		" tag=", tag,
+		" duration=", duration_sec,
+		" enter_dist=", PAIR_CONTACT_ENTER_DIST,
+		" exit_dist=", PAIR_CONTACT_EXIT_DIST
+	)
+
+	while float(Time.get_ticks_msec() - start_ms) / 1000.0 < duration_sec:
+		await get_tree().physics_frame
+		frame_idx += 1
+
+		var elapsed_ms: int = Time.get_ticks_msec() - start_ms
+		var pieces: Array[RigidBody2D] = []
+		var cur_positions: Dictionary = {}
+		var cur_velocities: Dictionary = {}
+		var cur_angular_velocities: Dictionary = {}
+
+		for n in piece_container.get_children():
+			if n is RigidBody2D and n.has_meta("player") and not n.get_meta("dying", false):
+				var rb := n as RigidBody2D
+				pieces.append(rb)
+				cur_positions[rb.get_instance_id()] = rb.position
+				cur_velocities[rb.get_instance_id()] = rb.linear_velocity
+				cur_angular_velocities[rb.get_instance_id()] = rb.angular_velocity
+
+		for i in range(pieces.size()):
+			for j in range(i + 1, pieces.size()):
+				var a := pieces[i]
+				var b := pieces[j]
+
+				if not is_instance_valid(a) or not is_instance_valid(b):
+					continue
+
+				var ida: int = a.get_instance_id()
+				var idb: int = b.get_instance_id()
+				var key: String = str(mini(ida, idb)) + ":" + str(maxi(ida, idb))
+
+				var delta: Vector2 = b.position - a.position
+				var dist: float = delta.length()
+				var was_inside: bool = bool(_pair_contact_state.get(key, false))
+
+				var contact_normal: Vector2 = delta.normalized() if dist > 0.0001 else Vector2.RIGHT
+				var contact_a = null
+				var contact_b = null
+				var hit_t: float = 1.0
+				var swept_hit := false
+
+				if prev_positions.has(ida) and prev_positions.has(idb):
+					var prev_a: Vector2 = prev_positions[ida]
+					var prev_b: Vector2 = prev_positions[idb]
+
+					var move_a: Vector2 = a.position - prev_a
+					var move_b: Vector2 = b.position - prev_b
+
+					var rel_start: Vector2 = prev_b - prev_a
+					var rel_move: Vector2 = move_b - move_a
+
+					var qa: float = rel_move.dot(rel_move)
+					var qb: float = 2.0 * rel_start.dot(rel_move)
+					var qc: float = rel_start.dot(rel_start) - IOS_PIECE_DIAMETER_PX * IOS_PIECE_DIAMETER_PX
+					var disc: float = qb * qb - 4.0 * qa * qc
+
+					if qa > 0.000001 and disc >= 0.0:
+						var t_raw: float = (-qb - sqrt(disc)) / (2.0 * qa)
+
+						if t_raw >= 0.0 and t_raw <= 1.0:
+							swept_hit = true
+							hit_t = clamp(t_raw, 0.0, 1.0)
+
+							contact_a = prev_a + move_a * hit_t
+							contact_b = prev_b + move_b * hit_t
+
+							var swept_delta: Vector2 = contact_b - contact_a
+							if swept_delta.length() > 0.0001:
+								contact_normal = swept_delta.normalized()
+
+				var is_inside: bool = swept_hit or dist <= PAIR_CONTACT_ENTER_DIST
+
+				if is_inside and not was_inside:
+					_pair_contact_state[key] = true
+
+					if MANUAL_PIECE_COLLISIONS:
+						var pre_va: Vector2 = prev_velocities.get(ida, a.linear_velocity)
+						var pre_vb: Vector2 = prev_velocities.get(idb, b.linear_velocity)
+						var pre_wa: float = float(prev_angular_velocities.get(ida, a.angular_velocity))
+						var pre_wb: float = float(prev_angular_velocities.get(idb, b.angular_velocity))
+
+						print("[IOS_MANUAL_COLLISION_CALL]",
+							" frame=", frame_idx,
+							" hit_t=", String.num(hit_t, 6),
+							" swept_hit=", swept_hit,
+							" raw_dist=", String.num(dist, 6),
+							" contact_a=", contact_a,
+							" contact_b=", contact_b,
+							" pre_va=", pre_va,
+							" pre_vb=", pre_vb,
+							" pre_wa=", String.num(pre_wa, 6),
+							" pre_wb=", String.num(pre_wb, 6)
+						)
+
+						_apply_ios_piece_collision(a, b, contact_normal, contact_a, contact_b, pre_va, pre_vb, pre_wa, pre_wb, hit_t)
+					else:
+						print("[IOS_MANUAL_COLLISION_DISABLED]")
+
+					_print_pair_crossing("ENTER", tag, frame_idx, elapsed_ms, a, b, dist)
+
+				elif was_inside and dist <= PAIR_CONTACT_EXIT_DIST:
+					_print_pair_crossing("HOLD", tag, frame_idx, elapsed_ms, a, b, dist)
+
+				elif was_inside and dist > PAIR_CONTACT_EXIT_DIST:
+					_pair_contact_state[key] = false
+					_print_pair_crossing("EXIT", tag, frame_idx, elapsed_ms, a, b, dist)
+
+		prev_positions = cur_positions
+		prev_velocities = cur_velocities
+		prev_angular_velocities = cur_angular_velocities
+		
+func _print_pair_crossing(kind: String, tag: String, frame_idx: int, elapsed_ms: int, a: RigidBody2D, b: RigidBody2D, dist: float) -> void:
+	var delta: Vector2 = b.position - a.position
+	var normal: Vector2 = delta.normalized() if dist > 0.0001 else Vector2.RIGHT
+	var rel_v: Vector2 = b.linear_velocity - a.linear_velocity
+	var rel_n: float = rel_v.dot(normal)
+	var rel_t: float = rel_v.dot(normal.orthogonal())
+
+	print("[PAIR_CONTACT]",
+		" kind=", kind,
+		" tag=", tag,
+		" frame=", frame_idx,
+		" ms=", elapsed_ms,
+		" a=", a.name,
+		" b=", b.name,
+		" a_player=", int(a.get_meta("player", -1)),
+		" b_player=", int(b.get_meta("player", -1)),
+		" dist=", String.num(dist, 4),
+		" expected=", String.num(IOS_PIECE_DIAMETER_PX, 4),
+		" a_pos=", a.position,
+		" b_pos=", b.position,
+		" a_v=", String.num(a.linear_velocity.length(), 4),
+		" b_v=", String.num(b.linear_velocity.length(), 4),
+		" a_vel=", a.linear_velocity,
+		" b_vel=", b.linear_velocity,
+		" a_av=", String.num(a.angular_velocity, 6),
+		" b_av=", String.num(b.angular_velocity, 6),
+		" rel_n=", String.num(rel_n, 6),
+		" rel_t=", String.num(rel_t, 6)
+	)
 
 func _texrect_draw_rect(texr: TextureRect, img: Image) -> Rect2:
 	var tex_size: Vector2 = Vector2.ZERO
@@ -282,13 +501,6 @@ func _style_button(btn: Button, base: Color) -> void:
 	btn.add_theme_stylebox_override("disabled", disabled)
 	btn.add_theme_color_override("font_color", Color.WHITE)
 
-func _aim_label_base_color() -> Color:
-	if map_mode == 2:
-		return SEND_RED
-	if map_mode == 3:
-		return SEND_GREEN
-	return SEND_WHITE
-
 func _arrow_color_for_piece(piece: Node) -> Color:
 	if int(piece.get_meta("player", -1)) == 2:
 		return ARROW_COLOR_PLAYER2
@@ -311,13 +523,6 @@ func _apply_arrow_color_for_current_map() -> void:
 			arrow.modulate = _arrow_color_for_piece(piece)
 			arrow.modulate.a = old_alpha
 			
-func _apply_send_button_color_for_current_map() -> void:
-	if not is_instance_valid(send_button): return
-	if map_mode == 2:
-		_style_button(send_button, SEND_RED)
-	elif map_mode == 3:
-		_style_button(send_button, SEND_GREEN)
-
 func _can_show_aim_ui() -> bool:
 	return (
 		is_my_turn
@@ -337,7 +542,12 @@ func _update_aim_instruction_label() -> void:
 		_aim_instruction_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		_aim_instruction_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_aim_instruction_label.add_theme_font_size_override("font_size", 28)
-		_aim_instruction_label.add_theme_color_override("font_color", _aim_label_base_color())
+		var label_color: Color = SEND_WHITE
+		if map_mode == 2:
+			label_color = SEND_RED
+		elif map_mode == 3:
+			label_color = SEND_GREEN
+		_aim_instruction_label.add_theme_color_override("font_color", label_color)
 		_aim_instruction_label.z_as_relative = false
 		_aim_instruction_label.z_index = Z_TEXT
 		_aim_instruction_label.visible = false
@@ -369,12 +579,61 @@ func _update_aim_instruction_label() -> void:
 	else:
 		_aim_instruction_label.visible = false
 		_aim_instruction_label.modulate.a = 0.0
+		
+func _trace_nearest_piece_pairs(tag: String, duration_sec: float = KPHYS_TRACE_DURATION_SEC) -> void:
+	if not DEBUG_PIECE_CONTACTS:
+		return
+
+	var start_ms: int = Time.get_ticks_msec()
+
+	while float(Time.get_ticks_msec() - start_ms) / 1000.0 < duration_sec:
+		await get_tree().physics_frame
+
+		var elapsed_ms: int = Time.get_ticks_msec() - start_ms
+		var pieces: Array[RigidBody2D] = []
+
+		for n in piece_container.get_children():
+			if n is RigidBody2D and n.has_meta("player") and not n.get_meta("dying", false):
+				pieces.append(n)
+
+		var best_a: RigidBody2D = null
+		var best_b: RigidBody2D = null
+		var best_dist: float = INF
+
+		for i in range(pieces.size()):
+			for j in range(i + 1, pieces.size()):
+				var a := pieces[i]
+				var b := pieces[j]
+				if not is_instance_valid(a) or not is_instance_valid(b):
+					continue
+
+				var d: float = a.position.distance_to(b.position)
+				if d < best_dist:
+					best_dist = d
+					best_a = a
+					best_b = b
+
+		if best_a != null and best_b != null and best_dist < 40.0:
+			print("[PAIR_DIST]",
+				" tag=", tag,
+				" ms=", elapsed_ms,
+				" a=", best_a.name,
+				" b=", best_b.name,
+				" a_player=", int(best_a.get_meta("player", -1)),
+				" b_player=", int(best_b.get_meta("player", -1)),
+				" dist=", String.num(best_dist, 4),
+				" ios_expected=", String.num(IOS_PIECE_DIAMETER_PX, 4),
+				" effective_expected=", String.num(PIECE_DIAMETER_PX, 4),
+				" a_pos=", best_a.position,
+				" b_pos=", best_b.position,
+				" a_v=", String.num(best_a.linear_velocity.length(), 4),
+				" b_v=", String.num(best_b.linear_velocity.length(), 4)
+			)
 
 # Rebuild base polygons from the image ONCE (or when the texture/map changes).
 func _rebuild_base_polys_from_png(alpha_threshold: float = 0.1, simplify_epsilon: float = 1.5) -> void:
 	_base_iceberg_poly.clear()
 	_base_hole_polys.clear()
-	print("274 Call")
 	var texrect := _get_texrect()
 	if not is_instance_valid(texrect) or texrect.texture == null:
 		print("[POLY] No TextureRect/texture; skipping build")
@@ -483,8 +742,7 @@ func _refresh_safe_polys_for_transform() -> void:
 		if safe_zone_polygon is Polygon2D:
 			safe_zone_polygon.color = Color(0, 1, 0, 0.10)
 
-	_build_safe_area(final_poly)
-	_build_hole_areas(hole_locals)
+	_destroy_safe_hole_areas()
 
 	if _kill_debug_showing:
 		_ensure_kill_overlay()
@@ -532,7 +790,7 @@ func _destroy_safe_hole_areas() -> void:
 	_hole_polys.clear()
 
 func _build_safe_area(poly: PackedVector2Array) -> void:
-	if not is_instance_valid(board_zoom): return
+	return
 
 	# Create once
 	if not is_instance_valid(_safe_area):
@@ -562,7 +820,7 @@ func _build_safe_area(poly: PackedVector2Array) -> void:
 
 
 func _build_hole_areas(hole_polys: Array[PackedVector2Array]) -> void:
-	# Grow / create
+	return
 	while _hole_areas.size() < hole_polys.size():
 		var a := Area2D.new()
 		a.name = "HoleArea_%d" % _hole_areas.size()
@@ -600,32 +858,28 @@ func _build_hole_areas(hole_polys: Array[PackedVector2Array]) -> void:
 		_hole_polys   = _hole_polys.slice(0, hole_polys.size())
 
 func _on_safe_area_body_exited(body: Node) -> void:
-	if _loading_board_data or not _kill_detection_enabled:
+	if DISABLE_KILL_ZONES_FOR_COLLISION_TUNING or _loading_board_data or not _kill_detection_enabled:
 		return
 	if body is RigidBody2D and body.get_parent() == piece_container:
-		if DEBUG_KILL: print("[KILL] SafeArea.body_exited →", body.name)
-		_safe_kill(body)
+		if DEBUG_KILL:
+			print("[KILL_CHECK] SafeArea.body_exited -> ", body.name)
+		call_deferred("_fallback_kill_pass")
 
 func _on_hole_body_entered(body: Node) -> void:
-	if _loading_board_data or not _kill_detection_enabled:
+	if DISABLE_KILL_ZONES_FOR_COLLISION_TUNING or _loading_board_data or not _kill_detection_enabled:
 		return
 	if body is RigidBody2D and body.get_parent() == piece_container:
-		if DEBUG_KILL: print("[KILL] HoleArea.body_entered →", body.name)
-		_safe_kill(body)
+		if DEBUG_KILL:
+			print("[KILL_CHECK] HoleArea.body_entered -> ", body.name)
+		call_deferred("_fallback_kill_pass")
 
 func _on_water_kill_body_entered(body: Node) -> void:
-	if _loading_board_data or not _kill_detection_enabled:
+	if DISABLE_KILL_ZONES_FOR_COLLISION_TUNING or _loading_board_data or not _kill_detection_enabled:
 		return
 	if body is RigidBody2D and body.get_parent() == piece_container:
-		if DEBUG_KILL: print("[KILL] Water.body_entered →", body.name)
-		_safe_kill(body)
-		
-func _apply_piece_container_scale_for_board() -> void:
-	if not is_instance_valid(piece_container):
-		return
-
-	piece_container.scale = Vector2.ONE
-	_resync_piece_sprite_sizes()
+		if DEBUG_KILL:
+			print("[KILL_CHECK] Water.body_entered -> ", body.name)
+		call_deferred("_fallback_kill_pass")
 	
 func _target_scale_for_index(i: int) -> float:
 	return _board_scale_for_index(i)
@@ -846,42 +1100,43 @@ func _unhandled_input(event: InputEvent) -> void:
 			_set_kill_debug_visible(not _kill_debug_showing)
 
 func _fallback_kill_pass() -> void:
+	if DISABLE_KILL_ZONES_FOR_COLLISION_TUNING or not _kill_detection_enabled:
+		return
 	if _loading_board_data or _last_safe_poly.is_empty() or not is_instance_valid(board_zoom):
 		return
+
 	var to_bz: Transform2D = board_zoom.get_global_transform().affine_inverse()
+
 	for n in piece_container.get_children():
-		if not (n is RigidBody2D): continue
-		if n.get_meta("dying", false): continue
-		var p_bz: Vector2 = to_bz * (n as Node2D).global_position
-		var in_safe: bool = Geometry2D.is_point_in_polygon(p_bz, _last_safe_poly)
-		var in_hole: bool = false
+		if not (n is RigidBody2D):
+			continue
+		if n.get_meta("dying", false):
+			continue
+
+		var rb := n as RigidBody2D
+		var center_bz: Vector2 = to_bz * rb.global_position
+
+		var center_in_safe := Geometry2D.is_point_in_polygon(center_bz, _last_safe_poly)
+
+		var center_in_hole := false
 		for hp in _last_hole_polys_cached:
-			if not hp.is_empty() and Geometry2D.is_point_in_polygon(p_bz, hp):
-				in_hole = true
+			if hp.is_empty():
+				continue
+			if Geometry2D.is_point_in_polygon(center_bz, hp):
+				center_in_hole = true
 				break
-		if (not in_safe) or in_hole:
+
+		if (not center_in_safe) or center_in_hole:
 			if DEBUG_KILL:
-				print("[KILL] fallback → ", n.name, " in_safe=", in_safe, " in_hole=", in_hole, " pos=", p_bz)
-			_safe_kill(n)
-			
-func _align_piece_container_to_texrect() -> void:
-	_ensure_piece_container_hosted_in_board_zoom()
-	
-func _get_poly_bounds(poly: PackedVector2Array) -> Rect2:
-	if poly.is_empty():
-		return Rect2()
+				print("[KILL] center fallback -> ", rb.name,
+					" center_in_safe=", center_in_safe,
+					" center_in_hole=", center_in_hole,
+					" center=", center_bz,
+					" pos=", rb.position
+				)
 
-	var min_pos := poly[0]
-	var max_pos := poly[0]
-	for i in range(1, poly.size()):
-		var p := poly[i]
-		min_pos.x = min(min_pos.x, p.x)
-		min_pos.y = min(min_pos.y, p.y)
-		max_pos.x = max(max_pos.x, p.x)
-		max_pos.y = max(max_pos.y, p.y)
-
-	return Rect2(min_pos, max_pos - min_pos)
-	
+			_safe_kill(rb)
+				
 func _poly_inside_other(inner: PackedVector2Array, outer: PackedVector2Array) -> bool:
 	for p in inner:
 		if not Geometry2D.is_point_in_polygon(p, outer):
@@ -1017,11 +1272,31 @@ func _ensure_board_scaler() -> void:
 	print("[SHRINK] BoardScaler injected.")
 	
 func _ready():
+	Engine.physics_ticks_per_second = 60
 	modulate.a = 0.0
 
-	# Wait a single frame for the viewport size to be accurate before we do any calculations.
+	print("[PHYS_CHECK] PhysicsServer2D=", PhysicsServer2D.get_class())
+	print("[KNOCK_BUILD_MARKER]",
+		" box2d_native=true",
+		" manual_collisions=", MANUAL_PIECE_COLLISIONS,
+		" radius=", IOS_PIECE_RADIUS_PX,
+		" diameter=", IOS_PIECE_DIAMETER_PX,
+		" visual_size=", IOS_PENGUIN_VISUAL_SIZE,
+		" mass=", PIECE_MASS,
+		" inertia=", PIECE_INERTIA_PX,
+		" friction=", FRICTION,
+		" restitution=", RESTITUTION,
+		" density=", DENSITY,
+		" linear_damp=", LINEAR_DAMP,
+		" angular_damp=", ANGULAR_DAMP,
+		" ccd=", CCD_MODE,
+		" can_sleep=", CAN_SLEEP
+	)
+	_dump_physics_project_settings()
+
+	# Wait a single frame for the viewport size to be accurate before layout math.
 	await get_tree().process_frame
-	Engine.physics_ticks_per_second = 60
+
 	# 1. Dynamically set the board's target size based on the screen width.
 	_recalc_board_base_scale_factor()
 
@@ -1115,8 +1390,11 @@ func _ready():
 	_seed_area_overlaps()
 
 func _seed_area_overlaps() -> void:
-	if not is_instance_valid(_safe_area): return
-	# Touch the overlap list so the physics server evaluates it this frame
+	if not is_instance_valid(_safe_area):
+		return
+	if not _safe_area.monitoring:
+		return
+
 	_safe_area.get_overlapping_bodies()
 
 func _apply_bg_for_dark(is_dark: bool) -> void:
@@ -1137,7 +1415,7 @@ func _animate_and_fire_from_current_arrows() -> void:
 	for p in pieces:
 		var ang_deg: float = float(p.get_meta("shoot_dir", 0.0))
 		var pow_px: float = float(p.get_meta("power", 0.0))
-		_set_piece_arrow_from_data(p, deg_to_rad(ang_deg), pow_px, 0.22)
+		_set_piece_arrow_from_data(p, deg_to_rad(ang_deg), pow_px, IOS_ARROW_SHOT_FADE_SEC)
 
 	await get_tree().create_timer(0.5).timeout
 
@@ -1155,6 +1433,9 @@ func _animate_and_fire_from_current_arrows() -> void:
 		var ang_deg: float = float(p.get_meta("shoot_dir", 0.0))
 		var pow_px: float = float(p.get_meta("power", 0.0))
 		_fire_piece_from_arrow(p, deg_to_rad(ang_deg), pow_px)
+
+	_trace_pair_contact_crossings("local", KPHYS_TRACE_DURATION_SEC)
+	await _trace_all_piece_motion("local", KPHYS_TRACE_DURATION_SEC)
 
 	await _wait_for_pieces_to_settle(10.0, 8, IOS_STOP_LINEAR_SPEED, IOS_STOP_ANGULAR_SPEED)
 	
@@ -1174,7 +1455,7 @@ func _stage_after_local_play(next_idx: int) -> void:
 			rb.angular_velocity = 0.0
 			rb.freeze = false
 
-	_hide_all_arrows_and_refresh_highlights()
+	_hide_all_arrows_and_refresh_highlights(false)
 
 	var will_shrink := _clamp_board_index(next_idx) != _clamp_board_index(_current_board_index)
 	if will_shrink:
@@ -1182,8 +1463,8 @@ func _stage_after_local_play(next_idx: int) -> void:
 
 	await _tween_board_index_to(next_idx, 0.42)
 
-	if will_shrink and _kill_detection_enabled == false:
-		_set_kill_detection_enabled(true)
+	if _kill_detection_enabled == false:
+		_set_kill_detection_enabled(not game_over)
 
 	_is_zooming = false
 	_staged_launch_mode = true
@@ -1192,6 +1473,11 @@ func _stage_after_local_play(next_idx: int) -> void:
 	_update_piece_interactivity()
 	call_deferred("_apply_turn_highlights_based_on_arrows")
 	_recompute_send_button_visibility()
+	print("[LOCAL_STAGE_BOARD]",
+		" next_idx=", _staged_next_index,
+		" replay_board=", _serialize_current_board(_staged_next_index, false, true)
+	)
+	_trace_live_positions_after_shrink("local_stage_after_shrink")
 	
 func _set_game_data(new_game_data_json: String):
 	var parsed = JSON.parse_string(new_game_data_json)
@@ -1212,7 +1498,19 @@ func _set_game_data(new_game_data_json: String):
 	var data: Dictionary = parsed
 	is_your_turn = data.get("isYourTurn", false)
 	print("INCOMING RAW DATA: ", data)
+
+	_last_received_num = int(str(data.get("num", _last_received_num)))
+
 	var replay_str: String = data.get("replay", "")
+
+	if DEBUG_COLLISION_LAB:
+		replay_str = COLLISION_LAB_REPLAY
+		data["replay"] = replay_str
+		print("[COLLISION_LAB_RECEIVE] forcing local parse replay=", replay_str)
+	elif DEBUG_FORCE_HARD_IOS_REPLAY_ON_RECEIVE:
+		replay_str = HARD_IOS_REPLAY
+		data["replay"] = replay_str
+		print("[HARD_IOS_REPLAY_RECEIVE] forcing local parse replay=", replay_str)
 	var player1_id: String = str(data.get("player1", ""))
 	var player2_id: String = str(data.get("player2", ""))
 	my_player_id = str(data.get("myPlayerId", ""))
@@ -1293,7 +1591,24 @@ func _set_game_data(new_game_data_json: String):
 
 	if replay_str == "":
 		modulate.a = 1.0
+		
+func _apply_hardcoded_ios_replay_to_payload(payload: Dictionary, why: String) -> void:
+	if not DEBUG_FORCE_HARD_IOS_REPLAY_ON_SEND:
+		return
 
+	_last_received_num += 1
+
+	payload["replay"] = COLLISION_LAB_IOS_SEND_REPLAY
+	payload["num"] = str(_last_received_num)
+	payload["game"] = "knock"
+	payload["mode"] = str(map_mode)
+
+	print("[COLLISION_LAB_IOS_SEND]",
+		" why=", why,
+		" num=", payload["num"],
+		" replay=", payload["replay"]
+	)
+	
 func send_game() -> void:
 	print("[Send] send_game() called")
 	_stop_all_highlights()
@@ -1338,6 +1653,8 @@ func send_game() -> void:
 		if game_ended and win_loss_state != "":
 			payload["winner"] = my_player_id + "|" + win_loss_state
 
+		_apply_hardcoded_ios_replay_to_payload(payload, "staged_finalize")
+
 		var appPlugin := Engine.get_singleton("AppPlugin")
 		if appPlugin:
 			appPlugin.updateGameData(JSON.stringify(payload))
@@ -1363,17 +1680,29 @@ func send_game() -> void:
 		" | current_idx=", _current_board_index,
 		" | has_last_pre=", not last_pre_round.is_empty()
 	)
+	
+	print("[LOCAL_STAGE_READY_CHECK]",
+		" staged=", _staged_launch_mode,
+		" my_ready=", my_ready,
+		" opp_ready=", opp_ready,
+		" all_my_arrows=", _all_my_arrows_visible(),
+		" all_my_power=", _all_my_piece_powers_nonzero(),
+		" opp_arrows_nonzero=", _all_opponent_arrows_nonzero(),
+		" current_idx=", _current_board_index
+	)
 
 	# If EVERYONE has set arrows, we do the local play NOW, then let user re-aim.
 	if my_ready and opp_ready:
 		# 1) Capture the initial board (with current aims) as the first segment.
 		_staged_pre_board_str = _serialize_current_board(_current_board_index, false, true)
+		var shot_meta_before_fire: Dictionary = _capture_piece_shot_meta()
 
 		# 2) Play locally (animate + physics)
 		_replay_in_progress = true
 		_update_piece_interactivity()
 		_recompute_send_button_visibility()
 		await _animate_and_fire_from_current_arrows()
+		_restore_piece_shot_meta(shot_meta_before_fire)
 		_replay_in_progress = false
 		
 		if check_win():
@@ -1402,6 +1731,14 @@ func send_game() -> void:
 	if game_ended and win_loss_state != "":
 		payload2["winner"] = my_player_id + "|" + win_loss_state
 
+	_apply_hardcoded_ios_replay_to_payload(payload2, "fallback_send")
+	if DEBUG_FORCE_HARD_IOS_REPLAY_ON_SEND:
+		payload2 = {
+			"replay": "board:0#-60.000000,0.000000,1,0.000000,0.000000,80.000000#40.000000,0.000000,2,0.000000,0.000000,0.000000|shoot:1|board:0#-60.000000,0.000000,1,0.000000,0.000000,80.000000#40.000000,0.000000,2,0.000000,0.000000,0.000001",
+			"avatar1": "fshape,0|fshape_color,0.874510,0.674510,0.411765|body,0|body_color,0.874510,0.674510,0.411765|hair,0|hair_color,0.164706,0.137255,0.164706|eyes,0|mouth,0|clothes,0|clothes_color,0.627451,0.231373,0.231373|bg_color,0.301961,0.364706,0.537255|backdrop,3"
+		}
+
+	print("[COLLISION_LAB_DIRECT_SEND] payload2=", payload2)
 	print("[Send] PAYLOAD: ", payload2)
 	var appPlugin2 := Engine.get_singleton("AppPlugin")
 	if appPlugin2:
@@ -1442,11 +1779,23 @@ func _build_replay_string() -> String:
 
 func _serialize_current_board(board_idx: int, zero_power: bool, include_index: bool = true) -> String:
 	var parts := PackedStringArray()
+	var pieces: Array[RigidBody2D] = []
 
 	for n in piece_container.get_children():
-		if not (n is RigidBody2D): continue
-		if n.has_meta("dying") and n.get_meta("dying"): continue
+		if not (n is RigidBody2D):
+			continue
+		if n.has_meta("dying") and n.get_meta("dying"):
+			continue
+		if not n.has_meta("player"):
+			continue
 
+		pieces.append(n as RigidBody2D)
+
+	pieces.sort_custom(func(a: RigidBody2D, b: RigidBody2D) -> bool:
+		return int(a.get_meta("trace_id", 9999)) < int(b.get_meta("trace_id", 9999))
+	)
+
+	for n in pieces:
 		var b := n as Node2D
 		var pos: Vector2 = b.position
 		var owner_id := int(n.get_meta("player", -1))
@@ -1469,6 +1818,39 @@ func _serialize_current_board(board_idx: int, zero_power: bool, include_index: b
 	var header := "board:" + (str(board_idx) if include_index else "")
 	return "%s%s%s" % [header, "#" if body.length() > 0 else "", body]
 	
+func _capture_piece_shot_meta() -> Dictionary:
+	var out: Dictionary = {}
+
+	for n in piece_container.get_children():
+		if not (n is RigidBody2D):
+			continue
+		if not n.has_meta("trace_id"):
+			continue
+
+		var trace_id: int = int(n.get_meta("trace_id", -1))
+		out[trace_id] = {
+			"shoot_dir": float(n.get_meta("shoot_dir", 0.0)),
+			"power": float(n.get_meta("power", 0.0))
+		}
+
+	return out
+
+
+func _restore_piece_shot_meta(meta_by_trace_id: Dictionary) -> void:
+	for n in piece_container.get_children():
+		if not (n is RigidBody2D):
+			continue
+		if not n.has_meta("trace_id"):
+			continue
+
+		var trace_id: int = int(n.get_meta("trace_id", -1))
+		if not meta_by_trace_id.has(trace_id):
+			continue
+
+		var d: Dictionary = meta_by_trace_id[trace_id]
+		n.set_meta("shoot_dir", float(d.get("shoot_dir", n.get_meta("shoot_dir", 0.0))))
+		n.set_meta("power", float(d.get("power", n.get_meta("power", 0.0))))
+	
 func _all_opponent_arrows_nonzero() -> bool:
 	var any := false
 	for n in piece_container.get_children():
@@ -1479,10 +1861,6 @@ func _all_opponent_arrows_nonzero() -> bool:
 		if float(n.get_meta("power", 0.0)) <= 0.0:
 			return false
 	return any  # true only if there was at least one opponent piece and none had zero power
-	
-func _other_player_id() -> int:
-	return 2 if player == 1 else 1
-
 
 func _next_board_index_after_round(from_idx: int) -> int:
 	return int(max(0, from_idx)) + 1
@@ -1509,12 +1887,6 @@ func _board_player_power_state(bd: Dictionary, owner_id: int) -> Dictionary:
 		"any_power": any_power,
 		"all_power": any_piece and all_power
 	}
-
-
-func _board_all_players_powered(bd: Dictionary) -> bool:
-	var p1 := _board_player_power_state(bd, 1)
-	var p2 := _board_player_power_state(bd, 2)
-	return bool(p1["all_power"]) and bool(p2["all_power"])
 
 func _all_my_arrows_visible() -> bool:
 	var mine := _owned_live_pieces()
@@ -1591,7 +1963,13 @@ func parse_replay_string(replay: String, data_seq: int = -1) -> void:
 	last_pending_setup_round = {}
 
 	var pre_idx := int(last_pre_round.get("round", 0))
-	var complete_board_without_shoot := (not shoot_flag) and _board_all_players_powered(last_pre_round)
+	var p1_pre_state: Dictionary = _board_player_power_state(last_pre_round, 1)
+	var p2_pre_state: Dictionary = _board_player_power_state(last_pre_round, 2)
+	var complete_board_without_shoot := (
+		(not shoot_flag)
+		and bool(p1_pre_state["all_power"])
+		and bool(p2_pre_state["all_power"])
+	)
 
 	if complete_board_without_shoot:
 		last_post_round = {}
@@ -1624,7 +2002,8 @@ func parse_replay_string(replay: String, data_seq: int = -1) -> void:
 
 	_dbg_board_state("parse after pre_idx apply")
 
-	await _setup_board_from_board_dict(last_pre_round)
+	var pre_pieces: Array = last_pre_round.get("pieces", [])
+	await _setup_board_from_data(pre_pieces)
 	if _is_stale_data_seq(data_seq):
 		return
 
@@ -1769,14 +2148,20 @@ func _animate_send_button(should_show: bool) -> void:
 			)
 			
 func _set_kill_detection_enabled(on: bool) -> void:
+	if DISABLE_KILL_ZONES_FOR_COLLISION_TUNING:
+		on = false
+
 	_kill_detection_enabled = on
+
 	if is_instance_valid(_safe_area):
 		_safe_area.set_deferred("monitoring", on)
 		_safe_area.set_deferred("monitorable", on)
+
 	for a in _hole_areas:
 		if is_instance_valid(a):
 			a.set_deferred("monitoring", on)
 			a.set_deferred("monitorable", on)
+
 	for a in _water_kill_areas:
 		if is_instance_valid(a):
 			a.set_deferred("monitoring", on)
@@ -1871,11 +2256,13 @@ func _apply_map_theme(mode: int) -> void:
 		_clear_mushrooms()
 
 	_apply_arrow_color_for_current_map()
-	_apply_send_button_color_for_current_map()
-
-func _setup_board_from_board_dict(bd: Dictionary) -> void:
-	var arr: Array = bd.get("pieces", [])
-	await _setup_board_from_data(arr)
+	if is_instance_valid(send_button):
+		if map_mode == 2:
+			_style_button(send_button, SEND_RED)
+		elif map_mode == 3:
+			_style_button(send_button, SEND_GREEN)
+		else:
+			_style_button(send_button, SEND_BLUE)
 	
 func _apply_aim_data_from_board_dict(bd: Dictionary, show_arrows: bool = false) -> void:
 	var arr: Array = bd.get("pieces", [])
@@ -1897,7 +2284,7 @@ func _apply_aim_data_from_board_dict(bd: Dictionary, show_arrows: bool = false) 
 		var should_show_arrow := show_arrows and power_val > 0.5
 
 		if should_show_arrow:
-			_set_piece_arrow_from_data(piece, shoot_dir_rad, power_val, 0.18)
+			_set_piece_arrow_from_data(piece, shoot_dir_rad, power_val, IOS_ARROW_SHOT_FADE_SEC)
 		else:
 			if arrow:
 				arrow.visible = false
@@ -1923,21 +2310,33 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 		if child == _mushroom_layer:
 			continue
 		if child is RigidBody2D and child.has_meta("player"):
-			child.queue_free()
-	await get_tree().process_frame
+			var old_rb := child as RigidBody2D
+			old_rb.contact_monitor = false
+			old_rb.collision_layer = 0
+			old_rb.collision_mask = 0
+			old_rb.freeze = true
+			old_rb.linear_velocity = Vector2.ZERO
+			old_rb.angular_velocity = 0.0
+			old_rb.queue_free()
 
-	for piece_data in board_data:
+	await get_tree().physics_frame
+
+	for i in range(board_data.size()):
+		var piece_data: Dictionary = board_data[i]
 		var piece_instance: RigidBody2D = PieceScene.instantiate()
 
-		# Ownership / pose
+		# Ownership / identity / pose
 		var player_num: int = int(piece_data.get("player", 1))
 		piece_instance.set_meta("player", player_num)
+		piece_instance.set_meta("trace_id", i)
+		piece_instance.name = "Piece_%02d_P%d" % [i, player_num]
 
 		var raw_pos: Vector2 = piece_data.get("pos", Vector2.ZERO)
 		piece_instance.position = raw_pos
 		piece_instance.rotation = float(piece_data.get("rotation", 0.0))
 
-		# Cache arrows from incoming data (keep visuals hidden unless we’re replaying)
+		# Cache arrows from incoming data.
+		# Keep visuals hidden unless we are replaying.
 		var sd_rad := float(piece_data.get("shoot_dir", 0.0))
 		var pow_px := float(piece_data.get("power", 0.0))
 		piece_instance.set_meta("shoot_dir", rad_to_deg(sd_rad))
@@ -1945,7 +2344,7 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 
 		# Collisions
 		piece_instance.collision_layer = 1
-		piece_instance.collision_mask  = 1
+		piece_instance.collision_mask = 0 if MANUAL_PIECE_COLLISIONS else 1
 		piece_instance.add_to_group("pieces")
 
 		# Visuals
@@ -1959,14 +2358,21 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 				sprite.z_as_relative = true
 				sprite.z_index = 1
 
-		var collision_shape := piece_instance.find_child("CollisionShape2D", true, false) as CollisionShape2D
-		if collision_shape and collision_shape.shape is CircleShape2D:
-			(collision_shape.shape as CircleShape2D).radius = PIECE_RADIUS_PX
+		piece_container.add_child(piece_instance)
+
+		# piece.gd _ready() runs when the node is added and resets collision_mask.
+		# Reapply this here so manual collision mode truly disables native piece collisions.
+		piece_instance.collision_layer = 1
+		piece_instance.collision_mask = 0 if MANUAL_PIECE_COLLISIONS else 1
+
+		var physics_scale: float = _motion_scale_for_piece(piece_instance)
+		var physics_radius: float = PIECE_RADIUS_PX
+		var physics_diameter: float = physics_radius * 2.0
 
 		if piece_instance.has_method("set_physics_params"):
 			piece_instance.set_physics_params({
 				"PPM": PPM,
-				"PIECE_RADIUS_PX": PIECE_RADIUS_PX,
+				"PIECE_RADIUS_PX": physics_radius,
 				"FRICTION": FRICTION,
 				"RESTITUTION": RESTITUTION,
 				"LINEAR_DAMP": LINEAR_DAMP,
@@ -1977,8 +2383,85 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 				"LOCK_ROTATION": LOCK_ROTATION,
 				"CAN_SLEEP": CAN_SLEEP
 			})
+			
+		# set_physics_params() calls piece.gd _apply_phys_now(), so lock this in again.
+		piece_instance.collision_layer = 1
+		piece_instance.collision_mask = 0 if MANUAL_PIECE_COLLISIONS else 1
 
-		piece_container.add_child(piece_instance)
+		piece_instance.mass = PIECE_MASS
+		piece_instance.inertia = PIECE_INERTIA_PX
+		piece_instance.freeze = false
+		piece_instance.can_sleep = CAN_SLEEP
+		piece_instance.sleeping = false
+		piece_instance.contact_monitor = DEBUG_CONTACT_SIGNALS
+		piece_instance.max_contacts_reported = 8
+		piece_instance.continuous_cd = CCD_MODE
+		print("[COLLISION_MODE_CHECK]",
+			" name=", piece_instance.name,
+			" manual=", MANUAL_PIECE_COLLISIONS,
+			" layer=", piece_instance.collision_layer,
+			" mask=", piece_instance.collision_mask
+		)
+
+		var body_shape := piece_instance.get_node_or_null("CollisionShape2D") as CollisionShape2D
+		if body_shape == null:
+			body_shape = CollisionShape2D.new()
+			body_shape.name = "CollisionShape2D"
+			piece_instance.add_child(body_shape)
+
+		body_shape.position = Vector2.ZERO
+		body_shape.rotation = 0.0
+		body_shape.scale = Vector2.ONE
+		body_shape.disabled = false
+
+		if not (body_shape.shape is CircleShape2D):
+			body_shape.shape = CircleShape2D.new()
+		else:
+			body_shape.shape = body_shape.shape.duplicate(true)
+
+		(body_shape.shape as CircleShape2D).radius = physics_radius
+
+		var pm := PhysicsMaterial.new()
+		pm.friction = FRICTION
+		pm.bounce = RESTITUTION
+		pm.rough = false
+		pm.absorbent = false
+		piece_instance.physics_material_override = pm
+		
+		print("[MATERIAL_CHECK]",
+			" name=", piece_instance.name,
+			" material=", piece_instance.physics_material_override,
+			" bounce=", piece_instance.physics_material_override.bounce if piece_instance.physics_material_override else -1.0,
+			" friction=", piece_instance.physics_material_override.friction if piece_instance.physics_material_override else -1.0
+		)
+
+		var contact_cb := Callable(self, "_on_piece_body_entered").bind(piece_instance)
+		if DEBUG_CONTACT_SIGNALS and not piece_instance.body_entered.is_connected(contact_cb):
+			piece_instance.body_entered.connect(contact_cb)
+
+		if DEBUG_PIECE_CONTACTS:
+			print("[PIECE_COLLIDER]",
+				" name=", piece_instance.name,
+				" trace_id=", i,
+				" player=", player_num,
+				" ios_radius=", IOS_PIECE_RADIUS_PX,
+				" ios_diameter=", IOS_PIECE_DIAMETER_PX,
+				" motion_scale=", String.num(physics_scale, 6),
+				" local_radius=", String.num(physics_radius, 6),
+				" local_diameter=", String.num(physics_diameter, 6),
+				" scaled_screen_diameter=", String.num(physics_diameter * physics_scale, 6),
+				" expected_local_contact_dist=", IOS_PIECE_DIAMETER_PX,
+				" mass=", piece_instance.mass,
+				" inertia=", String.num(piece_instance.inertia, 6),
+				" inertia_expected=", String.num(PIECE_INERTIA_PX, 6),
+				" angular_damp=", ANGULAR_DAMP,
+				" linear_damp=", LINEAR_DAMP,
+				" density=", DENSITY,
+				" bounce=", RESTITUTION,
+				" friction=", FRICTION,
+				" ccd=", CCD_MODE,
+				" contact_signals=", DEBUG_CONTACT_SIGNALS
+			)
 
 		var arrow := piece_instance.get_node_or_null("Arrow") as CanvasItem
 		if arrow:
@@ -1986,7 +2469,6 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 			arrow.z_index = Z_ARROWS
 			arrow.modulate = _arrow_color_for_piece(piece_instance)
 			arrow.modulate.a = 1.0
-			# Keep arrows hidden unless we’re animating a replay
 			arrow.visible = false
 
 		if piece_instance.has_method("set_controlled_by_me"):
@@ -1997,8 +2479,275 @@ func _setup_board_from_data(board_data: Array[Dictionary]) -> void:
 			piece_instance.connect("aim_changed", Callable(self, "_on_piece_aim_changed"))
 
 		call_deferred("_try_watch_arrow_for_piece", piece_instance)
+
 	_apply_piece_draw_order()
 	_apply_top_ui_draw_order()
+	
+func _trace_all_piece_motion(tag: String, duration_sec: float = KPHYS_TRACE_DURATION_SEC) -> void:
+	if not KPHYS_TRACE_ENABLED or not DEBUG_ALL_PIECE_TRACE:
+		return
+
+	var start_ms: int = Time.get_ticks_msec()
+	var frame_idx: int = 0
+
+	print("[KTRACE_ANDROID_ALL_START] tag=", tag)
+
+	while float(Time.get_ticks_msec() - start_ms) / 1000.0 < duration_sec:
+		await get_tree().physics_frame
+		frame_idx += 1
+
+		var elapsed_ms: int = Time.get_ticks_msec() - start_ms
+		var pieces: Array[RigidBody2D] = []
+
+		for n in piece_container.get_children():
+			if n is RigidBody2D and n.has_meta("player") and not n.get_meta("dying", false):
+				pieces.append(n)
+
+		pieces.sort_custom(func(a: RigidBody2D, b: RigidBody2D) -> bool:
+			return int(a.get_meta("trace_id", 9999)) < int(b.get_meta("trace_id", 9999))
+		)
+
+		for rb in pieces:
+			var motion_scale: float = maxf(0.0001, _motion_scale_for_piece(rb))
+			var trace_id: int = int(rb.get_meta("trace_id", -1))
+			var player_id: int = int(rb.get_meta("player", -1))
+			var shoot_dir_rad: float = deg_to_rad(float(rb.get_meta("shoot_dir", 0.0)))
+			var power_val: float = float(rb.get_meta("power", 0.0))
+
+			print("KTRACE_ANDROID_ALL,",
+				tag, ",",
+				frame_idx, ",",
+				elapsed_ms, ",",
+				trace_id, ",",
+				player_id, ",",
+				String.num(rb.position.x, 6), ",",
+				String.num(-rb.position.y, 6), ",",
+				String.num(rb.rotation, 6), ",",
+				String.num(rb.linear_velocity.x / motion_scale, 6), ",",
+				String.num(-rb.linear_velocity.y / motion_scale, 6), ",",
+				String.num(rb.linear_velocity.length() / motion_scale, 6), ",",
+				String.num(-rb.angular_velocity, 6), ",",
+				String.num(power_val, 6), ",",
+				String.num(-shoot_dir_rad, 6), ",",
+				rb.name
+			)
+			
+func _on_piece_body_entered(other: Node, self_piece: RigidBody2D) -> void:
+	if not is_instance_valid(self_piece):
+		return
+	if not (other is RigidBody2D):
+		return
+	if other.get_parent() != piece_container:
+		return
+	if not self_piece.has_meta("player") or not other.has_meta("player"):
+		return
+
+	var other_piece := other as RigidBody2D
+
+	# Godot usually emits body_entered from both bodies.
+	# Run/log only one direction so the collision does not get applied twice.
+	if self_piece.get_instance_id() > other_piece.get_instance_id():
+		return
+
+	if not DEBUG_CONTACT_SIGNALS:
+		return
+
+	var dist: float = self_piece.position.distance_to(other_piece.position)
+	var physics_scale: float = _motion_scale_for_piece(self_piece)
+	var expected_touch_dist: float = IOS_PIECE_DIAMETER_PX
+
+	var delta: Vector2 = other_piece.position - self_piece.position
+	var normal: Vector2 = delta.normalized() if dist > 0.0001 else Vector2.RIGHT
+	var tangent: Vector2 = normal.orthogonal()
+	var rel_v: Vector2 = other_piece.linear_velocity - self_piece.linear_velocity
+	var rel_n: float = rel_v.dot(normal)
+	var rel_t: float = rel_v.dot(tangent)
+
+	var self_trace_id: int = int(self_piece.get_meta("trace_id", -1))
+	var other_trace_id: int = int(other_piece.get_meta("trace_id", -1))
+
+	print("[GODOT_CONTACT_ENTER]",
+		" frame=", Engine.get_physics_frames() - _replay_trace_start_physics_frame,
+		" ms=", Time.get_ticks_msec() - _replay_trace_start_ms,
+		" self=", self_piece.name,
+		" other=", other_piece.name,
+		" self_trace_id=", self_trace_id,
+		" other_trace_id=", other_trace_id,
+		" self_player=", int(self_piece.get_meta("player", -1)),
+		" other_player=", int(other_piece.get_meta("player", -1)),
+		" dist_local=", String.num(dist, 6),
+		" expected_local=", String.num(expected_touch_dist, 6),
+		" penetration_local=", String.num(expected_touch_dist - dist, 6),
+		" motion_scale=", String.num(physics_scale, 6),
+		" dist_screen=", String.num(dist * physics_scale, 6),
+		" expected_screen=", String.num(expected_touch_dist * physics_scale, 6),
+		" self_pos=", self_piece.position,
+		" other_pos=", other_piece.position,
+		" self_v=", String.num(self_piece.linear_velocity.length(), 6),
+		" other_v=", String.num(other_piece.linear_velocity.length(), 6),
+		" self_vel=", self_piece.linear_velocity,
+		" other_vel=", other_piece.linear_velocity,
+		" self_v_ios=(", String.num(self_piece.linear_velocity.x / maxf(0.0001, physics_scale), 6), ", ", String.num(-self_piece.linear_velocity.y / maxf(0.0001, physics_scale), 6), ")",
+		" other_v_ios=(", String.num(other_piece.linear_velocity.x / maxf(0.0001, physics_scale), 6), ", ", String.num(-other_piece.linear_velocity.y / maxf(0.0001, physics_scale), 6), ")",
+		" self_av=", String.num(self_piece.angular_velocity, 6),
+		" other_av=", String.num(other_piece.angular_velocity, 6),
+		" self_av_ios=", String.num(-self_piece.angular_velocity, 6),
+		" other_av_ios=", String.num(-other_piece.angular_velocity, 6),
+		" rel_n=", String.num(rel_n, 6),
+		" rel_t=", String.num(rel_t, 6)
+	)
+	
+func _apply_ios_piece_collision(
+	a: RigidBody2D,
+	b: RigidBody2D,
+	forced_normal: Vector2 = Vector2.ZERO,
+	contact_a = null,
+	contact_b = null,
+	pre_va: Vector2 = Vector2.ZERO,
+	pre_vb: Vector2 = Vector2.ZERO,
+	pre_wa: float = 0.0,
+	pre_wb: float = 0.0,
+	hit_t: float = 1.0
+) -> void:
+	print("[IOS_MANUAL_COLLISION_ENTERED]",
+		" a_valid=", is_instance_valid(a),
+		" b_valid=", is_instance_valid(b),
+		" a=", a.name if is_instance_valid(a) else "null",
+		" b=", b.name if is_instance_valid(b) else "null",
+		" contact_a=", contact_a,
+		" contact_b=", contact_b,
+		" pre_va=", pre_va,
+		" pre_vb=", pre_vb,
+		" pre_wa=", String.num(pre_wa, 6),
+		" pre_wb=", String.num(pre_wb, 6),
+		" hit_t=", String.num(hit_t, 6)
+	)
+	if not is_instance_valid(a) or not is_instance_valid(b):
+		return
+	if not a.has_meta("player") or not b.has_meta("player"):
+		return
+
+	var use_pre_velocities := pre_va != Vector2.ZERO or pre_vb != Vector2.ZERO or absf(pre_wa) > 0.00001 or absf(pre_wb) > 0.00001
+
+	var va_before: Vector2 = pre_va if use_pre_velocities else a.linear_velocity
+	var vb_before: Vector2 = pre_vb if use_pre_velocities else b.linear_velocity
+	var wa_before: float = pre_wa if use_pre_velocities else a.angular_velocity
+	var wb_before: float = pre_wb if use_pre_velocities else b.angular_velocity
+
+	if contact_a is Vector2 and contact_b is Vector2:
+		a.position = contact_a
+		b.position = contact_b
+
+	var delta: Vector2 = b.position - a.position
+	var dist: float = delta.length()
+	if dist <= 0.0001:
+		return
+
+	var n: Vector2 = forced_normal.normalized() if forced_normal.length() > 0.0001 else delta / dist
+	var t: Vector2 = n.orthogonal()
+
+	var inv_mass_a: float = 1.0 / maxf(0.0001, a.mass)
+	var inv_mass_b: float = 1.0 / maxf(0.0001, b.mass)
+	var inv_inertia_a: float = 1.0 / maxf(0.0001, a.inertia)
+	var inv_inertia_b: float = 1.0 / maxf(0.0001, b.inertia)
+	var radius: float = IOS_PIECE_RADIUS_PX
+
+	var rel_closing: float = (va_before - vb_before).dot(n)
+	if rel_closing <= 0.0:
+		print("[IOS_MANUAL_COLLISION_SKIP]",
+			" reason=not_closing",
+			" a=", a.name,
+			" b=", b.name,
+			" rel_closing=", String.num(rel_closing, 6),
+			" n=", n,
+			" pre_va=", va_before,
+			" pre_vb=", vb_before
+		)
+		return
+
+	var normal_denom: float = inv_mass_a + inv_mass_b
+	var jn: float = (1.0 + IOS_COLLISION_RESTITUTION) * rel_closing / maxf(0.0001, normal_denom)
+
+	var out_va: Vector2 = va_before - n * (jn * inv_mass_a)
+	var out_vb: Vector2 = vb_before + n * (jn * inv_mass_b)
+	var out_wa: float = wa_before
+	var out_wb: float = wb_before
+
+	var rel_tangent: float = (out_va - out_vb).dot(t) + (out_wa + out_wb) * radius
+	var tangent_denom: float = inv_mass_a + inv_mass_b + (radius * radius * inv_inertia_a) + (radius * radius * inv_inertia_b)
+	var jt: float = rel_tangent / maxf(0.0001, tangent_denom)
+	var jt_max: float = IOS_COLLISION_FRICTION * absf(jn)
+	jt = clamp(jt, -jt_max, jt_max)
+	jt *= IOS_COLLISION_TANGENT_IMPULSE_SCALE
+
+	out_va -= t * (jt * inv_mass_a)
+	out_vb += t * (jt * inv_mass_b)
+
+	var spin_jt: float = clamp(jt, -IOS_COLLISION_SPIN_JT_LIMIT, IOS_COLLISION_SPIN_JT_LIMIT)
+
+	out_wa += radius * spin_jt * inv_inertia_a
+	out_wb += radius * spin_jt * inv_inertia_b
+
+	a.linear_velocity = out_va
+	b.linear_velocity = out_vb
+	a.angular_velocity = out_wa
+	b.angular_velocity = out_wb
+
+	var frame_dt := 1.0 / float(Engine.physics_ticks_per_second)
+	var remain_t: float = clamp(1.0 - hit_t, 0.0, 1.0)
+
+	a.position += a.linear_velocity * frame_dt * remain_t
+	b.position += b.linear_velocity * frame_dt * remain_t
+
+	var corrected_delta: Vector2 = b.position - a.position
+	var corrected_dist: float = corrected_delta.length()
+	var penetration: float = IOS_PIECE_DIAMETER_PX - corrected_dist
+
+	if penetration > 0.0:
+		var correction: Vector2 = n * ((penetration * 0.5) + 0.001)
+		a.position -= correction
+		b.position += correction
+
+	print("[IOS_MANUAL_COLLISION]",
+		" a=", a.name,
+		" b=", b.name,
+		" hit_t=", String.num(hit_t, 6),
+		" dist=", String.num(dist, 4),
+		" normal=", n,
+		" rel_closing=", String.num(rel_closing, 4),
+		" rel_tangent=", String.num(rel_tangent, 4),
+		" jn=", String.num(jn, 4),
+		" jt=", String.num(jt, 4),
+		" spin_jt=", String.num(spin_jt, 4),
+		" contact_a=", contact_a,
+		" contact_b=", contact_b,
+		" pre_va=", va_before,
+		" pre_vb=", vb_before,
+		" pre_wa=", String.num(wa_before, 6),
+		" pre_wb=", String.num(wb_before, 6),
+		" out_va=", a.linear_velocity,
+		" out_vb=", b.linear_velocity,
+		" out_wa=", String.num(a.angular_velocity, 6),
+		" out_wb=", String.num(b.angular_velocity, 6)
+	)
+	
+	
+func _apply_board_snapshot_authoritative(bd: Dictionary, show_arrows: bool = false) -> void:
+	var arr: Array = bd.get("pieces", [])
+
+	await _setup_board_from_data(arr)
+	await get_tree().process_frame
+
+	_ensure_piece_container_hosted_in_board_zoom()
+	_resync_piece_sprite_sizes()
+	_apply_aim_data_from_board_dict(bd, show_arrows)
+	_refresh_safe_polys_for_transform()
+
+	for i in range(2):
+		await get_tree().physics_frame
+
+	_seed_area_overlaps()
+	_apply_piece_draw_order()
 
 func _on_piece_aim_changed(_angle_deg: float, _pow: float) -> void:
 	_recompute_send_button_visibility()
@@ -2018,6 +2767,12 @@ func _set_piece_arrow_from_data(piece: Node, shoot_dir_rad: float, pow_px: float
 
 	arrow = piece.get_node_or_null("Arrow") as CanvasItem
 	if arrow:
+		if arrow.has_meta("fade_tw"):
+			var old_fade: Variant = arrow.get_meta("fade_tw")
+			if old_fade is Tween and (old_fade as Tween).is_running():
+				(old_fade as Tween).kill()
+			arrow.remove_meta("fade_tw")
+
 		arrow.z_as_relative = false
 		arrow.z_index = Z_ARROWS
 		arrow.modulate = _arrow_color_for_piece(piece)
@@ -2027,12 +2782,13 @@ func _set_piece_arrow_from_data(piece: Node, shoot_dir_rad: float, pow_px: float
 
 			if fade_sec > 0.0 and not was_visible:
 				arrow.modulate.a = 0.0
-				var tw := create_tween()
-				tw.tween_property(arrow, "modulate:a", 1.0, fade_sec)\
+				var arrow_tween := create_tween()
+				arrow.set_meta("fade_tw", arrow_tween)
+				arrow_tween.tween_property(arrow, "modulate:a", IOS_ARROW_SHOT_ALPHA, fade_sec)\
 					.set_trans(Tween.TRANS_SINE)\
 					.set_ease(Tween.EASE_OUT)
 			else:
-				arrow.modulate.a = 1.0
+				arrow.modulate.a = IOS_ARROW_SHOT_ALPHA
 		else:
 			arrow.visible = false
 			arrow.modulate.a = 1.0
@@ -2052,20 +2808,134 @@ func _rotate_piece_to_dir(tw: Tween, piece: Node, shoot_dir_rad: float, dur: flo
 		0.0, 1.0, dur
 	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
+func _motion_scale_for_piece(piece: Node) -> float:
+	var parent_node: Node2D = piece.get_parent() as Node2D
+	if parent_node == null:
+		return 1.0
+
+	var global_scale: Vector2 = parent_node.get_global_transform().get_scale()
+	return maxf(0.001, (absf(global_scale.x) + absf(global_scale.y)) * 0.5)
+
 func _fire_piece_from_arrow(piece: Node, shoot_dir_rad: float, pow_px: float) -> void:
 	if pow_px <= 0.5:
 		return
+
 	if piece is RigidBody2D:
 		var rb := piece as RigidBody2D
+		var motion_scale: float = _motion_scale_for_piece(rb)
+		var launch_velocity: Vector2 = Vector2(cos(shoot_dir_rad), sin(shoot_dir_rad)) * (pow_px * POWER_TO_VELOCITY * motion_scale)
+
+		if KPHYS_TRACE_ENABLED:
+			print("[KPHYS_FIRE]",
+				" piece=", piece.name,
+				" player=", int(piece.get_meta("player", -1)),
+				" pos=", rb.position,
+				" dir=", String.num(shoot_dir_rad, 6),
+				" power=", String.num(pow_px, 6),
+				" mult=", String.num(POWER_TO_VELOCITY, 6),
+				" motion_scale=", String.num(motion_scale, 6),
+				" velocity=", launch_velocity,
+				" velocity_len=", String.num(launch_velocity.length(), 6),
+				" ios_velocity_len=", String.num(launch_velocity.length() / motion_scale, 6)
+			)
+
 		rb.freeze = false
 		rb.sleeping = false
 		rb.angular_velocity = 0.0
 		rb.rotation = shoot_dir_rad + PIECE_HEADING_OFFSET
-		rb.linear_velocity = Vector2(cos(shoot_dir_rad), sin(shoot_dir_rad)) * (pow_px * 2.0)
+		rb.linear_velocity = launch_velocity
+
 	if piece.has_method("fade_out_arrow_for_shot"):
 		piece.call("fade_out_arrow_for_shot", 0.18)
 		
-func _hide_all_arrows_and_refresh_highlights() -> void:
+func _trace_ios_style_motion(tag: String, duration_sec: float = KPHYS_TRACE_DURATION_SEC) -> void:
+	if not KPHYS_TRACE_ENABLED:
+		return
+
+	var tracked: Array[RigidBody2D] = []
+	for n in piece_container.get_children():
+		if n is RigidBody2D and n.has_meta("player") and not n.get_meta("dying", false):
+			tracked.append(n)
+
+	tracked.sort_custom(func(a: RigidBody2D, b: RigidBody2D) -> bool:
+		return float(a.get_meta("power", 0.0)) > float(b.get_meta("power", 0.0))
+	)
+
+	var track_count: int = mini(tracked.size(), 3)
+
+	print("[KTRACE_ANDROID_START] tag=", tag)
+
+	for i in track_count:
+		var rb := tracked[i]
+		print("[KTRACE_ANDROID_TRACK]",
+			" idx=", i,
+			" piece=", rb.name,
+			" player=", int(rb.get_meta("player", -1)),
+			" x=", String.num(rb.position.x, 6),
+			" y=", String.num(-rb.position.y, 6),
+			" dir=", String.num(-deg_to_rad(float(rb.get_meta("shoot_dir", 0.0))), 6),
+			" power=", String.num(float(rb.get_meta("power", 0.0)), 6)
+		)
+
+	var start_ms: int = Time.get_ticks_msec()
+	var last_pos: Dictionary = {}
+	var last_ms: Dictionary = {}
+
+	while float(Time.get_ticks_msec() - start_ms) / 1000.0 < duration_sec:
+		await get_tree().physics_frame
+
+		var elapsed_ms: int = Time.get_ticks_msec() - start_ms
+
+		for i in track_count:
+			var rb := tracked[i]
+			if not is_instance_valid(rb):
+				continue
+
+			var pos: Vector2 = Vector2(rb.position.x, -rb.position.y)
+			var speed_from_delta: float = 0.0
+
+			if last_pos.has(i):
+				var prev_pos: Vector2 = last_pos[i] as Vector2
+				var prev_ms: int = int(last_ms[i])
+				var dt: float = maxf(0.001, float(elapsed_ms - prev_ms) / 1000.0)
+				speed_from_delta = (pos - prev_pos).length() / dt
+
+			last_pos[i] = pos
+			last_ms[i] = elapsed_ms
+
+			var motion_scale: float = _motion_scale_for_piece(rb)
+			var local_velocity_len: float = rb.linear_velocity.length() / motion_scale
+
+			print("KTRACE_ANDROID,%s,%d,%d,%d,%s,%s,%s,%s,%s,%s,%s,%s,%s" % [
+				tag,
+				elapsed_ms,
+				i,
+				int(rb.get_meta("player", -1)),
+				String.num(pos.x, 6),
+				String.num(pos.y, 6),
+				String.num(-rb.rotation, 6),
+				String.num(-deg_to_rad(float(rb.get_meta("shoot_dir", 0.0))), 6),
+				String.num(float(rb.get_meta("power", 0.0)), 6),
+				String.num(speed_from_delta, 6),
+				String.num(rb.linear_velocity.length(), 6),
+				String.num(local_velocity_len, 6),
+				String.num(-rb.angular_velocity, 6)
+			])
+
+	print("[KTRACE_ANDROID_END] tag=", tag)
+		
+func _hide_all_arrows_and_refresh_highlights(clear_meta: bool = true) -> void:
+	var saved_meta: Dictionary = {}
+
+	if not clear_meta:
+		for piece in piece_container.get_children():
+			if piece is RigidBody2D and piece.has_meta("trace_id"):
+				var trace_id: int = int(piece.get_meta("trace_id", -1))
+				saved_meta[trace_id] = {
+					"shoot_dir": float(piece.get_meta("shoot_dir", 0.0)),
+					"power": float(piece.get_meta("power", 0.0))
+				}
+
 	for piece in piece_container.get_children():
 		if piece.has_method("hide_arrow"):
 			piece.hide_arrow()
@@ -2073,8 +2943,26 @@ func _hide_all_arrows_and_refresh_highlights() -> void:
 			var arrow := piece.get_node_or_null("Arrow") as CanvasItem
 			if arrow:
 				arrow.visible = false
-		piece.set_meta("power", 0.0)
-		piece.set_meta("shoot_dir", 0.0)
+
+		if clear_meta:
+			piece.set_meta("power", 0.0)
+			piece.set_meta("shoot_dir", 0.0)
+
+	if not clear_meta:
+		for piece in piece_container.get_children():
+			if not (piece is RigidBody2D):
+				continue
+			if not piece.has_meta("trace_id"):
+				continue
+
+			var trace_id: int = int(piece.get_meta("trace_id", -1))
+			if not saved_meta.has(trace_id):
+				continue
+
+			var d: Dictionary = saved_meta[trace_id]
+			piece.set_meta("shoot_dir", float(d.get("shoot_dir", piece.get_meta("shoot_dir", 0.0))))
+			piece.set_meta("power", float(d.get("power", piece.get_meta("power", 0.0))))
+
 	_apply_piece_draw_order()
 	call_deferred("_apply_turn_highlights_based_on_arrows")
 	_recompute_send_button_visibility()
@@ -2124,8 +3012,17 @@ func _kill_piece(rb: RigidBody2D) -> void:
 		rb.queue_free()
 		
 func _safe_kill(n: Node) -> void:
-	if _loading_board_data or not _kill_detection_enabled:
+	if DISABLE_KILL_ZONES_FOR_COLLISION_TUNING or _loading_board_data or not _kill_detection_enabled:
 		return
+		
+	if DEBUG_KILL:
+		print("[KILL_FINAL]",
+			" name=", n.name,
+			" player=", int(n.get_meta("player", -1)),
+			" pos=", n.position,
+			" global_pos=", n.global_position,
+			" v=", String.num(n.linear_velocity.length(), 4)
+		)
 	if n is RigidBody2D:
 		call_deferred("_kill_piece", n)
 		
@@ -2133,7 +3030,7 @@ func _on_replay_round_finished(data_seq: int = -1) -> void:
 	if _is_stale_data_seq(data_seq):
 		return
 
-	_hide_all_arrows_and_refresh_highlights()
+	_hide_all_arrows_and_refresh_highlights(false)
 
 	_replay_in_progress = false
 	_is_zooming = true
@@ -2162,16 +3059,19 @@ func _on_replay_round_finished(data_seq: int = -1) -> void:
 		return
 
 	if not last_post_round.is_empty():
-		_dbg_board_state("before post snapshot")
-		_apply_post_round_snapshot(last_post_round, next_idx)
-		_dbg_board_state("after post snapshot")
+		_dbg_board_state("before post snapshot + shrink")
+		_apply_post_round_snapshot(last_post_round, next_idx, true, 0.42)
 
 	_dbg_board_state("before shrink tween")
-	await _tween_board_index_to(next_idx, 0.42)
+	await _tween_board_index_to(next_idx, 0.42, last_post_round.is_empty())
 	if _is_stale_data_seq(data_seq):
 		return
 
-	_dbg_board_state("after shrink tween")
+	_dbg_board_state("after post snapshot + shrink")
+	_trace_live_positions_after_shrink("after_post_snapshot_and_shrink")
+
+	if not last_post_round.is_empty() and DEBUG_TRACE_ID_POST_DIFF:
+		_trace_post_round_error_by_trace_id(last_post_round, "after_post_snapshot_and_shrink")
 
 	if will_shrink and _kill_detection_enabled == false:
 		_set_kill_detection_enabled(true)
@@ -2182,9 +3082,9 @@ func _on_replay_round_finished(data_seq: int = -1) -> void:
 		if setup_idx != _current_board_index:
 			_apply_board_index_immediate(setup_idx)
 
-		_apply_post_round_snapshot(last_pending_setup_round, setup_idx)
-
-		_apply_aim_data_from_board_dict(last_pending_setup_round, false)
+		await _apply_post_round_snapshot(last_pending_setup_round, setup_idx, true)
+		if _is_stale_data_seq(data_seq):
+			return
 
 		last_pre_round = last_pending_setup_round.duplicate(true)
 		last_post_round = {}
@@ -2240,34 +3140,492 @@ func _wait_for_pieces_to_settle(timeout_sec: float = 10.0, still_frames_needed: 
 
 	await get_tree().create_timer(0.35).timeout
 
-func _apply_post_round_snapshot(post_board: Dictionary, _board_idx: int = -1) -> void:
-	var arr: Array = post_board.get("pieces", [])
+func _trace_post_round_error(post_board: Dictionary, tag: String) -> void:
+	if post_board.is_empty():
+		print("[POST_DIFF_SUMMARY] tag=", tag, " skipped=no_post_board")
+		return
 
-	# Collect only piece bodies
-	var children_pieces: Array[Node] = []
+	var targets: Array = post_board.get("pieces", [])
+	if targets.is_empty():
+		print("[POST_DIFF_SUMMARY] tag=", tag, " skipped=no_targets")
+		return
+
+	var live: Array[RigidBody2D] = []
 	for c in piece_container.get_children():
-		if c is RigidBody2D and c.has_meta("player"):
-			children_pieces.append(c)
+		if c is RigidBody2D and c.has_meta("player") and not c.get_meta("dying", false):
+			live.append(c)
 
-	var count: int = min(children_pieces.size(), arr.size())
-	for i in count:
-		var piece_node := children_pieces[i]
-		var pd: Dictionary = arr[i]
-		var pos: Vector2 = pd["pos"]
-		var rot: float = float(pd["rotation"])
+	var matched_live_ids: Dictionary = {}
+	var match_by_target_index: Dictionary = {}
 
-		if piece_node is RigidBody2D:
-			var rb := piece_node as RigidBody2D
-			rb.freeze = true
-			rb.position = pos
-			rb.rotation = rot
-			rb.linear_velocity = Vector2.ZERO
-			rb.angular_velocity = 0.0
-			rb.freeze = false
+	while true:
+		var best_rb: RigidBody2D = null
+		var best_target_idx: int = -1
+		var best_cost: float = INF
+
+		for target_idx in range(targets.size()):
+			if match_by_target_index.has(target_idx):
+				continue
+
+			var pd: Dictionary = targets[target_idx]
+			var target_player: int = int(pd.get("player", -1))
+			var target_pos: Vector2 = pd.get("pos", Vector2.ZERO)
+
+			for rb in live:
+				if not is_instance_valid(rb):
+					continue
+				if matched_live_ids.has(rb.get_instance_id()):
+					continue
+				if int(rb.get_meta("player", -1)) != target_player:
+					continue
+
+				var cost: float = rb.position.distance_squared_to(target_pos)
+				if cost < best_cost:
+					best_cost = cost
+					best_rb = rb
+					best_target_idx = target_idx
+
+		if best_rb == null or best_target_idx < 0:
+			break
+
+		matched_live_ids[best_rb.get_instance_id()] = true
+		match_by_target_index[best_target_idx] = best_rb
+
+	var matched_count: int = 0
+	var total_pos_err: float = 0.0
+	var max_pos_err: float = 0.0
+	var total_scaled_pos_err: float = 0.0
+	var max_scaled_pos_err: float = 0.0
+	var total_rot_err: float = 0.0
+	var max_rot_err: float = 0.0
+
+	var live_center := Vector2.ZERO
+	var target_center := Vector2.ZERO
+	var scaled_live_center := Vector2.ZERO
+	var center_count: int = 0
+
+	var live_idx: int = _current_board_index
+	var target_board_idx: int = int(post_board.get("round", live_idx))
+	var live_scale: float = _target_scale_for_index(live_idx)
+	var target_scale: float = _target_scale_for_index(target_board_idx)
+	var scale_ratio: float = target_scale / maxf(0.0001, live_scale)
+
+	for target_idx in range(targets.size()):
+		if not match_by_target_index.has(target_idx):
+			var missing_pd: Dictionary = targets[target_idx]
+			print("[POST_DIFF_MISSING]",
+				" tag=", tag,
+				" target_idx=", target_idx,
+				" target_player=", int(missing_pd.get("player", -1)),
+				" target_pos=", missing_pd.get("pos", Vector2.ZERO)
+			)
+			continue
+
+		var rb := match_by_target_index[target_idx] as RigidBody2D
+		if not is_instance_valid(rb):
+			continue
+
+		var pd: Dictionary = targets[target_idx]
+		var target_pos: Vector2 = pd.get("pos", rb.position)
+		var target_rot: float = float(pd.get("rotation", rb.rotation))
+
+		var pos_err: float = rb.position.distance_to(target_pos)
+		var rot_err: float = absf(angle_difference(rb.rotation, target_rot))
+
+		var live_scaled_to_target: Vector2 = rb.position * scale_ratio
+		var scaled_pos_err: float = live_scaled_to_target.distance_to(target_pos)
+
+		matched_count += 1
+		total_pos_err += pos_err
+		total_scaled_pos_err += scaled_pos_err
+		total_rot_err += rot_err
+		max_pos_err = maxf(max_pos_err, pos_err)
+		max_scaled_pos_err = maxf(max_scaled_pos_err, scaled_pos_err)
+		max_rot_err = maxf(max_rot_err, rot_err)
+
+		live_center += rb.position
+		target_center += target_pos
+		scaled_live_center += live_scaled_to_target
+		center_count += 1
+
+		print("[POST_DIFF]",
+			" tag=", tag,
+			" target_idx=", target_idx,
+			" target_board_idx=", target_board_idx,
+			" live=", rb.name,
+			" player=", int(rb.get_meta("player", -1)),
+			" live_pos=", rb.position,
+			" target_pos=", target_pos,
+			" pos_err=", String.num(pos_err, 6),
+			" live_scaled_to_target=", live_scaled_to_target,
+			" scaled_pos_err=", String.num(scaled_pos_err, 6),
+			" live_rot=", String.num(rb.rotation, 6),
+			" target_rot=", String.num(target_rot, 6),
+			" rot_err=", String.num(rot_err, 6),
+			" live_v=", String.num(rb.linear_velocity.length(), 6),
+			" live_av=", String.num(rb.angular_velocity, 6)
+		)
+
+	if center_count > 0:
+		live_center /= float(center_count)
+		target_center /= float(center_count)
+		scaled_live_center /= float(center_count)
+
+		var center_err: Vector2 = live_center - target_center
+		var scaled_center_err: Vector2 = scaled_live_center - target_center
+
+		print("[POST_DIFF_CENTER_NEAREST]",
+			" tag=", tag,
+			" live_center=", live_center,
+			" target_center=", target_center,
+			" center_err=", center_err,
+			" center_err_len=", String.num(center_err.length(), 6),
+			" scaled_live_center=", scaled_live_center,
+			" scaled_center_err=", scaled_center_err,
+			" scaled_center_err_len=", String.num(scaled_center_err.length(), 6),
+			" live_idx=", live_idx,
+			" target_board_idx=", target_board_idx,
+			" scale_ratio=", String.num(scale_ratio, 6)
+		)
+
+	var avg_pos_err: float = total_pos_err / maxf(1.0, float(matched_count))
+	var avg_scaled_pos_err: float = total_scaled_pos_err / maxf(1.0, float(matched_count))
+	var avg_rot_err: float = total_rot_err / maxf(1.0, float(matched_count))
+
+	print("[POST_DIFF_SUMMARY]",
+		" tag=", tag,
+		" live_count=", live.size(),
+		" target_count=", targets.size(),
+		" matched=", matched_count,
+		" avg_pos_err=", String.num(avg_pos_err, 6),
+		" max_pos_err=", String.num(max_pos_err, 6),
+		" avg_scaled_pos_err=", String.num(avg_scaled_pos_err, 6),
+		" max_scaled_pos_err=", String.num(max_scaled_pos_err, 6),
+		" avg_rot_err=", String.num(avg_rot_err, 6),
+		" max_rot_err=", String.num(max_rot_err, 6)
+	)
+	
+func _trace_post_round_error_by_trace_id(post_board: Dictionary, tag: String) -> void:
+	if post_board.is_empty():
+		print("[POST_DIFF_ID_SUMMARY] tag=", tag, " skipped=no_post_board")
+		return
+
+	var targets: Array = post_board.get("pieces", [])
+	if targets.is_empty():
+		print("[POST_DIFF_ID_SUMMARY] tag=", tag, " skipped=no_targets")
+		return
+
+	var live_by_id: Dictionary = {}
+
+	for c in piece_container.get_children():
+		if c is RigidBody2D and c.has_meta("player") and not c.get_meta("dying", false):
+			var rb := c as RigidBody2D
+			live_by_id[int(rb.get_meta("trace_id", -1))] = rb
+
+	var live_idx: int = _current_board_index
+	var target_board_idx: int = int(post_board.get("round", live_idx))
+	var live_scale: float = _target_scale_for_index(live_idx)
+	var target_scale: float = _target_scale_for_index(target_board_idx)
+	var scale_ratio: float = target_scale / maxf(0.0001, live_scale)
+
+	var live_center := Vector2.ZERO
+	var target_center := Vector2.ZERO
+	var center_count: int = 0
+
+	for target_idx in range(targets.size()):
+		if not live_by_id.has(target_idx):
+			continue
+
+		var rb := live_by_id[target_idx] as RigidBody2D
+		if not is_instance_valid(rb):
+			continue
+
+		var pd: Dictionary = targets[target_idx]
+		var target_pos: Vector2 = pd.get("pos", rb.position)
+
+		live_center += rb.position
+		target_center += target_pos
+		center_count += 1
+
+	if center_count > 0:
+		live_center /= float(center_count)
+		target_center /= float(center_count)
+
+	var scaled_live_center: Vector2 = live_center * scale_ratio
+	var center_err: Vector2 = live_center - target_center
+	var scaled_center_err: Vector2 = scaled_live_center - target_center
+
+	var center_only_offset: Vector2 = live_center * (scale_ratio - 1.0)
+
+	var matched_count: int = 0
+	var total_pos_err: float = 0.0
+	var max_pos_err: float = 0.0
+	var total_scaled_pos_err: float = 0.0
+	var max_scaled_pos_err: float = 0.0
+	var total_center_corrected_err: float = 0.0
+	var max_center_corrected_err: float = 0.0
+	var total_rot_err: float = 0.0
+	var max_rot_err: float = 0.0
+
+	for target_idx in range(targets.size()):
+		if not live_by_id.has(target_idx):
+			var missing_pd: Dictionary = targets[target_idx]
+			print("[POST_DIFF_ID_MISSING]",
+				" tag=", tag,
+				" trace_id=", target_idx,
+				" target_player=", int(missing_pd.get("player", -1)),
+				" target_pos=", missing_pd.get("pos", Vector2.ZERO)
+			)
+			continue
+
+		var rb := live_by_id[target_idx] as RigidBody2D
+		if not is_instance_valid(rb):
+			continue
+
+		var pd: Dictionary = targets[target_idx]
+		var target_pos: Vector2 = pd.get("pos", rb.position)
+		var target_rot: float = float(pd.get("rotation", rb.rotation))
+
+		var live_scaled_to_target: Vector2 = rb.position * scale_ratio
+		var center_corrected_pos: Vector2 = rb.position + center_only_offset
+
+		var pos_err: float = rb.position.distance_to(target_pos)
+		var scaled_pos_err: float = live_scaled_to_target.distance_to(target_pos)
+		var center_corrected_err: float = center_corrected_pos.distance_to(target_pos)
+		var rot_err: float = absf(angle_difference(rb.rotation, target_rot))
+
+		matched_count += 1
+		total_pos_err += pos_err
+		total_scaled_pos_err += scaled_pos_err
+		total_center_corrected_err += center_corrected_err
+		total_rot_err += rot_err
+
+		max_pos_err = maxf(max_pos_err, pos_err)
+		max_scaled_pos_err = maxf(max_scaled_pos_err, scaled_pos_err)
+		max_center_corrected_err = maxf(max_center_corrected_err, center_corrected_err)
+		max_rot_err = maxf(max_rot_err, rot_err)
+
+		print("[POST_DIFF_ID_ROW]",
+			" tag=", tag,
+			" id=", target_idx,
+			" live=", rb.name,
+			" player=", int(rb.get_meta("player", -1)),
+			" lx=", String.num(rb.position.x, 6),
+			" ly=", String.num(rb.position.y, 6),
+			" tx=", String.num(target_pos.x, 6),
+			" ty=", String.num(target_pos.y, 6),
+			" pe=", String.num(pos_err, 6),
+			" ccx=", String.num(center_corrected_pos.x, 6),
+			" ccy=", String.num(center_corrected_pos.y, 6),
+			" cce=", String.num(center_corrected_err, 6),
+			" lr=", String.num(rb.rotation, 6),
+			" tr=", String.num(target_rot, 6),
+			" re=", String.num(rot_err, 6),
+			" lv=", String.num(rb.linear_velocity.length(), 6),
+			" av=", String.num(rb.angular_velocity, 6),
+			" live_idx=", live_idx,
+			" target_board_idx=", target_board_idx,
+			" scale_ratio=", String.num(scale_ratio, 6),
+			" slx=", String.num(live_scaled_to_target.x, 6),
+			" sly=", String.num(live_scaled_to_target.y, 6),
+			" spe=", String.num(scaled_pos_err, 6)
+		)
+
+	if center_count > 0:
+		print("[POST_DIFF_CENTER]",
+			" tag=", tag,
+			" live_center=", live_center,
+			" target_center=", target_center,
+			" center_err=", center_err,
+			" center_err_len=", String.num(center_err.length(), 6),
+			" scaled_live_center=", scaled_live_center,
+			" scaled_center_err=", scaled_center_err,
+			" scaled_center_err_len=", String.num(scaled_center_err.length(), 6),
+			" center_only_offset=", center_only_offset,
+			" live_idx=", live_idx,
+			" target_board_idx=", target_board_idx,
+			" scale_ratio=", String.num(scale_ratio, 6)
+		)
+
+	var avg_pos_err: float = total_pos_err / maxf(1.0, float(matched_count))
+	var avg_scaled_pos_err: float = total_scaled_pos_err / maxf(1.0, float(matched_count))
+	var avg_center_corrected_err: float = total_center_corrected_err / maxf(1.0, float(matched_count))
+	var avg_rot_err: float = total_rot_err / maxf(1.0, float(matched_count))
+
+	print("[POST_DIFF_ID_SUMMARY]",
+		" tag=", tag,
+		" live_count=", live_by_id.size(),
+		" target_count=", targets.size(),
+		" matched=", matched_count,
+		" avg_pos_err=", String.num(avg_pos_err, 6),
+		" max_pos_err=", String.num(max_pos_err, 6),
+		" avg_scaled_pos_err=", String.num(avg_scaled_pos_err, 6),
+		" max_scaled_pos_err=", String.num(max_scaled_pos_err, 6),
+		" avg_center_corrected_err=", String.num(avg_center_corrected_err, 6),
+		" max_center_corrected_err=", String.num(max_center_corrected_err, 6),
+		" avg_rot_err=", String.num(avg_rot_err, 6),
+		" max_rot_err=", String.num(max_rot_err, 6)
+	)
+	
+func _apply_post_round_snapshot(post_board: Dictionary, _board_idx: int = -1, tween_survivors: bool = true, move_dur: float = 0.16) -> void:
+	var arr: Array = post_board.get("pieces", [])
+	if arr.is_empty():
+		return
+
+	var live: Array[RigidBody2D] = []
+	for c in piece_container.get_children():
+		if c is RigidBody2D and c.has_meta("player") and not c.get_meta("dying", false):
+			live.append(c)
+
+	var matched_live_ids: Dictionary = {}
+	var match_by_target_index: Dictionary = {}
+
+	while true:
+		var best_rb: RigidBody2D = null
+		var best_target_idx: int = -1
+		var best_cost: float = INF
+
+		for target_idx in arr.size():
+			if match_by_target_index.has(target_idx):
+				continue
+
+			var pd: Dictionary = arr[target_idx]
+			var target_player: int = int(pd.get("player", -1))
+			var target_pos: Vector2 = pd.get("pos", Vector2.ZERO)
+
+			for rb in live:
+				if not is_instance_valid(rb):
+					continue
+				if matched_live_ids.has(rb.get_instance_id()):
+					continue
+				if int(rb.get_meta("player", -1)) != target_player:
+					continue
+
+				var cost: float = rb.position.distance_squared_to(target_pos)
+				if cost < best_cost:
+					best_cost = cost
+					best_rb = rb
+					best_target_idx = target_idx
+
+		if best_rb == null or best_target_idx < 0:
+			break
+
+		matched_live_ids[best_rb.get_instance_id()] = true
+		match_by_target_index[best_target_idx] = best_rb
+
+	var snap_tw := create_tween().set_parallel()
+	var has_snap_tween := false
+
+	for target_idx in arr.size():
+		if not match_by_target_index.has(target_idx):
+			continue
+
+		var rb := match_by_target_index[target_idx] as RigidBody2D
+		if not is_instance_valid(rb):
+			continue
+
+		var pd: Dictionary = arr[target_idx]
+		var target_pos: Vector2 = pd.get("pos", rb.position)
+		var target_rot: float = float(pd.get("rotation", rb.rotation))
+		if KPHYS_TRACE_ENABLED and absf(angle_difference(rb.rotation, target_rot)) > 0.05:
+			print("[POST_ROT_CORRECT]",
+				" piece=", rb.name,
+				" from=", String.num(rb.rotation, 6),
+				" to=", String.num(target_rot, 6),
+				" diff=", String.num(angle_difference(rb.rotation, target_rot), 6)
+			)
+
+		rb.freeze = true
+		rb.linear_velocity = Vector2.ZERO
+		rb.angular_velocity = 0.0
+		rb.set_meta("player", int(pd.get("player", rb.get_meta("player", -1))))
+		rb.set_meta("shoot_dir", rad_to_deg(float(pd.get("shoot_dir", 0.0))))
+		rb.set_meta("power", float(pd.get("power", 0.0)))
+
+		var arrow := rb.get_node_or_null("Arrow") as CanvasItem
+		if arrow:
+			arrow.visible = false
+			arrow.modulate.a = 0.0
+
+		var ring := rb.get_node_or_null("HighlightRing") as CanvasItem
+		if ring:
+			ring.visible = false
+
+		rb.rotation = target_rot
+
+		if tween_survivors and rb.position.distance_to(target_pos) > 1.5:
+			has_snap_tween = true
+
+			snap_tw.tween_property(rb, "position", target_pos, move_dur)\
+				.set_trans(Tween.TRANS_CUBIC)\
+				.set_ease(Tween.EASE_IN_OUT)
 		else:
-			piece_node.position = pos
-			piece_node.rotation = rot
+			rb.position = target_pos
 
+	var killed_any := false
+	for rb in live:
+		if not is_instance_valid(rb):
+			continue
+		if matched_live_ids.has(rb.get_instance_id()):
+			continue
+
+		killed_any = true
+		rb.set_meta("dying", true)
+		rb.collision_layer = 0
+		rb.collision_mask = 0
+		rb.freeze = true
+		rb.linear_velocity = Vector2.ZERO
+		rb.angular_velocity = 0.0
+
+		var aim_area := rb.get_node_or_null("Area2D") as Area2D
+		if aim_area:
+			aim_area.monitoring = false
+			aim_area.monitorable = false
+
+		var arrow := rb.get_node_or_null("Arrow") as CanvasItem
+		if arrow:
+			arrow.visible = false
+
+		var ring := rb.get_node_or_null("HighlightRing") as CanvasItem
+		if ring:
+			ring.visible = false
+
+		var kill_tw := create_tween().set_parallel()
+		kill_tw.tween_property(rb, "scale", Vector2.ZERO, 0.18)\
+			.set_trans(Tween.TRANS_BACK)\
+			.set_ease(Tween.EASE_IN)
+		kill_tw.tween_property(rb, "modulate:a", 0.0, 0.14)\
+			.set_trans(Tween.TRANS_SINE)\
+			.set_ease(Tween.EASE_IN)
+		kill_tw.chain().tween_callback(Callable(rb, "queue_free"))
+
+	if has_snap_tween and snap_tw.is_running():
+		await snap_tw.finished
+	else:
+		snap_tw.kill()
+
+	if killed_any:
+		await get_tree().create_timer(0.20).timeout
+		await get_tree().process_frame
+
+	for target_idx in arr.size():
+		if not match_by_target_index.has(target_idx):
+			continue
+
+		var rb := match_by_target_index[target_idx] as RigidBody2D
+		if not is_instance_valid(rb):
+			continue
+
+		var pd: Dictionary = arr[target_idx]
+		rb.position = pd.get("pos", rb.position)
+		rb.rotation = float(pd.get("rotation", rb.rotation))
+		rb.linear_velocity = Vector2.ZERO
+		rb.angular_velocity = 0.0
+		rb.freeze = false
+		piece_container.move_child(rb, target_idx)
+
+	_apply_piece_draw_order()
+	
 func _play_round_from_replay(pre_board: Dictionary, data_seq: int = -1) -> void:
 	if _is_stale_data_seq(data_seq):
 		return
@@ -2280,21 +3638,38 @@ func _play_round_from_replay(pre_board: Dictionary, data_seq: int = -1) -> void:
 
 	var pre_arr: Array = pre_board.get("pieces", [])
 
+	var live_count: int = 0
+	for child in piece_container.get_children():
+		if child is RigidBody2D and child.has_meta("player") and not child.get_meta("dying", false):
+			live_count += 1
+
+	if live_count != pre_arr.size():
+		print("[REPLAY] Piece count mismatch before replay. Rebuilding from pre-board. live=", live_count, " pre=", pre_arr.size())
+		await _apply_board_snapshot_authoritative(pre_board, false)
+		if _is_stale_data_seq(data_seq):
+			return
+
 	var pieces: Array[RigidBody2D] = []
 	for child in piece_container.get_children():
 		if child is RigidBody2D and child.has_meta("player"):
 			pieces.append(child)
 
+	pieces.sort_custom(func(a: RigidBody2D, b: RigidBody2D) -> bool:
+		return int(a.get_meta("trace_id", 9999)) < int(b.get_meta("trace_id", 9999))
+	)
+
 	var count: int = min(pieces.size(), pre_arr.size())
 	if count == 0:
-		_on_replay_round_finished(data_seq)
+		await _on_replay_round_finished(data_seq)
 		return
 
 	for i in count:
 		var piece := pieces[i]
-		if not is_instance_valid(piece): continue
+		if not is_instance_valid(piece):
+			continue
+
 		var pd: Dictionary = pre_arr[i]
-		_set_piece_arrow_from_data(piece, float(pd["shoot_dir"]), float(pd["power"]), 0.18)
+		_set_piece_arrow_from_data(piece, float(pd["shoot_dir"]), float(pd["power"]), IOS_ARROW_SHOT_FADE_SEC)
 
 	await get_tree().create_timer(0.5).timeout
 	if _is_stale_data_seq(data_seq):
@@ -2303,7 +3678,9 @@ func _play_round_from_replay(pre_board: Dictionary, data_seq: int = -1) -> void:
 	var rotation_tween := create_tween().set_parallel()
 	for i in count:
 		var piece := pieces[i]
-		if not is_instance_valid(piece): continue
+		if not is_instance_valid(piece):
+			continue
+
 		var pd: Dictionary = pre_arr[i]
 		_rotate_piece_to_dir(rotation_tween, piece, float(pd["shoot_dir"]), 0.5)
 
@@ -2316,18 +3693,44 @@ func _play_round_from_replay(pre_board: Dictionary, data_seq: int = -1) -> void:
 	if _is_stale_data_seq(data_seq):
 		return
 
+	_set_kill_detection_enabled(false)
+
 	if PDIFF_ENABLED and _pdiff != null:
 		_pdiff.start("replay idx=%d" % _current_board_index)
 		_pdiff_active = true
-		_set_kill_detection_enabled(false)
 
 	for i in count:
 		var piece := pieces[i]
-		if not is_instance_valid(piece): continue
+		if not is_instance_valid(piece):
+			continue
+
 		var pd: Dictionary = pre_arr[i]
 		_fire_piece_from_arrow(piece, float(pd["shoot_dir"]), float(pd["power"]))
 
+	_trace_pair_contact_crossings("replay", KPHYS_TRACE_DURATION_SEC)
+	await _trace_all_piece_motion("replay", KPHYS_TRACE_DURATION_SEC)
+
 	await _wait_for_pieces_to_settle(10.0, 8, IOS_STOP_LINEAR_SPEED, IOS_STOP_ANGULAR_SPEED)
+
+	if not last_post_round.is_empty():
+		if DEBUG_TRACE_ID_POST_DIFF:
+			_trace_post_round_error_by_trace_id(last_post_round, "after_settle_before_snapshot")
+		_trace_post_round_error(last_post_round, "after_settle_before_snapshot_nearest")
+
+	if DEBUG_FORCE_LOCAL_STAGE_FROM_REPLAY:
+		print("[LOCAL_STAGE_FORCE_FROM_REPLAY] using simulated board before authoritative iOS snapshot")
+		var forced_next_idx: int = _next_board_index_after_round(_current_board_index)
+		await _stage_after_local_play(forced_next_idx)
+
+		if not last_post_round.is_empty() and DEBUG_TRACE_ID_POST_DIFF:
+			_trace_post_round_error_by_trace_id(last_post_round, "forced_local_stage_vs_ios_post")
+
+		_replay_in_progress = false
+		_is_zooming = false
+		_update_piece_interactivity()
+		_recompute_send_button_visibility()
+		return
+
 	if _is_stale_data_seq(data_seq):
 		return
 
@@ -2337,13 +3740,32 @@ func _play_round_from_replay(pre_board: Dictionary, data_seq: int = -1) -> void:
 		_pdiff.report()
 		_set_kill_detection_enabled(true)
 
-	_on_replay_round_finished(data_seq)
+	await _on_replay_round_finished(data_seq)
+	
+func _dump_physics_project_settings() -> void:
+	for item in ProjectSettings.get_property_list():
+		var key: String = String(item.get("name", ""))
+		var low := key.to_lower()
+
+		if (
+			low.contains("box2d")
+			or (
+				low.contains("physics/2d")
+				and (
+					low.contains("iteration")
+					or low.contains("solver")
+					or low.contains("step")
+					or low.contains("contact")
+					or low.contains("ccd")
+					or low.contains("bias")
+					or low.contains("damp")
+				)
+			)
+		):
+			print("[PHYS_SETTING] ", key, "=", ProjectSettings.get_setting(key))
 	
 func _clamp_board_index(i: int) -> int:
-	return clamp(i, 0, BOARD_MAX_INDEX)
-
-func _board_size_for_index(i: int) -> float:
-	return LOGICAL_BOARD_SIZE.x * _board_scale_for_index(i)
+	return int(clamp(i, 0, BOARD_MAX_INDEX))
 
 func _board_scale_for_index(i: int) -> float:
 	return maxf(0.0, 1.0 - float(_clamp_board_index(i)) * 0.1)
@@ -2371,14 +3793,16 @@ func _apply_board_index_immediate(i: int) -> void:
 			" | target=", target
 		)
 
-	_apply_piece_container_scale_for_board()
+	if is_instance_valid(piece_container):
+		piece_container.scale = Vector2.ONE
+	_resync_piece_sprite_sizes()
 	_apply_ios_board_texture_layout()
 	_layout_board_centered()
 
 	_refresh_safe_polys_for_transform()
 	_dbg_board_state("apply_immediate AFTER")
 	
-func _tween_board_index_to(i: int, dur: float = 0.42) -> void:
+func _tween_board_index_to(i: int, dur: float = 0.42, lock_pieces: bool = true) -> void:
 	var target_raw_idx: int = int(max(0, i))
 	var target_visual_idx: int = _clamp_board_index(target_raw_idx)
 	var current_visual_idx: int = _clamp_board_index(_current_board_index)
@@ -2410,6 +3834,7 @@ func _tween_board_index_to(i: int, dur: float = 0.42) -> void:
 	var start_idx := _current_board_index
 	var s0 := scaler.scale.x
 	var s1 := _target_scale_for_index(target_raw_idx)
+	var piece_coord_s0: float = maxf(0.001, s0)
 
 	print("[SHRINK] TWEEN START",
 		" | idx ", start_idx, " -> ", target_raw_idx,
@@ -2424,6 +3849,28 @@ func _tween_board_index_to(i: int, dur: float = 0.42) -> void:
 	)
 
 	_dbg_board_state("tween BEFORE")
+	
+	var locked_piece_positions: Array[Dictionary] = []
+	var locked_center := Vector2.ZERO
+	var locked_count: int = 0
+
+	if lock_pieces:
+		for n in piece_container.get_children():
+			if n is RigidBody2D and n.has_meta("player") and not n.get_meta("dying", false):
+				var rb := n as RigidBody2D
+				locked_piece_positions.append({
+					"node": rb,
+					"local_pos": rb.position,
+					"local_rot": rb.rotation
+				})
+				locked_center += rb.position
+				locked_count += 1
+				rb.freeze = true
+				rb.linear_velocity = Vector2.ZERO
+				rb.angular_velocity = 0.0
+
+	if locked_count > 0:
+		locked_center /= float(locked_count)
 
 	var last_bucket := [-1]
 
@@ -2436,6 +3883,28 @@ func _tween_board_index_to(i: int, dur: float = 0.42) -> void:
 		if is_instance_valid(piece_container):
 			piece_container.position = LOGICAL_BOARD_SIZE * 0.5
 			piece_container.scale = Vector2.ONE
+
+		var center_coord_ratio: float = step_scale / piece_coord_s0
+		var center_only_offset: Vector2 = locked_center * (center_coord_ratio - 1.0)
+		
+		if DEBUG_SHRINK:
+			print("[SHRINK_COORD]",
+				" t=", String.num(t, 3),
+				" step_scale=", String.num(step_scale, 6),
+				" ratio=", String.num(center_coord_ratio, 6),
+				" center=", locked_center,
+				" center_offset=", center_only_offset
+			)
+
+		for item in locked_piece_positions:
+			var rb := item["node"] as RigidBody2D
+			if is_instance_valid(rb):
+				var lp: Vector2 = item["local_pos"]
+				var lr: float = float(item["local_rot"])
+				rb.position = lp + center_only_offset
+				rb.rotation = lr
+				rb.linear_velocity = Vector2.ZERO
+				rb.angular_velocity = 0.0
 
 		_resync_piece_sprite_sizes()
 
@@ -2467,6 +3936,20 @@ func _tween_board_index_to(i: int, dur: float = 0.42) -> void:
 		piece_container.position = LOGICAL_BOARD_SIZE * 0.5
 		piece_container.scale = Vector2.ONE
 
+	var final_center_coord_ratio: float = _target_scale_for_index(_current_board_index) / piece_coord_s0
+	var final_center_only_offset: Vector2 = locked_center * (final_center_coord_ratio - 1.0)
+
+	for item in locked_piece_positions:
+		var rb := item["node"] as RigidBody2D
+		if is_instance_valid(rb):
+			var lp: Vector2 = item["local_pos"]
+			var lr: float = float(item["local_rot"])
+			rb.position = lp + final_center_only_offset
+			rb.rotation = lr
+			rb.linear_velocity = Vector2.ZERO
+			rb.angular_velocity = 0.0
+			rb.freeze = false
+
 	_resync_piece_sprite_sizes()
 
 	_is_zooming = false
@@ -2474,11 +3957,49 @@ func _tween_board_index_to(i: int, dur: float = 0.42) -> void:
 	_refresh_safe_polys_for_transform()
 	_seed_area_overlaps()
 	_set_kill_detection_enabled(true)
-	_fallback_kill_pass()
 
 	print("[SHRINK] TWEEN FINISHED | committed raw_idx=", _current_board_index, " | visual_idx=", _clamp_board_index(_current_board_index))
 	_dbg_board_state("tween AFTER COMMIT")
 	
+	
+func _trace_live_positions_after_shrink(tag: String) -> void:
+	var live: Array[RigidBody2D] = []
+
+	for c in piece_container.get_children():
+		if c is RigidBody2D and c.has_meta("player") and not c.get_meta("dying", false):
+			live.append(c)
+
+	live.sort_custom(func(a: RigidBody2D, b: RigidBody2D) -> bool:
+		return int(a.get_meta("trace_id", 9999)) < int(b.get_meta("trace_id", 9999))
+	)
+
+	var center := Vector2.ZERO
+	for rb in live:
+		center += rb.position
+
+	if live.size() > 0:
+		center /= float(live.size())
+
+	print("[POST_SHRINK_LIVE_CENTER]",
+		" tag=", tag,
+		" idx=", _current_board_index,
+		" center=", center,
+		" count=", live.size()
+	)
+
+	for rb in live:
+		print("[POST_SHRINK_LIVE_ROW]",
+			" tag=", tag,
+			" id=", int(rb.get_meta("trace_id", -1)),
+			" name=", rb.name,
+			" player=", int(rb.get_meta("player", -1)),
+			" x=", String.num(rb.position.x, 6),
+			" y=", String.num(rb.position.y, 6),
+			" rot=", String.num(rb.rotation, 6),
+			" v=", String.num(rb.linear_velocity.length(), 6),
+			" av=", String.num(rb.angular_velocity, 6)
+		)
+		
 # --- Piece Highlighting ---
 func _apply_turn_highlights_based_on_arrows() -> void:
 	if spectator_mode or not _can_show_aim_ui():
@@ -2544,10 +4065,27 @@ func _on_arrow_visibility_changed(piece: Node) -> void:
 		return
 
 	if arrow.visible:
+		var old_alpha := arrow.modulate.a
+
 		arrow.z_as_relative = false
 		arrow.z_index = Z_ARROWS
 		arrow.modulate = _arrow_color_for_piece(piece)
-		arrow.modulate.a = maxf(arrow.modulate.a, 1.0)
+		arrow.modulate.a = old_alpha
+
+		if arrow.has_meta("fade_tw"):
+			var old_fade: Variant = arrow.get_meta("fade_tw")
+			if old_fade is Tween and (old_fade as Tween).is_running():
+				(old_fade as Tween).kill()
+			arrow.remove_meta("fade_tw")
+
+		if not _replay_in_progress and old_alpha >= 0.95:
+			arrow.modulate.a = 0.0
+			var arrow_tween := create_tween()
+			arrow.set_meta("fade_tw", arrow_tween)
+			arrow_tween.tween_property(arrow, "modulate:a", 1.0, 0.18)\
+				.set_trans(Tween.TRANS_SINE)\
+				.set_ease(Tween.EASE_OUT)
+
 		_stop_highlight_for_piece(piece)
 	else:
 		if _can_show_aim_ui() and int(piece.get_meta("player", -1)) == player:
@@ -2613,7 +4151,7 @@ func check_win() -> bool:
 		print("-> RESULT: Game Continues. P1=%d, P2=%d" % [p1_count, p2_count])
 		return false
 
-	if game_over: # Already handled
+	if game_over:
 		print("-> Game was already marked as over. No new result displayed.")
 		return true
 
@@ -2851,13 +4389,11 @@ func _show_goal_popup() -> void:
 	var popup_width: float = viewport_size.x * 0.8
 	var popup_height: float = 320.0
 
-	# Dim overlay
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.5)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dim.z_index = 99
 
-	# Card
 	var popup := PanelContainer.new()
 	popup.custom_minimum_size = Vector2(popup_width, popup_height)
 	popup.z_index = 100
@@ -2872,7 +4408,6 @@ func _show_goal_popup() -> void:
 	card_style.shadow_color = Color(0, 0, 0, 0.3)
 	popup.add_theme_stylebox_override("panel", card_style)
 
-	# Vertical layout inside the card
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 16)
 	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -2904,7 +4439,6 @@ func _show_goal_popup() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inner.add_child(title)
 
-	# Body — center
 	var body_wrap := CenterContainer.new()
 	body_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	inner.add_child(body_wrap)
@@ -2918,7 +4452,6 @@ func _show_goal_popup() -> void:
 	body.custom_minimum_size = Vector2(popup_width - 96, 0)
 	body_wrap.add_child(body)
 
-	# Start button — bottom center, map-specific styling
 	var btn_wrap := CenterContainer.new()
 	inner.add_child(btn_wrap)
 
@@ -2960,7 +4493,6 @@ func _show_goal_popup() -> void:
 
 	btn_wrap.add_child(start_btn)
 
-	# Add to this scene (not viewport root) so we don't disturb top-level transforms.
 	add_child(dim)
 	add_child(popup)
 
@@ -3167,12 +4699,10 @@ func _spawn_mushrooms_for_map3() -> void:
 		m.position = pos
 		_mushroom_layer.add_child(m)
 
-		# purely visual: align draw depth with pieces
 		var spr := m.get_node_or_null("Sprite2D") as Sprite2D
 		if spr:
 			spr.z_index = 0
 
-		# give each mushroom access to the pieces for a guaranteed overlap check
 		if m.has_method("set_piece_container"):
 			m.set_piece_container(piece_container)
 
@@ -3299,7 +4829,7 @@ func _ensure_kill_overlay() -> void:
 	if not is_instance_valid(_kill_overlay_root):
 		_kill_overlay_root = Node2D.new()
 		_kill_overlay_root.name = "KillDebugOverlay"
-		_kill_overlay_root.z_index = 500     # <= always above everything
+		_kill_overlay_root.z_index = 500
 		board_zoom.add_child(_kill_overlay_root)
 
 	if not is_instance_valid(_safe_debug_poly):
@@ -3330,7 +4860,7 @@ func _set_kill_debug_visible(should_show: bool) -> void:
 		if is_instance_valid(d): d.visible = should_show
 
 func _update_hole_outlines(hole_locals: Array[PackedVector2Array]) -> void:
-	# grow outlines to match holes
+
 	while _hole_debug_outlines.size() < hole_locals.size():
 		var ln := Line2D.new()
 		ln.width = 2.0
@@ -3339,12 +4869,12 @@ func _update_hole_outlines(hole_locals: Array[PackedVector2Array]) -> void:
 		ln.z_index = 1001
 		_kill_overlay_root.add_child(ln)
 		_hole_debug_outlines.append(ln)
-	# update
+
 	for i in hole_locals.size():
 		var pts := hole_locals[i]
 		_hole_debug_outlines[i].points = pts
 		_hole_debug_outlines[i].visible = _kill_debug_showing
-	# hide extras
+		
 	for j in range(hole_locals.size(), _hole_debug_outlines.size()):
 		if is_instance_valid(_hole_debug_outlines[j]):
 			_hole_debug_outlines[j].visible = false
@@ -3375,7 +4905,6 @@ func _update_piece_center_debug_dots() -> void:
 				in_hole = true
 				break
 
-		# ensure dot node
 		if idx >= _center_debug_nodes.size():
 			var dot := Polygon2D.new()
 			dot.z_index = 1002
@@ -3389,7 +4918,6 @@ func _update_piece_center_debug_dots() -> void:
 			else (Color(1, 0.9, 0, 0.95) if in_hole else Color(1, 0, 0, 0.95))
 		idx += 1
 
-	# hide leftovers
 	for j in range(idx, _center_debug_nodes.size()):
 		if is_instance_valid(_center_debug_nodes[j]):
 			_center_debug_nodes[j].visible = false

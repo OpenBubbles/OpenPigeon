@@ -3,7 +3,7 @@ package com.openbubbles.openpigeon.settings
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Color
-import android.util.Log
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import androidx.core.content.edit
 import java.io.File
 
@@ -30,20 +30,20 @@ object AvatarData {
     private fun syncFromCfgIfNewer() {
         val file = File(appContext.filesDir, GODOT_CFG_SUBPATH)
         if (!file.exists()) {
-            Log.d(TAG, "No cfg at ${file.absolutePath} — skipping import")
+            OpenPigeonLog.d(TAG, "No cfg at ${file.absolutePath} — skipping import")
             return
         }
 
         val cfgModified     = file.lastModified()
         val lastAndroidWrite = prefs().getLong(PREF_LAST_WRITE, 0L)
 
-        Log.d(TAG, "cfg lastModified=$cfgModified  lastAndroidWrite=$lastAndroidWrite")
+        OpenPigeonLog.d(TAG, "cfg lastModified=$cfgModified  lastAndroidWrite=$lastAndroidWrite")
 
         if (cfgModified > lastAndroidWrite) {
-            Log.d(TAG, "Godot wrote more recently — importing cfg into prefs")
+            OpenPigeonLog.d(TAG, "Godot wrote more recently — importing cfg into prefs")
             importFromCfg(file)
         } else {
-            Log.d(TAG, "Android wrote more recently (or same) — keeping prefs, re-writing cfg")
+            OpenPigeonLog.d(TAG, "Android wrote more recently (or same) — keeping prefs, re-writing cfg")
             // Re-write so Godot always has the freshest Android values
             writeCfg()
         }
@@ -97,9 +97,9 @@ object AvatarData {
             // Stamp the write time as "now" so we don't re-import next time
             editor.putLong(PREF_LAST_WRITE, System.currentTimeMillis())
             editor.apply()
-            Log.d(TAG, "Import from cfg complete")
+            OpenPigeonLog.d(TAG, "Import from cfg complete")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to import cfg", e)
+            OpenPigeonLog.e(TAG, "Failed to import cfg", e)
         }
     }
 
@@ -263,9 +263,9 @@ object AvatarData {
             // Stamp the write time so syncFromCfgIfNewer() knows Android wrote this
             prefs().edit { putLong(PREF_LAST_WRITE, System.currentTimeMillis()) }
 
-            Log.d(TAG, "Wrote cfg to ${file.absolutePath}")
+            OpenPigeonLog.d(TAG, "Wrote cfg to ${file.absolutePath}")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to write cfg", e)
+            OpenPigeonLog.e(TAG, "Failed to write cfg", e)
         }
     }
 }

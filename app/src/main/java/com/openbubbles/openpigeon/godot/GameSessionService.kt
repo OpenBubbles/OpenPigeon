@@ -5,7 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.DeadObjectException
 import android.os.IBinder
-import android.util.Log
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import com.openbubbles.openpigeon.GameSession
 import com.openbubbles.openpigeon.IGameSession
 import com.openbubbles.openpigeon.IUpdateGameSessionCallback
@@ -17,7 +17,7 @@ class GameSessionService : Service() {
 
     private val binder = object : IGameSession.Stub() {
         override fun getCurrentMessage(id: String?): Bundle {
-            Log.i("openpigeon-GameSessionService", "${MadridExtension.activeSessions}")
+            OpenPigeonLog.i("openpigeon-GameSessionService", "${MadridExtension.activeSessions}")
             val gameSession: GameSession = MadridExtension.activeSessions[id!!] ?: return Bundle()
 
             return Bundle().apply {
@@ -34,7 +34,7 @@ class GameSessionService : Service() {
                 try {
                     callback?.onFinished()
                 } catch(e: DeadObjectException) {
-                    Log.e("openpigeon-GameSessionService", "Callback object is dead!")
+                    OpenPigeonLog.e("openpigeon-GameSessionService", "Callback object is dead!")
                 }
             }
         }
@@ -71,7 +71,7 @@ class GameSessionService : Service() {
                         }
                     })
                 } catch (e: DeadObjectException) {
-                    Log.e("openpigeon-GameSessionService", "Callback object is dead!")
+                    OpenPigeonLog.e("openpigeon-GameSessionService", "Callback object is dead!")
                     gameSession.messageUpdated = {}
                 }
             }

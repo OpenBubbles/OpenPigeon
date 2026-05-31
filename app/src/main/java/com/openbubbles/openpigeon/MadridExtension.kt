@@ -8,7 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import android.widget.RemoteViews
 import android.widget.Toast
 import androidx.compose.runtime.Composable
@@ -89,6 +89,7 @@ import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
 import androidx.core.content.edit
+import com.openbubbles.openpigeon.pool.NineBallGame
 
 
 class MadridExtension(val context: Context) : IMadridExtension.Stub() {
@@ -119,6 +120,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             DotsGame(),
             GomokuGame(),
             ReversiGame(),
+            NineBallGame(),
             QuestionsGame(),
             WordHuntGame(), //Marked Hidden as inside Word Games Wrapper
             AnagramsGame(), //Marked Hidden as inside Word Games Wrapper
@@ -139,11 +141,11 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         }
 
         fun findByName(name: String): Game? {
-            if (name == "pool3") {
-                return games.find { it is PoolGame }
+            return when (name) {
+                "pool3" -> games.find { it.getName() == "pool" }
+                "pool2" -> games.find { it.getName() == "pool2" }
+                else -> games.find { it.getName() == name }
             }
-
-            return games.find { it.getName() == name }
         }
 
         var currentUserCount: Int = 2
@@ -192,7 +194,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             try {
                 cb.updateView(result.remoteViews)
             } catch (t: Throwable) {
-                Log.e("MadridExtension", "updateKeyboard updateView failed", t)
+                OpenPigeonLog.e("MadridExtension", "updateKeyboard updateView failed", t)
             }
         }
 
@@ -200,7 +202,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             try {
                 cb.updateView(result.remoteViews)
             } catch (t: Throwable) {
-                Log.e("MadridExtension", "updateKeyboard second updateView failed", t)
+                OpenPigeonLog.e("MadridExtension", "updateKeyboard second updateView failed", t)
             }
         }, 50)
     }
@@ -235,7 +237,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         session.handleNewMessage(message)
         val game = session.getGame()
 
-        Log.i("Session", message.session.toString())
+        OpenPigeonLog.i("Session", message.session.toString())
         if (game != null ) {
             val intent = Intent(context, game.gameClass())
                 .apply {
@@ -247,7 +249,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             context.startActivity(intent)
         } else {
-            Log.e("Game","null")
+            OpenPigeonLog.e("Game","null")
             return
         }
     }
@@ -279,7 +281,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
     override fun messageUpdated(message: MadridMessage?) {
         if (message == null) return
         activeSessions[message.session]?.handleNewMessage(message)
-        Log.i("update", "message")
+        OpenPigeonLog.i("update", "message")
     }
 
 }
@@ -602,7 +604,11 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
                 putExtra("DISPLAY_GAME", run {
                     val game = session?.currentMessage?.get("game")
                     val gameName = session?.currentMessage?.get("game_name")
-                    if (game == "pool3") "8 Ball+" else gameName
+                    when (game) {
+                        "pool3" -> "8 Ball+"
+                        "pool2" -> "9 Ball"
+                        else -> gameName
+                    }
                 })
                 data = "data://${System.currentTimeMillis()}".toUri()
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)

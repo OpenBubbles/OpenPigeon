@@ -11,7 +11,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.os.SystemClock
-import android.util.Log
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import androidx.core.content.edit
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -142,6 +142,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
 import com.openbubbles.openpigeon.settings.SettingsSheet
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
+import androidx.appcompat.widget.SwitchCompat
 import kotlin.apply
 import kotlin.toString
 import androidx.compose.ui.res.painterResource
@@ -399,8 +403,217 @@ class Crazy8Activity : ComponentActivity() {
     private var settingsConfigured = false
     private var settingsIdentityBeforeOpen: String? = null
 
+    private var crazy8ActivityClosing = false
+    private var musicEnabled = false
+    private var musicTrack: AudioTrack? = null
+    private val crazy8MusicTrack = "crazy8/crazy8.wav"
+
     fun getPrefs(): SharedPreferences {
         return getSharedPreferences("crazy_prefs", MODE_PRIVATE)
+    }
+
+    private data class WavLoopData(
+        val pcm: ByteArray,
+        val sampleRate: Int,
+        val channelMask: Int,
+        val encoding: Int,
+        val frameCount: Int
+    )
+
+    private fun applyMusicEnabled(enabled: Boolean) {
+        musicEnabled = enabled
+
+        getPrefs().edit {
+            putBoolean("music_enabled", enabled)
+        }
+
+        if (enabled) {
+            startCrazy8Music()
+        } else {
+            stopCrazy8Music()
+        }
+    }
+
+    private fun startCrazy8Music() {
+        if (!musicEnabled || crazy8ActivityClosing || musicTrack != null) return
+
+        try {
+            val wav = loadPcm16Wav(crazy8MusicTrack)
+
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_GAME)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(wav.sampleRate)
+                        .setChannelMask(wav.channelMask)
+                        .setEncoding(wav.encoding)
+                        .build()
+                )
+                .setBufferSizeInBytes(wav.pcm.size)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+
+            if (track.state != AudioTrack.STATE_INITIALIZED) {
+                track.release()
+                throw IllegalStateException("AudioTrack failed to initialize")
+            }
+
+            val written = track.write(wav.pcm, 0, wav.pcm.size)
+            if (written <= 0) {
+                track.release()
+                throw IllegalStateException("AudioTrack write failed: $written")
+            }
+
+            val loopResult = track.setLoopPoints(0, wav.frameCount, -1)
+            if (loopResult != AudioTrack.SUCCESS) {
+                OpenPigeonLog.w("Crazy8Music", "Loop points failed: $loopResult")
+            }
+
+            track.setVolume(0.55f)
+
+            musicTrack = track
+            track.play()
+
+            OpenPigeonLog.e(
+                "Crazy8Music",
+                "Started $crazy8MusicTrack sampleRate=${wav.sampleRate} frames=${wav.frameCount} written=$written playState=${track.playState}"
+            )
+        } catch (e: Exception) {
+            OpenPigeonLog.e("Crazy8Music", "Unable to play music track $crazy8MusicTrack", e)
+
+            musicEnabled = false
+            musicTrack = null
+        }
+    }
+
+    private fun pauseCrazy8Music() {
+        try {
+            musicTrack?.let { track ->
+                if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                    track.pause()
+                }
+            }
+        } catch (e: Exception) {
+            OpenPigeonLog.w("Crazy8Music", "Unable to pause music", e)
+        }
+    }
+
+    private fun resumeCrazy8Music() {
+        if (!musicEnabled || crazy8ActivityClosing) return
+
+        try {
+            val track = musicTrack
+
+            if (track == null) {
+                startCrazy8Music()
+            } else if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                track.play()
+            }
+        } catch (e: Exception) {
+            OpenPigeonLog.w("Crazy8Music", "Unable to resume music, restarting", e)
+            stopCrazy8Music()
+            startCrazy8Music()
+        }
+    }
+
+    private fun stopCrazy8Music() {
+        val track = musicTrack ?: return
+        musicTrack = null
+
+        try {
+            track.pause()
+        } catch (_: Exception) {
+        }
+
+        track.release()
+    }
+
+    private fun loadPcm16Wav(path: String): WavLoopData {
+        val bytes = assets.open(path).use { it.readBytes() }
+
+        if (bytes.size < 44 || chunkName(bytes, 0) != "RIFF" || chunkName(bytes, 8) != "WAVE") {
+            throw IllegalArgumentException("Invalid WAV file: $path")
+        }
+
+        var offset = 12
+        var audioFormat = 0
+        var channelCount = 0
+        var sampleRate = 0
+        var bitsPerSample = 0
+        var dataStart = -1
+        var dataSize = 0
+
+        while (offset + 8 <= bytes.size) {
+            val name = chunkName(bytes, offset)
+            val size = readLeInt(bytes, offset + 4)
+            val start = offset + 8
+
+            if (start + size > bytes.size) break
+
+            when (name) {
+                "fmt " -> {
+                    audioFormat = readLeShort(bytes, start)
+                    channelCount = readLeShort(bytes, start + 2)
+                    sampleRate = readLeInt(bytes, start + 4)
+                    bitsPerSample = readLeShort(bytes, start + 14)
+                }
+                "data" -> {
+                    dataStart = start
+                    dataSize = size
+                }
+            }
+
+            offset = start + size + (size and 1)
+        }
+
+        if (audioFormat != 1 || bitsPerSample != 16 || channelCount !in 1..2 || dataStart < 0 || dataSize <= 0) {
+            throw IllegalArgumentException("WAV must be 16-bit PCM mono/stereo: $path")
+        }
+
+        val pcm = bytes.copyOfRange(dataStart, dataStart + dataSize)
+        val frameSize = channelCount * 2
+        val frameCount = pcm.size / frameSize
+        val channelMask = if (channelCount == 1) {
+            AudioFormat.CHANNEL_OUT_MONO
+        } else {
+            AudioFormat.CHANNEL_OUT_STEREO
+        }
+
+        return WavLoopData(
+            pcm = pcm,
+            sampleRate = sampleRate,
+            channelMask = channelMask,
+            encoding = AudioFormat.ENCODING_PCM_16BIT,
+            frameCount = frameCount
+        )
+    }
+
+    private fun readLeShort(bytes: ByteArray, offset: Int): Int {
+        return (bytes[offset].toInt() and 0xff) or
+                ((bytes[offset + 1].toInt() and 0xff) shl 8)
+    }
+
+    private fun readLeInt(bytes: ByteArray, offset: Int): Int {
+        return (bytes[offset].toInt() and 0xff) or
+                ((bytes[offset + 1].toInt() and 0xff) shl 8) or
+                ((bytes[offset + 2].toInt() and 0xff) shl 16) or
+                ((bytes[offset + 3].toInt() and 0xff) shl 24)
+    }
+
+    private fun chunkName(bytes: ByteArray, offset: Int): String {
+        return String(
+            byteArrayOf(
+                bytes[offset],
+                bytes[offset + 1],
+                bytes[offset + 2],
+                bytes[offset + 3]
+            )
+        )
     }
 
     private fun refreshSettingsSheetValues() {
@@ -423,6 +636,19 @@ class Crazy8Activity : ComponentActivity() {
                 putString("name", newName)
             }
             name = newName
+        }
+
+        val musicSwitch = SwitchCompat(this)
+        musicSwitch.isChecked = getPrefs().getBoolean("music_enabled", true)
+        musicEnabled = musicSwitch.isChecked
+        musicSwitch.setOnCheckedChangeListener { _, checked ->
+            applyMusicEnabled(checked)
+        }
+
+        settingsSheet.addGameControl("Music", musicSwitch)
+
+        if (musicEnabled) {
+            startCrazy8Music()
         }
     }
 
@@ -496,7 +722,7 @@ class Crazy8Activity : ComponentActivity() {
             if (isConnecting) return@Runnable
             if (currentConnection != null && connected) return@Runnable
 
-            Log.i("Crazy8", "Attempting reconnect to room=$currentRoom")
+            OpenPigeonLog.w("Crazy8", "Attempting reconnect to room=$currentRoom")
             connectedError = null
             joinRoom(currentRoom)
         }
@@ -520,7 +746,7 @@ class Crazy8Activity : ComponentActivity() {
             try {
                 block()
             } catch (e: Exception) {
-                Log.e("Crazy8", "Async operation failed", e)
+                OpenPigeonLog.e("Crazy8", "Async operation failed", e)
             }
         }
     }
@@ -560,7 +786,7 @@ class Crazy8Activity : ComponentActivity() {
                 val room = currentMessage["room"]!!
                 joinRoom(room)
             } else {
-                Log.e("openpigeon-${baseGame.getName()}", "$sessionId does not exist!")
+                OpenPigeonLog.e("openpigeon-${baseGame.getName()}", "$sessionId does not exist!")
                 finish()
             }
         }
@@ -571,7 +797,7 @@ class Crazy8Activity : ComponentActivity() {
             val prefs = remember { getPrefs() }
 
             if (CRAZY8_VERBOSE_LOGS) {
-                Log.i("name", prefs.getString("name", "")!!)
+                OpenPigeonLog.w("name", prefs.getString("name", "")!!)
             }
             var thisName by remember { mutableStateOf(prefs.getString("name", "") ?: "") }
             if (name == null) {
@@ -696,7 +922,7 @@ class Crazy8Activity : ComponentActivity() {
 
         PlayerIO.authenticate(this, BuildConfig.PIO_GAME_ID, "mobile", authParams, null, object : Callback<Client>() {
             override fun onSuccess(p0: Client?) {
-                Log.i("PlayerIO", "Authenticated with playerIO!")
+                OpenPigeonLog.w("PlayerIO", "Authenticated with playerIO!")
                 val joinData = mapOf(
                     "id" to userid,
                     "name" to legacyAvatarStringForCrazy8(name ?: "Player"),
@@ -711,7 +937,7 @@ class Crazy8Activity : ComponentActivity() {
 
                     override fun onError(p0: PlayerIOError?) {
                         isConnecting = false
-                        Log.e("PlayerIO", "Error joining $p0")
+                        OpenPigeonLog.e("PlayerIO", "Error joining $p0")
                         connectedError = p0.toString()
                         scheduleReconnect()
                     }
@@ -720,13 +946,13 @@ class Crazy8Activity : ComponentActivity() {
 
             override fun onError(p0: PlayerIOError?) {
                 isConnecting = false
-                Log.e("PlayerIO", "Error $p0")
+                OpenPigeonLog.e("PlayerIO", "Error $p0")
                 connectedError = p0.toString()
                 scheduleReconnect()
             }
         })
 
-        Log.i("Godot room", room)
+        OpenPigeonLog.w("Godot room", room)
     }
 
     fun sendMessage(message: String) {
@@ -759,7 +985,7 @@ class Crazy8Activity : ComponentActivity() {
             try {
                 connection.send("emsg", encrypted)
             } catch (e: Exception) {
-                Log.e("Crazy8", "Failed to send chat message", e)
+                OpenPigeonLog.e("Crazy8", "Failed to send chat message", e)
             }
         }
     }
@@ -848,7 +1074,7 @@ class Crazy8Activity : ComponentActivity() {
                 connection.send("name", packed)
                 connection.send("avatar", packed)
             } catch (e: Exception) {
-                Log.e("Crazy8", "Failed to send avatar update", e)
+                OpenPigeonLog.e("Crazy8", "Failed to send avatar update", e)
             }
         }
     }
@@ -966,7 +1192,7 @@ class Crazy8Activity : ComponentActivity() {
         connection.addMessageListener("*", object : MessageListener() {
             override fun onMessage(message: Message?) {
                 if (CRAZY8_VERBOSE_LOGS) {
-                    Log.i("PlayerIO", "message $message")
+                    OpenPigeonLog.w("PlayerIO", "message $message")
                 }
                 when (message!!.type) {
                     "join_list", "game_list" -> {
@@ -990,7 +1216,7 @@ class Crazy8Activity : ComponentActivity() {
                             val chain = message.getInt(6)
 
                             if (CRAZY8_VERBOSE_LOGS) {
-                                Log.i("Crazy8", "game_list reverse=$reverse chain=$chain")
+                                OpenPigeonLog.w("Crazy8", "game_list reverse=$reverse chain=$chain")
                             }
 
                             game = buildCrazyGameFromSections(
@@ -1119,7 +1345,7 @@ class Crazy8Activity : ComponentActivity() {
 
                         val bytes = message.getByteArray(1)
                         if (CRAZY8_VERBOSE_LOGS) {
-                            Log.i("bytes", Base64.encode(bytes))
+                            OpenPigeonLog.w("bytes", Base64.encode(bytes))
                         }
                         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
                         // Vitalii Zlotskii is very good at cryptography, as showed off here...
@@ -1138,7 +1364,7 @@ class Crazy8Activity : ComponentActivity() {
                         }, 5000)
 
                         if (CRAZY8_VERBOSE_LOGS) {
-                            Log.i("Got message", decrypted)
+                            OpenPigeonLog.w("Got message", decrypted)
                         }
                     }
                     "name", "avatar" -> {
@@ -1152,7 +1378,7 @@ class Crazy8Activity : ComponentActivity() {
         })
         connection.addDisconnectListener(object : DisconnectListener() {
             override fun onDisconnect() {
-                Log.i("PlayerIO", "disconnected")
+                OpenPigeonLog.w("PlayerIO", "disconnected")
                 connected = false
                 currentConnection = null
                 isConnecting = false
@@ -1163,6 +1389,8 @@ class Crazy8Activity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        crazy8ActivityClosing = true
+        stopCrazy8Music()
         cancelReconnect()
         reconnectHandler.removeCallbacks(pingRunnable)
         networkExecutor.shutdownNow()
@@ -1176,15 +1404,18 @@ class Crazy8Activity : ComponentActivity() {
         if (gameSessionIPC != null) {
             gameSessionIPC?.setSuppressNotifications(sessionId, true)
         } else {
-            Log.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
+            OpenPigeonLog.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
         }
 
         if (currentConnection == null && currentRoom.isNotBlank() && !name.isNullOrBlank()) {
             scheduleReconnect(200L)
         }
+
+        resumeCrazy8Music()
     }
 
     override fun onPause() {
+        pauseCrazy8Music()
         gameSessionIPC!!.setSuppressNotifications(sessionId, false)
         super.onPause()
     }
@@ -1427,7 +1658,7 @@ fun rememberAssetBitmap(context: Context, path: String): androidx.compose.ui.gra
                 imageState.value = bmp?.asImageBitmap()
             }
         } catch (e: Exception) {
-            Log.e("Crazy8", "Failed to load asset $path", e)
+            OpenPigeonLog.e("Crazy8", "Failed to load asset $path", e)
         }
     }
 
@@ -1454,7 +1685,7 @@ fun RenderLobbyAvatar(avatarData: String, modifier: Modifier = Modifier) {
                         applyFromOpponentString(avatarData)
                         tag = avatarData
                     } catch (e: Exception) {
-                        Log.e("Crazy8", "Failed to render lobby avatar", e)
+                        OpenPigeonLog.e("Crazy8", "Failed to render lobby avatar", e)
                         showPlaceholder()
                     }
                 }
@@ -1467,7 +1698,7 @@ fun RenderLobbyAvatar(avatarData: String, modifier: Modifier = Modifier) {
                     view.applyFromOpponentString(avatarData)
                     view.tag = avatarData
                 } catch (e: Exception) {
-                    Log.e("Crazy8", "Failed to update lobby avatar", e)
+                    OpenPigeonLog.e("Crazy8", "Failed to update lobby avatar", e)
                     view.showPlaceholder()
                 }
             }
