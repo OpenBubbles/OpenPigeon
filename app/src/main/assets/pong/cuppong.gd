@@ -15,6 +15,7 @@ var CHARMAP = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789~!@
 var CHARMAP_LEN = len(CHARMAP)
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
+const MUSIC_STREAM := preload("res://global/audio/pong.ogg")
 
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var player_avatar_display = %PlayerAvatarDisplay
@@ -35,6 +36,7 @@ const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 @export var show_overlay: bool = true
 
 var appPlugin: Object
+var mediaPlugin = null
 var screen_size: Vector2
 var has_connected: bool = false
 var game_settings_category: String = ""
@@ -117,6 +119,15 @@ func _ready():
 		settings_button.pressed.connect(_on_settings_button_pressed)
 	if is_instance_valid(dot_timer):
 		dot_timer.connect("timeout", _on_dot_timer_timeout)
+		
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
+	
 	if appPlugin:
 		if not has_connected:
 			print("App plugin is available")
@@ -132,6 +143,29 @@ func _ready():
 	if _debug_perf:
 		_create_debug_overlay()
 	_enforce_mobile_lighting_settings()
+	
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 	
 func _enforce_mobile_lighting_settings() -> void:
 	if is_instance_valid(camera):

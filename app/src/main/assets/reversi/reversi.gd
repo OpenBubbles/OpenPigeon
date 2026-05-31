@@ -44,6 +44,7 @@ var win_loss_state = ""
 var white_score = 0
 var black_score = 0
 var preview_flips_active = false
+var mediaPlugin = null
 
 const STAR_POINTS = [
 Vector2i(2, 2),
@@ -67,6 +68,7 @@ const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const STAR_POINT_SCENE = preload("res://reversi/StarPoint.tscn")
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const PIECE_TEX := preload("res://reversi/reversi_tile.png")
+const MUSIC_STREAM := preload("res://global/audio/reversi.ogg")
 const PIECE_PADDING := 6
 
 func _make_piece_material() -> ShaderMaterial:
@@ -109,6 +111,15 @@ func _ready():
 	call_deferred("place_star_points")
 
 	var appPlugin = Engine.get_singleton("AppPlugin")
+	
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
+	
 	if appPlugin:
 		print("AppPlugin Available")
 		if not has_connected:
@@ -137,6 +148,29 @@ func _ready():
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
 		background.color = Color(0.08, 0.08, 0.08) if is_dark else Color("#e5e5e5")
+		
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 
 func setup_board_structure():
 	if not grid:

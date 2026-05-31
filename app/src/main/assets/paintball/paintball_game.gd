@@ -35,6 +35,7 @@ const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_ani
 const RULES_POPUP_SCENE := preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE := preload("res://global/settings_popup.tscn")
 const PAINTBALL_SCENE := preload("res://paintball/PaintballProjectile.tscn")
+const MUSIC_STREAM := preload("res://global/audio/paintball.ogg")
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 const SPLAT_TEX := preload("res://paintball/splat.png")
 const OPPONENT_FACING_TEX := preload("res://paintball/opponent_facing.png")
@@ -61,6 +62,7 @@ var ui
 # Connection / plugin
 # -------------------------------------------------------------------
 var has_connected: bool = false
+var mediaPlugin = null
 
 # -------------------------------------------------------------------
 # Identity and turn state (PB_State expects these)
@@ -248,7 +250,15 @@ func _ready() -> void:
 		(fire_button as Button).pressed.connect(_on_fire_pressed)
 	elif fire_button is BaseButton:
 		(fire_button as BaseButton).pressed.connect(_on_fire_pressed)
+		
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
 
+	_start_music()
+		
 	# Important: load/parse game data before any await that allows the screen to draw.
 	_connect_app_plugin_or_dev()
 
@@ -321,6 +331,33 @@ func _set_game_data(raw_text: String) -> void:
 
 	# UI reflect
 	ui.apply_hearts_from_hp()
+	
+# -------------------------------------------------------------------
+# Music hookup
+# -------------------------------------------------------------------
+	
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 		
 # -------------------------------------------------------------------
 # Button clicked entry point

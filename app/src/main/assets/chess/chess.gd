@@ -59,6 +59,7 @@ var pending_evaluate: bool = false   # set true if parse_gp_replay ran before UI
 var _modal_open: bool = false
 
 var appPlugin: Object = null
+var mediaPlugin = null
 var local_mode: bool = false        # true when running without appPlugin (local debug)
 var isTurn: bool = false
 var waitingForOpponent: bool = true
@@ -83,6 +84,7 @@ var flip_board_ui: bool = false  # Whether to flip the board UI to put local pla
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
+const MUSIC_STREAM := preload("res://global/audio/chess.ogg")
 
 var sent_tween: Tween
 var dot_count: int = 0
@@ -248,6 +250,14 @@ func _ready() -> void:
 		settings_button.pressed.connect(_on_settings_button_pressed)
 	if is_instance_valid(dot_timer):
 		dot_timer.connect("timeout", _on_dot_timer_timeout)
+		
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
 
 	appPlugin = Engine.get_singleton("AppPlugin")
 	local_mode = (appPlugin == null)
@@ -288,6 +298,29 @@ func _set_game_data(raw: String) -> void:
 	# Always release the guard flag (guaranteed cleanup)
 	is_processing_game_data = false
 	_log_data.info("_set_game_data complete")
+	
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 
 ## Internal implementation of _set_game_data - separated to ensure guard flag cleanup
 func _set_game_data_impl(raw: String) -> void:

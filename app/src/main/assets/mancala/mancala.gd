@@ -39,6 +39,7 @@ var StoneScene : PackedScene = preload("res://mancala/stone.tscn")
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
+const MUSIC_STREAM := preload("res://global/audio/mancala.ogg")
 
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var opp_avatar_display = %OppAvatarDisplay
@@ -65,6 +66,7 @@ const BOUNCE_DURATION: float = 0.01 # Duration for the initial bounce at pickup 
 var dot_count: int = 0
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 var sent_tween: Tween
+var mediaPlugin = null
 
 var _is_animating: bool = false
 var moves_made: Array = []
@@ -105,6 +107,15 @@ func _ready() -> void:
 		skip_button.visible = false
 
 	var appPlugin = Engine.get_singleton("AppPlugin")
+	
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
+	
 	if appPlugin:
 		print("AppPlugin Available")
 		if not has_connected:
@@ -132,6 +143,29 @@ func _ready() -> void:
 	add_child(_carrying_stones_container)
 	_carrying_stones_container.z_index = 90
 	_apply_board_sprite_modulate()
+	
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 	
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if not is_instance_valid(background):

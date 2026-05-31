@@ -38,6 +38,7 @@ const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
+const MUSIC_STREAM := preload("res://global/audio/fill.ogg")
 
 var board: Array = []
 var color_board: Array = []
@@ -67,6 +68,7 @@ var my_player_id
 var player = 1
 var sent_tween: Tween
 var dot_count = 0
+var mediaPlugin = null
 
 func _ready():
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
@@ -82,6 +84,15 @@ func _ready():
 		dot_timer.connect("timeout", _on_dot_timer_timeout)
 
 	var appPlugin = Engine.get_singleton("AppPlugin")
+	
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
+	
 	if appPlugin:
 		print("AppPlugin Available")
 		if not has_connected:
@@ -97,6 +108,29 @@ func _ready():
 		rules_button.pressed.connect(on_rules_button_pressed)
 	if settings_button:
 		settings_button.pressed.connect(_on_settings_button_pressed)
+		
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 
 func _update_start_positions() -> void:
 	if player == 2:
@@ -365,7 +399,7 @@ func update_ui_from_board_state():
 	print("253 UI Updated! Left Score (Me): %d, Right Score (Opp): %d" % [my_count, op_count])
 	
 func _get_score_text_color(bg_color_index: int) -> Color:
-	if bg_color_index == 1 or bg_color_index == 2: # Yellow
+	if bg_color_index == 1 or bg_color_index == 20: # Yellow
 		return Color(0.2, 0.2, 0.2) # dark gray
 	return Color.WHITE
 			

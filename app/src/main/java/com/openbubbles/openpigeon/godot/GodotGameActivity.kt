@@ -18,6 +18,7 @@ class GodotGameActivity : GodotActivity() {
 
     lateinit var sessionId: String
     var appPlugin: GodotAppPlugin? = null
+    var mediaPlugin: OpenPigeonMediaPlugin? = null
     var gameSessionIPC: GameSessionIPC? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,14 +53,17 @@ class GodotGameActivity : GodotActivity() {
             OpenPigeonLog.w("openpigeon-godot", "onResume called before baseGame was initialized!")
         }
         super.onResume()
+        mediaPlugin?.resumeMusic()
     }
 
     override fun onPause() {
+        mediaPlugin?.pauseMusic()
         gameSessionIPC?.setSuppressNotifications(sessionId, false)
         super.onPause()
     }
 
     override fun onDestroy() {
+        mediaPlugin?.stopMusic()
         gameSessionIPC?.setSuppressNotifications(sessionId, false)
         gameSessionIPC?.unlockMsgHandle(sessionId)
         super.onDestroy()
@@ -111,6 +115,13 @@ class GodotGameActivity : GodotActivity() {
         return appPlugin!!
     }
 
+    private fun getOrCreateMediaPlugin(): OpenPigeonMediaPlugin {
+        if (mediaPlugin == null) {
+            mediaPlugin = OpenPigeonMediaPlugin(godot!!)
+        }
+        return mediaPlugin!!
+    }
+
     private fun isYourTurn(message: Map<String, String>): Boolean {
         val sender = message["sender"]
         val myId = gameSessionIPC?.getSenderUUID(sessionId)
@@ -125,7 +136,7 @@ class GodotGameActivity : GodotActivity() {
     }
 
     override fun getHostPlugins(godot: Godot): Set<GodotPlugin> {
-        return setOf(getOrCreateAppPlugin())
+        return setOf(getOrCreateAppPlugin(), getOrCreateMediaPlugin())
     }
 
     override fun onGodotForceQuit(instance: Godot) {

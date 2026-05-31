@@ -22,6 +22,7 @@ const RULES_POPUP_SCENE  = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const PLAYER1_BOWL_TEX := preload("res://gomoku/player1_bowl.png")
 const PLAYER2_BOWL_TEX := preload("res://gomoku/player2_bowl.png")
+const MUSIC_STREAM := preload("res://global/audio/gomoku.ogg")
 
 var my_id := ""
 var my_player := 0           # 0 spectator, 1 black, 2 white
@@ -34,6 +35,7 @@ const SNAP_PX := 10.0
 var _is_dragging := false
 var _press_global := Vector2.ZERO
 const DRAG_THRESHOLD := 6.0
+var mediaPlugin = null
 
 var is_my_turn = false
 var game_id := ""
@@ -93,6 +95,15 @@ func _ready() -> void:
 		push_warning("No %SendButton in scene")
 
 	appPlugin = Engine.get_singleton("AppPlugin")
+
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
+
 	if appPlugin:
 		if not has_connected:
 			appPlugin.connect("set_game_data", Callable(self, "_set_game_data"))
@@ -102,6 +113,29 @@ func _ready() -> void:
 		var dev := '{"isYourTurn": true,"player":"2","map":"00000000000000000000000000000000000000000000000000000000000000000211100000000222110000000021111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","move":"6,6,1","id":"dev"}'
 		await get_tree().process_frame
 		_set_game_data(dev)
+		
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 
 func _panel_inner_rect() -> Rect2:
 	var r := Board.get_rect()

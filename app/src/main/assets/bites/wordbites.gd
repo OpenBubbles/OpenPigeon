@@ -27,6 +27,7 @@ extends Control
 
 const LETTER_BG: Texture2D = preload("res://anagrams/letter_bg.png")
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
+const MUSIC_STREAM := preload("res://global/audio/wordbites.ogg")
 const DICT_PATH := "res://global/gp_wg_en2.txt"
 
 class TrieNode:
@@ -48,6 +49,7 @@ var has_connected := false
 var my_id := ""
 var game_id := ""
 var winner = null
+var mediaPlugin = null
 var game_over := false
 var game_ended := false
 var win_loss_state = ""
@@ -89,6 +91,15 @@ func _ready() -> void:
 				_words_scroll_container.gui_input.connect(_on_words_list_scroll_gui_input)
 	
 	appPlugin = Engine.get_singleton("AppPlugin")
+	
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
+	
 	if appPlugin:
 		if not has_connected:
 			appPlugin.connect("set_game_data", Callable(self, "_set_game_data"))
@@ -104,6 +115,29 @@ func _ready() -> void:
 	_apply_score_box_style(main_score_box)
 	_apply_score_box_style(player_score_box)
 	_apply_score_box_style(opp_score_box)
+	
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 	
 func _is_piece_horizontal_idx(idx: int, orientations: Array) -> bool:
 	if idx < 0 or idx >= orientations.size():

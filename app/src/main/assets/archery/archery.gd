@@ -3,6 +3,7 @@ class_name ArcheryGame
 
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
+const MUSIC_STREAM := preload("res://global/audio/archery.ogg")
 
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var player_avatar_display = %PlayerAvatarDisplay
@@ -70,6 +71,7 @@ var spectator_mode: bool = false
 var game_over: bool = false
 
 var appPlugin = null
+var mediaPlugin = null
 var num_shots: int = 0
 var aim_tween: Tween = null
 var aim_zoom_tween: Tween = null
@@ -123,6 +125,14 @@ func _update_set_score_labels() -> void:
 
 
 func _ready() -> void:
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
+
 	appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin:
 		print("App plugin is available")
@@ -173,6 +183,29 @@ func _ready() -> void:
 		camera.look_at(center - Vector3(0.0, CAMERA_LOOK_AT_Y_OFFSET, 0.0), Vector3.UP)
 	
 	update_distance()
+	
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 
 func check_winner(completed_round: int = set_num) -> bool:
 	print("check_winner: completed_round=", completed_round, " you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
@@ -1713,6 +1746,28 @@ func _on_settings_button_pressed() -> void:
 	dim.z_index = 99
 	root.move_child(dim, root.get_child_count() - 2)
 	settings_popup_script.setup_popup(dim)
+
+	if mediaPlugin:
+		var music_row := HBoxContainer.new()
+		music_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+		var music_label := Label.new()
+		music_label.text = "Music"
+		music_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+		var music_toggle := CheckButton.new()
+		music_toggle.button_pressed = mediaPlugin.isMusicEnabled()
+		music_toggle.toggled.connect(func(enabled: bool) -> void:
+			mediaPlugin.setMusicEnabled(enabled)
+			if enabled:
+				_start_music()
+			else:
+				_stop_music()
+		)
+
+		music_row.add_child(music_label)
+		music_row.add_child(music_toggle)
+		settings_popup_script.custom_settings_container.add_child(music_row)
 
 	var custom_settings_title := popup_instance.find_child("CustomSettingsTitleLabel", true)
 	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:

@@ -21,6 +21,7 @@ class_name CheckersBoardTop
 @onready var spec_label: Label = %SpecLabel
 @onready var board: TextureRect = %CheckersBoardTop
 var appPlugin: Node = null
+var mediaPlugin = null
 
 var sent_tween: Tween
 var dot_count: int = 0
@@ -34,6 +35,7 @@ var black_king_texture := preload("res://checkers/checker_black_king.png")
 var red_king_texture := preload("res://checkers/checker_red_king.png")
 var black_normal_texture := preload("res://checkers/checker_black.png")
 var red_normal_texture := preload("res://checkers/checker_red.png")
+const MUSIC_STREAM := preload("res://global/audio/checkers.ogg")
 
 var ui_piece_textures := {
 	"red": preload("res://checkers/checker_red.png"),
@@ -434,6 +436,15 @@ func _ready() -> void:
 			send_button.pressed.connect(_on_send_pressed)
 			
 	appPlugin = Engine.get_singleton("AppPlugin")
+	
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
+	
 	if appPlugin:
 		if not has_connected:
 			appPlugin.connect("set_game_data", _set_game_data)
@@ -460,6 +471,29 @@ func _visual_to_logical(gx: int, gy: int) -> Vector2i:
 	var lx := gx if (player == 2 and not spectator_mode) else (7 - gx)
 	var ly := (7 - gy) if (player == 2 and not spectator_mode) else gy
 	return Vector2i(lx, ly)
+	
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 	
 func _animate_send_button(show: bool) -> void:
 	if not is_instance_valid(send_button):

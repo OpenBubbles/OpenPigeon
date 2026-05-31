@@ -26,6 +26,7 @@ const DIRS				:= [Vector2i(1,0), Vector2i(0,1), Vector2i(1,1), Vector2i(1,-1)]
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const RULES_POPUP_SCENE	 := preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE := preload("res://global/settings_popup.tscn")
+const MUSIC_STREAM := preload("res://global/audio/connect4.ogg")
 const PIECE_TEX := {
 	"red":		preload("res://connect/red_piece.png"),
 	"yellow":	preload("res://connect/yellow_piece.png")
@@ -54,6 +55,7 @@ var last_highlight			: Node2D = null
 var droppedPiece			: RigidBody2D = null
 var board_state: PackedInt32Array = PackedInt32Array()
 var winner : String = ""
+var mediaPlugin = null
 
 func _ready() -> void:
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
@@ -69,6 +71,15 @@ func _ready() -> void:
 		_update_send_button_visibility(false)
 		send_button.pressed.connect(send_game)
 	var app: Object = Engine.get_singleton("AppPlugin")
+	
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
+	
 	if app:
 		if not has_connected:
 			app.connect("set_game_data", _set_game_data)
@@ -102,7 +113,6 @@ func _clear_board_pieces() -> void:
 			if n.find(",") != -1:
 				c.queue_free()
 	_reset_board_state()
-
 
 func _set_game_data(new_replay: String) -> void:
 	var data: Dictionary = JSON.parse_string(new_replay)
@@ -145,6 +155,29 @@ func _set_game_data(new_replay: String) -> void:
 	winner = data.get("winner", "")
 	_hydrate_board_from_replay(replay)
 	_refresh_turn_ui()
+	
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 
 func _resolve_my_side(my_id: String, p1_id: String, p2_id: String, owner: int, my_turn: bool) -> int:
 	if my_id != "" and p1_id != "" and p2_id != "":

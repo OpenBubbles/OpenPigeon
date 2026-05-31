@@ -28,6 +28,7 @@ class_name TanksGame
 const RULES_POPUP_SCENE := preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE := preload("res://global/settings_popup.tscn")
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
+const MUSIC_STREAM := preload("res://global/audio/tanks.ogg")
 
 var core: TanksCore
 var has_connected: bool = false
@@ -39,6 +40,7 @@ var spectator_mode: bool = false
 var can_interact: bool = true
 var has_replay: bool = false
 const BASE_WAIT_TEXT := "WAITING FOR OPPONENT"
+var mediaPlugin = null
 
 var game_over: bool = false
 var winner: String = ""
@@ -108,6 +110,14 @@ func _ready() -> void:
 		dot_timer.timeout.connect(_on_dot_timer_timeout)
 	if is_instance_valid(power_slider):
 		power_slider.value_changed.connect(_on_power_slider_changed)
+		
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
 
 	resized.connect(_on_resized)
 	_on_resized()
@@ -140,6 +150,29 @@ func _ready() -> void:
 	power_slider.editable = false
 
 	_connect_app_plugin_or_dev()
+	
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 	
 func _show_win_burst(avatar: Control) -> void:
 	if not is_instance_valid(avatar):

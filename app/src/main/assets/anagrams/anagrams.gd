@@ -29,6 +29,7 @@ extends Control
 const LETTER_BG: Texture2D = preload("res://anagrams/letter_bg.png")
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const DICT_PATH := "res://global/gp_wg_en2.txt"
+const MUSIC_STREAM := preload("res://global/audio/anagrams.ogg")
 
 var _tear_rng := RandomNumberGenerator.new()
 
@@ -39,6 +40,7 @@ var dot_count := 0
 var spectator_mode := false
 const BASE_WAIT_TEXT := "WAITING FOR OPPONENT"
 var appPlugin: Object = null
+var mediaPlugin = null
 var has_connected := false
 var my_id := ""
 var game_id := ""
@@ -70,6 +72,15 @@ func _ready() -> void:
 		dot_timer.connect("timeout", _on_dot_timer_timeout)
 	if not view_words_button.pressed.is_connected(_on_view_words_pressed):
 		view_words_button.pressed.connect(_on_view_words_pressed)
+		
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
+		
 	appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin:
 		if not has_connected:
@@ -323,6 +334,28 @@ func _make_letter_counts(pool: String) -> Dictionary:
 		counts[c] = int(counts.get(c, 0)) + 1
 	return counts
 		
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 
 func _parse_avatar_string(data_string: String) -> Dictionary:
 	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()

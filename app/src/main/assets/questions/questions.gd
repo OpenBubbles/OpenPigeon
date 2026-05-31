@@ -7,27 +7,30 @@ extends Control
 @onready var questions_list: VBoxContainer = %QuestionsList
 @onready var question_avatar_scene: Control		= %QuestionAvatarDisplay
 @onready var question_mark_filler: RichTextLabel		= %QuestionMark
-@onready var wait_for_label : Label = %WaitForLabel
-@onready var dot_timer : Timer = %DotTimer
-@onready var player_avatar_display	: Control		= %PlayerAvatarDisplay
+@onready var wait_for_label: Label = %WaitForLabel
+@onready var dot_timer: Timer = %DotTimer
+@onready var player_avatar_display: Control		= %PlayerAvatarDisplay
 @onready var _desc_rich: RichTextLabel = %Description
 @onready var bottom_items: VBoxContainer = %BottomItems
-@onready var overlay				: PanelContainer = %AnswerOverlay
-@onready var overlay_num			: RichTextLabel = %QuestionNumber
-@onready var overlay_text			: RichTextLabel = %QuestionText
-@onready var overlay_yes			: Button = %YesButton
-@onready var overlay_no				: Button = %NoButton
-@onready var overlay_some			: Button = %SometimesButton
-@onready var overlay_correct		: Button = %CorrectButton
+@onready var overlay: PanelContainer = %AnswerOverlay
+@onready var overlay_num: RichTextLabel = %QuestionNumber
+@onready var overlay_text: RichTextLabel = %QuestionText
+@onready var overlay_yes: Button = %YesButton
+@onready var overlay_no: Button = %NoButton
+@onready var overlay_some: Button = %SometimesButton
+@onready var overlay_correct: Button = %CorrectButton
 @onready var questions_text_container: PanelContainer = %QuestionsTextContainer
+@onready var win_loss_label: Label = %WinLossLabel
 
 var my_uuid: String = ""
 
 const OpponentAvatarScene: PackedScene = preload("res://global/avatar_textures/AvatarThumbnail.tscn")
 const AvatarWinAnimScene: PackedScene = preload("res://global/avatar_textures/avatar_win_anim.tscn")
+const MUSIC_STREAM := preload("res://global/audio/20questions.ogg")
 var _opponent_avatar_data: Dictionary = {}
 
 var is_my_turn: bool = false
+var mediaPlugin = null
 var server_player_hint: int = 0
 var i_am_player: int = 1
 var secret_answer: String = ""
@@ -52,6 +55,15 @@ var _kb_last_h := 0
 
 func _ready() -> void:
 	var appPlugin = Engine.get_singleton("AppPlugin")
+	
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
+	
 	if appPlugin and appPlugin.has_method("getSenderUUID"):
 		my_uuid = String(appPlugin.getSenderUUID() or "")
 	else:
@@ -87,6 +99,23 @@ func _ready() -> void:
 		questions_list.add_theme_constant_override("separation", sep * 2)
 	if is_instance_valid(overlay):
 		overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+		overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+		overlay.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		overlay.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		overlay.z_index = 1000
+
+	if is_instance_valid(overlay_yes):
+		overlay_yes.pressed.connect(func(): _overlay_click(1))
+	if is_instance_valid(overlay_no):
+		overlay_no.pressed.connect(func(): _overlay_click(2))
+	if is_instance_valid(overlay_some):
+		overlay_some.pressed.connect(func(): _overlay_click(3))
+	if is_instance_valid(overlay_correct):
+		overlay_correct.visible = true
+		overlay_correct.disabled = false
+		overlay_correct.mouse_filter = Control.MOUSE_FILTER_STOP
+		overlay_correct.pressed.connect(func(): _overlay_click(4))
+
 	if is_instance_valid(text_box):
 		if not text_box.focus_entered.is_connected(_on_text_focus_entered):
 			text_box.focus_entered.connect(_on_text_focus_entered)
@@ -94,15 +123,6 @@ func _ready() -> void:
 			text_box.focus_exited.connect(_on_text_focus_exited)
 		if not text_box.text_changed.is_connected(_on_text_changed_sanitize):
 			text_box.text_changed.connect(_on_text_changed_sanitize)
-		overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-		overlay.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		overlay.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		overlay.z_index = 1000
-
-		if is_instance_valid(overlay_yes): overlay_yes.pressed.connect(func(): _overlay_click(1))
-		if is_instance_valid(overlay_no): overlay_no.pressed.connect(func(): _overlay_click(2))
-		if is_instance_valid(overlay_some): overlay_some.pressed.connect(func(): _overlay_click(3))
-		if is_instance_valid(overlay_correct): overlay_correct.pressed.connect(func(): _overlay_click(4))
 	var vbar := questions_scroll.get_v_scroll_bar()
 	if vbar:
 		vbar.visible = false
@@ -115,6 +135,29 @@ func _ready() -> void:
 		_start_waiting()
 	elif is_my_turn and (not game_over):
 		_stop_waiting()
+		
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 
 func _get_s(parsed_dict: Dictionary, key: String, def: String = "") -> String:
 	if not parsed_dict.has(key):
@@ -299,6 +342,9 @@ func _set_game_data(data_json: String) -> void:
 	dbg("set_game_data: secret_answer='%s', game_over=%s" % [secret_answer, str(game_over)])
 	_renumber_from_one()
 	_evaluate_game_over_and_winner()
+	if parsed.has("winner"):
+		winner = int(_get_s(parsed, "winner", "0"))
+		game_over = winner != 0
 	_update_upcoming_input_chip_color()
 	if (not is_my_turn) and (not game_over) and (not _waiting_active):
 		_start_waiting()
@@ -337,26 +383,46 @@ func _evaluate_game_over_and_winner() -> void:
 		
 	if game_over and not was_over:
 		_stop_waiting()
+		_hide_answer_overlay()
+
 		if is_instance_valid(bottom_items):
 			bottom_items.visible = false
 		if is_instance_valid(text_box):
 			text_box.editable = false
+		if is_instance_valid(send_button):
+			send_button.disabled = true
 
-		var p1_avatar := player_avatar_display
-		var p2_avatar := question_avatar_scene
+		if is_instance_valid(win_loss_label):
+			if winner == 0:
+				win_loss_label.text = "DRAW!"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+			else:
+				var you_win := false
 
-		if winner == 1:
-			if is_instance_valid(p1_avatar):
-				print("[20Q][win-burst] highlighting Player 1 avatar")
-				_show_win_burst(p1_avatar)
-			else:
-				print("[20Q][win-burst][WARN] player_avatar_display not valid")
-		elif winner == -1:
-			if is_instance_valid(p2_avatar):
-				print("[20Q][win-burst] highlighting Player 2 avatar")
-				_show_win_burst(p2_avatar)
-			else:
-				print("[20Q][win-burst][WARN] opponent avatar display (question_avatar_scene) not valid")
+				if i_am_player == 1 and winner == 1:
+					you_win = true
+				elif i_am_player == 2 and winner == -1:
+					you_win = true
+
+				if you_win:
+					win_loss_label.text = "YOU WIN!"
+					win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+				else:
+					if i_am_player != 1 and i_am_player != 2:
+						win_loss_label.text = "Player 1 Wins!" if winner == 1 else "Player 2 Wins!"
+						win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+					else:
+						win_loss_label.text = "YOU LOSE"
+						win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
+			win_loss_label.visible = true
+			await get_tree().process_frame
+			win_loss_label.scale = Vector2.ZERO
+			win_loss_label.pivot_offset = win_loss_label.size / 2.0
+
+			var tween_in := create_tween()
+			tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
+				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	
 func _question_color_for_index(idx: int) -> Color:
 	var deg := (360.0 / 20.0) * float(idx)
@@ -512,8 +578,18 @@ func _apply_answer_code_to_idx(target_idx: int, code: int) -> void:
 		dbg("apply_idx: NOT FOUND or already answered")
 		return
 
+	if code == 4:
+		game_over = true
+		winner = 1
+
 	_render_all_questions()
 	_evaluate_game_over_and_winner()
+
+	if code == 4:
+		game_over = true
+		winner = 1
+		dbg("apply_idx: guessed-it selected; forcing game_over=true winner=1 before send")
+
 	dbg("apply_idx: updated; calling _send_full_state & _maybe_show_answer_popup")
 	_send_full_state()
 	_update_ui_interactivity()
@@ -556,8 +632,23 @@ func _send_game(text: String, q_idx: int, resp_code: int) -> void:
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
 
-	if game_over and winner != 0:
-		payload["winner"] = str(winner)
+	for q in questions:
+		if int(q.get("resp", 0)) == 4:
+			game_over = true
+			winner = 1
+			break
+
+	if game_over:
+		var win_loss_state := "0"
+
+		if winner == 0:
+			win_loss_state = "0"
+		elif (i_am_player == 1 and winner == 1) or (i_am_player == 2 and winner == -1):
+			win_loss_state = "1"
+		else:
+			win_loss_state = "-1"
+
+		payload["winner"] = my_uuid + "|" + win_loss_state
 
 	var json := JSON.stringify(payload)
 	print("Sending: ", json)
@@ -1123,8 +1214,16 @@ func _overlay_click(code: int) -> void:
 	if _overlay_idx == -1:
 		_hide_answer_overlay()
 		return
-	_apply_answer_code_to_idx(_overlay_idx, code)
+
+	var clicked_idx := _overlay_idx
+	_apply_answer_code_to_idx(clicked_idx, code)
 	_hide_answer_overlay()
+
+	if code == 4:
+		_stop_waiting()
+		_update_ui_interactivity()
+		return
+
 	if not game_over and i_am_player == 2 and is_my_turn:
 		_maybe_show_answer_popup()
 
@@ -1197,6 +1296,13 @@ func _show_answer_overlay_for(idx: int, text: String, col: Color) -> void:
 		overlay_text.text = text
 
 	_overlay_idx = idx
+
+	for btn in [overlay_yes, overlay_no, overlay_some, overlay_correct]:
+		if is_instance_valid(btn):
+			btn.visible = true
+			btn.disabled = false
+			btn.mouse_filter = Control.MOUSE_FILTER_STOP
+
 	overlay.visible = true
 	print("VISIBLE OVERLAY")
 	overlay.move_to_front()

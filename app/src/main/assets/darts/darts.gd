@@ -3,6 +3,7 @@ class_name DartsGame
 
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
+const MUSIC_STREAM := preload("res://global/audio/darts.ogg")
 
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var player_avatar_display = %PlayerAvatarDisplay
@@ -35,6 +36,7 @@ var is_my_turn: bool = false
 var player: int = -1
 var mode: int = -1
 var replay: String = ""
+var mediaPlugin = null
 
 var my_moves: Array[Array]
 
@@ -61,6 +63,15 @@ func _ready():
 	if is_instance_valid(dot_timer):
 		dot_timer.connect("timeout", _on_dot_timer_timeout)
 	var appPlugin = Engine.get_singleton("AppPlugin")
+	
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
+	
 	if appPlugin:
 		if not has_connected:
 			print("App plugin is available")
@@ -137,6 +148,29 @@ func _set_game_data(new_replay: String):
 		set_score(1, mode)
 		set_score(2, mode)
 	_process_game_state()
+	
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 
 func _get_turn_dart_limit() -> int:
 	if redemption_active:

@@ -26,6 +26,7 @@ extends Control
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
+const MUSIC_STREAM := preload("res://global/audio/dots.ogg")
 
 var sent_tween: Tween
 var dot_count: int = 0
@@ -50,6 +51,7 @@ var win_loss_state = ""
 var my_score
 var opp_score
 var my_id: String
+var mediaPlugin = null
 
 var prev_lines_cache: Array = []
 var last_replay_sent: String = ""
@@ -107,6 +109,15 @@ func _ready() -> void:
 
 	_apply_player_color_icons()
 	var appPlugin = Engine.get_singleton("AppPlugin")
+	
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
+	
 	if appPlugin: 
 		print("AppPlugin Available")
 		if not has_connected:
@@ -173,6 +184,29 @@ func _set_game_data(raw_text: String) -> void:
 		game_over = true
 	if not is_my_turn:
 		start_waiting_animation()
+		
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 
 func _load_pre_state_and_replay(replay_str: String) -> void:
 	var parsed := _parse_replay_dnb(replay_str)

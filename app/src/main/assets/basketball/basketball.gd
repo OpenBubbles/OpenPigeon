@@ -5,6 +5,7 @@ var elapsedTime: float = 0.0
 
 const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
+const MUSIC_STREAM := preload("res://global/audio/basketball.ogg")
 const MIN_DRAG_DISTANCE := 30.0
 
 @onready var opp_avatar_display = %OppAvatarDisplay
@@ -74,6 +75,7 @@ var skip_score2 = null
 var turnNum = null
 
 var appPlugin = null
+var mediaPlugin = null
 var has_connected = false
 var dev_data = ""
 var game_mode: String = "n"
@@ -99,6 +101,14 @@ func _ready() -> void:
 		timeRemainingLabel = get_node("Scoreboard/Time")
 		youScoreLabel = get_node("Scoreboard/YouScore")
 		oppScoreLabel = get_node("Scoreboard/OppScore")
+		
+		if Engine.has_singleton("OpenPigeonMedia"):
+			mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+			print("OpenPigeonMedia plugin is available")
+		else:
+			print("OpenPigeonMedia plugin is not available")
+
+		_start_music()
 
 		appPlugin = Engine.get_singleton("AppPlugin")
 		if appPlugin:
@@ -264,6 +274,29 @@ func _input(event: InputEvent) -> void:
 func interpolate_x_delta(value: float) -> float:
 	var t = inverse_lerp(-200.0, 200.0, value)
 	return lerp(-1, 1, t)
+	
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 
 func playReplay(player_num: int, replay_str: String) -> float:
 	replayPlaying = true

@@ -5,6 +5,7 @@ const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const BOMB_TEXTURE_PATH := preload("res://battleship/bomb.png")
 const PLANE_TEXTURE_PATH := preload("res://battleship/plane.png")
+const MUSIC_STREAM := preload("res://global/audio/battleship.ogg")
 signal replay_finished
 
 var _replay_pending: int = 0
@@ -42,6 +43,7 @@ const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 var _water_scroll_x: float = 0.0
 var isTurn = false
 var appPlugin = null
+var mediaPlugin = null
 var myBattleground: BattleGround = null
 var theirBattleground: BattleGround = null
 var myBoardContainer: Control = null
@@ -90,6 +92,13 @@ const BUFFER_OFFSETS_DIAG: Array[Vector2i] = [
 ]
 
 func _ready() -> void:
+	if Engine.has_singleton("OpenPigeonMedia"):
+		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+		print("OpenPigeonMedia plugin is available")
+	else:
+		print("OpenPigeonMedia plugin is not available")
+
+	_start_music()
 	appPlugin = Engine.get_singleton("AppPlugin")
 	
 	if appPlugin:
@@ -434,6 +443,29 @@ func _set_game_data(new_replay: String) -> void:
 		if not spectator_mode:
 			myBattleground.process_mode = Node.PROCESS_MODE_DISABLED
 			theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
+
+var music_player: AudioStreamPlayer = null
+
+func _start_music() -> void:
+	if mediaPlugin and not mediaPlugin.isMusicEnabled():
+		return
+
+	if music_player == null:
+		music_player = AudioStreamPlayer.new()
+		music_player.name = "MusicPlayer"
+		music_player.stream = MUSIC_STREAM
+		music_player.volume_db = -4.0
+		add_child(music_player)
+
+	if not music_player.playing:
+		music_player.play()
+		
+func _stop_music() -> void:
+	if music_player:
+		music_player.stop()
+	
+func _exit_tree() -> void:
+	_stop_music()
 
 func _apply_spectator_ship_hiding() -> void:
 	if not spectator_mode:
