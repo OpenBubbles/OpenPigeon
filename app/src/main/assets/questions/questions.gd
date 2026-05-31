@@ -5,7 +5,6 @@ extends Control
 @onready var questions_scroll: ScrollContainer = %QuestionsScroll
 @onready var questions_container: CenterContainer = %QuestionsContainer
 @onready var questions_list: VBoxContainer = %QuestionsList
-@onready var question_avatar_scene: Control		= %QuestionAvatarDisplay
 @onready var question_mark_filler: RichTextLabel		= %QuestionMark
 @onready var wait_for_label: Label = %WaitForLabel
 @onready var dot_timer: Timer = %DotTimer
@@ -45,6 +44,7 @@ var _overlay_idx: int = -1
 var BASE_WAIT_TEXT := ""
 var dot_count := 0
 var _waiting_active := false
+var spectator_mode: bool = false
 
 var _input_lifted := false
 var _input_orig_preset := -1
@@ -279,13 +279,16 @@ func _set_game_data(data_json: String) -> void:
 	var player1: String = _get_s(parsed, "player1", "")
 	var player2: String = _get_s(parsed, "player2", "")
 
+	spectator_mode = false
+
 	if player1 != "" or player2 != "":
 		if my_uuid == player1:
 			i_am_player = 1
 		elif my_uuid == player2:
 			i_am_player = 2
 		else:
-			i_am_player = 2 if server_player_hint == 1 else 1
+			spectator_mode = true
+			i_am_player = 1
 	else:
 		i_am_player = 2 if server_player_hint == 1 else 1
 		
@@ -343,8 +346,19 @@ func _set_game_data(data_json: String) -> void:
 	_renumber_from_one()
 	_evaluate_game_over_and_winner()
 	if parsed.has("winner"):
-		winner = int(_get_s(parsed, "winner", "0"))
-		game_over = winner != 0
+		var winner_parts := _get_s(parsed, "winner", "").split("|", false)
+		if winner_parts.size() >= 2:
+			var winner_sender := String(winner_parts[0])
+			var win_loss_state := int(winner_parts[1])
+
+			game_over = true
+
+			if win_loss_state == 0:
+				winner = 0
+			elif winner_sender == player1:
+				winner = 1 if win_loss_state == 1 else -1
+			elif winner_sender == player2:
+				winner = -1 if win_loss_state == 1 else 1
 	_update_upcoming_input_chip_color()
 	if (not is_my_turn) and (not game_over) and (not _waiting_active):
 		_start_waiting()
@@ -369,7 +383,9 @@ func _evaluate_game_over_and_winner() -> void:
 		if r == 4:
 			any_correct = true
 
-	if any_correct:
+	if game_over:
+		pass
+	elif any_correct:
 		game_over = true
 		winner = 1
 		print("[20Q] GAME OVER: Player 1 wins (guessed correctly).")
@@ -381,7 +397,7 @@ func _evaluate_game_over_and_winner() -> void:
 		game_over = false
 		winner = 0
 		
-	if game_over and not was_over:
+	if game_over:
 		_stop_waiting()
 		_hide_answer_overlay()
 
@@ -416,13 +432,17 @@ func _evaluate_game_over_and_winner() -> void:
 						win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
 
 			win_loss_label.visible = true
-			await get_tree().process_frame
-			win_loss_label.scale = Vector2.ZERO
-			win_loss_label.pivot_offset = win_loss_label.size / 2.0
 
-			var tween_in := create_tween()
-			tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
-				.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+			if not was_over:
+				await get_tree().process_frame
+				win_loss_label.scale = Vector2.ZERO
+				win_loss_label.pivot_offset = win_loss_label.size / 2.0
+
+				var tween_in := create_tween()
+				tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
+					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+			else:
+				win_loss_label.scale = Vector2.ONE
 	
 func _question_color_for_index(idx: int) -> Color:
 	var deg := (360.0 / 20.0) * float(idx)
@@ -504,7 +524,7 @@ func _replay_from_state() -> void:
 	print("====================")
 
 func _on_send_pressed() -> void:
-	if game_over or (not is_my_turn) or (not is_instance_valid(text_box)):
+	if spectator_mode or game_over or (not is_my_turn) or (not is_instance_valid(text_box)):
 		return
 
 	var raw := text_box.text
@@ -578,17 +598,11 @@ func _apply_answer_code_to_idx(target_idx: int, code: int) -> void:
 		dbg("apply_idx: NOT FOUND or already answered")
 		return
 
-	if code == 4:
-		game_over = true
-		winner = 1
-
 	_render_all_questions()
 	_evaluate_game_over_and_winner()
 
 	if code == 4:
-		game_over = true
-		winner = 1
-		dbg("apply_idx: guessed-it selected; forcing game_over=true winner=1 before send")
+		dbg("apply_idx: guessed-it selected; game_over=%s winner=%d before send" % [str(game_over), winner])
 
 	dbg("apply_idx: updated; calling _send_full_state & _maybe_show_answer_popup")
 	_send_full_state()
@@ -662,7 +676,7 @@ func _send_full_state() -> void:
 	_send_game("", 0, 0)
 
 func _update_ui_interactivity() -> void:
-	var enable_input := (is_my_turn and not game_over and i_am_player == 1)
+	var enable_input := (is_my_turn and not game_over and i_am_player == 1 and not spectator_mode)
 
 	if is_instance_valid(send_button):
 		send_button.disabled = not enable_input
@@ -670,7 +684,7 @@ func _update_ui_interactivity() -> void:
 		text_box.editable = enable_input
 
 	if is_instance_valid(bottom_items):
-		bottom_items.visible = (i_am_player == 1) and (not _waiting_active)
+		bottom_items.visible = (i_am_player == 1) and (not spectator_mode) and (not game_over) and (not _waiting_active)
 
 	dbg("ui: enable_input=%s, i_am_player=%d, is_my_turn=%s, game_over=%s" % [str(is_my_turn and not game_over and i_am_player == 1), i_am_player, str(is_my_turn), str(game_over)])
 	if is_instance_valid(bottom_items):
@@ -1188,7 +1202,7 @@ func _maybe_show_answer_popup() -> void:
 		i_am_player, str(is_my_turn), str(game_over), _count_unanswered()
 	])
 
-	if i_am_player != 2 or not is_my_turn or game_over:
+	if spectator_mode or i_am_player != 2 or not is_my_turn or game_over:
 		_hide_answer_overlay()
 		return
 
@@ -1337,7 +1351,11 @@ func _update_description_fill() -> void:
 
 	_desc_rich.bbcode_enabled = true
 
-	if i_am_player == 2 or game_over:
+	if spectator_mode:
+		var guide := "[font_size=18]You are watching this game.[/font_size]"
+		_desc_rich.parse_bbcode(guide)
+		_desc_rich.visible = true
+	elif i_am_player == 2:
 		var your_word := "[font_size=20]Your word:[/font_size]\n"
 		var the_word  := "[font_size=34][b]%s[/b][/font_size]" % secret_answer
 		_desc_rich.parse_bbcode(your_word + the_word)
@@ -1367,6 +1385,8 @@ func _set_wait_base_text() -> void:
 	BASE_WAIT_TEXT = "Waiting for an answer" if i_am_player == 1 else "Waiting for a question"
 
 func _start_waiting() -> void:
+	if spectator_mode or game_over:
+		return
 	print("START WAITING")
 	_set_wait_base_text()
 	if is_instance_valid(wait_for_label):
