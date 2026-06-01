@@ -447,7 +447,7 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 
-[node name="WaitForOpponentLabel" type="Label" parent="." unique_id=291081742]
+[node name="waitingLabel" type="Label" parent="." unique_id=291081742]
 unique_name_in_owner = true
 z_index = 20
 layout_mode = 1

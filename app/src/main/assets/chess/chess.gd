@@ -72,10 +72,13 @@ var flip_board_ui: bool = false  # Whether to flip the board UI to put local pla
 @onready var background: ColorRect = %Background
 @onready var player_marker: TextureRect = %PlayerMarker
 @onready var opp_marker: TextureRect = %OpponentMarker
+@onready var send_button: Button = %SendButton
+@onready var win_loss_label: Label = %WinLossLabel
 
 const MUSIC_STREAM := preload("res://global/audio/chess.ogg")
 
 var sent_tween: Tween
+var win_loss_tween: Tween
 
 # Chess state - managed by ChessBoard instance
 # Property wrappers provide read access to game_board state. Mutations should go through
@@ -128,7 +131,6 @@ var opponent_last_move_from: Vector2i = Vector2i(-1, -1)  # opponent's last move
 var opponent_last_move_to: Vector2i = Vector2i(-1, -1)    # opponent's last move destination square (for green highlight)
 
 # UI controls
-var send_button: Button = null
 var undo_arrow_label: Label = null
 var player_chess_black: Sprite2D = null
 var player_chess_white: Sprite2D = null
@@ -148,7 +150,6 @@ var rank_labels: Array[Label] = []   # Labels for 1–8 along the left
 
 # UI labels
 var check_label: Label = null
-var game_over_label: Label = null
 
 # Repetition - read-only access (managed by game_board internally)
 var position_counts: Dictionary:
@@ -191,6 +192,9 @@ var _log_ui := ChessDebug.ScopedLogger.new("UI")
 var _log_data := ChessDebug.ScopedLogger.new("DATA")
 var _log_board := ChessDebug.ScopedLogger.new("BOARD")
 
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
+
 ## Get standardized game state dictionary for logging.
 func _game_state_dict() -> Dictionary:
 	return {
@@ -216,7 +220,7 @@ func _calculate_player_index(is_your_turn: bool, message_player: int) -> int:
 	return message_player if is_your_turn else (3 - message_player)
 
 # ---------- Ready / plugin ----------
-func _ready() -> void:
+func _on_game_ready() -> void:
 	# Enable DEBUG logging in debug builds (production defaults to INFO for performance)
 	if OS.has_feature("debug"):
 		ChessDebug.set_level(ChessDebug.LogLevel.DEBUG)
@@ -229,43 +233,27 @@ func _ready() -> void:
 
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_bg_for_dark(is_dark)
-	if is_instance_valid(rules_button):
-		rules_button.pressed.connect(_on_rules_button_pressed)
-	if is_instance_valid(settings_button):
-		settings_button.pressed.connect(_on_settings_button_pressed)
-	if is_instance_valid(dot_timer):
-		dot_timer.connect("timeout", _on_dot_timer_timeout)
-		
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
 
-	_start_music()
-
-	appPlugin = Engine.get_singleton("AppPlugin")
 	local_mode = (appPlugin == null)
 	if not local_mode:
 		_log_init.info("AppPlugin found")
-		if not appPlugin.is_connected("set_game_data", _set_game_data):
-			appPlugin.connect("set_game_data", _set_game_data)
-		my_player_id = appPlugin.getSenderUUID()
-		# Board already initialized by ChessBoard.new(true) with starting position
+		my_player_id = my_uuid
 		_update_turn_flags()
-		appPlugin.onReady()
 	else:
 		_log_init.debug("No AppPlugin (local debug mode)")
 		my_player_index = 2  # Player 2 is white
 		my_color = "w"
 		flip_board_ui = false
-		# Board already initialized by ChessBoard.new(true) with starting position
 		_update_turn_flags()
+		
 	_log_init.game_state("_ready after init", _game_state_dict())
 	_compute_sizes()
 	_build_board_ui()
 	_refresh_board_ui()
-	_update_waiting_label()
+	if waitingForOpponent and not game_over:
+		start_waiting_animation()
+	else:
+		stop_waiting_animation()
 	_log_init.info("_ready() complete")
 
 func _set_game_data(raw: String) -> void:
@@ -284,29 +272,6 @@ func _set_game_data(raw: String) -> void:
 	is_processing_game_data = false
 	_log_data.info("_set_game_data complete")
 	
-var music_player: AudioStreamPlayer = null
-
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
-
 ## Internal implementation of _set_game_data - separated to ensure guard flag cleanup
 func _set_game_data_impl(raw: String) -> void:
 	var orientation_changed: bool = false  # Track if board orientation changes
@@ -388,6 +353,40 @@ func _set_game_data_impl(raw: String) -> void:
 		else:
 			turn = ChessPiece.opposite_side(my_color)
 		_log_data.debug("Turn flags: isTurn=%s, waiting=%s, turn=%s" % [str(isTurn), str(waitingForOpponent), turn])
+		
+		if data.has("winner"):
+			var winner_parts := String(data.get("winner", "")).split("|", false)
+
+			if winner_parts.size() >= 2:
+				var winner_sender := String(winner_parts[0])
+				var win_loss_state := String(winner_parts[1])
+
+				game_over = true
+				waitingForOpponent = false
+				isTurn = false
+
+				if win_loss_state == "0":
+					game_over_state = ChessEngine.GameState.DRAW_FIFTY_MOVE
+					game_over_reason = "Draw"
+					game_over_winner_side = ""
+				elif winner_sender == my_player_id:
+					if win_loss_state == "1":
+						game_over_winner_side = my_color
+					else:
+						game_over_winner_side = ChessPiece.opposite_side(my_color)
+
+					game_over_state = ChessEngine.GameState.CHECKMATE
+					game_over_reason = ChessEngine.state_description(game_over_state, game_over_winner_side)
+				else:
+					if win_loss_state == "1":
+						game_over_winner_side = ChessPiece.opposite_side(my_color)
+					else:
+						game_over_winner_side = my_color
+
+					game_over_state = ChessEngine.GameState.CHECKMATE
+					game_over_reason = ChessEngine.state_description(game_over_state, game_over_winner_side)
+
+				_log_data.debug("Parsed winner payload: sender=%s result=%s winner_side=%s" % [winner_sender, win_loss_state, game_over_winner_side])
 
 	_log_data.game_state("_set_game_data end", _game_state_dict())
 
@@ -407,8 +406,11 @@ func _set_game_data_impl(raw: String) -> void:
 		_build_board_ui()
 		_refresh_board_ui()
 
-	# Update the waiting label to show/hide based on current state
-	_update_waiting_label()
+	# Update the centralized BaseGame waiting animation.
+	if waitingForOpponent and not game_over:
+		start_waiting_animation()
+	else:
+		stop_waiting_animation()
 
 func _update_turn_flags() -> void:
 	# canonicalize interaction flags based on board 'turn' and local 'my_color'
@@ -427,21 +429,6 @@ func _update_turn_flags() -> void:
 		waitingForOpponent = not isTurn
 		_log_game.debug("_update_turn_flags: isTurn=%s, waiting=%s" % [str(isTurn), str(waitingForOpponent)])
 	_log_game.game_state("_update_turn_flags", _game_state_dict())
-
-func _update_waiting_label() -> void:
-	# Show or hide the waiting label based on waitingForOpponent flag
-	if waiting_label == null:
-		waiting_label = get_node_or_null("waitingLabel")
-
-	if waiting_label != null:
-		if waitingForOpponent and not game_over:
-			waiting_label.visible = true
-			_log_ui.debug("Showing waiting label")
-		else:
-			waiting_label.visible = false
-			_log_ui.debug("Hiding waiting label")
-	else:
-		_log_ui.info("waiting_label node not found")
 
 # ---------- UI / sizes ----------
 func _compute_sizes() -> void:
@@ -466,8 +453,9 @@ func _flip_board_ui() -> void:
 	for r in range(8):
 		for f in range(8):
 			# Calculate new Y position based on flip state
-			var ui_y: float = (7 - r) * SQUARE_SIZE if not flip_board_ui else r * SQUARE_SIZE
-			var new_pos: Vector2 = BOARD_ORIGIN + Vector2(f * SQUARE_SIZE, ui_y)
+			var ui_x: float = ((7 - f) if flip_board_ui else f) * SQUARE_SIZE
+			var ui_y: float = (r if flip_board_ui else (7 - r)) * SQUARE_SIZE
+			var new_pos: Vector2 = BOARD_ORIGIN + Vector2(ui_x, ui_y)
 
 			# Update square position
 			squares[r][f].position = new_pos
@@ -615,8 +603,9 @@ func _build_board_ui() -> void:
 		for f in range(8):
 			var rect: ColorRect = ColorRect.new()
 			rect.size = Vector2(SQUARE_SIZE, SQUARE_SIZE)
-			var ui_y: float = (7 - r) * SQUARE_SIZE if not flip_board_ui else r * SQUARE_SIZE
-			rect.position = BOARD_ORIGIN + Vector2(f * SQUARE_SIZE, ui_y)
+			var ui_x: float = ((7 - f) if flip_board_ui else f) * SQUARE_SIZE
+			var ui_y: float = (r if flip_board_ui else (7 - r)) * SQUARE_SIZE
+			rect.position = BOARD_ORIGIN + Vector2(ui_x, ui_y)
 			rect.color = ChessUI.get_square_color(r, f)
 			rect.z_index = 0  # Board squares layer (above borders, below pieces)
 			board_container.add_child(rect)
@@ -685,12 +674,6 @@ func _build_board_ui() -> void:
 		check_label.visible = false
 		check_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(check_label)
-	if game_over_label == null:
-		game_over_label = Label.new()
-		game_over_label.name = "GAME_OVER_LABEL"
-		game_over_label.visible = false
-		game_over_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(game_over_label)
 
 	# Style / position labels (positioned below board instead of top)
 	# Note: board_w is already declared earlier in this function (line 414)
@@ -703,15 +686,6 @@ func _build_board_ui() -> void:
 	check_label.text = ""
 	check_label.visible = false
 
-	var game_over_label_y: float = check_label_y + 45.0
-	game_over_label.position = Vector2(BOARD_ORIGIN.x - 100, game_over_label_y)
-	game_over_label.size = Vector2(board_w + 200, 60)
-	game_over_label.add_theme_font_size_override("font_size", 32)
-	game_over_label.add_theme_color_override("font_color", Color(0.9,0.2,0.2))
-	game_over_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	game_over_label.text = ""
-	game_over_label.visible = false
-
 	# Clean any previous floating UI controls (note: send_button is now a scene node, not cleaned up here)
 	if is_instance_valid(undo_arrow_label):
 		undo_arrow_label.queue_free()
@@ -720,7 +694,6 @@ func _build_board_ui() -> void:
 	# Setup and create dialogs via ChessDialogs controller
 	dialogs.cleanup()
 	dialogs.setup(self, PIECE_TEXTURES, func(msg: String) -> void: _log_ui.debug(msg))
-	dialogs.create_game_over_panel(BOARD_ORIGIN, board_w, SQUARE_SIZE)
 	dialogs.create_promotion_dialog(BOARD_ORIGIN, board_w, SQUARE_SIZE)
 	_log_ui.debug("_build_board_ui: dialogs controller initialized")
 
@@ -735,8 +708,7 @@ func _build_board_ui() -> void:
 		# Position send button below check label (check label is 40px tall)
 		var btn_y: float = BOARD_ORIGIN.y + board_w + BORDER_THICK + 50.0
 		send_button.position = Vector2(btn_x, btn_y)
-		send_button.disabled = true
-		send_button.visible = _has_pending()
+		_update_send_button_visibility(_has_pending())
 		# Connect the pressed signal only if not already connected
 		if not send_button.pressed.is_connected(_on_send_pressed):
 			send_button.pressed.connect(_on_send_pressed)
@@ -859,22 +831,20 @@ func _refresh_board_ui() -> void:
 						# keep normal
 						squares[r][f].modulate = Color(1, 1, 1)
 
-	# Update check / game_over labels
-	if incheck:
+	# Update check label. Do not show CHECK once the game is over.
+	if game_over:
+		check_label.visible = false
+	elif incheck:
 		check_label.text = "CHECK — %s to move" % ("White" if side_to_move == "w" else "Black")
 		check_label.visible = true
-		# Emit signal for check detection (only when becoming visible)
 		check_detected.emit(side_to_move)
 	else:
 		check_label.visible = false
 
 	if game_over:
-		var msg: String = ChessUI.format_result_message(game_over_state, game_over_winner_side, my_color)
-		dialogs.show_game_over(msg)
+		_show_win_loss_result()
 	else:
-		dialogs.hide_game_over()
-	# Always hide the old top game over label in favor of the centered panel
-	game_over_label.visible = false
+		_hide_win_loss_result()
 	
 	# Ensure pending-state UI is visible and correct
 	if _has_pending():
@@ -893,13 +863,9 @@ func _refresh_board_ui() -> void:
 			ov_back.color = ChessUI.LEGAL_MOVE_COLOR
 			ov_back.visible = true
 			_start_pulse(ov_back)
-		if is_instance_valid(send_button):
-			send_button.disabled = false
-			send_button.visible = true
+		_update_send_button_visibility(true)
 	else:
-		if is_instance_valid(send_button):
-			send_button.disabled = true
-			send_button.visible = false
+		_update_send_button_visibility(false)
 	
 	_log_ui.debug("_refresh_board_ui done")
 	_log_ui.game_state("_refresh_board_ui", _game_state_dict())
@@ -955,6 +921,96 @@ func _show_undo_arrow(from_sq: Vector2i) -> void:
 	# Ensure it's drawn on top of pieces/overlays.
 	undo_arrow_label.z_index = 1000
 	add_child(undo_arrow_label)
+	
+func _update_send_button_visibility(show: bool) -> void:
+	if not is_instance_valid(send_button):
+		return
+
+	send_button.disabled = not show
+	send_button.set_as_top_level(true)
+
+	if not send_button.has_meta("home_pos"):
+		send_button.set_meta("home_pos", send_button.global_position)
+
+	if send_button.has_meta("sb_tween"):
+		var old: Tween = send_button.get_meta("sb_tween") as Tween
+		if old and old.is_running():
+			old.kill()
+
+	var home: Vector2 = send_button.get_meta("home_pos")
+	var vp: Rect2 = get_viewport_rect()
+	var off_y: float = vp.size.y + send_button.size.y + 30.0
+	var start_pos: Vector2 = Vector2(home.x, off_y)
+
+	if show:
+		if not send_button.visible:
+			send_button.global_position = start_pos
+			send_button.visible = true
+			send_button.modulate.a = 1.0
+		elif send_button.global_position.y > vp.size.y:
+			send_button.global_position = start_pos
+
+		var t_in: Tween = create_tween()
+		send_button.set_meta("sb_tween", t_in)
+		t_in.tween_property(send_button, "global_position", home, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	else:
+		if send_button.visible:
+			var t_out: Tween = create_tween()
+			send_button.set_meta("sb_tween", t_out)
+			t_out.tween_property(send_button, "global_position", Vector2(home.x, off_y), 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+			t_out.tween_callback(func():
+				if is_instance_valid(send_button):
+					send_button.visible = false
+			)
+			
+func _show_win_loss_result() -> void:
+	if not is_instance_valid(win_loss_label):
+		return
+
+	if win_loss_tween and win_loss_tween.is_running():
+		win_loss_tween.kill()
+
+	var is_draw := game_over_state == ChessEngine.GameState.STALEMATE \
+		or game_over_state == ChessEngine.GameState.DRAW_INSUFFICIENT \
+		or game_over_state == ChessEngine.GameState.DRAW_FIFTY_MOVE \
+		or game_over_state == ChessEngine.GameState.DRAW_REPETITION
+
+	if is_draw or game_over_winner_side == "":
+		win_loss_label.text = "DRAW!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	else:
+		var you_win := (not spectator_mode) and game_over_winner_side == my_color
+
+		if you_win:
+			win_loss_label.text = "YOU WIN!"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			GameUtils._show_win_burst(player_avatar_display)
+		else:
+			if spectator_mode:
+				win_loss_label.text = "%s Wins!" % ("White" if game_over_winner_side == "w" else "Black")
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+				GameUtils._show_win_burst(player_avatar_display if game_over_winner_side == my_color else opp_avatar_display)
+			else:
+				win_loss_label.text = "YOU LOSE"
+				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+				GameUtils._show_win_burst(opp_avatar_display)
+
+	win_loss_label.visible = true
+	await get_tree().process_frame
+	win_loss_label.scale = Vector2.ZERO
+	win_loss_label.pivot_offset = win_loss_label.size / 2.0
+
+	win_loss_tween = create_tween()
+	win_loss_tween.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+
+func _hide_win_loss_result() -> void:
+	if win_loss_tween and win_loss_tween.is_running():
+		win_loss_tween.kill()
+
+	if is_instance_valid(win_loss_label):
+		win_loss_label.visible = false
+		win_loss_label.text = ""
+		win_loss_label.scale = Vector2.ONE
 
 func _hide_undo_arrow() -> void:
 	if is_instance_valid(undo_arrow_label):
@@ -986,9 +1042,7 @@ func _on_promotion_choice(piece: String) -> void:
 		_execute_move(promotion_pending_from, promotion_pending_to)
 		_show_undo_arrow(_get_pending_from())
 		# Send button enabled after move
-		if is_instance_valid(send_button):
-			send_button.disabled = false
-			send_button.visible = true
+		_update_send_button_visibility(true)
 		selected = Vector2i(-1, -1)
 		highlighted.clear()
 		legal_moves.clear()
@@ -1010,9 +1064,7 @@ func _on_send_pressed() -> void:
 	# Clear pending state
 	_clear_pending()
 	_hide_undo_arrow()
-	if is_instance_valid(send_button):
-		send_button.disabled = true
-		send_button.visible = false
+	_update_send_button_visibility(false)
 	_refresh_board_ui()
 
 func _undo_pending() -> void:
@@ -1022,9 +1074,7 @@ func _undo_pending() -> void:
 	if game_board:
 		game_board.undo_pending()
 	_hide_undo_arrow()
-	if is_instance_valid(send_button):
-		send_button.disabled = true
-		send_button.visible = false
+	_update_send_button_visibility(false)
 	_update_turn_flags()
 	_refresh_board_ui()
 
@@ -1156,9 +1206,7 @@ func _handle_move_tap(sq: Vector2i, piece: String) -> void:
 			await _animate_player_move(selected, _get_pending_to())
 			_execute_move(selected, _get_pending_to())
 			_show_undo_arrow(_get_pending_from())
-			if is_instance_valid(send_button):
-				send_button.disabled = false
-				send_button.visible = true
+			_update_send_button_visibility(true)
 			_clear_selection()
 			_refresh_board_ui()
 			return
@@ -1406,13 +1454,13 @@ func _commit_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 		# Emit signal for game over
 		game_over_detected.emit(winner_side, game_over_reason)
 
-		# Calculate winner_decl for network protocol
+		# Calculate winner_decl for network protocol.
+		# Format is sender_id|result where:
+		# 1 = sender won, -1 = sender lost, 0 = draw.
 		if state == ChessEngine.GameState.CHECKMATE:
-			# Winner is the side that delivered checkmate (the side that just moved)
-			var winner_player_index: int = my_player_index if side == my_color else enemy_player_index
-			winner_decl = my_player_id + "|" + str(winner_player_index)
+			winner_decl = my_player_id + "|1"
 		else:
-			# Draw (stalemate, insufficient material, 50-move, repetition)
+			# Draw: stalemate, insufficient material, 50-move rule, or repetition.
 			winner_decl = my_player_id + "|0"
 
 	# Export data to host in GamePigeon format
@@ -1430,7 +1478,6 @@ func _commit_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 		isTurn = false
 		_log_game.debug("_commit_move: game ended, winner_decl=%s" % str(winner_decl))
 	else:
-		play_sent_animation()
 		if not local_mode:
 			waitingForOpponent = true
 			isTurn = false
@@ -1441,23 +1488,28 @@ func _commit_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 			isTurn = true
 			_log_game.debug("_commit_move: local mode - kept interaction enabled for both sides")
 
+		play_sent_animation()
+
 	# Evaluate check/stalemate on the new position to update UI/selectability
 	_evaluate_check_and_update_flags()
-	
-	# Update the waiting label to reflect the new waiting state
-	_update_waiting_label()
 
-	# Send to appPlugin (always send in commit)
+	# Send to host through BaseGame
 	_log_game.game_state("_commit_move before send", _game_state_dict())
 	if not local_mode:
-		_log_game.debug("_commit_move sending updateGameData: %s" % str(to_send))
-		appPlugin.updateGameData(JSON.stringify(to_send))
+		_log_game.debug("_commit_move sending game data: %s" % str(to_send))
+		send_game_data(JSON.stringify(to_send))
 	else:
 		_log_game.debug("_commit_move local-only; not sending to appPlugin")
 	_log_game.info("_commit_move complete")
 
 func _evaluate_check_and_update_flags() -> void:
 	## Evaluate game state using ChessBoard and update UI flags accordingly.
+	if game_over:
+		waitingForOpponent = false
+		isTurn = false
+		_refresh_board_ui()
+		return
+
 	var result: Dictionary = game_board.evaluate_state()
 	var state: ChessEngine.GameState = result["state"]
 	var in_check: bool = result["in_check"]
@@ -1512,8 +1564,13 @@ func _ui_ready() -> bool:
 
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
-		print("Is Dark: ", is_dark)
 		background.color = ChessUI.DARK_BACKGROUND if is_dark else ChessUI.LIGHT_BACKGROUND
+		
+func _get_settings_avatar_display() -> Control:
+	return player_avatar_display
+		
+func _get_rules_title() -> String:
+	return "Chess"
 		
 func _get_rules_text() -> String:
 	return """
@@ -1597,6 +1654,10 @@ func play_sent_animation() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
+
+		if waitingForOpponent and not game_over:
 			start_waiting_animation()
+		else:
+			stop_waiting_animation()
 	)
 	

@@ -493,20 +493,35 @@ text = "Send"
 [node name="Container" type="Control" parent="VBoxContainer/MarginContainer/BottomItems" unique_id=898863733]
 layout_mode = 2
 
-[node name="WaitForLabel" type="Label" parent="VBoxContainer/MarginContainer" unique_id=864817670]
+[node name="DotTimer" type="Timer" parent="." unique_id=1375439605]
+unique_name_in_owner = true
+wait_time = 0.75
+
+[node name="WaitBlur" type="ColorRect" parent="." unique_id=1823741754]
 unique_name_in_owner = true
 visible = false
-layout_mode = 2
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.152941, 0.152941, 0.152941, 0.556863)
+
+[node name="waitingLabel" type="Label" parent="." unique_id=864817670]
+unique_name_in_owner = true
+visible = false
+layout_mode = 0
+offset_top = 834.0
+offset_right = 286.0
+offset_bottom = 869.0
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_g0j6x")
 text = "Waiting for an answer..."
 horizontal_alignment = 1
 vertical_alignment = 1
-
-[node name="DotTimer" type="Timer" parent="." unique_id=1375439605]
-unique_name_in_owner = true
-wait_time = 0.75
 
 [node name="WinLossLabel" type="Label" parent="." unique_id=195215211]
 unique_name_in_owner = true

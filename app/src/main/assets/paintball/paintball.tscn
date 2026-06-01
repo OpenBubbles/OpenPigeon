@@ -529,7 +529,7 @@ text = "SENT"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="WaitForOpponentLabel" type="Label" parent="MarginContainer" unique_id=1272825137]
+[node name="waitingLabel" type="Label" parent="MarginContainer" unique_id=1272825137]
 unique_name_in_owner = true
 z_index = 21
 layout_mode = 2

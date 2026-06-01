@@ -54,17 +54,14 @@ var sent_label_tween: Tween
 var _send_btn_shown_y := 0.0
 var _send_btn_hidden_y := 0.0
 
-func _ready() -> void:
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
+
+func _on_game_ready() -> void:
 	_rng.randomize()
 	_tile_tex = load(TILE_TEXTURE_PATH)
 	_make_runtime_nodes()
 	_reset_board_arrays(GRID_SQUARES + 1)
-	if is_instance_valid(rules_button):
-		rules_button.pressed.connect(_on_rules_button_pressed)
-	if is_instance_valid(settings_button):
-		settings_button.pressed.connect(_on_settings_button_pressed)
-	if is_instance_valid(dot_timer):
-		dot_timer.connect("timeout", _on_dot_timer_timeout)
 	if is_instance_valid(Board):
 		Board.mouse_filter = Control.MOUSE_FILTER_PASS
 	if is_instance_valid(send_button):
@@ -82,14 +79,6 @@ func _ready() -> void:
 
 	appPlugin = Engine.get_singleton("AppPlugin")
 
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
-
-	_start_music()
-
 	if appPlugin:
 		if not has_connected:
 			appPlugin.connect("set_game_data", Callable(self, "_set_game_data"))
@@ -99,29 +88,6 @@ func _ready() -> void:
 		var dev := '{"isYourTurn": true,"player":"2","map":"00000000000000000000000000000000000000000000000000000000000000000211100000000222110000000021111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","move":"6,6,1","id":"dev"}'
 		await get_tree().process_frame
 		_set_game_data(dev)
-		
-var music_player: AudioStreamPlayer = null
-
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
 
 func _panel_inner_rect() -> Rect2:
 	var r := Board.get_rect()

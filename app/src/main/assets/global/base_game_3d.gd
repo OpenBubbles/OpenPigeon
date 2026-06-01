@@ -7,9 +7,9 @@ const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 @onready var settings_button: Button = get_node_or_null("%SettingsButton")
 @onready var rules_button: Button = get_node_or_null("%RulesButton")
 
-@onready var waiting_label: Label = %waitingLabel
-@onready var waiting_blur: ColorRect = %WaitBlur
-@onready var dot_timer: Timer = %DotTimer
+@onready var waiting_label: Label = get_node_or_null("%waitingLabel")
+@onready var waiting_blur: ColorRect = get_node_or_null("%WaitBlur")
+@onready var dot_timer: Timer = get_node_or_null("%DotTimer")
 
 var appPlugin = null
 var mediaPlugin = null

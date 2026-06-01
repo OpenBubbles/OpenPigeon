@@ -1257,7 +1257,7 @@ func _ensure_board_scaler() -> void:
 	_apply_board_draw_order()
 	print("[SHRINK] BoardScaler injected.")
 	
-func _ready():
+func _on_game_ready():
 	Engine.physics_ticks_per_second = 60
 	modulate.a = 0.0
 
@@ -1294,8 +1294,6 @@ func _ready():
 	randomize()
 	print("Knockout Scene ready!")
 
-	if is_instance_valid(dot_timer):
-		dot_timer.connect("timeout", _on_dot_timer_timeout)
 	if is_instance_valid(send_button):
 		send_button.visible = false
 		send_button.pressed.connect(send_game)
@@ -1303,8 +1301,6 @@ func _ready():
 		push_warning("No %SendButton in scene")
 		
 	_recompute_send_button_visibility()
-	if rules_button:    rules_button.pressed.connect(_on_rules_button_pressed)
-	if settings_button: settings_button.pressed.connect(_on_settings_button_pressed)
 	_wire_water_kill_areas()
 
 	# 3. Configure the TextureRect and BoardZoom nodes to use our logical size.

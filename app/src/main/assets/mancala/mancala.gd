@@ -30,7 +30,6 @@ var board_labels: Array = []
 var replay_moves: Array = []
 var current_theme_name: String = "Default"
 
-
 var PitScene    : PackedScene = preload("res://mancala/pit.tscn")
 var StoreScene  : PackedScene = preload("res://mancala/store.tscn")
 var StoneScene : PackedScene = preload("res://mancala/stone.tscn")
@@ -59,6 +58,9 @@ var _is_animating: bool = false
 var moves_made: Array = []
 var prev_board_str: String = ""
 
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
+
 func _debug_pit_input_layers() -> void:
 	for pit in pit_nodes:
 		print("=== Pit", pit.index, "layers ===")
@@ -78,7 +80,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		print("Unhandled Click at: ", event.position)
 
-func _ready() -> void:
+func _on_game_ready() -> void:
 	game_settings_category = SettingsManager.get_game_name_from_path(get_tree().current_scene.scene_file_path)
 	print("Current game scene for settings: ", game_settings_category)
 	_load_game_specific_settings()
@@ -93,16 +95,6 @@ func _ready() -> void:
 	if skip_button:
 		skip_button.visible = false
 
-	var appPlugin = Engine.get_singleton("AppPlugin")
-	
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
-
-	_start_music()
-	
 	if appPlugin:
 		print("AppPlugin Available")
 		if not has_connected:
@@ -120,40 +112,13 @@ func _ready() -> void:
 			if node is Control and node.name != "DebugRect":
 				node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	if rules_button:
-		rules_button.pressed.connect(_on_rules_button_pressed)
-	if settings_button:
-		settings_button.pressed.connect(_on_settings_button_pressed)
 	if skip_button:
 		skip_button.pressed.connect(_on_skip_button_pressed)
 
 	add_child(_carrying_stones_container)
 	_carrying_stones_container.z_index = 90
 	_apply_board_sprite_modulate()
-	
-var music_player: AudioStreamPlayer = null
 
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
-	
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if not is_instance_valid(background):
 		return

@@ -52,7 +52,13 @@ var _words_scroll: ScrollContainer = null
 var _is_dragging_words := false
 var _last_drag_pos := Vector2.ZERO
 
-func _ready() -> void:
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
+	
+func _get_dev_data() -> String:
+	return '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
+
+func _on_game_ready() -> void:
 	if not start_button.pressed.is_connected(_on_start_button_pressed):
 		start_button.pressed.connect(_on_start_button_pressed)
 	if not back_button.pressed.is_connected(_on_back_button_pressed):
@@ -60,31 +66,8 @@ func _ready() -> void:
 
 	if not game_screen.time_up.is_connected(_on_game_time_up):
 		game_screen.time_up.connect(_on_game_time_up)
-	if is_instance_valid(dot_timer):
-		dot_timer.connect("timeout", _on_dot_timer_timeout)
 	if not view_words_button.pressed.is_connected(_on_view_words_pressed):
 		view_words_button.pressed.connect(_on_view_words_pressed)
-		
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
-
-	_start_music()
-		
-	appPlugin = Engine.get_singleton("AppPlugin")
-	if appPlugin:
-		if not has_connected:
-			appPlugin.connect("set_game_data", Callable(self, "_set_game_data"))
-			has_connected = true
-			appPlugin.call("onReady")
-	else:
-		#var dev := '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","id":"dev"}'
-		var dev := '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
-		
-		await get_tree().process_frame
-		_set_game_data(dev)
 	if is_instance_valid(full_word_list):
 		full_word_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -107,6 +90,16 @@ func _ready() -> void:
 	_apply_score_box_style(main_score_box)
 	_apply_score_box_style(player_score_box)
 	_apply_score_box_style(opp_score_box)
+
+	_sync_waiting_animation()
+	
+func _sync_waiting_animation() -> void:
+	if spectator_mode or game_over:
+		stop_waiting_animation()
+	elif my_has_data or not is_my_turn:
+		start_waiting_animation()
+	else:
+		stop_waiting_animation()
 	
 func _on_words_scroll_gui_input(event: InputEvent) -> void:
 	if _words_scroll == null:
@@ -166,7 +159,10 @@ func _set_game_data(raw_text: String) -> void:
 	print("INCOMING DATA: ", res)
 	
 	game_id = _get_first(d, "id", game_id)
-	my_id   = _get_first(d, "myPlayerId", my_id)
+	my_id = _get_first(d, "myPlayerId", my_id)
+
+	if my_id == "":
+		my_id = my_uuid
 	var p1_id: String = _get_first(d, "player1", "")
 	var p2_id: String = _get_first(d, "player2", "")
 	var sender_s: String = _get_first(d, "player", "1")
@@ -191,7 +187,6 @@ func _set_game_data(raw_text: String) -> void:
 	is_my_turn = is_your_turn
 	var opponent_avatar_key := ""
 	winner = _get_first(d, "winner", "")
-	stop_waiting_animation()
 
 	var sender_player: int = clampi(int(sender_s), 1, 2)
 	my_has_data = false
@@ -288,15 +283,8 @@ func _set_game_data(raw_text: String) -> void:
 	game_ended = await check_win()
 	print("Game Ended: ", game_ended)
 	_init_screens()
-
-	if spectator_mode:
-		stop_waiting_animation()
-	elif game_over:
-		stop_waiting_animation()
-	elif my_has_data:
-		start_waiting_animation()
-	else:
-		stop_waiting_animation()
+	
+	_sync_waiting_animation()
 		
 func _load_dictionary() -> void:
 	if _dict_loaded:
@@ -326,29 +314,6 @@ func _make_letter_counts(pool: String) -> Dictionary:
 		counts[c] = int(counts.get(c, 0)) + 1
 	return counts
 		
-var music_player: AudioStreamPlayer = null
-
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
-
 func _get_first(d: Dictionary, key: String, def: String = "") -> String:
 	if not d.has(key):
 		return def
@@ -643,14 +608,12 @@ func send_game() -> void:
 	if game_ended and win_loss_state != "":
 		payload["winner"] = my_id + "|" + win_loss_state
 	
-	var plug := Engine.get_singleton("AppPlugin")
-	if plug:
-		plug.updateGameData(JSON.stringify(payload))
-	else:
-		print("AppPlugin is null; cannot send.")
+	my_has_data = true
+	is_my_turn = false
+
+	send_game_data(JSON.stringify(payload))
 	print("OUTGOING DATA", payload)
 	
-	is_my_turn = false
 	game_ended = await check_win()
 	if not game_ended:
 		print("[SEND] No win detected; clearing preview.")
@@ -758,7 +721,8 @@ func play_sent_animation() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
-			start_waiting_animation()
+
+		_sync_waiting_animation()
 	)
 
 func _populate_scoreboard(

@@ -264,18 +264,6 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_4qhse")
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="SentLabel" type="Label" parent="VBoxContainer/CenterContainer/Node2D" unique_id=294973156]
-unique_name_in_owner = true
-visible = false
-z_index = 6
-layout_mode = 2
-size_flags_horizontal = 4
-theme_override_font_sizes/font_size = 25
-theme_override_styles/normal = SubResource("StyleBoxFlat_4qhse")
-text = "SENT"
-horizontal_alignment = 1
-vertical_alignment = 1
-
 [node name="BottomItemHBoxContainer" type="HBoxContainer" parent="VBoxContainer" unique_id=804983312]
 custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
@@ -352,7 +340,7 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 
-[node name="WaitForOpponentLabel" type="Label" parent="." unique_id=372444500]
+[node name="waitingLabel" type="Label" parent="." unique_id=372444500]
 unique_name_in_owner = true
 visible = false
 z_index = 6
@@ -372,6 +360,29 @@ size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_uih6s")
 text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SentLabel" type="Label" parent="." unique_id=294973156]
+unique_name_in_owner = true
+visible = false
+z_index = 6
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -30.5
+offset_top = -17.5
+offset_right = 30.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_4qhse")
+text = "SENT"
 horizontal_alignment = 1
 vertical_alignment = 1
 

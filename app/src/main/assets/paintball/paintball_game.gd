@@ -140,7 +140,10 @@ var _opp_avatar_texture_hover: Texture2D = null
 # -------------------------------------------------------------------
 # Ready / process
 # -------------------------------------------------------------------
-func _ready() -> void:
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
+
+func _on_game_ready() -> void:
 	_build_modules()
 
 	# Owner refs first
@@ -168,16 +171,7 @@ func _ready() -> void:
 	_require_new_shoot_selection = true
 	ui.show_fire_button(false)
 
-	# UI signals
-	if is_instance_valid(dot_timer):
-		dot_timer.timeout.connect(ui.on_dot_timer_timeout)
-
-	if is_instance_valid(rules_button):
-		rules_button.pressed.connect(_on_rules_button_pressed)
-
-	if is_instance_valid(settings_button):
-		settings_button.pressed.connect(_on_settings_button_pressed)
-		
+	# UI signals		
 	if is_instance_valid(opponent_sprite):
 		_opp_sprite_base_scale = opponent_sprite.scale
 		_opp_sprite_start_pos = opponent_sprite.global_position
@@ -193,14 +187,6 @@ func _ready() -> void:
 		(fire_button as Button).pressed.connect(_on_fire_pressed)
 	elif fire_button is BaseButton:
 		(fire_button as BaseButton).pressed.connect(_on_fire_pressed)
-		
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
-
-	_start_music()
 		
 	# Important: load/parse game data before any await that allows the screen to draw.
 	_connect_app_plugin_or_dev()
@@ -274,34 +260,7 @@ func _set_game_data(raw_text: String) -> void:
 
 	# UI reflect
 	ui.apply_hearts_from_hp()
-	
-# -------------------------------------------------------------------
-# Music hookup
-# -------------------------------------------------------------------
-	
-var music_player: AudioStreamPlayer = null
 
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
-		
 # -------------------------------------------------------------------
 # Button clicked entry point
 # -------------------------------------------------------------------

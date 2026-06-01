@@ -270,7 +270,7 @@ text = "SENT"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="WaitForOpponentLabel" type="Label" parent="MarginContainer/VBoxContainer/GameBoard" unique_id=446935368]
+[node name="waitingLabel" type="Label" parent="MarginContainer/VBoxContainer/GameBoard" unique_id=446935368]
 unique_name_in_owner = true
 visible = false
 z_index = 102

@@ -75,7 +75,10 @@ func _game_x_to_screen_x(game_x: float) -> float:
 
 var _aim_label: Label
 
-func _ready() -> void:
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
+
+func _on_game_ready() -> void:
 	core = TanksCore.new()
 	add_child(core)
 	core.replay_true.connect(_on_has_replay)
@@ -86,27 +89,13 @@ func _ready() -> void:
 	core.outbound_ready.connect(_send_payload)
 	core.opponent_avatar_ready.connect(_on_opponent_avatar_received)
 
-	if is_instance_valid(rules_button):
-		rules_button.pressed.connect(_on_rules_pressed)
-	if is_instance_valid(settings_button):
-		settings_button.pressed.connect(_on_settings_pressed)
 	if is_instance_valid(fire_button):
 		fire_button.pressed.connect(_on_send_pressed)
 		fire_button.button_down.connect(_on_fire_button_down)
 		fire_button.button_up.connect(_on_fire_button_up)
-	if is_instance_valid(dot_timer):
-		dot_timer.timeout.connect(_on_dot_timer_timeout)
 	if is_instance_valid(power_slider):
 		power_slider.value_changed.connect(_on_power_slider_changed)
 		
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
-
-	_start_music()
-
 	resized.connect(_on_resized)
 	_on_resized()
 	
@@ -138,30 +127,7 @@ func _ready() -> void:
 	power_slider.editable = false
 
 	_connect_app_plugin_or_dev()
-	
-var music_player: AudioStreamPlayer = null
 
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
-	
 func _get_target_tank_width_screen_px() -> float:
 	return TANK_WIDTH_UNITS * _get_pixels_per_board_unit()
 
@@ -1012,7 +978,7 @@ class TankBullet extends Node2D:
 	var _trail_max_length_px: float = 170.0
 	var _trail_min_point_spacing_px: float = 1.5
 
-	func _ready() -> void:
+	func _on_game_ready() -> void:
 		set_as_top_level(true)
 
 		_trail = Line2D.new()
@@ -1389,8 +1355,7 @@ func _check_win_condition() -> bool:
 	can_interact = false
 	_is_playing_round = true
 
-	if is_instance_valid(dot_timer):
-		dot_timer.stop()
+	stop_waiting_animation()
 
 	if is_instance_valid(_aim_label):
 		_aim_label.visible = false

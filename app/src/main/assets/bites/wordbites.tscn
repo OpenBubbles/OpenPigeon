@@ -772,7 +772,7 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_tfubl")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_h58lc")
 text = "VIEW ALL WORDS"
 
-[node name="WaitForOpponentLabel" type="Label" parent="ScoreScreen/MarginContainer" unique_id=2094845676]
+[node name="waitingLabel" type="Label" parent="ScoreScreen/MarginContainer" unique_id=2094845676]
 unique_name_in_owner = true
 visible = false
 z_index = 102

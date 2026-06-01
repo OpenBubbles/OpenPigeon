@@ -59,7 +59,43 @@ var suppress_next_click: bool = false
 
 @export_range(0.3, 1.0, 0.01) var piece_fill: float = 0.78
 @export var board_inset: int = 0
+
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
 	
+func _get_dev_data() -> String:
+	return '{"isYourTurn":1,"player":"1","replay":"board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|move:6,5,7,4|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0"}'
+
+func _on_game_ready() -> void:
+	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
+	_apply_bg_for_dark(is_dark)
+	if is_instance_valid(board):
+		board.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		board.mouse_filter = Control.MOUSE_FILTER_STOP
+		if not board.is_connected("resized", Callable(self, "_on_board_resized")):
+			board.resized.connect(_on_board_resized)
+		if not board.gui_input.is_connected(Callable(self, "_on_board_gui_input")):
+			board.gui_input.connect(_on_board_gui_input)
+	_recalculate_board_layout_from_board()
+
+	pieces_root = Node2D.new()
+	pieces_root.name = "PiecesRoot"
+	add_child(pieces_root)
+	if is_instance_valid(send_button):
+		send_button.disabled = true
+		send_button.visible = false
+		send_button.modulate.a = 0
+		send_button.scale = Vector2(1.0, 1.0)
+		if not send_button.pressed.is_connected(Callable(self, "_on_send_pressed")):
+			send_button.pressed.connect(_on_send_pressed)
+
+	if player == 0 or replay == "":
+		return
+
+	var playerBox := get_node_or_null("Player" + str(player) + "Box")
+	if playerBox != null and not spectator_mode:
+		playerBox.get_child(0).set_text("[center]You[/center]")	
+
 func _tween_for(target: Object) -> Tween:
 	var tw := get_tree().create_tween()
 	if is_instance_valid(target):
@@ -283,10 +319,7 @@ func send_game_checkers() -> void:
 	if wl != "":
 		payload["winner"] = my_player + "|" + ("1" if wl == "win" else "-1")
 
-	if appPlugin:
-		appPlugin.updateGameData(JSON.stringify(payload))
-	else:
-		print("AppPlugin is null. Cannot send game data.")
+	send_game_data(JSON.stringify(payload))
 
 	if game_is_over or wl != "":
 		game_over = true
@@ -391,63 +424,6 @@ func _clear_pieces() -> void:
 	has_moved = false
 	chain_jump_piece = null
 
-func _ready() -> void:
-	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
-	_apply_bg_for_dark(is_dark)
-	if is_instance_valid(board):
-		board.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		board.mouse_filter = Control.MOUSE_FILTER_STOP
-		if not board.is_connected("resized", Callable(self, "_on_board_resized")):
-			board.resized.connect(_on_board_resized)
-		if not board.gui_input.is_connected(Callable(self, "_on_board_gui_input")):
-			board.gui_input.connect(_on_board_gui_input)
-	_recalculate_board_layout_from_board()
-
-	pieces_root = Node2D.new()
-	pieces_root.name = "PiecesRoot"
-	add_child(pieces_root)
-	if is_instance_valid(dot_timer):
-		dot_timer.connect("timeout", _on_dot_timer_timeout)
-	if is_instance_valid(rules_button) and not rules_button.pressed.is_connected(Callable(self, "_on_rules_button_pressed")):
-		rules_button.pressed.connect(_on_rules_button_pressed)
-	if is_instance_valid(settings_button) and not settings_button.pressed.is_connected(Callable(self, "_on_settings_button_pressed")):
-		settings_button.pressed.connect(_on_settings_button_pressed)
-	if is_instance_valid(send_button):
-		send_button.disabled = true
-		send_button.visible = false
-		send_button.modulate.a = 0
-		send_button.scale = Vector2(1.0, 1.0)
-		if not send_button.pressed.is_connected(Callable(self, "_on_send_pressed")):
-			send_button.pressed.connect(_on_send_pressed)
-			
-	appPlugin = Engine.get_singleton("AppPlugin")
-	
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
-
-	_start_music()
-	
-	if appPlugin:
-		if not has_connected:
-			appPlugin.connect("set_game_data", _set_game_data)
-			has_connected = true
-			appPlugin.onReady()
-			print("AppPlugin Connected")
-	else:
-		if player == 0 or replay == "":
-			_set_game_data('{"isYourTurn":1,"player":"1","replay":"board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|move:6,5,7,4|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0"}')
-			print("App plugin is not available")
-
-	if player == 0 or replay == "":
-		return
-
-	var playerBox := get_node_or_null("Player" + str(player) + "Box")
-	if playerBox != null and not spectator_mode:
-		playerBox.get_child(0).set_text("[center]You[/center]")	
-		
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
 		background.color = Color(0.08, 0.08, 0.08) if is_dark else Color("#e5e5e5")
@@ -456,29 +432,6 @@ func _visual_to_logical(gx: int, gy: int) -> Vector2i:
 	var lx := gx if (player == 2 and not spectator_mode) else (7 - gx)
 	var ly := (7 - gy) if (player == 2 and not spectator_mode) else gy
 	return Vector2i(lx, ly)
-	
-var music_player: AudioStreamPlayer = null
-
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
 	
 func _animate_send_button(show: bool) -> void:
 	if not is_instance_valid(send_button):
@@ -1374,31 +1327,6 @@ The other player is declared the winner.
 
 """
 
-func _on_dim_gui_input_rules(e: InputEvent) -> void:
-	if e is InputEventMouseButton and e.pressed:
-		suppress_next_click = true
-		get_viewport().set_input_as_handled()
-
-func _on_rules_close_pressed(dim: ColorRect, popup: Control) -> void:
-	suppress_next_click = true
-	if is_instance_valid(dim):
-		dim.queue_free()
-	if is_instance_valid(popup):
-		popup.queue_free()
-
-func _on_dim_gui_input_settings(e: InputEvent) -> void:
-	if e is InputEventMouseButton and e.pressed:
-		suppress_next_click = true
-		get_viewport().set_input_as_handled()
-
-func _on_settings_closed() -> void:
-	suppress_next_click = true
-	if is_instance_valid(player_avatar_display):
-		player_avatar_display.update_display_from_settings()
-
-func _on_settings_theme_selected(_name: String) -> void:
-	pass
-	
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
 		return

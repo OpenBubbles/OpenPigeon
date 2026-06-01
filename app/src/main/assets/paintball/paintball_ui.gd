@@ -211,48 +211,6 @@ func play_sent_animation() -> void:
 		if not g.is_my_turn and not g.game_over:
 			start_waiting_animation()
 	)
-	
-func start_waiting_animation() -> void:
-	if not is_instance_valid(g.waiting_label) or not is_instance_valid(g.waiting_blur) or not is_instance_valid(g.dot_timer):
-		print("Warning: Waiting animation nodes are not valid.")
-		return
-	if g.spectator_mode:
-		return
-
-	g.dot_count = 0
-	g.waiting_label.text = g.BASE_WAIT_TEXT + "."
-	g.waiting_label.visible = true
-	g.waiting_blur.visible = true
-
-	g.waiting_label.modulate.a = 0.0
-	g.waiting_blur.modulate.a = 0.0
-
-	var tween_wait_in = g.create_tween().set_parallel(true)
-	tween_wait_in.tween_property(g.waiting_label, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_property(g.waiting_blur, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_callback(func():
-		g.dot_timer.start()
-	)
-
-func stop_waiting_animation() -> void:
-	if is_instance_valid(g.dot_timer):
-		g.dot_timer.stop()
-	if is_instance_valid(g.waiting_label):
-		g.waiting_label.visible = false
-		g.waiting_label.modulate.a = 1.0
-	if is_instance_valid(g.waiting_blur):
-		g.waiting_blur.visible = false
-		g.waiting_blur.modulate.a = 1.0
-
-func on_dot_timer_timeout() -> void:
-	if not is_instance_valid(g.waiting_label):
-		print("Warning: waiting_label is not valid in _on_dot_timer_timeout.")
-		return
-	g.dot_count = (g.dot_count % 3) + 1
-	var dots = ""
-	for i in range(g.dot_count):
-		dots += "."
-	g.waiting_label.text = g.BASE_WAIT_TEXT + dots
 
 func pop_button(btn: Control) -> void:
 	btn.pivot_offset = btn.size / 2.0
@@ -260,30 +218,6 @@ func pop_button(btn: Control) -> void:
 	tween.tween_property(btn, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(btn, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
-
-func on_rules_button_pressed() -> void:
-	if not is_instance_valid(g.rules_button):
-		return
-
-	await pop_button(g.rules_button)
-
-	var popup := g.RULES_POPUP_SCENE.instantiate() as RulesPopup
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var root := g.get_tree().root
-	root.add_child(dim)
-	root.add_child(popup)
-	popup.z_index = 100
-	dim.z_index = 99
-
-	popup.tree_exited.connect(func():
-		if is_instance_valid(dim):
-			dim.queue_free()
-	)
-
-	popup.open("How to Play Paintball", get_rules_text())
 
 func get_rules_text() -> String:
 	return """
@@ -304,59 +238,6 @@ func get_rules_text() -> String:
 • Replace in Future
 [/font_size]
 """
-
-func on_settings_button_pressed() -> void:
-	if not is_instance_valid(g.settings_button):
-		return
-
-	await pop_button(g.settings_button)
-
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var popup_instance := g.SETTINGS_POPUP_SCENE.instantiate()
-	var settings_popup_script := popup_instance as SettingsPopup
-
-	var root := g.get_tree().root
-	root.add_child(dim)
-	root.add_child(popup_instance)
-	popup_instance.z_index = 100
-	dim.z_index = 99
-	root.move_child(dim, root.get_child_count() - 2)
-
-	settings_popup_script.setup_popup(dim)
-
-	var custom_settings_title := popup_instance.find_child("CustomSettingsTitleLabel", true)
-	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:
-		(custom_settings_title as Label).visible = true
-	elif custom_settings_title and custom_settings_title is Label:
-		(custom_settings_title as Label).visible = false
-
-	settings_popup_script.closed.connect(func():
-		if is_instance_valid(g.player_avatar_display):
-			g.player_avatar_display.update_display_from_settings()
-	)
-	settings_popup_script.settings_theme_selected.connect(g._on_theme_changed)
-
-	popup_instance.set_as_top_level(true)
-	popup_instance.visible = true
-	await g.get_tree().process_frame
-
-	var viewport_size: Vector2 = g.get_viewport().get_visible_rect().size
-	var desired_width: float = viewport_size.x * 0.95
-	var desired_height: float = popup_instance.get_combined_minimum_size().y
-
-	popup_instance.size = Vector2(desired_width, desired_height)
-	popup_instance.position = Vector2((viewport_size.x - desired_width) / 2.0, viewport_size.y)
-
-	var bottom_offset: float = 50.0
-	var target_y_position: float = viewport_size.y - desired_height - bottom_offset
-	var target_position: Vector2 = Vector2((viewport_size.x - desired_width) / 2.0, target_y_position)
-
-	var popup_tween := g.create_tween()
-	popup_tween.tween_property(popup_instance, "position", target_position, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	popup_instance.grab_focus()
 
 func check_win() -> bool:
 	print("--- CHECKING WIN CONDITION ---")

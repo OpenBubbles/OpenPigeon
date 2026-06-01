@@ -86,8 +86,11 @@ void fragment() {
 	var mat := ShaderMaterial.new()
 	mat.shader = sh
 	return mat
+	
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
 
-func _ready():
+func _on_game_ready():
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_bg_for_dark(is_dark)
 	post_board_data.resize(64)
@@ -98,14 +101,6 @@ func _ready():
 	call_deferred("place_star_points")
 
 	var appPlugin = Engine.get_singleton("AppPlugin")
-	
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
-
-	_start_music()
 	
 	if appPlugin:
 		print("AppPlugin Available")
@@ -126,38 +121,10 @@ func _ready():
 
 	call_deferred("calculate_button_target_position")
 	send_button.visible = false
-	
-	if rules_button:
-		rules_button.pressed.connect(_on_rules_button_pressed)
-	if settings_button:
-		settings_button.pressed.connect(_on_settings_button_pressed)
-		
+
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
 		background.color = Color(0.08, 0.08, 0.08) if is_dark else Color("#e5e5e5")
-		
-var music_player: AudioStreamPlayer = null
-
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
 
 func setup_board_structure():
 	if not grid:

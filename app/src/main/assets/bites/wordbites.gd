@@ -61,7 +61,10 @@ var _words_is_dragging := false
 var _words_last_drag_pos := Vector2.ZERO
 const WORDS_DRAG_THRESHOLD := 8.0
 
-func _ready() -> void:
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
+
+func _on_game_ready() -> void:
 	if not start_button.pressed.is_connected(_on_start_button_pressed):
 		start_button.pressed.connect(_on_start_button_pressed)
 	if not back_button.pressed.is_connected(_on_back_button_pressed):
@@ -69,8 +72,6 @@ func _ready() -> void:
 
 	if not game_screen.time_up.is_connected(_on_game_time_up):
 		game_screen.time_up.connect(_on_game_time_up)
-	if is_instance_valid(dot_timer):
-		dot_timer.connect("timeout", _on_dot_timer_timeout)
 	if not view_words_button.pressed.is_connected(_on_view_words_pressed):
 		view_words_button.pressed.connect(_on_view_words_pressed)
 	
@@ -83,14 +84,6 @@ func _ready() -> void:
 				_words_scroll_container.gui_input.connect(_on_words_list_scroll_gui_input)
 	
 	appPlugin = Engine.get_singleton("AppPlugin")
-	
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
-
-	_start_music()
 	
 	if appPlugin:
 		if not has_connected:
@@ -107,30 +100,7 @@ func _ready() -> void:
 	_apply_score_box_style(main_score_box)
 	_apply_score_box_style(player_score_box)
 	_apply_score_box_style(opp_score_box)
-	
-var music_player: AudioStreamPlayer = null
 
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
-	
 func _is_piece_horizontal_idx(idx: int, orientations: Array) -> bool:
 	if idx < 0 or idx >= orientations.size():
 		return false

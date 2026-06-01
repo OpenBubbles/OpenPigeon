@@ -1,10 +1,16 @@
-[gd_scene load_steps=21 format=3 uid="uid://b8lajx2v3mn4p"]
+[gd_scene format=3 uid="uid://b8lajx2v3mn4p"]
 
 [ext_resource type="Script" uid="uid://c2tucuh4qvd1y" path="res://chess/chess.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_6ithn"]
 [ext_resource type="Texture2D" uid="uid://cswvpaebcr2k2" path="res://chess/chess_marker.png" id="3_awjd8"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="4_awjd8"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="5_6ithn"]
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_awjd8"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_6ithn"]
+viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="ViewportTexture" id="ViewportTexture_hp2ci"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
@@ -18,18 +24,51 @@ viewport_path = NodePath("SubViewportContainer/SubViewport")
 [sub_resource type="ViewportTexture" id="ViewportTexture_xo6sa"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_0wno7"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
+[sub_resource type="SystemFont" id="SystemFont_awjd8"]
+font_weight = 600
+subpixel_positioning = 0
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_yqr8p"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_d3h5h"]
+bg_color = Color(0.129412, 0.282353, 0.686275, 1)
+border_color = Color(0.8, 0.8, 0.8, 0)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+expand_margin_left = 20.0
+expand_margin_top = 6.0
+expand_margin_right = 20.0
+expand_margin_bottom = 6.0
+shadow_size = 2
+shadow_offset = Vector2(0, 2)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4qhse"]
-bg_color = Color(0.545098, 0.545098, 0.545098, 0.72549)
-corner_radius_top_left = 25
-corner_radius_top_right = 25
-corner_radius_bottom_right = 25
-corner_radius_bottom_left = 25
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_a7n7t"]
+bg_color = Color(0.0884535, 0.210391, 0.534708, 1)
+border_color = Color(0.8, 0.8, 0.8, 0)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+expand_margin_left = 20.0
+expand_margin_top = 6.0
+expand_margin_right = 20.0
+expand_margin_bottom = 6.0
+shadow_size = 2
+shadow_offset = Vector2(0, 2)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_xo6sa"]
+bg_color = Color(0.200916, 0.379772, 0.83122, 1)
+border_color = Color(0.8, 0.8, 0.8, 0)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+expand_margin_left = 20.0
+expand_margin_top = 6.0
+expand_margin_right = 20.0
+expand_margin_bottom = 6.0
+shadow_size = 2
+shadow_offset = Vector2(0, 2)
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_hp2ci"]
 texture = ExtResource("4_awjd8")
@@ -71,7 +110,18 @@ expand_margin_top = 10.0
 expand_margin_right = 20.0
 expand_margin_bottom = 10.0
 
-[node name="Chess" type="Control"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_awjd8"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[node name="Chess" type="Control" unique_id=1470324892]
 z_index = 3
 layout_mode = 3
 anchors_preset = 15
@@ -81,7 +131,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
 
-[node name="MarginContainer" type="MarginContainer" parent="."]
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=1900695099]
 layout_mode = 0
 offset_right = 648.0
 offset_bottom = 135.0
@@ -90,14 +140,14 @@ theme_override_constants/margin_left = 40
 theme_override_constants/margin_top = 30
 theme_override_constants/margin_right = 40
 
-[node name="TopBarContainer" type="HBoxContainer" parent="MarginContainer"]
+[node name="TopBarContainer" type="HBoxContainer" parent="MarginContainer" unique_id=1608294260]
 layout_mode = 2
 
-[node name="PlayerContainer" type="VBoxContainer" parent="MarginContainer/TopBarContainer"]
+[node name="PlayerContainer" type="VBoxContainer" parent="MarginContainer/TopBarContainer" unique_id=1418809414]
 layout_mode = 2
 size_flags_horizontal = 0
 
-[node name="YouLabel" type="Label" parent="MarginContainer/TopBarContainer/PlayerContainer"]
+[node name="YouLabel" type="Label" parent="MarginContainer/TopBarContainer/PlayerContainer" unique_id=1841383248]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
@@ -107,24 +157,24 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="PlayerAvatarDisplay" parent="MarginContainer/TopBarContainer/PlayerContainer" instance=ExtResource("2_6ithn")]
+[node name="PlayerAvatarDisplay" parent="MarginContainer/TopBarContainer/PlayerContainer" unique_id=790625426 instance=ExtResource("2_6ithn")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_hp2ci")
-texture_pressed = SubResource("ViewportTexture_d3h5h")
-texture_hover = SubResource("ViewportTexture_a7n7t")
+texture_normal = SubResource("ViewportTexture_awjd8")
+texture_pressed = SubResource("ViewportTexture_6ithn")
+texture_hover = SubResource("ViewportTexture_hp2ci")
 is_display_only = true
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/TopBarContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/TopBarContainer" unique_id=1472849205]
 layout_mode = 2
 
-[node name="Control" type="Control" parent="MarginContainer/TopBarContainer/VBoxContainer"]
+[node name="Control" type="Control" parent="MarginContainer/TopBarContainer/VBoxContainer" unique_id=301039106]
 custom_minimum_size = Vector2(0, 50)
 layout_mode = 2
 
-[node name="PlayerMarker" type="TextureRect" parent="MarginContainer/TopBarContainer/VBoxContainer"]
+[node name="PlayerMarker" type="TextureRect" parent="MarginContainer/TopBarContainer/VBoxContainer" unique_id=1884601987]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(32, 64)
 layout_mode = 2
@@ -132,18 +182,18 @@ texture = ExtResource("3_awjd8")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="Control" type="Control" parent="MarginContainer/TopBarContainer"]
+[node name="Control" type="Control" parent="MarginContainer/TopBarContainer" unique_id=858292539]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="VBoxContainer2" type="VBoxContainer" parent="MarginContainer/TopBarContainer"]
+[node name="VBoxContainer2" type="VBoxContainer" parent="MarginContainer/TopBarContainer" unique_id=2086781148]
 layout_mode = 2
 
-[node name="Control" type="Control" parent="MarginContainer/TopBarContainer/VBoxContainer2"]
+[node name="Control" type="Control" parent="MarginContainer/TopBarContainer/VBoxContainer2" unique_id=23509005]
 custom_minimum_size = Vector2(0, 50)
 layout_mode = 2
 
-[node name="OpponentMarker" type="TextureRect" parent="MarginContainer/TopBarContainer/VBoxContainer2"]
+[node name="OpponentMarker" type="TextureRect" parent="MarginContainer/TopBarContainer/VBoxContainer2" unique_id=507509044]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(32, 64)
 layout_mode = 2
@@ -151,56 +201,52 @@ texture = ExtResource("3_awjd8")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="OppContainer" type="VBoxContainer" parent="MarginContainer/TopBarContainer"]
+[node name="OppContainer" type="VBoxContainer" parent="MarginContainer/TopBarContainer" unique_id=139186127]
 layout_mode = 2
 size_flags_horizontal = 8
 
-[node name="OppLabel" type="Control" parent="MarginContainer/TopBarContainer/OppContainer"]
+[node name="OppLabel" type="Control" parent="MarginContainer/TopBarContainer/OppContainer" unique_id=35514292]
 custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
 
-[node name="OppAvatarDisplay" parent="MarginContainer/TopBarContainer/OppContainer" instance=ExtResource("2_6ithn")]
+[node name="OppAvatarDisplay" parent="MarginContainer/TopBarContainer/OppContainer" unique_id=428947057 instance=ExtResource("2_6ithn")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_xo6sa")
-texture_pressed = SubResource("ViewportTexture_0wno7")
-texture_hover = SubResource("ViewportTexture_yqr8p")
+texture_normal = SubResource("ViewportTexture_d3h5h")
+texture_pressed = SubResource("ViewportTexture_a7n7t")
+texture_hover = SubResource("ViewportTexture_xo6sa")
 is_display_only = true
 controlled_by_data = true
 
-[node name="winLoseLabel" type="Panel" parent="."]
-visible = false
-top_level = true
+[node name="SendButton" type="Button" parent="." unique_id=1127727856]
+unique_name_in_owner = true
+z_index = 99
+custom_minimum_size = Vector2(70, 50)
 layout_mode = 0
-offset_left = 116.0
-offset_top = 609.0
-offset_right = 546.0
-offset_bottom = 709.0
-theme_override_styles/panel = SubResource("StyleBoxFlat_4qhse")
+offset_left = 289.0
+offset_top = 1009.28
+offset_right = 359.0
+offset_bottom = 1059.28
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+size_flags_vertical = 8
+focus_mode = 0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/icon_normal_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_colors/icon_focus_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_colors/icon_pressed_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_colors/icon_hover_color = Color(0.129412, 0.282353, 0.686275, 1)
+theme_override_fonts/font = SubResource("SystemFont_awjd8")
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_d3h5h")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_a7n7t")
+theme_override_styles/hover = SubResource("StyleBoxFlat_xo6sa")
+text = "Send"
 
-[node name="RichTextLabel" type="RichTextLabel" parent="winLoseLabel"]
-layout_mode = 0
-offset_left = 16.0
-offset_top = 29.2222
-offset_right = 419.0
-offset_bottom = 71.2222
-theme_override_font_sizes/normal_font_size = 30
-bbcode_enabled = true
-text = "[center]YOU WIN![/center]"
-
-[node name="SendButton" type="Button" parent="."]
-layout_mode = 0
-offset_left = 112.0
-offset_top = 1068.0
-offset_right = 232.0
-offset_bottom = 1118.0
-disabled = true
-text = "Send
-"
-
-[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="."]
+[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="." unique_id=1152736009]
 custom_minimum_size = Vector2(0, 120)
 layout_mode = 1
 anchors_preset = 12
@@ -213,14 +259,14 @@ grow_vertical = 0
 mouse_filter = 2
 theme_override_constants/separation = 10
 
-[node name="MarginContainer" type="MarginContainer" parent="BottomItemHBoxContainer"]
+[node name="MarginContainer" type="MarginContainer" parent="BottomItemHBoxContainer" unique_id=1574116463]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/margin_left = 40
 theme_override_constants/margin_right = 40
 theme_override_constants/margin_bottom = 30
 
-[node name="SettingsButton" type="Button" parent="BottomItemHBoxContainer/MarginContainer"]
+[node name="SettingsButton" type="Button" parent="BottomItemHBoxContainer/MarginContainer" unique_id=1928001954]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -232,7 +278,7 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_hp2ci")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_d3h5h")
 theme_override_styles/hover = SubResource("StyleBoxTexture_a7n7t")
 
-[node name="RulesButton" type="Button" parent="BottomItemHBoxContainer/MarginContainer"]
+[node name="RulesButton" type="Button" parent="BottomItemHBoxContainer/MarginContainer" unique_id=423081959]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -244,9 +290,9 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_xo6sa")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_0wno7")
 theme_override_styles/hover = SubResource("StyleBoxTexture_yqr8p")
 
-[node name="WaitBlur" type="ColorRect" parent="."]
+[node name="WaitBlur" type="ColorRect" parent="." unique_id=429017406]
 unique_name_in_owner = true
-visible = false
+z_index = 100
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -256,11 +302,11 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 
-[node name="DotTimer" type="Timer" parent="."]
+[node name="DotTimer" type="Timer" parent="." unique_id=1897958632]
 unique_name_in_owner = true
 wait_time = 0.75
 
-[node name="SpecLabel" type="Label" parent="."]
+[node name="SpecLabel" type="Label" parent="." unique_id=1242177239]
 unique_name_in_owner = true
 visible = false
 layout_mode = 0
@@ -273,10 +319,10 @@ text = "Spectating..."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="SentLabel" type="Label" parent="."]
+[node name="SentLabel" type="Label" parent="." unique_id=1400889086]
 unique_name_in_owner = true
 visible = false
-z_index = 1
+z_index = 102
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -295,9 +341,10 @@ text = "SENT"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="WaitForOpponentLabel" type="Label" parent="."]
+[node name="waitingLabel" type="Label" parent="." unique_id=2122413385]
 unique_name_in_owner = true
-z_index = 11
+visible = false
+z_index = 102
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -314,5 +361,26 @@ size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_hp2ci")
 text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WinLossLabel" type="Label" parent="." unique_id=452101547]
+unique_name_in_owner = true
+visible = false
+z_index = 102
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -17.5
+offset_right = 0.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_awjd8")
 horizontal_alignment = 1
 vertical_alignment = 1

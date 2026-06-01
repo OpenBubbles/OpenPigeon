@@ -91,7 +91,10 @@ var is_my_turn: int
 var replay_string: String
 var mode: String
 
-func _ready():
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
+
+func _on_game_ready():
 	screen_size = get_viewport().get_visible_rect().size
 	if is_instance_valid(main_overlay):
 		main_overlay.visible = show_overlay
@@ -103,17 +106,7 @@ func _ready():
 	appPlugin = Engine.get_singleton("AppPlugin")
 	if is_instance_valid(settings_button):
 		settings_button.pressed.connect(_on_settings_button_pressed)
-	if is_instance_valid(dot_timer):
-		dot_timer.connect("timeout", _on_dot_timer_timeout)
-		
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
 
-	_start_music()
-	
 	if appPlugin:
 		if not has_connected:
 			print("App plugin is available")
@@ -129,29 +122,6 @@ func _ready():
 	if _debug_perf:
 		_create_debug_overlay()
 	_enforce_mobile_lighting_settings()
-	
-var music_player: AudioStreamPlayer = null
-
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
 	
 func _enforce_mobile_lighting_settings() -> void:
 	if is_instance_valid(camera):

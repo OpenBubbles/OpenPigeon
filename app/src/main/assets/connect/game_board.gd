@@ -44,29 +44,18 @@ var droppedPiece			: RigidBody2D = null
 var board_state: PackedInt32Array = PackedInt32Array()
 var winner : String = ""
 
-func _ready() -> void:
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
+
+func _on_game_ready() -> void:
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_bg_for_dark(is_dark)
-	if is_instance_valid(rules_button):
-		rules_button.pressed.connect(_on_rules_button_pressed)
-	if is_instance_valid(settings_button):
-		settings_button.pressed.connect(_on_settings_button_pressed)
-	if is_instance_valid(dot_timer):
-		dot_timer.timeout.connect(_on_dot_timer_timeout)
 	if is_instance_valid(send_button):
 		send_button.disabled = true
 		_update_send_button_visibility(false)
 		send_button.pressed.connect(send_game)
 	var app: Object = Engine.get_singleton("AppPlugin")
-	
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
 
-	_start_music()
-	
 	if app:
 		if not has_connected:
 			app.connect("set_game_data", _set_game_data)
@@ -142,29 +131,6 @@ func _set_game_data(new_replay: String) -> void:
 	winner = data.get("winner", "")
 	_hydrate_board_from_replay(replay)
 	_refresh_turn_ui()
-	
-var music_player: AudioStreamPlayer = null
-
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
 
 func _resolve_my_side(my_id: String, p1_id: String, p2_id: String, owner: int, my_turn: bool) -> int:
 	if my_id != "" and p1_id != "" and p2_id != "":

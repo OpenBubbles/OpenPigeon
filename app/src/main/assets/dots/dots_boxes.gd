@@ -48,7 +48,10 @@ var send_button_home: Vector2 = Vector2.ZERO
 var blue_marker_tex: Texture2D = preload("res://dots/blue_marker.png")
 var red_marker_tex: Texture2D = preload("res://dots/red_marker.png")
 
-func _ready() -> void:
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
+
+func _on_game_ready() -> void:
 	var sb := StyleBoxFlat.new()
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
 	print("Dark Mode: ", is_dark)
@@ -78,12 +81,6 @@ func _ready() -> void:
 		else:
 			push_warning("[Grid] temp_line_changed signal missing")
 
-	if is_instance_valid(rules_button):
-		rules_button.pressed.connect(_on_rules_button_pressed)
-	if is_instance_valid(settings_button):
-		settings_button.pressed.connect(_on_settings_button_pressed)
-	if is_instance_valid(dot_timer):
-		dot_timer.connect("timeout", _on_dot_timer_timeout)
 	if is_instance_valid(send_button):
 		send_button.visible = false
 		send_button.modulate.a = 0.0
@@ -95,15 +92,7 @@ func _ready() -> void:
 
 	_apply_player_color_icons()
 	var appPlugin = Engine.get_singleton("AppPlugin")
-	
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
 
-	_start_music()
-	
 	if appPlugin: 
 		print("AppPlugin Available")
 		if not has_connected:
@@ -171,29 +160,6 @@ func _set_game_data(raw_text: String) -> void:
 	if not is_my_turn:
 		start_waiting_animation()
 		
-var music_player: AudioStreamPlayer = null
-
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
-
 func _load_pre_state_and_replay(replay_str: String) -> void:
 	var parsed := _parse_replay_dnb(replay_str)
 	var pre_lines: Array = parsed.get("pre_lines", [])

@@ -48,17 +48,11 @@ var _input_orig_position := Vector2.ZERO
 var _kb_open := false
 var _kb_last_h := 0
 
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
 
-func _ready() -> void:
+func _on_game_ready() -> void:
 	var appPlugin = Engine.get_singleton("AppPlugin")
-	
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
-
-	_start_music()
 	
 	if appPlugin and appPlugin.has_method("getSenderUUID"):
 		my_uuid = String(appPlugin.getSenderUUID() or "")
@@ -88,8 +82,6 @@ func _ready() -> void:
 			questions_scroll.get_v_scroll_bar().visible = false
 		if is_instance_valid(questions_scroll.get_h_scroll_bar()):
 			questions_scroll.get_h_scroll_bar().visible = false
-	if is_instance_valid(dot_timer) and not dot_timer.timeout.is_connected(_on_dot_timer_timeout):
-		dot_timer.timeout.connect(_on_dot_timer_timeout)
 	if is_instance_valid(questions_list):
 		questions_list.resized.connect(_on_questions_resized)
 		questions_list.child_entered_tree.connect(_on_questions_child_entered)
@@ -136,29 +128,6 @@ func _ready() -> void:
 	elif is_my_turn and (not game_over):
 		stop_waiting_animation()
 		
-var music_player: AudioStreamPlayer = null
-
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
-
 func _get_s(parsed_dict: Dictionary, key: String, def: String = "") -> String:
 	if not parsed_dict.has(key):
 		return def

@@ -91,6 +91,12 @@ var opp_score: int = 0        # per-set score (opponent)
 var you_set_wins: int = 0     # total sets won (you)
 var opp_set_wins: int = 0     # total sets won (opponent)
 
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
+	
+func _get_dev_data() -> String:
+	return '{ "isYourTurn": true, "player": "1", "replay": "state:1,18,0,0,0|move:1,0.059418,1.351113,-14.397592|move:1,-0.077269,1.397037,-14.397591|move:1,-0.020799,1.492665,-14.397592|state:1,29,18,0,1", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,0|mouth,0|acc,0|wins,0|bg_color,0.900000,0.900000,0.900000|body_color,0.000000,1.000000,0.000000|glasses,0|stache,0|backdrop,0|hair,3|clothes,2|hair_color,0.431373,0.254902,0.121569|clothes_color,0.438450,0.340784,0.366469", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "", "id": "6gt6WvSteSKHYrKr", "ios": "16.3.1", "num": "3", "game": "archery", "seed": "247149971", "tver": "5", "build": "d4yGowcTuIW9i", "version": "0" }'
+
 func _update_set_score_labels() -> void:
 	score_label.text = "[center]%d - %d[/center]" % [you_score, opp_score]
 
@@ -110,28 +116,7 @@ func _update_set_score_labels() -> void:
 		opp_wins.visible = false
 		opp_label.visible = true
 
-
-func _ready() -> void:
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
-
-	_start_music()
-
-	appPlugin = Engine.get_singleton("AppPlugin")
-	if appPlugin:
-		print("App plugin is available")
-		appPlugin.connect("set_game_data", _set_game_data)
-		my_uuid = appPlugin.getSenderUUID()
-		appPlugin.onReady()
-	else:
-		print("App plugin is not available")
-		my_uuid = "0a602920-2033-469d-aab8-5e832c5d4f6a"
-		#var dev_data = '{ "isYourTurn": true, "player": "1", "replay": "state:2,0,0,1,1|move:0,2.433302,4.115979,-19.019581|move:0,1.885665,4.547050,-19.018667|move:0,1.404883,4.726025,-19.029633|state:2,0,0,0,1", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,0|mouth,0|acc,0|wins,0|bg_color,0.900000,0.900000,0.900000|body_color,0.000000,1.000000,0.000000|glasses,0|stache,0|backdrop,0|hair,3|clothes,2|hair_color,0.431373,0.254902,0.121569|clothes_color,0.438450,0.340784,0.366469", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "", "id": "6gt6WvSteSKHYrKr\n", "ios": "16.3.1", "num": "3", "game": "archery", "seed": "247149971", "tver": "5", "build": "d4yGowcTuIW9i", "version": "0" }'
-		var dev_data = '{ "isYourTurn": true, "player": "1", "replay": "state:1,18,0,0,0|move:1,0.059418,1.351113,-14.397592|move:1,-0.077269,1.397037,-14.397591|move:1,-0.020799,1.492665,-14.397592|state:1,29,18,0,1", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,0|mouth,0|acc,0|wins,0|bg_color,0.900000,0.900000,0.900000|body_color,0.000000,1.000000,0.000000|glasses,0|stache,0|backdrop,0|hair,3|clothes,2|hair_color,0.431373,0.254902,0.121569|clothes_color,0.438450,0.340784,0.366469", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "", "id": "6gt6WvSteSKHYrKr\n", "ios": "16.3.1", "num": "3", "game": "archery", "seed": "247149971", "tver": "5", "build": "d4yGowcTuIW9i", "version": "0" }'
-		_set_game_data(dev_data)
+func _on_game_ready() -> void:
 	if is_instance_valid(aim_cursor):
 		aim_cursor.visible = false
 	if is_instance_valid(aim_progress_bar):
@@ -139,15 +124,9 @@ func _ready() -> void:
 		aim_progress_bar.value = 0.0
 	if is_instance_valid(wind_arrow):
 		wind_arrow.pivot_offset = wind_arrow.size / 2.0
-		print("Wind Arrow Set 1")
 		wind_arrow.scale = Vector2.ONE
-	if is_instance_valid(wind_arrow_circle):
-		if wind_arrow_circle is Control:
-			wind_arrow_circle.pivot_offset = wind_arrow_circle.size / 2.0
-	if is_instance_valid(settings_button):
-		settings_button.pressed.connect(_on_settings_button_pressed)
-	if is_instance_valid(dot_timer):
-		dot_timer.connect("timeout", _on_dot_timer_timeout)
+	if is_instance_valid(wind_arrow_circle) and wind_arrow_circle is Control:
+		wind_arrow_circle.pivot_offset = wind_arrow_circle.size / 2.0
 	if is_instance_valid(top_game_bar):
 		top_game_bar.modulate.a = 1.0
 		_top_bar_inited = true
@@ -157,42 +136,17 @@ func _ready() -> void:
 		wind_panel_container.modulate.a = 1.0
 	if is_instance_valid(score_box):
 		_score_box_inited = true
-
 		_score_box_orig_min_size = score_box.custom_minimum_size
 		if _score_box_orig_min_size == Vector2.ZERO:
 			_score_box_orig_min_size = score_box.get_combined_minimum_size()
-
 		score_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if is_instance_valid(camera):
 		camera.position = CAMERA_DEFAULT_POS
 		camera.fov = CAMERA_DEFAULT_FOV
 		var center := _get_bullseye_center_world()
 		camera.look_at(center - Vector3(0.0, CAMERA_LOOK_AT_Y_OFFSET, 0.0), Vector3.UP)
-	
+
 	update_distance()
-	
-var music_player: AudioStreamPlayer = null
-
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
 
 func check_winner(completed_round: int = set_num) -> bool:
 	print("check_winner: completed_round=", completed_round, " you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
@@ -340,17 +294,11 @@ func _process_game_state() -> void:
 
 func _award_set_points_and_continue(completed_round: int = set_num) -> bool:
 	var won_now: bool = check_winner(completed_round)
-	if appPlugin:
-		appPlugin.updateGameData(export_replay())
-	else:
-		print("No app plugin! " + export_replay())
+	send_game_data(export_replay())
 	return won_now
 	
 func _send_turn_state_only() -> void:
-	if appPlugin:
-		appPlugin.updateGameData(export_replay())
-	else:
-		print("No app plugin! " + export_replay())
+	send_game_data(export_replay())
 		
 func _spawn_avatar_score_popup(is_you: bool, amount: int, is_miss: bool = false) -> void:
 	var avatar: Control = player_avatar_display if is_you else opp_avatar_display
@@ -1526,80 +1474,3 @@ func play_sent_animation() -> void:
 			start_waiting_animation()
 	)
 	
-func _on_settings_button_pressed() -> void:
-	if not is_instance_valid(settings_button):
-		return
-	if _settings_open:
-		return
-	_settings_open = true
-	settings_button.pivot_offset = settings_button.size / 2.0
-	var tween := create_tween()
-	tween.tween_property(settings_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(settings_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var popup_instance := SETTINGS_POPUP_SCENE.instantiate()
-	var settings_popup_script := popup_instance as SettingsPopup
-	var root := get_tree().root
-	root.add_child(dim)
-	root.add_child(popup_instance)
-	popup_instance.z_index = 100
-	dim.z_index = 99
-	root.move_child(dim, root.get_child_count() - 2)
-	settings_popup_script.setup_popup(dim)
-
-	if mediaPlugin:
-		var music_row := HBoxContainer.new()
-		music_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-		var music_label := Label.new()
-		music_label.text = "Music"
-		music_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-		var music_toggle := CheckButton.new()
-		music_toggle.button_pressed = mediaPlugin.isMusicEnabled()
-		music_toggle.toggled.connect(func(enabled: bool) -> void:
-			mediaPlugin.setMusicEnabled(enabled)
-			if enabled:
-				_start_music()
-			else:
-				_stop_music()
-		)
-
-		music_row.add_child(music_label)
-		music_row.add_child(music_toggle)
-		settings_popup_script.custom_settings_container.add_child(music_row)
-
-	var custom_settings_title := popup_instance.find_child("CustomSettingsTitleLabel", true)
-	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:
-		(custom_settings_title as Label).visible = true
-	elif custom_settings_title and custom_settings_title is Label:
-		(custom_settings_title as Label).visible = false
-
-	settings_popup_script.closed.connect(func():
-		_settings_open = false
-		if is_instance_valid(player_avatar_display):
-			player_avatar_display.update_display_from_settings()
-		if is_instance_valid(dim):
-			dim.queue_free()
-	)
-	popup_instance.set_as_top_level(true)
-	popup_instance.visible = true
-	await get_tree().process_frame
-
-	var viewport_size := get_viewport().get_visible_rect().size
-	var desired_width := viewport_size.x * 0.95
-	var desired_height: float = popup_instance.get_combined_minimum_size().y
-	popup_instance.size = Vector2(desired_width, desired_height)
-	popup_instance.position = Vector2((viewport_size.x - desired_width) / 2, viewport_size.y)
-
-	var bottom_offset := 50
-	var target_y_position := viewport_size.y - desired_height - bottom_offset
-	var target_position := Vector2((viewport_size.x - desired_width) / 2, target_y_position)
-
-	var popup_tween := create_tween()
-	popup_tween.tween_property(popup_instance, "position", target_position, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	popup_instance.grab_focus()

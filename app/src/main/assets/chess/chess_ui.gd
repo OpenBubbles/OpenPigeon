@@ -113,19 +113,25 @@ static func calculate_board_dimensions(viewport_size: Vector2, margin: float = V
 
 ## Convert a board position to screen coordinates
 static func board_to_screen(pos: Vector2i, board_origin: Vector2, square_size: float, flip_board: bool) -> Vector2:
-	var ui_y: float = (7 - pos.y) * square_size if not flip_board else pos.y * square_size
-	return board_origin + Vector2(pos.x * square_size, ui_y)
+	var ui_x: float = ((7 - pos.x) if flip_board else pos.x) * square_size
+	var ui_y: float = (pos.y if flip_board else (7 - pos.y)) * square_size
+	return board_origin + Vector2(ui_x, ui_y)
 
 ## Convert screen coordinates to a board position
 static func screen_to_board(screen_pos: Vector2, board_origin: Vector2, square_size: float, flip_board: bool) -> Vector2i:
 	var rel: Vector2 = screen_pos - board_origin
 	if rel.x < 0 or rel.y < 0:
 		return Vector2i(-1, -1)
-	var f: int = int(rel.x / square_size)
-	var rf: int = int(rel.y / square_size)
-	if f < 0 or f > 7 or rf < 0 or rf > 7:
+
+	var ui_f: int = int(rel.x / square_size)
+	var ui_r: int = int(rel.y / square_size)
+
+	if ui_f < 0 or ui_f > 7 or ui_r < 0 or ui_r > 7:
 		return Vector2i(-1, -1)
-	var r: int = (7 - rf) if not flip_board else rf
+
+	var f: int = (7 - ui_f) if flip_board else ui_f
+	var r: int = ui_r if flip_board else (7 - ui_r)
+
 	return Vector2i(f, r)
 
 ## Create a pulse animation tween for a ColorRect overlay

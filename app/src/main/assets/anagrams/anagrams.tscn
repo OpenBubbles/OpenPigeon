@@ -22,6 +22,17 @@ expand_margin_top = 10.0
 expand_margin_right = 20.0
 expand_margin_bottom = 10.0
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_i2lji"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0k6o1"]
 bg_color = Color(1, 1, 1, 1)
 corner_radius_top_left = 10
@@ -294,17 +305,6 @@ shadow_offset = Vector2(0, 5)
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_h58lc"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_i2lji"]
-bg_color = Color(0, 0, 0, 0.788235)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
-expand_margin_left = 20.0
-expand_margin_top = 10.0
-expand_margin_right = 20.0
-expand_margin_bottom = 10.0
-
 [node name="Anagrams" type="Control" unique_id=759773451]
 layout_mode = 3
 anchors_preset = 15
@@ -345,6 +345,43 @@ grow_vertical = 2
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_ak8kl")
 text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WaitBlur" type="ColorRect" parent="." unique_id=1868164064]
+unique_name_in_owner = true
+visible = false
+z_index = 100
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.152941, 0.152941, 0.152941, 0.556863)
+
+[node name="waitingLabel" type="Label" parent="." unique_id=1701977657]
+unique_name_in_owner = true
+visible = false
+z_index = 102
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -163.0
+offset_top = -17.5
+offset_right = 163.0
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 4
+size_flags_vertical = 8
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_i2lji")
+text = "WAITING FOR OPPONENT..."
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -856,20 +893,6 @@ theme_override_styles/pressed = SubResource("StyleBoxFlat_rly8n")
 theme_override_styles/hover = SubResource("StyleBoxFlat_tfubl")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_h58lc")
 text = "VIEW ALL WORDS (X)"
-
-[node name="WaitForOpponentLabel" type="Label" parent="ScoreScreen/MarginContainer" unique_id=1701977657]
-unique_name_in_owner = true
-visible = false
-z_index = 102
-custom_minimum_size = Vector2(0, 70)
-layout_mode = 2
-size_flags_horizontal = 4
-size_flags_vertical = 8
-theme_override_font_sizes/font_size = 25
-theme_override_styles/normal = SubResource("StyleBoxFlat_i2lji")
-text = "WAITING FOR OPPONENT..."
-horizontal_alignment = 1
-vertical_alignment = 1
 
 [node name="WordsScreen" type="Control" parent="." unique_id=1435066116]
 unique_name_in_owner = true

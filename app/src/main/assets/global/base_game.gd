@@ -10,9 +10,9 @@ const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 
 # Waiting-animation nodes are REQUIRED and uniform across all games.
 # Strict % lookup: a game missing/renaming any of these fails loud at load.
-@onready var waiting_label: Label = %waitingLabel
-@onready var waiting_blur: ColorRect = %WaitBlur
-@onready var dot_timer: Timer = %DotTimer
+@onready var waiting_label: Label = get_node_or_null("%waitingLabel")
+@onready var waiting_blur: ColorRect = get_node_or_null("%WaitBlur")
+@onready var dot_timer: Timer = get_node_or_null("%DotTimer")
 
 var appPlugin = null
 var mediaPlugin = null
@@ -36,7 +36,11 @@ func _ready() -> void:
 	if is_instance_valid(dot_timer) and not dot_timer.timeout.is_connected(_on_dot_timer_timeout):
 		dot_timer.timeout.connect(_on_dot_timer_timeout)
 
-	appPlugin = Engine.get_singleton("AppPlugin")
+	if Engine.has_singleton("AppPlugin"):
+		appPlugin = Engine.get_singleton("AppPlugin")
+	else:
+		appPlugin = null
+		
 	if appPlugin:
 		appPlugin.connect("set_game_data", _set_game_data)
 		my_uuid = appPlugin.getSenderUUID()
@@ -72,25 +76,35 @@ func _on_rules_button_pressed() -> void:
 func start_waiting_animation() -> void:
 	if spectator_mode:
 		return
+	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):
+		return
+
 	dot_count = 0
 	waiting_label.text = BASE_WAIT_TEXT + "."
 	waiting_label.visible = true
 	waiting_label.modulate.a = 0.0
 	waiting_blur.visible = true
 	waiting_blur.modulate.a = 0.0
+
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
 	tw.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
 	tw.tween_callback(func(): dot_timer.start())
 
 func stop_waiting_animation() -> void:
-	dot_timer.stop()
-	waiting_label.visible = false
-	waiting_label.modulate.a = 1.0
-	waiting_blur.visible = false
-	waiting_blur.modulate.a = 1.0
+	if is_instance_valid(dot_timer):
+		dot_timer.stop()
+	if is_instance_valid(waiting_label):
+		waiting_label.visible = false
+		waiting_label.modulate.a = 1.0
+	if is_instance_valid(waiting_blur):
+		waiting_blur.visible = false
+		waiting_blur.modulate.a = 1.0
 
 func _on_dot_timer_timeout() -> void:
+	if not is_instance_valid(waiting_label):
+		return
+
 	dot_count = (dot_count % 3) + 1
 	waiting_label.text = BASE_WAIT_TEXT + ".".repeat(dot_count)
 
