@@ -1,4 +1,4 @@
-extends Node3D
+extends BaseGame3D
 class_name PaintballGame
 
 @export var buttons_root: NodePath
@@ -8,12 +8,7 @@ class_name PaintballGame
 @onready var fire_button: Control = %FireButton
 @onready var player_avatar_display: Control = %PlayerAvatarDisplay
 @onready var opp_avatar_display: Control = %OppAvatarDisplay
-@onready var rules_button: Button = %RulesButton
-@onready var settings_button: Button = %SettingsButton
 @onready var sent_label: Label = %SentLabel
-@onready var waiting_label: Label = %WaitForOpponentLabel
-@onready var waiting_blur: Control = %WaitBlur
-@onready var dot_timer: Timer = %DotTimer
 @onready var win_loss_label: Label = %WinLossLabel
 @onready var spec_label: Label = %SpecLabel
 @onready var you_label: Label = %YouLabel
@@ -31,12 +26,8 @@ class_name PaintballGame
 
 const HEART_FULL_TEX := preload("res://paintball/heart.png")
 const HEART_VOID_TEX := preload("res://paintball/heart_void.png")
-const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
-const RULES_POPUP_SCENE := preload("res://global/RulesPopup.tscn")
-const SETTINGS_POPUP_SCENE := preload("res://global/settings_popup.tscn")
 const PAINTBALL_SCENE := preload("res://paintball/PaintballProjectile.tscn")
 const MUSIC_STREAM := preload("res://global/audio/paintball.ogg")
-const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 const SPLAT_TEX := preload("res://paintball/splat.png")
 const OPPONENT_FACING_TEX := preload("res://paintball/opponent_facing.png")
 const OPPONENT_SIDE_TEX := preload("res://paintball/opponent_side.png")
@@ -62,7 +53,6 @@ var ui
 # Connection / plugin
 # -------------------------------------------------------------------
 var has_connected: bool = false
-var mediaPlugin = null
 
 # -------------------------------------------------------------------
 # Identity and turn state (PB_State expects these)
@@ -70,15 +60,12 @@ var mediaPlugin = null
 var my_id: String = ""
 var p1_id: String = ""
 var p2_id: String = ""
-var _opp_id: String = ""
 var winner: String = ""
 
 var playernum: int = 0
 var turn_owner: int = 1
 var is_your_turn: bool = false
 var is_my_turn: bool = false
-var spectator_mode: bool = false
-var _suppress_send_after_round: bool = false
 
 # -------------------------------------------------------------------
 # Win state (PB_UI + PB_State expect these)
@@ -97,7 +84,6 @@ var _hp_opp: int = 3
 # Buttons / lanes (PB_Buttons, PB_Shots, PB_Round)
 # -------------------------------------------------------------------
 var _buttons: Array[ActionButton3D] = []
-var _move_btn_by_lane: Dictionary = {}
 var _shoot_btn_by_lane: Dictionary = {}
 var _lane_x: Dictionary = {
 	ActionButton3D.Lane.LEFT: -1.0,
@@ -107,20 +93,14 @@ var _lane_x: Dictionary = {
 
 var _player_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
 var _selected_shoot: ActionButton3D = null
-var _move_tween: Tween = null
 
 # -------------------------------------------------------------------
 # Round / sequence flags (cross-module)
 # -------------------------------------------------------------------
 var _is_shot_sequence_running: bool = false
 var _round_sequence_running: bool = false
-var _shot_in_progress: bool = false
 var _require_new_shoot_selection: bool = true
-var _need_new_selection: bool = true
-var _touched_this_turn: bool = false
 var _opp_sprite_base_scale: Vector3 = Vector3.ONE
-var _fp_aim_base_scale: Vector2 = Vector2.ONE
-var _last_autoplayed_replay_str: String = ""
 
 # -------------------------------------------------------------------
 # Opponent pending shot + reveal (PB_State, PB_Round, PB_Shots)
@@ -128,25 +108,16 @@ var _last_autoplayed_replay_str: String = ""
 var _pending_enemy_shot: bool = false
 var _opp_pos_enc: int = -1
 var _opp_target_enc: int = -1
-var _opp_target_enc_vis: int = -1
-var _opp_target_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
-var _opp_target_world: Vector3 = Vector3.ZERO
-var _opp_reveal_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
-var _opp_sprite_reveal_offset_y: float = -1.3
 var _opp_sprite_start_pos: Vector3 = Vector3.ZERO
 
 # -------------------------------------------------------------------
 # Replay fields (PB_State expects these on g)
 # -------------------------------------------------------------------
 var _replay_segments: PackedStringArray = PackedStringArray()
-var _replay_seg_index: int = 0
-var _replay_base_state: Dictionary = {}
 var _last_replay_str: String = ""
 
 var _is_replay_playback: bool = false
 var _replay_auto_pending: bool = false
-var _replay_auto_full_str: String = ""
-var _replay_auto_end_state: Dictionary = {}
 var _replay_send_segments: PackedStringArray = PackedStringArray()
 var _replay_is_autoplay_round: bool = false
 var _replay_send_armed: bool = false
@@ -154,45 +125,17 @@ var _replay_send_armed: bool = false
 # -------------------------------------------------------------------
 # Camera / aim / recoil (PB_Round + PB_Shots)
 # -------------------------------------------------------------------
-var _cam_start_fov: float = 70.0
-var _cam_start_xform: Transform3D = Transform3D.IDENTITY
 var _aim_target_world: Vector3 = Vector3.ZERO
 
-var _round_end_white_in: float = 0.25
-var _round_end_white_out: float = 0.25
-
-var _fp_aim_base_pos: Vector2 = Vector2.ZERO
-var _muzzle_tex_px: Vector2 = Vector2(340.0, 120.0)
-
 var ball_speed: float = 36.0
-var _paintball_scale: float = 0.10
-
-var _opp_recoil_z: float = 0.22
-var _opp_recoil_in_time: float = 0.05
-var _opp_recoil_out_time: float = 0.12
-
-var _player_hit_last: bool = false
-var _enemy_hit_last: bool = false
 
 # -------------------------------------------------------------------
 # Fire button placement + splats (PB_UI expects these on g)
 # -------------------------------------------------------------------
-var _fire_btn_shown_pos: Vector2 = Vector2.ZERO
-var _fire_btn_hidden_pos: Vector2 = Vector2.ZERO
-var _fire_button_is_shown: bool = false
-var _fire_btn_tween: Tween = null
-
-var _player_splat: TextureRect = null
-var _player_splat_tween: Tween = null
-
-var _opp_splat: Sprite3D = null
-var _opp_splat_tween: Tween = null
-
 var sent_tween: Tween = null
 var _opp_avatar_texture_normal: Texture2D = null
 var _opp_avatar_texture_pressed: Texture2D = null
 var _opp_avatar_texture_hover: Texture2D = null
-var dot_count: int = 0
 
 # -------------------------------------------------------------------
 # Ready / process
@@ -560,14 +503,6 @@ func _apply_hearts_from_hp() -> void:
 	if ui != null:
 		ui.apply_hearts_from_hp()
 
-func start_waiting_animation() -> void:
-	if ui != null:
-		ui.start_waiting_animation()
-
-func stop_waiting_animation() -> void:
-	if ui != null:
-		ui.stop_waiting_animation()
-
 func play_sent_animation() -> void:
 	if ui != null:
 		ui.play_sent_animation()
@@ -669,16 +604,3 @@ func _replay_build_after_my_fire(my_pos_enc: int, my_target_enc: int) -> String:
 	if _last_replay_str == "":
 		return seg
 	return _last_replay_str + "|" + seg
-
-# -------------------------------------------------------------------
-# Rules / settings
-# -------------------------------------------------------------------
-func _on_rules_button_pressed() -> void:
-	ui.on_rules_button_pressed()
-
-func _on_settings_button_pressed() -> void:
-	ui.on_settings_button_pressed()
-
-func _on_theme_changed(_theme: Variant = null) -> void:
-	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("update_display_from_settings"):
-		player_avatar_display.update_display_from_settings()

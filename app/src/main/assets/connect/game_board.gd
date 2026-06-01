@@ -1,15 +1,10 @@
-extends Control
+extends BaseGame
 class_name ConnectGameBoard
 
 @onready var player_avatar_display	: Control		= %PlayerAvatarDisplay
 @onready var opp_avatar_display		: Control		= %OppAvatarDisplay
-@onready var rules_button			: Button		= %RulesButton
-@onready var settings_button		: Button		= %SettingsButton
 @onready var send_button			: Button		= %SendButton
 @onready var sent_label				: Label			= %SentLabel
-@onready var waiting_label			: Label			= %WaitForOpponentLabel
-@onready var waiting_blur			: Control		= %WaitBlur
-@onready var dot_timer				: Timer			= %DotTimer
 @onready var background				: ColorRect		= %Background
 @onready var win_loss_label			: Label			= %WinLossLabel
 @onready var player_piece			: TextureRect	= %PlayerPiece
@@ -19,13 +14,9 @@ class_name ConnectGameBoard
 
 const BOARD_W			:= 7
 const BOARD_H			:= 6
-const BASE_WAIT_TEXT	:= "WAITING FOR OPPONENT"
 const PIECE_YELLOW		:= "yellow"
 const PIECE_RED			:= "red"
 const DIRS				:= [Vector2i(1,0), Vector2i(0,1), Vector2i(1,1), Vector2i(1,-1)]
-const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
-const RULES_POPUP_SCENE	 := preload("res://global/RulesPopup.tscn")
-const SETTINGS_POPUP_SCENE := preload("res://global/settings_popup.tscn")
 const MUSIC_STREAM := preload("res://global/audio/connect4.ogg")
 const PIECE_TEX := {
 	"red":		preload("res://connect/red_piece.png"),
@@ -34,13 +25,10 @@ const PIECE_TEX := {
 
 var yPoses: Array[float]	= [192.544, 109.498, 26.612, -56.274, -139.121, -221.902]
 var sent_tween				: Tween
-var dot_count				: int	= 0
 var my_player				: String = ""
 var turn_owner				: int	= 1
 var firstReplay				: bool	= true
 var isTurn					: bool	= false
-var game_settings_category	: String = ""
-var spectator_mode			: bool	= false
 var has_connected			: bool	= false
 var _last_applied_replay: String = ""
 var waitingForOpponent		: bool	= true
@@ -55,13 +43,12 @@ var last_highlight			: Node2D = null
 var droppedPiece			: RigidBody2D = null
 var board_state: PackedInt32Array = PackedInt32Array()
 var winner : String = ""
-var mediaPlugin = null
 
 func _ready() -> void:
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_bg_for_dark(is_dark)
 	if is_instance_valid(rules_button):
-		rules_button.pressed.connect(on_rules_button_pressed)
+		rules_button.pressed.connect(_on_rules_button_pressed)
 	if is_instance_valid(settings_button):
 		settings_button.pressed.connect(_on_settings_button_pressed)
 	if is_instance_valid(dot_timer):
@@ -402,9 +389,9 @@ func _set_waiting(enabled: bool) -> void:
 		_update_send_button_visibility(false)
 
 	if enabled:
-		_start_waiting_animation()
+		start_waiting_animation()
 	else:
-		_stop_waiting_animation()
+		stop_waiting_animation()
 
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
@@ -481,7 +468,7 @@ func play_sent_animation() -> void:
 			return
 
 		if waitingForOpponent and not isTurn and not can_interact:
-			_start_waiting_animation()
+			start_waiting_animation()
 	)
 	
 func _player_id_to_color(pid: int) -> String:
@@ -731,119 +718,6 @@ func _finalize_win(i_won: bool) -> void:
 	t_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	can_interact = false
 
-func _start_waiting_animation() -> void:
-	if spectator_mode or not (is_instance_valid(waiting_label) and is_instance_valid(waiting_blur) and is_instance_valid(dot_timer)):
-		return
-	if waiting_label.visible == true and waiting_blur.visible == true:
-		return
-	dot_count = 0
-	waiting_label.text = BASE_WAIT_TEXT + "."
-	waiting_label.visible = true
-	waiting_blur.visible = true
-	waiting_label.modulate.a = 0.0
-	waiting_blur.modulate.a = 0.0
-	var t: Tween = create_tween().set_parallel(true)
-	t.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
-	t.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
-	t.tween_callback(func():
-		dot_timer.start()
-	)
-
-func _stop_waiting_animation() -> void:
-	if waiting_label.visible == false and waiting_blur.visible == false:
-		return
-	if is_instance_valid(dot_timer):
-		dot_timer.stop()
-	if is_instance_valid(waiting_label):
-		waiting_label.visible = false
-		waiting_label.modulate.a = 0.0
-	if is_instance_valid(waiting_blur):
-		waiting_blur.visible = false
-		waiting_blur.modulate.a = 0.0
-		
-	if not game_over and isTurn and not spectator_mode:
-		can_interact = true
-
-func _on_dot_timer_timeout() -> void:
-	if not is_instance_valid(waiting_label):
-		return
-	dot_count = (dot_count % 3) + 1
-	var dots: String = ""
-	for i in range(dot_count):
-		dots += "."
-	waiting_label.text = BASE_WAIT_TEXT + dots
-
-func on_rules_button_pressed() -> void:
-	if not is_instance_valid(rules_button):
-		return
-
-	rules_button.pivot_offset = rules_button.size / 2.0
-	var tween := create_tween()
-	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
-
-	var popup := RULES_POPUP_SCENE.instantiate() as RulesPopup
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var root := get_tree().root
-	root.add_child(dim)
-	root.add_child(popup)
-	popup.z_index = 100
-	dim.z_index = 99
-
-	popup.tree_exited.connect(func():
-		if is_instance_valid(dim):
-			dim.queue_free()
-	)
-
-	popup.open("How to Play Four In A Row", _get_rules_text())
-
-func _on_settings_button_pressed() -> void:
-	if not is_instance_valid(settings_button):
-		return
-	await _tap_bounce(settings_button)
-
-	var dim: ColorRect = ColorRect.new()
-	dim.color = Color(0,0,0,0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var popup: Control = SETTINGS_POPUP_SCENE.instantiate()
-	var script := popup as SettingsPopup
-
-	var root: Window = get_tree().root
-	root.add_child(dim)
-	root.add_child(popup)
-	popup.z_index = 100
-	dim.z_index = 99
-	root.move_child(dim, root.get_child_count() - 2)
-
-	script.setup_popup(dim)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	dim.gui_input.connect(func(e: InputEvent):
-		if e is InputEventMouseButton and e.pressed:
-			suppress_next_click = true
-			get_viewport().set_input_as_handled()
-	)
-
-	var title_node: Node = popup.find_child("CustomSettingsTitleLabel", true)
-	if title_node and title_node is Label:
-		(title_node as Label).visible = (script.custom_settings_container.get_child_count() > 0)
-
-	script.closed.connect(func():
-		suppress_next_click = true
-		if is_instance_valid(player_avatar_display):
-			player_avatar_display.call("update_display_from_settings")
-		_lock_interaction_briefly()
-	)
-
-	script.settings_theme_selected.connect(_on_theme_changed)
-	script.dark_mode_changed.connect(_apply_bg_for_dark)
-
-	_slide_up_in(popup)
-	
 func _clear_pending_move() -> void:
 	if droppedPiece == null or not is_instance_valid(droppedPiece):
 		droppedPiece = null
@@ -933,18 +807,10 @@ func _get_rules_text() -> String:
 [/font_size]
 """
 
-func _on_theme_changed(_n: String) -> void:
-	pass
-
 func _unhandled_input(e: InputEvent) -> void:
 	if suppress_next_click and e is InputEventMouseButton and e.pressed:
 		suppress_next_click = false
 		get_viewport().set_input_as_handled()
-
-func _load_game_specific_settings() -> void:
-	var vol: float = float(SettingsManager.get_setting(game_settings_category, "master_volume", 0.75))
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(vol))
-	var _dbg: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
 
 func _lock_interaction_briefly(d: float=0.25) -> void:
 	can_interact = false

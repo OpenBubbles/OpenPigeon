@@ -1,22 +1,16 @@
-extends Node3D
+extends BaseGame3D
 class_name DartsGame
 
-const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
-const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const MUSIC_STREAM := preload("res://global/audio/darts.ogg")
 
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var player_avatar_display = %PlayerAvatarDisplay
-@onready var settings_button: Button = %SettingsButton
 @onready var winner_label: Label = %WinLossLabel
-@onready var waiting_label: Label = %waitingLabel
 @onready var bust_label: Label = %BustLabel
 @onready var sent_label: Label = %SentLabel
 @onready var you_score_label: Label = %PlayerScoreLabel
 @onready var opp_score_label: Label = %OpponentScoreLabel
-@onready var waiting_blur: ColorRect = %WaitBlur
 @onready var main_overlay: Control = %MainOverlay
-@onready var dot_timer: Timer = %DotTimer
 @onready var spectator_label: Label = %SpecLabel
 
 var main_dart: Dart
@@ -25,18 +19,13 @@ var darts: Array[Dart] = []
 var current_dart: Dart
 var num_shots: int = 0
 var replay_played: bool = false
-var game_settings_category: String = ""
-var _settings_open: bool = false
 var sent_tween: Tween
-var dot_count: int = 0
-const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 
 var has_connected: bool = false
 var is_my_turn: bool = false
 var player: int = -1
 var mode: int = -1
 var replay: String = ""
-var mediaPlugin = null
 
 var my_moves: Array[Array]
 
@@ -44,7 +33,6 @@ var p1_pre_score: int = 0
 var p2_pre_score: int = 0
 var p1_score: int = 0
 var p2_score: int = 0
-var spectator_mode: bool = false
 var redemption_active: bool = false
 var redemption_darts_allowed: int = 0
 
@@ -580,113 +568,3 @@ func play_sent_animation() -> void:
 			sent_label.modulate.a = 1.0
 			start_waiting_animation()
 	)
-
-func _on_dot_timer_timeout():
-	if not is_instance_valid(waiting_label):
-		return
-	dot_count = (dot_count % 3) + 1
-	var dots = ""
-	for i in range(dot_count):
-		dots += "."
-	waiting_label.text = BASE_WAIT_TEXT + dots
-
-func start_waiting_animation():
-	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):
-		return
-	if spectator_mode:
-		return
-
-	dot_count = 0
-	waiting_label.text = BASE_WAIT_TEXT + "."
-	waiting_label.visible = true
-	waiting_blur.visible = true
-
-	waiting_label.modulate.a = 0.0
-	waiting_blur.modulate.a = 0.0
-
-	var tween_wait_in = create_tween().set_parallel(true)
-	tween_wait_in.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_callback(func():
-		dot_timer.start()
-	)
-
-func stop_waiting_animation():
-	if is_instance_valid(dot_timer):
-		dot_timer.stop()
-	if is_instance_valid(waiting_label):
-		waiting_label.visible = false
-		waiting_label.modulate.a = 1.0
-	if is_instance_valid(waiting_blur):
-		waiting_blur.visible = false
-		waiting_blur.modulate.a = 1.0
-
-func _on_settings_button_pressed() -> void:
-	if not is_instance_valid(settings_button):
-		return
-	if _settings_open:
-		return
-	_settings_open = true
-	settings_button.pivot_offset = settings_button.size / 2.0
-	var tween := create_tween()
-	tween.tween_property(settings_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(settings_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
-
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var popup_instance := SETTINGS_POPUP_SCENE.instantiate()
-	var settings_popup_script := popup_instance as SettingsPopup
-
-	var root := get_tree().root
-	root.add_child(dim)
-	root.add_child(popup_instance)
-	popup_instance.z_index = 100
-	dim.z_index = 99
-	root.move_child(dim, root.get_child_count() - 2)
-
-	settings_popup_script.setup_popup(dim)
-
-	var custom_settings_title := popup_instance.find_child("CustomSettingsTitleLabel", true)
-	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:
-		(custom_settings_title as Label).visible = true
-	elif custom_settings_title and custom_settings_title is Label:
-		(custom_settings_title as Label).visible = false
-
-	settings_popup_script.closed.connect(func():
-		_settings_open = false
-		if is_instance_valid(player_avatar_display):
-			player_avatar_display.update_display_from_settings()
-		if is_instance_valid(dim):
-			dim.queue_free()
-	)
-	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
-
-	popup_instance.set_as_top_level(true)
-	popup_instance.visible = true
-	await get_tree().process_frame
-
-	var viewport_size := get_viewport().get_visible_rect().size
-	var desired_width := viewport_size.x * 0.95
-	var desired_height: float = popup_instance.get_combined_minimum_size().y
-	popup_instance.size = Vector2(desired_width, desired_height)
-	popup_instance.position = Vector2((viewport_size.x - desired_width) / 2, viewport_size.y)
-
-	var bottom_offset := 50
-	var target_y_position := viewport_size.y - desired_height - bottom_offset
-	var target_position := Vector2((viewport_size.x - desired_width) / 2, target_y_position)
-
-	var popup_tween := create_tween()
-	popup_tween.tween_property(popup_instance, "position", target_position, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	popup_instance.grab_focus()
-
-func _on_theme_changed(_new_theme_name: String) -> void:
-	pass
-
-func _load_game_specific_settings() -> void:
-	var saved_volume: float = float(SettingsManager.get_setting(game_settings_category, "master_volume", 0.75))
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))
-	var show_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
-	print("Loaded game-specific settings for ", game_settings_category, ": volume=", saved_volume, " debug=", show_debug_info)

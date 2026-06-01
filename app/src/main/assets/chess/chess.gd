@@ -1,4 +1,4 @@
-extends Control
+extends BaseGame
 class_name ChessTop
 
 ## Chess game main controller for OpenPigeon integration.
@@ -58,8 +58,6 @@ var BLACK_THICK: float = 2.0
 var pending_evaluate: bool = false   # set true if parse_gp_replay ran before UI built
 var _modal_open: bool = false
 
-var appPlugin: Object = null
-var mediaPlugin = null
 var local_mode: bool = false        # true when running without appPlugin (local debug)
 var isTurn: bool = false
 var waitingForOpponent: bool = true
@@ -68,27 +66,16 @@ var enemy_player_index: int = 2  # 1 or 2, used for UI if needed
 var my_player_index: int = 1
 var my_color: String = "w"  # Tracks whether the local player is white or black
 var flip_board_ui: bool = false  # Whether to flip the board UI to put local player at bottom
-@onready var rules_button: Button     = %RulesButton
-@onready var settings_button: Button = %SettingsButton
 @onready var sent_label: Label = %SentLabel
-@onready var waiting_label: Label = %WaitForOpponentLabel
-@onready var waiting_blur: Control = %WaitBlur
-@onready var dot_timer: Timer = %DotTimer
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var background: ColorRect = %Background
 @onready var player_marker: TextureRect = %PlayerMarker
 @onready var opp_marker: TextureRect = %OpponentMarker
 
-
-const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
-const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
-const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const MUSIC_STREAM := preload("res://global/audio/chess.ogg")
 
 var sent_tween: Tween
-var dot_count: int = 0
-const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 
 # Chess state - managed by ChessBoard instance
 # Property wrappers provide read access to game_board state. Mutations should go through
@@ -139,8 +126,6 @@ var selected: Vector2i = Vector2i(-1, -1)           # selected square or Vector2
 var legal_moves: Array[Vector2i] = []          # array of Vector2i targets for selected
 var opponent_last_move_from: Vector2i = Vector2i(-1, -1)  # opponent's last move origin square (for green highlight)
 var opponent_last_move_to: Vector2i = Vector2i(-1, -1)    # opponent's last move destination square (for green highlight)
-var game_settings_category: String = ""
-var spectator_mode: bool = false
 
 # UI controls
 var send_button: Button = null
@@ -245,7 +230,7 @@ func _ready() -> void:
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_bg_for_dark(is_dark)
 	if is_instance_valid(rules_button):
-		rules_button.pressed.connect(on_rules_button_pressed)
+		rules_button.pressed.connect(_on_rules_button_pressed)
 	if is_instance_valid(settings_button):
 		settings_button.pressed.connect(_on_settings_button_pressed)
 	if is_instance_valid(dot_timer):
@@ -1530,35 +1515,6 @@ func _apply_bg_for_dark(is_dark: bool) -> void:
 		print("Is Dark: ", is_dark)
 		background.color = ChessUI.DARK_BACKGROUND if is_dark else ChessUI.LIGHT_BACKGROUND
 		
-func on_rules_button_pressed() -> void:
-	if not is_instance_valid(rules_button):
-		return
-	_modal_open = true
-	rules_button.pivot_offset = rules_button.size / 2.0
-	var tween := create_tween()
-	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
-
-	var popup := RULES_POPUP_SCENE.instantiate() as RulesPopup
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var root := get_tree().root
-	root.add_child(dim)
-	root.add_child(popup)
-	popup.z_index = 100
-	dim.z_index = 99
-
-	popup.tree_exited.connect(func():
-		_modal_open = false
-		if is_instance_valid(dim):
-			dim.queue_free()
-	)
-
-	popup.open("How to Play Chess", _get_rules_text())
-
 func _get_rules_text() -> String:
 	return """
 [font_size={32px}][b]Chess[/b][/font_size]
@@ -1644,139 +1600,3 @@ func play_sent_animation() -> void:
 			start_waiting_animation()
 	)
 	
-func start_waiting_animation():
-	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):
-		print("Warning: Waiting animation nodes are not valid.")
-		return
-	if spectator_mode:
-		return
-
-	dot_count = 0
-	waiting_label.text = BASE_WAIT_TEXT + "."
-	waiting_label.visible = true
-	waiting_blur.visible = true
-
-	waiting_label.modulate.a = 0.0
-	waiting_blur.modulate.a = 0.0
-
-	var tween_wait_in = create_tween().set_parallel(true)
-	tween_wait_in.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_callback(func():
-		dot_timer.start()
-	)
-
-func stop_waiting_animation():
-	if is_instance_valid(dot_timer):
-		dot_timer.stop()
-	if is_instance_valid(waiting_label):
-		waiting_label.visible = false
-		waiting_label.modulate.a = 1.0
-	if is_instance_valid(waiting_blur):
-		waiting_blur.visible = false
-		waiting_blur.modulate.a = 1.0
-
-func _on_dot_timer_timeout():
-	if not is_instance_valid(waiting_label):
-		print("Warning: waiting_label is not valid in _on_dot_timer_timeout.")
-		return
-	dot_count = (dot_count % 3) + 1
-	var dots = ""
-	for i in range(dot_count):
-		dots += "."
-	waiting_label.text = BASE_WAIT_TEXT + dots
-
-func _on_settings_button_pressed() -> void:
-	if not is_instance_valid(settings_button):
-		return
-	settings_button.pivot_offset = settings_button.size / 2.0
-	var tween := create_tween()
-	tween.tween_property(settings_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(settings_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
-	_modal_open = true
-
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var popup_instance := SETTINGS_POPUP_SCENE.instantiate()
-	var settings_popup_script := popup_instance as SettingsPopup
-
-	var root := get_tree().root
-	root.add_child(dim)
-	root.add_child(popup_instance)
-	popup_instance.z_index = 100
-	dim.z_index = 99
-	root.move_child(dim, root.get_child_count() - 2)
-
-	settings_popup_script.setup_popup(dim)
-
-	#var volume_setting_hbox := HBoxContainer.new()
-	#volume_setting_hbox.add_child(Label.new())
-	#(volume_setting_hbox.get_child(0) as Label).text = "Game Volume:"
-	#(volume_setting_hbox.get_child(0) as Label).set_h_size_flags(Control.SIZE_EXPAND_FILL)
-#
-	#var volume_slider := HSlider.new()
-	#volume_slider.min_value = 0.0
-	#volume_slider.max_value = 1.0
-	#volume_slider.step = 0.05
-	#var saved_volume: float = float(SettingsManager.get_setting(game_settings_category, "master_volume", 0.75))
-	#volume_slider.value = saved_volume
-	#volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	#volume_slider.value_changed.connect(func(value):
-		#AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
-		#SettingsManager.set_setting(game_settings_category, "master_volume", value)
-	#)
-	#volume_setting_hbox.add_child(volume_slider)
-	#settings_popup_script.add_custom_setting(volume_setting_hbox)
-#
-	#var toggle_debug_checkbox := CheckBox.new()
-	#toggle_debug_checkbox.text = "Show Debug Info"
-	#var saved_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
-	#toggle_debug_checkbox.button_pressed = saved_debug_info
-	#toggle_debug_checkbox.pressed.connect(func():
-		#SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
-	#)
-	#settings_popup_script.add_custom_setting(toggle_debug_checkbox)
-
-	var custom_settings_title := popup_instance.find_child("CustomSettingsTitleLabel", true)
-	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:
-		(custom_settings_title as Label).visible = true
-	elif custom_settings_title and custom_settings_title is Label:
-		(custom_settings_title as Label).visible = false
-
-	settings_popup_script.closed.connect(func():
-		if is_instance_valid(player_avatar_display):
-			player_avatar_display.update_display_from_settings()
-		_modal_open = false
-	)
-	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
-	settings_popup_script.dark_mode_changed.connect(_apply_bg_for_dark)
-
-	popup_instance.set_as_top_level(true)
-	popup_instance.visible = true
-	await get_tree().process_frame
-
-	var viewport_size := get_viewport_rect().size
-	var desired_width := viewport_size.x * 0.95
-	var desired_height: float = popup_instance.get_combined_minimum_size().y
-	popup_instance.size = Vector2(desired_width, desired_height)
-	popup_instance.position = Vector2((viewport_size.x - desired_width) / 2, viewport_size.y)
-
-	var bottom_offset := 50
-	var target_y_position := viewport_size.y - desired_height - bottom_offset
-	var target_position := Vector2((viewport_size.x - desired_width) / 2, target_y_position)
-
-	var popup_tween := create_tween()
-	popup_tween.tween_property(popup_instance, "position", target_position, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	popup_instance.grab_focus()
-
-func _on_theme_changed(new_theme_name: String) -> void:
-	pass
-
-func _load_game_specific_settings() -> void:
-	var saved_volume: float = float(SettingsManager.get_setting(game_settings_category, "master_volume", 0.75))
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))
-	var show_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
-	print("Loaded game-specific settings for ", game_settings_category, ": volume=", saved_volume, " debug=", show_debug_info)

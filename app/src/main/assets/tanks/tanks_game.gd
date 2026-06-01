@@ -1,16 +1,11 @@
-extends Control
+extends BaseGame
 class_name TanksGame
 
 @onready var world: Node2D = %World
 @onready var player_avatar_display: Control = %PlayerAvatarDisplay
 @onready var opp_avatar_display: Control = %OppAvatarDisplay
-@onready var rules_button: Button = %RulesButton
-@onready var settings_button: Button = %SettingsButton
 @onready var sent_label: Label = %SentLabel
 @onready var win_loss_label: Label = %WinLossLabel
-@onready var waiting_label: Label = %WaitForOpponentLabel
-@onready var waiting_blur: Control = %WaitBlur
-@onready var dot_timer: Timer = %DotTimer
 @onready var terrain: TanksTerrain = %Terrain
 @onready var sky: TanksSky = %Sky
 @onready var player_health: TextureRect = %PlayerHealth
@@ -25,22 +20,15 @@ class_name TanksGame
 @onready var wind_indicator: WindIndicator = %WindIndicator
 @onready var spec_label: Label = %SpecLabel
 
-const RULES_POPUP_SCENE := preload("res://global/RulesPopup.tscn")
-const SETTINGS_POPUP_SCENE := preload("res://global/settings_popup.tscn")
-const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const MUSIC_STREAM := preload("res://global/audio/tanks.ogg")
 
 var core: TanksCore
 var has_connected: bool = false
 var sent_tween: Tween
-var dot_count: int = 0
 var _view_flipped: bool = false
 var _is_dragging_aim: bool = false
-var spectator_mode: bool = false
 var can_interact: bool = true
 var has_replay: bool = false
-const BASE_WAIT_TEXT := "WAITING FOR OPPONENT"
-var mediaPlugin = null
 
 var game_over: bool = false
 var winner: String = ""
@@ -728,85 +716,6 @@ func _send_payload(payload: Dictionary) -> bool:
 
 	return true
 
-func _on_rules_pressed() -> void:
-	var popup := RULES_POPUP_SCENE.instantiate()
-	var dim := _make_dim()
-	popup.z_index = 1000
-	can_interact = false
-	get_tree().root.add_child(dim)
-	get_tree().root.add_child(popup)
-	(popup as Node).tree_exited.connect(func():
-		if is_instance_valid(dim):
-			dim.queue_free()
-		can_interact = true
-	)
-	if popup.has_method("open"):
-		popup.open("How to Play Tanks", _rules_text())
-
-func _on_settings_pressed() -> void:
-	if not is_instance_valid(settings_button):
-		return
-
-	await _pop_button(settings_button)
-	can_interact = false
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var popup_instance := SETTINGS_POPUP_SCENE.instantiate()
-	var settings_popup := popup_instance as SettingsPopup
-
-	var root := get_tree().root
-	root.add_child(dim)
-	root.add_child(popup_instance)
-
-	popup_instance.z_index = 1000
-	dim.z_index = 99
-	root.move_child(dim, root.get_child_count() - 2)
-
-	if settings_popup != null:
-		settings_popup.setup_popup(dim)
-	else:
-		if popup_instance.has_method("setup_popup"):
-			popup_instance.call("setup_popup", dim)
-
-	var custom_settings_title := popup_instance.find_child("CustomSettingsTitleLabel", true)
-	if custom_settings_title != null and custom_settings_title is Label and settings_popup != null:
-		(custom_settings_title as Label).visible = (settings_popup.custom_settings_container.get_child_count() > 0)
-	elif custom_settings_title != null and custom_settings_title is Label:
-		(custom_settings_title as Label).visible = false
-
-	if settings_popup != null:
-		settings_popup.closed.connect(func():
-			if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("update_display_from_settings"):
-				player_avatar_display.update_display_from_settings()
-			can_interact = true
-		)
-		settings_popup.settings_theme_selected.connect(_on_theme_changed)
-
-	popup_instance.set_as_top_level(true)
-	popup_instance.visible = true
-	await get_tree().process_frame
-
-	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
-	var desired_width: float = viewport_size.x * 0.95
-	var desired_height: float = popup_instance.get_combined_minimum_size().y
-
-	popup_instance.size = Vector2(desired_width, desired_height)
-	popup_instance.position = Vector2((viewport_size.x - desired_width) * 0.5, viewport_size.y)
-
-	var bottom_offset: float = 50.0
-	var target_y: float = viewport_size.y - desired_height - bottom_offset
-	var target_pos: Vector2 = Vector2((viewport_size.x - desired_width) * 0.5, target_y)
-
-	var tw := create_tween()
-	tw.tween_property(popup_instance, "position", target_pos, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-
-	popup_instance.grab_focus()
-
-func _on_theme_changed(_new_theme_name: String) -> void:
-	pass
-
 func _pop_button(b: Control) -> void:
 	if not is_instance_valid(b):
 		return
@@ -885,47 +794,6 @@ func _update_avatars() -> void:
 	if player_avatar_display.has_method("update_avatar_from_string") and my_str != "":
 		player_avatar_display.update_avatar_from_string(my_str)
 
-func start_waiting_animation():
-	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):
-		print("Warning: Waiting animation nodes are not valid.")
-		return
-	if spectator_mode:
-		return
-
-	dot_count = 0
-	waiting_label.text = BASE_WAIT_TEXT + "."
-	waiting_label.visible = true
-	waiting_blur.visible = true
-
-	waiting_label.modulate.a = 0.0
-	waiting_blur.modulate.a = 0.0
-
-	var tween_wait_in = create_tween().set_parallel(true)
-	tween_wait_in.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_callback(func():
-		dot_timer.start()
-	)
-
-func stop_waiting_animation():
-	if is_instance_valid(dot_timer):
-		dot_timer.stop()
-	if is_instance_valid(waiting_label):
-		waiting_label.visible = false
-		waiting_label.modulate.a = 1.0
-	if is_instance_valid(waiting_blur):
-		waiting_blur.visible = false
-		waiting_blur.modulate.a = 1.0
-
-func _on_dot_timer_timeout() -> void:
-	if not is_instance_valid(waiting_label):
-		return
-	dot_count = (dot_count % 3) + 1
-	var dots := ""
-	for i in range(dot_count):
-		dots += "."
-	waiting_label.text = BASE_WAIT_TEXT + dots
-	
 func _circle_intersects_rect(center: Vector2, radius: float, rect: Rect2) -> bool:
 	var closest_x: float = clampf(center.x, rect.position.x, rect.position.x + rect.size.x)
 	var closest_y: float = clampf(center.y, rect.position.y, rect.position.y + rect.size.y)

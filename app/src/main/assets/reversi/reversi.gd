@@ -1,4 +1,4 @@
-extends Control
+extends BaseGame
 
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var opp_avatar_display = %OppAvatarDisplay
@@ -8,13 +8,8 @@ extends Control
 @onready var send_button = %SendButton
 @onready var sent_label = %SentLabel
 @onready var background = %Background
-@onready var waiting_label = %WaitForOpponentLabel
-@onready var waiting_blur = %WaitBlur
 @onready var win_loss_label = %WinLossLabel
-@onready var dot_timer = %DotTimer
 @onready var replay_button = %ReplayButton
-@onready var rules_button = %RulesButton
-@onready var settings_button = %SettingsButton
 @onready var spec_label = %SpecLabel
 @onready var board_root: Control = %GameAreaCenterContainer
 @onready var star_layer: Control = %StarPointLayer
@@ -23,13 +18,11 @@ extends Control
 const BOARD_SIZE = 8
 
 var board = []
-var game_settings_category: String
 var player_symbol = ""
 var game_over = false
 var has_connected: bool = false
 var is_your_turn: bool = false
 var is_my_turn: bool = false
-var spectator_mode: bool = false
 var player: int = -1
 var avatar_key = 0
 var replay_val
@@ -44,7 +37,6 @@ var win_loss_state = ""
 var white_score = 0
 var black_score = 0
 var preview_flips_active = false
-var mediaPlugin = null
 
 const STAR_POINTS = [
 Vector2i(2, 2),
@@ -57,16 +49,11 @@ var temp_piece_active = false
 var temp_piece_x = -1
 var temp_piece_y = -1
 
-var dot_count: int = 0
-const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 var button_tween: Tween
 var sent_tween: Tween
 var send_button_target_y_position = -1
 const BUTTON_OFFSCREEN_OFFSET = 100
-const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
-const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const STAR_POINT_SCENE = preload("res://reversi/StarPoint.tscn")
-const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const PIECE_TEX := preload("res://reversi/reversi_tile.png")
 const MUSIC_STREAM := preload("res://global/audio/reversi.ogg")
 const PIECE_PADDING := 6
@@ -141,7 +128,7 @@ func _ready():
 	send_button.visible = false
 	
 	if rules_button:
-		rules_button.pressed.connect(on_rules_button_pressed)
+		rules_button.pressed.connect(_on_rules_button_pressed)
 	if settings_button:
 		settings_button.pressed.connect(_on_settings_button_pressed)
 		
@@ -1135,34 +1122,6 @@ func on_send_button_pressed():
 	animate_button_slide_down()
 	is_my_turn = false
 	
-func start_waiting_animation():
-	dot_count = 0
-	waiting_label.text = BASE_WAIT_TEXT + "."
-	waiting_label.visible = true
-	waiting_blur.visible = true
-
-	waiting_label.modulate.a = 0.0
-	waiting_blur.modulate.a = 0.0
-
-	var tween = create_tween().set_parallel(true)
-	tween.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
-	tween.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
-
-	dot_timer.start()
-
-
-func stop_waiting_animation():
-	dot_timer.stop()
-	waiting_label.visible = false
-	waiting_blur.visible = false
-
-func _on_dot_timer_timeout():
-	dot_count = (dot_count % 3) + 1
-	var dots = ""
-	for i in range(dot_count):
-		dots += "."
-	waiting_label.text = BASE_WAIT_TEXT + dots
-
 func play_sent_animation():
 	if sent_label and not game_over:
 		if sent_tween and sent_tween.is_running():
@@ -1299,34 +1258,6 @@ func create_radial_gradient_texture(_size: int = 64) -> Texture2D:
 			image.set_pixel(x, y, Color(1, 1, 1, alpha))
 	return ImageTexture.create_from_image(image)
 	
-func on_rules_button_pressed() -> void:
-	if not is_instance_valid(rules_button):
-		return
-
-	rules_button.pivot_offset = rules_button.size / 2.0
-	var tween := create_tween()
-	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
-
-	var popup := RULES_POPUP_SCENE.instantiate() as RulesPopup
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var root := get_tree().root
-	root.add_child(dim)
-	root.add_child(popup)
-	popup.z_index = 100
-	dim.z_index = 99
-
-	popup.tree_exited.connect(func():
-		if is_instance_valid(dim):
-			dim.queue_free()
-	)
-
-	popup.open("How to Play Reversi", _get_rules_text())
-	
 func _get_rules_text() -> String:
 	return """
 [font_size={18px}]
@@ -1338,108 +1269,3 @@ func _get_rules_text() -> String:
 6. The player with the most discs on the board wins!
 [/font_size]
 """
-
-func _on_settings_button_pressed() -> void:
-
-	settings_button.pivot_offset = settings_button.size / 2.0
-	var tween = create_tween()
-	tween.tween_property(settings_button, "scale", Vector2(1.3, 1.3), 0.1)\
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(settings_button, "scale", Vector2.ONE, 0.3)\
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
-
-	var dim = ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var popup_instance = SETTINGS_POPUP_SCENE.instantiate()
-	var settings_popup_script = popup_instance as SettingsPopup
-	var root = get_tree().root
-	root.add_child(dim)
-	root.add_child(popup_instance)
-
-	popup_instance.z_index = 100
-	dim.z_index = 99
-	root.move_child(dim, root.get_child_count() - 2)
-
-	settings_popup_script.setup_popup(dim)
-
-	#var volume_setting_hbox = HBoxContainer.new()
-	#volume_setting_hbox.add_child(Label.new())
-	#volume_setting_hbox.get_child(0).text = "Game Volume:"
-	#volume_setting_hbox.get_child(0).set_h_size_flags(Control.SIZE_EXPAND_FILL)
-#
-	#var volume_slider = HSlider.new()
-	#volume_slider.min_value = 0.0
-	#volume_slider.max_value = 1.0
-	#volume_slider.step = 0.05
-	#
-	#var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
-	#volume_slider.value = saved_volume
-#
-	#volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	#volume_slider.value_changed.connect(func(value):
-		#AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
-		#print("Master Volume: ", value)
-		#SettingsManager.set_setting(game_settings_category, "master_volume", value)
-	#)
-	#volume_setting_hbox.add_child(volume_slider)
-#
-	#settings_popup_script.add_custom_setting(volume_setting_hbox)
-	#
-	#var toggle_debug_checkbox = CheckBox.new()
-	#toggle_debug_checkbox.text = "Show Debug Info"
-	#
-	#var saved_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
-	#toggle_debug_checkbox.button_pressed = saved_debug_info
-#
-	#toggle_debug_checkbox.pressed.connect(func():
-		#print("Debug Info Toggled: ", toggle_debug_checkbox.button_pressed)
-		#SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
-	#)
-	#settings_popup_script.add_custom_setting(toggle_debug_checkbox)
-
-	var custom_settings_title = popup_instance.find_child("CustomSettingsTitleLabel", true)
-	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:
-		custom_settings_title.visible = true
-	else:
-		if custom_settings_title and custom_settings_title is Label:
-			custom_settings_title.visible = false
-
-	settings_popup_script.closed.connect(func():
-		print("Settings popup was closed for game: ", game_settings_category)
-		if is_instance_valid(player_avatar_display):
-			player_avatar_display.update_display_from_settings()
-	)
-	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
-	settings_popup_script.dark_mode_changed.connect(_apply_bg_for_dark)
-
-	popup_instance.set_as_top_level(true)
-	popup_instance.visible = true
-	await get_tree().process_frame
-
-	var viewport_size = get_viewport_rect().size
-	var desired_width = viewport_size.x * 0.95
-	var desired_height = popup_instance.get_combined_minimum_size().y
-	
-	popup_instance.size = Vector2(desired_width, desired_height)
-	popup_instance.position = Vector2((viewport_size.x - desired_width) / 2, viewport_size.y)
-	
-	var bottom_offset = 50
-	var target_y_position = viewport_size.y - desired_height - bottom_offset
-	var target_position = Vector2((viewport_size.x - desired_width) / 2, target_y_position)
-
-	var popup_tween = create_tween()
-	popup_tween.tween_property(popup_instance, "position", target_position, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-
-	popup_instance.grab_focus()
-	
-func _on_theme_changed(new_theme_name: String):
-	print("Game scene received theme change: ", new_theme_name)
-
-	pass
-	
-func _load_game_specific_settings():
-	var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))

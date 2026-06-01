@@ -1,4 +1,4 @@
-extends Control
+extends BaseGame
 
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var opp_avatar_display = %OppAvatarDisplay
@@ -10,20 +10,13 @@ extends Control
 @onready var left_score_label: Label = %LeftScore
 @onready var right_score_label: Label = %RightScore
 @onready var sent_label: Label = %SentLabel
-@onready var waiting_label: Label = %WaitForOpponentLabel
-@onready var waiting_blur: ColorRect = %WaitBlur
-@onready var dot_timer: Timer = %DotTimer
 @onready var win_loss_label: Label = %WinLossLabel
-@onready var rules_button: Button = %RulesButton
-@onready var settings_button: Button = %SettingsButton
 @onready var spec_label: Label = %SpecLabel
 @onready var you_label: Label = %YouLabel
 
 const COLORS = [0, 1, 2, 3, 4, 5]
 const BOARD_WIDTH = 8
 const BOARD_HEIGHT = 7
-
-var game_settings_category: String
 
 const COLOR_MAP = {
 	0: Color(0.92, 0.13, 0.432), # Red
@@ -34,10 +27,6 @@ const COLOR_MAP = {
 	5: Color(0.25, 0.25, 0.25)   # Black
 }
 
-const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
-const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
-const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
-const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const MUSIC_STREAM := preload("res://global/audio/fill.ogg")
 
 var board: Array = []
@@ -50,7 +39,6 @@ var win_loss_state = ""
 var has_connected: bool = false
 var is_your_turn: bool = false
 var is_my_turn: bool = false
-var spectator_mode: bool = false
 var avatar_key = 0
 
 var left_start: Vector2i
@@ -67,8 +55,6 @@ var my_player
 var my_player_id
 var player = 1
 var sent_tween: Tween
-var dot_count = 0
-var mediaPlugin = null
 
 func _ready():
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
@@ -105,7 +91,7 @@ func _ready():
 		call_deferred("_set_game_data", '{ "isYourTurn": true, "player": "2", "seed": "0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player2": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
 		
 	if rules_button:
-		rules_button.pressed.connect(on_rules_button_pressed)
+		rules_button.pressed.connect(_on_rules_button_pressed)
 	if settings_button:
 		settings_button.pressed.connect(_on_settings_button_pressed)
 		
@@ -982,34 +968,6 @@ func _on_dot_timer_timeout():
 		dots += "."
 	waiting_label.text = BASE_WAIT_TEXT + dots
 	
-func on_rules_button_pressed() -> void:
-	if not is_instance_valid(rules_button):
-		return
-
-	rules_button.pivot_offset = rules_button.size / 2.0
-	var tween := create_tween()
-	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
-
-	var popup := RULES_POPUP_SCENE.instantiate() as RulesPopup
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var root := get_tree().root
-	root.add_child(dim)
-	root.add_child(popup)
-	popup.z_index = 100
-	dim.z_index = 99
-
-	popup.tree_exited.connect(func():
-		if is_instance_valid(dim):
-			dim.queue_free()
-	)
-
-	popup.open("How to Play Filler", _get_rules_text())
-	
 func _get_rules_text() -> String:
 	return """
 [font_size={18px}]
@@ -1019,110 +977,3 @@ func _get_rules_text() -> String:
 4. The game ends when there are no more tiles to occupy
 [/font_size]
 """
-
-func _on_settings_button_pressed() -> void:
-	settings_button.pivot_offset = settings_button.size / 2.0
-	tween = create_tween()
-	tween.tween_property(settings_button, "scale", Vector2(1.3, 1.3), 0.1)\
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(settings_button, "scale", Vector2.ONE, 0.3)\
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
-
-	var dim = ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var popup_instance = SETTINGS_POPUP_SCENE.instantiate()
-	var settings_popup_script = popup_instance as SettingsPopup
-
-	var root = get_tree().root
-	root.add_child(dim)
-	root.add_child(popup_instance)
-	popup_instance.z_index = 100
-	dim.z_index = 99
-	root.move_child(dim, root.get_child_count() - 2)
-	settings_popup_script.setup_popup(dim)
-
-	#var volume_setting_hbox = HBoxContainer.new()
-	#volume_setting_hbox.add_child(Label.new())
-	#volume_setting_hbox.get_child(0).text = "Game Volume:"
-	#volume_setting_hbox.get_child(0).set_h_size_flags(Control.SIZE_EXPAND_FILL)
-#
-	#var volume_slider = HSlider.new()
-	#volume_slider.min_value = 0.0
-	#volume_slider.max_value = 1.0
-	#volume_slider.step = 0.05
-	#
-	#var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
-	#volume_slider.value = saved_volume
-#
-	#volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	#volume_slider.value_changed.connect(func(value):
-		#AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
-		#print("Master Volume: ", value)
-		#SettingsManager.set_setting(game_settings_category, "master_volume", value)
-	#)
-	#volume_setting_hbox.add_child(volume_slider)
-#
-	#settings_popup_script.add_custom_setting(volume_setting_hbox)
-	#
-	#var toggle_debug_checkbox = CheckBox.new()
-	#toggle_debug_checkbox.text = "Show Debug Info"
-	#
-	#var saved_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
-	#toggle_debug_checkbox.button_pressed = saved_debug_info
-#
-	#toggle_debug_checkbox.pressed.connect(func():
-		#print("Debug Info Toggled: ", toggle_debug_checkbox.button_pressed)
-		#SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
-	#)
-	#settings_popup_script.add_custom_setting(toggle_debug_checkbox)
-
-	var custom_settings_title = popup_instance.find_child("CustomSettingsTitleLabel", true)
-	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:
-		custom_settings_title.visible = true
-	else:
-		if custom_settings_title and custom_settings_title is Label:
-			custom_settings_title.visible = false
-
-	settings_popup_script.closed.connect(func():
-		print("Settings popup was closed for game: ", game_settings_category)
-		if is_instance_valid(player_avatar_display):
-			player_avatar_display.update_display_from_settings()
-	)
-	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
-	settings_popup_script.dark_mode_changed.connect(_apply_bg_for_dark)
-
-	popup_instance.set_as_top_level(true)
-	popup_instance.visible = true
-	await get_tree().process_frame
-
-	var viewport_size = get_viewport_rect().size
-	var desired_width = viewport_size.x * 0.95
-	var desired_height = popup_instance.get_combined_minimum_size().y
-	
-	popup_instance.size = Vector2(desired_width, desired_height)
-	popup_instance.position = Vector2((viewport_size.x - desired_width) / 2, viewport_size.y)
-	
-	var bottom_offset = 50
-	var target_y_position = viewport_size.y - desired_height - bottom_offset
-	var target_position = Vector2((viewport_size.x - desired_width) / 2, target_y_position)
-
-	var popup_tween = create_tween()
-	popup_tween.tween_property(popup_instance, "position", target_position, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-
-	popup_instance.grab_focus()
-	
-func _on_theme_changed(new_theme_name: String):
-	print("Game scene received theme change: ", new_theme_name)
-	pass
-	
-func _load_game_specific_settings():
-	var saved_volume = SettingsManager.get_setting(game_settings_category, "master_volume", 0.75)
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))
-	var show_debug_info = SettingsManager.get_setting(game_settings_category, "show_debug_info", false)
-	
-	print("Loaded game-specific settings for ", game_settings_category, ":")
-	print("  Master Volume: ", saved_volume)
-	print("  Show Debug Info: ", show_debug_info)

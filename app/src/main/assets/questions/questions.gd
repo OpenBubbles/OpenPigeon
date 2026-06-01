@@ -1,4 +1,4 @@
-extends Control
+extends BaseGame
 
 @onready var send_button: Button = %SendButton
 @onready var text_box: TextEdit = %TextBox
@@ -7,7 +7,6 @@ extends Control
 @onready var questions_list: VBoxContainer = %QuestionsList
 @onready var question_mark_filler: RichTextLabel = %QuestionMark
 @onready var wait_for_label: Label = %WaitForLabel
-@onready var dot_timer: Timer = %DotTimer
 @onready var player_avatar_display: Control = %PlayerAvatarDisplay
 @onready var _desc_rich: RichTextLabel = %Description
 @onready var bottom_items: VBoxContainer = %BottomItems
@@ -21,10 +20,7 @@ extends Control
 @onready var questions_text_container: PanelContainer = %QuestionsTextContainer
 @onready var win_loss_label: Label = %WinLossLabel
 
-var my_uuid: String = ""
-
 const OpponentAvatarScene: PackedScene = preload("res://global/avatar_textures/AvatarThumbnail.tscn")
-const AvatarWinAnimScene: PackedScene = preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const MUSIC_STREAM := preload("res://global/audio/20questions.ogg")
 var _opponent_avatar_data: Dictionary = {}
 var _answer_avatar_data: Dictionary = {}
@@ -33,7 +29,6 @@ var _avatar1_raw: String = ""
 var _avatar2_raw: String = ""
 
 var is_my_turn: bool = false
-var mediaPlugin = null
 var server_player_hint: int = 0
 var i_am_player: int = 1
 var secret_answer: String = ""
@@ -45,10 +40,7 @@ var game_over: bool = false
 const MAX_QUESTIONS := 20
 var _scroll_tween: Tween = null
 var _overlay_idx: int = -1
-var BASE_WAIT_TEXT := ""
-var dot_count := 0
 var _waiting_active := false
-var spectator_mode: bool = false
 
 var _input_lifted := false
 var _input_orig_preset := -1
@@ -140,9 +132,9 @@ func _ready() -> void:
 	call_deferred("_maybe_show_answer_popup")
 	_make_scrollbars_invisible()
 	if (not is_my_turn) and (not game_over) and (not _waiting_active):
-		_start_waiting()
+		start_waiting_animation()
 	elif is_my_turn and (not game_over):
-		_stop_waiting()
+		stop_waiting_animation()
 		
 var music_player: AudioStreamPlayer = null
 
@@ -375,9 +367,9 @@ func _set_game_data(data_json: String) -> void:
 				winner = -1 if win_loss_state == 1 else 1
 	_update_upcoming_input_chip_color()
 	if (not is_my_turn) and (not game_over) and (not _waiting_active):
-		_start_waiting()
+		start_waiting_animation()
 	elif is_my_turn and (not game_over):
-		_stop_waiting()
+		stop_waiting_animation()
 		
 	_replay_from_state()
 	_render_all_questions()
@@ -412,7 +404,7 @@ func _evaluate_game_over_and_winner() -> void:
 		winner = 0
 		
 	if game_over:
-		_stop_waiting()
+		stop_waiting_animation()
 		_hide_answer_overlay()
 
 		if is_instance_valid(bottom_items):
@@ -563,7 +555,7 @@ func _on_send_pressed() -> void:
 	text_box.text = ""
 	DisplayServer.virtual_keyboard_hide()
 	_on_text_focus_exited()
-	_start_waiting()
+	start_waiting_animation()
 	_update_description_fill()
 
 func _apply_answer_code_to_idx(target_idx: int, code: int) -> void:
@@ -592,10 +584,10 @@ func _apply_answer_code_to_idx(target_idx: int, code: int) -> void:
 
 	if not game_over:
 		_maybe_show_answer_popup()
-		_start_waiting()
+		start_waiting_animation()
 	else:
 		_hide_answer_overlay()
-		_stop_waiting()
+		stop_waiting_animation()
 	
 	dbg("apply_idx: target_idx=%d code=%d i_am_player=%d game_over=%s qcount=%d" % [target_idx, code, i_am_player, str(game_over), questions.size()])
 
@@ -682,9 +674,9 @@ func _update_ui_interactivity() -> void:
 
 	var should_wait := (not game_over) and (not is_my_turn)
 	if should_wait and not _waiting_active:
-		_start_waiting()
+		start_waiting_animation()
 	elif (not should_wait) and _waiting_active:
-		_stop_waiting()
+		stop_waiting_animation()
 
 func _render_all_questions() -> void:
 	if not is_instance_valid(questions_list):
@@ -980,7 +972,7 @@ func _overlay_click(code: int) -> void:
 	_hide_answer_overlay()
 
 	if code == 4:
-		_stop_waiting()
+		stop_waiting_animation()
 		_update_ui_interactivity()
 		return
 
@@ -1092,52 +1084,8 @@ func _update_description_fill() -> void:
 
 var DEBUG_20Q := true
 
-func _on_dot_timer_timeout() -> void:
-	if not is_instance_valid(wait_for_label):
-		print("Warning: wait_for_label is not valid in _on_dot_timer_timeout.")
-		return
-	dot_count = (dot_count % 3) + 1
-	var dots := ""
-	for i in range(dot_count):
-		dots += "."
-	wait_for_label.text = BASE_WAIT_TEXT + dots
-
 func _set_wait_base_text() -> void:
 	BASE_WAIT_TEXT = "Waiting for an answer" if i_am_player == 1 else "Waiting for a question"
-
-func _start_waiting() -> void:
-	if spectator_mode or game_over:
-		return
-	print("START WAITING")
-	_set_wait_base_text()
-	if is_instance_valid(wait_for_label):
-		wait_for_label.text = BASE_WAIT_TEXT
-		wait_for_label.visible = true
-	dot_count = 0
-	if is_instance_valid(dot_timer):
-		if not dot_timer.is_stopped():
-			dot_timer.stop()
-		dot_timer.start()
-
-	_waiting_active = true
-	print("WAITING ACTIVE: ", _waiting_active)
-	if i_am_player == 1 and is_instance_valid(bottom_items):
-		bottom_items.visible = false
-
-func _stop_waiting() -> void:
-	print("STOP WAITING")
-	if not _waiting_active:
-		print("no waiting active")
-		return
-
-	if is_instance_valid(wait_for_label):
-		wait_for_label.visible = false
-	if is_instance_valid(dot_timer):
-		dot_timer.stop()
-
-	_waiting_active = false
-	if i_am_player == 1 and is_instance_valid(bottom_items):
-		bottom_items.visible = true
 
 func _renumber_from_one() -> void:
 	if questions.is_empty():

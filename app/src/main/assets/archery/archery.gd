@@ -1,19 +1,13 @@
-extends Node3D
+extends BaseGame3D
 class_name ArcheryGame
 
-const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
-const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const MUSIC_STREAM := preload("res://global/audio/archery.ogg")
 
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var player_avatar_display = %PlayerAvatarDisplay
-@onready var settings_button: Button = %SettingsButton
 @onready var winner_label: Label = %WinLossLabel
-@onready var waiting_label: Label = %waitingLabel
 @onready var sent_label: Label = %SentLabel
-@onready var waiting_blur: ColorRect = %WaitBlur
 @onready var main_overlay: Control = %MainOverlay
-@onready var dot_timer: Timer = %DotTimer
 @onready var spectator_label: Label = %SpecLabel
 @onready var you_label: Label = %YouLabel
 @onready var opp_label: Label = %OppLabel
@@ -54,24 +48,17 @@ var player: int
 var gseed: int
 var upped_set = false
 var replay: Dictionary = {}
-var my_uuid: String = ""
 const MAX_WIND_POWER: float = 5.0   # used for color scaling
 const BOARD_RADIUS: float = 0.75
 const RING_COUNT: float = 10.0
 const RING_SPACING: float = BOARD_RADIUS / RING_COUNT
 var wind_anim_time: float = 0.0     # for the stretching arrow animation
 var wind_pulse_amount: float = 0.01
-var _settings_open: bool = false
 var has_turn_pre_state: bool = false
 var turn_pre_state: Array[int] = []
 var sent_tween: Tween
-var dot_count: int = 0
-const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
-var spectator_mode: bool = false
 var game_over: bool = false
 
-var appPlugin = null
-var mediaPlugin = null
 var num_shots: int = 0
 var aim_tween: Tween = null
 var aim_zoom_tween: Tween = null
@@ -1539,50 +1526,6 @@ func play_sent_animation() -> void:
 			start_waiting_animation()
 	)
 	
-func _on_dot_timer_timeout():
-	if not is_instance_valid(waiting_label):
-		print("Warning: waiting_label is not valid in _on_dot_timer_timeout.")
-		return
-	dot_count = (dot_count % 3) + 1
-	var dots = ""
-	for i in range(dot_count):
-		dots += "."
-	waiting_label.text = BASE_WAIT_TEXT + dots
-
-func start_waiting_animation():
-	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):
-		print("Warning: Waiting animation nodes are not valid.")
-		return
-	if spectator_mode:
-		return
-
-	_hide_wind_panel(0.2)
-
-	dot_count = 0
-	waiting_label.text = BASE_WAIT_TEXT + "."
-	waiting_label.visible = true
-	waiting_blur.visible = true
-
-	waiting_label.modulate.a = 0.0
-	waiting_blur.modulate.a = 0.0
-
-	var tween_wait_in = create_tween().set_parallel(true)
-	tween_wait_in.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_callback(func():
-		dot_timer.start()
-	)
-
-func stop_waiting_animation():
-	if is_instance_valid(dot_timer):
-		dot_timer.stop()
-	if is_instance_valid(waiting_label):
-		waiting_label.visible = false
-		waiting_label.modulate.a = 1.0
-	if is_instance_valid(waiting_blur):
-		waiting_blur.visible = false
-		waiting_blur.modulate.a = 1.0
-
 func _on_settings_button_pressed() -> void:
 	if not is_instance_valid(settings_button):
 		return

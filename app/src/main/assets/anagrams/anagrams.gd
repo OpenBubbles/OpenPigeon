@@ -1,4 +1,4 @@
-extends Control
+extends BaseGame
 
 @onready var intro_screen: Control = %IntroScreen
 @onready var game_screen: Control = %GameScreen
@@ -6,8 +6,6 @@ extends Control
 @onready var words_screen: Control = %WordsScreen
 @onready var start_button: Button = %StartButton
 @onready var sent_label: Label = %SentLabel
-@onready var waiting_label: Label = %WaitForOpponentLabel
-@onready var dot_timer: Timer = %DotTimer
 @onready var win_loss_label: Label = %WinLossLabel
 @onready var main_score_box: PanelContainer = %MainScoreBoxContainer
 @onready var player_score_box: PanelContainer = %PlayerScoreBoxContainer
@@ -27,7 +25,6 @@ extends Control
 @onready var words_scroll: ScrollContainer = %VScrollBar
 
 const LETTER_BG: Texture2D = preload("res://anagrams/letter_bg.png")
-const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const DICT_PATH := "res://global/gp_wg_en2.txt"
 const MUSIC_STREAM := preload("res://global/audio/anagrams.ogg")
 
@@ -36,11 +33,6 @@ var _tear_rng := RandomNumberGenerator.new()
 var screens: Array[Control] = []
 var current_screen: int = 0
 var sent_label_tween: Tween
-var dot_count := 0
-var spectator_mode := false
-const BASE_WAIT_TEXT := "WAITING FOR OPPONENT"
-var appPlugin: Object = null
-var mediaPlugin = null
 var has_connected := false
 var my_id := ""
 var game_id := ""
@@ -199,7 +191,7 @@ func _set_game_data(raw_text: String) -> void:
 	is_my_turn = is_your_turn
 	var opponent_avatar_key := ""
 	winner = _get_first(d, "winner", "")
-	stop_waiting()
+	stop_waiting_animation()
 
 	var sender_player: int = clampi(int(sender_s), 1, 2)
 	my_has_data = false
@@ -298,13 +290,13 @@ func _set_game_data(raw_text: String) -> void:
 	_init_screens()
 
 	if spectator_mode:
-		stop_waiting()
+		stop_waiting_animation()
 	elif game_over:
-		stop_waiting()
+		stop_waiting_animation()
 	elif my_has_data:
-		start_waiting()
+		start_waiting_animation()
 	else:
-		stop_waiting()
+		stop_waiting_animation()
 		
 func _load_dictionary() -> void:
 	if _dict_loaded:
@@ -766,7 +758,7 @@ func play_sent_animation() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
-			start_waiting()
+			start_waiting_animation()
 	)
 
 func _populate_scoreboard(
@@ -869,25 +861,3 @@ func _populate_scoreboard(
 			p1_score_s = str(final_score)
 		elif my_player == 2:
 			p2_score_s = str(final_score)
-
-func start_waiting():
-	if not (is_instance_valid(waiting_label) and is_instance_valid(dot_timer)): return
-	dot_count = 0
-	waiting_label.text = BASE_WAIT_TEXT + "."
-	waiting_label.visible = true;
-	waiting_label.modulate.a = 0.0;
-	var tw := create_tween().set_parallel(true)
-	tw.tween_property(waiting_label,"modulate:a",1.0,0.3)
-	tw.tween_callback(func(): dot_timer.start())
-
-func stop_waiting():
-	if is_instance_valid(dot_timer): 
-		dot_timer.stop()
-	if is_instance_valid(waiting_label): 
-		waiting_label.visible=false
-		waiting_label.modulate.a=1.0
-
-func _on_dot_timer_timeout():
-	if not is_instance_valid(waiting_label): return
-	dot_count = (dot_count % 3) + 1
-	waiting_label.text = BASE_WAIT_TEXT + ".".repeat(dot_count)
