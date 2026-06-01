@@ -1,8 +1,5 @@
-extends Control
+extends BaseGame
 
-const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
-const RULES_POPUP_SCENE = preload("res://global/RulesPopup.tscn")
-const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const BOMB_TEXTURE_PATH := preload("res://battleship/bomb.png")
 const PLANE_TEXTURE_PATH := preload("res://battleship/plane.png")
 const MUSIC_STREAM := preload("res://global/audio/battleship.ogg")
@@ -11,10 +8,7 @@ signal replay_finished
 var _replay_pending: int = 0
 var _replay_token: int = 0
 
-
 var sent_tween: Tween
-var dot_count: int = 0
-const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 
 @onready var state: Label = %StateLabel
 @onready var start_button: Button = %StartButton
@@ -22,13 +16,8 @@ const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 @onready var shuffle_button: TextureButton = %ShuffleButton
 @onready var battleground1: BattleGround = %BattleGround1
 @onready var battleground2: BattleGround = %BattleGround2
-@onready var settings_button: Button = %SettingsButton
-@onready var rules_button: Button = %RulesButton
 @onready var winner_label: Label = %WinLossLabel
-@onready var waiting_label: Label = %waitingLabel
 @onready var sent_label: Label = %SentLabel
-@onready var waiting_blur: ColorRect = %WaitBlur
-@onready var dot_timer: Timer = %DotTimer
 @onready var spectator_label: Label = %SpecLabel
 @onready var p1_avatar_display = %P1AvatarDisplay
 @onready var p1_you_label: Label = %P1YouLabel
@@ -42,17 +31,12 @@ const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 
 var _water_scroll_x: float = 0.0
 var isTurn = false
-var appPlugin = null
-var mediaPlugin = null
 var myBattleground: BattleGround = null
 var theirBattleground: BattleGround = null
 var myBoardContainer: Control = null
 var theirBoardContainer: Control = null
 var my_player
-var my_uuid: String = ""
 var player = null
-var game_settings_category: String = ""
-var spectator_mode: bool = false
 var fireMode = false
 var is_end = false
 var winner = false
@@ -91,87 +75,50 @@ const BUFFER_OFFSETS_DIAG: Array[Vector2i] = [
 	Vector2i(-1, -1),
 ]
 
-func _ready() -> void:
-	if Engine.has_singleton("OpenPigeonMedia"):
-		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-		print("OpenPigeonMedia plugin is available")
-	else:
-		print("OpenPigeonMedia plugin is not available")
+# ----- Base overrides -----
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
 
-	_start_music()
-	appPlugin = Engine.get_singleton("AppPlugin")
-	
-	if appPlugin:
-		print("App plugin is available")
-		appPlugin.connect("set_game_data", _set_game_data)
-		my_uuid = appPlugin.getSenderUUID()
-		appPlugin.onReady()
-	else:
-		print("App plugin is not available, using dev data")
-		my_uuid = "0a602920-2033-469d-aab8-5e832c5d4f6a"
+func _get_dev_data() -> String:
+	return JSON.stringify({
+		"size": 9,
+		"isYourTurn": true,
+		"player": 2,
+		"myPlayerId": "DEV_PLAYER",
+		"replay": "",
+		"bullets1": "",
+		"bullets2": "",
+		"skip_ships": "",
+		"ships1": "",
+		"ships2": "",
+	})
 
-		var dev_data := { #SETUP SCREEN PLAYER 1
-			"size": 9,
-			"isYourTurn": true,
-			"player": 2,
-			"myPlayerId": "DEV_PLAYER",
-			"replay": "",
-			"bullets1": "",
-			"bullets2": "",
-			"skip_ships": "",
-			"ships1": "",
-			"ships2": "",
-		}
-		
-		#var dev_data := { #SETUP SCREEN PLAYER 2 (PLAYER 1 Has Chosen Board)
-			#"size": 8,
-			#"isYourTurn": true,
-			#"player": 1,
-			#"myPlayerId": "DEV_PLAYER",
-			#"replay": "",
-			#"bullets1": "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
-			#"bullets2": "",
-			#"skip_ships": "",
-			#"ships1": "pos:2,3&num:0,0,0,0&rot:0|pos:1,0&num:0,0,0&rot:1|pos:4,2&num:0,0,0&rot:1|pos:7,4&num:0,0,0&rot:0|pos:0,4&num:0,0&rot:0|pos:5,6&num:0,0&rot:0|pos:5,0&num:0,0&rot:1",
-			#"ships2": "",
-		#}
-		
-		#var dev_data := { #Player 1 Sent a Shot after player 2 sent one
-			#"size": 8,
-			#"isYourTurn": true,
-			#"player": 1,
-			#"myPlayerId": "DEV_PLAYER",
-			#"replay": "0,1",
-			#"bullets1": "0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
-			#"bullets2": "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
-			#"skip_ships": "pos:2,2&num:0,0,0,0&rot:0|pos:7,5&num:0,0,0&rot:0|pos:4,3&num:0,0,0&rot:1|pos:1,0&num:0,0,0&rot:1|pos:5,0&num:0,0&rot:1|pos:0,4&num:0,0&rot:0|pos:4,6&num:0,0&rot:0",
-			#"ships1": "pos:2,1&num:0,0,0,0&rot:0|pos:5,5&num:0,0,0&rot:1|pos:1,7&num:0,0,0&rot:1|pos:7,1&num:0,0,0&rot:0|pos:5,7&num:0,0&rot:1|pos:0,2&num:0,0&rot:0|pos:5,0&num:0,0&rot:0",
-			#"ships2": "pos:2,2&num:0,0,0,0&rot:0|pos:7,5&num:0,0,0&rot:0|pos:4,3&num:0,0,0&rot:1|pos:1,0&num:0,0,0&rot:1|pos:5,0&num:0,0&rot:1|pos:0,4&num:0,0&rot:0|pos:4,6&num:0,0&rot:0",
-		#}
+func _get_rules_title() -> String:
+	return "How to Play Sea Battle"
 
-		_set_game_data(JSON.stringify(dev_data))
+func _get_settings_avatar_display():
+	return _get_my_avatar_display()
+
+func _add_settings_rows(_container, popup_script) -> void:
+	popup_script.settings_theme_selected.connect(_on_theme_changed)
+
+func _on_game_ready() -> void:
 	_rng.randomize()
-	
+
 	if is_instance_valid(battleground1):
 		_board_center_pos = battleground1.global_position
 	else:
 		_board_center_pos = Vector2.ZERO
-		
+
 	if is_instance_valid(clouds_rect):
 		_clouds_home_pos = clouds_rect.global_position
 
 	_board_travel_distance = get_viewport_rect().size.x * travel_distance
-	
-	if is_instance_valid(rules_button):
-		rules_button.pressed.connect(on_rules_button_pressed)
-	if is_instance_valid(settings_button):
-		settings_button.pressed.connect(_on_settings_button_pressed)
+
 	if is_instance_valid(start_button):
 		start_button.pressed.connect(_on_start_button_pressed)
 	if is_instance_valid(fire_button):
 		fire_button.pressed.connect(_on_fire_button_pressed)
-	if is_instance_valid(dot_timer):
-		dot_timer.connect("timeout", _on_dot_timer_timeout)
 	if is_instance_valid(shuffle_button):
 		shuffle_button.pressed.connect(_on_shuffle_button_pressed)
 	if is_instance_valid(fire_button):
@@ -180,10 +127,9 @@ func _ready() -> void:
 
 	if replay == null or player == null:
 		return
-		
+
 	if water_rect and water_rect.material is ShaderMaterial:
 		var mat := water_rect.material as ShaderMaterial
-
 		if mat.shader:
 			var uniforms := mat.shader.get_shader_uniform_list()
 			for u in uniforms:
@@ -192,7 +138,7 @@ func _ready() -> void:
 					if val != null:
 						_water_scroll_x = float(val)
 					break
-
+					
 func _set_game_data(new_replay: String) -> void:
 	print("\n==========================")
 	print("[SET_GAME_DATA] NEW PAYLOAD RECEIVED")
@@ -443,29 +389,6 @@ func _set_game_data(new_replay: String) -> void:
 		if not spectator_mode:
 			myBattleground.process_mode = Node.PROCESS_MODE_DISABLED
 			theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
-
-var music_player: AudioStreamPlayer = null
-
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
 
 func _apply_spectator_ship_hiding() -> void:
 	if not spectator_mode:
@@ -901,10 +824,7 @@ func send_update():
 		print("[SEND] Winner flag included: ", msg["winner"])
 
 	var encoded = JSON.stringify(msg)
-	if appPlugin:
-		appPlugin.updateGameData(encoded)
-	else:
-		print("No app plugin! ")
+	send_game_data(encoded)
 
 	print("[SEND] FINAL JSON SENT TO APP PLUGIN:")
 	print(encoded)
@@ -1546,34 +1466,6 @@ func _haptic_explosion(strength: float = 1.0, duration_ms: int = 45) -> void:
 	strength = clampf(strength, 0.0, 1.0)
 	Input.vibrate_handheld(duration_ms, strength)
 	
-func on_rules_button_pressed() -> void:
-	if not is_instance_valid(rules_button):
-		return
-
-	rules_button.pivot_offset = rules_button.size / 2.0
-	var tween := create_tween()
-	tween.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
-
-	var popup := RULES_POPUP_SCENE.instantiate() as RulesPopup
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var root := get_tree().root
-	root.add_child(dim)
-	root.add_child(popup)
-	popup.z_index = 100
-	dim.z_index = 99
-
-	popup.tree_exited.connect(func():
-		if is_instance_valid(dim):
-			dim.queue_free()
-	)
-
-	popup.open("How to Play Sea Battle", _get_rules_text())
-	
 func _get_rules_text() -> String:
 	return """
 [font_size={32px}][b]Sea Battle[/b][/font_size]
@@ -1631,139 +1523,3 @@ func play_sent_animation() -> void:
 			sent_label.modulate.a = 1.0
 			start_waiting_animation()
 	)
-
-func start_waiting_animation():
-	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):
-		print("Warning: Waiting animation nodes are not valid.")
-		return
-	if spectator_mode:
-		return
-
-	dot_count = 0
-	waiting_label.text = BASE_WAIT_TEXT + "."
-	waiting_label.visible = true
-	waiting_blur.visible = true
-
-	waiting_label.modulate.a = 0.0
-	waiting_blur.modulate.a = 0.0
-
-	var tween_wait_in = create_tween().set_parallel(true)
-	tween_wait_in.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_callback(func():
-		dot_timer.start()
-	)
-
-func stop_waiting_animation():
-	if is_instance_valid(dot_timer):
-		dot_timer.stop()
-	if is_instance_valid(waiting_label):
-		waiting_label.visible = false
-		waiting_label.modulate.a = 1.0
-	if is_instance_valid(waiting_blur):
-		waiting_blur.visible = false
-		waiting_blur.modulate.a = 1.0
-
-func _on_dot_timer_timeout():
-	if not is_instance_valid(waiting_label):
-		print("Warning: waiting_label is not valid in _on_dot_timer_timeout.")
-		return
-	dot_count = (dot_count % 3) + 1
-	var dots = ""
-	for i in range(dot_count):
-		dots += "."
-	waiting_label.text = BASE_WAIT_TEXT + dots
-
-func _on_settings_button_pressed() -> void:
-	if not is_instance_valid(settings_button):
-		return
-	settings_button.pivot_offset = settings_button.size / 2.0
-	var tween := create_tween()
-	tween.tween_property(settings_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.tween_property(settings_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await tween.finished
-
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var popup_instance := SETTINGS_POPUP_SCENE.instantiate()
-	var settings_popup_script := popup_instance as SettingsPopup
-
-	var root := get_tree().root
-	root.add_child(dim)
-	root.add_child(popup_instance)
-	popup_instance.z_index = 100
-	dim.z_index = 99
-	root.move_child(dim, root.get_child_count() - 2)
-
-	settings_popup_script.setup_popup(dim)
-
-	#var volume_setting_hbox := HBoxContainer.new()
-	#volume_setting_hbox.add_child(Label.new())
-	#(volume_setting_hbox.get_child(0) as Label).text = "Game Volume:"
-	#(volume_setting_hbox.get_child(0) as Label).set_h_size_flags(Control.SIZE_EXPAND_FILL)
-#
-	#var volume_slider := HSlider.new()
-	#volume_slider.min_value = 0.0
-	#volume_slider.max_value = 1.0
-	#volume_slider.step = 0.05
-	#var saved_volume: float = float(SettingsManager.get_setting(game_settings_category, "master_volume", 0.75))
-	#volume_slider.value = saved_volume
-	#volume_slider.set_h_size_flags(Control.SIZE_EXPAND_FILL)
-	#volume_slider.value_changed.connect(func(value):
-		#AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(value))
-		#SettingsManager.set_setting(game_settings_category, "master_volume", value)
-	#)
-	#volume_setting_hbox.add_child(volume_slider)
-	#settings_popup_script.add_custom_setting(volume_setting_hbox)
-#
-	#var toggle_debug_checkbox := CheckBox.new()
-	#toggle_debug_checkbox.text = "Show Debug Info"
-	#var saved_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
-	#toggle_debug_checkbox.button_pressed = saved_debug_info
-	#toggle_debug_checkbox.pressed.connect(func():
-		#SettingsManager.set_setting(game_settings_category, "show_debug_info", toggle_debug_checkbox.button_pressed)
-	#)
-	#settings_popup_script.add_custom_setting(toggle_debug_checkbox)
-
-	var custom_settings_title := popup_instance.find_child("CustomSettingsTitleLabel", true)
-	if custom_settings_title and custom_settings_title is Label and settings_popup_script.custom_settings_container.get_child_count() > 0:
-		(custom_settings_title as Label).visible = true
-	elif custom_settings_title and custom_settings_title is Label:
-		(custom_settings_title as Label).visible = false
-
-	settings_popup_script.closed.connect(func():
-		var my_avatar := _get_my_avatar_display()
-		if is_instance_valid(my_avatar):
-			my_avatar.update_display_from_settings()
-	)
-	settings_popup_script.settings_theme_selected.connect(_on_theme_changed)
-
-	popup_instance.set_as_top_level(true)
-	popup_instance.visible = true
-	await get_tree().process_frame
-
-	var viewport_size := get_viewport_rect().size
-	var desired_width := viewport_size.x * 0.95
-	var desired_height: float = popup_instance.get_combined_minimum_size().y
-	popup_instance.size = Vector2(desired_width, desired_height)
-	popup_instance.position = Vector2((viewport_size.x - desired_width) / 2, viewport_size.y)
-
-	var bottom_offset := 50
-	var target_y_position := viewport_size.y - desired_height - bottom_offset
-	var target_position := Vector2((viewport_size.x - desired_width) / 2, target_y_position)
-
-	var popup_tween := create_tween()
-	popup_tween.tween_property(popup_instance, "position", target_position, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	popup_instance.grab_focus()
-
-@warning_ignore("unused_parameter")
-func _on_theme_changed(new_theme_name: String) -> void:
-	pass
-
-func _load_game_specific_settings() -> void:
-	var saved_volume: float = float(SettingsManager.get_setting(game_settings_category, "master_volume", 0.75))
-	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))
-	var show_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
-	print("Loaded game-specific settings for ", game_settings_category, ": volume=", saved_volume, " debug=", show_debug_info)

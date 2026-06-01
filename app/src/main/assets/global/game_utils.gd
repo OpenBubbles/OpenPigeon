@@ -2,6 +2,10 @@ class_name GameUtils
 extends RefCounted
 
 const AvatarWinAnimScene: PackedScene = preload("res://global/avatar_textures/avatar_win_anim.tscn")
+const RULES_POPUP_SCENE: PackedScene = preload("res://global/RulesPopup.tscn")
+const SETTINGS_POPUP_SCENE: PackedScene = preload("res://global/settings_popup.tscn")
+
+# ---------- Avatars ----------
 
 static func _parse_avatar_string(data_string: String) -> Dictionary:
 	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
@@ -44,39 +48,30 @@ static func _parse_avatar_string(data_string: String) -> Dictionary:
 				var i := key_value[1].to_int()
 				if i >= 0 and i < body_map.size():
 					data["fshape_style"] = String(body_map[i])
-
 			"fshape_color", "body_color":
 				data["fshape_color"] = read_color.call(key_value.slice(1))
-
 			"hair":
 				var i := key_value[1].to_int()
 				if i >= 0 and i < hair_map.size():
 					data["hair_style"] = String(hair_map[i])
-
 			"hair_color":
 				data["hair_color"] = read_color.call(key_value.slice(1))
-
 			"eyes":
 				var i := key_value[1].to_int()
 				if i >= 0 and i < eyes_map.size():
 					data["eyes_style"] = String(eyes_map[i])
-
 			"mouth":
 				var i := key_value[1].to_int()
 				if i >= 0 and i < mouth_map.size():
 					data["mouth_style"] = String(mouth_map[i])
-
 			"clothes":
 				var i := key_value[1].to_int()
 				if i >= 0 and i < clothing_map.size():
 					data["clothing_style"] = String(clothing_map[i])
-
 			"clothes_color":
 				data["clothing_color"] = read_color.call(key_value.slice(1))
-
 			"bg_color":
 				data["bg_color"] = read_color.call(key_value.slice(1))
-
 			"backdrop":
 				var i := key_value[1].to_int()
 				if i >= 0 and i < backdrop_map.size():
@@ -84,7 +79,7 @@ static func _parse_avatar_string(data_string: String) -> Dictionary:
 			_:
 				pass
 	return data
-	
+
 static func _ensure_avatar_wrapper(avatar: Control) -> Control:
 	var parent: Node = avatar.get_parent()
 	if parent == null:
@@ -141,3 +136,132 @@ static func _show_win_burst(avatar: Control) -> void:
 	anim_instance.offset_bottom = 43.0
 	(anim_instance as Node).call("set_color", Color(1.0, 0.84, 0.0))
 	(anim_instance as Node).call("play", 0.05)
+
+# ---------- Rules popup ----------
+
+static func open_rules_popup(game: Node, rules_button: Button, title: String, body: String) -> void:
+	if is_instance_valid(rules_button):
+		rules_button.pivot_offset = rules_button.size / 2.0
+		var bump := game.create_tween()
+		bump.tween_property(rules_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		bump.tween_property(rules_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		await bump.finished
+
+	var popup := RULES_POPUP_SCENE.instantiate() as RulesPopup
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var root := game.get_tree().root
+	root.add_child(dim)
+	root.add_child(popup)
+	popup.z_index = 100
+	dim.z_index = 99
+	popup.tree_exited.connect(func():
+		if is_instance_valid(dim):
+			dim.queue_free()
+	)
+	popup.open(title, body)
+
+# ---------- Settings popup ----------
+# add_rows:  Callable(container, popup_script) -> void   (optional; pass invalid Callable to skip)
+# on_closed: Callable() -> void                          (base resets its _settings_open guard here)
+
+static func open_settings_popup(game: Node, media_plugin, settings_button: Button,
+		avatar_display, music_stream: AudioStream,
+		add_rows: Callable, on_closed: Callable) -> void:
+	if not is_instance_valid(settings_button):
+		return
+
+	settings_button.pivot_offset = settings_button.size / 2.0
+	var bump := game.create_tween()
+	bump.tween_property(settings_button, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	bump.tween_property(settings_button, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await bump.finished
+
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.5)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var popup := SETTINGS_POPUP_SCENE.instantiate()
+	var popup_script := popup as SettingsPopup
+	var root := game.get_tree().root
+	root.add_child(dim)
+	root.add_child(popup)
+	popup.z_index = 100
+	dim.z_index = 99
+	root.move_child(dim, root.get_child_count() - 2)
+	popup_script.setup_popup(dim)
+
+	# Music row — common to every game.
+	if media_plugin:
+		var row := HBoxContainer.new()
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var lbl := Label.new()
+		lbl.text = "Music"
+		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var toggle := CheckButton.new()
+		toggle.button_pressed = media_plugin.isMusicEnabled()
+		toggle.toggled.connect(func(enabled: bool) -> void:
+			media_plugin.setMusicEnabled(enabled)
+			if enabled:
+				start_music(game, music_stream, media_plugin)
+			else:
+				stop_music(game)
+		)
+		row.add_child(lbl)
+		row.add_child(toggle)
+		popup_script.custom_settings_container.add_child(row)
+
+	# Per-game extra rows / signal hookups.
+	if add_rows.is_valid():
+		add_rows.call(popup_script.custom_settings_container, popup_script)
+
+	var title := popup.find_child("CustomSettingsTitleLabel", true)
+	if title and title is Label:
+		(title as Label).visible = popup_script.custom_settings_container.get_child_count() > 0
+
+	popup_script.closed.connect(func():
+		if on_closed.is_valid():
+			on_closed.call()
+		if is_instance_valid(avatar_display):
+			avatar_display.update_display_from_settings()
+		if is_instance_valid(dim):
+			dim.queue_free()
+	)
+
+	popup.set_as_top_level(true)
+	popup.visible = true
+	await game.get_tree().process_frame
+
+	var vp := game.get_viewport().get_visible_rect().size
+	var w := vp.x * 0.95
+	var h: float = popup.get_combined_minimum_size().y
+	popup.size = Vector2(w, h)
+	popup.position = Vector2((vp.x - w) / 2, vp.y)
+	var target_y := vp.y - h - 50.0
+	var slide := game.create_tween()
+	slide.tween_property(popup, "position", Vector2((vp.x - w) / 2, target_y), 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	popup.grab_focus()
+
+# ---------- Music ----------
+
+static func start_music(game: Node, stream: AudioStream, media_plugin) -> void:
+	if media_plugin and not media_plugin.isMusicEnabled():
+		return
+	if stream == null:
+		return
+	var mp := game.get_node_or_null("MusicPlayer") as AudioStreamPlayer
+	if mp == null:
+		mp = AudioStreamPlayer.new()
+		mp.name = "MusicPlayer"
+		mp.stream = stream
+		mp.volume_db = -4.0
+		game.add_child(mp)
+	if not mp.playing:
+		mp.play()
+
+static func stop_music(game: Node) -> void:
+	var mp := game.get_node_or_null("MusicPlayer") as AudioStreamPlayer
+	if mp:
+		mp.stop()

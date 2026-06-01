@@ -1,20 +1,15 @@
-extends Node3D
+extends BaseGame3D
 class_name basketball
 
 var elapsedTime: float = 0.0
 
-const AvatarWinAnimScene := preload("res://global/avatar_textures/avatar_win_anim.tscn")
-const SETTINGS_POPUP_SCENE = preload("res://global/settings_popup.tscn")
 const MUSIC_STREAM := preload("res://global/audio/basketball.ogg")
 const MIN_DRAG_DISTANCE := 30.0
 
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var winner_label: Label = %WinLossLabel
-@onready var waiting_label: Label = %waitingLabel
 @onready var sent_label: Label = %SentLabel
-@onready var waiting_blur: ColorRect = %WaitBlur
-@onready var dot_timer: Timer = %DotTimer
 @onready var spectator_label: Label = %SpecLabel
 @onready var start_button: Button = %StartButton
 @onready var skip_button: TextureButton = %SkipButton
@@ -53,9 +48,6 @@ var gameDataSet = false
 var game_over = false
 var _ui_initialized := false
 var sent_tween: Tween
-var dot_count: int = 0
-const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
-var spectator_mode: bool = false
 var allow_waiting_from_loaded_data: bool = false
 var loaded_has_winner: bool = false
 var winner_sent: bool = false
@@ -74,8 +66,6 @@ var skip_score1 = null
 var skip_score2 = null
 var turnNum = null
 
-var appPlugin = null
-var mediaPlugin = null
 var has_connected = false
 var dev_data = ""
 var game_mode: String = "n"
@@ -94,47 +84,30 @@ var myReplay = ""
 var isWaiting = false
 var receivedMessage = null
 
-func _ready() -> void:
+func _get_music_stream() -> AudioStream:
+	return MUSIC_STREAM
+
+func _get_dev_data() -> String:
+	return '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "18", "skip_score2": "46", "player": "2", "score1": "18", "score2": "23", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "h", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Lets play Basketball!", "game_name": "Basketball", "replay": "60,0.264,0,0"}'
+
+func _on_game_ready() -> void:
 	if not _ui_initialized:
 		_ui_initialized = true
 
 		timeRemainingLabel = get_node("Scoreboard/Time")
 		youScoreLabel = get_node("Scoreboard/YouScore")
 		oppScoreLabel = get_node("Scoreboard/OppScore")
-		
-		if Engine.has_singleton("OpenPigeonMedia"):
-			mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-			print("OpenPigeonMedia plugin is available")
-		else:
-			print("OpenPigeonMedia plugin is not available")
-
-		_start_music()
-
-		appPlugin = Engine.get_singleton("AppPlugin")
-		if appPlugin:
-			if not has_connected:
-				print("App plugin is available")
-				appPlugin.connect("set_game_data", _set_game_data)
-				has_connected = true
-				appPlugin.onReady()
-		else:
-			print("App plugin is not available")
-			#dev_data = '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "18", "skip_score2": "46", "player": "2", "score1": "18", "score2": "23", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "n", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Let\'s play Basketball!", "game_name": "Basketball", "replay": "60,0.264,0,0"}'
-			dev_data = '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "18", "skip_score2": "46", "player": "2", "score1": "18", "score2": "23", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "h", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Let\'s play Basketball!", "game_name": "Basketball", "replay": "60,0.264,0,0"}'
-			_set_game_data(dev_data, true)
 
 		if is_instance_valid(start_button):
 			start_button.pressed.connect(start_button_pressed)
 		if is_instance_valid(skip_button):
 			skip_button.pressed.connect(skipReplay)
-		if is_instance_valid(dot_timer):
-			dot_timer.timeout.connect(_on_dot_timer_timeout)
 
 	if not gameDataSet:
 		return
 
 	refresh_ui_state()
-
+	
 func showWinner():
 	if myScore == oppScore:
 		winner_label.set_text("DRAW!")
@@ -274,29 +247,6 @@ func _input(event: InputEvent) -> void:
 func interpolate_x_delta(value: float) -> float:
 	var t = inverse_lerp(-200.0, 200.0, value)
 	return lerp(-1, 1, t)
-	
-var music_player: AudioStreamPlayer = null
-
-func _start_music() -> void:
-	if mediaPlugin and not mediaPlugin.isMusicEnabled():
-		return
-
-	if music_player == null:
-		music_player = AudioStreamPlayer.new()
-		music_player.name = "MusicPlayer"
-		music_player.stream = MUSIC_STREAM
-		music_player.volume_db = -4.0
-		add_child(music_player)
-
-	if not music_player.playing:
-		music_player.play()
-		
-func _stop_music() -> void:
-	if music_player:
-		music_player.stop()
-	
-func _exit_tree() -> void:
-	_stop_music()
 
 func playReplay(player_num: int, replay_str: String) -> float:
 	replayPlaying = true
@@ -950,44 +900,3 @@ func play_sent_animation() -> void:
 			start_waiting_animation()
 	)
 	
-func _on_dot_timer_timeout():
-	if not is_instance_valid(waiting_label):
-		print("Warning: waiting_label is not valid in _on_dot_timer_timeout.")
-		return
-	dot_count = (dot_count % 3) + 1
-	var dots = ""
-	for i in range(dot_count):
-		dots += "."
-	waiting_label.text = BASE_WAIT_TEXT + dots
-
-func start_waiting_animation():
-	if not is_instance_valid(waiting_label) or not is_instance_valid(waiting_blur) or not is_instance_valid(dot_timer):
-		print("Warning: Waiting animation nodes are not valid.")
-		return
-	if spectator_mode:
-		return
-
-	dot_count = 0
-	waiting_label.text = BASE_WAIT_TEXT + "."
-	waiting_label.visible = true
-	waiting_blur.visible = true
-
-	waiting_label.modulate.a = 0.0
-	waiting_blur.modulate.a = 0.0
-
-	var tween_wait_in = create_tween().set_parallel(true)
-	tween_wait_in.tween_property(waiting_label, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_property(waiting_blur, "modulate:a", 1.0, 0.3)
-	tween_wait_in.tween_callback(func():
-		dot_timer.start()
-	)
-
-func stop_waiting_animation():
-	if is_instance_valid(dot_timer):
-		dot_timer.stop()
-	if is_instance_valid(waiting_label):
-		waiting_label.visible = false
-		waiting_label.modulate.a = 1.0
-	if is_instance_valid(waiting_blur):
-		waiting_blur.visible = false
-		waiting_blur.modulate.a = 1.0
