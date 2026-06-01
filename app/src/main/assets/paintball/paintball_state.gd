@@ -90,88 +90,6 @@ func flip_enc_for_perspective(enc: int) -> int:
 		return 0
 	return enc
 
-func parse_avatar_string(data_string: String) -> Dictionary:
-	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
-	var body_map: Array     = AvatarThumbnail.avatar_fshape_regions.keys()
-	var eyes_map: Array     = AvatarThumbnail.avatar_eyes_regions.keys()
-	var mouth_map: Array    = AvatarThumbnail.avatar_mouth_regions.keys()
-	var clothing_map: Array = AvatarThumbnail.avatar_clothing_regions.keys()
-	var backdrop_map: Array = ["Plain"]
-	backdrop_map.append_array(AvatarThumbnail.avatar_background_regions.keys())
-
-	var data: Dictionary = {
-		"fshape_style":   body_map[0]     if body_map.size()     > 0 else "Default",
-		"hair_style":     hair_map[0]     if hair_map.size()     > 0 else "hair1",
-		"eyes_style":     eyes_map[0]     if eyes_map.size()     > 0 else "eyes1",
-		"mouth_style":    mouth_map[0]    if mouth_map.size()    > 0 else "mouth1",
-		"clothing_style": clothing_map[0] if clothing_map.size() > 0 else "clothing1",
-		"bg_style":       "Plain",
-		"fshape_color":   Color(0.88, 0.67, 0.41),
-		"hair_color":     Color(0.17, 0.14, 0.17),
-		"clothing_color": Color(0.63, 0.24, 0.24),
-		"bg_color":       Color(0.31, 0.36, 0.54),
-	}
-
-	if data_string.is_empty():
-		return data
-
-	var read_color = func(vals: Array) -> Color:
-		if vals.size() >= 3:
-			return Color(vals[0].to_float(), vals[1].to_float(), vals[2].to_float())
-		return Color.WHITE
-
-	for part in data_string.split("|", false):
-		var key_value := part.split(",", false)
-		if key_value.size() < 2:
-			continue
-		var key := key_value[0]
-
-		match key:
-			"fshape", "body":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < body_map.size():
-					data["fshape_style"] = String(body_map[i])
-
-			"fshape_color", "body_color":
-				data["fshape_color"] = read_color.call(key_value.slice(1))
-
-			"hair":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < hair_map.size():
-					data["hair_style"] = String(hair_map[i])
-
-			"hair_color":
-				data["hair_color"] = read_color.call(key_value.slice(1))
-
-			"eyes":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < eyes_map.size():
-					data["eyes_style"] = String(eyes_map[i])
-
-			"mouth":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < mouth_map.size():
-					data["mouth_style"] = String(mouth_map[i])
-
-			"clothes":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < clothing_map.size():
-					data["clothing_style"] = String(clothing_map[i])
-
-			"clothes_color":
-				data["clothing_color"] = read_color.call(key_value.slice(1))
-
-			"bg_color":
-				data["bg_color"] = read_color.call(key_value.slice(1))
-
-			"backdrop":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < backdrop_map.size():
-					data["bg_style"] = String(backdrop_map[i])
-			_:
-				pass
-	return data
-
 func set_game_data(raw_text: String) -> void:
 	var res: Dictionary = JSON.parse_string(raw_text)
 	if typeof(res) != TYPE_DICTIONARY:
@@ -262,7 +180,7 @@ func set_game_data(raw_text: String) -> void:
 	var avatar_string: String = res_str(res, opponent_avatar_key, "").strip_edges()
 
 	if avatar_string != "" and is_instance_valid(g.opp_avatar_display):
-		var opponent_data = parse_avatar_string(avatar_string)
+		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
 		if g.opp_avatar_display.has_method("update_avatar_from_data"):
 			g.opp_avatar_display.update_avatar_from_data(opponent_data)
 

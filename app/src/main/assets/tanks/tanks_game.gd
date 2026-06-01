@@ -174,41 +174,6 @@ func _stop_music() -> void:
 func _exit_tree() -> void:
 	_stop_music()
 	
-func _show_win_burst(avatar: Control) -> void:
-	if not is_instance_valid(avatar):
-		return
-	if not is_instance_valid(core):
-		return
-
-	var wrapper: Control = core._ensure_avatar_wrapper(avatar)
-	if not is_instance_valid(wrapper):
-		return
-
-	var existing: Node = wrapper.get_node_or_null("AvatarWinAnim")
-	if existing != null:
-		return
-
-	var anim_instance: Control = AvatarWinAnimScene.instantiate() as Control
-	anim_instance.name = "AvatarWinAnim"
-	wrapper.add_child(anim_instance)
-
-	var avatar_idx: int = avatar.get_index()
-	wrapper.move_child(anim_instance, avatar_idx)
-
-	anim_instance.z_as_relative = false
-	avatar.z_as_relative = false
-	anim_instance.z_index = 0
-	avatar.z_index = max(avatar.z_index, 1)
-
-	anim_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
-	anim_instance.offset_left = -52.0
-	anim_instance.offset_right = 52.0
-	anim_instance.offset_top = -43.0
-	anim_instance.offset_bottom = 43.0
-
-	(anim_instance as Node).call("set_color", Color(1.0, 0.84, 0.0))
-	(anim_instance as Node).call("play", 0.05)
-
 func _get_target_tank_width_screen_px() -> float:
 	return TANK_WIDTH_UNITS * _get_pixels_per_board_unit()
 
@@ -1536,7 +1501,7 @@ func _check_win_condition() -> bool:
 		var you_win: bool = (not core.spectator_mode) and core.player == winning_player
 
 		if you_win:
-			_show_win_burst(player_avatar_display)
+			GameUtils._show_win_burst(player_avatar_display)
 			result_text = "YOU WIN!"
 			win_loss_state = "1"
 			result_color = Color(1, 0.84, 0)
@@ -1544,12 +1509,12 @@ func _check_win_condition() -> bool:
 			win_loss_state = "-1"
 			if core.spectator_mode:
 				var winning_avatar: Control = player_avatar_display if winner == "1" else opp_avatar_display
-				_show_win_burst(winning_avatar)
+				GameUtils._show_win_burst(winning_avatar)
 
 				result_text = "Player %s Wins!" % winner
 				result_color = Color(1, 0.84, 0)
 			else:
-				_show_win_burst(opp_avatar_display)
+				GameUtils._show_win_burst(opp_avatar_display)
 				result_text = "YOU LOSE"
 				result_color = Color(1, 0.2, 0.2)
 

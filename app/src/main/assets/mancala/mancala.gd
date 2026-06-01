@@ -211,7 +211,7 @@ func _set_game_data(raw_text: String) -> void:
 	
 	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
 		var avatar_string = res[opponent_avatar_key]
-		var opponent_data = _parse_avatar_string(avatar_string)
+		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
@@ -345,89 +345,6 @@ func parse_game_data(raw: String) -> Dictionary:
 
 	return out
 	
-func _parse_avatar_string(data_string: String) -> Dictionary:
-	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
-	var body_map: Array     = AvatarThumbnail.avatar_fshape_regions.keys()
-	var eyes_map: Array     = AvatarThumbnail.avatar_eyes_regions.keys()
-	var mouth_map: Array    = AvatarThumbnail.avatar_mouth_regions.keys()
-	var clothing_map: Array = AvatarThumbnail.avatar_clothing_regions.keys()
-	var backdrop_map: Array = ["Plain"]
-	backdrop_map.append_array(AvatarThumbnail.avatar_background_regions.keys())
-
-	var data: Dictionary = {
-		"fshape_style":   body_map[0]     if body_map.size()     > 0 else "Default",
-		"hair_style":     hair_map[0]     if hair_map.size()     > 0 else "hair1",
-		"eyes_style":     eyes_map[0]     if eyes_map.size()     > 0 else "eyes1",
-		"mouth_style":    mouth_map[0]    if mouth_map.size()    > 0 else "mouth1",
-		"clothing_style": clothing_map[0] if clothing_map.size() > 0 else "clothing1",
-		"bg_style":       "Plain",
-		"fshape_color":   Color(0.88, 0.67, 0.41),
-		"hair_color":     Color(0.17, 0.14, 0.17),
-		"clothing_color": Color(0.63, 0.24, 0.24),
-		"bg_color":       Color(0.31, 0.36, 0.54),
-	}
-
-	if data_string.is_empty():
-		return data
-
-	var read_color = func(vals: Array) -> Color:
-		if vals.size() >= 3:
-			return Color(vals[0].to_float(), vals[1].to_float(), vals[2].to_float())
-		return Color.WHITE
-
-	for part in data_string.split("|", false):
-		var key_value := part.split(",", false)
-		if key_value.size() < 2:
-			continue
-		var key := key_value[0]
-
-		match key:
-			"fshape", "body":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < body_map.size():
-					data["fshape_style"] = String(body_map[i])
-
-			# --- Skin color (accept both) ---
-			"fshape_color", "body_color":
-				data["fshape_color"] = read_color.call(key_value.slice(1))
-
-			"hair":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < hair_map.size():
-					data["hair_style"] = String(hair_map[i])
-
-			"hair_color":
-				data["hair_color"] = read_color.call(key_value.slice(1))
-
-			"eyes":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < eyes_map.size():
-					data["eyes_style"] = String(eyes_map[i])
-
-			"mouth":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < mouth_map.size():
-					data["mouth_style"] = String(mouth_map[i])
-
-			"clothes":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < clothing_map.size():
-					data["clothing_style"] = String(clothing_map[i])
-
-			"clothes_color":
-				data["clothing_color"] = read_color.call(key_value.slice(1))
-
-			"bg_color":
-				data["bg_color"] = read_color.call(key_value.slice(1))
-
-			"backdrop":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < backdrop_map.size():
-					data["bg_style"] = String(backdrop_map[i])
-			_:
-				pass
-	return data
-
 func _parse_single_board(data: String) -> Array:
 	var pit_list = []
 	for pit_str in data.split("&"):
@@ -1177,7 +1094,7 @@ func _check_game_over_and_winner() -> bool:
 		elif (player == 1 and winner_id == 1) or (player == 2 and winner_id == 2):
 			if not spectator_mode:
 				win_loss_label.text = "YOU WIN!"
-				_show_win_burst(player_avatar_display)
+				GameUtils._show_win_burst(player_avatar_display)
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 				win_loss_state = "1"
 			else:
@@ -1187,7 +1104,7 @@ func _check_game_over_and_winner() -> bool:
 		else:
 			if not spectator_mode:
 				win_loss_label.text = "YOU LOSE"
-				_show_win_burst(opp_avatar_display)
+				GameUtils._show_win_burst(opp_avatar_display)
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
 				win_loss_state = "-1"
 			else:
@@ -1271,59 +1188,6 @@ func _animate_sweep(pit_indices: Array, store_idx: int) -> void:
 
 	pits[store_idx].append_array(all_labels)
 	_refresh_pit_count_label(store_idx)
-	
-func _show_win_burst(avatar: Control) -> void:
-	if not is_instance_valid(avatar) or not is_instance_valid(avatar.get_parent()):
-		push_warning("Tried to show win burst on an invalid avatar or avatar with no parent.")
-		return
-
-	var parent = avatar.get_parent()
-
-	if parent.get_node_or_null("%s_Wrapper/AvatarWinAnim" % avatar.name):
-		return
-
-	var wrapper = Control.new()
-	wrapper.name = "%s_Wrapper" % avatar.name
-
-	wrapper.layout_mode = avatar.layout_mode
-	wrapper.size_flags_horizontal = avatar.size_flags_horizontal
-	wrapper.size_flags_vertical = avatar.size_flags_vertical
-	wrapper.position = avatar.position
-	wrapper.size = avatar.size
-	wrapper.rotation = avatar.rotation
-	wrapper.scale = avatar.scale
-	wrapper.pivot_offset = avatar.pivot_offset
-	wrapper.custom_minimum_size = avatar.custom_minimum_size
-
-	var avatar_index = avatar.get_index()
-	parent.remove_child(avatar)
-	parent.add_child(wrapper)
-	parent.move_child(wrapper, avatar_index)
-	wrapper.add_child(avatar)
-
-	avatar.position = Vector2.ZERO
-	avatar.set_anchors_preset(Control.PRESET_FULL_RECT)
-
-	var anim_instance = AvatarWinAnimScene.instantiate() as Control
-	if not is_instance_valid(anim_instance):
-		push_error("Failed to instantiate AvatarWinAnimScene.")
-		return
-	anim_instance.name = "AvatarWinAnim"
-	wrapper.add_child(anim_instance)
-	
-	wrapper.move_child(anim_instance, 0)
-
-	anim_instance.set_anchors_preset(Control.PRESET_FULL_RECT)
-	anim_instance.offset_left = -52.0
-	anim_instance.offset_right = 52.0
-	anim_instance.offset_top = -43.0
-	anim_instance.offset_bottom = 43.0
-
-	if anim_instance.has_method("set_color"):
-		anim_instance.call("set_color", Color(1.0, 0.84, 0.0))
-	
-	if anim_instance.has_method("play"):
-		anim_instance.call("play", 0.05)
 	
 func _on_skip_button_pressed() -> void:
 	if in_replay:

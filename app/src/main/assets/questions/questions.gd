@@ -5,10 +5,10 @@ extends Control
 @onready var questions_scroll: ScrollContainer = %QuestionsScroll
 @onready var questions_container: CenterContainer = %QuestionsContainer
 @onready var questions_list: VBoxContainer = %QuestionsList
-@onready var question_mark_filler: RichTextLabel		= %QuestionMark
+@onready var question_mark_filler: RichTextLabel = %QuestionMark
 @onready var wait_for_label: Label = %WaitForLabel
 @onready var dot_timer: Timer = %DotTimer
-@onready var player_avatar_display: Control		= %PlayerAvatarDisplay
+@onready var player_avatar_display: Control = %PlayerAvatarDisplay
 @onready var _desc_rich: RichTextLabel = %Description
 @onready var bottom_items: VBoxContainer = %BottomItems
 @onready var overlay: PanelContainer = %AnswerOverlay
@@ -27,6 +27,10 @@ const OpponentAvatarScene: PackedScene = preload("res://global/avatar_textures/A
 const AvatarWinAnimScene: PackedScene = preload("res://global/avatar_textures/avatar_win_anim.tscn")
 const MUSIC_STREAM := preload("res://global/audio/20questions.ogg")
 var _opponent_avatar_data: Dictionary = {}
+var _answer_avatar_data: Dictionary = {}
+var _my_avatar_string: String = ""
+var _avatar1_raw: String = ""
+var _avatar2_raw: String = ""
 
 var is_my_turn: bool = false
 var mediaPlugin = null
@@ -68,6 +72,10 @@ func _ready() -> void:
 		my_uuid = String(appPlugin.getSenderUUID() or "")
 	else:
 		my_uuid = ""
+		
+	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
+		_my_avatar_string = player_avatar_display.get_avatar_data_string()
+		
 	if is_instance_valid(send_button):
 		send_button.pressed.connect(_on_send_pressed)
 
@@ -282,7 +290,7 @@ func _set_game_data(data_json: String) -> void:
 	spectator_mode = false
 
 	if player1 != "" or player2 != "":
-		if my_uuid == player1:
+		if my_uuid == player1 or player1 == "":
 			i_am_player = 1
 		elif my_uuid == player2:
 			i_am_player = 2
@@ -292,13 +300,19 @@ func _set_game_data(data_json: String) -> void:
 	else:
 		i_am_player = 2 if server_player_hint == 1 else 1
 		
-	var opponent_avatar_key := "avatar2" if i_am_player == 1 else "avatar1"
-	print("opponent_avatar_key")
-	if parsed.has(opponent_avatar_key):
-		var avatar_string := _get_s(parsed, opponent_avatar_key, "")
-		_opponent_avatar_data = _parse_avatar_string(avatar_string)
-	else:
-		_opponent_avatar_data = _parse_avatar_string("")
+	var avatar1_string := _get_s(parsed, "avatar1", "")
+	var avatar2_string := _get_s(parsed, "avatar2", "")
+
+	if avatar1_string != "":
+		_avatar1_raw = avatar1_string
+	if avatar2_string != "":
+		_avatar2_raw = avatar2_string
+
+	_opponent_avatar_data = GameUtils._parse_avatar_string(_avatar1_raw)
+	_answer_avatar_data = GameUtils._parse_avatar_string(_avatar2_raw)
+
+	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("update_avatar_from_data"):
+		player_avatar_display.call_deferred("update_avatar_from_data", _answer_avatar_data)
 
 	questions.clear()
 	if parsed.has("questions"):
@@ -506,16 +520,6 @@ func _make_scrollbars_invisible() -> void:
 		hbar.self_modulate.a = 0.0
 		hbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-func _scroll_to_bottom_smooth() -> void:
-	if not is_instance_valid(questions_scroll):
-		return
-	var vbar := questions_scroll.get_v_scroll_bar()
-	if not vbar:
-		return
-	var target := vbar.max_value
-	var t := create_tween()
-	t.tween_property(questions_scroll, "scroll_vertical", target, 0.25).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-
 func _replay_from_state() -> void:
 	print("==== Replay 20Q ====")
 	print("I am P", i_am_player, " | turn=", is_my_turn, " | answer='", secret_answer, "'")
@@ -535,14 +539,12 @@ func _on_send_pressed() -> void:
 		_on_text_focus_exited()
 		return
 
-	var is_guess_correct: bool = (i_am_player == 1) and (cleaned.to_lower() == secret_answer.strip_edges().to_lower())
-
 	var text_to_send := cleaned
-	if not is_guess_correct and not text_to_send.ends_with("?"):
+	if not text_to_send.ends_with("?"):
 		text_to_send += "?"
 
 	var next_idx: int = (int(questions[-1]["idx"]) + 1) if questions.size() > 0 else 1
-	var resp_code: int = 4 if is_guess_correct else 0
+	var resp_code: int = 0
 
 	questions.append({ "text": text_to_send, "idx": next_idx, "resp": resp_code })
 	_evaluate_game_over_and_winner()
@@ -550,39 +552,19 @@ func _on_send_pressed() -> void:
 	_update_upcoming_input_chip_color()
 	_smooth_scroll_to_bottom()
 
-	if i_am_player == 1 and not is_guess_correct:
+	if i_am_player == 1:
 		var asked_count := questions.size()
 		if asked_count >= MAX_QUESTIONS:
 			_evaluate_game_over_and_winner()
 			_update_ui_interactivity()
 			print("P1 reached 20 questions without correct guess. You lose.")
 
-	_send_game(text_to_send, next_idx, resp_code)
+	_send_game()
 	text_box.text = ""
 	DisplayServer.virtual_keyboard_hide()
 	_on_text_focus_exited()
 	_start_waiting()
 	_update_description_fill()
-
-func _on_answer_yes() -> void:
-	_apply_answer_code_to_pending(1)
-
-func _on_answer_no() -> void:
-	_apply_answer_code_to_pending(2)
-
-func _on_answer_sometimes() -> void:
-	_apply_answer_code_to_pending(3)
-
-func _on_answer_correct() -> void:
-	if questions.size() == 0:
-		return
-	var last: Dictionary = questions[-1]
-	if int(last["resp"]) != 0:
-		return
-	var txt: String = str(last["text"]).to_lower()
-	var target: String = secret_answer.strip_edges().to_lower()
-	var code: int = 4 if txt.find(target) != -1 else 1
-	_apply_answer_code_to_pending(code)
 
 func _apply_answer_code_to_idx(target_idx: int, code: int) -> void:
 	if game_over or i_am_player != 2 or questions.size() == 0:
@@ -604,8 +586,8 @@ func _apply_answer_code_to_idx(target_idx: int, code: int) -> void:
 	if code == 4:
 		dbg("apply_idx: guessed-it selected; game_over=%s winner=%d before send" % [str(game_over), winner])
 
-	dbg("apply_idx: updated; calling _send_full_state & _maybe_show_answer_popup")
-	_send_full_state()
+	dbg("apply_idx: updated; calling _send_game() & _maybe_show_answer_popup")
+	_send_game()
 	_update_ui_interactivity()
 
 	if not game_over:
@@ -627,7 +609,7 @@ func _apply_answer_code_to_pending(code: int) -> void:
 				_apply_answer_code_to_idx(idx, code)
 			return
 
-func _send_game(text: String, q_idx: int, resp_code: int) -> void:
+func _send_game() -> void:
 	var chunks: Array[String] = []
 	for q in questions:
 		var server_idx := int(q["idx"]) - 1
@@ -642,9 +624,20 @@ func _send_game(text: String, q_idx: int, resp_code: int) -> void:
 		"questions": questions_field
 	}
 	
-	var avatar_key := ("avatar1" if i_am_player == 1 else "avatar2")
-	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
-		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
+	var my_avatar := _my_avatar_string
+	if my_avatar == "" and is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
+		my_avatar = player_avatar_display.get_avatar_data_string()
+
+	if i_am_player == 2:
+		if my_avatar != "":
+			payload["avatar2"] = my_avatar
+		if _avatar1_raw != "":
+			payload["avatar1"] = _avatar1_raw
+	else:
+		if my_avatar != "":
+			payload["avatar1"] = my_avatar
+		if _avatar2_raw != "":
+			payload["avatar2"] = _avatar2_raw
 
 	for q in questions:
 		if int(q.get("resp", 0)) == 4:
@@ -671,9 +664,6 @@ func _send_game(text: String, q_idx: int, resp_code: int) -> void:
 		appPlugin.updateGameData(json)
 	else:
 		print("No app plugin (local test).")
-
-func _send_full_state() -> void:
-	_send_game("", 0, 0)
 
 func _update_ui_interactivity() -> void:
 	var enable_input := (is_my_turn and not game_over and i_am_player == 1 and not spectator_mode)
@@ -794,7 +784,7 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 
 			if _opponent_avatar_data.is_empty():
 				print("[20Q][row] _opponent_avatar_data empty. Using defaults.")
-				_opponent_avatar_data = _parse_avatar_string("")
+				_opponent_avatar_data = GameUtils._parse_avatar_string("")
 			else:
 				print("[20Q][row] Using provided avatar data: ", _opponent_avatar_data)
 
@@ -880,88 +870,6 @@ func _debug_print_row_layout(row: HBoxContainer) -> void:
 	if avatar:
 		print("[20Q][rowdbg] avatar rect=", (avatar as Control).get_rect(), " anchors=FULL? (", (avatar as Control).anchor_left, ",", (avatar as Control).anchor_top, ",", (avatar as Control).anchor_right, ",", (avatar as Control).anchor_bottom, ")")
 	
-func _parse_avatar_string(data_string: String) -> Dictionary:
-	var hair_map: Array     = AvatarThumbnail.avatar_hair_regions.keys()
-	var body_map: Array     = AvatarThumbnail.avatar_fshape_regions.keys()
-	var eyes_map: Array     = AvatarThumbnail.avatar_eyes_regions.keys()
-	var mouth_map: Array    = AvatarThumbnail.avatar_mouth_regions.keys()
-	var clothing_map: Array = AvatarThumbnail.avatar_clothing_regions.keys()
-	var backdrop_map: Array = ["Plain"]
-	backdrop_map.append_array(AvatarThumbnail.avatar_background_regions.keys())
-
-	var data: Dictionary = {
-		"fshape_style":   body_map[0]     if body_map.size()     > 0 else "Default",
-		"hair_style":     hair_map[0]     if hair_map.size()     > 0 else "hair1",
-		"eyes_style":     eyes_map[0]     if eyes_map.size()     > 0 else "eyes1",
-		"mouth_style":    mouth_map[0]    if mouth_map.size()    > 0 else "mouth1",
-		"clothing_style": clothing_map[0] if clothing_map.size() > 0 else "clothing1",
-		"bg_style":       "Plain",
-		"fshape_color":   Color(0.88, 0.67, 0.41),
-		"hair_color":     Color(0.17, 0.14, 0.17),
-		"clothing_color": Color(0.63, 0.24, 0.24),
-		"bg_color":       Color(0.31, 0.36, 0.54),
-	}
-
-	if data_string.is_empty():
-		return data
-
-	var read_color = func(vals: Array) -> Color:
-		if vals.size() >= 3:
-			return Color(vals[0].to_float(), vals[1].to_float(), vals[2].to_float())
-		return Color.WHITE
-
-	for part in data_string.split("|", false):
-		var key_value := part.split(",", false)
-		if key_value.size() < 2:
-			continue
-		var key := key_value[0]
-
-		match key:
-			"fshape", "body":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < body_map.size():
-					data["fshape_style"] = String(body_map[i])
-					
-			"fshape_color", "body_color":
-				data["fshape_color"] = read_color.call(key_value.slice(1))
-
-			"hair":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < hair_map.size():
-					data["hair_style"] = String(hair_map[i])
-
-			"hair_color":
-				data["hair_color"] = read_color.call(key_value.slice(1))
-
-			"eyes":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < eyes_map.size():
-					data["eyes_style"] = String(eyes_map[i])
-
-			"mouth":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < mouth_map.size():
-					data["mouth_style"] = String(mouth_map[i])
-
-			"clothes":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < clothing_map.size():
-					data["clothing_style"] = String(clothing_map[i])
-
-			"clothes_color":
-				data["clothing_color"] = read_color.call(key_value.slice(1))
-
-			"bg_color":
-				data["bg_color"] = read_color.call(key_value.slice(1))
-
-			"backdrop":
-				var i := key_value[1].to_int()
-				if i >= 0 and i < backdrop_map.size():
-					data["bg_style"] = String(backdrop_map[i])
-			_:
-				pass
-	return data
-
 func _make_response_chip(code: int) -> Control:
 	var txt := _response_text(code)
 	var col := _response_color(code)
@@ -997,150 +905,6 @@ func _make_response_chip(code: int) -> Control:
 func _on_inline_answer_pressed(q_idx: int, code: int) -> void:
 	_apply_answer_code_to_idx(q_idx, code)
 	
-func _lift_input_row(up: bool) -> void:
-	if not is_instance_valid(bottom_items):
-		return
-
-	if is_instance_valid(bottom_items.get_tree()):
-		for t in get_tree().get_processed_tweens():
-			if t.is_running() and t.get_target() == bottom_items:
-				t.stop()
-
-	if up and not _input_lifted:
-		_input_lifted = true
-		_input_orig_position = bottom_items.position
-
-		bottom_items.set_anchors_preset(Control.PRESET_TOP_WIDE, false)
-		bottom_items.offset_left = 0
-		bottom_items.offset_right = 0
-		bottom_items.offset_top = 0
-		bottom_items.offset_bottom = 0
-		bottom_items.position = Vector2(bottom_items.position.x, 0)
-
-		var header_h := 0.0
-		if is_instance_valid(_desc_rich):
-			header_h = _desc_rich.get_rect().size.y
-		var target_y := 8.0 + header_h
-
-		var t := create_tween()
-		t.tween_property(bottom_items, "position:y", target_y, 0.18)\
-			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-
-	elif (not up) and _input_lifted:
-		_input_lifted = false
-		var t := create_tween()
-		t.tween_property(bottom_items, "position:y", 0.0, 0.12)\
-			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-		await t.finished
-
-		bottom_items.set_anchors_preset(Control.PRESET_BOTTOM_WIDE, false)
-		bottom_items.offset_left = 0
-		bottom_items.offset_right = 0
-		bottom_items.offset_top = 0
-		bottom_items.offset_bottom = 0
-		bottom_items.position = Vector2.ZERO
-
-func _show_win_burst(avatar: Control) -> void:
-	if not is_instance_valid(avatar):
-		print("[20Q][win-burst][ERR] avatar invalid")
-		return
-	var parent := avatar.get_parent()
-	if not is_instance_valid(parent):
-		print("[20Q][win-burst][ERR] avatar has no parent")
-		return
-
-	var burst_name := "AvatarWinAnim_" + str(avatar.get_instance_id())
-	if parent.get_node_or_null(burst_name) != null:
-		print("[20Q][win-burst] animation already present for this avatar")
-		return
-
-	if AvatarWinAnimScene == null:
-		print("[20Q][win-burst][ERR] AvatarWinAnimScene preload is null!")
-		return
-
-	var anim_instance := AvatarWinAnimScene.instantiate() as Control
-	if not is_instance_valid(anim_instance):
-		print("[20Q][win-burst][ERR] could not instance AvatarWinAnimScene")
-		return
-	anim_instance.name = burst_name
-	parent.add_child(anim_instance)
-	parent.move_child(anim_instance, avatar.get_index())
-
-	anim_instance.anchor_left   = avatar.anchor_left
-	anim_instance.anchor_top    = avatar.anchor_top
-	anim_instance.anchor_right  = avatar.anchor_right
-	anim_instance.anchor_bottom = avatar.anchor_bottom
-	anim_instance.offset_left   = avatar.offset_left - 52.0
-	anim_instance.offset_right  = avatar.offset_right + 52.0
-	anim_instance.offset_top    = avatar.offset_top - 43.0
-	anim_instance.offset_bottom = avatar.offset_bottom + 43.0
-
-	anim_instance.z_as_relative = avatar.z_as_relative
-	avatar.z_as_relative        = avatar.z_as_relative
-	anim_instance.z_index       = avatar.z_index - 1
-	avatar.z_index              = max(avatar.z_index, 1)
-
-	parent.visible = true
-	avatar.visible = true
-
-	if anim_instance.has_method("set_color"):
-		anim_instance.call("set_color", Color(1.0, 0.84, 0.0))  # gold
-	if anim_instance.has_method("play"):
-		anim_instance.call("play", 0.05)
-
-	print("[20Q][win-burst] burst added as sibling and playing behind avatar")
-
-func _make_inline_btn(caption: String, bg: Color, fg: Color, q_idx: int, code: int) -> Button:
-	var b := Button.new()
-	var sb_b := StyleBoxFlat.new()
-	sb_b.bg_color = bg
-	sb_b.corner_radius_top_left = 8
-	sb_b.corner_radius_top_right = 8
-	sb_b.corner_radius_bottom_left = 8
-	sb_b.corner_radius_bottom_right = 8
-	sb_b.content_margin_left = 10
-	sb_b.content_margin_right = 10
-	sb_b.content_margin_top = 8
-	sb_b.content_margin_bottom = 8
-	b.add_theme_stylebox_override("normal", sb_b)
-	b.add_theme_stylebox_override("hover", sb_b)
-	b.add_theme_stylebox_override("pressed", sb_b)
-	b.add_theme_stylebox_override("disabled", sb_b)
-	b.add_theme_color_override("font_color", fg)
-	b.text = caption
-	b.pressed.connect(Callable(self, "_on_inline_answer_pressed").bind(q_idx, code))
-	return b
-
-func _make_response_pill(code: int) -> Control:
-	var txt := _response_text(code)
-	var col := _response_color(code)
-
-	var holder := PanelContainer.new()
-	holder.custom_minimum_size = Vector2(110, 40)
-
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = col
-	sb.corner_radius_top_left = 10
-	sb.corner_radius_top_right = 10
-	sb.corner_radius_bottom_left = 10
-	sb.corner_radius_bottom_right = 10
-	sb.content_margin_left = 14
-	sb.content_margin_right = 14
-	sb.content_margin_top = 8
-	sb.content_margin_bottom = 8
-	holder.add_theme_stylebox_override("panel", sb)
-
-	var lbl := Label.new()
-	lbl.text = txt
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	lbl.add_theme_font_size_override("font_size", 18)
-	holder.add_child(lbl)
-
-	return holder
-
 func _response_text(code: int) -> String:
 	if code == 1:
 		return "Yes"
@@ -1171,24 +935,6 @@ func _badge_color_for_index(idx: int) -> Color:
 	var v := 0.95
 	return Color.from_hsv(h, s, v, 1.0)
 
-func _style_button_bg(btn: Button, bg: Color, font_col: Color) -> void:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.corner_radius_top_left = 8
-	sb.corner_radius_top_right = 8
-	sb.corner_radius_bottom_left = 8
-	sb.corner_radius_bottom_right = 8
-	sb.content_margin_left = 10
-	sb.content_margin_right = 10
-	sb.content_margin_top = 8
-	sb.content_margin_bottom = 8
-
-	btn.add_theme_stylebox_override("normal", sb)
-	btn.add_theme_stylebox_override("hover", sb)
-	btn.add_theme_stylebox_override("pressed", sb)
-	btn.add_theme_stylebox_override("disabled", sb)
-	btn.add_theme_color_override("font_color", font_col)
-
 func _pending_unanswered_question() -> Dictionary:
 	for q in questions:
 		if int(q.get("resp", 0)) == 0:
@@ -1198,7 +944,7 @@ func _pending_unanswered_question() -> Dictionary:
 	return {}
 
 func _maybe_show_answer_popup() -> void:
-	_dbg("maybe_overlay: enter p=%d turn=%s game_over=%s unanswered=%d" % [
+	dbg("maybe_overlay: enter p=%d turn=%s game_over=%s unanswered=%d" % [
 		i_am_player, str(is_my_turn), str(game_over), _count_unanswered()
 	])
 
@@ -1218,13 +964,13 @@ func _maybe_show_answer_popup() -> void:
 	_show_answer_overlay_for(idx, txt, col)
 
 	if _count_unanswered() > 0 and is_instance_valid(overlay) and not overlay.visible:
-		_dbg("overlay: was supposed to be visible; forcing show/front")
+		dbg("overlay: was supposed to be visible; forcing show/front")
 		overlay.visible = true
 		overlay.move_to_front()
 		overlay.z_index = 1000
 	
 func _overlay_click(code: int) -> void:
-	_dbg("overlay: click code=%d on idx=%d" % [code, _overlay_idx])
+	dbg("overlay: click code=%d on idx=%d" % [code, _overlay_idx])
 	if _overlay_idx == -1:
 		_hide_answer_overlay()
 		return
@@ -1243,27 +989,6 @@ func _overlay_click(code: int) -> void:
 
 func _on_overlay_btn_pressed(code: int) -> void:
 	_apply_answer_code_to_pending(code)
-
-func _make_overlay_btn(caption: String, bg: Color, fg: Color, code: int) -> Button:
-	var b := Button.new()
-	b.text = caption
-	var s := StyleBoxFlat.new()
-	s.bg_color = bg
-	s.corner_radius_top_left = 8
-	s.corner_radius_top_right = 8
-	s.corner_radius_bottom_left = 8
-	s.corner_radius_bottom_right = 8
-	s.content_margin_left = 10
-	s.content_margin_right = 10
-	s.content_margin_top = 8
-	s.content_margin_bottom = 8
-	b.add_theme_stylebox_override("normal", s)
-	b.add_theme_stylebox_override("hover", s)
-	b.add_theme_stylebox_override("pressed", s)
-	b.add_theme_stylebox_override("disabled", s)
-	b.add_theme_color_override("font_color", fg)
-	b.pressed.connect(Callable(self, "_on_overlay_btn_pressed").bind(code))
-	return b
 
 func _count_unanswered() -> int:
 	var c := 0
@@ -1296,7 +1021,7 @@ func _set_overlay_style_color(c: Color) -> void:
 
 func _show_answer_overlay_for(idx: int, text: String, col: Color) -> void:
 	if not is_instance_valid(overlay):
-		_dbg("overlay: node missing; cannot show")
+		dbg("overlay: node missing; cannot show")
 		return
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.z_index = 1000
@@ -1331,7 +1056,7 @@ func _show_answer_overlay_for(idx: int, text: String, col: Color) -> void:
 
 
 	var r := overlay.get_global_rect()
-	_dbg("overlay: SHOW idx=%d text='%s' unanswered=%d turn=%s p=%d rect=(%.1f,%.1f,%.1f,%.1f) visible=%s z=%d top_level=%s" % [
+	dbg("overlay: SHOW idx=%d text='%s' unanswered=%d turn=%s p=%d rect=(%.1f,%.1f,%.1f,%.1f) visible=%s z=%d top_level=%s" % [
 		idx, text, _count_unanswered(), str(is_my_turn), i_am_player,
 		r.position.x, r.position.y, r.size.x, r.size.y,
 		str(overlay.visible), overlay.z_index, str(overlay.top_level)
@@ -1340,9 +1065,9 @@ func _show_answer_overlay_for(idx: int, text: String, col: Color) -> void:
 func _hide_answer_overlay() -> void:
 	if is_instance_valid(overlay):
 		overlay.visible = false
-	_dbg("overlay: HIDE")
+	dbg("overlay: HIDE")
 	
-func _dbg(msg: String) -> void:
+func dbg(msg: String) -> void:
 	print("[20Q] ", msg)
 
 func _update_description_fill() -> void:
@@ -1366,10 +1091,6 @@ func _update_description_fill() -> void:
 		_desc_rich.visible = true
 
 var DEBUG_20Q := true
-
-func dbg(msg: String) -> void:
-	if DEBUG_20Q:
-		print("[20Q] ", msg)
 
 func _on_dot_timer_timeout() -> void:
 	if not is_instance_valid(wait_for_label):
