@@ -20,7 +20,6 @@ const BOARD_SIZE = 8
 var board = []
 var player_symbol = ""
 var game_over = false
-var has_connected: bool = false
 var is_your_turn: bool = false
 var is_my_turn: bool = false
 var player: int = -1
@@ -29,7 +28,6 @@ var replay_val
 var replay_symbol
 var replay: String = ""
 var replay_played: bool = false
-var my_player_id
 var my_moves: Array[Array]
 var pre_board_data: Array[int] = []
 var post_board_data: Array[int] = []
@@ -89,39 +87,35 @@ void fragment() {
 	
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
+	
+func _get_dev_data() -> String:
+	return '{ "isYourTurn": true, "player": "2", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,0,2,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0|move:0,3,1|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,2,2,2,0,0,1,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0", "player1": "TEST_P1", "player2": "TEST_P2", "id": "dev", "game": "reversi" }'
+	
+func _get_settings_avatar_display() -> Control:
+	return player_avatar_display
+
+func _get_rules_title() -> String:
+	return "Reversi"
 
 func _on_game_ready():
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_bg_for_dark(is_dark)
+
 	post_board_data.resize(64)
 	post_board_data.fill(0)
 
 	setup_board_structure()
-	
 	call_deferred("place_star_points")
 
-	var appPlugin = Engine.get_singleton("AppPlugin")
-	
-	if appPlugin:
-		print("AppPlugin Available")
-		if not has_connected:
-			appPlugin.connect("set_game_data", _set_game_data)
-			has_connected = true
-			appPlugin.onReady()
-			print("AppPlugin Connected")
-	else:
-		_set_game_data('{ "isYourTurn": true, "player": "2", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,0,2,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0|move:0,3,1|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,2,2,2,0,0,1,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
-		#_set_game_data('{ "isYourTurn": true, "player": "1", "replay": "board:1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,2,2,1,0|move:0,3,1|board:1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,2,2,2,2,2,2,1,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player2": "", "player1": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "reversi", "mode": "1", "tver": "5", "build": "56", "version": "0" }')
-		#_set_game_data('{ "isYourTurn": true, "player": "1", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0|move:3,1,2|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,0,0,0,0,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "f7898779-d537-4b0f-8c51-d604e934e2fb", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
-		print("No AppPlugin Available, Setting Debug Data")
-		
 	setup_ui_elements_style_and_signals()
 	setup_score_labels()
 	setup_sent_label()
 
 	call_deferred("calculate_button_target_position")
-	send_button.visible = false
 
+	if is_instance_valid(send_button):
+		send_button.visible = false
+		
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
 		background.color = Color(0.08, 0.08, 0.08) if is_dark else Color("#e5e5e5")
@@ -167,7 +161,9 @@ func calculate_button_target_position():
 
 func setup_ui_elements_style_and_signals():
 	if send_button:
-		send_button.pressed.connect(on_send_button_pressed)
+		if not send_button.pressed.is_connected(on_send_button_pressed):
+			send_button.pressed.connect(on_send_button_pressed)
+
 		send_button.text = "Send"
 		send_button.add_theme_font_override("font", SystemFont.new())
 		send_button.add_theme_color_override("font_color", Color.WHITE)
@@ -203,7 +199,7 @@ func setup_ui_elements_style_and_signals():
 		opp_count_label.set_horizontal_alignment(HORIZONTAL_ALIGNMENT_CENTER)
 		opp_count_label.set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER)
 		opp_count_label.set_h_size_flags(Control.SIZE_SHRINK_CENTER)
-				
+		
 func setup_score_labels():
 	if player_count_label:
 		var player_score_style = StyleBoxFlat.new()
@@ -488,92 +484,139 @@ func highlight_valid_moves():
 
 func _set_game_data(new_game_data_json: String):
 	var parsed_data = JSON.parse_string(new_game_data_json)
-	if parsed_data is Dictionary:
-		
-		var player1_id = parsed_data.get("player1", "")
-		var player2_id = parsed_data.get("player2", "")
-		my_player_id = parsed_data.get("myPlayerId", "")
-		is_your_turn = parsed_data.get("isYourTurn", false)
-		var opponent_avatar_key = ""
-		print("My Player: ", my_player_id, " Player 1 ID: ", player1_id, " Player 2 ID: ", player2_id)
-		print("Pre Player Your Turn: ", is_your_turn, " Pre Player My Turn: ", is_my_turn)
-		if my_player_id == player1_id or my_player_id == player2_id or player1_id == "":
-			if my_player_id == player1_id or (player1_id == "" and is_your_turn):
-				player = 1
-				player_symbol = "⚫"
-				opponent_avatar_key = "avatar2"
-				is_my_turn = is_your_turn
-				spectator_mode = false
-				print("Set Player to 1")			
-			elif my_player_id == player2_id or (player1_id == "" and not is_your_turn):
-				player = 2
-				player_symbol = "⚪"
-				opponent_avatar_key = "avatar1"
-				is_my_turn = is_your_turn
-				spectator_mode = false
-				print("Set Player to 2")
-		else:
-			spectator_mode = true
-			print("Spectator Mode Enabled!")
-			spec_label.visible = true
-			is_my_turn = false
-			player = 1
-		setup_score_labels()
-		
-		print("My Device ID (my_player): ", my_player_id)
-		print("Is My Turn: ", is_my_turn)
-		print("My Numerical Player (1=Black, 2=White): ", player)
-		print("My Player Symbol: ", player_symbol)
 
-		if my_player_id != "" and player1_id != "" and player2_id != "":
-			if my_player_id == player1_id:
-				opponent_avatar_key = "avatar2"
-				print("Opp is avatar2")
-			elif my_player_id == player2_id:
-				opponent_avatar_key = "avatar1"
-				print("Opp is avatar1")
-		
-		if opponent_avatar_key != "" and parsed_data.has(opponent_avatar_key):
-			var avatar_string = parsed_data[opponent_avatar_key]
-			var opponent_data = GameUtils._parse_avatar_string(avatar_string)
-			if is_instance_valid(opp_avatar_display):
-				opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
-
-		replay = parsed_data.get("replay", "")
-		
-		replay_played = false
-		my_moves.clear()
-
-		if replay.is_empty():
-			initialize_board_pieces()
-			pre_board_data = get_current_board_as_array()
-		else:
-			var temp_parsed_replay = parse_replay(replay)
-			if "post_board" in temp_parsed_replay and temp_parsed_replay["post_board"] is Array:
-				pre_board_data = temp_parsed_replay["post_board"]
-			elif "pre_board" in temp_parsed_replay and temp_parsed_replay["pre_board"] is Array:
-				pre_board_data = temp_parsed_replay["pre_board"]
-			else:
-				pre_board_data.clear()
-				pre_board_data.resize(BOARD_SIZE * BOARD_SIZE)
-				pre_board_data.fill(0)
-			
-			process_game_state()
-			print("403 Updating Piece Counts")
-			update_piece_counts()
-			
-			await check_win()
-
-			if not is_my_turn and not game_over and not spectator_mode:
-				start_waiting_animation()
-			else:
-				stop_waiting_animation()
-	else:
+	if not (parsed_data is Dictionary):
 		print("Parsed Data is not dictionary")
 		initialize_board_pieces()
 		update_piece_counts()
 		highlight_valid_moves()
-		
+		return
+
+	game_over = false
+	win_loss_state = ""
+	spectator_mode = false
+	replay_played = false
+	temp_piece_active = false
+	temp_piece_x = -1
+	temp_piece_y = -1
+	preview_flips_active = false
+	my_moves.clear()
+
+	stop_waiting_animation()
+	set_highlight_visibility(false)
+
+	if is_instance_valid(send_button):
+		send_button.visible = false
+
+	if is_instance_valid(win_loss_label):
+		win_loss_label.visible = false
+		win_loss_label.text = ""
+		win_loss_label.scale = Vector2.ONE
+		win_loss_label.modulate.a = 1.0
+
+	var player1_id: String = str(parsed_data.get("player1", ""))
+	var player2_id: String = str(parsed_data.get("player2", ""))
+	var winner_payload: String = str(parsed_data.get("winner", ""))
+	is_your_turn = bool(parsed_data.get("isYourTurn", false))
+
+	var opponent_avatar_key := ""
+
+	print("My UUID: ", my_uuid, " Player 1 ID: ", player1_id, " Player 2 ID: ", player2_id)
+	print("Pre Player Your Turn: ", is_your_turn, " Pre Player My Turn: ", is_my_turn)
+
+	if my_uuid != "" and player1_id != "" and player2_id != "":
+		if my_uuid == player1_id:
+			player = 1
+			player_symbol = "⚫"
+			opponent_avatar_key = "avatar2"
+			is_my_turn = is_your_turn
+			spectator_mode = false
+			print("Set Player to 1")
+		elif my_uuid == player2_id:
+			player = 2
+			player_symbol = "⚪"
+			opponent_avatar_key = "avatar1"
+			is_my_turn = is_your_turn
+			spectator_mode = false
+			print("Set Player to 2")
+		else:
+			spectator_mode = true
+			is_my_turn = false
+			player = 1
+			player_symbol = "⚫"
+			print("Spectator Mode Enabled!")
+	else:
+		if is_your_turn:
+			player = 1
+			player_symbol = "⚫"
+			opponent_avatar_key = "avatar2"
+		else:
+			player = 2
+			player_symbol = "⚪"
+			opponent_avatar_key = "avatar1"
+
+		is_my_turn = is_your_turn
+		spectator_mode = false
+
+	if is_instance_valid(spec_label):
+		spec_label.visible = spectator_mode
+
+	setup_score_labels()
+
+	print("Is My Turn: ", is_my_turn)
+	print("My Numerical Player (1=Black, 2=White): ", player)
+	print("My Player Symbol: ", player_symbol)
+
+	if spectator_mode:
+		if parsed_data.has("avatar1") and is_instance_valid(player_avatar_display):
+			player_avatar_display.call_deferred("update_avatar_from_data", GameUtils._parse_avatar_string(str(parsed_data["avatar1"])))
+
+		if parsed_data.has("avatar2") and is_instance_valid(opp_avatar_display):
+			opp_avatar_display.call_deferred("update_avatar_from_data", GameUtils._parse_avatar_string(str(parsed_data["avatar2"])))
+	else:
+		if opponent_avatar_key != "" and parsed_data.has(opponent_avatar_key):
+			var avatar_string = parsed_data[opponent_avatar_key]
+			var opponent_data = GameUtils._parse_avatar_string(avatar_string)
+
+			if is_instance_valid(opp_avatar_display):
+				opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+
+	replay = str(parsed_data.get("replay", ""))
+
+	if replay.is_empty():
+		initialize_board_pieces()
+		pre_board_data = get_current_board_as_array()
+		update_piece_counts()
+	else:
+		var temp_parsed_replay = parse_replay(replay)
+
+		if "post_board" in temp_parsed_replay and temp_parsed_replay["post_board"] is Array:
+			pre_board_data = temp_parsed_replay["post_board"]
+		elif "pre_board" in temp_parsed_replay and temp_parsed_replay["pre_board"] is Array:
+			pre_board_data = temp_parsed_replay["pre_board"]
+		else:
+			pre_board_data.clear()
+			pre_board_data.resize(BOARD_SIZE * BOARD_SIZE)
+			pre_board_data.fill(0)
+
+		await process_game_state()
+		print("Updating Piece Counts")
+		update_piece_counts()
+
+	if winner_payload != "":
+		_apply_winner_payload(winner_payload, player1_id, player2_id)
+		return
+
+	check_win()
+
+	if not is_my_turn and not game_over and not spectator_mode:
+		start_waiting_animation()
+	else:
+		stop_waiting_animation()
+
+	if is_my_turn and not game_over:
+		highlight_valid_moves()
+
 func reset_board_to_pre_data():
 	for idx in range(BOARD_SIZE * BOARD_SIZE):
 		@warning_ignore("integer_division")
@@ -594,30 +637,32 @@ func process_game_state():
 		await play_replay(replay)
 	else:
 		print("Replay is empty or replay was already played")
+
 		if not replay.is_empty() and replay_played:
-			print("Replayed Already Played")
-			pass
+			print("Replay Already Played")
 		elif not replay.is_empty() and not replay_played:
 			for y_godot in range(BOARD_SIZE):
 				for x_godot in range(BOARD_SIZE):
 					var replay_y = (BOARD_SIZE - 1) - y_godot
 					var cell_index = replay_y * BOARD_SIZE + x_godot
-					
+
 					if cell_index >= 0 and cell_index < pre_board_data.size():
 						var piece_value = pre_board_data[cell_index]
-						
+
 						var symbol = ""
 						if piece_value == 1:
 							symbol = "⚫"
 						elif piece_value == 2:
 							symbol = "⚪"
+
 						set_piece(x_godot, y_godot, symbol, true)
 					else:
 						print(str("Error: pre_board_data index out of bounds or size mismatch. Index: ", cell_index, " Size: ", pre_board_data.size()))
-	print("453 Call Update Count")
+
+	print("Call Update Count")
 	update_piece_counts()
 
-	if is_my_turn and not game_over:
+	if is_my_turn and not game_over and not spectator_mode:
 		highlight_valid_moves()
 		send_button.visible = true
 	else:
@@ -644,68 +689,128 @@ func get_current_board_as_array() -> Array[int]:
 
 			current_board_array[cell_index] = piece_value
 	return current_board_array
-			
+	
+func _show_result_from_state(state: String, spectator_winner_player: int = 0) -> void:
+	game_over = true
+	win_loss_state = state
+	is_my_turn = false
+	temp_piece_active = false
+	preview_flips_active = false
+
+	stop_waiting_animation()
+	set_highlight_visibility(false)
+
+	if is_instance_valid(send_button):
+		send_button.visible = false
+
+	set_cells_interactable(false)
+
+	if not is_instance_valid(win_loss_label):
+		return
+
+	if state == "0":
+		win_loss_label.text = "DRAW!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	elif spectator_mode:
+		var player_num := spectator_winner_player
+
+		if player_num == 0:
+			player_num = 1 if state == "1" else 2
+
+		win_loss_label.text = "Player %d Wins!" % player_num
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
+		if player_num == 1:
+			if is_instance_valid(player_avatar_display):
+				GameUtils._show_win_burst(player_avatar_display)
+		else:
+			if is_instance_valid(opp_avatar_display):
+				GameUtils._show_win_burst(opp_avatar_display)
+	elif state == "1":
+		win_loss_label.text = "YOU WIN!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
+		if is_instance_valid(player_avatar_display):
+			GameUtils._show_win_burst(player_avatar_display)
+	else:
+		win_loss_label.text = "YOU LOSE"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
+		if is_instance_valid(opp_avatar_display):
+			GameUtils._show_win_burst(opp_avatar_display)
+
+	win_loss_label.visible = true
+	win_loss_label.modulate.a = 1.0
+	win_loss_label.scale = Vector2.ZERO
+	win_loss_label.pivot_offset = win_loss_label.size / 2.0
+
+	var tween = create_tween()
+	tween.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6)\
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+
+func _apply_winner_payload(winner_payload: String, player1_id: String = "", player2_id: String = "") -> void:
+	var parts := winner_payload.split("|", false)
+	if parts.size() < 2:
+		return
+
+	var sender_uuid := String(parts[0])
+	var sender_state := String(parts[1])
+
+	if sender_state == "0":
+		_show_result_from_state("0")
+		return
+
+	var local_state := sender_state
+	var winning_player := 0
+
+	if spectator_mode:
+		var sender_player := 0
+
+		if sender_uuid == player1_id:
+			sender_player = 1
+		elif sender_uuid == player2_id:
+			sender_player = 2
+
+		winning_player = sender_player
+
+		if sender_state == "-1":
+			winning_player = 2 if sender_player == 1 else 1
+
+		local_state = "1" if winning_player == 1 else "-1"
+	else:
+		if sender_uuid != my_uuid:
+			local_state = "-1" if sender_state == "1" else "1"
+
+	_show_result_from_state(local_state, winning_player)
+
 func check_win() -> bool:
+	update_piece_counts()
+
 	var current_has_moves = has_any_valid_moves(player_symbol)
 	var opponent_player = "⚫" if player_symbol == "⚪" else "⚪"
 	var opponent_has_moves = has_any_valid_moves(opponent_player)
+
 	print("Game Over Status: ", game_over)
 	print("Our Possible Moves: ", current_has_moves)
 	print("Opponent Possible Moves: ", opponent_has_moves)
 
-	if not game_over and not current_has_moves and not opponent_has_moves:
-		set_cells_interactable(false)
-		print("Valid, player: ", player, " White Score: ", white_score, " Black Score: ", black_score)
-		if (player == 2 and white_score > black_score) or (player == 1 and black_score > white_score):
-			GameUtils._show_win_burst(player_avatar_display)
-			if not spectator_mode:
-				win_loss_label.text = "YOU WIN!"
-				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			else:
-				win_loss_label.text = "Player 1 Wins!"
-				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			win_loss_state = "1"
-		elif white_score == black_score:
-			win_loss_label.text = "DRAW!"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
-			win_loss_state = "0"
-		else:
-			GameUtils._show_win_burst(opp_avatar_display)
-			if not spectator_mode:
-				win_loss_label.text = "YOU LOSE"
-				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
-			else:
-				win_loss_label.text = "Player 2 Wins!"
-				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			win_loss_state = "-1"
-
-		win_loss_label.visible = true
-
-		await get_tree().process_frame
-
-		win_loss_label.scale = Vector2(0, 0)
-		win_loss_label.pivot_offset = win_loss_label.size / 2.0
-
-		var tween = create_tween()
-		tween.tween_property(win_loss_label, "scale", Vector2(1.0, 1.0), 0.6)\
-			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-
-		game_over = true
-
-		await get_tree().create_timer(3.0).timeout
-		var fade_tween = create_tween()
-		fade_tween.tween_property(win_loss_label, "modulate:a", 0.0, 0.6)\
-			.set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_LINEAR)
-		await fade_tween.finished
-		win_loss_label.visible = false
+	if game_over:
 		return true
-	else:
-		print("Game Over Status: ", game_over)
-		print("Our Possible Moves: ", current_has_moves)
-		print("Opponent Possible Moves: ", opponent_has_moves)
 
-	return false
-	
+	if current_has_moves or opponent_has_moves:
+		return false
+
+	print("Valid, player: ", player, " White Score: ", white_score, " Black Score: ", black_score)
+
+	if white_score == black_score:
+		_show_result_from_state("0")
+	elif black_score > white_score:
+		_show_result_from_state("1" if player == 1 else "-1", 1)
+	else:
+		_show_result_from_state("1" if player == 2 else "-1", 2)
+
+	return true
+
 func set_cells_interactable(active: bool):
 	for y in range(BOARD_SIZE):
 		for x in range(BOARD_SIZE):
@@ -990,38 +1095,16 @@ func on_cell_pressed(x: int, y: int) -> void:
 		
 func _internal_submit_move(final_x: int, final_y: int):
 	post_board_data = get_current_board_as_array()
-	var move_arr = [final_x, 7 - final_y, player]
-	my_moves.append(move_arr)
-
-	var moves_str = ""
-	for move in my_moves:
-		moves_str += "move:" + str(move[0]) + "," + str(move[1]) + "," + str(move[2])
-
-	var result = {
-		"replay": "board:" + ",".join(pre_board_data) + "|" + moves_str + "|" + "board:" + ",".join(post_board_data)
-	}
-
-	avatar_key = "avatar" + str(player)
-	if player != 0 and is_instance_valid(player_avatar_display):
-		result[avatar_key] = player_avatar_display.get_avatar_data_string()
-
-	if await check_win():
-		if win_loss_state != "":
-			result["winner"] = my_player_id + "|" + win_loss_state
-	else:
-		play_sent_animation()
-
-	var appPlugin := Engine.get_singleton("AppPlugin")
-	if appPlugin:
-		appPlugin.updateGameData(JSON.stringify(result))
+	send_game(final_x, final_y)
 	
-	animate_button_slide_down()
-	is_my_turn = false
-		
 func on_send_button_pressed():
 	if not temp_piece_active or temp_piece_x == -1:
 		return
-		
+
+	if game_over or spectator_mode or not is_my_turn:
+		animate_button_slide_down()
+		return
+
 	set_highlight_visibility(false)
 	reset_board_to_pre_data()
 	clear_temp_piece_visual()
@@ -1033,22 +1116,29 @@ func on_send_button_pressed():
 		send_button.visible = false
 		highlight_valid_moves()
 		return
-		
+
 	flip_pieces(temp_piece_x, temp_piece_y, player_symbol, directions_to_flip)
 	set_piece(temp_piece_x, temp_piece_y, player_symbol, true)
 	temp_piece_active = false
 	update_piece_counts()
 
-	print("Pre Avatar Assignment Number: ", player)
-	avatar_key = "avatar" + str(player)
-	print("Post Avatar Assignment Number: ", avatar_key)
-	
 	post_board_data = get_current_board_as_array()
 
 	print("Pre board data: ", pre_board_data)
 	print("Post board data: ", post_board_data)
 
-	var move_arr = [temp_piece_x, 7 - temp_piece_y, player]
+	send_game(temp_piece_x, temp_piece_y)
+
+	temp_piece_x = -1
+	temp_piece_y = -1
+	
+func send_game(final_x: int, final_y: int) -> void:
+	if spectator_mode:
+		return
+
+	var move_arr = [final_x, 7 - final_y, player]
+
+	my_moves.clear()
 	my_moves.append(move_arr)
 
 	var moves_str = ""
@@ -1059,65 +1149,69 @@ func on_send_button_pressed():
 		"replay": "board:" + ",".join(pre_board_data) + "|" + moves_str + "|" + "board:" + ",".join(post_board_data)
 	}
 
-	if player != 0 and is_instance_valid(player_avatar_display):
+	avatar_key = "avatar" + str(player)
+
+	if player != 0 and is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		var avatar_string = player_avatar_display.get_avatar_data_string()
 		result[avatar_key] = avatar_string
 		print("Adding my avatar data to payload with key '", avatar_key, "'")
 
-	print("Replay string before JSON encode: ", result["replay"])
-	print("Type of replay field: ", typeof(result["replay"]))
-
-	if await check_win():
+	if check_win():
 		if win_loss_state != "":
-			result["winner"] = my_player_id + "|" + win_loss_state
+			result["winner"] = my_uuid + "|" + win_loss_state
 	else:
 		play_sent_animation()
 
 	var game_data = JSON.stringify(result)
 
-	var appPlugin := Engine.get_singleton("AppPlugin")
-	if appPlugin:
-		print("Attempting to send game data via AppPlugin.")
-		print("Game data being sent: " + game_data)
-		appPlugin.updateGameData(game_data)
-	else:
-		print("AppPlugin is null. Cannot send game data.")
-		
-	temp_piece_active = false
-	temp_piece_x = -1
-	temp_piece_y = -1
+	print("Game data being sent: " + game_data)
+	send_game_data(game_data)
+
+	my_moves.clear()
 	animate_button_slide_down()
 	is_my_turn = false
-	
+
+	if game_over:
+		stop_waiting_animation()
+
 func play_sent_animation():
-	if sent_label and not game_over:
-		if sent_tween and sent_tween.is_running():
-			sent_tween.kill()
+	if not is_instance_valid(sent_label) or game_over or spectator_mode:
+		stop_waiting_animation()
+		return
 
-		sent_tween = create_tween().set_parallel(false)
+	if sent_tween and sent_tween.is_running():
+		sent_tween.kill()
 
-		sent_label.text = "Sent"
-		sent_label.visible = true
-		sent_label.modulate.a = 0.0
-		sent_label.scale = Vector2.ONE
-		sent_label.pivot_offset = sent_label.get_size() / 2.0
+	sent_tween = create_tween().set_parallel(false)
 
-		sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
+	sent_label.text = "Sent"
+	sent_label.visible = true
+	sent_label.modulate.a = 0.0
+	sent_label.scale = Vector2.ONE
+	sent_label.pivot_offset = sent_label.get_size() / 2.0
 
-		sent_tween.tween_interval(0.6)
-		sent_tween.tween_callback(func():
+	sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
+
+	sent_tween.tween_interval(0.6)
+	sent_tween.tween_callback(func():
+		if is_instance_valid(sent_label):
 			sent_label.text = "Sent ✔"
-		)
+	)
 
-		sent_tween.tween_interval(2.0)
-		sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
+	sent_tween.tween_interval(2.0)
+	sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
 
-		sent_tween.tween_callback(func():
+	sent_tween.tween_callback(func():
+		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
-			start_waiting_animation()
-		)
 
+		if not game_over and not spectator_mode and not is_my_turn:
+			start_waiting_animation()
+		else:
+			stop_waiting_animation()
+	)
+	
 func animate_button_slide_up():
 	if button_tween and button_tween.is_running():
 		button_tween.kill()
@@ -1130,15 +1224,14 @@ func animate_button_slide_up():
 func animate_button_slide_down():
 	if button_tween and button_tween.is_running():
 		button_tween.kill()
-		
+
 	var offscreen_bottom_y = $MainVBoxContainer.size.y + BUTTON_OFFSCREEN_OFFSET
-	
+
 	button_tween = create_tween()
 	button_tween.tween_property(send_button, "position:y", offscreen_bottom_y, 0.75)\
 		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_BACK)
 	button_tween.tween_callback(func():
 		send_button.visible = false
-		await check_win()
 	)
 
 func set_highlight_visibility(_visible: bool):

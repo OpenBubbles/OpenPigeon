@@ -39,7 +39,6 @@ var moves: Dictionary[Vector2, Sprite2D] = {}
 var has_moved: bool = false
 var prev_moves: Array[Vector2] = []
 var prev_jumps: Array[Sprite2D] = []
-var _replay_tweens: Array[Tween] = []
 var chain_jump_piece: Sprite2D = null
 var checking_for_jumps: bool = false
 var must_jump: bool = false
@@ -206,10 +205,11 @@ func _get_nth_board_str(src: String, n: int) -> String:
 	return ""
 
 func _current_board_string() -> String:
-	var board: Array[String] = []
-	board.resize(64)
+	var board_values: Array[String] = []
+	board_values.resize(64)
+
 	for k in range(64):
-		board[k] = "0"
+		board_values[k] = "0"
 
 	for ly in range(8):
 		for lx in range(8):
@@ -217,35 +217,25 @@ func _current_board_string() -> String:
 			if piece != null:
 				var color := get_piece_color(piece)
 				var v := "0"
+
 				if color == "red":
 					v = "3" if is_checker_king(piece) else "1"
 				elif color == "black":
 					v = "4" if is_checker_king(piece) else "2"
+
 				var A := _logical_to_abs(lx, ly)
 				var idx := A.y * 8 + A.x
-				if idx >= 0 and idx < 64:
-					board[idx] = v
 
-	return ",".join(board)
+				if idx >= 0 and idx < 64:
+					board_values[idx] = v
+
+	return ",".join(board_values)
 
 func _on_send_pressed() -> void:
 	if input_locked:
 		return
 	if not has_moved or prev_moves.size() < 2:
 		return
-	var red_left := false
-	var black_left := false
-	for y in range(8):
-		for x in range(8):
-			var piece := get_node_or_null("PiecesRoot/%d,%d" % [x, y]) as Sprite2D
-			if piece == null:
-				continue
-			var col := get_piece_color(piece)
-			if col == "red":
-				red_left = true
-			elif col == "black":
-				black_left = true
-	var game_is_over_pre := (red_left and not black_left) or (black_left and not red_left)
 
 	isTurn = false
 	_animate_send_button(false)
@@ -391,9 +381,9 @@ func _spawn_piece(val: String, lx: int, ly: int) -> Sprite2D:
 func _recalculate_board_layout_from_board() -> void:
 	if board == null:
 		return
-	var draw: Rect2 = _get_board_draw_rect()
-	var draw_pos: Vector2 = draw.position
-	var draw_size: Vector2 = draw.size
+	var board_rect: Rect2 = _get_board_draw_rect()
+	var draw_pos: Vector2 = board_rect.position
+	var draw_size: Vector2 = board_rect.size
 	var square_side: float = min(draw_size.x, draw_size.y) - float(board_inset) * 2.0
 	var px: int = int(floor(square_side / 8.0))
 	px = max(px, 1)
@@ -433,7 +423,7 @@ func _visual_to_logical(gx: int, gy: int) -> Vector2i:
 	var ly := (7 - gy) if (player == 2 and not spectator_mode) else gy
 	return Vector2i(lx, ly)
 	
-func _animate_send_button(show: bool) -> void:
+func _animate_send_button(should_show: bool) -> void:
 	if not is_instance_valid(send_button):
 		return
 	if not send_button.has_meta("sb_home_pos"):
@@ -448,7 +438,7 @@ func _animate_send_button(show: bool) -> void:
 	var tw := create_tween()
 	send_button.set_meta("sb_tween", tw)
 
-	if show:
+	if should_show:
 		send_button.visible = true
 		send_button.disabled = false
 		send_button.position = off_pos
@@ -593,12 +583,13 @@ func _on_board_gui_input(event: InputEvent) -> void:
 	if not _can_accept_board_input():
 		return
 
-	var draw: Rect2 = _get_board_draw_rect()
+	var board_rect: Rect2 = _get_board_draw_rect()
 	var p: Vector2 = event.position
-	if not draw.has_point(p):
+
+	if not board_rect.has_point(p):
 		return
 
-	var rel: Vector2 = p - draw.position - Vector2(board_inset, board_inset)
+	var rel: Vector2 = p - board_rect.position - Vector2(board_inset, board_inset)
 	var gx: int = int(floor(rel.x / float(cell_px)))
 	var gy: int = int(floor(rel.y / float(cell_px)))
 	if gx < 0 or gx > 7 or gy < 0 or gy > 7:
@@ -715,16 +706,16 @@ func _get_board_draw_rect() -> Rect2:
 	var tex_size: Vector2 = Vector2(tex_size_i)
 	var ctl_size: Vector2 = board.size
 	var off: Vector2 = board.position
-	var mode: int = board.stretch_mode
+	var stretch_mode_value: int = board.stretch_mode
 
-	match mode:
+	match stretch_mode_value:
 		TextureRect.STRETCH_SCALE, TextureRect.STRETCH_TILE:
 			return Rect2(off, ctl_size)
 
 		TextureRect.STRETCH_KEEP, TextureRect.STRETCH_KEEP_CENTERED:
 			var draw_size: Vector2 = tex_size
 			var draw_pos: Vector2 = off
-			if mode == TextureRect.STRETCH_KEEP_CENTERED:
+			if stretch_mode_value == TextureRect.STRETCH_KEEP_CENTERED:
 				draw_pos += (ctl_size - draw_size) * 0.5
 			return Rect2(draw_pos, draw_size)
 
@@ -732,7 +723,7 @@ func _get_board_draw_rect() -> Rect2:
 			var s: float = min(ctl_size.x / tex_size.x, ctl_size.y / tex_size.y)
 			var draw_size: Vector2 = tex_size * s
 			var draw_pos: Vector2 = off
-			if mode == TextureRect.STRETCH_KEEP_ASPECT_CENTERED:
+			if stretch_mode_value == TextureRect.STRETCH_KEEP_ASPECT_CENTERED:
 				draw_pos += (ctl_size - draw_size) * 0.5
 			return Rect2(draw_pos, draw_size)
 
@@ -1131,9 +1122,10 @@ func game_over_visual(results: String) -> void:
 	t_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	
 func export_replay() -> String:
-	var board: Array[String] = []
+	var board_values: Array[String] = []
+
 	for i in range(64):
-		board.append("0")
+		board_values.append("0")
 
 	for ly in range(8):
 		for lx in range(8):
@@ -1143,11 +1135,11 @@ func export_replay() -> String:
 				var idx := A.y * 8 + A.x
 				var color := get_piece_color(piece)
 				if color == "red":
-					board[idx] = "3" if is_checker_king(piece) else "1"
+					board_values[idx] = "3" if is_checker_king(piece) else "1"
 				elif color == "black":
-					board[idx] = "4" if is_checker_king(piece) else "2"
+					board_values[idx] = "4" if is_checker_king(piece) else "2"
 
-	var boardStr := ",".join(board)
+	var boardStr := ",".join(board_values)
 
 	var move_str := "|"
 	for i in range(0, prev_moves.size(), 2):
@@ -1378,14 +1370,14 @@ func _dump_pieces() -> void:
 			if c is Sprite2D:
 				names.append((c as Sprite2D).name)
 	
-func _peek_cell(lx: int, ly: int) -> void:
-	var n := get_node_or_null("PiecesRoot/%d,%d" % [lx, ly])
+func _peek_cell(_lx: int, _ly: int) -> void:
+	pass
 	
 func _scan_row(ly: int) -> void:
 	var row: Array[String] = []
 	for x in range(8):
 		var n := get_node_or_null("PiecesRoot/%d,%d" % [x, ly])
-		row.append(n.name if n else ".")
+		row.append(String(n.name) if n != null else ".")
 	
 func _diagonal_dirs_for(piece: Sprite2D) -> Array:
 	var dirs: Array[Vector2i] = []
@@ -1453,13 +1445,15 @@ func _collect_jump_landings(piece: Sprite2D) -> Array[Vector2i]:
 
 func _highlight_all_jump_targets() -> void:
 	_clear_move_highlights()
-	var c := 0
+
 	for jp in jumping_pieces:
-		if not is_instance_valid(jp): continue
+		if not is_instance_valid(jp):
+			continue
+
 		_start_pulse(jp, 0.1, 0.7, 1.0)
+
 		for land in _collect_jump_landings(jp):
 			_add_move_highlight(land.x, land.y)
-			c += 1
 
 func _move_dirs_for(piece: Sprite2D) -> Array[Vector2i]:
 	var dirs: Array[Vector2i] = []

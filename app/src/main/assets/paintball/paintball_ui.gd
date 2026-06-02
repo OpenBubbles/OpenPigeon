@@ -183,6 +183,10 @@ func play_sent_animation() -> void:
 		print("Warning: sent_label is not valid for play_sent_animation.")
 		return
 
+	if g.game_over or g.spectator_mode:
+		g.stop_waiting_animation()
+		return
+
 	if g.sent_tween and g.sent_tween.is_running():
 		g.sent_tween.kill()
 
@@ -208,36 +212,18 @@ func play_sent_animation() -> void:
 			g.sent_label.visible = false
 			g.sent_label.modulate.a = 1.0
 
-		if not g.is_my_turn and not g.game_over:
-			start_waiting_animation()
+		if not g.game_over and not g.spectator_mode and not g.is_my_turn:
+			g.start_waiting_animation()
+		else:
+			g.stop_waiting_animation()
 	)
-
+	
 func pop_button(btn: Control) -> void:
 	btn.pivot_offset = btn.size / 2.0
 	var tween := g.create_tween()
 	tween.tween_property(btn, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(btn, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tween.finished
-
-func get_rules_text() -> String:
-	return """
-[font_size={32px}][b]Paintball[/b][/font_size]
-
-[font_size={24px}][b]Objective[/b][/font_size]
-[font_size={18px}]
-• Replace in Future
-[/font_size]
-
-[font_size={24px}][b]How to Play[/b][/font_size]
-[font_size={18px}]
-• Replace in Future
-[/font_size]
-
-[font_size={24px}][b]End of Game[/b][/font_size]
-[font_size={18px}]
-• Replace in Future
-[/font_size]
-"""
 
 func check_win() -> bool:
 	print("--- CHECKING WIN CONDITION ---")
@@ -248,31 +234,11 @@ func check_win() -> bool:
 	if g._hp_me > 0 and g._hp_opp > 0:
 		return false
 
-	g.game_over = true
-
 	if g._hp_me <= 0 and g._hp_opp <= 0:
-		g.win_loss_state = "0"
-		if is_instance_valid(g.win_loss_label):
-			g.win_loss_label.text = "DRAW!"
-			g.win_loss_label.visible = true
-		return true
-
-	if g._hp_opp <= 0:
-		g.win_loss_state = "1"
-		if is_instance_valid(g.win_loss_label):
-			g.win_loss_label.text = ("Player 1 Wins!" if g.spectator_mode else "YOU WIN!")
-			g.win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			g.win_loss_label.visible = true
-		if is_instance_valid(g.player_avatar_display):
-			GameUtils._show_win_burst(g.player_avatar_display)
-		return true
-
-	g.win_loss_state = "-1"
-	if is_instance_valid(g.win_loss_label):
-		g.win_loss_label.text = ("Player 2 Wins!" if g.spectator_mode else "YOU LOSE")
-		g.win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
-		g.win_loss_label.visible = true
-	if is_instance_valid(g.opp_avatar_display):
-		GameUtils._show_win_burst(g.opp_avatar_display)
+		g._show_result_from_state("0")
+	elif g._hp_opp <= 0:
+		g._show_result_from_state("1")
+	else:
+		g._show_result_from_state("-1")
 
 	return true

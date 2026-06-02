@@ -5,11 +5,9 @@ var player: int      = 1
 var is_your_turn: bool = false
 var is_my_turn: bool = false
 var mode: String = ""
-var my_player: String = ""
 const PIT_COUNT: int = 14
 var avatar_key: String = "0"
 var _last_sown_pit: int = -1
-var has_connected: bool = false
 var offsets: Array[Vector2]
 const GOLDEN_ANGLE := TAU * (1.0 - 1.0/1.61803398875)
 const PIT_PADDING := 12.0
@@ -20,7 +18,6 @@ var game_over: bool = false
 var in_replay: bool = false
 const BASE_STONE_SCALE := Vector2(0.1, 0.1)
 var win_loss_state: String = ""
-var winner_id: int = -1
 var disp_winner: bool = false
 var _skip_replay_animation: bool = false
 var pits: Array = []
@@ -29,6 +26,7 @@ var spawn_points: Array[Marker2D] = []
 var board_labels: Array = []
 var replay_moves: Array = []
 var current_theme_name: String = "Default"
+var winner_id
 
 var PitScene    : PackedScene = preload("res://mancala/pit.tscn")
 var StoreScene  : PackedScene = preload("res://mancala/store.tscn")
@@ -60,6 +58,18 @@ var prev_board_str: String = ""
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
+	
+func _get_dev_data() -> String:
+	return '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:&2,2&2&&3,3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&1,13,12&13,11,12,11,13,12,11,1,13,3,11,2&13,13,11,12,2|move:2,4|board:12&2,2&2&&3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&&13,11,12,11,13,12,11,1,13,3,11,2,1&13,13,11,12,2,13","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+	
+func _get_settings_avatar_display() -> Control:
+	return player_avatar_display
+
+func _get_rules_title() -> String:
+	return "Mancala"
+	
+func _get_rules_text() -> String:
+	return _get_rules_text_for_mode()
 
 func _debug_pit_input_layers() -> void:
 	for pit in pit_nodes:
@@ -83,42 +93,33 @@ func _unhandled_input(event: InputEvent) -> void:
 func _on_game_ready() -> void:
 	game_settings_category = SettingsManager.get_game_name_from_path(get_tree().current_scene.scene_file_path)
 	print("Current game scene for settings: ", game_settings_category)
+
 	_load_game_specific_settings()
+
 	var saved_theme: String = str(SettingsManager.get_setting("global", "theme", current_theme_name))
 	current_theme_name = saved_theme
-	current_palette     = _get_palette_for_theme(saved_theme)
+	current_palette = _get_palette_for_theme(saved_theme)
+
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_board_sprite_modulate()
 	_apply_bg_for_dark(is_dark)
 	_init_mancala_board_structure()
 
-	if skip_button:
+	if is_instance_valid(skip_button):
 		skip_button.visible = false
 
-	if appPlugin:
-		print("AppPlugin Available")
-		if not has_connected:
-			appPlugin.connect("set_game_data", _set_game_data)
-			has_connected = true
-			appPlugin.onReady()
-			print("AppPlugin Connected")
-	else:
-		print("[DEV] Editor hint active, loading sample game data")
-		var dev_data = '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:&2,2&2&&3,3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&1,13,12&13,11,12,11,13,12,11,1,13,3,11,2&13,13,11,12,2|move:2,4|board:12&2,2&2&&3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&&13,11,12,11,13,12,11,1,13,3,11,2,1&13,13,11,12,2,13","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
-		_set_game_data(dev_data)
+		if not skip_button.pressed.is_connected(_on_skip_button_pressed):
+			skip_button.pressed.connect(_on_skip_button_pressed)
 
 	for pit in pit_nodes:
 		for node in pit.get_children():
 			if node is Control and node.name != "DebugRect":
 				node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	if skip_button:
-		skip_button.pressed.connect(_on_skip_button_pressed)
-
 	add_child(_carrying_stones_container)
 	_carrying_stones_container.z_index = 90
 	_apply_board_sprite_modulate()
-
+	
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if not is_instance_valid(background):
 		return
@@ -141,142 +142,205 @@ func _apply_bg_for_dark(is_dark: bool) -> void:
 func _set_game_data(raw_text: String) -> void:
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
 	var res = JSON.parse_string(raw_text)
+
+	if typeof(res) != TYPE_DICTIONARY:
+		return
+
 	print("[PARSE] Raw game data received:", res)
 
 	_skip_replay_animation = false
 	in_replay = false
-	if skip_button:
+	_is_animating = false
+	game_over = false
+	disp_winner = false
+	win_loss_state = ""
+	winner_id = null
+	spectator_mode = false
+	moves_made.clear()
+	replay_moves.clear()
+	_stop_pit_highlights()
+	stop_waiting_animation()
+
+	if is_instance_valid(skip_button):
 		skip_button.visible = false
 
-	var my_id = res.get("myPlayerId", "")
-	var p1_id = res.get("player1", "")
-	var p2_id = res.get("player2", "")
-	var opponent_avatar_key = ""
+	if is_instance_valid(win_loss_label):
+		win_loss_label.visible = false
+		win_loss_label.text = ""
+		win_loss_label.scale = Vector2.ONE
 
-	if my_id != "" and p1_id != "" and p2_id != "":
-		if my_id == p1_id:
-			opponent_avatar_key = "avatar2"
-			print("Opp is avatar2")
-		elif my_id == p2_id:
-			opponent_avatar_key = "avatar1"
-			print("Opp is avatar1")
-	
-	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
-		var avatar_string = res[opponent_avatar_key]
-		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
-		if is_instance_valid(opp_avatar_display):
-			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+	if is_instance_valid(free_turn_label):
+		free_turn_label.visible = false
+
+	var p1_id: String = str(res.get("player1", ""))
+	var p2_id: String = str(res.get("player2", ""))
+	var winner_payload: String = str(res.get("winner", ""))
+	var opponent_avatar_key := ""
 
 	player_str = int(res.get("player", player))
 	mode = String(res.get("mode", mode))
-	my_player = my_id
-	winner_id = int(res.get("winner", ""))
-	is_your_turn = res.get("isYourTurn", false)
-	
-	if my_player == p1_id or (p1_id == "" and is_your_turn):
-		player = 1
-		is_my_turn = is_your_turn
-		spectator_mode = false
-	elif my_player == p2_id or (p1_id == "" and not is_your_turn):
-		player = 2
-		is_my_turn = is_your_turn
-		spectator_mode = false
+	is_your_turn = bool(res.get("isYourTurn", false))
+
+	if my_uuid != "" and p1_id != "" and p2_id != "":
+		if my_uuid == p1_id:
+			player = 1
+			is_my_turn = is_your_turn
+			spectator_mode = false
+			opponent_avatar_key = "avatar2"
+		elif my_uuid == p2_id:
+			player = 2
+			is_my_turn = is_your_turn
+			spectator_mode = false
+			opponent_avatar_key = "avatar1"
+		else:
+			player = 1
+			is_my_turn = false
+			spectator_mode = true
 	else:
-		spectator_mode = true
+		player = 1 if is_your_turn else 2
+		is_my_turn = is_your_turn
+		spectator_mode = false
+		opponent_avatar_key = "avatar2" if player == 1 else "avatar1"
+
+	if spectator_mode:
 		print("Spectator Mode Enabled!")
-		spec_label.visible = true
+
+		if is_instance_valid(spec_label):
+			spec_label.visible = true
+
 		is_my_turn = false
-		player = 1
+
+		if res.has("avatar1") and is_instance_valid(player_avatar_display):
+			player_avatar_display.call_deferred("update_avatar_from_data", GameUtils._parse_avatar_string(str(res["avatar1"])))
+
+		if res.has("avatar2") and is_instance_valid(opp_avatar_display):
+			opp_avatar_display.call_deferred("update_avatar_from_data", GameUtils._parse_avatar_string(str(res["avatar2"])))
+	else:
+		if is_instance_valid(spec_label):
+			spec_label.visible = false
+
+		if opponent_avatar_key != "" and res.has(opponent_avatar_key):
+			var avatar_string = res[opponent_avatar_key]
+			var opponent_data = GameUtils._parse_avatar_string(avatar_string)
+
+			if is_instance_valid(opp_avatar_display):
+				opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
 	print("YOUR TURN?: ", is_your_turn, " MY TURN?: ", is_my_turn, " Spectator Mode: ", spectator_mode)
-	
-	_apply_bg_for_dark(is_dark)
 
-	var replay_str: String = String(res.get("replay", ""))
+	_apply_bg_for_dark(is_dark)
 	_apply_board_layout(is_my_turn)
 
-	var parsed = parse_game_data(replay_str)
-	var initial_board_for_replay_str = ""
-	var rb: Array = parsed.get("raw_boards", [])
-	if rb.size() > 0:
-		initial_board_for_replay_str = rb[0]
-	else:
-		push_warning("_set_game_data: no initial board state found for replay.")
-	
-	pits.clear()
-	for i in range(PIT_COUNT):
-		pits.append([])
+	var replay_str: String = String(res.get("replay", ""))
+	var parsed = parse_replay_string(replay_str)
+	var raw_boards: Array = parsed.get("raw_boards", [])
 
-	if initial_board_for_replay_str != "":
-		var initial_board_data = _parse_single_board(initial_board_for_replay_str)
+	if raw_boards.size() > 0:
+		var initial_board_data = _parse_single_board(str(raw_boards[0]))
+
+		pits.clear()
+		for i in range(PIT_COUNT):
+			pits.append([])
+
 		for i in range(min(initial_board_data.size(), PIT_COUNT)):
 			pits[i] = initial_board_data[i].duplicate()
+
 		_refresh_all_pits()
 	else:
-		push_warning("_set_game_data: no previous board state found for replay, using default setup.")
+		print("_set_game_data: no replay board found, keeping default layout.")
 
-	replay_moves.clear()
 	if parsed.moves.size() > 0:
 		replay_moves = parsed.moves
 		_is_animating = true
 		in_replay = true
-		if skip_button:
+
+		if is_instance_valid(skip_button):
 			skip_button.visible = true
+
 		for i in range(replay_moves.size()):
 			if _skip_replay_animation:
-				print("Skipped 230")
+				print("Replay skipped.")
 				break
+
 			var move_data = replay_moves[i]
 			var replay_player = int(move_data[0])
 			var replay_pit_offset = int(move_data[1])
 			var actual_pit_idx = replay_pit_offset
+
 			if replay_player == 2:
 				actual_pit_idx += 7
+
 			var original_player_str_for_sow = player_str
 			player_str = replay_player
 			in_replay = true
+
 			await _sow_from(actual_pit_idx)
+
 			in_replay = false
+
 			if game_over:
-				if skip_button: skip_button.visible = false
+				if is_instance_valid(skip_button):
+					skip_button.visible = false
+
 				_is_animating = false
 				return
+
 			var current_sow_player_store_idx = 6 if player_str == 1 else 13
 			if _last_sown_pit == current_sow_player_store_idx:
 				free_turn_label.text = "Free Turn!"
 				free_turn_label.visible = true
+
 				var free_turn_tween = create_tween()
 				free_turn_tween.tween_interval(0.8)
-				free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
+				free_turn_tween.tween_callback(func():
+					free_turn_label.visible = false
+				)
 				await free_turn_tween.finished
+
 			player_str = original_player_str_for_sow
-		if skip_button: skip_button.visible = false
+
+		if is_instance_valid(skip_button):
+			skip_button.visible = false
+
 		_is_animating = false
-		if rb.size() > 1:
-			var final_board_data = _parse_single_board(rb[rb.size() - 1])
+		in_replay = false
+
+		if raw_boards.size() > 1:
+			var final_board_data = _parse_single_board(str(raw_boards[raw_boards.size() - 1]))
+
 			for k in range(min(final_board_data.size(), PIT_COUNT)):
 				pits[k] = final_board_data[k].duplicate()
+
 			if _skip_replay_animation:
 				_refresh_all_pits()
 		else:
-			push_warning("_set_game_data: No final board state (rb[1]) available for post-replay update.")
+			push_warning("_set_game_data: No final board state available for post-replay update.")
+
 		_skip_replay_animation = false
-		prev_board_str = rb[rb.size() - 1] if rb.size() > 0 else ""
-	elif rb.size() > 0:
-		prev_board_str = rb[0]
+		prev_board_str = str(raw_boards[raw_boards.size() - 1]) if raw_boards.size() > 0 else ""
+	elif raw_boards.size() > 0:
+		prev_board_str = str(raw_boards[0])
 	else:
-		if skip_button:
+		if is_instance_valid(skip_button):
 			skip_button.visible = false
 
-	print("258 CALLED GAME OVER")
-	await _check_game_over_and_winner()
-	if is_my_turn and not game_over:
+	if winner_payload != "":
+		_apply_winner_payload(winner_payload, p1_id, p2_id)
+		return
+
+	await check_win()
+
+	if game_over:
+		stop_waiting_animation()
+	elif is_my_turn and not spectator_mode:
 		_start_pit_highlights()
 		stop_waiting_animation()
-	elif not is_my_turn and not game_over:
+	elif not spectator_mode:
 		start_waiting_animation()
-
-func parse_game_data(raw: String) -> Dictionary:
+	else:
+		stop_waiting_animation()
+		
+func parse_replay_string(raw: String) -> Dictionary:
 	var out = {
 		"boards": [],
 		"moves": [],
@@ -309,9 +373,6 @@ func _parse_single_board(data: String) -> Array:
 			pit_list.append(arr)
 	return pit_list
 	
-func _on_plugin_set_game_data(raw_text: String) -> void:
-	call_deferred("_set_game_data", raw_text)
-
 func _init_mancala_board_structure() -> void:
 	randomize()
 	for i in range(PIT_COUNT):
@@ -789,7 +850,7 @@ func _sow_from(start_idx: int) -> void:
 	for child in _carrying_stones_container.get_children():
 		child.queue_free()
 	_carrying_stones_container.scale = Vector2(1.0, 1.0)
-	await _check_game_over_and_winner()
+	await check_win()
 
 func _animate_capture(stones_to_capture: Array, last_sown_pit_idx: int, opposite_pit_idx: int, player_store_idx: int) -> void:
 	print("Animating capture of ", stones_to_capture.size(), " stones to store ", player_store_idx)
@@ -862,9 +923,7 @@ func _animate_capture(stones_to_capture: Array, last_sown_pit_idx: int, opposite
 
 func _end_turn() -> void:
 	avatar_key = "avatar" + str(player)
-	player = 1 if player==2 and not spectator_mode else 2
 	free_turn_label.visible = false
-
 	send_game()
 
 func _refresh_all_pits() -> void:
@@ -939,141 +998,194 @@ func _place_stone(_container: Node2D, _base_pos: Vector2, _label: int) -> void:
 	
 func send_game() -> void:
 	print("Send Game Called!")
+
+	if spectator_mode:
+		return
+
 	is_my_turn = false
+	_stop_pit_highlights()
+
 	var all_moves = ""
 	for m in moves_made:
 		all_moves += "move:" + m + "|"
+
 	moves_made.clear()
 
 	var post_board_str = "board:"
 	for i in range(pits.size()):
 		var pit = pits[i]
+
 		if pit.size() > 0:
 			for j in range(pit.size()):
 				post_board_str += str(pit[j])
+
 				if j < pit.size() - 1:
 					post_board_str += ","
-		
+
 		if i < pits.size() - 1:
 			post_board_str += "&"
-	
+
 	var payload = {
 		"replay": "board:" + prev_board_str + "|" + all_moves + post_board_str
 	}
-	
-	if player != 0 and is_instance_valid(player_avatar_display):
+
+	if player != 0 and is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		var avatar_string = player_avatar_display.get_avatar_data_string()
 		payload[avatar_key] = avatar_string
 		print("Adding my avatar data to payload with key '", avatar_key, "'")
-	
-	print("PAYLOAD: ", payload)
-	if await _check_game_over_and_winner():
-		if game_over == true and not spectator_mode:
-			payload["winner"] = my_player + "|" + win_loss_state
+
+	if await check_win():
+		if game_over and win_loss_state != "":
+			payload["winner"] = my_uuid + "|" + win_loss_state
+
 	var game_data = JSON.stringify(payload)
 	print("Game data being sent: " + game_data)
 
-	var appPlugin := Engine.get_singleton("AppPlugin")
-	if not spectator_mode:
-		if appPlugin:
-			print("Attempting to send game data via AppPlugin.")
-			appPlugin.updateGameData(game_data)
-		else:
-			print("AppPlugin is null. Cannot send game data.")
-		if not game_over:
-			play_sent_animation()
+	send_game_data(game_data)
+
+	if game_over:
+		stop_waiting_animation()
+	else:
+		play_sent_animation()
 		
-func _check_game_over_and_winner() -> bool:
+func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: String = "") -> void:
+	var parts := winner_payload.split("|", false)
+	if parts.size() < 2:
+		return
+
+	var sender_uuid := String(parts[0])
+	var sender_state := String(parts[1])
+
+	if sender_state == "0":
+		_show_result_from_state("0")
+		return
+
+	var local_state := sender_state
+	var winning_player := 0
+
+	if spectator_mode:
+		var sender_player := 0
+
+		if sender_uuid == p1_id:
+			sender_player = 1
+		elif sender_uuid == p2_id:
+			sender_player = 2
+
+		winning_player = sender_player
+
+		if sender_state == "-1":
+			winning_player = 2 if sender_player == 1 else 1
+
+		local_state = "1" if winning_player == 1 else "-1"
+	else:
+		if sender_uuid != my_uuid:
+			local_state = "-1" if sender_state == "1" else "1"
+
+	_show_result_from_state(local_state, winning_player)
+		
+func check_win() -> bool:
 	print("Checking for game over condition...")
-	var is_game_over_condition_met := false
 
-	if not game_over:
-		var player1_store_count: int = pits[6].size()
-		var player2_store_count: int = pits[13].size()
-		print("PLAYER 1 STORE QTY: ", player1_store_count, " | PLAYER 2 STORE QTY: ", player2_store_count)
+	if game_over:
+		return true
 
-		var player1_side_empty := true
-		for i in range(0, 6):
-			if pits[i].size() > 0:
-				player1_side_empty = false
-				break
+	var player1_side_empty := true
+	for i in range(0, 6):
+		if pits[i].size() > 0:
+			player1_side_empty = false
+			break
 
-		var player2_side_empty := true
-		for i in range(7, 13):
-			if pits[i].size() > 0:
-				player2_side_empty = false
-				break
+	var player2_side_empty := true
+	for i in range(7, 13):
+		if pits[i].size() > 0:
+			player2_side_empty = false
+			break
 
-		if player1_side_empty or player2_side_empty:
-			print("Game over: One player's side is empty.")
-			is_game_over_condition_met = true
+	if not player1_side_empty and not player2_side_empty:
+		return false
 
-			if player1_side_empty:
-				print("Player 1's side empty -> animate stones from Player 2 pits to Store 13.")
-				await _animate_sweep([7, 8, 9, 10, 11, 12], 13)
-			elif player2_side_empty:
-				print("Player 2's side empty -> animate stones from Player 1 pits to Store 6.")
-				await _animate_sweep([0, 1, 2, 3, 4, 5], 6)
-				_refresh_pit_count_label(6)
+	print("Game over: One player's side is empty.")
 
-	if is_game_over_condition_met and not game_over:
-		game_over = true
+	if player1_side_empty:
+		print("Player 1's side empty -> animate stones from Player 2 pits to Store 13.")
+		await _animate_sweep([7, 8, 9, 10, 11, 12], 13)
+	elif player2_side_empty:
+		print("Player 2's side empty -> animate stones from Player 1 pits to Store 6.")
+		await _animate_sweep([0, 1, 2, 3, 4, 5], 6)
+		_refresh_pit_count_label(6)
 
-		var p1: int = pits[6].size()
-		var p2: int = pits[13].size()
-		print("Final scores: Player 1 (store 6): ", p1, ", Player 2 (store 13): ", p2)
+	var p1: int = pits[6].size()
+	var p2: int = pits[13].size()
 
-		if p1 > p2:
-			winner_id = 1
-		elif p2 > p1:
-			winner_id = 2
-		else:
-			winner_id = -1
+	print("Final scores: Player 1 (store 6): ", p1, ", Player 2 (store 13): ", p2)
 
-	if game_over and not disp_winner:
-		print("Setting Game_Over_State")
-		disp_winner = true
+	if p1 > p2:
+		winner_id = 1
+		_show_result_from_state("1" if player == 1 else "-1", 1)
+	elif p2 > p1:
+		winner_id = 2
+		_show_result_from_state("1" if player == 2 else "-1", 2)
+	else:
+		winner_id = -1
+		_show_result_from_state("0")
 
-		_stop_pit_highlights()
+	return true
+	
+func _show_result_from_state(state: String, spectator_winner_player: int = 0) -> void:
+	game_over = true
+	disp_winner = true
+	win_loss_state = state
+	is_my_turn = false
+	_is_animating = false
+	in_replay = false
 
-		if is_instance_valid(free_turn_label):
-			free_turn_label.visible = false
+	_stop_pit_highlights()
+	stop_waiting_animation()
 
-		if winner_id == -1:
-			win_loss_label.text = "DRAW!"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
-			win_loss_state = "0"
-		elif (player == 1 and winner_id == 1) or (player == 2 and winner_id == 2):
-			if not spectator_mode:
-				win_loss_label.text = "YOU WIN!"
-				GameUtils._show_win_burst(player_avatar_display)
-				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-				win_loss_state = "1"
-			else:
-				win_loss_label.text = "Player {0} Wins!".format([winner_id])
-				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			
-		else:
-			if not spectator_mode:
-				win_loss_label.text = "YOU LOSE"
-				GameUtils._show_win_burst(opp_avatar_display)
-				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
-				win_loss_state = "-1"
-			else:
-				win_loss_label.text = "Player {0} Wins!".format([winner_id])
-				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			
-		win_loss_label.visible = true
-		await get_tree().process_frame
-		win_loss_label.scale = Vector2.ZERO
-		win_loss_label.pivot_offset = win_loss_label.size / 2
+	if is_instance_valid(skip_button):
+		skip_button.visible = false
 
-		var tween_in := create_tween()
-		tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6)\
-			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-		await tween_in.finished
+	if is_instance_valid(free_turn_label):
+		free_turn_label.visible = false
 
-	return game_over	
+	if not is_instance_valid(win_loss_label):
+		return
+
+	if state == "0":
+		winner_id = -1
+		win_loss_label.text = "DRAW!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	elif spectator_mode:
+		var player_num := spectator_winner_player
+
+		if player_num == 0:
+			player_num = 1 if state == "1" else 2
+
+		winner_id = player_num
+		win_loss_label.text = "Player {0} Wins!".format([player_num])
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+	elif state == "1":
+		winner_id = player
+		win_loss_label.text = "YOU WIN!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
+		if is_instance_valid(player_avatar_display):
+			GameUtils._show_win_burst(player_avatar_display)
+	else:
+		winner_id = 2 if player == 1 else 1
+		win_loss_label.text = "YOU LOSE"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
+		if is_instance_valid(opp_avatar_display):
+			GameUtils._show_win_burst(opp_avatar_display)
+
+	win_loss_label.visible = true
+	win_loss_label.scale = Vector2.ZERO
+	win_loss_label.pivot_offset = win_loss_label.size / 2
+
+	var tween_in := create_tween()
+	tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6)\
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	
 func _animate_sweep(pit_indices: Array, store_idx: int) -> void:
 	var store_node := pit_nodes[store_idx]
@@ -1202,34 +1314,42 @@ No rule info found for this mode.
 """
 
 func play_sent_animation():
-	if sent_label:
-		if sent_tween and sent_tween.is_running():
-			sent_tween.kill()
+	if not is_instance_valid(sent_label) or game_over:
+		return
 
-		sent_tween = create_tween().set_parallel(false)
+	if sent_tween and sent_tween.is_running():
+		sent_tween.kill()
 
-		sent_label.text = "Sent"
-		sent_label.visible = true
-		sent_label.modulate.a = 0.0
-		sent_label.scale = Vector2.ONE
-		sent_label.pivot_offset = sent_label.get_size() / 2.0
+	sent_tween = create_tween().set_parallel(false)
 
-		sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
+	sent_label.text = "Sent"
+	sent_label.visible = true
+	sent_label.modulate.a = 0.0
+	sent_label.scale = Vector2.ONE
+	sent_label.pivot_offset = sent_label.get_size() / 2.0
 
-		sent_tween.tween_interval(0.6)
-		sent_tween.tween_callback(func():
+	sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
+
+	sent_tween.tween_interval(0.6)
+	sent_tween.tween_callback(func():
+		if is_instance_valid(sent_label):
 			sent_label.text = "Sent ✔"
-		)
+	)
 
-		sent_tween.tween_interval(2.0)
-		sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
+	sent_tween.tween_interval(2.0)
+	sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
 
-		sent_tween.tween_callback(func():
+	sent_tween.tween_callback(func():
+		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
+
+		if not game_over and not spectator_mode and not is_my_turn:
 			start_waiting_animation()
-		)
- 
+		else:
+			stop_waiting_animation()
+	)
+	
 func _palette_color(key: String) -> Color:
 	var v = current_palette.get(key)
 	if v == null and key == "primary":

@@ -30,7 +30,6 @@ const MUSIC_STREAM := preload("res://global/audio/pong.ogg")
 @export var show_overlay: bool = true
 
 var screen_size: Vector2
-var has_connected: bool = false
 var balls_back_tween: Tween
 var sent_tween: Tween
 var redemption_tween: Tween
@@ -93,35 +92,82 @@ var mode: String
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
+	
+func _get_dev_data() -> String:
+	return '{"isYourTurn":true,"skip_score1":"0","skip_score2":"0","player":"2","score1":"0","score2":"0","num":"1","game":"beer","mode":"h","seed":"-472793889","seed2":"0"}'
+	
+func _get_settings_avatar_display() -> Control:
+	return player_avatar_display
 
-func _on_game_ready():
+func _get_rules_title() -> String:
+	return "Cup Pong"
+
+func _on_game_ready() -> void:
 	screen_size = get_viewport().get_visible_rect().size
+
 	if is_instance_valid(main_overlay):
 		main_overlay.visible = show_overlay
-		
+
 	my_cups = get_node("cups2")
 	replay_cups = get_node("cups1")
 	camera = get_node("Camera3D")
 	ball = get_node("ball")
-	appPlugin = Engine.get_singleton("AppPlugin")
-	if is_instance_valid(settings_button):
-		settings_button.pressed.connect(_on_settings_button_pressed)
 
-	if appPlugin:
-		if not has_connected:
-			print("App plugin is available")
-			appPlugin.connect("set_game_data", _set_game_data)
-			my_uuid = appPlugin.getSenderUUID()
-			has_connected = true
-			appPlugin.onReady()
-	else:
-		print("App plugin is not available")
-		#board:0,1,2,3,4,5,6,7,8,9&0,1,2,3,4,5,6,7,8,9|move:K;AEDSK;AEDSLaC~DgLbFdCRLdHdCgLeI~BSLfKFBhLgL7ATLhM\'AiLiN zULjO0zkLlPtyWLmPTymLnP5xZLoP1xpLpPJw2LqPbwsLrOCv5LsNNvwLuMJu9LvLruALwJ7t(LxIltFLyGys-LzEwsKL9CIskL;BAsGLRA_suL1A siL*A_sgL;A_sgMdA_siMgA_skMiA_skMiA_skMiA_sk2&25|move:K;AEDSK-DgC K_FtCAK(HsB5K!JbBoK9KRAUK7L AdK4NgzJK2Ocy(K0O5yyKYPxx4KVPVxoKTP5wVKRP0wfKOPGvMKMO.u.KKOwuEKINFt!KFMAtwKDLhs3KBJUspKzH\'rWKxGjriKuEfqQKsB~qcJ(A(qaJ)BjqmKeBnqsKnBeqqKuA_qpKxA_qmKyA_qlKyA_qlKyA_ql6&24,28|move:K;AEDSK\'B9DyK-EjC*K_GpCGK)IhB\'K*J5BNK!LrBgK9MLAWK8NPApK6ODz4K4PdzyK2PKy*K1P2yHKZP5ybKXPTxRKWPsxlKUOYw1KSN_wwKRM-v@KPL7vGKNKGvbKMI*uSKKHkunKIFot4KHDetzLSB8tnK5BotALtA-tALoA-tELkA_tGLiA_tILhA_tJLhA_tJLhA_tJ0&24|move:K;AEDSK(C(DdK6FhCMKZHhB;KSI*BJKLKIA-KEL9AGKxNaz)KpN.zDKiO1y*KbPuyBJ_PUx@J9P5xAJ2P1w!JWPIwzJPPav~JIOAvzJBNLu~JuMHuzJnLpt~JhJ4tAJaIis!I)GvsBI8Esr*ITEvrOIAFHrxIgGErgH9Hlq!HPH0qUHwIeqDHcIoqmG5Ikp-GMH*p1GtHFpKGaG4puF3F)pdFKE!o9FrDSoSE\'CloCE1ALolEJyXn EqwUn1D\'uDnLD1r\'nv&24|board:1,3,4,5,7,8,9&0,1,2,3,4,5,6,7,8,9
-		#_set_game_data('{"isYourTurn":true,"skip_score1":"0","skip_score2":"0","player":"1","replay":"board:0,1,3,5,6,7,8,9&0,1,2,3,4,5,6,7,8,9|move:K;AEDSLaDmDeLcFACRLdHyCjLeJgBXLgKVBpLhL;A3LiNjAvLjOez9LlO7zBLmPyy_LnPWyILoP5ybLqP0xQLrPFxjLsO-wYLtOtwrLvNCv6LwMxvALxLdu)LyJQuJLzH)udLBGdtTLCD;tnK\'C;tHLgC9tALsCYtxLhCItZK;CstFK*B7tsK(ButuK;A_tFLeA_tOLhA_tOLhA_tNLhA_tN0&24,27,31|move:K;AEDSK-C-DhK)FlCVK@HkCmK9I_B0K6KLBsK3L@A6K0NcAyKXN;z@KVO2zFKSPvy.KPPVyMKMP5yeKJP1xTKGPIxmKDO;w1KBOzwvKyNJv~KvMFvDKsLmu.KpJ1uMKnIfugKkGrtWKhEotqKgDhtHKgC uxKgCPvnKhB;wcKhBqw(KhAsx3KhBoyQKhB3zCKiCgAoKiCqBaKiCmB8KiB(CTKiBGDEKjA5EqKjA3E;KjBpF4&24,29,38|board:1,3,5,6,7,8,9&0,1,2,3,4,5,6,7,8,9","score1":"0","score2":"0","num":"2","game":"beer","mode":"h","seed":"-1429210425","round":"1","seed2":"0"}')
-		_set_game_data('{"isYourTurn":true,"skip_score1":"0","skip_score2":"0","player":"2","score1":"0","score2":"0","num":"1","game":"beer","mode":"h","seed":"-472793889","seed2":"0"}')
 	if _debug_perf:
 		_create_debug_overlay()
+
 	_enforce_mobile_lighting_settings()
+	
+func _set_game_data(new_replay: String):
+	var parsed = JSON.parse_string(new_replay)
+	print("NEW REPLAY: " + str(parsed))
+	
+	is_my_turn = parsed["isYourTurn"]
+	player = int(parsed["player"])
+	replay_string = parsed["replay"] if "replay" in parsed else ""
+	mode = parsed["mode"]
+	_current_seed = int(parsed.get("seed", "0"))
+	_apply_mode_board_layout()
+	winner = parsed["winner"] if "winner" in parsed else ""
+	if winner != "":
+		game_over = check_winner()
+	var opponent_avatar_key = ""
+	var p1_id: String = parsed.get("player1", "")
+	var p2_id: String = parsed.get("player2", "")
+	spectator_mode = my_uuid != "" and p1_id != "" and p2_id != "" and my_uuid != p1_id and my_uuid != p2_id
+	if is_instance_valid(spectator_label):
+		spectator_label.visible = spectator_mode
+	if is_my_turn and not spectator_mode:
+		player = 2 if player == 1 else 1
+	elif spectator_mode: player = 1
+		
+	if player == 1 or spectator_mode:
+		opponent_avatar_key = "avatar2"
+	else:
+		opponent_avatar_key = "avatar1"
+		
+	if opponent_avatar_key != "" and parsed.has(opponent_avatar_key):
+		var avatar_string = parsed[opponent_avatar_key]
+		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
+		if is_instance_valid(opp_avatar_display):
+			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+	if spectator_mode and parsed.has("avatar1"):
+		var p1_data = GameUtils._parse_avatar_string(parsed["avatar1"])
+		if is_instance_valid(player_avatar_display):
+			player_avatar_display.call_deferred("update_avatar_from_data", p1_data)
+		
+		
+	played_replay = false
+	redemption = false
+	num_balls = 2
+	throws = []
+		
+	_process_game_state()
+	print("Game Over: ", game_over, " Winner: ", winner )
+	if not is_my_turn and not game_over and not spectator_mode:
+		start_waiting_animation()
+	else:
+		stop_waiting_animation()
 	
 func _enforce_mobile_lighting_settings() -> void:
 	if is_instance_valid(camera):
@@ -298,54 +344,84 @@ func _process(delta: float) -> void:
 func check_winner() -> bool:
 	if game_over:
 		return true
-	
+
 	if winner.is_empty():
 		return false
-	
-	var loser_uuid := winner.split("|")[0]
-	
-	if loser_uuid == my_uuid:
-		_handle_game_over_i_lost()
+
+	var parts := winner.split("|", false)
+	if parts.size() < 2:
+		return false
+
+	var sender_uuid := String(parts[0])
+	var result := String(parts[1])
+
+	if result == "0":
+		_handle_game_over_draw()
+	elif sender_uuid == my_uuid:
+		if result == "1":
+			_handle_game_over_i_won()
+		else:
+			_handle_game_over_i_lost()
 	else:
-		_handle_game_over_i_won()
-	
+		if result == "1":
+			_handle_game_over_i_lost()
+		else:
+			_handle_game_over_i_won()
+
 	return true
+	
+func _handle_game_over_draw() -> void:
+	if game_over:
+		return
+
+	game_over = true
+	num_balls = 0
+	ball_ready = false
+	current_ball = null
+	stop_waiting_animation()
+
+	if is_instance_valid(winner_label):
+		winner_label.text = "DRAW!"
+		winner_label.visible = true
+		winner_label.add_theme_color_override("font_color", Color(1, 1, 1))
 	
 func _handle_game_over_i_lost() -> void:
 	if game_over:
 		return
-	
+
+	game_over = true
 	lost = true
 	num_balls = 0
-	
+	ball_ready = false
+	current_ball = null
+	stop_waiting_animation()
+
 	if is_instance_valid(winner_label):
-		if winner_label.has_method("show_label"):
-			winner_label.show_label("You Lose!")
-		else:
-			winner_label.text = "YOU LOSE"
-			winner_label.visible = true
-			winner_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
-	
+		winner_label.text = "YOU LOSE"
+		winner_label.visible = true
+		winner_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
 	if is_instance_valid(opp_avatar_display):
 		GameUtils._show_win_burst(opp_avatar_display)
-
+		
 func _handle_game_over_i_won() -> void:
 	if game_over:
 		return
-	
+
+	game_over = true
 	num_balls = 0
-	
+	ball_ready = false
+	current_ball = null
+	stop_waiting_animation()
+
 	if is_instance_valid(winner_label):
-		if winner_label.has_method("show_label"):
-			winner_label.show_label("You Win!")
-		else:
-			winner_label.text = "YOU WIN!"
-			winner_label.visible = true
-			winner_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-	
+		winner_label.text = "YOU WIN!"
+		winner_label.visible = true
+		winner_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
 	if is_instance_valid(player_avatar_display):
 		GameUtils._show_win_burst(player_avatar_display)
-	
+		
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
 		print("Warning: sent_label is not valid for play_sent_animation.")
@@ -375,7 +451,11 @@ func play_sent_animation() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
+
+		if not game_over and not spectator_mode and not is_my_turn:
 			start_waiting_animation()
+		else:
+			stop_waiting_animation()
 	)
 	
 func _generate_random_cup_positions(seed_value: int) -> Array:
@@ -448,13 +528,13 @@ func _process_game_state():
 			var parsed_replay = parseReplay(replay_string)
 			set_boards(parsed_replay)
 			if is_my_turn:
-				waiting_label.visible = false
+				stop_waiting_animation()
 				playReplay(parsed_replay)
 				return
 		else:
 			if check_winner(): return
 			if is_my_turn:
-				waiting_label.visible = false
+				stop_waiting_animation()
 				camera.position = Vector3(0.0, 1.147, -1.73)
 	elif is_my_turn:
 		if check_winner(): return
@@ -531,7 +611,11 @@ func throw_finished():
 	
 	if redemption:
 		if throws[-1]["cup"] == -1:
+			lost = true
+			var outgoing := export_replay()
 			_handle_game_over_i_lost()
+			send_game_data(outgoing)
+			return
 		elif len(my_cups.cups_in_play) == 0:
 			if mode != "h":
 				my_cups.reset_cups([0,1,2])
@@ -567,10 +651,10 @@ func throw_finished():
 		else:
 			current_ball = spawn_ball()
 	elif not game_over:
-		if appPlugin:
-			appPlugin.updateGameData(export_replay())
-		else:
-			print("No app plugin! " + export_replay())
+		var outgoing := export_replay()
+		send_game_data(outgoing)
+		if not game_over:
+			play_sent_animation()
 
 func set_boards(parsed_replay: Dictionary):
 	var my_board: Array
@@ -602,59 +686,6 @@ func set_boards(parsed_replay: Dictionary):
 	my_cups.set_cups_in_play(my_board)
 	replay_cups.set_cups_in_play(other_board)
 
-var my_player
-func _set_game_data(new_replay: String):
-	var parsed = JSON.parse_string(new_replay)
-	print("NEW REPLAY: " + str(parsed))
-	
-	is_my_turn = parsed["isYourTurn"]
-	player = int(parsed["player"])
-	replay_string = parsed["replay"] if "replay" in parsed else ""
-	mode = parsed["mode"]
-	_current_seed = int(parsed.get("seed", "0"))
-	_apply_mode_board_layout()
-	winner = parsed["winner"] if "winner" in parsed else ""
-	if winner != "":
-		game_over = check_winner()
-	var opponent_avatar_key = ""
-	my_player = parsed.get("myPlayerId", "")
-	var p1_id: String = parsed.get("player1", "")
-	var p2_id: String = parsed.get("player2", "")
-	spectator_mode = my_player != "" and p1_id != "" and p2_id != "" and my_player != p1_id and my_player != p2_id
-	if is_instance_valid(spectator_label):
-		spectator_label.visible = spectator_mode
-	if is_my_turn and not spectator_mode:
-		player = 2 if player == 1 else 1
-	elif spectator_mode: player = 1
-		
-	if player == 1 or spectator_mode:
-		opponent_avatar_key = "avatar2"
-	else:
-		opponent_avatar_key = "avatar1"
-		
-	if opponent_avatar_key != "" and parsed.has(opponent_avatar_key):
-		var avatar_string = parsed[opponent_avatar_key]
-		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
-		if is_instance_valid(opp_avatar_display):
-			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
-	if spectator_mode:
-		var p1_data = GameUtils._parse_avatar_string(parsed["avatar1"])
-		if is_instance_valid(player_avatar_display):
-			player_avatar_display.call_deferred("update_avatar_from_data", p1_data)
-		
-		
-	played_replay = false
-	redemption = false
-	num_balls = 2
-	throws = []
-		
-	_process_game_state()
-	print("Game Over: ", game_over, " Winner: ", winner )
-	if not is_my_turn and not game_over:
-		start_waiting_animation()
-	else:
-		stop_waiting_animation()
-
 func export_board(exp_player: int):
 	var board: Array
 	if player == exp_player:
@@ -680,10 +711,8 @@ func export_replay() -> String:
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		export_data[avatar_key] = player_avatar_display.get_avatar_data_string()
 	if lost:
-		game_over = true
-		export_data["winner"] = my_uuid+"|-1"
-	else:
-		play_sent_animation()
+		export_data["winner"] = my_uuid + "|-1"
+
 	return JSON.stringify(export_data)
 
 func convert_replay(poses: Array[Vector3]):

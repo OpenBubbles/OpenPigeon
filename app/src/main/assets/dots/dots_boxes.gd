@@ -20,29 +20,24 @@ extends BaseGame
 const MUSIC_STREAM := preload("res://global/audio/dots.ogg")
 
 var sent_tween: Tween
-
-var has_connected: bool = false
 var _turn_steps: Array = []
 var player: int = 1
 var turn_owner: int = 1
-var winner_id: String = "-1"
 var is_your_turn: bool = false
 var is_my_turn: bool = false : set = _set_is_my_turn
 var pre_board_str: String = ""
 var post_board_str_from_opponent: String = ""
 var opponent_post_lines: Array = []
 var opponent_post_squares: Array = []
-var game_ended = false
-var game_over = false
-var win_loss_state = ""
-var my_score
-var opp_score
-var my_id: String
+var game_ended: bool = false
+var game_over: bool = false
+var win_loss_state: String = ""
+var my_score: int = 0
+var opp_score: int = 0
 
 var prev_lines_cache: Array = []
 var last_replay_sent: String = ""
-
-var send_button_home: Vector2 = Vector2.ZERO
+var _loading_replay: bool = false
 
 @export var board_size: int = 4 : set = set_board_size # 4, 5, or 6
 var blue_marker_tex: Texture2D = preload("res://dots/blue_marker.png")
@@ -50,12 +45,24 @@ var red_marker_tex: Texture2D = preload("res://dots/red_marker.png")
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
+	
+func _get_dev_data() -> String:
+	return '{"isYourTurn": true,"size": "4","player": "2","replay": "board:1,0,2,0,3#2,0,1,0,2#1,0,0,0,1#2,2,1,2,2#1,3,0,3,1#2,2,0,2,1#1,1,1,1,2#2,1,0,1,1#1,3,2,3,3#2,1,2,1,3#1,3,1,3,2#2,2,2,2,3#1,1,0,2,0|line:2,1,1,2,1|square:2,1,0|line:2,1,2,2,2|square:2,1,1|line:2,1,3,2,3|square:2,1,2|line:2,2,0,3,0|board:1,0,2,0,3#2,0,1,0,2#1,0,0,0,1#2,2,1,2,2#1,3,0,3,1#2,2,0,2,1#1,1,1,1,2#2,1,0,1,1#1,3,2,3,3#2,1,2,1,3#1,3,1,3,2#2,2,2,2,3#1,1,0,2,0#2,1,1,2,1#2,1,2,2,2#2,1,3,2,3#2,2,0,3,0#2,1,0#2,1,1#2,1,2","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","id": "dev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
+	
+func _get_settings_avatar_display() -> Control:
+	return player_avatar_display
+
+func _get_rules_title() -> String:
+	return "Dots & Boxes"
 
 func _on_game_ready() -> void:
 	var sb := StyleBoxFlat.new()
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
+
 	print("Dark Mode: ", is_dark)
+
 	_apply_bg_for_dark(is_dark)
+
 	sb.bg_color = Color(1, 1, 1, 1)
 	sb.corner_radius_top_left = 2
 	sb.corner_radius_top_right = 2
@@ -63,104 +70,155 @@ func _on_game_ready() -> void:
 	sb.corner_radius_bottom_right = 2
 	sb.shadow_color = Color(0, 0, 0, 0.18)
 	sb.shadow_size = 16
-	%Paper.add_theme_stylebox_override("panel", sb)
+
+	if is_instance_valid(paper):
+		paper.add_theme_stylebox_override("panel", sb)
+
 	set_board_size(board_size)
-	resized.connect(_on_resized)
+
+	if not resized.is_connected(_on_resized):
+		resized.connect(_on_resized)
+
 	_on_resized()
+
 	if is_instance_valid(grid):
-		grid.connect("turn_changed", Callable(self, "_on_turn"))
-		grid.connect("score_changed", Callable(self, "_on_score"))
-		grid.connect("game_over", Callable(self, "_on_game_over"))
+		if not grid.is_connected("turn_changed", Callable(self, "_on_turn")):
+			grid.connect("turn_changed", Callable(self, "_on_turn"))
+
+		if not grid.is_connected("score_changed", Callable(self, "_on_score")):
+			grid.connect("score_changed", Callable(self, "_on_score"))
+
+		if not grid.is_connected("game_over", Callable(self, "_on_game_over")):
+			grid.connect("game_over", Callable(self, "_on_game_over"))
+
 		if grid.has_signal("line_committed_bl"):
-			grid.connect("line_committed_bl", Callable(self, "_on_line_committed_bl"))
+			if not grid.is_connected("line_committed_bl", Callable(self, "_on_line_committed_bl")):
+				grid.connect("line_committed_bl", Callable(self, "_on_line_committed_bl"))
+
 		if grid.has_signal("square_completed_bl"):
-			grid.connect("square_completed_bl", Callable(self, "_on_square_completed_bl"))
+			if not grid.is_connected("square_completed_bl", Callable(self, "_on_square_completed_bl")):
+				grid.connect("square_completed_bl", Callable(self, "_on_square_completed_bl"))
+
 		if grid.has_signal("temp_line_changed"):
-			grid.connect("temp_line_changed", Callable(self, "_on_temp_line_changed"))
-			print("[Grid] connected temp_line_changed")
+			if not grid.is_connected("temp_line_changed", Callable(self, "_on_temp_line_changed")):
+				grid.connect("temp_line_changed", Callable(self, "_on_temp_line_changed"))
+				print("[Grid] connected temp_line_changed")
 		else:
 			push_warning("[Grid] temp_line_changed signal missing")
+	else:
+		push_warning("No %DotsGrid in scene")
 
 	if is_instance_valid(send_button):
-		send_button.visible = false
+		_update_send_button_visibility(false)
 		send_button.modulate.a = 0.0
 		send_button.scale = Vector2(1.0, 1.0)
-		send_button.pressed.connect(_on_send_pressed)
+
+		if not send_button.pressed.is_connected(_on_send_pressed):
+			send_button.pressed.connect(_on_send_pressed)
+
 		print("[SendButton] ready; visible=", send_button.visible, " a=", send_button.modulate.a)
 	else:
 		push_warning("No %SendButton in scene")
 
 	_apply_player_color_icons()
-	var appPlugin = Engine.get_singleton("AppPlugin")
-
-	if appPlugin: 
-		print("AppPlugin Available")
-		if not has_connected:
-			appPlugin.connect("set_game_data", _set_game_data)
-			has_connected = true
-			appPlugin.onReady()
-			print("AppPlugin Connected")
-	else:
-		print("[DEV] Editor hint active, loading sample game data")
-		var dev_data = '{"isYourTurn": true,"size": "4","player": "2","replay": "board:1,0,2,0,3#2,0,1,0,2#1,0,0,0,1#2,2,1,2,2#1,3,0,3,1#2,2,0,2,1#1,1,1,1,2#2,1,0,1,1#1,3,2,3,3#2,1,2,1,3#1,3,1,3,2#2,2,2,2,3#1,1,0,2,0|line:2,1,1,2,1|square:2,1,0|line:2,1,2,2,2|square:2,1,1|line:2,1,3,2,3|square:2,1,2|line:2,2,0,3,0|board:1,0,2,0,3#2,0,1,0,2#1,0,0,0,1#2,2,1,2,2#1,3,0,3,1#2,2,0,2,1#1,1,1,1,2#2,1,0,1,1#1,3,2,3,3#2,1,2,1,3#1,3,1,3,2#2,2,2,2,3#1,1,0,2,0
-		2,1,1,2,1#2,1,2,2,2#2,1,3,2,3#2,2,0,3,0#2,1,0#2,1,1#2,1,2","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
-		#var dev_data = '{"isYourTurn": true,"size": "6","player": "2","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
-		_set_game_data(dev_data)
-
+	
 func _set_game_data(raw_text: String) -> void:
 	var res: Dictionary = JSON.parse_string(raw_text)
 	if typeof(res) != TYPE_DICTIONARY:
 		return
+
+	game_over = false
+	game_ended = false
+	win_loss_state = ""
+	spectator_mode = false
+	_turn_steps.clear()
+	stop_waiting_animation()
+	_update_send_button_visibility(false)
+
+	if is_instance_valid(win_loss_label):
+		win_loss_label.visible = false
+		win_loss_label.text = ""
+		win_loss_label.scale = Vector2.ONE
+
 	print("RAW INCOMING DATA: ", res)
-	my_id = res.get("myPlayerId", "")
+
 	var p1_id: String = res.get("player1", "")
 	var p2_id: String = res.get("player2", "")
-	var opponent_avatar_key = ""
+	var opponent_avatar_key := ""
 
 	turn_owner = clamp(int(res.get("player", 1)), 1, 2)
 	is_your_turn = bool(res.get("isYourTurn", false))
 
-	if my_id != "" and p1_id != "" and p2_id != "":
-		player = (1 if my_id == p1_id else (2 if my_id == p2_id else 0))
+	if my_uuid != "" and p1_id != "" and p2_id != "":
+		player = (1 if my_uuid == p1_id else (2 if my_uuid == p2_id else 0))
+
 		if player == 0:
 			spectator_mode = true
-			you_label.text = ""
-			spec_label.show()
+
+			if is_instance_valid(you_label):
+				you_label.text = ""
+
+			if is_instance_valid(spec_label):
+				spec_label.show()
+
 			player = 1
+		else:
+			if is_instance_valid(spec_label):
+				spec_label.hide()
 	else:
 		player = (3 - turn_owner) if is_your_turn else turn_owner
-		
+
+		if is_instance_valid(spec_label):
+			spec_label.hide()
+
 	if player == 1:
 		opponent_avatar_key = "avatar2"
 	else:
 		opponent_avatar_key = "avatar1"
-		
+
 	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
 		var avatar_string = res[opponent_avatar_key]
 		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
+
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
+	if spectator_mode and res.has("avatar1"):
+		var p1_data = GameUtils._parse_avatar_string(res["avatar1"])
+
+		if is_instance_valid(player_avatar_display):
+			player_avatar_display.call_deferred("update_avatar_from_data", p1_data)
+
 	_apply_player_color_icons()
-	is_my_turn = is_your_turn
 
 	board_size = clamp(int(res.get("size", board_size)), 4, 6)
+
 	if is_instance_valid(grid) and grid.has_method("set_grid"):
 		grid.call("set_grid", board_size)
 
 	var replay_str: String = String(res.get("replay", ""))
 	await _load_pre_state_and_replay(replay_str)
 
-	_apply_turn_state()
+	if res.has("winner") and String(res.get("winner", "")) != "":
+		_apply_winner_payload(String(res.get("winner", "")), p1_id, p2_id)
+		return
+
+	is_my_turn = is_your_turn
 	
 	game_ended = await check_win()
+
 	if game_ended:
 		stop_waiting_animation()
+		_update_send_button_visibility(false)
 		game_over = true
-	if not is_my_turn:
+	elif not is_my_turn and not spectator_mode:
 		start_waiting_animation()
+	else:
+		stop_waiting_animation()
 		
 func _load_pre_state_and_replay(replay_str: String) -> void:
+	_loading_replay = true
+
 	var parsed := _parse_replay_dnb(replay_str)
 	var pre_lines: Array = parsed.get("pre_lines", [])
 	var pre_squares: Array = parsed.get("pre_squares", [])
@@ -173,17 +231,21 @@ func _load_pre_state_and_replay(replay_str: String) -> void:
 
 	if is_instance_valid(grid) and grid.has_method("load_lines_and_squares_state"):
 		grid.call("load_lines_and_squares_state", pre_lines, pre_squares)
+
 	if not moves.is_empty() and is_instance_valid(grid) and grid.has_method("replay_line_move"):
 		for move in moves:
 			await grid.call("replay_line_move", move)
 			await get_tree().create_timer(0.7).timeout
 
 	prev_lines_cache = _get_committed_lines()
+
 	if is_instance_valid(player_score_label) and is_instance_valid(opp_score_label):
 		if player_score_label.text == "" and opp_score_label.text == "":
 			player_score_label.text = "0"
 			opp_score_label.text = "0"
 
+	_loading_replay = false
+	
 func _set_is_my_turn(v: bool) -> void:
 	is_my_turn = v
 	if v:
@@ -194,10 +256,13 @@ func _apply_turn_state() -> void:
 	if is_instance_valid(grid):
 		var grid_player := player if is_my_turn else (3 - player)
 		grid.set("player", grid_player)
-		grid.call_deferred("set_input_enabled", is_my_turn and not spectator_mode)
-	if not spectator_mode:
-		if is_my_turn: stop_waiting_animation()
+		grid.call_deferred("set_input_enabled", is_my_turn and not spectator_mode and not game_over and not _loading_replay)
 
+	if game_over or spectator_mode:
+		stop_waiting_animation()
+	elif is_my_turn:
+		stop_waiting_animation()
+		
 func _parse_replay_dnb(raw: String) -> Dictionary:
 	var out := {
 		"pre_board_str": "", "post_board_str": "", "pre_lines": [], "pre_squares": [], 
@@ -299,33 +364,42 @@ func _on_turn() -> void:
 func _on_score(p0: int, p1: int) -> void:
 	my_score = p0 if player == 1 else p1
 	opp_score = p1 if player == 1 else p0
+
 	if is_instance_valid(player_score_label):
 		player_score_label.text = str(my_score)
+
 	if is_instance_valid(opp_score_label):
 		opp_score_label.text = str(opp_score)
-	
+
+	if _loading_replay:
+		return
+
 	game_ended = await check_win()
+
 	if game_ended:
 		stop_waiting_animation()
+		_update_send_button_visibility(false)
 		game_over = true
-		send_game()
 
 func _on_game_over() -> void:
 	pass
 
 func _on_temp_line_changed(has_line: bool) -> void:
-	if not is_instance_valid(send_button):
-		print("[SendButton] missing node")
+	if game_over or spectator_mode or not is_my_turn:
+		_update_send_button_visibility(false)
 		return
 
-	var should_show := has_line
-	print("[SendButton] temp_line_changed has_line=", has_line, " -> should_show=", should_show)
+	_update_send_button_visibility(has_line)
+	
+func _update_send_button_visibility(should_show: bool) -> void:
+	if not is_instance_valid(send_button):
+		return
 
+	send_button.disabled = not should_show
 	send_button.set_as_top_level(true)
 
 	if not send_button.has_meta("home_pos"):
 		send_button.set_meta("home_pos", send_button.global_position)
-		print("[SendButton] home cached: ", send_button.get_meta("home_pos"))
 
 	if send_button.has_meta("sb_tween"):
 		var old_tw: Variant = send_button.get_meta("sb_tween")
@@ -336,10 +410,9 @@ func _on_temp_line_changed(has_line: bool) -> void:
 	var vp := get_viewport_rect()
 	var off_y: float = vp.size.y + send_button.size.y + 30.0
 	var start_pos := Vector2(home.x, off_y)
-	var is_send_visible = send_button.visible
 
 	if should_show:
-		if not is_send_visible:
+		if not send_button.visible:
 			send_button.global_position = start_pos
 			send_button.visible = true
 			send_button.modulate.a = 1.0
@@ -348,37 +421,41 @@ func _on_temp_line_changed(has_line: bool) -> void:
 
 		var t_in := create_tween()
 		send_button.set_meta("sb_tween", t_in)
-		print("[SendButton] fly-in from ", send_button.global_position, " to ", home)
-		t_in.tween_property(send_button, "global_position", home, 0.35)\
+		t_in.tween_property(send_button, "global_position", home, 0.35) \
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	else:
-		if is_send_visible:
+		if send_button.visible:
 			var end_pos := Vector2(home.x, off_y)
-			print("[SendButton] fly-out from ", send_button.global_position, " to ", end_pos)
 			var t_out := create_tween()
 			send_button.set_meta("sb_tween", t_out)
-			t_out.tween_property(send_button, "global_position", end_pos, 0.25)\
+			t_out.tween_property(send_button, "global_position", end_pos, 0.25) \
 				.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 			t_out.tween_callback(func():
 				if is_instance_valid(send_button):
-					print("[SendButton] hide complete; visible=false")
 					send_button.visible = false
 			)
-		
+
 func _on_send_pressed() -> void:
 	print("[SendButton] pressed -> committing temp line and sending")
+
+	if game_over or spectator_mode or not is_my_turn:
+		_update_send_button_visibility(false)
+		return
+
 	var committed: bool = false
+
 	if is_instance_valid(grid) and grid.has_method("commit_temp_line_now"):
 		committed = bool(grid.call("commit_temp_line_now"))
+
 	print("[Send] commit_temp_line_now -> ", committed)
 
 	is_my_turn = false
+
 	if is_instance_valid(grid) and grid.has_method("set_input_enabled"):
 		grid.call("set_input_enabled", false)
 
-	if is_instance_valid(send_button):
-		send_button.visible = false
-	
+	_update_send_button_visibility(false)
+
 	if has_method("send_game"):
 		call_deferred("send_game")
 		
@@ -388,13 +465,16 @@ func send_game() -> void:
 
 	if _turn_steps.is_empty():
 		print("[Send] No committed steps this turn; abort")
+		_update_send_button_visibility(false)
 		return
 
 	var new_lines: Array = []
 	var new_squares: Array = []
+
 	for step in _turn_steps:
 		if step.has("line"):
 			new_lines.append(step["line"])
+
 		if step.has("squares"):
 			new_squares.append_array(step["squares"])
 
@@ -405,45 +485,51 @@ func send_game() -> void:
 	final_squares.append_array(new_squares)
 
 	var final_pre_board_str: String = post_board_str_from_opponent if post_board_str_from_opponent != "" else pre_board_str
-
 	var final_post_board_str: String = _compose_board_string(final_lines, final_squares)
 
 	var parts: Array[String] = []
 	parts.append("board:" + final_pre_board_str)
+
 	for step2 in _turn_steps:
 		var mv: Array = step2["line"]
 		parts.append("line:%d,%d,%d,%d,%d" % [int(mv[0]), int(mv[1]), int(mv[2]), int(mv[3]), int(mv[4])])
-		
+
 		for sq in (step2["squares"] as Array):
 			parts.append("square:%d,%d,%d" % [int(sq[0]), int(sq[1]), int(sq[2])])
+
 	parts.append("board:" + final_post_board_str)
 
 	var replay: String = String("|").join(parts)
 	last_replay_sent = replay
 
-	var payload: Dictionary = { "replay": replay }
-	var avatar_key := ("avatar1" if player == 1 else "avatar2")
+	var payload: Dictionary = {
+		"replay": replay
+	}
+
+	var avatar_key := "avatar1" if player == 1 else "avatar2"
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
 
 	game_ended = await check_win()
 	if game_ended:
-		print("Check Win 773 my_player: ", my_id, " win_loss_state: ", win_loss_state)
+		print("Check Win 773 my_player: ", my_uuid, " win_loss_state: ", win_loss_state)
+
 		if win_loss_state != "":
-			payload["winner"] = my_id + "|" + win_loss_state
+			payload["winner"] = my_uuid + "|" + win_loss_state
+
 	print("[Send] PAYLOAD: ", payload)
-	var appPlugin := Engine.get_singleton("AppPlugin")
-	if appPlugin:
-		appPlugin.updateGameData(JSON.stringify(payload))
-	else:
-		print("AppPlugin is null. Cannot send game data.")
+	send_game_data(JSON.stringify(payload))
 
 	is_my_turn = false
+
 	if is_instance_valid(grid) and grid.has_method("clear_temp_line"):
 		grid.call("clear_temp_line")
-	if is_instance_valid(send_button):
-		send_button.visible = false
-	if not game_over:
+
+	_update_send_button_visibility(false)
+
+	if game_over:
+		stop_waiting_animation()
+	elif not spectator_mode:
 		play_sent_animation()
 
 	prev_lines_cache = final_lines
@@ -569,7 +655,11 @@ func play_sent_animation() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
+
+		if not game_over and not spectator_mode and not is_my_turn:
 			start_waiting_animation()
+		else:
+			stop_waiting_animation()
 	)
 	
 func check_win() -> bool:
@@ -621,3 +711,72 @@ func check_win() -> bool:
 		print("-> Game was already marked as over. No new result displayed.")
 
 	return true
+
+func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: String = "") -> void:
+	var parts := winner_payload.split("|", false)
+	if parts.size() < 2:
+		return
+
+	var sender_uuid := String(parts[0])
+	var result := String(parts[1])
+
+	game_over = true
+	game_ended = true
+	is_my_turn = false
+
+	stop_waiting_animation()
+	_update_send_button_visibility(false)
+
+	if result == "0":
+		win_loss_state = "0"
+		win_loss_label.text = "DRAW!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	elif spectator_mode:
+		var sender_player := 0
+
+		if sender_uuid == p1_id:
+			sender_player = 1
+		elif sender_uuid == p2_id:
+			sender_player = 2
+
+		var winning_player := sender_player
+
+		if result == "-1":
+			winning_player = 2 if sender_player == 1 else 1
+
+		if winning_player == 1:
+			win_loss_label.text = "Player 1 Wins!"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			GameUtils._show_win_burst(player_avatar_display)
+		elif winning_player == 2:
+			win_loss_label.text = "Player 2 Wins!"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			GameUtils._show_win_burst(opp_avatar_display)
+		else:
+			win_loss_label.text = "Game Over"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+	elif sender_uuid == my_uuid:
+		if result == "1":
+			win_loss_state = "1"
+			win_loss_label.text = "YOU WIN!"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			GameUtils._show_win_burst(player_avatar_display)
+		else:
+			win_loss_state = "-1"
+			win_loss_label.text = "YOU LOSE"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+			GameUtils._show_win_burst(opp_avatar_display)
+	else:
+		if result == "1":
+			win_loss_state = "-1"
+			win_loss_label.text = "YOU LOSE"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+			GameUtils._show_win_burst(opp_avatar_display)
+		else:
+			win_loss_state = "1"
+			win_loss_label.text = "YOU WIN!"
+			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+			GameUtils._show_win_burst(player_avatar_display)
+
+	win_loss_label.visible = true
+	win_loss_label.scale = Vector2.ONE

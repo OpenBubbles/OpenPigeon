@@ -266,9 +266,18 @@ func _set_game_data(new_replay: String) -> void:
 			myBoardContainer = player1_container
 			theirBoardContainer = player2_container
 
+	var my_bg_name: String = "NULL"
+	var their_bg_name: String = "NULL"
+
+	if is_instance_valid(myBattleground):
+		my_bg_name = String(myBattleground.name)
+
+	if is_instance_valid(theirBattleground):
+		their_bg_name = String(theirBattleground.name)
+
 	print("[BOARD MAP] Local player is P", player,
-		" -> myBattleground=", (myBattleground.name if is_instance_valid(myBattleground) else "NULL"),
-		", theirBattleground=", (theirBattleground.name if is_instance_valid(theirBattleground) else "NULL"))
+		" -> myBattleground=", my_bg_name,
+		", theirBattleground=", their_bg_name)
 
 	if is_instance_valid(theirBattleground):
 		theirBattleground.set_grid_tint(Color.BLACK)

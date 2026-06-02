@@ -155,8 +155,8 @@ static func open_rules_popup(game: Node, rules_button: Button, title: String, bo
 	var root := game.get_tree().root
 	root.add_child(dim)
 	root.add_child(popup)
-	popup.z_index = 100
-	dim.z_index = 99
+	popup.z_index = 200
+	dim.z_index = 150
 	popup.tree_exited.connect(func():
 		if is_instance_valid(dim):
 			dim.queue_free()
@@ -188,8 +188,8 @@ static func open_settings_popup(game: Node, media_plugin, settings_button: Butto
 	var root := game.get_tree().root
 	root.add_child(dim)
 	root.add_child(popup)
-	popup.z_index = 100
-	dim.z_index = 99
+	popup.z_index = 200
+	dim.z_index = 150
 	root.move_child(dim, root.get_child_count() - 2)
 	popup_script.setup_popup(dim)
 

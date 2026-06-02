@@ -41,54 +41,67 @@ const MAX_QUESTIONS := 20
 var _scroll_tween: Tween = null
 var _overlay_idx: int = -1
 var _waiting_active := false
-
-var _input_lifted := false
-var _input_orig_preset := -1
-var _input_orig_position := Vector2.ZERO
+var _questions_wait_text: String = "Waiting"
 var _kb_open := false
 var _kb_last_h := 0
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
+	
+func _get_dev_data() -> String:
+	return '{"player":"2","game":"questions","questions":"[Is it a fruit?^&*1^&*1|][Is it an Apple?^&*2^&*2|][Is it a Pear?^&*3^&*0]","game_name":"20 Questions","id":"TEST123","answer":"Pear","num":"1","isYourTurn":true,"player1":"TEST_P1","player2":"TEST_P2"}'
+	
+func _get_settings_avatar_display() -> Control:
+	return player_avatar_display
+
+func _get_rules_title() -> String:
+	return "20 Questions"
+	
+func _get_rules_text() -> String:
+	return """
+[font_size={32px}][b]20 Questions[/b][/font_size]
+
+[font_size={24px}][b]Goal[/b][/font_size]
+[font_size={18px}]
+Player 1 tries to guess Player 2's secret answer in 20 questions or less.
+[/font_size]
+
+[font_size={24px}][b]How to Play[/b][/font_size]
+[font_size={18px}]
+• Player 2 secretly chooses an answer.
+• Player 1 asks yes-or-no style questions.
+• Player 2 answers Yes, No, Sometimes, or You've Guessed It.
+• If Player 1 guesses correctly, Player 1 wins.
+• If Player 1 reaches 20 questions without guessing correctly, Player 2 wins.
+[/font_size]
+"""
 
 func _on_game_ready() -> void:
-	var appPlugin = Engine.get_singleton("AppPlugin")
-	
-	if appPlugin and appPlugin.has_method("getSenderUUID"):
-		my_uuid = String(appPlugin.getSenderUUID() or "")
-	else:
-		my_uuid = ""
-		
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		_my_avatar_string = player_avatar_display.get_avatar_data_string()
-		
+
 	if is_instance_valid(send_button):
-		send_button.pressed.connect(_on_send_pressed)
+		if not send_button.pressed.is_connected(_on_send_pressed):
+			send_button.pressed.connect(_on_send_pressed)
 
-	if appPlugin:
-		print("App plugin is available")
-		appPlugin.connect("set_game_data", _set_game_data)
-		my_uuid = appPlugin.getSenderUUID()
-		appPlugin.onReady()
-	else:
-		print("App plugin is not available")
-		my_uuid = "0a602920-2033-469d-aab8-5e832c5d4f6a"
-		_set_game_data('{"player":"2","game":"questions","questions":"[Is it a fruit?^&*1^&*1|][Is it an Apple?^&*2^&*2|][Is it a Pear?^&*3^&*0]","game_name":"20 Questions","id":"TEST123","answer":"Pear","num":"1"}')
-
-	_update_ui_interactivity()
-	
 	if is_instance_valid(questions_scroll):
 		if is_instance_valid(questions_scroll.get_v_scroll_bar()):
 			questions_scroll.get_v_scroll_bar().visible = false
 		if is_instance_valid(questions_scroll.get_h_scroll_bar()):
 			questions_scroll.get_h_scroll_bar().visible = false
+
 	if is_instance_valid(questions_list):
-		questions_list.resized.connect(_on_questions_resized)
-		questions_list.child_entered_tree.connect(_on_questions_child_entered)
+		if not questions_list.resized.is_connected(_on_questions_resized):
+			questions_list.resized.connect(_on_questions_resized)
+
+		if not questions_list.child_entered_tree.is_connected(_on_questions_child_entered):
+			questions_list.child_entered_tree.connect(_on_questions_child_entered)
+
 		var sep := questions_list.get_theme_constant("separation", "VBoxContainer")
 		if sep == 0:
 			sep = 12
 		questions_list.add_theme_constant_override("separation", sep * 2)
+
 	if is_instance_valid(overlay):
 		overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 		overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -97,37 +110,47 @@ func _on_game_ready() -> void:
 		overlay.z_index = 1000
 
 	if is_instance_valid(overlay_yes):
-		overlay_yes.pressed.connect(func(): _overlay_click(1))
+		if not overlay_yes.pressed.is_connected(func(): _overlay_click(1)):
+			overlay_yes.pressed.connect(func(): _overlay_click(1))
+
 	if is_instance_valid(overlay_no):
-		overlay_no.pressed.connect(func(): _overlay_click(2))
+		if not overlay_no.pressed.is_connected(func(): _overlay_click(2)):
+			overlay_no.pressed.connect(func(): _overlay_click(2))
+
 	if is_instance_valid(overlay_some):
-		overlay_some.pressed.connect(func(): _overlay_click(3))
+		if not overlay_some.pressed.is_connected(func(): _overlay_click(3)):
+			overlay_some.pressed.connect(func(): _overlay_click(3))
+
 	if is_instance_valid(overlay_correct):
 		overlay_correct.visible = true
 		overlay_correct.disabled = false
 		overlay_correct.mouse_filter = Control.MOUSE_FILTER_STOP
-		overlay_correct.pressed.connect(func(): _overlay_click(4))
+
+		if not overlay_correct.pressed.is_connected(func(): _overlay_click(4)):
+			overlay_correct.pressed.connect(func(): _overlay_click(4))
 
 	if is_instance_valid(text_box):
 		if not text_box.focus_entered.is_connected(_on_text_focus_entered):
 			text_box.focus_entered.connect(_on_text_focus_entered)
+
 		if not text_box.focus_exited.is_connected(_on_text_focus_exited):
 			text_box.focus_exited.connect(_on_text_focus_exited)
+
 		if not text_box.text_changed.is_connected(_on_text_changed_sanitize):
 			text_box.text_changed.connect(_on_text_changed_sanitize)
-	var vbar := questions_scroll.get_v_scroll_bar()
-	if vbar:
-		vbar.visible = false
-		vbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		
+
+	if is_instance_valid(questions_scroll):
+		var vbar := questions_scroll.get_v_scroll_bar()
+		if vbar:
+			vbar.visible = false
+			vbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
 	await get_tree().process_frame
-	call_deferred("_maybe_show_answer_popup")
+
 	_make_scrollbars_invisible()
-	if (not is_my_turn) and (not game_over) and (not _waiting_active):
-		start_waiting_animation()
-	elif is_my_turn and (not game_over):
-		stop_waiting_animation()
-		
+	_update_ui_interactivity()
+	call_deferred("_maybe_show_answer_popup")
+	
 func _get_s(parsed_dict: Dictionary, key: String, def: String = "") -> String:
 	if not parsed_dict.has(key):
 		return def
@@ -237,9 +260,22 @@ func _set_game_data(data_json: String) -> void:
 	if typeof(parsed_v) != TYPE_DICTIONARY:
 		printerr("Bad game data JSON")
 		return
+
 	var parsed: Dictionary = parsed_v
 	last_raw_payload = parsed.duplicate(true)
+
 	print("RAW DATA:", parsed)
+
+	game_over = false
+	winner = 0
+	spectator_mode = false
+	stop_waiting_animation()
+
+	if is_instance_valid(win_loss_label):
+		win_loss_label.visible = false
+		win_loss_label.text = ""
+		win_loss_label.scale = Vector2.ONE
+
 	is_my_turn = _get_b(parsed, "isYourTurn", false)
 	server_player_hint = int(_get_s(parsed, "player", "1"))
 	secret_answer = _get_s(parsed, "answer", secret_answer)
@@ -247,8 +283,6 @@ func _set_game_data(data_json: String) -> void:
 
 	var player1: String = _get_s(parsed, "player1", "")
 	var player2: String = _get_s(parsed, "player2", "")
-
-	spectator_mode = false
 
 	if player1 != "" or player2 != "":
 		if my_uuid == player1 or player1 == "":
@@ -260,12 +294,15 @@ func _set_game_data(data_json: String) -> void:
 			i_am_player = 1
 	else:
 		i_am_player = 2 if server_player_hint == 1 else 1
-		
+
+	_set_wait_base_text()
+
 	var avatar1_string := _get_s(parsed, "avatar1", "")
 	var avatar2_string := _get_s(parsed, "avatar2", "")
 
 	if avatar1_string != "":
 		_avatar1_raw = avatar1_string
+
 	if avatar2_string != "":
 		_avatar2_raw = avatar2_string
 
@@ -276,9 +313,11 @@ func _set_game_data(data_json: String) -> void:
 		player_avatar_display.call_deferred("update_avatar_from_data", _answer_avatar_data)
 
 	questions.clear()
+
 	if parsed.has("questions"):
 		var raw: Variant = parsed["questions"]
 		var joined: String = ""
+
 		if typeof(raw) == TYPE_ARRAY and raw.size() > 0:
 			joined = str(raw[0])
 		elif typeof(raw) == TYPE_STRING:
@@ -287,9 +326,12 @@ func _set_game_data(data_json: String) -> void:
 		if joined != "":
 			var cleaned: String = joined.replace("['", "").replace("']", "")
 			cleaned = cleaned.replace("[", "").replace("]", "")
+
 			var chunks: PackedStringArray = cleaned.split("|", false)
+
 			for chunk in chunks:
 				var parts: PackedStringArray = chunk.split("^&*", false)
+
 				if parts.size() >= 3:
 					var q_text: String = parts[0]
 					var q_idx: int = int(parts[1])
@@ -301,123 +343,182 @@ func _set_game_data(data_json: String) -> void:
 	if parsed.has("response") and questions.size() > 0:
 		var resp_txt: String = _get_s(parsed, "response", "")
 		questions[-1]["response_text"] = resp_txt
-			
-	dbg("set_game_data: is_my_turn=%s, server_player_hint=%s, i_am_player(pre)=%s" % [str(is_my_turn), str(server_player_hint), str(i_am_player)])
+
+	dbg("set_game_data: is_my_turn=%s, server_player_hint=%s, i_am_player=%s" % [str(is_my_turn), str(server_player_hint), str(i_am_player)])
 	dbg("set_game_data: parsed questions count=%d" % questions.size())
+
 	if questions.size() > 0:
-		var u := 0
+		var unanswered := 0
+
 		for q in questions:
 			if int(q.get("resp", 0)) == 0:
-				u += 1
-		if u == 0 and i_am_player == 1:
+				unanswered += 1
+
+		if unanswered == 0 and i_am_player == 1:
 			is_my_turn = true
-		elif u != 0 and i_am_player == 2:
+		elif unanswered != 0 and i_am_player == 2:
 			is_my_turn = true
 		else:
 			is_my_turn = false
-			
-		dbg("set_game_data: unanswered=%d" % u)
-	dbg("set_game_data: secret_answer='%s', game_over=%s" % [secret_answer, str(game_over)])
+
+		dbg("set_game_data: unanswered=%d" % unanswered)
+
 	_renumber_from_one()
-	_evaluate_game_over_and_winner()
-	if parsed.has("winner"):
-		var winner_parts := _get_s(parsed, "winner", "").split("|", false)
-		if winner_parts.size() >= 2:
-			var winner_sender := String(winner_parts[0])
-			var win_loss_state := int(winner_parts[1])
 
-			game_over = true
+	if parsed.has("winner") and _get_s(parsed, "winner", "") != "":
+		_apply_winner_payload(_get_s(parsed, "winner", ""), player1, player2)
+	else:
+		check_win()
 
-			if win_loss_state == 0:
-				winner = 0
-			elif winner_sender == player1:
-				winner = 1 if win_loss_state == 1 else -1
-			elif winner_sender == player2:
-				winner = -1 if win_loss_state == 1 else 1
 	_update_upcoming_input_chip_color()
-	if (not is_my_turn) and (not game_over) and (not _waiting_active):
-		start_waiting_animation()
-	elif is_my_turn and (not game_over):
-		stop_waiting_animation()
-		
 	_replay_from_state()
 	_render_all_questions()
 	_update_ui_interactivity()
 	_update_description_fill()
-	_maybe_show_answer_popup()
+
+	if game_over:
+		stop_waiting_animation()
+	elif not is_my_turn:
+		_set_wait_base_text()
+		start_waiting_animation()
+	else:
+		stop_waiting_animation()
+		_maybe_show_answer_popup()
+		
+func _show_result_from_state(state: String, spectator_winner_player: int = 0) -> void:
+	game_over = true
+	is_my_turn = false
+
+	stop_waiting_animation()
+	_hide_answer_overlay()
+
+	if is_instance_valid(bottom_items):
+		bottom_items.visible = false
+
+	if is_instance_valid(text_box):
+		text_box.editable = false
+
+	if is_instance_valid(send_button):
+		send_button.disabled = true
+
+	if state == "0":
+		winner = 0
+	elif spectator_mode:
+		winner = 1 if spectator_winner_player == 1 else -1
+	elif state == "1":
+		winner = 1 if i_am_player == 1 else -1
+	else:
+		winner = -1 if i_am_player == 1 else 1
+
+	if not is_instance_valid(win_loss_label):
+		return
+
+	if state == "0":
+		win_loss_label.text = "DRAW!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	elif spectator_mode:
+		var player_num := spectator_winner_player
+
+		if player_num == 0:
+			player_num = 1 if state == "1" else 2
+
+		win_loss_label.text = "Player %d Wins!" % player_num
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+	elif state == "1":
+		win_loss_label.text = "YOU WIN!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
+		if is_instance_valid(player_avatar_display):
+			GameUtils._show_win_burst(player_avatar_display)
+	else:
+		win_loss_label.text = "YOU LOSE"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
+		if is_instance_valid(player_avatar_display):
+			GameUtils._show_win_burst(player_avatar_display)
+
+	win_loss_label.visible = true
+	win_loss_label.scale = Vector2.ZERO
+	win_loss_label.pivot_offset = win_loss_label.size / 2.0
+
+	var tween_in := create_tween()
+	tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		
+func _apply_winner_payload(winner_payload: String, player1_id: String = "", player2_id: String = "") -> void:
+	var parts := winner_payload.split("|", false)
+	if parts.size() < 2:
+		return
+
+	var sender_uuid := String(parts[0])
+	var sender_state := String(parts[1])
+
+	if sender_state == "0":
+		_show_result_from_state("0")
+		return
+
+	var local_state := sender_state
+	var winning_player := 0
+
+	if spectator_mode:
+		var sender_player := 0
+
+		if sender_uuid == player1_id:
+			sender_player = 1
+		elif sender_uuid == player2_id:
+			sender_player = 2
+
+		winning_player = sender_player
+
+		if sender_state == "-1":
+			winning_player = 2 if sender_player == 1 else 1
+
+		local_state = "1" if winning_player == 1 else "-1"
+	else:
+		if sender_uuid != my_uuid:
+			local_state = "-1" if sender_state == "1" else "1"
+
+	_show_result_from_state(local_state, winning_player)
 	
-func _evaluate_game_over_and_winner() -> void:
-	var was_over := game_over
+func check_win() -> bool:
+	if game_over:
+		return true
 
 	var any_correct := false
 	var answered := 0
+
 	for q in questions:
 		var r := int(q.get("resp", 0))
+
 		if r > 0:
 			answered += 1
+
 		if r == 4:
 			any_correct = true
 
-	if game_over:
-		pass
-	elif any_correct:
-		game_over = true
-		winner = 1
-		print("[20Q] GAME OVER: Player 1 wins (guessed correctly).")
-	elif answered >= MAX_QUESTIONS:
-		game_over = true
-		winner = -1
-		print("[20Q] GAME OVER: Player 2 wins (no correct guess in 20).")
-	else:
-		game_over = false
-		winner = 0
-		
-	if game_over:
-		stop_waiting_animation()
-		_hide_answer_overlay()
+	if any_correct:
+		print("[20Q] GAME OVER: Player 1 wins, guessed correctly.")
 
-		if is_instance_valid(bottom_items):
-			bottom_items.visible = false
-		if is_instance_valid(text_box):
-			text_box.editable = false
-		if is_instance_valid(send_button):
-			send_button.disabled = true
+		if spectator_mode:
+			_show_result_from_state("1", 1)
+		else:
+			_show_result_from_state("1" if i_am_player == 1 else "-1")
 
-		if is_instance_valid(win_loss_label):
-			if winner == 0:
-				win_loss_label.text = "DRAW!"
-				win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
-			else:
-				var you_win := false
+		return true
 
-				if i_am_player == 1 and winner == 1:
-					you_win = true
-				elif i_am_player == 2 and winner == -1:
-					you_win = true
+	if answered >= MAX_QUESTIONS:
+		print("[20Q] GAME OVER: Player 2 wins, no correct guess in 20.")
 
-				if you_win:
-					win_loss_label.text = "YOU WIN!"
-					win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-				else:
-					if i_am_player != 1 and i_am_player != 2:
-						win_loss_label.text = "Player 1 Wins!" if winner == 1 else "Player 2 Wins!"
-						win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-					else:
-						win_loss_label.text = "YOU LOSE"
-						win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+		if spectator_mode:
+			_show_result_from_state("-1", 2)
+		else:
+			_show_result_from_state("1" if i_am_player == 2 else "-1")
 
-			win_loss_label.visible = true
+		return true
 
-			if not was_over:
-				await get_tree().process_frame
-				win_loss_label.scale = Vector2.ZERO
-				win_loss_label.pivot_offset = win_loss_label.size / 2.0
-
-				var tween_in := create_tween()
-				tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
-					.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-			else:
-				win_loss_label.scale = Vector2.ONE
+	game_over = false
+	winner = 0
+	return false
 	
 func _question_color_for_index(idx: int) -> Color:
 	var deg := (360.0 / 20.0) * float(idx)
@@ -501,6 +602,7 @@ func _on_send_pressed() -> void:
 		return
 
 	var text_to_send := cleaned
+
 	if not text_to_send.ends_with("?"):
 		text_to_send += "?"
 
@@ -508,58 +610,71 @@ func _on_send_pressed() -> void:
 	var resp_code: int = 0
 
 	questions.append({ "text": text_to_send, "idx": next_idx, "resp": resp_code })
-	_evaluate_game_over_and_winner()
+
+	check_win()
 	_render_all_questions()
 	_update_upcoming_input_chip_color()
 	_smooth_scroll_to_bottom()
 
 	if i_am_player == 1:
 		var asked_count := questions.size()
+
 		if asked_count >= MAX_QUESTIONS:
-			_evaluate_game_over_and_winner()
+			check_win()
 			_update_ui_interactivity()
 			print("P1 reached 20 questions without correct guess. You lose.")
 
-	_send_game()
+	send_game()
+
 	text_box.text = ""
 	DisplayServer.virtual_keyboard_hide()
 	_on_text_focus_exited()
-	start_waiting_animation()
-	_update_description_fill()
 
+	if game_over:
+		stop_waiting_animation()
+	else:
+		_set_wait_base_text()
+		start_waiting_animation()
+
+	_update_description_fill()
+	
 func _apply_answer_code_to_idx(target_idx: int, code: int) -> void:
 	if game_over or i_am_player != 2 or questions.size() == 0:
 		return
 
 	var found := false
+
 	for i in range(questions.size()):
 		if int(questions[i].get("idx", -1)) == target_idx and int(questions[i].get("resp", 0)) == 0:
 			questions[i]["resp"] = code
 			found = true
 			break
+
 	if not found:
 		dbg("apply_idx: NOT FOUND or already answered")
 		return
 
 	_render_all_questions()
-	_evaluate_game_over_and_winner()
+	check_win()
 
 	if code == 4:
 		dbg("apply_idx: guessed-it selected; game_over=%s winner=%d before send" % [str(game_over), winner])
 
-	dbg("apply_idx: updated; calling _send_game() & _maybe_show_answer_popup")
-	_send_game()
+	dbg("apply_idx: updated; calling send_game() & _maybe_show_answer_popup")
+
+	send_game()
 	_update_ui_interactivity()
 
 	if not game_over:
 		_maybe_show_answer_popup()
+		_set_wait_base_text()
 		start_waiting_animation()
 	else:
 		_hide_answer_overlay()
 		stop_waiting_animation()
-	
-	dbg("apply_idx: target_idx=%d code=%d i_am_player=%d game_over=%s qcount=%d" % [target_idx, code, i_am_player, str(game_over), questions.size()])
 
+	dbg("apply_idx: target_idx=%d code=%d i_am_player=%d game_over=%s qcount=%d" % [target_idx, code, i_am_player, str(game_over), questions.size()])
+	
 func _apply_answer_code_to_pending(code: int) -> void:
 	if game_over or i_am_player != 2 or questions.size() == 0:
 		return
@@ -570,8 +685,12 @@ func _apply_answer_code_to_pending(code: int) -> void:
 				_apply_answer_code_to_idx(idx, code)
 			return
 
-func _send_game() -> void:
+func send_game() -> void:
+	if spectator_mode:
+		return
+
 	var chunks: Array[String] = []
+
 	for q in questions:
 		var server_idx := int(q["idx"]) - 1
 		var c := "%s^&*%d^&*%d" % [str(q["text"]), server_idx, int(q["resp"])]
@@ -584,8 +703,9 @@ func _send_game() -> void:
 		"id": game_id,
 		"questions": questions_field
 	}
-	
+
 	var my_avatar := _my_avatar_string
+
 	if my_avatar == "" and is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		my_avatar = player_avatar_display.get_avatar_data_string()
 
@@ -600,32 +720,23 @@ func _send_game() -> void:
 		if _avatar2_raw != "":
 			payload["avatar2"] = _avatar2_raw
 
-	for q in questions:
-		if int(q.get("resp", 0)) == 4:
-			game_over = true
-			winner = 1
-			break
+	check_win()
 
 	if game_over:
-		var win_loss_state := "0"
+		var outgoing_state := "0"
 
-		if winner == 0:
-			win_loss_state = "0"
-		elif (i_am_player == 1 and winner == 1) or (i_am_player == 2 and winner == -1):
-			win_loss_state = "1"
-		else:
-			win_loss_state = "-1"
+		if winner == 1:
+			outgoing_state = "1" if i_am_player == 1 else "-1"
+		elif winner == -1:
+			outgoing_state = "1" if i_am_player == 2 else "-1"
 
-		payload["winner"] = my_uuid + "|" + win_loss_state
+		payload["winner"] = my_uuid + "|" + outgoing_state
 
 	var json := JSON.stringify(payload)
-	print("Sending: ", json)
-	var appPlugin := Engine.get_singleton("AppPlugin")
-	if appPlugin:
-		appPlugin.updateGameData(json)
-	else:
-		print("No app plugin (local test).")
 
+	print("Sending: ", json)
+	send_game_data(json)
+	
 func _update_ui_interactivity() -> void:
 	var enable_input := (is_my_turn and not game_over and i_am_player == 1 and not spectator_mode)
 
@@ -643,6 +754,7 @@ func _update_ui_interactivity() -> void:
 
 	var should_wait := (not game_over) and (not is_my_turn)
 	if should_wait and not _waiting_active:
+		_set_wait_base_text()
 		start_waiting_animation()
 	elif (not should_wait) and _waiting_active:
 		stop_waiting_animation()
@@ -1054,7 +1166,10 @@ func _update_description_fill() -> void:
 var DEBUG_20Q := true
 
 func _set_wait_base_text() -> void:
-	BASE_WAIT_TEXT = "Waiting for an answer" if i_am_player == 1 else "Waiting for a question"
+	_questions_wait_text = "Waiting for an answer" if i_am_player == 1 else "Waiting for a question"
+
+	if is_instance_valid(wait_for_label):
+		wait_for_label.text = _questions_wait_text
 
 func _renumber_from_one() -> void:
 	if questions.is_empty():

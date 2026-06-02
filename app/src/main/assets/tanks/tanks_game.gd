@@ -23,7 +23,6 @@ class_name TanksGame
 const MUSIC_STREAM := preload("res://global/audio/tanks.ogg")
 
 var core: TanksCore
-var has_connected: bool = false
 var sent_tween: Tween
 var _view_flipped: bool = false
 var _is_dragging_aim: bool = false
@@ -77,10 +76,29 @@ var _aim_label: Label
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
+	
+func _get_dev_data() -> String:
+	return JSON.stringify({
+		"myPlayerId": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb",
+		"player1": "82B2A470-70BC-4EDF-9AAA-0B99A98C58DAj2fM2b",
+		"player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb",
+		"player": "1",
+		"isYourTurn": true,
+		"avatar1": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657",
+		"avatar2": "",
+		"replay": "board:height,0.0&wind,-1.0&tank1x,-150.0&tank1rot,4.960246&tank1power,0.82741&tank1hp,3&tank2x,150.0&tank2rot,-4.960246&tank2power,0.82741&tank2hp,2|shoot:1"
+	})
+	
+func _get_settings_avatar_display() -> Control:
+	return player_avatar_display
+
+func _get_rules_title() -> String:
+	return "Tanks"
 
 func _on_game_ready() -> void:
 	core = TanksCore.new()
 	add_child(core)
+
 	core.replay_true.connect(_on_has_replay)
 	core.winner_true.connect(_has_winner)
 	core.turn_changed.connect(_on_turn_changed)
@@ -90,17 +108,26 @@ func _on_game_ready() -> void:
 	core.opponent_avatar_ready.connect(_on_opponent_avatar_received)
 
 	if is_instance_valid(fire_button):
-		fire_button.pressed.connect(_on_send_pressed)
-		fire_button.button_down.connect(_on_fire_button_down)
-		fire_button.button_up.connect(_on_fire_button_up)
+		if not fire_button.pressed.is_connected(_on_send_pressed):
+			fire_button.pressed.connect(_on_send_pressed)
+
+		if not fire_button.button_down.is_connected(_on_fire_button_down):
+			fire_button.button_down.connect(_on_fire_button_down)
+
+		if not fire_button.button_up.is_connected(_on_fire_button_up):
+			fire_button.button_up.connect(_on_fire_button_up)
+
 	if is_instance_valid(power_slider):
-		power_slider.value_changed.connect(_on_power_slider_changed)
-		
-	resized.connect(_on_resized)
+		if not power_slider.value_changed.is_connected(_on_power_slider_changed):
+			power_slider.value_changed.connect(_on_power_slider_changed)
+
+	if not resized.is_connected(_on_resized):
+		resized.connect(_on_resized)
+
 	_on_resized()
-	
+
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	
+
 	_apply_tank_size()
 	_apply_tank_colors()
 	_debug_tank_sizes()
@@ -111,22 +138,79 @@ func _on_game_ready() -> void:
 
 	_apply_tank_colors()
 	_setup_aim_label()
-	
-	# Set UI to "Out" state immediately
-	fire_button.modulate.a = 0.0
-	power_slider.modulate.a = 0.0
-	power_label.modulate.a = 0.0
+
+	if is_instance_valid(fire_button):
+		fire_button.modulate.a = 0.0
+
+	if is_instance_valid(power_slider):
+		power_slider.modulate.a = 0.0
+		power_slider.editable = false
+
+	if is_instance_valid(power_label):
+		power_label.modulate.a = 0.0
+
 	if is_instance_valid(_aim_label):
 		_aim_label.modulate.a = 0.0
-		
-	tank_p1.set_power_visibility(false)
-	tank_p2.set_power_visibility(false)
-	
-	# Disable interaction until board is loaded and it's our turn
-	can_interact = false
-	power_slider.editable = false
 
-	_connect_app_plugin_or_dev()
+	if is_instance_valid(tank_p1):
+		tank_p1.set_power_visibility(false)
+
+	if is_instance_valid(tank_p2):
+		tank_p2.set_power_visibility(false)
+
+	can_interact = false
+
+func _set_game_data(raw_text: String) -> void:
+	var parsed: Variant = JSON.parse_string(raw_text)
+
+	if typeof(parsed) != TYPE_DICTIONARY:
+		print("[TANKS] Bad game data JSON")
+		return
+
+	var data: Dictionary = parsed
+
+	if my_uuid != "":
+		data["myPlayerId"] = my_uuid
+
+	var winner_payload: String = str(data.get("winner", ""))
+	var p1_id: String = str(data.get("player1", ""))
+	var p2_id: String = str(data.get("player2", ""))
+
+	game_over = false
+	winner = ""
+	win_loss_state = ""
+	can_interact = false
+	has_replay = false
+
+	stop_waiting_animation()
+
+	if is_instance_valid(win_loss_label):
+		win_loss_label.visible = false
+		win_loss_label.text = ""
+		win_loss_label.scale = Vector2.ONE
+		win_loss_label.modulate.a = 1.0
+
+	core.ingest_game_data(JSON.stringify(data))
+	_apply_view_flip()
+
+	if is_instance_valid(spec_label):
+		spec_label.visible = core.spectator_mode
+
+	_update_avatars()
+	_apply_health_colors()
+
+	if not core.current_board.is_empty():
+		_apply_health_from_board(core.current_board)
+
+	_apply_tank_colors()
+
+	if not core.current_board.is_empty():
+		call_deferred("_apply_tanks_from_board", core.current_board)
+
+	_update_aim_label_visibility()
+
+	if winner_payload != "":
+		_apply_winner_payload(winner_payload, p1_id, p2_id)
 
 func _get_target_tank_width_screen_px() -> float:
 	return TANK_WIDTH_UNITS * _get_pixels_per_board_unit()
@@ -231,57 +315,6 @@ func _get_pixels_per_board_unit() -> float:
 func _board_units_to_screen_px(units: float) -> float:
 	return units * _get_pixels_per_board_unit()
 
-func _connect_app_plugin_or_dev() -> void:
-	var app_plugin := Engine.get_singleton("AppPlugin")
-	if app_plugin:
-		if not has_connected:
-			app_plugin.connect("set_game_data", _set_game_data)
-			has_connected = true
-			app_plugin.onReady()
-	else:
-		var dev := JSON.stringify({ #PLAYER 2
-			"myPlayerId": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb",
-			"player1": "82B2A470-70BC-4EDF-9AAA-0B99A98C58DAj2fM2b",
-			"player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb",
-			"player": "1",
-			"isYourTurn": true,
-			"avatar1": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657",
-			"avatar2": "",
-			"replay": "board:height,0.0&wind,-1.0&tank1x,-150.0&tank1rot,4.960246&tank1power,0.82741&tank1hp,3&tank2x,150.0&tank2rot,-4.960246&tank2power,0.82741&tank2hp,2|shoot:1"
-		})
-		#var dev := JSON.stringify({ #PLAYER 1
-			#"myPlayerId": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb",
-			#"player1": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb",
-			#"player2": "82B2A470-70BC-4EDF-9AAA-0B99A98C58DAj2fM2b",
-			#"player": "1",
-			#"isYourTurn": true,
-			#"avatar1": "",
-			#"avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657",
-			#"replay": "board:height,55.690147&wind,0.413690&tank1x,-140.662827&tank1rot,0.000000&tank1power,1.000000&tank1hp,2&tank2x,116.385284&tank2rot,0.000000&tank2power,0.500000&tank2hp,2"
-		#})
-		_set_game_data(dev)
-
-func _set_game_data(raw_text: String) -> void:
-	core.ingest_game_data(raw_text)
-	_apply_view_flip()
-	
-	if is_instance_valid(spec_label):
-		spec_label.visible = core.spectator_mode
-	
-	_update_avatars()
-
-	_apply_health_colors()
-
-	if not core.current_board.is_empty():
-		_apply_health_from_board(core.current_board)
-
-	_apply_tank_colors()
-
-	if not core.current_board.is_empty():
-		call_deferred("_apply_tanks_from_board", core.current_board)
-		
-	_update_aim_label_visibility()
-	
 func _apply_view_flip() -> void:
 	_view_flipped = (core.player == 2)
 
@@ -642,6 +675,13 @@ func _on_has_replay(r: bool) -> void:
 func _has_winner(w: bool) -> void:
 	game_over = w
 
+	if game_over:
+		can_interact = false
+		stop_waiting_animation()
+
+		if is_instance_valid(_aim_label):
+			_aim_label.visible = false
+
 func _on_turn_changed(v: bool) -> void:
 	if _is_playing_round or has_replay or core.current_board.is_empty() or core.spectator_mode:
 		can_interact = false
@@ -664,21 +704,20 @@ func _on_turn_changed(v: bool) -> void:
 
 func _send_payload(payload: Dictionary) -> bool:
 	print(">>> _send_payload CALLED")
-	if game_over and win_loss_state != "" and core.my_id != "":
-		payload["winner"] = core.my_id + "|" + win_loss_state
-	
+
+	if game_over and win_loss_state != "":
+		var sender_id := my_uuid
+
+		if sender_id == "" and core != null:
+			sender_id = core.my_id
+
+		if sender_id != "" and not payload.has("winner"):
+			payload["winner"] = sender_id + "|" + win_loss_state
+
 	print(">>> PAYLOAD: ", payload)
 
 	var json := JSON.stringify(payload)
-	var app_plugin := Engine.get_singleton("AppPlugin")
-
-	if app_plugin:
-		print(">>> AppPlugin found, calling updateGameData")
-		app_plugin.updateGameData(json)
-		return true
-
-	print(">>> AppPlugin NOT found. DEV MODE FALLBACK.")
-	print(">>> JSON TO SEND: ", json)
+	send_game_data(json)
 
 	return true
 
@@ -699,7 +738,7 @@ func _make_dim() -> ColorRect:
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	return dim
 
-func _rules_text() -> String:
+func _get_rules_text() -> String:
 	return """
 [font_size={32px}][b]Tanks[/b][/font_size]
 
@@ -722,7 +761,11 @@ func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
 		print("Warning: sent_label is not valid for play_sent_animation.")
 		return
-	
+
+	if game_over or (core != null and core.spectator_mode):
+		stop_waiting_animation()
+		return
+
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()
 
@@ -747,7 +790,11 @@ func play_sent_animation() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
+
+		if not game_over and core != null and not core.spectator_mode and not core.is_my_turn:
 			start_waiting_animation()
+		else:
+			stop_waiting_animation()
 	)
 
 func _update_avatars() -> void:
@@ -1166,7 +1213,7 @@ func _on_replay_action(_action: Dictionary) -> void:
 		if is_instance_valid(wind_indicator):
 			wind_indicator.set_wind(w_visual)
 
-	if await _finish_round_or_show_result():
+	if _finish_round_or_show_result():
 		return
 	
 	_is_playing_round = false
@@ -1200,12 +1247,12 @@ func _play_round_sequence() -> void:
 	# --- EXECUTE SHOTS ---
 	# Shot 1 (Current Player)
 	await _execute_shot(p1_idx, t1_rot, t1_pow, wind_val)
-	if await _check_win_condition():
+	if _check_win_condition():
 		return
 	
 	# Shot 2 (Opponent's Last Known/Current Turn)
 	await _execute_shot(p2_idx, t2_rot, t2_pow, wind_val)
-	if await _check_win_condition():
+	if _check_win_condition():
 		return
 	
 	_is_playing_round = false
@@ -1297,17 +1344,130 @@ func _play_death_feedback(at_pos: Vector2) -> void:
 	_spawn_impact_fx(at_pos, "tank_death")
 	
 func _finish_round_or_show_result() -> bool:
-	if await _check_win_condition():
+	if _check_win_condition():
 		can_interact = false
 		_update_aim_label_visibility()
 		return true
 
 	return false
 
-func _check_win_condition() -> bool:
-	#if game_over:
-		#return true
+func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: String = "") -> void:
+	var parts := winner_payload.split("|", false)
 
+	if parts.size() < 2:
+		return
+
+	var sender_uuid := String(parts[0])
+	var sender_state := String(parts[1])
+
+	if sender_state == "0":
+		_show_result_from_state("0")
+		return
+
+	var local_state := sender_state
+	var winning_player := 0
+
+	if core != null and core.spectator_mode:
+		var sender_player := 0
+
+		if sender_uuid == p1_id:
+			sender_player = 1
+		elif sender_uuid == p2_id:
+			sender_player = 2
+
+		winning_player = sender_player
+
+		if sender_state == "-1":
+			winning_player = 2 if sender_player == 1 else 1
+
+		local_state = "1" if winning_player == 1 else "-1"
+	else:
+		if sender_uuid != my_uuid:
+			local_state = "-1" if sender_state == "1" else "1"
+
+	_show_result_from_state(local_state, winning_player)
+	
+func _show_result_from_state(state: String, spectator_winner_player: int = 0) -> void:
+	game_over = true
+	win_loss_state = state
+	can_interact = false
+	_is_playing_round = true
+
+	if core != null:
+		core.is_my_turn = false
+
+	stop_waiting_animation()
+
+	if is_instance_valid(_aim_label):
+		_aim_label.visible = false
+
+	if is_instance_valid(fire_button):
+		fire_button.modulate.a = 0.0
+
+	if is_instance_valid(power_slider):
+		power_slider.modulate.a = 0.0
+		power_slider.editable = false
+
+	if is_instance_valid(power_label):
+		power_label.modulate.a = 0.0
+
+	if state == "0":
+		winner = "0"
+	elif core != null and core.spectator_mode:
+		winner = str(spectator_winner_player)
+	elif state == "1":
+		winner = str(core.player)
+	else:
+		winner = "2" if core.player == 1 else "1"
+
+	if not is_instance_valid(win_loss_label):
+		return
+
+	if state == "0":
+		win_loss_label.text = "DRAW!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	elif core != null and core.spectator_mode:
+		var player_num := spectator_winner_player
+
+		if player_num == 0:
+			player_num = 1 if state == "1" else 2
+
+		win_loss_label.text = "Player %d Wins!" % player_num
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
+		var winning_avatar: Control = player_avatar_display if player_num == 1 else opp_avatar_display
+		if is_instance_valid(winning_avatar):
+			GameUtils._show_win_burst(winning_avatar)
+	elif state == "1":
+		win_loss_label.text = "YOU WIN!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
+		if is_instance_valid(player_avatar_display):
+			GameUtils._show_win_burst(player_avatar_display)
+	else:
+		win_loss_label.text = "YOU LOSE"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
+		if is_instance_valid(opp_avatar_display):
+			GameUtils._show_win_burst(opp_avatar_display)
+
+	win_loss_label.visible = true
+	win_loss_label.modulate.a = 1.0
+	win_loss_label.scale = Vector2.ZERO
+
+	await get_tree().process_frame
+
+	win_loss_label.pivot_offset = win_loss_label.size / 2.0
+
+	var tween_in := create_tween()
+	tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+
+	if is_instance_valid(waiting_blur):
+		waiting_blur.visible = true
+		waiting_blur.modulate.a = 1.0
+
+func _check_win_condition() -> bool:
 	var hp1: int = int(core.current_board.get("tank1hp", 3))
 	var hp2: int = int(core.current_board.get("tank2hp", 3))
 
@@ -1315,78 +1475,24 @@ func _check_win_condition() -> bool:
 		return false
 
 	if hp1 <= 0 and hp2 <= 0:
-		winner = "0"
+		_show_result_from_state("0")
 	elif hp2 <= 0:
-		winner = "1"
+		_show_result_from_state("1" if core.player == 1 else "-1", 1)
 	else:
-		winner = "2"
-
-	game_over = true
-
-	var result_text := ""
-	var result_color := Color.WHITE
-
-	if winner == "0":
-		result_text = "DRAW!"
-		win_loss_state = "0"
-		result_color = Color(1, 1, 1)
-	else:
-		var winning_player: int = int(winner)
-		var you_win: bool = (not core.spectator_mode) and core.player == winning_player
-
-		if you_win:
-			GameUtils._show_win_burst(player_avatar_display)
-			result_text = "YOU WIN!"
-			win_loss_state = "1"
-			result_color = Color(1, 0.84, 0)
-		else:
-			win_loss_state = "-1"
-			if core.spectator_mode:
-				var winning_avatar: Control = player_avatar_display if winner == "1" else opp_avatar_display
-				GameUtils._show_win_burst(winning_avatar)
-
-				result_text = "Player %s Wins!" % winner
-				result_color = Color(1, 0.84, 0)
-			else:
-				GameUtils._show_win_burst(opp_avatar_display)
-				result_text = "YOU LOSE"
-				result_color = Color(1, 0.2, 0.2)
-
-	can_interact = false
-	_is_playing_round = true
-
-	stop_waiting_animation()
-
-	if is_instance_valid(_aim_label):
-		_aim_label.visible = false
-
-	if is_instance_valid(win_loss_label):
-		win_loss_label.text = result_text
-		win_loss_label.visible = true
-		win_loss_label.modulate.a = 1.0
-		win_loss_label.scale = Vector2.ZERO
-		win_loss_label.add_theme_color_override("font_color", result_color)
-		await get_tree().process_frame
-		win_loss_label.pivot_offset = waiting_label.size / 2.0
-
-		var tween_in := create_tween()
-		tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
-			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-
-	if is_instance_valid(waiting_blur):
-		waiting_blur.visible = true
-		waiting_blur.modulate.a = 1.0
+		_show_result_from_state("1" if core.player == 2 else "-1", 2)
 
 	return true
-	
+
 func _on_send_pressed() -> void:
 	if _is_playing_round:
 		return
+
 	if core == null or core.spectator_mode or not core.is_my_turn:
 		return
 
 	_is_playing_round = true
 	can_interact = false
+
 	await _set_ui_visible(false)
 
 	var my_tank: Tank = tank_p1 if core.player == 1 else tank_p2
@@ -1410,6 +1516,7 @@ func _on_send_pressed() -> void:
 	core.set_my_aim(my_send_rot, my_pwr)
 
 	var avatar_str := ""
+
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		avatar_str = player_avatar_display.get_avatar_data_string()
 
@@ -1422,14 +1529,12 @@ func _on_send_pressed() -> void:
 	}
 
 	var avatar_key := "avatar1" if core.player == 1 else "avatar2"
+
 	if avatar_str != "":
 		payload[avatar_key] = avatar_str
 
-	var finished := await _finish_round_or_show_result()
+	var finished := _finish_round_or_show_result()
 
-	if game_over and win_loss_state != "" and core.my_id != "":
-		payload["winner"] = core.my_id + "|" + win_loss_state
-	
 	_send_payload(payload)
 
 	if finished:

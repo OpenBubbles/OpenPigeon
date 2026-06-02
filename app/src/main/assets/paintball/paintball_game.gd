@@ -50,11 +50,6 @@ var states
 var ui
 
 # -------------------------------------------------------------------
-# Connection / plugin
-# -------------------------------------------------------------------
-var has_connected: bool = false
-
-# -------------------------------------------------------------------
 # Identity and turn state (PB_State expects these)
 # -------------------------------------------------------------------
 var my_id: String = ""
@@ -142,11 +137,55 @@ var _opp_avatar_texture_hover: Texture2D = null
 # -------------------------------------------------------------------
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
+	
+func _get_dev_data() -> String:
+	var DEV_SCENARIO: int = 3
+
+	var dev_data_1 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV1"}'
+	var dev_data_2 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV1","replay":"hp1:3,hp2:3,pos1:0,pos2:0,target1:2,target2:2"}'
+	var dev_data_3 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV3","replay":"hp1:3,hp2:3,pos1:0,pos2:0,target1:0,target2:0|hp1:2,hp2:3,pos1:0,pos2:0,target1:-1,target2:0"}'
+
+	if DEV_SCENARIO == 2:
+		return dev_data_2
+	elif DEV_SCENARIO == 3:
+		return dev_data_3
+
+	return dev_data_1
+	
+func _get_settings_avatar_display() -> Control:
+	return player_avatar_display
+
+func _get_rules_title() -> String:
+	return "Paintball"
+	
+func _get_rules_text() -> String:
+	return """
+[font_size={32px}][b]Paintball[/b][/font_size]
+
+[font_size={24px}][b]Goal[/b][/font_size]
+[font_size={18px}]
+Pick where to move and where to shoot. Try to hit your opponent before they hit you.
+[/font_size]
+
+[font_size={24px}][b]How to Play[/b][/font_size]
+[font_size={18px}]
+• Choose a lane to move to.
+• Choose a lane to shoot at.
+• Press Fire to lock in your move.
+• When both players have chosen, the round plays out.
+[/font_size]
+
+[font_size={24px}][b]End of Game[/b][/font_size]
+[font_size={18px}]
+• Each player starts with 3 hearts.
+• A player loses a heart when they are hit.
+• First player to reduce the other player to 0 hearts wins.
+[/font_size]
+"""
 
 func _on_game_ready() -> void:
 	_build_modules()
 
-	# Owner refs first
 	buttons.setup(self)
 	shots.setup(self)
 	ui.setup(self)
@@ -154,11 +193,10 @@ func _on_game_ready() -> void:
 	replay.setup(self)
 	round_mgr.setup(self)
 
-	# Buttons boot
 	buttons.setup_buttons_root(buttons_root)
 	buttons.collect_and_index_buttons()
 	buttons.cache_lane_x_from_move_buttons()
-	
+
 	print("[GAME] buttons collected:", _buttons.size())
 	for b in _buttons:
 		if is_instance_valid(b):
@@ -171,7 +209,6 @@ func _on_game_ready() -> void:
 	_require_new_shoot_selection = true
 	ui.show_fire_button(false)
 
-	# UI signals		
 	if is_instance_valid(opponent_sprite):
 		_opp_sprite_base_scale = opponent_sprite.scale
 		_opp_sprite_start_pos = opponent_sprite.global_position
@@ -182,31 +219,23 @@ func _on_game_ready() -> void:
 		_opp_avatar_texture_pressed = opp_avatar_display.get("texture_pressed") as Texture2D
 		_opp_avatar_texture_hover = opp_avatar_display.get("texture_hover") as Texture2D
 
-	# Fire button
-	if fire_button is Button:
-		(fire_button as Button).pressed.connect(_on_fire_pressed)
-	elif fire_button is BaseButton:
-		(fire_button as BaseButton).pressed.connect(_on_fire_pressed)
-		
-	# Important: load/parse game data before any await that allows the screen to draw.
-	_connect_app_plugin_or_dev()
+	if fire_button is BaseButton:
+		var fire_callable := Callable(self, "_on_fire_pressed")
+		if not (fire_button as BaseButton).pressed.is_connected(fire_callable):
+			(fire_button as BaseButton).pressed.connect(fire_callable)
 
-	# UI boot after data request/parse.
 	await ui.init_fire_button()
 	ui.init_player_splat_overlay()
 	ui.init_opponent_splat()
 	ui.apply_hearts_from_hp()
-	
+
 func _process(delta: float) -> void:		
 	if shots != null:
 		shots.tick(delta)
 		
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_RESUMED:
-		var appPlugin := Engine.get_singleton("AppPlugin")
-		if appPlugin:
-			print("[APP] Resumed; refreshing paintball data")
-			appPlugin.onReady()
+		print("[APP] Paintball resumed.")
 
 # -------------------------------------------------------------------
 # Modules bootstrapping
@@ -226,40 +255,34 @@ func _on_button_pressed(b: ActionButton3D) -> void:
 	_on_button_clicked(b)
 
 # -------------------------------------------------------------------
-# AppPlugin hookup
+# Set Game Data
 # -------------------------------------------------------------------
-func _connect_app_plugin_or_dev() -> void:
-	var appPlugin := Engine.get_singleton("AppPlugin")
-	if appPlugin:
-		print("AppPlugin Available")
-		if not has_connected:
-			appPlugin.connect("set_game_data", _set_game_data)
-			has_connected = true
-			appPlugin.onReady()
-			print("AppPlugin Connected")
-		return
-
-	# Editor dev payload
-	print("[DEV] Editor hint active, loading sample game data")
-	var DEV_SCENARIO: int = 3
-	var dev_data_1 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV1"}'
-	var dev_data_2 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV1","replay":"hp1:3,hp2:3,pos1:0,pos2:0,target1:2,target2:2"}'
-	var dev_data_3 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV3","replay":"hp1:3,hp2:3,pos1:0,pos2:0,target1:0,target2:0|hp1:2,hp2:3,pos1:0,pos2:0,target1:-1,target2:0"}'
-	var dev_data := dev_data_1
-	if DEV_SCENARIO == 3:
-		dev_data = dev_data_3
-	_set_game_data(dev_data)
-
 func _set_game_data(raw_text: String) -> void:
-	# PB_State is the parser/turn gatekeeper right now
-	states.set_game_data(raw_text)
+	my_id = my_uuid
 
-	# If PB_Replay wants a hook when payload arrives
+	game_over = false
+	game_ended = false
+	win_loss_state = "0"
+	winner = ""
+
+	stop_waiting_animation()
+
+	if is_instance_valid(win_loss_label):
+		win_loss_label.visible = false
+		win_loss_label.text = ""
+		win_loss_label.scale = Vector2.ONE
+
+	if states != null:
+		states.set_game_data(raw_text)
+
 	if replay != null and replay.has_method("on_payload_loaded"):
 		replay.call("on_payload_loaded")
 
-	# UI reflect
-	ui.apply_hearts_from_hp()
+	if ui != null:
+		ui.apply_hearts_from_hp()
+
+	if winner != "":
+		_apply_winner_payload(winner)
 
 # -------------------------------------------------------------------
 # Button clicked entry point
@@ -309,8 +332,8 @@ func _on_fire_pressed() -> void:
 	_replay_is_autoplay_round = false
 
 	if _pending_enemy_shot:
-		var my_pos_int: int = states.lane_to_pos_enc(_player_lane)
-		var my_target_int: int = states.lane_to_target_enc(_selected_shoot.lane)
+		var pending_my_pos_int: int = states.lane_to_pos_enc(_player_lane)
+		var pending_my_target_int: int = states.lane_to_target_enc(_selected_shoot.lane)
 
 		if _replay_send_segments.size() > 0:
 			var head_state: Dictionary = _parse_replay_state(String(_replay_send_segments[0]))
@@ -335,8 +358,8 @@ func _on_fire_pressed() -> void:
 					head_state["hp1"] = _hp_opp
 					head_state["hp2"] = _hp_me
 
-				head_state[my_pos_key] = my_pos_int
-				head_state[my_tgt_key] = my_target_int
+				head_state[my_pos_key] = pending_my_pos_int
+				head_state[my_tgt_key] = pending_my_target_int
 
 				_replay_send_segments[0] = _replay_state_to_string(head_state)
 
@@ -416,6 +439,14 @@ func _replay_autoplay_round() -> void:
 # Compatibility wrappers PB_State / PB_Round expect on PaintballGame
 # -------------------------------------------------------------------
 func send_game(clear_targets_for_next_turn: bool = false) -> void:
+	if game_over or spectator_mode:
+		stop_waiting_animation()
+
+		if ui != null:
+			ui.show_fire_button(false)
+
+		return
+
 	if states != null:
 		states.send_game(clear_targets_for_next_turn)
 
@@ -463,6 +494,10 @@ func _apply_hearts_from_hp() -> void:
 		ui.apply_hearts_from_hp()
 
 func play_sent_animation() -> void:
+	if game_over or spectator_mode:
+		stop_waiting_animation()
+		return
+
 	if ui != null:
 		ui.play_sent_animation()
 
@@ -477,6 +512,67 @@ func _set_button_enabled(b: ActionButton3D, enabled: bool) -> void:
 func _update_move_buttons() -> void:
 	if buttons != null:
 		buttons.update_move_buttons()
+		
+func _apply_winner_payload(winner_payload: String) -> void:
+	var parts := winner_payload.split("|", false)
+	if parts.size() < 2:
+		return
+
+	var sender_uuid := String(parts[0])
+	var sender_state := String(parts[1])
+
+	if sender_state == "0":
+		_show_result_from_state("0")
+		return
+
+	var local_state := sender_state
+
+	if sender_uuid != my_uuid:
+		local_state = "-1" if sender_state == "1" else "1"
+
+	_show_result_from_state(local_state)
+	
+func _show_result_from_state(state: String) -> void:
+	game_over = true
+	game_ended = true
+	win_loss_state = state
+	is_my_turn = false
+	_is_shot_sequence_running = false
+	_round_sequence_running = false
+	_replay_auto_pending = false
+	_replay_send_armed = false
+
+	stop_waiting_animation()
+
+	if ui != null:
+		ui.show_fire_button(false)
+
+	if not is_instance_valid(win_loss_label):
+		return
+
+	if state == "0":
+		win_loss_label.text = "DRAW!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	elif state == "1":
+		win_loss_label.text = "YOU WIN!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
+		if is_instance_valid(player_avatar_display):
+			GameUtils._show_win_burst(player_avatar_display)
+	else:
+		win_loss_label.text = "YOU LOSE"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
+		if is_instance_valid(opp_avatar_display):
+			GameUtils._show_win_burst(opp_avatar_display)
+
+	win_loss_label.visible = true
+	win_loss_label.scale = Vector2.ZERO
+	win_loss_label.pivot_offset = win_loss_label.size / 2
+
+	var tween_in := create_tween()
+	tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6)\
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 
 func check_win() -> bool:
 	if ui != null:

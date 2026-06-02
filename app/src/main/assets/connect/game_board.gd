@@ -1,72 +1,67 @@
 extends BaseGame
 class_name ConnectGameBoard
 
-@onready var player_avatar_display	: Control		= %PlayerAvatarDisplay
-@onready var opp_avatar_display		: Control		= %OppAvatarDisplay
-@onready var send_button			: Button		= %SendButton
-@onready var sent_label				: Label			= %SentLabel
-@onready var background				: ColorRect		= %Background
-@onready var win_loss_label			: Label			= %WinLossLabel
-@onready var player_piece			: TextureRect	= %PlayerPiece
-@onready var opp_piece				: TextureRect	= %OppPiece
-@onready var you_label				: Label			= %YouLabel
-@onready var spec_label				: Label			= %SpecLabel
+@onready var player_avatar_display: Control = %PlayerAvatarDisplay
+@onready var opp_avatar_display: Control = %OppAvatarDisplay
+@onready var send_button: Button = %SendButton
+@onready var sent_label: Label = %SentLabel
+@onready var background: ColorRect = %Background
+@onready var win_loss_label: Label = %WinLossLabel
+@onready var player_piece: TextureRect = %PlayerPiece
+@onready var opp_piece: TextureRect = %OppPiece
+@onready var you_label: Label = %YouLabel
+@onready var spec_label: Label = %SpecLabel
 
-const BOARD_W			:= 7
-const BOARD_H			:= 6
-const PIECE_YELLOW		:= "yellow"
-const PIECE_RED			:= "red"
-const DIRS				:= [Vector2i(1,0), Vector2i(0,1), Vector2i(1,1), Vector2i(1,-1)]
+const BOARD_W:= 7
+const BOARD_H:= 6
+const PIECE_YELLOW:= "yellow"
+const PIECE_RED:= "red"
+const DROP_START_OFFSET	:= 90.0
+const DIRS:= [Vector2i(1,0), Vector2i(0,1), Vector2i(1,1), Vector2i(1,-1)]
 const MUSIC_STREAM := preload("res://global/audio/connect4.ogg")
 const PIECE_TEX := {
-	"red":		preload("res://connect/red_piece.png"),
-	"yellow":	preload("res://connect/yellow_piece.png")
+	"red": preload("res://connect/red_piece.png"),
+	"yellow": preload("res://connect/yellow_piece.png")
 }
 
-var yPoses: Array[float]	= [192.544, 109.498, 26.612, -56.274, -139.121, -221.902]
-var sent_tween				: Tween
-var my_player				: String = ""
-var turn_owner				: int	= 1
-var firstReplay				: bool	= true
-var isTurn					: bool	= false
-var has_connected			: bool	= false
+var yPoses: Array[float] = [192.544, 109.498, 26.612, -56.274, -139.121, -221.902]
+var sent_tween: Tween
+var turn_owner: int	= 1
+var isTurn: bool	= false
 var _last_applied_replay: String = ""
-var waitingForOpponent		: bool	= true
-var win_loss_state			: String = ""
-var replay					: String = ""
-var player					: int	= 0		# 0=spectator/unknown, 1=P1, 2=P2
-var game_over				: bool	= false
-var can_interact			: bool	= true
-var suppress_next_click		: bool	= false
+var waitingForOpponent: bool	= true
+var win_loss_state: String = ""
+var replay: String = ""
+var player: int	= 0		# 0=spectator/unknown, 1=P1, 2=P2
+var game_over: bool	= false
+var can_interact: bool	= true
 var _replay_apply_id: int = 0
-var last_highlight			: Node2D = null
-var droppedPiece			: RigidBody2D = null
+var last_highlight: Node2D = null
+var droppedPiece: RigidBody2D = null
 var board_state: PackedInt32Array = PackedInt32Array()
 var winner : String = ""
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
+	
+func _get_dev_data() -> String:
+	return '{"isYourTurn":true,"player":"2","replay":"board:1,1,1,0,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"}'
+	
+func _get_settings_avatar_display() -> Control:
+	return player_avatar_display
+
+func _get_rules_title() -> String:
+	return "Four In A Row"
 
 func _on_game_ready() -> void:
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_bg_for_dark(is_dark)
+
 	if is_instance_valid(send_button):
 		send_button.disabled = true
 		_update_send_button_visibility(false)
-		send_button.pressed.connect(send_game)
-	var app: Object = Engine.get_singleton("AppPlugin")
-
-	if app:
-		if not has_connected:
-			app.connect("set_game_data", _set_game_data)
-			has_connected = true
-			app.call("onReady")
-			await get_tree().process_frame
-			return
-	else:
-		if player == 0 or replay.is_empty():
-			_set_game_data('{"isYourTurn":true,"player":"2","replay":"board:1,1,1,0,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"}')
-			return
+		if not send_button.pressed.is_connected(send_game):
+			send_button.pressed.connect(send_game)
 
 	if player == 0 or replay.is_empty():
 		return
@@ -95,12 +90,11 @@ func _set_game_data(new_replay: String) -> void:
 	print("[INCOMING] Raw Data: ", data)
 	isTurn		= bool(data.get("isYourTurn", false))
 	replay		= String(data.get("replay", ""))
-	my_player	= String(data.get("myPlayerId", ""))
 
 	var p1_id: String	= String(data.get("player1", ""))
 	var p2_id: String	= String(data.get("player2", ""))
 	turn_owner			= clamp(int(data.get("player", 1)), 1, 2)
-	player				= _resolve_my_side(my_player, p1_id, p2_id, turn_owner, isTurn)
+	player				= _resolve_my_side(my_uuid, p1_id, p2_id, turn_owner, isTurn)
 	spectator_mode		= (player == 0)
 
 	if is_instance_valid(spec_label):
@@ -128,11 +122,17 @@ func _set_game_data(new_replay: String) -> void:
 	_apply_player_piece_icons()
 	_label_you_box()
 	
-	winner = data.get("winner", "")
-	_hydrate_board_from_replay(replay)
-	_refresh_turn_ui()
+	winner = String(data.get("winner", ""))
 
-func _resolve_my_side(my_id: String, p1_id: String, p2_id: String, owner: int, my_turn: bool) -> int:
+	stop_waiting_animation()
+	_update_send_button_visibility(false)
+	can_interact = false
+
+	var replay_will_apply := _hydrate_board_from_replay(replay)
+	if not replay_will_apply:
+		_finish_replay_turn_state()
+
+func _resolve_my_side(my_id: String, p1_id: String, p2_id: String, turn_player: int, my_turn: bool) -> int:
 	if my_id != "" and p1_id != "" and p2_id != "":
 		if my_id == p1_id:
 			return 1
@@ -142,9 +142,10 @@ func _resolve_my_side(my_id: String, p1_id: String, p2_id: String, owner: int, m
 			return 0  # spectator/unknown
 
 	if p1_id == "" or p2_id == "":
-		if (owner == 2 and my_turn) or (owner == 1):
+		if (turn_player == 2 and my_turn) or (turn_player == 1):
 			return 1
 		return 2
+
 	return 0
 
 func _label_you_box() -> void:
@@ -161,17 +162,68 @@ func _reset_board_state() -> void:
 	board_state.resize(BOARD_W * BOARD_H)
 	for i in range(board_state.size()):
 		board_state[i] = 0
+		
+func _is_board_full() -> bool:
+	if board_state.size() < BOARD_W * BOARD_H:
+		return false
 
-func _hydrate_board_from_replay(rep: String) -> void:
-	if rep.is_empty():
+	for i in range(BOARD_W * BOARD_H):
+		if board_state[i] == 0:
+			return false
+
+	return true
+
+func _finish_replay_turn_state() -> void:
+	if game_over:
+		can_interact = false
+		isTurn = false
+		waitingForOpponent = false
+		stop_waiting_animation()
+		_update_send_button_visibility(false)
 		return
+
+	if _is_board_full():
+		_finalize_draw()
+		return
+
+	_refresh_turn_ui()
+
+func _finalize_draw() -> void:
+	if game_over:
+		return
+
+	game_over = true
+	can_interact = false
+	isTurn = false
+	waitingForOpponent = false
+	win_loss_state = "0"
+
+	stop_waiting_animation()
+	_update_send_button_visibility(false)
+
+	if is_instance_valid(win_loss_label):
+		win_loss_label.text = "DRAW!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+		win_loss_label.visible = true
+
+		await get_tree().process_frame
+		win_loss_label.scale = Vector2.ZERO
+		win_loss_label.pivot_offset = win_loss_label.size / 2
+
+		var t_in: Tween = create_tween()
+		t_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+
+func _hydrate_board_from_replay(rep: String) -> bool:
+	if rep.is_empty():
+		return false
 
 	if rep == _last_applied_replay:
-		return
+		return false
 
 	_last_applied_replay = rep
 	_replay_apply_id += 1
 	call_deferred("_apply_replay_with_drop", rep, _replay_apply_id)
+	return true
 
 func _apply_replay_with_drop(rep: String, apply_id: int) -> void:
 	_clear_board_pieces()
@@ -218,6 +270,8 @@ func _apply_replay_with_drop(rep: String, apply_id: int) -> void:
 	if has_move:
 		board_state[_idx(mx, my)] = mpid
 		_spawn_piece_drop_anim(mx, mpid, my, apply_id)
+	else:
+		_finish_replay_turn_state()
 
 func _spawn_piece_static(x: int, pid: int, y: int) -> Node2D:
 	var proto: RigidBody2D = get_node("ConnectPiece" + str(x))
@@ -244,7 +298,7 @@ func _spawn_piece_drop_anim(x: int, pid: int, y: int, apply_id: int) -> void:
 	var piece: RigidBody2D = proto.duplicate()
 
 	var target_y: float = yPoses[y]
-	var start_y: float = yPoses[BOARD_H - 1] - 400.0 # Start slightly higher for better effect
+	var start_y: float = yPoses[BOARD_H - 1] - DROP_START_OFFSET
 
 	piece.position.y = start_y
 	piece.name = "%d,%d" % [x, y]
@@ -263,11 +317,13 @@ func _spawn_piece_drop_anim(x: int, pid: int, y: int, apply_id: int) -> void:
 
 	tw.tween_callback(func():
 		if apply_id != _replay_apply_id:
-			if is_instance_valid(piece): piece.queue_free()
+			if is_instance_valid(piece):
+				piece.queue_free()
 			return
 
 		_highlight_last(piece)
 		_check_and_finalize_from_board()
+		_finish_replay_turn_state()
 	)
 
 func _build_replay_payload() -> Dictionary:
@@ -292,8 +348,7 @@ func _build_replay_payload() -> Dictionary:
 	}
 
 	if game_over and win_loss_state != "":
-		var winner_id: String = my_player if my_player != "" else str(player)
-		payload["winner"] = "%s|%s" % [winner_id, win_loss_state]
+		payload["winner"] = "%s|%s" % [my_uuid, win_loss_state]
 
 	return payload
 
@@ -309,16 +364,18 @@ func send_game() -> void:
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.call("get_avatar_data_string")
 	print("[SEND] Payload: ", payload)
-
-	var app: Object = Engine.get_singleton("AppPlugin")
-	if app:
-		app.call("updateGameData", JSON.stringify(payload))
+	send_game_data(JSON.stringify(payload))
 
 	if is_instance_valid(send_button):
 		send_button.disabled = true
 		_update_send_button_visibility(false)
 
-	if not game_over:
+	if game_over:
+		can_interact = false
+		isTurn = false
+		waitingForOpponent = false
+		stop_waiting_animation()
+	else:
 		can_interact = false
 		isTurn = false
 		waitingForOpponent = true
@@ -363,9 +420,11 @@ func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
 		background.color = Color("352925ff") if is_dark else Color("#d8c7c2")
 
-func _update_send_button_visibility(show: bool) -> void:
+func _update_send_button_visibility(should_show: bool) -> void:
 	if not is_instance_valid(send_button):
 		return
+
+	send_button.disabled = not should_show
 	send_button.set_as_top_level(true)
 
 	if not send_button.has_meta("home_pos"):
@@ -381,7 +440,7 @@ func _update_send_button_visibility(show: bool) -> void:
 	var off_y: float = vp.size.y + send_button.size.y + 30.0
 	var start_pos: Vector2 = Vector2(home.x, off_y)
 
-	if show:
+	if should_show:
 		if not send_button.visible:
 			send_button.global_position = start_pos
 			send_button.visible = true
@@ -481,42 +540,82 @@ func spawnPiece(x: int, color: String, y: int=-1, from_replay: bool=false) -> vo
 	if (not can_interact) and not from_replay:
 		return
 
+	if not from_replay and is_instance_valid(droppedPiece):
+		var old_x: int = int(droppedPiece.name.get_slice(",", 0))
+		if old_x == x:
+			return
+		_clear_pending_move()
+
 	var piece: RigidBody2D = proto.duplicate()
+
+	var target_y: float
+	var should_animate_drop := false
+
 	if y >= 0:
-		piece.position.y = yPoses[y]
+		target_y = yPoses[y]
+		piece.position.y = target_y
 	else:
 		y = get_piece_y(x)
 		if y < 0:
 			return
-			
+
+		target_y = yPoses[y]
+		piece.position.y = yPoses[BOARD_H - 1] - DROP_START_OFFSET
+		should_animate_drop = true
+
 	var pid: int = 1 if color == PIECE_YELLOW else 2
 	board_state[_idx(x, y)] = pid
 
 	add_child(piece)
+
 	var spr: Sprite2D = piece.get_child(0) as Sprite2D
 	spr.texture = PIECE_TEX[color]
+
 	(piece.get_child(1) as CollisionShape2D).disabled = false
 	piece.visible = true
-	piece.set_freeze_enabled(false
-	)
+	piece.set_freeze_enabled(true)
 	piece.name = "%d,%d" % [x, y]
+
+	if not from_replay:
+		droppedPiece = piece
+
+	if should_animate_drop:
+		var tw := create_tween()
+		piece.set_meta("drop_tween", tw)
+		tw.tween_property(piece, "position:y", target_y, 0.65).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		await tw.finished
+
+		if not is_instance_valid(piece):
+			return
+
+		if piece.has_meta("drop_tween"):
+			piece.remove_meta("drop_tween")
+
+		if not from_replay and droppedPiece != piece:
+			return
 
 	if from_replay:
 		_highlight_last(piece)
 		_check_and_finalize_from_board()
 		return
 
-	droppedPiece = piece
 	if _check_and_finalize_from_board():
+		_update_send_button_visibility(false)
+		await get_tree().process_frame
+		await send_game()
+	elif _is_board_full():
+		_finalize_draw()
 		await get_tree().process_frame
 		await send_game()
 	else:
-		if is_instance_valid(send_button):
-			send_button.disabled = false
-			_update_send_button_visibility(true)
-
+		_update_send_button_visibility(true)
+		
 func move_dropped_piece_to_column(new_x: int) -> void:
 	if game_over or not can_interact or droppedPiece == null:
+		return
+	
+	var old_x: int = int(droppedPiece.name.get_slice(",", 0))
+	if old_x == new_x:
 		return
 
 	var new_y: int = get_piece_y(new_x)
@@ -548,36 +647,45 @@ func undo_move() -> void:
 func _find_winning_sequence() -> Dictionary:
 	for y in range(0, BOARD_H):
 		for x in range(0, BOARD_W):
-			var base: String = _cell_color(x, y)
-			if base == "":
+			var base: int = board_state[_idx(x, y)]
+			if base == 0:
 				continue
+
 			for d in DIRS:
 				var px: int = x - d.x
 				var py: int = y - d.y
 				var prev_ok: bool = (px >= 0 and px < BOARD_W and py >= 0 and py < BOARD_H)
-				if prev_ok and _cell_color(px, py) == base:
+
+				if prev_ok and board_state[_idx(px, py)] == base:
 					continue
 
 				var run: Array[Vector2i] = []
 				var cx: int = x
 				var cy: int = y
-				while cx >= 0 and cx < BOARD_W and cy >= 0 and cy < BOARD_H and _cell_color(cx, cy) == base:
+
+				while cx >= 0 and cx < BOARD_W and cy >= 0 and cy < BOARD_H and board_state[_idx(cx, cy)] == base:
 					run.append(Vector2i(cx, cy))
 					cx += d.x
 					cy += d.y
-				if run.size() >= 4:
-					return {"coords": run, "color": base}
-	return {}
 
+				if run.size() >= 4:
+					return {
+						"coords": run,
+						"pid": base
+					}
+
+	return {}
+	
 func _check_and_finalize_from_board() -> bool:
 	var win: Dictionary = _find_winning_sequence()
-	if win.is_empty() and winner == "":
+	if win.is_empty():
 		return false
+
 	_clear_last_highlight()
 	_highlight_winning_pulse(win["coords"])
-	var winner_pid: int = 1 if String(win["color"]) == PIECE_YELLOW else 2
-	var i_won_now: bool = (winner_pid == player) and (not spectator_mode)
-	_finalize_win(i_won_now)
+
+	var winner_pid: int = int(win["pid"])
+	_finalize_win(winner_pid)
 	return true
 
 func _clear_last_highlight() -> void:
@@ -648,17 +756,23 @@ func _winning_nodes_from_coords(cs: Array[Vector2i]) -> Array[Node2D]:
 func _highlight_winning_pulse(cs: Array[Vector2i]) -> void:
 	_pulse_nodes(_winning_nodes_from_coords(cs))
 
-func _finalize_win(i_won: bool) -> void:
+func _finalize_win(winner_pid: int) -> void:
 	if game_over:
 		return
+
 	game_over = true
-	win_loss_state = "1" if i_won else "-1"
-	_set_waiting(false)
+	can_interact = false
+	isTurn = false
 	waitingForOpponent = false
 
+	var i_won: bool = (winner_pid == player) and (not spectator_mode)
+	win_loss_state = "1" if i_won else "-1"
+
+	stop_waiting_animation()
+	_update_send_button_visibility(false)
+
 	if spectator_mode:
-		var p1_w: bool = (i_won and player == 1) or ((not i_won) and player == 2)
-		if p1_w:
+		if winner_pid == 1:
 			win_loss_label.text = "Player 1 Wins!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 			GameUtils._show_win_burst(player_avatar_display)
@@ -680,14 +794,20 @@ func _finalize_win(i_won: bool) -> void:
 	await get_tree().process_frame
 	win_loss_label.scale = Vector2.ZERO
 	win_loss_label.pivot_offset = win_loss_label.size / 2
+
 	var t_in: Tween = create_tween()
 	t_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	can_interact = false
-
+	
 func _clear_pending_move() -> void:
 	if droppedPiece == null or not is_instance_valid(droppedPiece):
 		droppedPiece = null
 		return
+
+	if droppedPiece.has_meta("drop_tween"):
+		var tw: Tween = droppedPiece.get_meta("drop_tween") as Tween
+		if tw and tw.is_running():
+			tw.kill()
+		droppedPiece.remove_meta("drop_tween")
 
 	var ox: int = int(droppedPiece.name.get_slice(",", 0))
 	var oy: int = int(droppedPiece.name.get_slice(",", 1))
@@ -697,56 +817,7 @@ func _clear_pending_move() -> void:
 
 	droppedPiece.queue_free()
 	droppedPiece = null
-
-func _tap_bounce(btn: Button) -> void:
-	btn.pivot_offset = btn.size / 2.0
-	var t: Tween = create_tween()
-	t.tween_property(btn, "scale", Vector2(1.3, 1.3), 0.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	t.tween_property(btn, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	await t.finished
-
-func _make_dim(popup: Control) -> ColorRect:
-	var dim: ColorRect = ColorRect.new()
-	dim.color = Color(0,0,0,0.5)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	dim.gui_input.connect(func(e: InputEvent):
-		if e is InputEventMouseButton and e.pressed:
-			suppress_next_click = true
-			dim.queue_free()
-			popup.queue_free()
-			_lock_interaction_briefly()
-			get_viewport().set_input_as_handled()
-	)
-	var root: Window = get_tree().root
-	root.add_child(dim)
-	root.add_child(popup)
-	popup.z_index = 100
-	dim.z_index = 99
-	root.move_child(dim, root.get_child_count() - 2)
-
-	var close_btn: Button = popup.find_child("CloseButton", true, false) as Button
-	if close_btn:
-		close_btn.pressed.connect(func():
-			suppress_next_click = true
-			dim.queue_free()
-			popup.queue_free()
-			_lock_interaction_briefly()
-		)
-	return dim
-
-func _slide_up_in(popup: Control) -> void:
-	popup.set_as_top_level(true)
-	popup.visible = true
-	await get_tree().process_frame
-	var vp: Vector2 = get_viewport_rect().size
-	var w: float = vp.x * 0.95
-	popup.size = Vector2(w, popup.get_combined_minimum_size().y)
-	popup.position = Vector2((vp.x - w) / 2, vp.y)
-	var target: Vector2 = Vector2((vp.x - w) / 2, vp.y - popup.size.y - 50)
-	var t: Tween = create_tween()
-	t.tween_property(popup, "position", target, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-	popup.grab_focus()
+	_update_send_button_visibility(false)
 
 func _get_rules_text() -> String:
 	return """
@@ -772,15 +843,3 @@ func _get_rules_text() -> String:
 • If the board fills completely with no four-in-a-row for either player, the game ends in a draw.
 [/font_size]
 """
-
-func _unhandled_input(e: InputEvent) -> void:
-	if suppress_next_click and e is InputEventMouseButton and e.pressed:
-		suppress_next_click = false
-		get_viewport().set_input_as_handled()
-
-func _lock_interaction_briefly(d: float=0.25) -> void:
-	can_interact = false
-	var timer: SceneTreeTimer = get_tree().create_timer(d)
-	timer.timeout.connect(func():
-		can_interact = true
-	)

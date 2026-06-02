@@ -38,16 +38,14 @@ var _tear_rng := RandomNumberGenerator.new()
 var screens: Array[Control] = []
 var current_screen: int = 0
 var sent_label_tween: Tween
-var has_connected := false
-var my_id := ""
 var game_id := ""
 var winner = null
 var game_over := false
 var game_ended := false
 var win_loss_state = ""
-var my_player := 0           # 0 spectator, 1 black, 2 white
 var p1_score_s = ""
 var p2_score_s = ""
+var player
 var possible_word_count: int = 0
 var _possible_words_cache: Array = []
 var _words_cache_ready := false
@@ -63,43 +61,225 @@ const WORDS_DRAG_THRESHOLD := 8.0
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
+	
+func _get_dev_data() -> String:
+	return '{"sender":"BB938756-D694-4421-9642-82CB312C13B0nbdTdV","version":"5","tver":"5","ios":"26.4","caption":"Lets play Word Bites!","id":"DlPri7dhRO5Nb3a2","player":"2","player2":"BB938756-D694-4421-9642-82CB312C13B0nbdTdV","letters":"AAA","lang":"en","mode":"1","level":"1|0|0|NG&1|6|4|RO&2|2|3|NY&2|0|3|FU&1|6|8|TE&0|6|6|U&0|6|0|I&0|4|1|U&0|0|8|L&0|3|6|K&0|7|2|P","avatar2":"body,2|eyes,0|mouth,3|acc,0|wins,0|bg_color,0.291679,0.246671,0.464589|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,3|clothes,1|hair_color,0.000000,0.000000,0.000000|clothes_color,0.922711,0.395143,0.779568","game":"wordbites","game_name":"Word Bites","num":"1","build":"LR5rAXhOt"}'
+	
+func _get_settings_avatar_display() -> Control:
+	return player_avatar_display
+
+func _get_rules_title() -> String:
+	return "Wordbites"
+	
+func _get_rules_text() -> String:
+	return """
+[font_size={32px}][b]Word Bites[/b][/font_size]
+
+[font_size={24px}][b]Goal[/b][/font_size]
+[font_size={18px}]
+Find as many valid words as possible before time runs out.
+[/font_size]
+
+[font_size={24px}][b]How to Play[/b][/font_size]
+[font_size={18px}]
+• Use the available letter pieces to build words.
+• Longer words are worth more points.
+• When the timer ends, your score and word list are sent.
+• Once both players finish, the higher score wins.
+[/font_size]
+"""
 
 func _on_game_ready() -> void:
-	if not start_button.pressed.is_connected(_on_start_button_pressed):
-		start_button.pressed.connect(_on_start_button_pressed)
-	if not back_button.pressed.is_connected(_on_back_button_pressed):
-		back_button.pressed.connect(_on_back_button_pressed)
+	if is_instance_valid(start_button):
+		if not start_button.pressed.is_connected(_on_start_button_pressed):
+			start_button.pressed.connect(_on_start_button_pressed)
 
-	if not game_screen.time_up.is_connected(_on_game_time_up):
-		game_screen.time_up.connect(_on_game_time_up)
-	if not view_words_button.pressed.is_connected(_on_view_words_pressed):
-		view_words_button.pressed.connect(_on_view_words_pressed)
-	
+	if is_instance_valid(back_button):
+		if not back_button.pressed.is_connected(_on_back_button_pressed):
+			back_button.pressed.connect(_on_back_button_pressed)
+
+	if is_instance_valid(game_screen):
+		if not game_screen.time_up.is_connected(_on_game_time_up):
+			game_screen.time_up.connect(_on_game_time_up)
+
+	if is_instance_valid(view_words_button):
+		if not view_words_button.pressed.is_connected(_on_view_words_pressed):
+			view_words_button.pressed.connect(_on_view_words_pressed)
+
 	if is_instance_valid(full_word_list):
 		full_word_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var grandparent := full_word_list.get_parent().get_parent()
+
+		var parent := full_word_list.get_parent()
+		var grandparent := parent.get_parent() if parent != null else null
+
 		if grandparent is ScrollContainer:
 			_words_scroll_container = grandparent as ScrollContainer
+
 			if not _words_scroll_container.gui_input.is_connected(_on_words_list_scroll_gui_input):
 				_words_scroll_container.gui_input.connect(_on_words_list_scroll_gui_input)
-	
-	appPlugin = Engine.get_singleton("AppPlugin")
-	
-	if appPlugin:
-		if not has_connected:
-			appPlugin.connect("set_game_data", Callable(self, "_set_game_data"))
-			has_connected = true
-			appPlugin.call("onReady")
-	else:
-		#var dev := '{"isYourTurn": true,"player":"2","level":"2|3|5|GO&2|0|7|UB&1|0|4|RE&2|0|1|ST&1|6|4|BI&0|5|7|N&0|3|3|M&0|3|1|L&0|2|8|C&0|7|6|D&0|6|1|P","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
-		#var dev := '{"isYourTurn": true,"player":"2","level":"2|3|5|GO&2|0|7|UB&1|0|4|RE&2|0|1|ST&1|6|4|BI&0|5|7|N&0|3|3|M&0|3|1|L&0|2|8|C&0|7|6|D&0|6|1|P", "avatar1":"body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "avatar2":"body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
-		var dev := '{"sender":"BB938756-D694-4421-9642-82CB312C13B0nbdTdV","version":"5","tver":"5","ios":"26.4","caption":"Lets play Word Bites!","id":"DlPri7dhRO5Nb3a2","player":"2","player2":"BB938756-D694-4421-9642-82CB312C13B0nbdTdV","letters":"AAA","lang":"en","mode":"1","level":"1|0|0|NG&1|6|4|RO&2|2|3|NY&2|0|3|FU&1|6|8|TE&0|6|6|U&0|6|0|I&0|4|1|U&0|0|8|L&0|3|6|K&0|7|2|P","avatar2":"body,2|eyes,0|mouth,3|acc,0|wins,0|bg_color,0.291679,0.246671,0.464589|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,3|clothes,1|hair_color,0.000000,0.000000,0.000000|clothes_color,0.922711,0.395143,0.779568","game":"wordbites","game_name":"Word Bites","num":"1","build":"LR5rAXhOt"}'
-		await get_tree().process_frame
-		_set_game_data(dev)
 
 	_apply_score_box_style(main_score_box)
 	_apply_score_box_style(player_score_box)
 	_apply_score_box_style(opp_score_box)
+	
+func _set_game_data(raw_text: String) -> void:
+	var res: Variant = JSON.parse_string(raw_text)
+	if typeof(res) != TYPE_DICTIONARY:
+		print("[WORDBITES] Bad JSON for _set_game_data")
+		return
+
+	var d: Dictionary = res
+	print("INCOMING DATA: ", d)
+
+	game_over = false
+	game_ended = false
+	win_loss_state = ""
+	winner = ""
+	my_has_data = false
+
+	stop_waiting_animation()
+
+	if is_instance_valid(win_loss_label):
+		win_loss_label.visible = false
+		win_loss_label.text = ""
+		win_loss_label.scale = Vector2.ONE
+		win_loss_label.modulate.a = 1.0
+
+	game_id = _get_first(d, "id", game_id)
+
+	var p1_id: String = _get_first(d, "player1", "")
+	var p2_id: String = _get_first(d, "player2", "")
+	var sender_s: String = _get_first(d, "player", "1")
+	var level_s: String = _get_first(d, "level", "")
+	var winner_payload: String = _get_first(d, "winner", "")
+
+	if level_s != "":
+		if game_screen.has_method("load_level"):
+			game_screen.load_level(level_s)
+
+	_words_cache_ready = false
+	_possible_words_cache.clear()
+
+	p1_score_s = _get_first(d, "score1", "")
+	var p1_words_s: String = _get_first(d, "words1", "")
+	var p1_wordlist_s: String = _get_first(d, "words_list1", "")
+
+	p2_score_s = _get_first(d, "score2", "")
+	var p2_words_s: String = _get_first(d, "words2", "")
+	var p2_wordlist_s: String = _get_first(d, "words_list2", "")
+
+	print("P1 Score: ", p1_score_s, " | P2 Score: ", p2_score_s)
+
+	var p1_score: int = int(p1_score_s) if p1_score_s != "" else 0
+	var p1_words: int = int(p1_words_s) if p1_words_s != "" else 0
+	var p2_score: int = int(p2_score_s) if p2_score_s != "" else 0
+	var p2_words: int = int(p2_words_s) if p2_words_s != "" else 0
+
+	var opponent_avatar_key := ""
+	var sender_player: int = clampi(int(sender_s), 1, 2)
+
+	if p1_id != "" and p2_id != "" and my_uuid != "":
+		if my_uuid == p1_id:
+			player = 1
+			opponent_avatar_key = "avatar2"
+			spectator_mode = false
+			print("SETTING FOR ID PLAYER 1")
+		elif my_uuid == p2_id:
+			player = 2
+			opponent_avatar_key = "avatar1"
+			spectator_mode = false
+			print("SETTING FOR ID PLAYER 2")
+		else:
+			player = 0
+			spectator_mode = true
+			print("SETTING FOR SPECTATOR")
+	else:
+		player = 1 if sender_player == 2 else 2
+		spectator_mode = false
+		opponent_avatar_key = "avatar1" if player == 2 else "avatar2"
+		print("PARTIAL OR MISSING PLAYER IDS; using sender field. my_uuid=", my_uuid)
+
+	if not spectator_mode:
+		if player == 1:
+			my_has_data = p1_score_s != "" or p1_words_s != "" or p1_wordlist_s != ""
+			print("PLAYER 1 DATA CHECK -> score:", p1_score_s, " words:", p1_words_s, " list:", p1_wordlist_s)
+		elif player == 2:
+			my_has_data = p2_score_s != "" or p2_words_s != "" or p2_wordlist_s != ""
+			print("PLAYER 2 DATA CHECK -> score:", p2_score_s, " words:", p2_words_s, " list:", p2_wordlist_s)
+
+	print("my_uuid=", my_uuid, " | my_has_data=", my_has_data, " | spectator_mode=", spectator_mode)
+
+	if spectator_mode:
+		print("SPECTATOR MODE ACTIVE")
+
+		if d.has("avatar1"):
+			var av1 = GameUtils._parse_avatar_string(d["avatar1"])
+			if is_instance_valid(player_avatar_display):
+				player_avatar_display.call_deferred("update_avatar_from_data", av1)
+			if is_instance_valid(player_score_avatar_display):
+				player_score_avatar_display.call_deferred("update_avatar_from_data", av1)
+
+		if d.has("avatar2"):
+			var av2 = GameUtils._parse_avatar_string(d["avatar2"])
+			if is_instance_valid(opp_avatar_display):
+				opp_avatar_display.call_deferred("update_avatar_from_data", av2)
+
+		var p1_entries := _build_word_entries_from_string(p1_wordlist_s)
+		_populate_scoreboard(true, p1_entries, p1_words, p1_score)
+
+		var p2_entries := _build_word_entries_from_string(p2_wordlist_s)
+		_populate_scoreboard(false, p2_entries, p2_words, p2_score)
+	else:
+		var my_score: int = 0
+		var my_words: int = 0
+		var my_wordlist_s: String = ""
+		var opp_score: int = 0
+		var opp_words: int = 0
+		var opp_wordlist_s: String = ""
+
+		if player == 1:
+			my_score = p1_score
+			my_words = p1_words
+			my_wordlist_s = p1_wordlist_s
+			opp_score = p2_score
+			opp_words = p2_words
+			opp_wordlist_s = p2_wordlist_s
+		elif player == 2:
+			my_score = p2_score
+			my_words = p2_words
+			my_wordlist_s = p2_wordlist_s
+			opp_score = p1_score
+			opp_words = p1_words
+			opp_wordlist_s = p1_wordlist_s
+
+		if my_wordlist_s != "":
+			var my_entries := _build_word_entries_from_string(my_wordlist_s)
+			_populate_scoreboard(true, my_entries, my_words, my_score)
+
+		if opp_wordlist_s != "":
+			var opp_entries := _build_word_entries_from_string(opp_wordlist_s)
+			_populate_scoreboard(false, opp_entries, opp_words, opp_score)
+
+	if opponent_avatar_key != "" and d.has(opponent_avatar_key):
+		var avatar_string = d[opponent_avatar_key]
+		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
+
+		if is_instance_valid(opp_avatar_display):
+			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+
+	if winner_payload != "":
+		_apply_winner_payload(winner_payload, p1_id, p2_id)
+	else:
+		game_ended = check_win()
+
+	_init_screens()
+
+	if game_over:
+		stop_waiting_animation()
+	elif my_has_data:
+		start_waiting_animation()
+	else:
+		stop_waiting_animation()
 
 func _is_piece_horizontal_idx(idx: int, orientations: Array) -> bool:
 	if idx < 0 or idx >= orientations.size():
@@ -255,155 +435,6 @@ func _can_form_with_orientation_dfs(
 	memo[key] = true
 	return false
 
-func _set_game_data(raw_text: String) -> void:
-	var res: Variant = JSON.parse_string(raw_text)
-	if typeof(res) != TYPE_DICTIONARY:
-		print("[ANAGRAMS] Bad JSON for _set_game_data")
-		return
-
-	var d: Dictionary = res
-	print("INCOMING DATA: ", res)
-
-	game_id = _get_first(d, "id", game_id)
-	my_id = _get_first(d, "myPlayerId", my_id)
-
-	var p1_id: String = _get_first(d, "player1", "")
-	var p2_id: String = _get_first(d, "player2", "")
-	var sender_s: String = _get_first(d, "player", "1")
-	var level_s: String = _get_first(d, "level", "")
-
-	if level_s != "":
-		if game_screen.has_method("load_level"):
-			game_screen.load_level(level_s)
-
-	_words_cache_ready = false
-	_possible_words_cache.clear()
-
-	p1_score_s = _get_first(d, "score1", "")
-	var p1_words_s: String = _get_first(d, "words1", "")
-	var p1_wordlist_s: String = _get_first(d, "words_list1", "")
-
-	p2_score_s = _get_first(d, "score2", "")
-	var p2_words_s: String = _get_first(d, "words2", "")
-	var p2_wordlist_s: String = _get_first(d, "words_list2", "")
-
-	print("P1s Score: ", p1_score_s, " | P2s Score: ", p2_score_s)
-
-	var p1_score: int = int(p1_score_s) if p1_score_s != "" else 0
-	var p1_words: int = int(p1_words_s) if p1_words_s != "" else 0
-	var p2_score: int = int(p2_score_s) if p2_score_s != "" else 0
-	var p2_words: int = int(p2_words_s) if p2_words_s != "" else 0
-
-	var opponent_avatar_key := ""
-	winner = _get_first(d, "winner", "")
-	stop_waiting_animation()
-
-	var sender_player: int = clampi(int(sender_s), 1, 2)
-
-	# Reset before determining
-	my_has_data = false
-
-	if p1_id != "" and p2_id != "" and my_id != "":
-		if my_id == p1_id:
-			my_player = 1
-			opponent_avatar_key = "avatar2"
-			spectator_mode = false
-			print("SETTING FOR ID PLAYER 1 (my_id matches player1)")
-		elif my_id == p2_id:
-			my_player = 2
-			opponent_avatar_key = "avatar1"
-			spectator_mode = false
-			print("SETTING FOR ID PLAYER 2 (my_id matches player2)")
-		else:
-			my_player = 0
-			spectator_mode = true
-			print("SETTING FOR SPECTATOR (my_id matches neither player1 nor player2)")
-	else:
-		my_player = 1 if sender_player == 2 else 2
-		spectator_mode = false
-		opponent_avatar_key = "avatar1" if my_player == 2 else "avatar2"
-		print("PARTIAL OR MISSING PLAYER IDS; using sender 'player' field as my slot -> my_player =", my_player)
-
-	# Now determine whether MY side has any data
-	if not spectator_mode:
-		if my_player == 1:
-			my_has_data = (
-				p1_score_s != ""
-				or p1_words_s != ""
-				or p1_wordlist_s != ""
-			)
-			print("PLAYER 1 DATA CHECK -> score:", p1_score_s, " words:", p1_words_s, " list:", p1_wordlist_s)
-		elif my_player == 2:
-			my_has_data = (
-				p2_score_s != ""
-				or p2_words_s != ""
-				or p2_wordlist_s != ""
-			)
-			print("PLAYER 2 DATA CHECK -> score:", p2_score_s, " words:", p2_words_s, " list:", p2_wordlist_s)
-
-	print("my_player =", my_player, " | my_has_data =", my_has_data, " | spectator_mode =", spectator_mode)
-
-	if spectator_mode:
-		print("SPECTATOR MODE ACTIVE")
-		if res.has("avatar1"):
-			var av1 = GameUtils._parse_avatar_string(res["avatar1"])
-			player_avatar_display.call_deferred("update_avatar_from_data", av1)
-			player_score_avatar_display.call_deferred("update_avatar_from_data", av1)
-		if res.has("avatar2"):
-			var av2 = GameUtils._parse_avatar_string(res["avatar2"])
-			opp_avatar_display.call_deferred("update_avatar_from_data", av2)
-
-		var p1_entries := _build_word_entries_from_string(p1_wordlist_s)
-		_populate_scoreboard(true, p1_entries, p1_words, p1_score)
-
-		var p2_entries := _build_word_entries_from_string(p2_wordlist_s)
-		_populate_scoreboard(false, p2_entries, p2_words, p2_score)
-
-	if not spectator_mode:
-		var my_score: int = 0
-		var my_words: int = 0
-		var my_wordlist_s: String = ""
-		var opp_score: int = 0
-		var opp_words: int = 0
-		var opp_wordlist_s: String = ""
-
-		if my_player == 1:
-			my_score = p1_score
-			my_words = p1_words
-			my_wordlist_s = p1_wordlist_s
-			opp_score = p2_score
-			opp_words = p2_words
-			opp_wordlist_s = p2_wordlist_s
-		elif my_player == 2:
-			my_score = p2_score
-			my_words = p2_words
-			my_wordlist_s = p2_wordlist_s
-			opp_score = p1_score
-			opp_words = p1_words
-			opp_wordlist_s = p1_wordlist_s
-
-		if my_wordlist_s != "":
-			var my_entries := _build_word_entries_from_string(my_wordlist_s)
-			_populate_scoreboard(true, my_entries, my_words, my_score)
-
-		if opp_wordlist_s != "":
-			var opp_entries := _build_word_entries_from_string(opp_wordlist_s)
-			_populate_scoreboard(false, opp_entries, opp_words, opp_score)
-
-	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
-		var avatar_string = res[opponent_avatar_key]
-		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
-		if is_instance_valid(opp_avatar_display):
-			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
-
-	game_ended = await check_win()
-	_init_screens()
-
-	if my_has_data and not game_over:
-		start_waiting_animation()
-	else:
-		stop_waiting_animation()
-		
 func _on_words_list_scroll_gui_input(event: InputEvent) -> void:
 	if _words_scroll_container == null:
 		return
@@ -880,9 +911,9 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 			var mb := event as InputEventMouseButton
 			if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
 				var click_pos := mb.position
-				var popup_rect := popup.get_global_rect()
+				var clicked_popup_rect := popup.get_global_rect()
 
-				if popup_rect.has_point(click_pos):
+				if clicked_popup_rect.has_point(click_pos):
 					return
 
 				var clicked_word := ""
@@ -1562,126 +1593,188 @@ func _build_word_entries_from_string(words_s: String) -> Array:
 
 func _on_game_time_up() -> void:
 	_populate_scoreboard(true)
-	send_game()
-	await _switch_to_screen(2)      # ScoreScreen
+	await send_game()
+	await _switch_to_screen(2)
 	
 func send_game() -> void:
 	await get_tree().process_frame
+
+	if spectator_mode:
+		return
+
 	var final_score: int = game_screen.get_final_score()
 	var total_words: int = game_screen.get_word_count()
 	var history: Array = game_screen.get_word_history()
-	
+
 	var word_strings: Array[String] = []
 	for entry in history:
 		if entry is Dictionary and entry.has("word"):
 			word_strings.append(String(entry["word"]))
+
 	var words_joined := "|".join(word_strings)
-	
-	var score_key := "score1" if my_player == 1 else "score2"
-	var words_key := "words1" if my_player == 1 else "words2"
-	var words_list_key := "words_list1" if my_player == 1 else "words_list2"
-	
+
+	var score_key := "score1" if player == 1 else "score2"
+	var words_key := "words1" if player == 1 else "words2"
+	var words_list_key := "words_list1" if player == 1 else "words_list2"
+
+	if player == 1:
+		p1_score_s = str(final_score)
+	else:
+		p2_score_s = str(final_score)
+
 	var payload: Dictionary = {}
-	
+
 	payload[score_key] = str(final_score)
 	payload[words_key] = str(total_words)
 	payload[words_list_key] = words_joined
-	
-	var avatar_key := ("avatar1" if my_player == 1 else "avatar2")
+
+	var avatar_key := "avatar1" if player == 1 else "avatar2"
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
-	
+
+	game_ended = check_win()
+
 	if game_ended and win_loss_state != "":
-		payload["winner"] = my_id + "|" + win_loss_state
-	
-	var plug := Engine.get_singleton("AppPlugin")
-	if plug:
-		plug.updateGameData(JSON.stringify(payload))
-	else:
-		print("AppPlugin is null; cannot send.")
+		payload["winner"] = my_uuid + "|" + win_loss_state
+
 	print("OUTGOING DATA", payload)
-	
-	game_ended = await check_win()
-	if not game_ended:
-		print("[SEND] No win detected; clearing preview.")
+	send_game_data(JSON.stringify(payload))
+
+	if game_over:
+		stop_waiting_animation()
 	else:
-		print("[SEND] Game ended with winner=", winner, " win_loss_state=", win_loss_state, " — keeping preview line.")
-	
-	if not game_over:
 		play_sent_animation()
+		
+func _show_result_from_state(state: String, spectator_winner_player: int = 0) -> void:
+	game_over = true
+	game_ended = true
+	win_loss_state = state
+
+	stop_waiting_animation()
+
+	if is_instance_valid(view_words_button):
+		view_words_button.visible = true
+
+	if state == "0":
+		winner = "0"
+	elif spectator_mode:
+		winner = "1" if spectator_winner_player == 1 else "-1"
+	elif state == "1":
+		winner = "1" if player == 1 else "-1"
+	else:
+		winner = "-1" if player == 1 else "1"
+
+	if not is_instance_valid(win_loss_label):
+		return
+
+	if state == "0":
+		win_loss_label.text = "DRAW!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+	elif spectator_mode:
+		var player_num := spectator_winner_player
+
+		if player_num == 0:
+			player_num = 1 if state == "1" else 2
+
+		win_loss_label.text = "Player %d Wins!" % player_num
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
+		var winning_avatar: Control = player_score_avatar_display if player_num == 1 else opp_avatar_display
+		if is_instance_valid(winning_avatar):
+			GameUtils._show_win_burst(winning_avatar)
+	elif state == "1":
+		win_loss_label.text = "YOU WIN!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
+		if is_instance_valid(player_score_avatar_display):
+			GameUtils._show_win_burst(player_score_avatar_display)
+	else:
+		win_loss_label.text = "YOU LOSE"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
+		if is_instance_valid(opp_avatar_display):
+			GameUtils._show_win_burst(opp_avatar_display)
+
+	win_loss_label.visible = true
+	win_loss_label.modulate.a = 1.0
+	win_loss_label.scale = Vector2.ZERO
+
+	await get_tree().process_frame
+
+	win_loss_label.pivot_offset = win_loss_label.size / 2
+
+	var tween_in := create_tween()
+	tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		
+func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: String = "") -> void:
+	var parts := winner_payload.split("|", false)
+
+	if parts.size() < 2:
+		return
+
+	var sender_uuid := String(parts[0])
+	var sender_state := String(parts[1])
+
+	if sender_state == "0":
+		_show_result_from_state("0")
+		return
+
+	var local_state := sender_state
+	var winning_player := 0
+
+	if spectator_mode:
+		var sender_player := 0
+
+		if sender_uuid == p1_id:
+			sender_player = 1
+		elif sender_uuid == p2_id:
+			sender_player = 2
+
+		winning_player = sender_player
+
+		if sender_state == "-1":
+			winning_player = 2 if sender_player == 1 else 1
+
+		local_state = "1" if winning_player == 1 else "-1"
+	else:
+		if sender_uuid != my_uuid:
+			local_state = "-1" if sender_state == "1" else "1"
+
+	_show_result_from_state(local_state, winning_player)
 		
 func check_win() -> bool:
 	print("--- CHECKING WIN CONDITION ---")
-	if game_over: return false
-	print("P1 Score:", p1_score_s," | P2 Score:", p2_score_s)
+
+	if game_over:
+		return true
+
+	print("P1 Score:", p1_score_s, " | P2 Score:", p2_score_s)
+
 	if p1_score_s == "" or p2_score_s == "":
 		return false
-	var p1_has = false
-	var p2_has = false
+
+	var p1_score := p1_score_s.to_int()
+	var p2_score := p2_score_s.to_int()
+
+	if p1_score > p2_score:
+		_show_result_from_state("1" if player == 1 else "-1", 1)
+	elif p2_score > p1_score:
+		_show_result_from_state("1" if player == 2 else "-1", 2)
+	else:
+		_show_result_from_state("0")
+
+	return true
 	
-	if p1_score_s.to_int() > p2_score_s.to_int():
-		p1_has = true
-	elif p1_score_s.to_int() < p2_score_s.to_int():
-		p2_has = true
-	else:
-		p1_has = true
-		p2_has = true
-
-	if p1_has and not p2_has:
-		winner = "1"
-	elif p2_has and not p1_has:
-		winner = "-1"
-	else:
-		winner = "0"
-
-	game_over = true
-	view_words_button.visible = true
-	if winner != "":
-		if winner == "0":
-			print("[WIN] FINAL TALLY: DRAW!")
-			win_loss_label.text = "DRAW!"
-			win_loss_state = "0"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
-		else:
-			var you_win: bool = (not spectator_mode) and (
-				(my_player == 1 and winner == "1") or
-				(my_player == 2 and winner == "-1")
-			)
-			print("[WIN] you_win=", you_win, " spectator_mode=", spectator_mode)
-
-			if you_win:
-				GameUtils._show_win_burst(player_score_avatar_display)
-				win_loss_label.text = "YOU WIN!"
-				win_loss_state = "1"
-				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			else:
-				if spectator_mode:
-					GameUtils._show_win_burst(player_score_avatar_display if winner == "1" else opp_avatar_display)
-					var displayedwinner = "1" if winner == "-1" else "2"
-					win_loss_label.text = "Player %s Wins!" % displayedwinner
-					win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-					win_loss_state = "-1"
-				else:
-					GameUtils._show_win_burst(opp_avatar_display)
-					win_loss_label.text = "YOU LOSE"
-					win_loss_state = "-1"
-					win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
-
-		win_loss_label.visible = true
-		await get_tree().process_frame
-		win_loss_label.scale = Vector2.ZERO
-		win_loss_label.pivot_offset = win_loss_label.size / 2
-		var tween_in := create_tween()
-		tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
-			.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-		return true
-	return false
-		
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
 		print("Warning: sent_label is not valid for play_sent_animation.")
 		return
-	
+
+	if game_over or spectator_mode:
+		stop_waiting_animation()
+		return
+
 	if sent_label_tween and sent_label_tween.is_running():
 		sent_label_tween.kill()
 
@@ -1706,9 +1799,13 @@ func play_sent_animation() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
-			start_waiting_animation()
-	)
 
+		if not game_over and not spectator_mode:
+			start_waiting_animation()
+		else:
+			stop_waiting_animation()
+	)
+	
 func _populate_scoreboard(
 	is_player: bool = true,
 	word_entries: Array = [],
@@ -1806,7 +1903,7 @@ func _populate_scoreboard(
 	target_score_label.text = "SCORE: %04d" % final_score
 	
 	if is_player:
-		if my_player == 1:
+		if player == 1:
 			p1_score_s = str(final_score)
-		elif my_player == 2:
+		elif player == 2:
 			p2_score_s = str(final_score)

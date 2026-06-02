@@ -186,12 +186,9 @@ var _pending_replay_str: String = ""
 var _replay_in_progress: bool = false
 var tween: Tween
 var win_loss_state = ""
-var has_connected: bool = false
 var is_your_turn: bool = false
 var is_my_turn: bool = false
 var _is_zooming: bool = false
-var my_player
-var my_player_id
 var avatar_key = 0
 var player = 1
 var sent_tween: Tween
@@ -204,6 +201,23 @@ var _last_received_num: int = 0
 
 func _is_stale_data_seq(data_seq: int) -> bool:
 	return data_seq >= 0 and data_seq != _incoming_data_seq
+	
+func _get_dev_data() -> String:
+	return JSON.stringify({
+		"isYourTurn": true,
+		"player": "1",
+		"myPlayerId": "TEST2",
+		"player1": "TEST1",
+		"player2": "TEST2",
+		"mode": "3",
+		"replay": "board:1#-41.490452,-18.381981,2,2.568027,0.311887,11.024456#35.786495,56.762127,1,0.193446,3.140568,125.850670|shoot:1|board:2#-24.121695,-12.309731,2,1.882683,0.311887,0.000000#-135.776291,51.576973,1,4.711365,-0.038352,95.461876|board:2#-24.121695,-12.309731,2,1.882683,0.311887,0.000000#-135.776291,51.576973,1,4.711365,-0.038352,95.461876"
+	})
+
+func _get_settings_avatar_display() -> Control:
+	return player_avatar_display
+
+func _get_rules_title() -> String:
+	return "Knockout"
 
 func _on_viewport_resize() -> void:
 	if not _board_initialized:
@@ -1280,15 +1294,13 @@ func _on_game_ready():
 	)
 	_dump_physics_project_settings()
 
-	# Wait a single frame for the viewport size to be accurate before layout math.
 	await get_tree().process_frame
 
-	# 1. Dynamically set the board's target size based on the screen width.
 	_recalc_board_base_scale_factor()
 
-	# 2. Standard scene and UI setup.
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_bg_for_dark(is_dark)
+
 	self.z_index = 10
 	_apply_board_draw_order()
 	randomize()
@@ -1296,14 +1308,15 @@ func _on_game_ready():
 
 	if is_instance_valid(send_button):
 		send_button.visible = false
-		send_button.pressed.connect(send_game)
+
+		if not send_button.pressed.is_connected(send_game):
+			send_button.pressed.connect(send_game)
 	else:
 		push_warning("No %SendButton in scene")
-		
+
 	_recompute_send_button_visibility()
 	_wire_water_kill_areas()
 
-	# 3. Configure the TextureRect and BoardZoom nodes to use our logical size.
 	var texrect := _get_texrect()
 	if is_instance_valid(texrect):
 		_apply_ios_board_texture_layout()
@@ -1314,10 +1327,10 @@ func _on_game_ready():
 		current_scale = ZOOM_START
 		board_zoom.scale = Vector2.ONE * (_board_base_scale_factor * current_scale)
 		board_zoom.pivot_offset = LOGICAL_BOARD_SIZE * 0.5
-		board_zoom.resized.connect(func():
-			_layout_board_centered()
-		)
-	
+
+		if not board_zoom.resized.is_connected(_layout_board_centered):
+			board_zoom.resized.connect(_layout_board_centered)
+
 	_ensure_board_scaler()
 	_apply_ios_board_texture_layout()
 	_layout_board_centered()
@@ -1326,51 +1339,30 @@ func _on_game_ready():
 	_set_kill_debug_visible(false)
 	_ensure_kill_overlay()
 	_apply_board_draw_order()
-	
-	# 4. Calculate the base scale factor and apply the initial board state.
+
 	_recalc_board_base_scale_factor()
 	_rebuild_base_polys_from_png()
-	_apply_board_index_immediate(0) # Sets initial TextureRect scale and generates polygons.
+	_apply_board_index_immediate(0)
 
-	# 5. Connect signals to handle screen resizing events.
-	get_viewport().size_changed.connect(_on_viewport_resize)
+	if not get_viewport().size_changed.is_connected(_on_viewport_resize):
+		get_viewport().size_changed.connect(_on_viewport_resize)
 
-	# 6. Final game initialization steps.
 	_board_initialized = true
 	print("Board initialized and scaled.")
+
 	if PDIFF_ENABLED:
-		await get_tree().create_timer(0.4).timeout   # let board settle/layout
-		
+		await get_tree().create_timer(0.4).timeout
+
 	if _pending_replay_str != "":
 		parse_replay_string(_pending_replay_str, _incoming_data_seq)
 		_pending_replay_str = ""
-		
-	var appPlugin = Engine.get_singleton("AppPlugin")
-	if appPlugin:
-		print("AppPlugin Available")
-		if not has_connected:
-			appPlugin.connect("set_game_data", _set_game_data)
-			has_connected = true
-			appPlugin.onReady()
-			print("AppPlugin Connected")
-	else:
-		var dev_payload := {
-			"isYourTurn": true,
-			"player": "1",
-			"myPlayerId": "TEST2",
-			"player1": "TEST1",
-			"player2": "TEST2",
-			"mode": "3",
-			"replay": "board:1#-41.490452,-18.381981,2,2.568027,0.311887,11.024456#35.786495,56.762127,1,0.193446,3.140568,125.850670|shoot:1|board:2#-24.121695,-12.309731,2,1.882683,0.311887,0.000000#-135.776291,51.576973,1,4.711365,-0.038352,95.461876|board:2#-24.121695,-12.309731,2,1.882683,0.311887,0.000000#-135.776291,51.576973,1,4.711365,-0.038352,95.461876"
-		}
-		_set_game_data(JSON.stringify(dev_payload))
 
 	call_deferred("_seed_area_overlaps")
 	_ensure_piece_container_hosted_in_board_zoom()
 	_resync_piece_sprite_sizes()
 	_refresh_safe_polys_for_transform()
 	_seed_area_overlaps()
-
+	
 func _seed_area_overlaps() -> void:
 	if not is_instance_valid(_safe_area):
 		return
@@ -1468,6 +1460,8 @@ func _set_game_data(new_game_data_json: String):
 
 	_stop_all_highlights()
 	stop_waiting_animation()
+	_recompute_send_button_visibility()
+
 	_incoming_data_seq += 1
 	var data_seq := _incoming_data_seq
 
@@ -1476,14 +1470,24 @@ func _set_game_data(new_game_data_json: String):
 	_staged_launch_mode = false
 	_staged_pre_board_str = ""
 	_staged_next_index = 0
+	game_over = false
+	game_ended = false
+	win_loss_state = ""
+	spectator_mode = false
+
+	if is_instance_valid(win_loss_label):
+		win_loss_label.visible = false
+		win_loss_label.text = ""
+		win_loss_label.scale = Vector2.ONE
 
 	var data: Dictionary = parsed
-	is_your_turn = data.get("isYourTurn", false)
+	is_your_turn = bool(data.get("isYourTurn", false))
 	print("INCOMING RAW DATA: ", data)
 
 	_last_received_num = int(str(data.get("num", _last_received_num)))
 
-	var replay_str: String = data.get("replay", "")
+	var replay_str: String = str(data.get("replay", ""))
+	var winner_payload: String = str(data.get("winner", ""))
 
 	if DEBUG_COLLISION_LAB:
 		replay_str = COLLISION_LAB_REPLAY
@@ -1493,26 +1497,31 @@ func _set_game_data(new_game_data_json: String):
 		replay_str = HARD_IOS_REPLAY
 		data["replay"] = replay_str
 		print("[HARD_IOS_REPLAY_RECEIVE] forcing local parse replay=", replay_str)
+
 	var player1_id: String = str(data.get("player1", ""))
 	var player2_id: String = str(data.get("player2", ""))
-	my_player_id = str(data.get("myPlayerId", ""))
+
 	map_mode = int(data.get("map", data.get("mode", map_mode)))
 	_apply_map_theme(map_mode)
 
-	spectator_mode = false
-	if my_player_id != "" and player1_id != "" and player2_id != "":
-		spectator_mode = my_player_id != player1_id and my_player_id != player2_id
+	if my_uuid != "" and player1_id != "" and player2_id != "":
+		spectator_mode = my_uuid != player1_id and my_uuid != player2_id
 
 	if spectator_mode:
 		player = 1
 		is_my_turn = false
-		you_label.text = ""
-		spec_label.show()
+
+		if is_instance_valid(you_label):
+			you_label.text = ""
+
+		if is_instance_valid(spec_label):
+			spec_label.show()
 	else:
 		is_my_turn = is_your_turn
-		if my_player_id != "" and my_player_id == player1_id:
+
+		if my_uuid != "" and my_uuid == player1_id:
 			player = 1
-		elif my_player_id != "" and my_player_id == player2_id:
+		elif my_uuid != "" and my_uuid == player2_id:
 			player = 2
 		elif player1_id != "" and player2_id == "":
 			player = 2
@@ -1524,11 +1533,9 @@ func _set_game_data(new_game_data_json: String):
 		if is_instance_valid(spec_label):
 			spec_label.hide()
 
-	print("P1ID: ", player1_id, " | P2ID: ", player2_id, " | MyID: ", my_player_id, " | Player: ", player, " | spectator=", spectator_mode)
-	
-	# Brand-new-to-me game: my_player_id isn't recognized as an assigned slot yet.
-	# Spectators never see the goal popup.
-	if not spectator_mode and (my_player_id == "" or (my_player_id != player1_id and my_player_id != player2_id)):
+	print("P1ID: ", player1_id, " | P2ID: ", player2_id, " | MyID: ", my_uuid, " | Player: ", player, " | spectator=", spectator_mode)
+
+	if not spectator_mode and (my_uuid == "" or (my_uuid != player1_id and my_uuid != player2_id)):
 		_pending_goal_popup = true
 
 	if player == 1:
@@ -1541,10 +1548,12 @@ func _set_game_data(new_game_data_json: String):
 	if spectator_mode:
 		if data.has("avatar1") and is_instance_valid(player_avatar_display):
 			player_avatar_display.call_deferred("update_avatar_from_data", GameUtils._parse_avatar_string(str(data["avatar1"])))
+
 		if data.has("avatar2") and is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", GameUtils._parse_avatar_string(str(data["avatar2"])))
 	else:
 		var opponent_avatar_key := "avatar2" if player == 1 else "avatar1"
+
 		if data.has(opponent_avatar_key) and is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", GameUtils._parse_avatar_string(str(data[opponent_avatar_key])))
 			print("[AVATAR] Updated opponent avatar from ", opponent_avatar_key)
@@ -1556,6 +1565,11 @@ func _set_game_data(new_game_data_json: String):
 			_pending_replay_str = replay_str
 	else:
 		print("New Game - No replay string found.")
+
+	if winner_payload != "":
+		_apply_winner_payload(winner_payload, player1_id, player2_id)
+		modulate.a = 1.0
+		return
 
 	_update_piece_interactivity()
 
@@ -1569,7 +1583,10 @@ func _set_game_data(new_game_data_json: String):
 
 		if not is_my_turn and not game_over:
 			start_waiting_animation()
-			_recompute_send_button_visibility()
+		else:
+			stop_waiting_animation()
+
+		_recompute_send_button_visibility()
 
 	if replay_str == "":
 		modulate.a = 1.0
@@ -1595,10 +1612,12 @@ func send_game() -> void:
 	print("[Send] send_game() called")
 	_stop_all_highlights()
 	await get_tree().process_frame
-	
-	# When the scene stayed open, old hide/reset logic can wipe the opponent's
-	# stored power meta after a received replay. Restore opponent setup data from
-	# last_pre_round before checking readiness.
+
+	if game_over or spectator_mode:
+		_recompute_send_button_visibility()
+		stop_waiting_animation()
+		return
+
 	if not last_pre_round.is_empty():
 		var pending_arr: Array = last_pre_round.get("pieces", [])
 		var live_pieces: Array[Node] = []
@@ -1608,6 +1627,7 @@ func send_game() -> void:
 				live_pieces.append(c)
 
 		var restore_count: int = min(live_pieces.size(), pending_arr.size())
+
 		for i in restore_count:
 			var piece := live_pieces[i]
 			var pd: Dictionary = pending_arr[i]
@@ -1620,73 +1640,61 @@ func send_game() -> void:
 				piece.set_meta("shoot_dir", rad_to_deg(float(pd.get("shoot_dir", 0.0))))
 				piece.set_meta("power", pending_power)
 
-	# If we already auto-played locally, this click FINALIZES and sends.
 	if _staged_launch_mode:
 		var payload: Dictionary = {}
 		var setup_str := _serialize_current_board(_staged_next_index, false, true)
 		var staged_replay_str := "%s|shoot:1|%s|%s" % [_staged_pre_board_str, setup_str, setup_str]
 		payload["replay"] = staged_replay_str
 
-		avatar_key = ("avatar1" if player == 1 else "avatar2")
+		avatar_key = "avatar1" if player == 1 else "avatar2"
 		if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 			payload[avatar_key] = player_avatar_display.get_avatar_data_string()
 
 		game_ended = check_win()
 		if game_ended and win_loss_state != "":
-			payload["winner"] = my_player_id + "|" + win_loss_state
+			payload["winner"] = my_uuid + "|" + win_loss_state
 
 		_apply_hardcoded_ios_replay_to_payload(payload, "staged_finalize")
 
-		var appPlugin := Engine.get_singleton("AppPlugin")
-		if appPlugin:
-			appPlugin.updateGameData(JSON.stringify(payload))
-		else:
-			print("AppPlugin is null. Cannot send game data.")
+		send_game_data(JSON.stringify(payload))
+		print("[Send] STAGED PAYLOAD: ", payload)
 
-		# Reset staged mode and hand off turn
 		_staged_launch_mode = false
 		_staged_pre_board_str = ""
 		is_my_turn = false
 		_update_piece_interactivity()
-		if not game_over:
+		_recompute_send_button_visibility()
+
+		if game_over:
+			stop_waiting_animation()
+		else:
 			play_sent_animation()
+
 		return
 
-	# Not staged yet → decide whether to auto-play first or just send normally.
 	var my_ready := _all_my_arrows_visible() and _all_my_piece_powers_nonzero()
 	var opp_ready := _all_opponent_arrows_nonzero()
-	
+
 	print("[Send] readiness | staged=", _staged_launch_mode,
 		" | my_ready=", my_ready,
 		" | opp_ready=", opp_ready,
 		" | current_idx=", _current_board_index,
 		" | has_last_pre=", not last_pre_round.is_empty()
 	)
-	
-	print("[LOCAL_STAGE_READY_CHECK]",
-		" staged=", _staged_launch_mode,
-		" my_ready=", my_ready,
-		" opp_ready=", opp_ready,
-		" all_my_arrows=", _all_my_arrows_visible(),
-		" all_my_power=", _all_my_piece_powers_nonzero(),
-		" opp_arrows_nonzero=", _all_opponent_arrows_nonzero(),
-		" current_idx=", _current_board_index
-	)
 
-	# If EVERYONE has set arrows, we do the local play NOW, then let user re-aim.
 	if my_ready and opp_ready:
-		# 1) Capture the initial board (with current aims) as the first segment.
 		_staged_pre_board_str = _serialize_current_board(_current_board_index, false, true)
 		var shot_meta_before_fire: Dictionary = _capture_piece_shot_meta()
 
-		# 2) Play locally (animate + physics)
 		_replay_in_progress = true
 		_update_piece_interactivity()
 		_recompute_send_button_visibility()
+
 		await _animate_and_fire_from_current_arrows()
 		_restore_piece_shot_meta(shot_meta_before_fire)
+
 		_replay_in_progress = false
-		
+
 		if check_win():
 			_staged_launch_mode = false
 			_staged_pre_board_str = ""
@@ -1694,43 +1702,41 @@ func send_game() -> void:
 			_recompute_send_button_visibility()
 			return
 
-		# 3) Stage the "post" board at next index and let the player aim again.
 		var next_idx: int = _next_board_index_after_round(_current_board_index)
 		await _stage_after_local_play(next_idx)
-
-		# Done: DO NOT send yet. The next click will send the 3-chunk payload.
 		return
 
-	# Fallback: opponent not ready
 	var replay_string_to_send := _build_replay_string()
-	var payload2: Dictionary = { "replay": replay_string_to_send }
+	var payload2: Dictionary = {
+		"replay": replay_string_to_send
+	}
 
-	avatar_key = ("avatar1" if player == 1 else "avatar2")
+	avatar_key = "avatar1" if player == 1 else "avatar2"
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload2[avatar_key] = player_avatar_display.get_avatar_data_string()
 
 	game_ended = check_win()
 	if game_ended and win_loss_state != "":
-		payload2["winner"] = my_player_id + "|" + win_loss_state
+		payload2["winner"] = my_uuid + "|" + win_loss_state
 
 	_apply_hardcoded_ios_replay_to_payload(payload2, "fallback_send")
+
 	if DEBUG_FORCE_HARD_IOS_REPLAY_ON_SEND:
 		payload2 = {
 			"replay": "board:0#-60.000000,0.000000,1,0.000000,0.000000,80.000000#40.000000,0.000000,2,0.000000,0.000000,0.000000|shoot:1|board:0#-60.000000,0.000000,1,0.000000,0.000000,80.000000#40.000000,0.000000,2,0.000000,0.000000,0.000001",
 			"avatar1": "fshape,0|fshape_color,0.874510,0.674510,0.411765|body,0|body_color,0.874510,0.674510,0.411765|hair,0|hair_color,0.164706,0.137255,0.164706|eyes,0|mouth,0|clothes,0|clothes_color,0.627451,0.231373,0.231373|bg_color,0.301961,0.364706,0.537255|backdrop,3"
 		}
 
-	print("[COLLISION_LAB_DIRECT_SEND] payload2=", payload2)
 	print("[Send] PAYLOAD: ", payload2)
-	var appPlugin2 := Engine.get_singleton("AppPlugin")
-	if appPlugin2:
-		appPlugin2.updateGameData(JSON.stringify(payload2))
-	else:
-		print("AppPlugin is null. Cannot send game data.")
+	send_game_data(JSON.stringify(payload2))
 
 	is_my_turn = false
 	_update_piece_interactivity()
-	if not game_over:
+	_recompute_send_button_visibility()
+
+	if game_over:
+		stop_waiting_animation()
+	else:
 		play_sent_animation()
 		
 func _build_replay_string() -> String:
@@ -4098,15 +4104,95 @@ func set_my_turn(value: bool) -> void:
 	_recompute_send_button_visibility()
 
 # --- UI Animations & State ---
+func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: String = "") -> void:
+	var parts := winner_payload.split("|", false)
+	if parts.size() < 2:
+		return
 
-func _animate_win_loss_label(text: String, color: Color) -> void:
-	win_loss_label.text = text
-	win_loss_label.add_theme_color_override("font_color", color)
-	win_loss_label.visible = true
-	await get_tree().process_frame
+	var sender_uuid := String(parts[0])
+	var sender_state := String(parts[1])
+
+	if sender_state == "0":
+		_show_result_from_state("0")
+		return
+
+	var local_state := sender_state
+	var winning_player := 0
+
+	if spectator_mode:
+		var sender_player := 0
+
+		if sender_uuid == p1_id:
+			sender_player = 1
+		elif sender_uuid == p2_id:
+			sender_player = 2
+
+		winning_player = sender_player
+
+		if sender_state == "-1":
+			winning_player = 2 if sender_player == 1 else 1
+
+		local_state = "1" if winning_player == 1 else "-1"
+	else:
+		if sender_uuid != my_uuid:
+			local_state = "-1" if sender_state == "1" else "1"
+
+	_show_result_from_state(local_state, winning_player)
 	
+func _show_result_from_state(state: String, spectator_winner_player: int = 0) -> void:
+	game_over = true
+	game_ended = true
+	win_loss_state = state
+	is_my_turn = false
+	_replay_in_progress = false
+	_staged_launch_mode = false
+
+	stop_waiting_animation()
+	_stop_all_highlights()
+	_recompute_send_button_visibility()
+
+	if is_instance_valid(_aim_instruction_label):
+		_aim_instruction_label.visible = false
+		_aim_instruction_label.modulate.a = 0.0
+
+	if not is_instance_valid(win_loss_label):
+		return
+
+	if state == "0":
+		win_loss_label.text = "DRAW!"
+		win_loss_label.add_theme_color_override("font_color", Color.WHITE)
+	elif spectator_mode:
+		var player_num := spectator_winner_player
+
+		if player_num == 0:
+			player_num = 1 if state == "1" else 2
+
+		win_loss_label.text = "Player %d Wins!" % player_num
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
+		if player_num == 1:
+			if is_instance_valid(player_avatar_display):
+				GameUtils._show_win_burst(player_avatar_display)
+		else:
+			if is_instance_valid(opp_avatar_display):
+				GameUtils._show_win_burst(opp_avatar_display)
+	elif state == "1":
+		win_loss_label.text = "YOU WIN!"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
+		if is_instance_valid(player_avatar_display):
+			GameUtils._show_win_burst(player_avatar_display)
+	else:
+		win_loss_label.text = "YOU LOSE"
+		win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
+		if is_instance_valid(opp_avatar_display):
+			GameUtils._show_win_burst(opp_avatar_display)
+
+	win_loss_label.visible = true
 	win_loss_label.scale = Vector2.ZERO
 	win_loss_label.pivot_offset = win_loss_label.size / 2.0
+
 	var win_loss_tween := create_tween()
 	win_loss_tween.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 
@@ -4119,16 +4205,20 @@ func check_win() -> bool:
 
 	var p1_count := 0
 	var p2_count := 0
+
 	for n in piece_container.get_children():
 		if n is RigidBody2D and not n.get_meta("dying", false):
 			var owner_id := int(n.get_meta("player", -1))
-			if owner_id == 1: p1_count += 1
-			elif owner_id == 2: p2_count += 1
-	
+
+			if owner_id == 1:
+				p1_count += 1
+			elif owner_id == 2:
+				p2_count += 1
+
 	var my_count := p1_count if player == 1 else p2_count
 	var op_count := p2_count if player == 1 else p1_count
-	
-	var game_is_over := (p1_count == 0 or p2_count == 0)
+
+	var game_is_over := p1_count == 0 or p2_count == 0
 	if not game_is_over:
 		print("-> RESULT: Game Continues. P1=%d, P2=%d" % [p1_count, p2_count])
 		return false
@@ -4137,26 +4227,14 @@ func check_win() -> bool:
 		print("-> Game was already marked as over. No new result displayed.")
 		return true
 
-	game_over = true
 	print("-> WIN CONDITION MET: My:%d, Opp:%d (P1=%d, P2=%d)" % [my_count, op_count, p1_count, p2_count])
-	
-	if my_count > 0 and op_count == 0:
-		print("-> FINAL TALLY: YOU WIN!")
-		GameUtils._show_win_burst(player_avatar_display)
-		win_loss_state = "1"
-		var text = "Player 1 Wins!" if spectator_mode and p1_count > 0 else "YOU WIN!"
-		_animate_win_loss_label(text, Color(1, 0.84, 0))
-	elif op_count > 0 and my_count == 0:
-		print("-> FINAL TALLY: YOU LOSE")
-		GameUtils._show_win_burst(opp_avatar_display)
-		win_loss_state = "-1"
-		var text = "Player 2 Wins!" if spectator_mode and p2_count > 0 else "YOU LOSE"
-		var color = Color(1, 0.84, 0) if spectator_mode else Color(1, 0.2, 0.2)
-		_animate_win_loss_label(text, color)
-	else: # Both 0
-		print("-> No pieces remain. Declaring draw.")
-		win_loss_state = "0"
-		_animate_win_loss_label("DRAW!", Color.WHITE)
+
+	if p1_count > 0 and p2_count == 0:
+		_show_result_from_state("1" if player == 1 else "-1", 1)
+	elif p2_count > 0 and p1_count == 0:
+		_show_result_from_state("1" if player == 2 else "-1", 2)
+	else:
+		_show_result_from_state("0")
 
 	return true
 	
@@ -4177,7 +4255,8 @@ func play_sent_animation():
 	sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
 	sent_tween.tween_interval(0.6)
 	sent_tween.tween_callback(func():
-		if is_instance_valid(sent_label): sent_label.text = "Sent ✔"
+		if is_instance_valid(sent_label):
+			sent_label.text = "Sent ✔"
 	)
 	sent_tween.tween_interval(2.0)
 	sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
@@ -4186,9 +4265,13 @@ func play_sent_animation():
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
-			start_waiting_animation()
-	)
 
+		if not game_over and not spectator_mode and not is_my_turn:
+			start_waiting_animation()
+		else:
+			stop_waiting_animation()
+	)
+	
 # --- Popups & Settings ---
 func _get_rules_text() -> String:
 	return """

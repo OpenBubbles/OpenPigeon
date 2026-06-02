@@ -58,7 +58,7 @@ var replay3 = null
 var replay4 = null
 var isTurn = null
 var player = null
-var seed = null
+var game_seed = null
 var seed2 = null
 var score1 = null
 var score2 = null
@@ -195,7 +195,8 @@ func getReplay(player_num: int):
 		if turnNum <= 3:
 			return replay2
 		return replay4
-	assert(true, "wtf player is not 1 or 2") 
+	push_error("Invalid player_num in getReplay(): " + str(player_num))
+	return null
 		
 var drag_start_pos = Vector2.ZERO
 var dragging = false
@@ -513,7 +514,7 @@ func refresh_ui_state() -> void:
 func spawnBall(player_num: int, didGoInReplay = null) -> BasketballBall:
 	if appPlugin != null:
 		if (turnNum < 3) or (didGoInReplay != null and turnNum == 3):
-			appPlugin.srand48(player_num, seed)
+			appPlugin.srand48(player_num, game_seed)
 		else:
 			appPlugin.srand48(player_num, seed2)
 	else:
@@ -660,7 +661,7 @@ func _set_game_data(new_replay: String, saved: bool = false):
 			replay = parsed["replay"] if "replay" in parsed else null
 			replay3 = parsed["replay3"] if "replay3" in parsed else null
 	else:
-		seed = int(parsed["seed"])
+		game_seed = int(parsed["seed"])
 		seed2 = int(parsed["seed2"])
 		score1 = int(parsed["score1"])
 		score2 = int(parsed["score2"])
@@ -776,10 +777,10 @@ func setScore(player_num: int, score: int) -> void:
 		print("OPP SCORE: ", oppScore)
 		oppScoreLabel.text = str(oppScore).pad_zeros(2)
 	
-func isNullOrEmpty(str) -> bool:
-	if str == null:
+func isNullOrEmpty(value) -> bool:
+	if value == null:
 		return true
-	return str.length() == 0
+	return String(value).length() == 0
 	
 func clearBalls() -> void:
 	for node in get_children():

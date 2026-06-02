@@ -190,7 +190,6 @@ var _log_init := ChessDebug.ScopedLogger.new("INIT")
 var _log_game := ChessDebug.ScopedLogger.new("GAME")
 var _log_ui := ChessDebug.ScopedLogger.new("UI")
 var _log_data := ChessDebug.ScopedLogger.new("DATA")
-var _log_board := ChessDebug.ScopedLogger.new("BOARD")
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
@@ -479,7 +478,7 @@ func _flip_board_ui() -> void:
 
 	_log_ui.debug("_flip_board_ui: positions and labels updated")
 
-func _create_square_elements(r: int, f: int, rect: ColorRect, pieces_row: Array[TextureRect], move_overlays_row: Array[ColorRect], king_overlays_row: Array[ColorRect], container: Control) -> void:
+func _create_square_elements(_r: int, _f: int, rect: ColorRect, pieces_row: Array[TextureRect], move_overlays_row: Array[ColorRect], king_overlays_row: Array[ColorRect], container: Control) -> void:
 	# Create piece texture using ChessUI helper for consistent sizing
 	var tex: TextureRect = TextureRect.new()
 	var piece_rect: Dictionary = ChessUI.calculate_piece_rect(rect.position, SQUARE_SIZE)
@@ -922,11 +921,11 @@ func _show_undo_arrow(from_sq: Vector2i) -> void:
 	undo_arrow_label.z_index = 1000
 	add_child(undo_arrow_label)
 	
-func _update_send_button_visibility(show: bool) -> void:
+func _update_send_button_visibility(should_show: bool) -> void:
 	if not is_instance_valid(send_button):
 		return
 
-	send_button.disabled = not show
+	send_button.disabled = not should_show
 	send_button.set_as_top_level(true)
 
 	if not send_button.has_meta("home_pos"):
@@ -942,7 +941,7 @@ func _update_send_button_visibility(show: bool) -> void:
 	var off_y: float = vp.size.y + send_button.size.y + 30.0
 	var start_pos: Vector2 = Vector2(home.x, off_y)
 
-	if show:
+	if should_show:
 		if not send_button.visible:
 			send_button.global_position = start_pos
 			send_button.visible = true
@@ -962,7 +961,7 @@ func _update_send_button_visibility(show: bool) -> void:
 				if is_instance_valid(send_button):
 					send_button.visible = false
 			)
-			
+
 func _show_win_loss_result() -> void:
 	if not is_instance_valid(win_loss_label):
 		return
@@ -1418,10 +1417,7 @@ func _execute_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 func _commit_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 	_log_game.debug("_commit_move called %s -> %s" % [_square_name(from_sq), _square_name(to_sq)])
 	_log_game.game_state("before_commit", _game_state_dict())
-	var uci: String = _to_uci(from_sq, to_sq)
-	last_move_promotion_piece = ""  # Clear after using in UCI
-	var moving: String = board[to_sq.y][to_sq.x]  # piece is already at destination
-	var side: String = moving[0]
+	last_move_promotion_piece = ""
 
 	# Use ChessBoard.commit_move() to properly switch turn, increment fullmove, and count position
 	var old_turn: String = turn

@@ -20,8 +20,6 @@ var current_dart: Dart
 var num_shots: int = 0
 var replay_played: bool = false
 var sent_tween: Tween
-
-var has_connected: bool = false
 var is_my_turn: bool = false
 var player: int = -1
 var mode: int = -1
@@ -35,6 +33,7 @@ var p1_score: int = 0
 var p2_score: int = 0
 var redemption_active: bool = false
 var redemption_darts_allowed: int = 0
+var game_over: bool = false
 
 
 const RESULT_NONE := 0
@@ -46,24 +45,19 @@ var match_result: int = RESULT_NONE
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
+	
+func _get_dev_data() -> String:
+	return '{ "isYourTurn": true, "player": "1", "replay": "state:101,10|move:0,0.103483,0.142005,2,2,0|move:0,-0.343160,0.606544,9,9,0|move:0,0.128320,0.867287,0,0,0|state:90,10", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "", "id": "dev", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }'
+	
+func _get_settings_avatar_display() -> Control:
+	return player_avatar_display
+
+func _get_rules_title() -> String:
+	return "Darts"
 
 func _on_game_ready():
 	main_dart = get_node("dart")
-	if is_instance_valid(settings_button):
-		settings_button.pressed.connect(_on_settings_button_pressed)
-	var appPlugin = Engine.get_singleton("AppPlugin")
-
-	if appPlugin:
-		if not has_connected:
-			print("App plugin is available")
-			appPlugin.connect("set_game_data", _set_game_data)
-			has_connected = true
-			appPlugin.onReady()
-	else:
-		print("App plugin is not available")
-		_set_game_data('{ "isYourTurn": true, "player": "1", "replay": "state:101,10|move:0,0.103483,0.142005,2,2,0|move:0,-0.343160,0.606544,9,9,0|move:0,0.128320,0.867287,0,0,0|state:90,10", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "", "id": "lfH52rteC7dc 4J7\n", "ios": "16.3.1", "num": "2", "game": "darts", "mode": "101", "tver": "5", "build": "56", "version": "0" }')
-
-var my_player
+	
 func _set_game_data(new_replay: String):
 	var parsed = JSON.parse_string(new_replay)
 	print("NEW REPLAY: " + str(parsed))
@@ -72,10 +66,9 @@ func _set_game_data(new_replay: String):
 	replay = parsed["replay"] if "replay" in parsed else ""
 	mode = int(parsed["mode"])
 	var opponent_avatar_key = ""
-	my_player = parsed.get("myPlayerId", null)
 	var p1_id: String = parsed.get("player1", "")
 	var p2_id: String = parsed.get("player2", "")
-	spectator_mode = my_player != "" and p1_id != "" and p2_id != "" and my_player != p1_id and my_player != p2_id
+	spectator_mode = my_uuid != "" and p1_id != "" and p2_id != "" and my_uuid != p1_id and my_uuid != p2_id
 	if is_instance_valid(spectator_label):
 		spectator_label.visible = spectator_mode
 	if is_my_turn and not spectator_mode:
@@ -93,7 +86,7 @@ func _set_game_data(new_replay: String):
 		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
-	if spectator_mode:
+	if spectator_mode and parsed.has("avatar1"):
 		var p1_data = GameUtils._parse_avatar_string(parsed["avatar1"])
 		if is_instance_valid(player_avatar_display):
 			player_avatar_display.call_deferred("update_avatar_from_data", p1_data)
@@ -104,17 +97,19 @@ func _set_game_data(new_replay: String):
 	redemption_active = false
 	redemption_darts_allowed = 0
 	replay_played = false
+	game_over = false
+	match_result = RESULT_NONE
 	reset_game_board()
 	winner_label.visible = false
 
 	if parsed.has("winner") and parsed["winner"] != null and parsed["winner"] != "":
-		var parts: Array = str(parsed["winner"]).split("|")
+		var parts := str(parsed["winner"]).split("|", false)
 		var result_code := RESULT_NONE
 		if parts.size() >= 2:
 			var winner_val: int = int(parts[1])
 			if winner_val == 0:
 				result_code = RESULT_DRAW
-			elif parts[0] == my_player:
+			elif parts[0] == my_uuid:
 				result_code = RESULT_WIN if winner_val == 1 else RESULT_LOSS
 			else:
 				result_code = RESULT_WIN if winner_val == -1 else RESULT_LOSS
@@ -210,10 +205,24 @@ func _process_game_state():
 			if won_waiting:
 				return
 
-		start_waiting_animation()
+		if not game_over and not spectator_mode:
+			start_waiting_animation()
+		else:
+			stop_waiting_animation()
 
 func _show_result(result_code: int) -> void:
 	match_result = result_code
+	game_over = result_code != RESULT_NONE
+
+	if result_code == RESULT_NONE:
+		return
+
+	is_my_turn = false
+	stop_waiting_animation()
+
+	if not is_instance_valid(winner_label):
+		return
+
 	winner_label.visible = true
 
 	match result_code:
@@ -230,9 +239,9 @@ func _show_result(result_code: int) -> void:
 				GameUtils._show_win_burst(opp_avatar_display)
 
 		RESULT_DRAW:
-			winner_label.text = "DRAW"
-			winner_label.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
-
+			winner_label.text = "DRAW!"
+			winner_label.add_theme_color_override("font_color", Color(1, 1, 1))
+			
 func check_win() -> bool: 
 	if redemption_active:
 		return false
@@ -285,7 +294,7 @@ func send_replay():
 
 	var p1_out := p1_score
 	var p2_out := p2_score
-	var game_over := false
+	var turn_ended_game := false
 	match_result = RESULT_NONE
 
 	if redemption_active and player == 2:
@@ -293,24 +302,29 @@ func send_replay():
 			_show_result(RESULT_DRAW)
 		else:
 			_show_result(RESULT_LOSS)
-		game_over = true
+		turn_ended_game = true
 	elif player == 2 and p2_out == 0:
 		_show_result(RESULT_WIN)
-		game_over = true
+		turn_ended_game = true
 	elif player == 1 and p1_out == 0:
-		game_over = false
+		turn_ended_game = false
 	else:
-		game_over = false
+		turn_ended_game = false
 
-	if game_over:
+	if turn_ended_game:
 		var winner_value := ""
 		match match_result:
-			RESULT_WIN:  winner_value = "1"
-			RESULT_LOSS: winner_value = "-1"
-			RESULT_DRAW: winner_value = "0"
+			RESULT_WIN:
+				winner_value = "1"
+			RESULT_LOSS:
+				winner_value = "-1"
+			RESULT_DRAW:
+				winner_value = "0"
+
 		if winner_value != "":
-			result["winner"] = my_player + "|" + winner_value
+			result["winner"] = my_uuid + "|" + winner_value
 	else:
+		is_my_turn = false
 		play_sent_animation()
 
 	var avatar_key := ("avatar1" if player == 1 else "avatar2")
@@ -318,15 +332,10 @@ func send_replay():
 		result[avatar_key] = player_avatar_display.get_avatar_data_string()
 
 	var game_data = JSON.stringify(result)
-
-	var appPlugin := Engine.get_singleton("AppPlugin")
-	if appPlugin:
-		appPlugin.updateGameData(game_data)
-	else:
-		print("App not connected! " + game_data)
-
-func play_replay(replay: String):
-	var parsed = parse_replay(replay)
+	send_game_data(game_data)
+	
+func play_replay(replay_str: String):
+	var parsed = parse_replay(replay_str)
 	var other_player = 1 if player == 2 else 2
 
 	p1_pre_score = parsed["pre_state"][0]
@@ -355,9 +364,9 @@ func play_replay(replay: String):
 	elif player == 2:
 		p1_pre_score = parsed["post_state"][0]
 
-func parse_replay(replay: String) -> Dictionary:
+func parse_replay(replay_str: String) -> Dictionary:
 	var result = {"moves": []}
-	for elem in replay.split("|"):
+	for elem in replay_str.split("|"):
 		var spl = elem.split(":")
 		if spl[0] == "state":
 			var state_spl = spl[1].split(",")
@@ -373,17 +382,17 @@ func parse_replay(replay: String) -> Dictionary:
 			result["moves"].append(move)
 	return result
 
-func set_score(player: int, score: int) -> void:
-	if player == 1:
+func set_score(target_player: int, score: int) -> void:
+	if target_player == 1:
 		p1_score = score
-	elif player == 2:
+	elif target_player == 2:
 		p2_score = score
 	else:
 		return
 
 	var score_text := str(score)
 
-	if self.player == player:
+	if self.player == target_player:
 		if is_instance_valid(you_score_label):
 			you_score_label.text = score_text
 		else:
@@ -393,17 +402,17 @@ func set_score(player: int, score: int) -> void:
 			opp_score_label.text = score_text
 		else:
 			print("WARN: opp_score_label is null; cannot set score to ", score_text)
-
-func dec_score(player: int, score: int):
-	if player == 1:
+			
+func dec_score(target_player: int, score: int):
+	if target_player == 1:
 		set_score(1, p1_score - score)
-	elif player == 2:
+	elif target_player == 2:
 		set_score(2, p2_score - score)
 
-func get_score(player: int) -> int:
-	if player == 1:
+func get_score(target_player: int) -> int:
+	if target_player == 1:
 		return p1_score
-	elif player == 2:
+	elif target_player == 2:
 		return p2_score
 	return -1
 
@@ -536,5 +545,9 @@ func play_sent_animation() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
+
+		if not game_over and not spectator_mode and not is_my_turn:
 			start_waiting_animation()
+		else:
+			stop_waiting_animation()
 	)
