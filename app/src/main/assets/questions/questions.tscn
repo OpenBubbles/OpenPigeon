@@ -196,7 +196,7 @@ corner_radius_bottom_left = 15
 bg_color = Color(0.6, 0.6, 0.6, 0)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_g0j6x"]
-bg_color = Color(0.69135684, 0.6913568, 0.69135684, 1)
+bg_color = Color(0.6901961, 0.6901961, 0.6901961, 0.72156864)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -207,7 +207,18 @@ expand_margin_right = 20.0
 expand_margin_bottom = 10.0
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8ngb3"]
-bg_color = Color(0, 0, 0, 0.788235)
+bg_color = Color(0.6901961, 0.6901961, 0.6901961, 0.72156864)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_uhsad"]
+bg_color = Color(0.69008625, 0.69008625, 0.69008625, 0.72300005)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -264,7 +275,6 @@ custom_minimum_size = Vector2(280, 0)
 layout_mode = 2
 theme_override_font_sizes/normal_font_size = 16
 bbcode_enabled = true
-text = "Your goal is to guess the answer in 20 questions or less."
 fit_content = true
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -305,6 +315,7 @@ size_flags_vertical = 3
 
 [node name="AnswerOverlay" type="PanelContainer" parent="VBoxContainer/QuestionsContainer" unique_id=1194795212]
 unique_name_in_owner = true
+visible = false
 z_index = 10
 custom_minimum_size = Vector2(300, 150)
 layout_mode = 2
@@ -438,6 +449,7 @@ theme_override_constants/separation = 9
 
 [node name="QuestionsTextContainer" type="PanelContainer" parent="VBoxContainer/MarginContainer/BottomItems" unique_id=515102771]
 unique_name_in_owner = true
+visible = false
 custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
 size_flags_horizontal = 4
@@ -479,6 +491,7 @@ theme_override_colors/background_color = Color(1, 1, 1, 1)
 
 [node name="SendButton" type="Button" parent="VBoxContainer/MarginContainer/BottomItems" unique_id=344033590]
 unique_name_in_owner = true
+visible = false
 custom_minimum_size = Vector2(100, 60)
 layout_mode = 2
 size_flags_horizontal = 4
@@ -500,6 +513,7 @@ wait_time = 0.75
 [node name="WaitBlur" type="ColorRect" parent="." unique_id=1823741754]
 unique_name_in_owner = true
 visible = false
+z_index = 150
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -512,10 +526,19 @@ color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 [node name="waitingLabel" type="Label" parent="." unique_id=864817670]
 unique_name_in_owner = true
 visible = false
-layout_mode = 0
-offset_top = 834.0
-offset_right = 286.0
-offset_bottom = 869.0
+z_index = 200
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -143.0
+offset_top = -17.5
+offset_right = 143.0
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_g0j6x")
@@ -526,6 +549,7 @@ vertical_alignment = 1
 [node name="WinLossLabel" type="Label" parent="." unique_id=195215211]
 unique_name_in_owner = true
 visible = false
+z_index = 200
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -540,5 +564,27 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_8ngb3")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SentLabel" type="Label" parent="." unique_id=1968394306]
+unique_name_in_owner = true
+visible = false
+z_index = 200
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -30.5
+offset_top = -17.5
+offset_right = 30.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_uhsad")
+text = "SENT"
 horizontal_alignment = 1
 vertical_alignment = 1

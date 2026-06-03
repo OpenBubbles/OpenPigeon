@@ -698,7 +698,7 @@ func _on_turn_changed(v: bool) -> void:
 		can_interact = false
 		await _set_ui_visible(false)
 		if not game_over:
-			start_waiting_animation()	
+			_start_waiting_for_opponent()	
 	
 	_update_aim_label_visibility()
 
@@ -766,6 +766,8 @@ func play_sent_animation() -> void:
 		stop_waiting_animation()
 		return
 
+	stop_waiting_animation()
+
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()
 
@@ -792,10 +794,19 @@ func play_sent_animation() -> void:
 			sent_label.modulate.a = 1.0
 
 		if not game_over and core != null and not core.spectator_mode and not core.is_my_turn:
-			start_waiting_animation()
+			_start_waiting_for_opponent()
 		else:
 			stop_waiting_animation()
 	)
+
+func _start_waiting_for_opponent() -> void:
+	if is_instance_valid(waiting_label):
+		waiting_label.modulate.a = 1.0
+
+	if is_instance_valid(waiting_blur):
+		waiting_blur.modulate.a = 1.0
+
+	start_waiting_animation()
 
 func _update_avatars() -> void:
 	if not is_instance_valid(player_avatar_display) or not is_instance_valid(opp_avatar_display):
@@ -1025,7 +1036,7 @@ class TankBullet extends Node2D:
 	var _trail_max_length_px: float = 170.0
 	var _trail_min_point_spacing_px: float = 1.5
 
-	func _on_game_ready() -> void:
+	func _ready() -> void:
 		set_as_top_level(true)
 
 		_trail = Line2D.new()
@@ -1540,6 +1551,9 @@ func _on_send_pressed() -> void:
 	if finished:
 		return
 
-	play_sent_animation()
-
+	core.is_my_turn = false
+	can_interact = false
 	_is_playing_round = false
+	_update_aim_label_visibility()
+
+	play_sent_animation()

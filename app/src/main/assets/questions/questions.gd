@@ -19,6 +19,7 @@ extends BaseGame
 @onready var overlay_correct: Button = %CorrectButton
 @onready var questions_text_container: PanelContainer = %QuestionsTextContainer
 @onready var win_loss_label: Label = %WinLossLabel
+@onready var sent_label: Label = %SentLabel
 
 const OpponentAvatarScene: PackedScene = preload("res://global/avatar_textures/AvatarThumbnail.tscn")
 const MUSIC_STREAM := preload("res://global/audio/20questions.ogg")
@@ -27,6 +28,9 @@ var _answer_avatar_data: Dictionary = {}
 var _my_avatar_string: String = ""
 var _avatar1_raw: String = ""
 var _avatar2_raw: String = ""
+
+var sent_tween: Tween
+var _sent_animation_active: bool = false
 
 var is_my_turn: bool = false
 var server_player_hint: int = 0
@@ -44,6 +48,9 @@ var _waiting_active := false
 var _questions_wait_text: String = "Waiting"
 var _kb_open := false
 var _kb_last_h := 0
+var _player1_id: String = ""
+var _player2_id: String = ""
+var _local_player_id: String = ""
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
@@ -283,12 +290,35 @@ func _set_game_data(data_json: String) -> void:
 
 	var player1: String = _get_s(parsed, "player1", "")
 	var player2: String = _get_s(parsed, "player2", "")
+	var incoming_my_id: String = _get_s(parsed, "myPlayerId", "")
 
-	if player1 != "" or player2 != "":
-		if my_uuid == player1 or player1 == "":
+	if my_uuid == "" and incoming_my_id != "":
+		my_uuid = incoming_my_id
+
+	_local_player_id = my_uuid if my_uuid != "" else incoming_my_id
+	_player1_id = player1
+	_player2_id = player2
+
+	spectator_mode = false
+
+	if _local_player_id != "":
+		if _player1_id != "" and _local_player_id == _player1_id:
 			i_am_player = 1
-		elif my_uuid == player2:
+		elif _player2_id != "" and _local_player_id == _player2_id:
 			i_am_player = 2
+		elif _player1_id == "" and _player2_id == "":
+			i_am_player = 2 if server_player_hint == 1 else 1
+
+			if i_am_player == 1:
+				_player1_id = _local_player_id
+			else:
+				_player2_id = _local_player_id
+		elif _player1_id == "":
+			i_am_player = 1
+			_player1_id = _local_player_id
+		elif _player2_id == "":
+			i_am_player = 2
+			_player2_id = _local_player_id
 		else:
 			spectator_mode = true
 			i_am_player = 1
@@ -296,6 +326,7 @@ func _set_game_data(data_json: String) -> void:
 		i_am_player = 2 if server_player_hint == 1 else 1
 
 	_set_wait_base_text()
+	_update_description_fill()
 
 	var avatar1_string := _get_s(parsed, "avatar1", "")
 	var avatar2_string := _get_s(parsed, "avatar2", "")
@@ -374,7 +405,6 @@ func _set_game_data(data_json: String) -> void:
 	_replay_from_state()
 	_render_all_questions()
 	_update_ui_interactivity()
-	_update_description_fill()
 
 	if game_over:
 		stop_waiting_animation()
@@ -632,9 +662,6 @@ func _on_send_pressed() -> void:
 
 	if game_over:
 		stop_waiting_animation()
-	else:
-		_set_wait_base_text()
-		start_waiting_animation()
 
 	_update_description_fill()
 	
@@ -665,11 +692,7 @@ func _apply_answer_code_to_idx(target_idx: int, code: int) -> void:
 	send_game()
 	_update_ui_interactivity()
 
-	if not game_over:
-		_maybe_show_answer_popup()
-		_set_wait_base_text()
-		start_waiting_animation()
-	else:
+	if game_over:
 		_hide_answer_overlay()
 		stop_waiting_animation()
 
@@ -689,6 +712,15 @@ func send_game() -> void:
 	if spectator_mode:
 		return
 
+	if _local_player_id == "":
+		_local_player_id = my_uuid
+
+	if _player1_id == "" and i_am_player == 1 and _local_player_id != "":
+		_player1_id = _local_player_id
+
+	if _player2_id == "" and i_am_player == 2 and _local_player_id != "":
+		_player2_id = _local_player_id
+
 	var chunks: Array[String] = []
 
 	for q in questions:
@@ -701,8 +733,21 @@ func send_game() -> void:
 	var payload: Dictionary = {
 		"game": "questions",
 		"id": game_id,
+		"player": str(i_am_player),
 		"questions": questions_field
 	}
+
+	if _player1_id != "":
+		payload["player1"] = _player1_id
+
+	if _player2_id != "":
+		payload["player2"] = _player2_id
+
+	if i_am_player == 1 and questions.size() > 0:
+		var latest_question: String = str(questions[-1].get("text", "")).strip_edges()
+
+		if latest_question != "":
+			payload["description"] = latest_question
 
 	var my_avatar := _my_avatar_string
 
@@ -730,13 +775,21 @@ func send_game() -> void:
 		elif winner == -1:
 			outgoing_state = "1" if i_am_player == 2 else "-1"
 
-		payload["winner"] = my_uuid + "|" + outgoing_state
+		var sender_id := _local_player_id if _local_player_id != "" else my_uuid
+		payload["winner"] = sender_id + "|" + outgoing_state
 
 	var json := JSON.stringify(payload)
 
 	print("Sending: ", json)
 	send_game_data(json)
-	
+
+	if game_over:
+		stop_waiting_animation()
+	else:
+		is_my_turn = false
+		play_sent_animation()
+		_update_ui_interactivity()
+
 func _update_ui_interactivity() -> void:
 	var enable_input := (is_my_turn and not game_over and i_am_player == 1 and not spectator_mode)
 
@@ -752,7 +805,8 @@ func _update_ui_interactivity() -> void:
 	if is_instance_valid(bottom_items):
 		dbg("ui: bottom_items.visible=%s" % str(bottom_items.visible))
 
-	var should_wait := (not game_over) and (not is_my_turn)
+	var should_wait := (not game_over) and (not is_my_turn) and (not _sent_animation_active)
+
 	if should_wait and not _waiting_active:
 		_set_wait_base_text()
 		start_waiting_animation()
@@ -1148,20 +1202,31 @@ func _update_description_fill() -> void:
 		return
 
 	_desc_rich.bbcode_enabled = true
+	_desc_rich.text = ""
 
 	if spectator_mode:
-		var guide := "[font_size=18]You are watching this game.[/font_size]"
-		_desc_rich.parse_bbcode(guide)
+		_desc_rich.parse_bbcode("[font_size=18]You are watching this game.[/font_size]")
 		_desc_rich.visible = true
-	elif i_am_player == 2:
+		return
+
+	if i_am_player == 2:
+		var word_text := secret_answer.strip_edges()
+
+		if word_text == "":
+			word_text = "..."
+
 		var your_word := "[font_size=20]Your word:[/font_size]\n"
-		var the_word  := "[font_size=34][b]%s[/b][/font_size]" % secret_answer
+		var the_word := "[font_size=34][b]%s[/b][/font_size]" % word_text
 		_desc_rich.parse_bbcode(your_word + the_word)
 		_desc_rich.visible = true
-	else:
-		var guide := "[font_size=18]Your goal is to guess the answer in 20 questions or less.[/font_size]"
-		_desc_rich.parse_bbcode(guide)
+		return
+
+	if i_am_player == 1:
+		_desc_rich.parse_bbcode("[font_size=18]Your goal is to guess the answer in 20 questions or less.[/font_size]")
 		_desc_rich.visible = true
+		return
+
+	_desc_rich.visible = false
 
 var DEBUG_20Q := true
 
@@ -1179,3 +1244,47 @@ func _renumber_from_one() -> void:
 	for i in arr.size():
 		arr[i]["idx"] = i + 1
 	questions = arr
+
+func play_sent_animation() -> void:
+	if not is_instance_valid(sent_label):
+		print("Warning: sent_label is not valid for play_sent_animation.")
+		_set_wait_base_text()
+		start_waiting_animation()
+		return
+
+	_sent_animation_active = true
+	stop_waiting_animation()
+
+	if sent_tween and sent_tween.is_running():
+		sent_tween.kill()
+
+	sent_tween = create_tween().set_parallel(false)
+
+	sent_label.text = "Sent"
+	sent_label.visible = true
+	sent_label.modulate.a = 0.0
+	sent_label.scale = Vector2.ONE
+	sent_label.pivot_offset = sent_label.get_size() / 2.0
+
+	sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
+	sent_tween.tween_interval(0.6)
+	sent_tween.tween_callback(func():
+		if is_instance_valid(sent_label):
+			sent_label.text = "Sent ✔"
+	)
+	sent_tween.tween_interval(2.0)
+	sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
+
+	sent_tween.tween_callback(func():
+		_sent_animation_active = false
+
+		if is_instance_valid(sent_label):
+			sent_label.visible = false
+			sent_label.modulate.a = 1.0
+
+		if not game_over and not spectator_mode and not is_my_turn:
+			_set_wait_base_text()
+			start_waiting_animation()
+		else:
+			stop_waiting_animation()
+	)

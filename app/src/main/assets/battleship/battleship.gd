@@ -52,6 +52,7 @@ var _shake_tween: Tween
 var replay: Array = []
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _last_random_layout_by_size: Dictionary = {}
+var _popup_input_blocked: bool = false
 
 const USE_DIAGONAL_BUFFER := false
 const SHIP_TEMPLATES := {
@@ -97,12 +98,28 @@ func _get_rules_title() -> String:
 	return "How to Play Sea Battle"
 
 func _get_settings_avatar_display():
-	return _get_my_avatar_display()
+	var avatar_display := _get_my_avatar_display()
+
+	if is_instance_valid(avatar_display):
+		return avatar_display
+
+	if is_instance_valid(p1_avatar_display):
+		return p1_avatar_display
+
+	return p2_avatar_display
 
 func _add_settings_rows(_container, popup_script) -> void:
 	popup_script.settings_theme_selected.connect(_on_theme_changed)
 
 func _on_game_ready() -> void:
+	if player == null:
+		if is_instance_valid(state):
+			state.visible = false
+
+		_set_avatar_display_shown(p1_avatar_display, false)
+		_set_avatar_display_shown(p2_avatar_display, false)
+		_update_you_labels(false)
+
 	_rng.randomize()
 
 	if is_instance_valid(battleground1):
@@ -138,7 +155,7 @@ func _on_game_ready() -> void:
 					if val != null:
 						_water_scroll_x = float(val)
 					break
-					
+
 func _set_game_data(new_replay: String) -> void:
 	print("\n==========================")
 	print("[SET_GAME_DATA] NEW PAYLOAD RECEIVED")
@@ -285,7 +302,9 @@ func _set_game_data(new_replay: String) -> void:
 	var my_avatar := _get_my_avatar_display()
 	var opp_avatar := _get_opp_avatar_display()
 
-	var had_avatar_from_payload := false
+	if is_instance_valid(my_avatar) and my_avatar.has_method("update_display_from_settings"):
+		print("[AVATAR] Loading local avatar from settings immediately.")
+		my_avatar.call_deferred("update_display_from_settings")
 
 	if parsed.has(player_avatar_key):
 		var player_avatar_string: String = str(parsed[player_avatar_key])
@@ -293,7 +312,6 @@ func _set_game_data(new_replay: String) -> void:
 		var player_data: Dictionary = GameUtils._parse_avatar_string(player_avatar_string)
 		if is_instance_valid(my_avatar):
 			my_avatar.call_deferred("update_avatar_from_data", player_data)
-		had_avatar_from_payload = true
 
 	if parsed.has(opponent_avatar_key):
 		var opp_avatar_string: String = str(parsed[opponent_avatar_key])
@@ -301,12 +319,6 @@ func _set_game_data(new_replay: String) -> void:
 		var opp_data: Dictionary = GameUtils._parse_avatar_string(opp_avatar_string)
 		if is_instance_valid(opp_avatar):
 			opp_avatar.call_deferred("update_avatar_from_data", opp_data)
-		had_avatar_from_payload = true
-
-	if not had_avatar_from_payload:
-		print("[AVATAR] No avatar strings in payload; using settings-based avatar for local player.")
-		if is_instance_valid(my_avatar) and my_avatar.has_method("update_display_from_settings"):
-			my_avatar.call_deferred("update_display_from_settings")
 
 	if not s1.is_empty():
 		print("[BOARD LOAD] Applying ships1 to battleground1 (P1 board)")
@@ -319,7 +331,13 @@ func _set_game_data(new_replay: String) -> void:
 		battleground2.from_encoded(s2)
 	else:
 		print("[BOARD LOAD] ships2 is empty; battleground2 starts empty")
-	_apply_spectator_ship_hiding()
+	if spectator_mode:
+		for bg in [battleground1, battleground2]:
+			if not is_instance_valid(bg):
+				continue
+
+			for ship in bg.ships:
+				ship.visible = false
 	var my_ships_encoded := (s1 if player == 1 else s2)
 
 	if not spectator_mode and my_ships_encoded.is_empty():
@@ -399,16 +417,6 @@ func _set_game_data(new_replay: String) -> void:
 			myBattleground.process_mode = Node.PROCESS_MODE_DISABLED
 			theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
 
-func _apply_spectator_ship_hiding() -> void:
-	if not spectator_mode:
-		return
-
-	for bg in [battleground1, battleground2]:
-		if not is_instance_valid(bg):
-			continue
-		for ship in bg.ships:
-			ship.visible = false
-		
 func play_replay(preplay: String, enter_turn_after: bool = true) -> void:
 	print("\n========== PLAY_REPLAY START ==========")
 	print("[PLAY_REPLAY] Incoming replay string: ", preplay)
@@ -515,15 +523,12 @@ func _on_shuffle_button_pressed() -> void:
 	
 	_randomize_my_ships(myBattleground.columns)
 
-func _get_template_for_size(bsize: int) -> String:
-	return SHIP_TEMPLATES.get(bsize, "")
-
 func _randomize_my_ships(board_size: int) -> void:
 	if not is_instance_valid(myBattleground):
 		print("Missing BattleGround")
 		return
 
-	var template := _get_template_for_size(board_size)
+	var template: String = SHIP_TEMPLATES.get(board_size, "")
 	if template.is_empty():
 		print("[RANDOMIZE] No template for board_size=", board_size, " – keeping existing layout")
 		return
@@ -563,7 +568,7 @@ func _randomize_my_ships(board_size: int) -> void:
 			push_error("[RANDOMIZE] Invalid ship after from_encoded. encoded=" + encoded)
 			return
 		ship.canBeMoved = true
-		
+
 func _build_randomized_encoded(template: String, bsize: int) -> String:
 	var ship_defs: Array[Dictionary] = []
 	for piece in template.split("|", false):
@@ -608,7 +613,7 @@ func _build_randomized_encoded(template: String, bsize: int) -> String:
 	push_warning("Backtracking randomization failed; using template.")
 	print("[RANDOMIZE] Backtracking FAILED, returning ORIGINAL TEMPLATE: ", template)
 	return template
-	
+
 func _try_place_ships(ship_defs: Array[Dictionary], ship_idx: int, blocked: Array, bsize: int, placed: Array[String]) -> bool:
 	if ship_idx >= ship_defs.size():
 		return true
@@ -654,20 +659,20 @@ func _try_place_ships(ship_defs: Array[Dictionary], ship_idx: int, blocked: Arra
 		placed.pop_back()
 
 	return false
-	
+
 func _shuffle_in_place(arr: Array) -> void:
 	for i in range(arr.size() - 1, 0, -1):
 		var j := _rng.randi_range(0, i)
 		var tmp = arr[i]
 		arr[i] = arr[j]
 		arr[j] = tmp
-		
+
 func _clone_blocked(blocked: Array) -> Array:
 	var out: Array = []
 	for col in blocked:
 		out.append((col as Array).duplicate())
 	return out
-	
+
 func _can_place_ship_at(blocked: Array, bsize: int, x: int, y: int, length: int, rot: int) -> bool:
 	var is_horizontal: bool = (rot == 1)
 
@@ -699,7 +704,6 @@ func _can_place_ship_at(blocked: Array, bsize: int, x: int, y: int, length: int,
 
 	return true
 
-
 func _place_ship_on_blocked(blocked: Array, bsize: int, x: int, y: int, length: int, rot: int) -> void:
 	var is_horizontal: bool = (rot == 1)
 
@@ -724,6 +728,16 @@ func _place_ship_on_blocked(blocked: Array, bsize: int, x: int, y: int, length: 
 					continue
 				blocked[dx][dy] = true
 
+func _set_avatar_display_shown(display: Control, should_show: bool) -> void:
+	if not is_instance_valid(display):
+		return
+
+	display.visible = true
+
+	var m: Color = display.modulate
+	m.a = 1.0 if should_show else 0.0
+	display.modulate = m
+
 func _get_my_avatar_display() -> Control:
 	if player == 1:
 		return p1_avatar_display
@@ -737,18 +751,17 @@ func _get_opp_avatar_display() -> Control:
 	elif player == 2:
 		return p1_avatar_display
 	return null
-	
+
 func _set_setup_mode(enabled: bool) -> void:
 	if is_instance_valid(state):
+		state.text = "Arrange your ships"
 		state.visible = enabled
 
 	var my_avatar := _get_my_avatar_display()
-	if is_instance_valid(my_avatar):
-		var m: Color = my_avatar.modulate
-		m.a = 0.0 if enabled else 1.0
-		my_avatar.modulate = m
+	var should_show_avatar := not enabled and not spectator_mode
 
-	_update_you_labels(not enabled)
+	_set_avatar_display_shown(my_avatar, should_show_avatar)
+	_update_you_labels(should_show_avatar)
 
 func show_battleground(mine: bool):
 	if not is_instance_valid(myBoardContainer) or not is_instance_valid(theirBoardContainer):
@@ -756,7 +769,7 @@ func show_battleground(mine: bool):
 
 	_set_board_active(myBoardContainer, myBattleground, mine)
 	_set_board_active(theirBoardContainer, theirBattleground, not mine)
-	
+
 func _set_board_active(container: Control, board: BattleGround, active: bool) -> void:
 	if not is_instance_valid(container) or not is_instance_valid(board):
 		return
@@ -843,7 +856,7 @@ func send_update():
 
 	if not is_end:
 		play_sent_animation()
-		
+
 func my_battleground_ready():
 	print("[MY_BATTLEGROUND_READY] Entered")
 	if spectator_mode:
@@ -895,6 +908,16 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 	var my_home: Vector2 = myBoardContainer.global_position
 	var their_home: Vector2 = theirBoardContainer.global_position
 
+	var my_avatar := _get_my_avatar_display()
+	var their_avatar := _get_opp_avatar_display()
+	var my_avatar_home: Vector2 = Vector2.ZERO
+	var their_avatar_home: Vector2 = Vector2.ZERO
+
+	if is_instance_valid(my_avatar):
+		my_avatar_home = my_avatar.global_position
+	if is_instance_valid(their_avatar):
+		their_avatar_home = their_avatar.global_position
+
 	var travel_distance_local: float = screen_width * 3.0
 	var offset := Vector2(travel_distance_local, 0.0)
 
@@ -903,14 +926,31 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 	myBoardContainer.set_as_top_level(true)
 	theirBoardContainer.set_as_top_level(true)
 
-	var base_z : int = max(myBoardContainer.z_index, theirBoardContainer.z_index)
+	if is_instance_valid(my_avatar):
+		my_avatar.set_as_top_level(true)
+		my_avatar.visible = true
+		my_avatar.modulate.a = 1.0
+
+	if is_instance_valid(their_avatar):
+		their_avatar.set_as_top_level(true)
+		their_avatar.visible = true
+		their_avatar.modulate.a = 1.0
+
+	var base_z: int = max(myBoardContainer.z_index, theirBoardContainer.z_index)
 	print("[SWAP] base_z=", base_z, " (pre-adjust z_index: my=", myBoardContainer.z_index, " their=", theirBoardContainer.z_index, ")")
+
 	if reverse:
 		myBoardContainer.z_index = base_z + 1
 		theirBoardContainer.z_index = base_z
 	else:
 		theirBoardContainer.z_index = base_z + 1
 		myBoardContainer.z_index = base_z
+
+	if is_instance_valid(my_avatar):
+		my_avatar.z_index = myBoardContainer.z_index + 1
+	if is_instance_valid(their_avatar):
+		their_avatar.z_index = theirBoardContainer.z_index + 1
+
 	print("[SWAP] post-adjust z_index: my=", myBoardContainer.z_index, " their=", theirBoardContainer.z_index)
 
 	var my_start_pos: Vector2
@@ -918,16 +958,31 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 	var their_start_pos: Vector2
 	var their_target_pos: Vector2
 
+	var my_avatar_start_pos: Vector2
+	var my_avatar_target_pos: Vector2
+	var their_avatar_start_pos: Vector2
+	var their_avatar_target_pos: Vector2
+
 	if reverse:
 		my_start_pos = my_home - offset
 		my_target_pos = my_home
 		their_start_pos = their_home
 		their_target_pos = their_home + offset
+
+		my_avatar_start_pos = my_avatar_home - offset
+		my_avatar_target_pos = my_avatar_home
+		their_avatar_start_pos = their_avatar_home
+		their_avatar_target_pos = their_avatar_home + offset
 	else:
 		my_start_pos = my_home
 		my_target_pos = my_home - offset
 		their_start_pos = their_home + offset
 		their_target_pos = their_home
+
+		my_avatar_start_pos = my_avatar_home
+		my_avatar_target_pos = my_avatar_home - offset
+		their_avatar_start_pos = their_avatar_home + offset
+		their_avatar_target_pos = their_avatar_home
 
 	print("[SWAP] my_start_pos=", my_start_pos, " my_target_pos=", my_target_pos)
 	print("[SWAP] their_start_pos=", their_start_pos, " their_target_pos=", their_target_pos)
@@ -940,6 +995,16 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 
 	myBoardContainer.global_position = my_start_pos
 	theirBoardContainer.global_position = their_start_pos
+
+	if is_instance_valid(my_avatar):
+		my_avatar.global_position = my_avatar_start_pos
+	if is_instance_valid(their_avatar):
+		their_avatar.global_position = their_avatar_start_pos
+
+	if is_instance_valid(p1_you_label):
+		p1_you_label.visible = false
+	if is_instance_valid(p2_you_label):
+		p2_you_label.visible = false
 
 	if is_instance_valid(fire_button):
 		fire_button.visible = false
@@ -987,7 +1052,7 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 		clouds_tween.tween_method(func(v): cmat.set_shader_parameter("swipe_offset", v), sw_start, sw_end, travel_anim_duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 	var main_tween := create_tween().set_parallel(true)
-	print("[SWAP] Starting main_tween for board slide.")
+	print("[SWAP] Starting main_tween for board and avatar slide.")
 
 	main_tween.parallel().tween_property(
 		myBoardContainer, "global_position",
@@ -998,6 +1063,18 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 		theirBoardContainer, "global_position",
 		their_target_pos, travel_anim_duration
 	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	if is_instance_valid(my_avatar):
+		main_tween.parallel().tween_property(
+			my_avatar, "global_position",
+			my_avatar_target_pos, travel_anim_duration
+		).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	if is_instance_valid(their_avatar):
+		main_tween.parallel().tween_property(
+			their_avatar, "global_position",
+			their_avatar_target_pos, travel_anim_duration
+		).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 	if water_rect and water_rect.material is ShaderMaterial:
 		print("[SWAP] Setting up water swipe tween.")
@@ -1017,25 +1094,54 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 	var incoming_battleground: BattleGround
 	var leaving_container: Control
 	var leaving_battleground: BattleGround
+	var incoming_avatar: Control
+	var leaving_avatar: Control
 
 	if reverse:
 		incoming_container = myBoardContainer
 		incoming_battleground = myBattleground
 		leaving_container = theirBoardContainer
 		leaving_battleground = theirBattleground
+		incoming_avatar = my_avatar
+		leaving_avatar = their_avatar
 	else:
 		incoming_container = theirBoardContainer
 		incoming_battleground = theirBattleground
 		leaving_container = myBoardContainer
 		leaving_battleground = myBattleground
+		incoming_avatar = their_avatar
+		leaving_avatar = my_avatar
 
 	print("[SWAP] incoming_battleground=", incoming_battleground.name, " leaving_battleground=", leaving_battleground.name)
 
 	myBoardContainer.set_as_top_level(false)
 	theirBoardContainer.set_as_top_level(false)
+	myBoardContainer.global_position = my_home
+	theirBoardContainer.global_position = their_home
+
+	if is_instance_valid(my_avatar):
+		my_avatar.set_as_top_level(false)
+		my_avatar.global_position = my_avatar_home
+
+	if is_instance_valid(their_avatar):
+		their_avatar.set_as_top_level(false)
+		their_avatar.global_position = their_avatar_home
 
 	_set_board_active(leaving_container, leaving_battleground, false)
 	_set_board_active(incoming_container, incoming_battleground, true)
+
+	if is_instance_valid(leaving_avatar):
+		leaving_avatar.visible = true
+		leaving_avatar.modulate.a = 0.0
+
+	if is_instance_valid(incoming_avatar):
+		incoming_avatar.visible = true
+		incoming_avatar.modulate.a = 1.0
+
+	if reverse:
+		_update_you_labels(not spectator_mode)
+	else:
+		_update_you_labels(false)
 
 	print("[SWAP] After _set_board_active calls.")
 
@@ -1046,7 +1152,6 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 		var label_tween := create_tween()
 		label_tween.tween_property(choose_target_label, "modulate:a", 1.0, 1.0)
 		print("[SWAP] choose_target_label fade-in tween started.")
-
 
 	print("[SWAP] === _swap_to_opponent_board END ===\n")
 
@@ -1067,6 +1172,44 @@ func _update_you_labels(show_you: bool = true) -> void:
 		p2_you_label.visible = true
 
 func _process(_delta: float) -> void:
+	var menu_open: bool = get("_settings_open") == true or get("_rules_open") == true
+
+	if menu_open:
+		if not _popup_input_blocked:
+			_popup_input_blocked = true
+
+			if is_instance_valid(battleground1):
+				battleground1.process_mode = Node.PROCESS_MODE_DISABLED
+			if is_instance_valid(battleground2):
+				battleground2.process_mode = Node.PROCESS_MODE_DISABLED
+			if is_instance_valid(fire_button):
+				fire_button.disabled = true
+
+		return
+
+	if _popup_input_blocked:
+		_popup_input_blocked = false
+
+		if spectator_mode:
+			if is_instance_valid(battleground1):
+				battleground1.process_mode = Node.PROCESS_MODE_INHERIT
+			if is_instance_valid(battleground2):
+				battleground2.process_mode = Node.PROCESS_MODE_INHERIT
+		elif fireMode:
+			if is_instance_valid(myBattleground):
+				myBattleground.process_mode = Node.PROCESS_MODE_DISABLED
+			if is_instance_valid(theirBattleground):
+				theirBattleground.process_mode = Node.PROCESS_MODE_INHERIT
+		elif is_instance_valid(myBattleground) and myBattleground.placing_items:
+			myBattleground.process_mode = Node.PROCESS_MODE_INHERIT
+			if is_instance_valid(theirBattleground):
+				theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
+		else:
+			if is_instance_valid(myBattleground):
+				myBattleground.process_mode = Node.PROCESS_MODE_DISABLED
+			if is_instance_valid(theirBattleground):
+				theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
+
 	if spectator_mode or not fireMode or not is_instance_valid(theirBattleground):
 		return
 	
@@ -1095,9 +1238,6 @@ func _process(_delta: float) -> void:
 
 func _flip_y_index(y: int, rows: int) -> int:
 	return (rows - 1) - y
-
-func _flip_coord_vertical(pos: Vector2, rows: int) -> Vector2:
-	return Vector2(pos.x, _flip_y_index(int(pos.y), rows))
 
 func _flip_bullets_vertical(bullets_str: String, rows: int, cols: int) -> String:
 	if bullets_str.is_empty():
@@ -1226,7 +1366,29 @@ func _on_fire_button_pressed() -> void:
 		print("[FIRE_BUTTON] Miss → sending update and waiting for opponent.")
 		send_update()
 	else:
-		_do_hit_camera_shake()
+		var vp := get_viewport()
+		if vp != null:
+			if _shake_tween and _shake_tween.is_running():
+				_shake_tween.kill()
+				vp.canvas_transform = Transform2D.IDENTITY
+
+			_shake_tween = create_tween()
+
+			_shake_tween.tween_method(
+				func(alpha: float) -> void:
+					var offset := Vector2(
+						randf_range(-1.0, 1.0),
+						randf_range(-1.0, 1.0)
+					) * 6.0 * alpha
+					vp.canvas_transform = Transform2D(0.0, offset),
+				1.0,
+				0.0,
+				0.25
+			).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+			_shake_tween.tween_callback(func() -> void:
+				vp.canvas_transform = Transform2D.IDENTITY
+			)
 		
 		if theirBattleground.is_over():
 			print("[FIRE_BUTTON] Opponent board is over — we win. Sending final update.")
@@ -1255,7 +1417,7 @@ func _on_fire_button_pressed() -> void:
 				label_tween.tween_property(choose_target_label, "modulate:a", 1.0, 1.0)
 				
 			print("[FIRE_BUTTON] Hit → player gets another turn. Ready for next shot.")
-			
+
 func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2, from_right: bool, plane_duration: float = 2.0) -> void:
 	if not is_instance_valid(board):
 		print("SOMETHING FAILED IN BOMB FALL (missing board)")
@@ -1373,7 +1535,7 @@ func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2,
 		bomb.queue_free()
 	if is_instance_valid(plane):
 		plane.queue_free()
-		
+
 func _run_replay_move(local_pos: Vector2, delay: float) -> void:
 	await get_tree().create_timer(delay).timeout
 	await _play_bomb_fall_animation_for_board(myBattleground, local_pos, true, 2.0)
@@ -1420,7 +1582,7 @@ func mark_end(win: bool):
 			GameUtils._show_win_burst(opp_avatar)
 		print("check_winner: YOU LOSE (final)")
 		return true
-	
+
 func _on_start_button_pressed() -> void:
 	print("Start pressed")
 	
@@ -1440,41 +1602,14 @@ func _on_start_button_pressed() -> void:
 
 func _on_battle_ground_is_valid(valid: bool) -> void:
 	start_button.disabled = not valid
-	
-func _do_hit_camera_shake(intensity: float = 6.0, duration: float = 0.25) -> void:
-	var vp := get_viewport()
-	if vp == null:
-		return
 
-	if _shake_tween and _shake_tween.is_running():
-		_shake_tween.kill()
-		vp.canvas_transform = Transform2D.IDENTITY
-
-	_shake_tween = create_tween()
-
-	_shake_tween.tween_method(
-		func(alpha: float) -> void:
-			var offset := Vector2(
-				randf_range(-1.0, 1.0),
-				randf_range(-1.0, 1.0)
-			) * intensity * alpha
-			vp.canvas_transform = Transform2D(0.0, offset),
-		1.0,
-		0.0,
-		duration
-	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-
-	_shake_tween.tween_callback(func() -> void:
-		vp.canvas_transform = Transform2D.IDENTITY
-	)
-	
 func _haptic_explosion(strength: float = 1.0, duration_ms: int = 45) -> void:
 	if not (OS.has_feature("android") or OS.has_feature("ios")):
 		return
 
 	strength = clampf(strength, 0.0, 1.0)
 	Input.vibrate_handheld(duration_ms, strength)
-	
+
 func _get_rules_text() -> String:
 	return """
 [font_size={32px}][b]Sea Battle[/b][/font_size]

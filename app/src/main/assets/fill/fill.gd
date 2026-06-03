@@ -458,8 +458,9 @@ func update_ui_from_board_state():
 	print("253 UI Updated! Left Score (Me): %d, Right Score (Opp): %d" % [my_count, op_count])
 	
 func _get_score_text_color(bg_color_index: int) -> Color:
-	if bg_color_index == 1 or bg_color_index == 20: # Yellow
-		return Color(0.2, 0.2, 0.2) # dark gray
+	if bg_color_index == 1 or bg_color_index == 2:
+		return Color(0.05, 0.05, 0.05)
+
 	return Color.WHITE
 			
 func _on_color_selection_made(selected_color_index: int):
@@ -585,12 +586,22 @@ func stop_pulsing_all_cells():
 				if is_instance_valid(highlight):
 					highlight.visible = false
 		
-func play_move_animation(start_pos: Vector2i):
+func play_move_animation(start_pos: Vector2i, forced_cells: Array = [], forced_color_idx: int = -1):
 	var visual_start_pos = start_pos
-	var new_color_idx = get_color_from_position(visual_start_pos)
+	var new_color_idx: int = forced_color_idx
+
+	if new_color_idx < 0:
+		new_color_idx = get_color_from_position(visual_start_pos)
+
 	var new_color = COLOR_MAP.get(new_color_idx, Color.WHITE)
-	
-	var cells_to_animate_pos = get_connected_cells_on_display(visual_start_pos, new_color_idx)
+
+	var cells_to_animate_pos: Array = []
+
+	if not forced_cells.is_empty():
+		cells_to_animate_pos = forced_cells.duplicate()
+	else:
+		cells_to_animate_pos = get_connected_cells_on_display(visual_start_pos, new_color_idx)
+
 	if cells_to_animate_pos.is_empty():
 		return
 
@@ -601,6 +612,29 @@ func play_move_animation(start_pos: Vector2i):
 	var original_parent_positions = {}
 	var animation_duration = 0.5
 
+	var score_bg: ColorRect = null
+	var score_label: Label = null
+
+	if visual_start_pos == left_start:
+		score_bg = left_bg
+		score_label = left_score_label
+	elif visual_start_pos == right_start:
+		score_bg = right_bg
+		score_label = right_score_label
+
+	if is_instance_valid(score_bg):
+		animation_tween.tween_property(score_bg, "color", new_color, animation_duration) \
+			.set_trans(Tween.TRANS_LINEAR)
+
+	if is_instance_valid(score_label):
+		var target_text_color := _get_score_text_color(new_color_idx)
+		animation_tween.tween_method(
+			func(c: Color): score_label.add_theme_color_override("font_color", c),
+			score_label.get_theme_color("font_color"),
+			target_text_color,
+			animation_duration
+		).set_trans(Tween.TRANS_LINEAR)
+
 	for cell_pos in cells_to_animate_pos:
 		var cell_node = board[cell_pos.y][cell_pos.x]
 		if is_instance_valid(cell_node):
@@ -608,19 +642,22 @@ func play_move_animation(start_pos: Vector2i):
 			if is_instance_valid(btn_color):
 				parent_cell_nodes.append(cell_node)
 				btn_color_nodes.append(btn_color)
-				
+
 				original_parent_positions[cell_node] = cell_node.position
 				cell_node.z_index = 10
-				
-				animation_tween.tween_property(btn_color, "modulate", new_color, animation_duration).set_trans(Tween.TRANS_SINE)
+
+				animation_tween.tween_property(btn_color, "modulate", new_color, animation_duration) \
+					.set_trans(Tween.TRANS_LINEAR)
+
 				group_center += cell_node.position
-	
-	if parent_cell_nodes.is_empty(): return
-	
+
+	if parent_cell_nodes.is_empty():
+		return
+
 	group_center /= parent_cell_nodes.size()
 	group_center += board[0][0].size / 2.0
 	var max_scale = 1.3
-	
+
 	animation_tween.tween_method(
 		func(progress): _update_group_transform(progress, btn_color_nodes, parent_cell_nodes, group_center, original_parent_positions, max_scale),
 		0.0, 1.0, animation_duration
@@ -636,11 +673,11 @@ func play_move_animation(start_pos: Vector2i):
 	for i in range(parent_cell_nodes.size()):
 		var parent_cell = parent_cell_nodes[i]
 		var btn_color = btn_color_nodes[i]
-		
+
 		parent_cell.z_index = 0
 		btn_color.scale = Vector2.ONE
 		btn_color.position = Vector2.ZERO
-
+		
 func _update_group_transform(progress: float, btn_nodes: Array, parent_cells: Array, center: Vector2, original_positions: Dictionary, max_scale: float):
 	var current_scale = lerp(1.0, max_scale, progress)
 	var gap_compensation = 1.05 
@@ -758,12 +795,26 @@ func parse_replay_string(replay_str: String, play_animation: bool):
 		print("Invalid replay format")
 		return
 
-	var board_part: String = parts[0] if play_animation else parts[2]
+	var pre_part: String = parts[0]
+	var post_part: String = parts[2]
 
-	if not board_part.begins_with("board:"):
+	if not pre_part.begins_with("board:") or not post_part.begins_with("board:"):
 		return
 
-	var vals = board_part.substr(6).split(",")
+	var pre_vals = pre_part.substr(6).split(",")
+	var post_vals = post_part.substr(6).split(",")
+
+	var post_board_snapshot: Array = []
+
+	for y in range(BOARD_HEIGHT):
+		post_board_snapshot.append([])
+
+		for x in range(BOARD_WIDTH):
+			var flat_i := y * BOARD_WIDTH + x
+			post_board_snapshot[y].append(int(post_vals[flat_i]) if flat_i < post_vals.size() and post_vals[flat_i] != "" else 0)
+
+	var visible_vals = pre_vals if play_animation else post_vals
+
 	color_board.clear()
 
 	for y in range(BOARD_HEIGHT):
@@ -771,30 +822,30 @@ func parse_replay_string(replay_str: String, play_animation: bool):
 
 		for x in range(BOARD_WIDTH):
 			var flat_i := y * BOARD_WIDTH + x
-			color_board[y].append(int(vals[flat_i]) if flat_i < vals.size() and vals[flat_i] != "" else 0)
+			color_board[y].append(int(visible_vals[flat_i]) if flat_i < visible_vals.size() and visible_vals[flat_i] != "" else 0)
 
 	apply_colors_to_cells()
 	await _apply_visual_board_transform()
 	update_ui_from_board_state()
 
 	if play_animation:
-		await play_move_animation(right_start)
+		var final_color_idx: int = int(post_board_snapshot[right_start.y][right_start.x])
+		var final_claimed_cells: Array[Vector2i] = get_connected_cells_in_board(post_board_snapshot, right_start, final_color_idx)
 
-		if parts[2].begins_with("board:"):
-			vals = parts[2].substr(6).split(",")
-			color_board.clear()
+		await play_move_animation(right_start, final_claimed_cells, final_color_idx)
 
-			for y in range(BOARD_HEIGHT):
-				color_board.append([])
+		color_board.clear()
 
-				for x in range(BOARD_WIDTH):
-					var flat_i := y * BOARD_WIDTH + x
-					color_board[y].append(int(vals[flat_i]) if flat_i < vals.size() and vals[flat_i] != "" else 0)
+		for y in range(BOARD_HEIGHT):
+			color_board.append([])
 
-			apply_colors_to_cells()
-			await _apply_visual_board_transform()
-			update_ui_from_board_state()
-			
+			for x in range(BOARD_WIDTH):
+				color_board[y].append(int(post_board_snapshot[y][x]))
+
+		apply_colors_to_cells()
+		await _apply_visual_board_transform()
+		update_ui_from_board_state()
+		
 func get_color_from_position(pos: Vector2i) -> int:
 	if pos.y >= 0 and pos.y < BOARD_HEIGHT and pos.x >= 0 and pos.x < BOARD_WIDTH:
 		return color_board[pos.y][pos.x]
@@ -820,6 +871,30 @@ func get_connected_cells_on_display(pos: Vector2i, target_color: int, visited = 
 
 	for dir in [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]:
 		result += get_connected_cells_on_display(pos + dir, target_color, visited)
+	return result
+	
+func get_connected_cells_in_board(source_board: Array, pos: Vector2i, target_color: int, visited = null) -> Array[Vector2i]:
+	if visited == null:
+		visited = {}
+
+	if visited.has(pos):
+		return []
+
+	if pos.x < 0 or pos.x >= BOARD_WIDTH or pos.y < 0 or pos.y >= BOARD_HEIGHT:
+		return []
+
+	if pos.y >= source_board.size() or pos.x >= source_board[pos.y].size():
+		return []
+
+	if int(source_board[pos.y][pos.x]) != target_color:
+		return []
+
+	visited[pos] = true
+	var result: Array[Vector2i] = [pos]
+
+	for dir in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		result += get_connected_cells_in_board(source_board, pos + dir, target_color, visited)
+
 	return result
 
 func get_connected_cells(pos: Vector2i, target_color: int, visited = null) -> Array[Vector2i]:

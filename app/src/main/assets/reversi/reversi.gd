@@ -1218,7 +1218,7 @@ func animate_button_slide_up():
 	
 	send_button.visible = true
 	button_tween = create_tween()
-	button_tween.tween_property(send_button, "position:y", send_button_target_y_position, 0.75)\
+	button_tween.tween_property(send_button, "position:y", send_button_target_y_position, 0.6)\
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 
 func animate_button_slide_down():
@@ -1228,7 +1228,7 @@ func animate_button_slide_down():
 	var offscreen_bottom_y = $MainVBoxContainer.size.y + BUTTON_OFFSCREEN_OFFSET
 
 	button_tween = create_tween()
-	button_tween.tween_property(send_button, "position:y", offscreen_bottom_y, 0.75)\
+	button_tween.tween_property(send_button, "position:y", offscreen_bottom_y, 0.6)\
 		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_BACK)
 	button_tween.tween_callback(func():
 		send_button.visible = false

@@ -65,17 +65,6 @@ shadow_color = Color(0, 0, 0, 0.647059)
 shadow_size = 4
 shadow_offset = Vector2(-1, 4)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1ko3n"]
-bg_color = Color(0, 0, 0, 0.788235)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
-expand_margin_left = 20.0
-expand_margin_top = 10.0
-expand_margin_right = 20.0
-expand_margin_bottom = 10.0
-
 [sub_resource type="ViewportTexture" id="ViewportTexture_0pvrk"]
 viewport_path = NodePath("SubViewportContainer/SubViewport")
 
@@ -110,6 +99,17 @@ texture = ExtResource("4_miqih")
 bg_color = Color(0.6, 0.6, 0.6, 0)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_miqih"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1ko3n"]
 bg_color = Color(0, 0, 0, 0.788235)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
@@ -222,37 +222,9 @@ visible = false
 layout_mode = 2
 mouse_filter = 2
 
-[node name="SentLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer" unique_id=1971626510]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-theme_override_font_sizes/font_size = 25
-theme_override_styles/normal = SubResource("StyleBoxFlat_1ko3n")
-text = "SENT"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="WinLossLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer" unique_id=851411848]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-theme_override_font_sizes/font_size = 25
-theme_override_styles/normal = SubResource("StyleBoxFlat_1ko3n")
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="FreeTurnLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer" unique_id=815482313]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-theme_override_font_sizes/font_size = 25
-theme_override_styles/normal = SubResource("StyleBoxFlat_1ko3n")
-text = "Free Turn."
-horizontal_alignment = 1
-vertical_alignment = 1
-
 [node name="SkipButton" type="TextureButton" parent="MarginContainer/InfoHBoxContainer/GameAreaCenterContainer" unique_id=465759711]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 texture_normal = ExtResource("4_elfvu")
 texture_pressed = ExtResource("6_xpj4b")
@@ -354,6 +326,68 @@ size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_miqih")
 text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SentLabel" type="Label" parent="." unique_id=1971626510]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -30.5
+offset_top = -17.5
+offset_right = 30.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_1ko3n")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WinLossLabel" type="Label" parent="." unique_id=851411848]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -17.5
+offset_right = 0.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_1ko3n")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="FreeTurnLabel" type="Label" parent="." unique_id=815482313]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -61.5
+offset_top = -17.5
+offset_right = 61.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_1ko3n")
+text = "Free Turn."
 horizontal_alignment = 1
 vertical_alignment = 1
 

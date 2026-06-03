@@ -41,17 +41,6 @@ size = Vector2(7.44318, 589.208)
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ipfru"]
 size = Vector2(74, 83)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_mg74y"]
-bg_color = Color(0, 0, 0, 0.788235)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
-expand_margin_left = 20.0
-expand_margin_top = 10.0
-expand_margin_right = 20.0
-expand_margin_bottom = 10.0
-
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_mdy7o"]
 texture = ExtResource("8_mg74y")
 
@@ -119,6 +108,17 @@ shadow_size = 2
 shadow_offset = Vector2(0, 2)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vgmxu"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_mg74y"]
 bg_color = Color(0, 0, 0, 0.788235)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
@@ -258,11 +258,13 @@ layout_mode = 2
 script = ExtResource("4_utbov")
 
 [node name="TextureLayer1" type="Sprite2D" parent="VBoxContainer/CenterContainer/GameBoard" unique_id=1915724798]
-z_index = 1
+unique_name_in_owner = true
+z_index = 10
 scale = Vector2(0.885, 0.885)
 texture = ExtResource("3_28fnr")
 
 [node name="TextureLayer2" type="Sprite2D" parent="VBoxContainer/CenterContainer/GameBoard" unique_id=709958164]
+z_index = 9
 scale = Vector2(0.885, 0.885)
 texture = ExtResource("6_wlgta")
 
@@ -431,27 +433,6 @@ position = Vector2(-0.125, -6.5)
 shape = SubResource("RectangleShape2D_ipfru")
 disabled = true
 
-[node name="WinLossLabel" type="Label" parent="VBoxContainer/CenterContainer" unique_id=1736925712]
-unique_name_in_owner = true
-visible = false
-z_index = 2
-layout_mode = 2
-theme_override_font_sizes/font_size = 25
-theme_override_styles/normal = SubResource("StyleBoxFlat_mg74y")
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="SentLabel" type="Label" parent="VBoxContainer/CenterContainer" unique_id=1143514009]
-unique_name_in_owner = true
-visible = false
-z_index = 2
-layout_mode = 2
-theme_override_font_sizes/font_size = 25
-theme_override_styles/normal = SubResource("StyleBoxFlat_mg74y")
-text = "SENT"
-horizontal_alignment = 1
-vertical_alignment = 1
-
 [node name="BottomItemHBoxContainer" type="HBoxContainer" parent="VBoxContainer" unique_id=1046370839]
 custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
@@ -587,7 +568,7 @@ text = "Send"
 [node name="WaitBlur" type="ColorRect" parent="." unique_id=618611308]
 unique_name_in_owner = true
 visible = false
-z_index = 1
+z_index = 150
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -600,7 +581,7 @@ color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 [node name="waitingLabel" type="Label" parent="." unique_id=554521185]
 unique_name_in_owner = true
 visible = false
-z_index = 2
+z_index = 200
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -620,6 +601,49 @@ text = "WAITING FOR OPPONENT..."
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="SentLabel" type="Label" parent="." unique_id=1143514009]
+unique_name_in_owner = true
+visible = false
+z_index = 200
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -30.5
+offset_top = -17.5
+offset_right = 30.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_mg74y")
+text = "SENT"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WinLossLabel" type="Label" parent="." unique_id=1736925712]
+unique_name_in_owner = true
+visible = false
+z_index = 200
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -17.5
+offset_right = 0.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_mg74y")
+horizontal_alignment = 1
+vertical_alignment = 1
+
 [node name="DotTimer" type="Timer" parent="." unique_id=1782032294]
 unique_name_in_owner = true
 wait_time = 0.75
@@ -627,6 +651,7 @@ wait_time = 0.75
 [node name="SpecLabel" type="Label" parent="." unique_id=2072312521]
 unique_name_in_owner = true
 visible = false
+z_index = 100
 layout_mode = 0
 offset_top = 165.0
 offset_right = 648.0

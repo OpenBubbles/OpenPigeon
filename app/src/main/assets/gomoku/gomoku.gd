@@ -25,6 +25,12 @@ const SNAP_PX := 10.0
 var _is_dragging := false
 var _press_global := Vector2.ZERO
 const DRAG_THRESHOLD := 6.0
+var _drag_started := false
+var _active_tile_tween: Tween
+var _active_spawn_root_pos := Vector2.ZERO
+var _active_spawn_valid := false
+var _active_tile_lifted := false
+var place_hint_label: Label
 
 var is_my_turn = false
 var game_id := ""
@@ -93,6 +99,9 @@ func _on_game_ready() -> void:
 		print("[SendButton] ready; visible=", send_button.visible, " a=", send_button.modulate.a)
 	else:
 		push_warning("No %SendButton in scene")
+		
+	_setup_place_hint_label()
+	_update_place_hint_visibility()
 		
 func _set_game_data(raw_text: String) -> void:
 	var res: Variant = JSON.parse_string(raw_text)
@@ -222,6 +231,8 @@ func _set_game_data(raw_text: String) -> void:
 		_return_active_to_bowl()
 	else:
 		_finalize_active_tile()
+		
+	_update_place_hint_visibility()
 
 	_ui_gesture_block = false
 	_is_dragging = false
@@ -359,6 +370,112 @@ func _make_tile(is_black: bool) -> TextureRect:
 	t.z_index = 50
 	t.modulate = (Color(0.139, 0.139, 0.139, 1.0) if is_black else Color.WHITE)
 	return t
+	
+func _haptic_explosion(strength: float = 0.35, duration_ms: int = 22) -> void:
+	if not (OS.has_feature("android") or OS.has_feature("ios")):
+		return
+
+	strength = clampf(strength, 0.0, 1.0)
+	Input.vibrate_handheld(duration_ms, strength)
+	
+func _lift_active_tile_for_drag() -> void:
+	if not is_instance_valid(_active_tile):
+		return
+
+	if _active_tile_lifted:
+		return
+
+	if _active_tile_tween and _active_tile_tween.is_running():
+		_active_tile_tween.kill()
+
+	_active_tile_lifted = true
+	_active_tile.z_index = 90
+	_active_tile.pivot_offset = _active_tile.size / 2.0
+
+	_active_tile_tween = create_tween().set_parallel(true)
+	_active_tile_tween.tween_property(_active_tile, "position", _active_tile.position + Vector2(0, -18.0), 0.10) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_active_tile_tween.tween_property(_active_tile, "scale", Vector2(1.08, 1.08), 0.10) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+
+func _set_active_tile_drag_pos(final_center_pos: Vector2) -> void:
+	if not is_instance_valid(_active_tile):
+		return
+
+	var lifted_pos := Vector2(
+		final_center_pos.x - TILE_PX * 0.5,
+		final_center_pos.y - TILE_PX * 0.5 - 18.0
+	)
+
+	_set_tile_offsets(_active_tile, lifted_pos.x, lifted_pos.y)
+	_active_tile.scale = Vector2(1.08, 1.08)
+	_active_tile.z_index = 90
+	_active_tile_lifted = true
+
+
+func _drop_active_tile_to(final_pos: Vector2) -> void:
+	if not is_instance_valid(_active_tile):
+		return
+
+	if _active_tile_tween and _active_tile_tween.is_running():
+		_active_tile_tween.kill()
+
+	_active_tile.z_index = 90
+	_active_tile.pivot_offset = _active_tile.size / 2.0
+
+	_active_tile_tween = create_tween().set_parallel(true)
+	_active_tile_tween.tween_property(_active_tile, "position", final_pos, 0.12) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	_active_tile_tween.tween_property(_active_tile, "scale", Vector2.ONE, 0.12) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+
+	_active_tile_tween.tween_callback(func():
+		if is_instance_valid(_active_tile):
+			_set_tile_offsets(_active_tile, final_pos.x, final_pos.y)
+			_active_tile.scale = Vector2.ONE
+			_active_tile.z_index = 75
+
+		_active_tile_lifted = false
+		_haptic_explosion(0.25, 18)
+	)
+
+func _animate_active_tile_to(final_pos: Vector2, lift_move: bool) -> void:
+	if not is_instance_valid(_active_tile):
+		return
+
+	if _active_tile_tween and _active_tile_tween.is_running():
+		_active_tile_tween.kill()
+
+	_active_tile.z_index = 90
+	_active_tile.pivot_offset = _active_tile.size / 2.0
+
+	if lift_move:
+		var lift_pos := _active_tile.position + Vector2(0, -18.0)
+		var travel_pos := final_pos + Vector2(0, -18.0)
+
+		_active_tile_tween = create_tween().set_parallel(false)
+		_active_tile_tween.tween_property(_active_tile, "position", lift_pos, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		_active_tile_tween.parallel().tween_property(_active_tile, "scale", Vector2(1.08, 1.08), 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		_active_tile_tween.tween_property(_active_tile, "position", travel_pos, 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		_active_tile_tween.tween_property(_active_tile, "position", final_pos, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		_active_tile_tween.parallel().tween_property(_active_tile, "scale", Vector2.ONE, 0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	else:
+		_active_tile.scale = Vector2.ONE
+		_active_tile_tween = create_tween()
+		_active_tile_tween.tween_property(_active_tile, "position", final_pos, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+	_active_tile_tween.tween_callback(func():
+		if is_instance_valid(_active_tile):
+			_set_tile_offsets(_active_tile, final_pos.x, final_pos.y)
+			_active_tile.scale = Vector2.ONE
+			_active_tile.z_index = 75
+
+		if lift_move:
+			_haptic_explosion(0.32, 22)
+		else:
+			_haptic_explosion(0.22, 16)
+	)
 
 func _set_tile_offsets(t: TextureRect, left: float, top: float) -> void:
 	t.offset_left = left; t.offset_top = top; t.offset_right = left + TILE_PX; t.offset_bottom = top + TILE_PX
@@ -379,10 +496,16 @@ func _place_random_in_bowl(bowl: Control, t: TextureRect) -> void:
 
 func _pop_bowl_tile(is_ours: bool) -> TextureRect:
 	var bowl := (PlayerBowl if is_ours else OppBowl)
+
 	for c in bowl.get_children():
 		if c is TextureRect:
+			if is_ours and is_instance_valid(_board_tiles_root):
+				_active_spawn_root_pos = _root_local_from_global((c as TextureRect).get_global_rect().position)
+				_active_spawn_valid = true
+
 			bowl.remove_child(c)
 			return c
+
 	return null
 	
 func _clear_bowl(bowl: Control) -> void:
@@ -410,23 +533,49 @@ func _retint_bowl(bowl: Control, is_black: bool) -> void:
 			(c as TextureRect).modulate = (Color(0.278, 0.278, 0.278, 1.0) if is_black else Color.WHITE)
 
 func _ensure_active_tile() -> void:
-	if _active_tile and is_instance_valid(_active_tile): return
+	if _active_tile and is_instance_valid(_active_tile):
+		return
+
+	_active_spawn_valid = false
 	_active_tile = _pop_bowl_tile(true)
-	if _active_tile == null: _active_tile = _make_tile(player == 1)
+
+	if _active_tile == null:
+		_active_tile = _make_tile(player == 1)
+		_active_spawn_valid = false
+
 	_active_from_bowl_offset = Vector2(_active_tile.offset_left, _active_tile.offset_top)
 	_active_tile = _prepare_tile_for_board(_active_tile, player == 1)
 	_board_tiles_root.add_child(_active_tile)
 	_active_tile.z_index = 75
+	_active_tile.scale = Vector2.ONE
 
-func _place_or_move_active_to(g: Vector2i) -> void:
+	if _active_spawn_valid:
+		_set_tile_offsets(_active_tile, _active_spawn_root_pos.x, _active_spawn_root_pos.y)
+
+func _place_or_move_active_to(g: Vector2i, from_drag: bool = false) -> void:
 	if not _grid_in_bounds(g):
 		return
 
-	if _current_move.x >= 0:
-		board_state[_current_move.y][_current_move.x] = 0
+	if _current_move == g:
+		_has_uncommitted_move = true
+		_show_send_button()
+		_update_place_hint_visibility()
+		_update_win_preview_for_current_move()
+
+		if from_drag and is_instance_valid(_active_tile):
+			var same_center := _grid_to_pos(g)
+			var same_final_pos := Vector2(same_center.x - TILE_PX * 0.5, same_center.y - TILE_PX * 0.5)
+			_drop_active_tile_to(same_final_pos)
+
+		return
 
 	if board_state[g.y][g.x] != 0:
 		return
+
+	var lift_move := _current_move.x >= 0 and _current_move.y >= 0 and is_instance_valid(_active_tile) and not from_drag
+
+	if _current_move.x >= 0 and _current_move.y >= 0:
+		board_state[_current_move.y][_current_move.x] = 0
 
 	_ensure_active_tile()
 
@@ -435,7 +584,12 @@ func _place_or_move_active_to(g: Vector2i) -> void:
 	_current_move = g
 
 	var c := _grid_to_pos(g)
-	_set_tile_offsets(_active_tile, c.x - TILE_PX * 0.5, c.y - TILE_PX * 0.5)
+	var final_pos := Vector2(c.x - TILE_PX * 0.5, c.y - TILE_PX * 0.5)
+
+	if from_drag:
+		_drop_active_tile_to(final_pos)
+	else:
+		_animate_active_tile_to(final_pos, lift_move)
 
 	_has_uncommitted_move = true
 	_show_send_button()
@@ -456,11 +610,20 @@ func _place_or_move_active_to(g: Vector2i) -> void:
 func _return_active_to_bowl() -> void:
 	if _active_tile == null:
 		return
+
+	if _active_tile_tween and _active_tile_tween.is_running():
+		_active_tile_tween.kill()
+
+	_active_tile.scale = Vector2.ONE
+	_active_tile.z_index = 50
+	_active_tile_lifted = false
+
 	_active_tile.reparent(PlayerBowl)
 	_set_tile_offsets(_active_tile, _active_from_bowl_offset.x, _active_from_bowl_offset.y)
 	_active_tile = null
 	_current_move = Vector2i(-1, -1)
 	_clear_win_preview()
+	_update_place_hint_visibility()
 	
 func _finalize_active_tile() -> void:
 	if _active_tile:
@@ -477,7 +640,15 @@ func _place_stone_direct(g: Vector2i, p:int) -> void:
 	_set_tile_offsets(tile, c.x - TILE_PX*0.5, c.y - TILE_PX*0.5)
 
 func _input(e: InputEvent) -> void:
-	if not is_my_turn or _ui_gesture_block:
+	if _ui_gesture_block:
+		if (e is InputEventMouseButton and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT and not (e as InputEventMouseButton).pressed) \
+		or (e is InputEventScreenTouch and not (e as InputEventScreenTouch).pressed):
+			_ui_gesture_block = false
+			_is_dragging = false
+			_drag_started = false
+		return
+
+	if not is_my_turn:
 		return
 
 	# -------- PRESS: mouse OR touch --------
@@ -486,104 +657,103 @@ func _input(e: InputEvent) -> void:
 		var gp := _event_pos(e)
 		if gp == Vector2.INF:
 			return
-		if _is_over_blocking_ui(gp):
-			_ui_gesture_block = true
-			_is_dragging = false
-			return
-		else:
-			_ui_gesture_block = false
 
+		if _is_over_blocking_ui(gp):
+			_is_dragging = false
+			_drag_started = false
+			return
+
+		_ui_gesture_block = false
 		_press_global = gp
 		_is_dragging = true
-		_ensure_active_tile()
-
-		var br: Rect2 = Board.get_global_rect()
-		if br.has_point(gp):
-			var local_board := _board_local_from_global(gp)
-			var info := _nearest_grid_center(local_board)
-			var c_board: Vector2 = info["pos"]
-			_set_tile_offsets(_active_tile, c_board.x - TILE_PX * 0.5, c_board.y - TILE_PX * 0.5)
-			_drag_snapped_grid = info["g"]
-		else:
-			var in_root := _root_local_from_global(gp)
-			_set_tile_offsets(_active_tile, in_root.x - TILE_PX * 0.5, in_root.y - TILE_PX * 0.5)
-			_drag_snapped_grid = Vector2i(-1, -1)
+		_drag_started = false
+		_drag_snapped_grid = Vector2i(-1, -1)
 
 	# -------- MOVE: mouse OR touch drag --------
-	elif _is_dragging and _active_tile and (e is InputEventMouseMotion or e is InputEventScreenDrag):
-		if _ui_gesture_block:
-			return
-
+	elif _is_dragging and (e is InputEventMouseMotion or e is InputEventScreenDrag):
 		var gp := _event_pos(e)
 		if gp == Vector2.INF:
 			return
+
+		if not _drag_started and gp.distance_to(_press_global) < DRAG_THRESHOLD:
+			return
+
+		if not _drag_started:
+			_drag_started = true
+			_ensure_active_tile()
+			_lift_active_tile_for_drag()
+
+		if not is_instance_valid(_active_tile):
+			return
+
 		var br: Rect2 = Board.get_global_rect()
 
 		if br.has_point(gp):
 			var local_board := _board_local_from_global(gp)
 			var info := _nearest_grid_center(local_board)
 			var c_board: Vector2 = info["pos"]
-			_set_tile_offsets(_active_tile, c_board.x - TILE_PX * 0.5, c_board.y - TILE_PX * 0.5)
+			_set_active_tile_drag_pos(c_board)
 			_drag_snapped_grid = info["g"]
 		else:
 			var in_root := _root_local_from_global(gp)
-			_set_tile_offsets(_active_tile, in_root.x - TILE_PX * 0.5, in_root.y - TILE_PX * 0.5)
+			_set_active_tile_drag_pos(in_root)
 			_drag_snapped_grid = Vector2i(-1, -1)
 
 	# -------- RELEASE: mouse OR touch --------
 	elif (e is InputEventMouseButton and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT and not (e as InputEventMouseButton).pressed and _is_dragging) \
 	or (e is InputEventScreenTouch and not (e as InputEventScreenTouch).pressed and _is_dragging):
-		if _ui_gesture_block:
-			_ui_gesture_block = false
-			_is_dragging = false
-			return
-
 		_is_dragging = false
 
+		var was_dragging := _drag_started
 		var gp := _event_pos(e)
+
 		if gp == Vector2.INF:
 			gp = _press_global
+
 		var br: Rect2 = Board.get_global_rect()
 
 		if not br.has_point(gp):
-			_return_active_to_bowl()
-			_hide_send_button()
-			_has_uncommitted_move = false
-			_clear_win_preview()
+			if was_dragging:
+				_return_active_to_bowl()
+				_hide_send_button()
+				_has_uncommitted_move = false
+				_clear_win_preview()
+
+			_drag_started = false
 			_drag_snapped_grid = Vector2i(-1, -1)
 			return
-
 
 		var local_board := _board_local_from_global(gp)
 		var info := _nearest_grid_center(local_board)
 		var g: Vector2i = info["g"]
 
 		if not _grid_in_bounds(g):
-			_return_active_to_bowl()
-			_hide_send_button()
-			_has_uncommitted_move = false
-			_clear_win_preview()
+			if was_dragging:
+				_return_active_to_bowl()
+				_hide_send_button()
+				_has_uncommitted_move = false
+				_clear_win_preview()
+
+			_drag_started = false
 			_drag_snapped_grid = Vector2i(-1, -1)
 			return
-
 
 		if _current_move == g:
-			_has_uncommitted_move = true
-			_show_send_button()
-			_update_win_preview_for_current_move()
+			_place_or_move_active_to(g, was_dragging)
+			_drag_started = false
 			_drag_snapped_grid = Vector2i(-1, -1)
 			return
 
-
 		if board_state[g.y][g.x] == 0:
-			_place_or_move_active_to(g)
+			_place_or_move_active_to(g, was_dragging)
 		else:
-			_return_active_to_bowl()
-			_hide_send_button()
-			_has_uncommitted_move = false
-			_clear_win_preview()
+			if was_dragging:
+				_return_active_to_bowl()
+				_hide_send_button()
+				_has_uncommitted_move = false
+				_clear_win_preview()
 
-
+		_drag_started = false
 		_drag_snapped_grid = Vector2i(-1, -1)
 
 func _tween_send_button(sb: bool) -> void:
@@ -611,9 +781,65 @@ func _tween_send_button(sb: bool) -> void:
 			if is_instance_valid(send_button):
 				send_button.visible = false
 		)
+		
+func _setup_place_hint_label() -> void:
+	if not is_instance_valid(send_button):
+		return
 
-func _show_send_button() -> void: _tween_send_button(true)
-func _hide_send_button() -> void: _tween_send_button(false)
+	var parent := send_button.get_parent() as Control
+	if parent == null:
+		return
+
+	var existing := parent.get_node_or_null("PlaceHintLabel") as Label
+	if existing:
+		place_hint_label = existing
+	else:
+		place_hint_label = Label.new()
+		place_hint_label.name = "PlaceHintLabel"
+		parent.add_child(place_hint_label)
+
+	place_hint_label.text = "Place a stone on an empty tile."
+	place_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	place_hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	place_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	place_hint_label.add_theme_font_size_override("font_size", 22)
+	place_hint_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
+
+	var hint_size := send_button.size
+	if hint_size.x <= 0.0:
+		hint_size.x = 360.0
+	if hint_size.y <= 0.0:
+		hint_size.y = 50.0
+
+	place_hint_label.size = hint_size
+	place_hint_label.position = Vector2(send_button.position.x, _send_btn_shown_y)
+	place_hint_label.visible = false
+
+
+func _update_place_hint_visibility() -> void:
+	if not is_instance_valid(place_hint_label):
+		return
+
+	var should_show := is_my_turn \
+		and not spectator_mode \
+		and not game_over \
+		and not _has_uncommitted_move \
+		and _current_move.x < 0 \
+		and not _is_dragging \
+		and not _ui_gesture_block
+
+	place_hint_label.visible = should_show
+
+func _show_send_button() -> void:
+	if is_instance_valid(place_hint_label):
+		place_hint_label.visible = false
+
+	_tween_send_button(true)
+
+
+func _hide_send_button() -> void:
+	_tween_send_button(false)
+	call_deferred("_update_place_hint_visibility")
 
 func _on_send_button_pressed() -> void:
 	if game_over or spectator_mode or not is_my_turn:
@@ -626,6 +852,7 @@ func _on_send_button_pressed() -> void:
 
 	_ui_gesture_block = true
 	await send_game()
+	_ui_gesture_block = false
 	
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
@@ -902,6 +1129,7 @@ func send_game() -> void:
 	_has_uncommitted_move = false
 	_hide_send_button()
 	is_my_turn = false
+	_update_place_hint_visibility()
 	_finalize_active_tile()
 
 	if not game_ended:
