@@ -115,13 +115,12 @@ func _apply_move_visuals() -> void:
 	if r == null:
 		return
 
-	visible = not r["hide"]
+	visible = not bool(r.get("hide", false))
 	if not visible:
 		return
 
-	var dist: int = int(r["dist"])
-	var flip: bool = bool(r["flip"])
-	print("CALLED!")
+	var dist: int = int(r.get("dist", 0))
+	var flip: bool = r.get("flip", false) == true
 
 	if _player_lane == Lane.LEFT and lane == Lane.CENTER:
 		flip = true
@@ -175,6 +174,7 @@ func _press() -> void:
 func _release(emit_click: bool) -> void:
 	if not _pressed:
 		return
+
 	_pressed = false
 
 	if _hovered:
@@ -183,12 +183,20 @@ func _release(emit_click: bool) -> void:
 		_tween_scale(_base_scale, 0.08)
 
 	if emit_click:
-		emit_signal("clicked", self)
+		call_deferred("emit_signal", "clicked", self)
 
 func _tween_scale(target: Vector3, time: float) -> void:
+	if not is_instance_valid(_sprite):
+		return
+
 	target.x = abs(target.x)
 
 	if _tw and _tw.is_valid():
 		_tw.kill()
+
+	if time <= 0.0:
+		_sprite.scale = target
+		return
+
 	_tw = create_tween()
 	_tw.tween_property(_sprite, "scale", target, time)

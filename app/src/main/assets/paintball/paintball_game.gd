@@ -50,35 +50,38 @@ var states
 var ui
 
 # -------------------------------------------------------------------
-# Identity and turn state (PB_State expects these)
+# Identity and turn state
 # -------------------------------------------------------------------
 var my_id: String = ""
 var p1_id: String = ""
 var p2_id: String = ""
+var _opp_id: String = ""
 var winner: String = ""
 
 var playernum: int = 0
 var turn_owner: int = 1
 var is_your_turn: bool = false
 var is_my_turn: bool = false
+var _suppress_send_after_round: bool = false
 
 # -------------------------------------------------------------------
-# Win state (PB_UI + PB_State expect these)
+# Win state
 # -------------------------------------------------------------------
 var game_ended: bool = false
 var game_over: bool = false
 var win_loss_state: String = "0"
 
 # -------------------------------------------------------------------
-# HP (PB_UI, PB_State, PB_Round)
+# HP
 # -------------------------------------------------------------------
 var _hp_me: int = 3
 var _hp_opp: int = 3
 
 # -------------------------------------------------------------------
-# Buttons / lanes (PB_Buttons, PB_Shots, PB_Round)
+# Buttons / lanes
 # -------------------------------------------------------------------
 var _buttons: Array[ActionButton3D] = []
+var _move_btn_by_lane: Dictionary = {}
 var _shoot_btn_by_lane: Dictionary = {}
 var _lane_x: Dictionary = {
 	ActionButton3D.Lane.LEFT: -1.0,
@@ -88,45 +91,87 @@ var _lane_x: Dictionary = {
 
 var _player_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
 var _selected_shoot: ActionButton3D = null
+var _move_tween: Tween = null
 
 # -------------------------------------------------------------------
-# Round / sequence flags (cross-module)
+# Round / sequence flags
 # -------------------------------------------------------------------
 var _is_shot_sequence_running: bool = false
 var _round_sequence_running: bool = false
+var _shot_in_progress: bool = false
 var _require_new_shoot_selection: bool = true
+var _need_new_selection: bool = true
+var _touched_this_turn: bool = false
 var _opp_sprite_base_scale: Vector3 = Vector3.ONE
+var _fp_aim_base_scale: Vector2 = Vector2.ONE
+var _last_autoplayed_replay_str: String = ""
 
 # -------------------------------------------------------------------
-# Opponent pending shot + reveal (PB_State, PB_Round, PB_Shots)
+# Opponent pending shot + reveal
 # -------------------------------------------------------------------
 var _pending_enemy_shot: bool = false
 var _opp_pos_enc: int = -1
 var _opp_target_enc: int = -1
+var _opp_target_enc_vis: int = -1
+var _opp_target_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
+var _opp_target_world: Vector3 = Vector3.ZERO
+var _opp_reveal_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
+var _opp_sprite_reveal_offset_y: float = -1.3
 var _opp_sprite_start_pos: Vector3 = Vector3.ZERO
 
 # -------------------------------------------------------------------
-# Replay fields (PB_State expects these on g)
+# Replay fields
 # -------------------------------------------------------------------
 var _replay_segments: PackedStringArray = PackedStringArray()
+var _replay_seg_index: int = 0
+var _replay_base_state: Dictionary = {}
 var _last_replay_str: String = ""
 
 var _is_replay_playback: bool = false
 var _replay_auto_pending: bool = false
+var _replay_auto_full_str: String = ""
+var _replay_auto_end_state: Dictionary = {}
 var _replay_send_segments: PackedStringArray = PackedStringArray()
 var _replay_is_autoplay_round: bool = false
 var _replay_send_armed: bool = false
 
 # -------------------------------------------------------------------
-# Camera / aim / recoil (PB_Round + PB_Shots)
+# Camera / aim / recoil
 # -------------------------------------------------------------------
+var _cam_start_fov: float = 70.0
+var _cam_start_xform: Transform3D = Transform3D.IDENTITY
 var _aim_target_world: Vector3 = Vector3.ZERO
 
+var _round_end_white_in: float = 0.25
+var _round_end_white_out: float = 0.25
+
+var _fp_aim_base_pos: Vector2 = Vector2.ZERO
+var _muzzle_tex_px: Vector2 = Vector2(340.0, 120.0)
+
 var ball_speed: float = 36.0
+var _paintball_scale: float = 0.10
+
+var _opp_recoil_z: float = 0.22
+var _opp_recoil_in_time: float = 0.05
+var _opp_recoil_out_time: float = 0.12
+
+var _player_hit_last: bool = false
+var _enemy_hit_last: bool = false
 
 # -------------------------------------------------------------------
-# Fire button placement + splats (PB_UI expects these on g)
+# Fire button placement + splats
 # -------------------------------------------------------------------
+var _fire_btn_shown_pos: Vector2 = Vector2.ZERO
+var _fire_btn_hidden_pos: Vector2 = Vector2.ZERO
+var _fire_button_is_shown: bool = false
+var _fire_btn_tween: Tween = null
+
+var _player_splat: TextureRect = null
+var _player_splat_tween: Tween = null
+
+var _opp_splat: Sprite3D = null
+var _opp_splat_tween: Tween = null
+
 var sent_tween: Tween = null
 var _opp_avatar_texture_normal: Texture2D = null
 var _opp_avatar_texture_pressed: Texture2D = null
@@ -207,12 +252,22 @@ func _on_game_ready() -> void:
 
 	_selected_shoot = null
 	_require_new_shoot_selection = true
-	ui.show_fire_button(false)
+
+	if is_instance_valid(fire_button):
+		fire_button.visible = false
+		fire_button.modulate.a = 0.0
+		fire_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	_fire_button_is_shown = false
 
 	if is_instance_valid(opponent_sprite):
 		_opp_sprite_base_scale = opponent_sprite.scale
 		_opp_sprite_start_pos = opponent_sprite.global_position
 		print("[DBG][READY] cached _opp_sprite_start_pos=", _opp_sprite_start_pos)
+		
+	if is_instance_valid(fp_aim_sprite):
+		_fp_aim_base_scale = fp_aim_sprite.scale
+		_fp_aim_base_pos = fp_aim_sprite.position
 
 	if is_instance_valid(opp_avatar_display):
 		_opp_avatar_texture_normal = opp_avatar_display.get("texture_normal") as Texture2D
@@ -225,6 +280,12 @@ func _on_game_ready() -> void:
 			(fire_button as BaseButton).pressed.connect(fire_callable)
 
 	await ui.init_fire_button()
+	if is_instance_valid(fire_button):
+		fire_button.visible = false
+		fire_button.modulate.a = 0.0
+		fire_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	_fire_button_is_shown = false
 	ui.init_player_splat_overlay()
 	ui.init_opponent_splat()
 	ui.apply_hearts_from_hp()
@@ -325,32 +386,30 @@ func _on_fire_pressed() -> void:
 		" replay_playback=", _is_replay_playback,
 		" replay_auto_pending=", _replay_auto_pending,
 		" segs=", _replay_segments.size(),
+		" sendq=", _replay_send_segments.size(),
 		" last_replay_len=", _last_replay_str.length()
 	)
-	
+
 	_replay_send_armed = true
 	_replay_is_autoplay_round = false
 
+	var my_pos_int: int = states.lane_to_pos_enc(_player_lane)
+	var my_target_int: int = states.lane_to_target_enc(_selected_shoot.lane)
+
 	if _pending_enemy_shot:
-		var pending_my_pos_int: int = states.lane_to_pos_enc(_player_lane)
-		var pending_my_target_int: int = states.lane_to_target_enc(_selected_shoot.lane)
+		var my_pos_key: String = "pos1" if playernum == 1 else "pos2"
+		var my_tgt_key: String = "target1" if playernum == 1 else "target2"
+		var opp_pos_key: String = "pos2" if playernum == 1 else "pos1"
+		var opp_tgt_key: String = "target2" if playernum == 1 else "target1"
+
+		if _replay_send_segments.size() <= 0 and _replay_segments.size() > 0:
+			_replay_send_segments = _replay_segments.duplicate()
 
 		if _replay_send_segments.size() > 0:
 			var head_state: Dictionary = _parse_replay_state(String(_replay_send_segments[0]))
+			var opp_ready: bool = int(head_state.get(opp_pos_key, -1)) != -1 and int(head_state.get(opp_tgt_key, -1)) != -1
 
-			# Only if opponent is ready and my fields are missing (the "2nd replay" case)
-			var opp_ready: bool = false
-			if playernum == 1:
-				opp_ready = int(head_state.get("pos2", -1)) != -1 and int(head_state.get("target2", -1)) != -1
-			else:
-				opp_ready = int(head_state.get("pos1", -1)) != -1 and int(head_state.get("target1", -1)) != -1
-
-			var my_pos_key: String = ("pos1" if playernum == 1 else "pos2")
-			var my_tgt_key: String = ("target1" if playernum == 1 else "target2")
-			var my_missing: bool = int(head_state.get(my_pos_key, -1)) == -1 or int(head_state.get(my_tgt_key, -1)) == -1
-
-			if opp_ready and my_missing:
-				# Keep hp aligned with current game state in p1 order
+			if opp_ready:
 				if playernum == 1:
 					head_state["hp1"] = _hp_me
 					head_state["hp2"] = _hp_opp
@@ -358,15 +417,45 @@ func _on_fire_pressed() -> void:
 					head_state["hp1"] = _hp_opp
 					head_state["hp2"] = _hp_me
 
-				head_state[my_pos_key] = pending_my_pos_int
-				head_state[my_tgt_key] = pending_my_target_int
+				head_state[my_pos_key] = my_pos_int
+				head_state[my_tgt_key] = my_target_int
 
 				_replay_send_segments[0] = _replay_state_to_string(head_state)
 
 				if _replay_segments.size() > 0:
 					_replay_segments[0] = _replay_send_segments[0]
+				else:
+					_replay_segments.append(_replay_send_segments[0])
 
-				print("[DBG][SENDQ] committed my selection into head=", String(_replay_send_segments[0]))
+				_apply_loaded_replay_segment(head_state)
+
+				print("[DBG][SENDQ] committed my selection into pending head=", String(_replay_send_segments[0]))
+		else:
+			var st_pending: Dictionary = {
+				"hp1": _hp_me if playernum == 1 else _hp_opp,
+				"hp2": _hp_opp if playernum == 1 else _hp_me,
+				"pos1": -1,
+				"pos2": -1,
+				"target1": -1,
+				"target2": -1
+			}
+
+			if playernum == 1:
+				st_pending["pos1"] = my_pos_int
+				st_pending["target1"] = my_target_int
+				st_pending["pos2"] = _opp_pos_enc
+				st_pending["target2"] = _opp_target_enc
+			else:
+				st_pending["pos2"] = my_pos_int
+				st_pending["target2"] = my_target_int
+				st_pending["pos1"] = _opp_pos_enc
+				st_pending["target1"] = _opp_target_enc
+
+			_replay_send_segments.append(_replay_state_to_string(st_pending))
+			_replay_segments.append(_replay_state_to_string(st_pending))
+			_apply_loaded_replay_segment(st_pending)
+
+			print("[DBG][SENDQ] built fallback pending head=", _replay_state_to_string(st_pending))
 
 		_replay_auto_pending = false
 		_is_replay_playback = true
@@ -375,12 +464,13 @@ func _on_fire_pressed() -> void:
 
 	print("[DBG][FIRE_PRESSED] BRANCH: send_game (pending_enemy_shot=false)")
 
-	var my_pos_int: int = states.lane_to_pos_enc(_player_lane)
-	var my_target_int: int = states.lane_to_target_enc(_selected_shoot.lane)
 	var st: Dictionary = {
-		"hp1": 3, "hp2": 3,
-		"pos1": -1, "pos2": -1,
-		"target1": -1, "target2": -1
+		"hp1": 3,
+		"hp2": 3,
+		"pos1": -1,
+		"pos2": -1,
+		"target1": -1,
+		"target2": -1
 	}
 
 	if playernum == 1:
@@ -401,7 +491,7 @@ func _on_fire_pressed() -> void:
 	)
 
 	send_game()
-	
+
 func get_world_for_player_lane(lane: ActionButton3D.Lane) -> Vector3:
 	var tx: float = float(_lane_x.get(lane, 0.0))
 	

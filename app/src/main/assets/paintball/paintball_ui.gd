@@ -29,30 +29,51 @@ func init_fire_button() -> void:
 	g.fire_button.global_position = g._fire_btn_hidden_pos
 
 func show_fire_button(should_show: bool) -> void:
+	if g == null:
+		return
+
+	if not is_instance_valid(g.fire_button):
+		g._fire_button_is_shown = should_show
+		return
+
 	if should_show == g._fire_button_is_shown:
 		return
-	g.fire_button.visible = true
+
 	g._fire_button_is_shown = should_show
 
 	if g._fire_btn_tween and g._fire_btn_tween.is_valid():
 		g._fire_btn_tween.kill()
 
-	g._fire_btn_tween = g.create_tween()
-	g._fire_btn_tween.set_trans(Tween.TRANS_SINE)
-	g._fire_btn_tween.set_ease(Tween.EASE_OUT)
-
 	if should_show:
 		g.fire_button.top_level = true
+		g.fire_button.visible = true
 		g.fire_button.global_position = g._fire_btn_hidden_pos
 		g.fire_button.modulate.a = 0.0
-		g.fire_button.visible = true
+		g.fire_button.mouse_filter = Control.MOUSE_FILTER_STOP
 
+		g._fire_btn_tween = g.create_tween()
+		g._fire_btn_tween.set_trans(Tween.TRANS_SINE)
+		g._fire_btn_tween.set_ease(Tween.EASE_OUT)
 		g._fire_btn_tween.tween_property(g.fire_button, "global_position", g._fire_btn_shown_pos, 0.25)
 		g._fire_btn_tween.parallel().tween_property(g.fire_button, "modulate:a", 1.0, 0.18)
 	else:
+		g.fire_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+		if g.fire_button.modulate.a <= 0.01:
+			g.fire_button.global_position = g._fire_btn_hidden_pos
+			g.fire_button.visible = false
+			g.fire_button.modulate.a = 0.0
+			return
+
+		g._fire_btn_tween = g.create_tween()
+		g._fire_btn_tween.set_trans(Tween.TRANS_SINE)
+		g._fire_btn_tween.set_ease(Tween.EASE_OUT)
 		g._fire_btn_tween.tween_property(g.fire_button, "modulate:a", 0.0, 0.15)
 		g._fire_btn_tween.tween_callback(func() -> void:
-			g.fire_button.global_position = g._fire_btn_hidden_pos
+			if is_instance_valid(g.fire_button):
+				g.fire_button.global_position = g._fire_btn_hidden_pos
+				g.fire_button.visible = false
+				g.fire_button.modulate.a = 0.0
 		)
 
 func apply_hearts_from_hp() -> void:

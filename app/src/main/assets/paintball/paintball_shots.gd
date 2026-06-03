@@ -91,14 +91,30 @@ func get_muzzle_screen_pos() -> Vector2:
 	return g.fp_aim_sprite.to_global(local)
 
 func fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached: Callable = Callable()) -> Vector3:
+	if g == null:
+		print("[SHOT] ERROR: game owner is null.")
+		return Vector3.ZERO
+
 	if not is_instance_valid(g.cam):
 		print("[SHOT] ERROR: cam invalid, cannot fire.")
 		return Vector3.ZERO
 
-	var ball := g.PAINTBALL_SCENE.instantiate() as PaintballProjectile
-	if ball == null:
-		print("[SHOT] ERROR: projectile instantiate failed.")
+	if g.PAINTBALL_SCENE == null:
+		print("[SHOT] ERROR: PAINTBALL_SCENE is null.")
 		return Vector3.ZERO
+
+	var inst: Node = g.PAINTBALL_SCENE.instantiate()
+
+	if inst == null:
+		print("[SHOT] ERROR: PaintballProjectile instantiate returned null.")
+		return Vector3.ZERO
+
+	if not (inst is PaintballProjectile):
+		print("[SHOT] ERROR: PaintballProjectile scene root is not PaintballProjectile. root=", inst, " script=", inst.get_script())
+		inst.queue_free()
+		return Vector3.ZERO
+
+	var ball: PaintballProjectile = inst as PaintballProjectile
 
 	var muzzle_world: Vector3 = Vector3.ZERO
 	var target_fixed: Vector3 = target_world
@@ -106,9 +122,11 @@ func fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached: 
 	if is_enemy:
 		if not is_instance_valid(g.opponent_sprite):
 			print("[SHOT] ERROR: opponent_sprite invalid for enemy shot.")
+			ball.queue_free()
 			return Vector3.ZERO
 
 		muzzle_world = g.opponent_sprite.global_position + Vector3(0.0, 0.9, 0.0)
+
 		var cam_pos: Vector3 = g.cam.global_transform.origin
 		muzzle_world.y = cam_pos.y
 		target_fixed.y = cam_pos.y
@@ -149,18 +167,20 @@ func fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached: 
 	var mi := ball.get_node_or_null("MeshInstance3D") as MeshInstance3D
 	if mi == null:
 		mi = ball.find_child("MeshInstance3D", true, false) as MeshInstance3D
+
 	if mi != null:
 		var mat := mi.material_override
 		if mat == null:
 			mat = StandardMaterial3D.new()
 			mi.material_override = mat
+
 		if mat is StandardMaterial3D:
 			var sm := mat as StandardMaterial3D
 			sm.albedo_color = desired_color
 			sm.emission_enabled = true
 			sm.emission = desired_color * 0.35
 
-	g.get_tree().current_scene.add_child(ball)
+	g.add_child(ball)
 
 	var box: Dictionary = {
 		"got": false,
@@ -168,18 +188,18 @@ func fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached: 
 	}
 
 	ball.reached_plane.connect(func(world_pos: Vector3) -> void:
-		if bool(box["got"]):
+		if box["got"] == true:
 			return
 
-		if not is_enemy and is_instance_valid(ball):
-			ball.visible = false
-			ball.queue_free()
+		box["got"] = true
+		box["impact"] = world_pos
 
 		if on_reached.is_valid():
 			on_reached.call(world_pos)
 
-		box["got"] = true
-		box["impact"] = world_pos
+		if is_instance_valid(ball):
+			ball.visible = false
+			ball.queue_free()
 	)
 
 	ball.launch(muzzle_world, target_fixed)
@@ -187,21 +207,23 @@ func fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached: 
 	var timeout_s: float = 3.0
 	var start_ms: int = Time.get_ticks_msec()
 
-	while not bool(box["got"]):
+	while box["got"] != true:
 		await g.get_tree().process_frame
+
 		var elapsed_s: float = float(Time.get_ticks_msec() - start_ms) / 1000.0
 		if elapsed_s >= timeout_s:
 			break
 
-	if not bool(box["got"]):
+	if box["got"] != true:
 		print("[SHOT] WARNING: reached_plane timeout after ", timeout_s, "s. Forcing impact.")
+		box["got"] = true
 		box["impact"] = target_fixed
 
 	var impact_world: Vector3 = box["impact"]
 
 	await g.get_tree().process_frame
 
-	if is_enemy and is_instance_valid(ball):
+	if is_instance_valid(ball):
 		ball.queue_free()
 
 	return impact_world

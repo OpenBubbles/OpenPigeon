@@ -208,16 +208,38 @@ func spawn_player_random_lane() -> void:
 	_did_initial_spawn = true
 
 func move_player_to_button(b: ActionButton3D) -> void:
+	if g == null:
+		return
+
 	if not g.is_my_turn or g._is_shot_sequence_running or g._round_sequence_running:
 		print("[INPUT] Ignored move (not my turn or sequence running).")
 		return
 
-	if not g.player:
+	if not is_instance_valid(g.player):
+		print("[INPUT] Ignored move because player is invalid.")
+		return
+
+	if not is_instance_valid(b):
+		print("[INPUT] Ignored move because button is invalid.")
 		return
 
 	var start_lane: ActionButton3D.Lane = g._player_lane
 	var target_lane: ActionButton3D.Lane = b.lane
+
+	print("[MOVE] requested start=", int(start_lane), " target=", int(target_lane))
+
 	if start_lane == target_lane:
+		print("[MOVE] ignored because already in target lane.")
+		return
+
+	var path: Array[ActionButton3D.Lane] = [start_lane]
+
+	if abs(int(target_lane) - int(start_lane)) == 2:
+		path.append(ActionButton3D.Lane.CENTER)
+
+	path.append(target_lane)
+
+	if path.size() < 2:
 		return
 
 	if g._move_tween and g._move_tween.is_valid():
@@ -225,15 +247,6 @@ func move_player_to_button(b: ActionButton3D) -> void:
 
 	var base_y: float = g.player.global_position.y
 	var base_z: float = g.player.global_position.z
-
-	var path: Array[ActionButton3D.Lane] = []
-	path.append(start_lane)
-
-	if abs(int(target_lane) - int(start_lane)) == 2:
-		path.append(ActionButton3D.Lane.CENTER)
-
-	path.append(target_lane)
-
 	var hop_height: float = 0.85
 	var leg_time: float = 0.35
 
@@ -242,36 +255,38 @@ func move_player_to_button(b: ActionButton3D) -> void:
 	g._move_tween.set_ease(Tween.EASE_OUT)
 
 	for i in range(1, path.size()):
+		var from_lane: ActionButton3D.Lane = path[i - 1]
 		var leg_lane: ActionButton3D.Lane = path[i]
-		var leg_x: float = _get_lane_world_x(leg_lane)
+		var from_pos: Vector3 = Vector3(_get_lane_world_x(from_lane), base_y, base_z)
+		var to_pos: Vector3 = Vector3(_get_lane_world_x(leg_lane), base_y, base_z)
 
-		var leg_pos := Vector3(leg_x, base_y, base_z)
-		g._move_tween.tween_property(g.player, "global_position", leg_pos, leg_time)
+		g._move_tween.tween_method(func(t: float) -> void:
+			if not is_instance_valid(g.player):
+				return
 
-		var yseq: Tween = g._move_tween.parallel()
-		yseq.tween_method(func(t: float) -> void:
-			var y := base_y + hop_height * 4.0 * t * (1.0 - t)
-			g.player.global_position.y = y
+			var p: Vector3 = from_pos.lerp(to_pos, t)
+			p.y = base_y + hop_height * 4.0 * t * (1.0 - t)
+			p.z = base_z
+			g.player.global_position = p
 		, 0.0, 1.0, leg_time)
 
 		g._move_tween.tween_callback(func() -> void:
-			var p := g.player.global_position
-			p.y = base_y
-			p.z = base_z
-			g.player.global_position = p
+			if not is_instance_valid(g.player):
+				return
 
 			g._player_lane = leg_lane
-			update_move_buttons()
+			g.player.global_position = Vector3(_get_lane_world_x(leg_lane), base_y, base_z)
 		)
 
 	g._move_tween.finished.connect(func() -> void:
-		var p := g.player.global_position
-		p.y = base_y
-		p.z = base_z
-		g.player.global_position = p
+		if not is_instance_valid(g.player):
+			return
 
-		g._player_lane = lane_from_player_x()
-		update_move_buttons()
+		g._player_lane = target_lane
+		g.player.global_position = Vector3(_get_lane_world_x(target_lane), base_y, base_z)
+		call_deferred("update_move_buttons")
+
+		print("[MOVE] finished lane=", int(g._player_lane), " pos=", g.player.global_position)
 	)
 
 func update_shoot_selection_visuals(selected: ActionButton3D) -> void:

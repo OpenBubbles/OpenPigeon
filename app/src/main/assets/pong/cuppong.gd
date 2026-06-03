@@ -57,6 +57,7 @@ var throws: Array[Dictionary] = []
 var redemption: bool = false
 var played_replay: bool = false
 var lost: bool = false
+var _stabilized_mats: Dictionary = {}
 
 var drag_start_pos = Vector2.ZERO
 var drag_start_time: float = 0.0
@@ -92,10 +93,10 @@ var mode: String
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
-	
+
 func _get_dev_data() -> String:
 	return '{"isYourTurn":true,"skip_score1":"0","skip_score2":"0","player":"2","score1":"0","score2":"0","num":"1","game":"beer","mode":"h","seed":"-472793889","seed2":"0"}'
-	
+
 func _get_settings_avatar_display() -> Control:
 	return player_avatar_display
 
@@ -114,62 +115,33 @@ func _on_game_ready() -> void:
 	ball = get_node("ball")
 
 	if _debug_perf:
-		_create_debug_overlay()
+		var parent: Node = get_tree().root
+		if is_instance_valid(main_overlay):
+			parent = main_overlay
 
-	_enforce_mobile_lighting_settings()
-	
-func _set_game_data(new_replay: String):
-	var parsed = JSON.parse_string(new_replay)
-	print("NEW REPLAY: " + str(parsed))
-	
-	is_my_turn = parsed["isYourTurn"]
-	player = int(parsed["player"])
-	replay_string = parsed["replay"] if "replay" in parsed else ""
-	mode = parsed["mode"]
-	_current_seed = int(parsed.get("seed", "0"))
-	_apply_mode_board_layout()
-	winner = parsed["winner"] if "winner" in parsed else ""
-	if winner != "":
-		game_over = check_winner()
-	var opponent_avatar_key = ""
-	var p1_id: String = parsed.get("player1", "")
-	var p2_id: String = parsed.get("player2", "")
-	spectator_mode = my_uuid != "" and p1_id != "" and p2_id != "" and my_uuid != p1_id and my_uuid != p2_id
-	if is_instance_valid(spectator_label):
-		spectator_label.visible = spectator_mode
-	if is_my_turn and not spectator_mode:
-		player = 2 if player == 1 else 1
-	elif spectator_mode: player = 1
-		
-	if player == 1 or spectator_mode:
-		opponent_avatar_key = "avatar2"
-	else:
-		opponent_avatar_key = "avatar1"
-		
-	if opponent_avatar_key != "" and parsed.has(opponent_avatar_key):
-		var avatar_string = parsed[opponent_avatar_key]
-		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
-		if is_instance_valid(opp_avatar_display):
-			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
-	if spectator_mode and parsed.has("avatar1"):
-		var p1_data = GameUtils._parse_avatar_string(parsed["avatar1"])
-		if is_instance_valid(player_avatar_display):
-			player_avatar_display.call_deferred("update_avatar_from_data", p1_data)
-		
-		
-	played_replay = false
-	redemption = false
-	num_balls = 2
-	throws = []
-		
-	_process_game_state()
-	print("Game Over: ", game_over, " Winner: ", winner )
-	if not is_my_turn and not game_over and not spectator_mode:
-		start_waiting_animation()
-	else:
-		stop_waiting_animation()
-	
-func _enforce_mobile_lighting_settings() -> void:
+		var label := Label.new()
+		label.name = "PerfOverlay"
+		label.text = "Perf..."
+		label.anchor_left = 0.0
+		label.anchor_top = 0.0
+		label.anchor_right = 0.0
+		label.anchor_bottom = 0.0
+		label.offset_left = 8.0
+		label.offset_top = 8.0
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.z_index = 999
+
+		if parent is Viewport:
+			var wrapper := Control.new()
+			wrapper.name = "PerfOverlayRoot"
+			wrapper.set_anchors_preset(Control.PRESET_FULL_RECT)
+			parent.add_child(wrapper)
+			wrapper.add_child(label)
+		else:
+			parent.add_child(label)
+
+		_debug_label = label
+
 	if is_instance_valid(camera):
 		camera.near = 0.1
 		camera.far = 20.0
@@ -214,7 +186,90 @@ func _enforce_mobile_lighting_settings() -> void:
 
 	Engine.physics_jitter_fix = 0.5
 
-var _stabilized_mats: Dictionary = {}
+func _set_game_data(new_replay: String):
+	var parsed = JSON.parse_string(new_replay)
+	print("NEW REPLAY: " + str(parsed))
+	
+	is_my_turn = parsed["isYourTurn"]
+	player = int(parsed["player"])
+	replay_string = parsed["replay"] if "replay" in parsed else ""
+	mode = parsed["mode"]
+	_current_seed = int(parsed.get("seed", "0"))
+	
+	if mode == "h":
+		var seed_value: int = _current_seed
+		var positions: Array = _generate_random_cup_positions(seed_value)
+
+		print("=== Random cup positions for seed %d ===" % seed_value)
+		var min_x := 999.0
+		var max_x := -999.0
+		var min_z := 999.0
+		var max_z := -999.0
+
+		for i in range(positions.size()):
+			var p: Vector3 = positions[i]
+			print("  [%d] x=%.4f y=%.4f z=%.4f" % [i, p.x, p.y, p.z])
+			min_x = min(min_x, p.x)
+			max_x = max(max_x, p.x)
+			min_z = min(min_z, p.z)
+			max_z = max(max_z, p.z)
+
+		print("  bounds: x=[%.3f, %.3f] z=[%.3f, %.3f]" % [min_x, max_x, min_z, max_z])
+		print("  normal-mode bounds: x=[-0.142, 0.142] z=[-2.207, -1.967]")
+
+		my_cups.mirror_x = false
+		replay_cups.mirror_x = true
+		my_cups.apply_random_positions(positions)
+		replay_cups.apply_random_positions(positions)
+
+		my_cups.set_cups_in_play(my_cups.cups_in_play)
+		replay_cups.set_cups_in_play(replay_cups.cups_in_play)
+	else:
+		my_cups.random_positions.clear()
+		replay_cups.random_positions.clear()
+		my_cups.arrangeCups()
+		replay_cups.arrangeCups()
+		
+	winner = parsed["winner"] if "winner" in parsed else ""
+	if winner != "":
+		game_over = check_winner()
+	var opponent_avatar_key = ""
+	var p1_id: String = parsed.get("player1", "")
+	var p2_id: String = parsed.get("player2", "")
+	spectator_mode = my_uuid != "" and p1_id != "" and p2_id != "" and my_uuid != p1_id and my_uuid != p2_id
+	if is_instance_valid(spectator_label):
+		spectator_label.visible = spectator_mode
+	if is_my_turn and not spectator_mode:
+		player = 2 if player == 1 else 1
+	elif spectator_mode: player = 1
+		
+	if player == 1 or spectator_mode:
+		opponent_avatar_key = "avatar2"
+	else:
+		opponent_avatar_key = "avatar1"
+		
+	if opponent_avatar_key != "" and parsed.has(opponent_avatar_key):
+		var avatar_string = parsed[opponent_avatar_key]
+		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
+		if is_instance_valid(opp_avatar_display):
+			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+	if spectator_mode and parsed.has("avatar1"):
+		var p1_data = GameUtils._parse_avatar_string(parsed["avatar1"])
+		if is_instance_valid(player_avatar_display):
+			player_avatar_display.call_deferred("update_avatar_from_data", p1_data)
+		
+		
+	played_replay = false
+	redemption = false
+	num_balls = 2
+	throws = []
+		
+	_process_game_state()
+	print("Game Over: ", game_over, " Winner: ", winner )
+	if not is_my_turn and not game_over and not spectator_mode:
+		start_waiting_animation()
+	else:
+		stop_waiting_animation()
 
 func _stabilize_geometry(root: Node) -> void:
 	for child in root.get_children():
@@ -244,44 +299,6 @@ func _stabilize_geometry(root: Node) -> void:
 					mesh.surface_set_material(s, new_mat)
 		_stabilize_geometry(child)
 
-
-func _apply_static_geometry_hints(root: Node) -> void:
-	for child in root.get_children():
-		if child is GeometryInstance3D:
-			var gi: GeometryInstance3D = child
-			gi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-		_apply_static_geometry_hints(child)
-		
-func _create_debug_overlay() -> void:
-	if not _debug_perf:
-		return
-	
-	var parent: Node = get_tree().root
-	if is_instance_valid(main_overlay):
-		parent = main_overlay
-	var label := Label.new()
-	label.name = "PerfOverlay"
-	label.text = "Perf..."
-	label.anchor_left = 0.0
-	label.anchor_top = 0.0
-	label.anchor_right = 0.0
-	label.anchor_bottom = 0.0
-	label.offset_left = 8.0
-	label.offset_top = 8.0
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.z_index = 999
-	
-	if parent is Viewport:
-		var wrapper := Control.new()
-		wrapper.name = "PerfOverlayRoot"
-		wrapper.set_anchors_preset(Control.PRESET_FULL_RECT)
-		parent.add_child(wrapper)
-		wrapper.add_child(label)
-	else:
-		parent.add_child(label)
-	
-	_debug_label = label
-	
 func _process(delta: float) -> void:
 	if not _debug_perf or not is_instance_valid(_debug_label):
 		return
@@ -356,7 +373,16 @@ func check_winner() -> bool:
 	var result := String(parts[1])
 
 	if result == "0":
-		_handle_game_over_draw()
+		game_over = true
+		num_balls = 0
+		ball_ready = false
+		current_ball = null
+		stop_waiting_animation()
+
+		if is_instance_valid(winner_label):
+			winner_label.text = "DRAW!"
+			winner_label.visible = true
+			winner_label.add_theme_color_override("font_color", Color(1, 1, 1))
 	elif sender_uuid == my_uuid:
 		if result == "1":
 			_handle_game_over_i_won()
@@ -369,22 +395,7 @@ func check_winner() -> bool:
 			_handle_game_over_i_won()
 
 	return true
-	
-func _handle_game_over_draw() -> void:
-	if game_over:
-		return
 
-	game_over = true
-	num_balls = 0
-	ball_ready = false
-	current_ball = null
-	stop_waiting_animation()
-
-	if is_instance_valid(winner_label):
-		winner_label.text = "DRAW!"
-		winner_label.visible = true
-		winner_label.add_theme_color_override("font_color", Color(1, 1, 1))
-	
 func _handle_game_over_i_lost() -> void:
 	if game_over:
 		return
@@ -403,7 +414,7 @@ func _handle_game_over_i_lost() -> void:
 
 	if is_instance_valid(opp_avatar_display):
 		GameUtils._show_win_burst(opp_avatar_display)
-		
+
 func _handle_game_over_i_won() -> void:
 	if game_over:
 		return
@@ -421,7 +432,7 @@ func _handle_game_over_i_won() -> void:
 
 	if is_instance_valid(player_avatar_display):
 		GameUtils._show_win_burst(player_avatar_display)
-		
+
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
 		print("Warning: sent_label is not valid for play_sent_animation.")
@@ -452,12 +463,13 @@ func play_sent_animation() -> void:
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
 
-		if not game_over and not spectator_mode and not is_my_turn:
+		if not game_over and not spectator_mode:
+			is_my_turn = false
 			start_waiting_animation()
 		else:
 			stop_waiting_animation()
 	)
-	
+
 func _generate_random_cup_positions(seed_value: int) -> Array:
 	var rng := Drand48.new()
 	rng.srand48(seed_value)
@@ -492,123 +504,152 @@ func _generate_random_cup_positions(seed_value: int) -> Array:
 			positions.append(Vector3(x, Y_FIXED, z))
 
 	return positions
-	
-func _apply_mode_board_layout() -> void:
-	if mode == "h":
-		var seed_value: int = _current_seed
-		var positions: Array = _generate_random_cup_positions(seed_value)
-		
-		print("=== Random cup positions for seed %d ===" % seed_value)
-		var min_x := 999.0; var max_x := -999.0
-		var min_z := 999.0; var max_z := -999.0
-		for i in range(positions.size()):
-			var p: Vector3 = positions[i]
-			print("  [%d] x=%.4f y=%.4f z=%.4f" % [i, p.x, p.y, p.z])
-			min_x = min(min_x, p.x); max_x = max(max_x, p.x)
-			min_z = min(min_z, p.z); max_z = max(max_z, p.z)
-		print("  bounds: x=[%.3f, %.3f] z=[%.3f, %.3f]" % [min_x, max_x, min_z, max_z])
-		print("  normal-mode bounds: x=[-0.142, 0.142] z=[-2.207, -1.967]")
 
-		my_cups.mirror_x = false
-		replay_cups.mirror_x = true
-		my_cups.apply_random_positions(positions)
-		replay_cups.apply_random_positions(positions)
-
-		my_cups.set_cups_in_play(my_cups.cups_in_play)
-		replay_cups.set_cups_in_play(replay_cups.cups_in_play)
-	else:
-		my_cups.random_positions.clear()
-		replay_cups.random_positions.clear()
-		my_cups.arrangeCups()
-		replay_cups.arrangeCups()
-		
 func _process_game_state():
 	if played_replay == false:
 		if not replay_string.is_empty():
-			var parsed_replay = parseReplay(replay_string)
-			set_boards(parsed_replay)
+			var parsed_replay := {"moves": []}
+
+			for elem in replay_string.split("|"):
+				var spl = elem.split(":")
+				if spl.size() < 2:
+					continue
+
+				if spl[0] == "board":
+					if "p1_board" not in parsed_replay:
+						var boards = spl[1].split("&")
+						var p1_board := []
+						var p2_board := []
+
+						if boards.size() > 0 and len(boards[0]) > 0:
+							for cup_id in boards[0].split(","):
+								p1_board.append(int(cup_id))
+
+						if boards.size() > 1 and len(boards[1]) > 0:
+							for cup_id in boards[1].split(","):
+								p2_board.append(int(cup_id))
+
+						parsed_replay["p1_board"] = p1_board
+						parsed_replay["p2_board"] = p2_board
+					else:
+						start_replay_boards = spl[1]
+
+				if spl[0] == "move":
+					var move = []
+					var move_spl = spl[1].split("&")[0]
+
+					for idx in range(0, len(move_spl), 6):
+						if idx + 5 < len(move_spl):
+							var x = convback(move_spl[idx] + move_spl[idx + 1]) * 6.0 - 3.0
+							var y = convback(move_spl[idx + 2] + move_spl[idx + 3]) * 4.0 - 2.0
+							var z = convback(move_spl[idx + 4] + move_spl[idx + 5]) * 8.0 - 4.0
+							move.append(Vector3(x, y, z))
+
+					if len(move_spl) % 6 > 0:
+						move.append(int(move_spl[-1]))
+
+					parsed_replay["moves"].append(move)
+
+			var my_board: Array
+			var other_board: Array
+
+			if player == 1:
+				my_board = parsed_replay["p1_board"]
+				other_board = parsed_replay["p2_board"]
+			else:
+				my_board = parsed_replay["p2_board"]
+				other_board = parsed_replay["p1_board"]
+
+			if mode == "h":
+				var seed_value: int = int(parsed_replay.get("seed", 0))
+				if seed_value == 0 and _current_seed != 0:
+					seed_value = _current_seed
+
+				var positions: Array = _generate_random_cup_positions(seed_value)
+				my_cups.mirror_x = false
+				replay_cups.mirror_x = true
+				my_cups.apply_random_positions(positions)
+				replay_cups.apply_random_positions(positions)
+			else:
+				my_cups.random_positions.clear()
+				replay_cups.random_positions.clear()
+
+			my_cups.prev_cups = my_board
+			my_cups.set_cups_in_play(my_board)
+			replay_cups.set_cups_in_play(other_board)
+
 			if is_my_turn:
 				stop_waiting_animation()
 				playReplay(parsed_replay)
 				return
 		else:
-			if check_winner(): return
+			if check_winner():
+				return
 			if is_my_turn:
 				stop_waiting_animation()
 				camera.position = Vector3(0.0, 1.147, -1.73)
 	elif is_my_turn:
-		if check_winner(): return
+		if check_winner():
+			return
+
 		if len(replay_cups.cups_in_play) == 0:
-			_show_redemption_label()
+			if is_instance_valid(redemption_label):
+				if redemption_tween and redemption_tween.is_running():
+					redemption_tween.kill()
+
+				redemption_label.visible = true
+				redemption_label.modulate.a = 1.0
+
+				redemption_tween = create_tween().set_parallel(false)
+				redemption_tween.tween_interval(2.0)
+				redemption_tween.tween_property(redemption_label, "modulate:a", 0.0, 0.5)
+				redemption_tween.tween_callback(func():
+					if is_instance_valid(redemption_label):
+						redemption_label.visible = false
+						redemption_label.modulate.a = 1.0
+				)
+
 			redemption = true
 
-	if check_winner(): return
-	
+	if check_winner():
+		return
+
 	if is_my_turn:
 		if current_ball == null:
 			current_ball = spawn_ball()
-		
-		if throws.size() == 0 and num_balls > 0 and preview_ball == null:
-			preview_ball = spawn_preview_ball()
-		
-func _clear_active_balls() -> void:
-	for child in get_children():
-		if child is PongBall and child != ball:
-			child.queue_free()
-	
-	current_ball = null
-	ball_ready = false
-	dragging = false
-		
-func _show_balls_back_label() -> void:
-	if not is_instance_valid(balls_back_label):
-		return
-	
-	if balls_back_tween and balls_back_tween.is_running():
-		balls_back_tween.kill()
-	
-	balls_back_label.visible = true
-	balls_back_label.modulate.a = 1.0
-	
-	balls_back_tween = create_tween().set_parallel(false)
-	
-	balls_back_tween.tween_interval(2.0)
-	
-	balls_back_tween.tween_property(balls_back_label, "modulate:a", 0.0, 0.5)
-	
-	balls_back_tween.tween_callback(func():
-		if is_instance_valid(balls_back_label):
-			balls_back_label.visible = false
-			balls_back_label.modulate.a = 1.0
-	)
 
-func _show_redemption_label() -> void:
-	if not is_instance_valid(redemption_label):
-		return
-	
-	if redemption_tween and redemption_tween.is_running():
-		redemption_tween.kill()
-	
-	redemption_label.visible = true
-	redemption_label.modulate.a = 1.0
-	
-	redemption_tween = create_tween().set_parallel(false)
-	
-	redemption_tween.tween_interval(2.0)
-	redemption_tween.tween_property(redemption_label, "modulate:a", 0.0, 0.5)
-	
-	redemption_tween.tween_callback(func():
-		if is_instance_valid(redemption_label):
-			redemption_label.visible = false
-			redemption_label.modulate.a = 1.0
-	)
+		if throws.size() == 0 and num_balls > 0 and preview_ball == null:
+			var new_ball: PongBall = ball.duplicate()
+			new_ball.position = player_ball_start_pos + second_ball_offset
+			new_ball.freeze = true
+			new_ball.is_mine = true
+			new_ball.collision_layer = 0
+			new_ball.collision_mask = 0
+
+			add_child(new_ball)
+			preview_ball = new_ball
 
 func throw_finished():
 	if len(throws) > 0 and len(throws) % 2 == 0:
 		if throws[-1]["cup"] > -1 and throws[-2]["cup"] > -1:
-			_show_balls_back_label()
+			if is_instance_valid(balls_back_label):
+				if balls_back_tween and balls_back_tween.is_running():
+					balls_back_tween.kill()
+
+				balls_back_label.visible = true
+				balls_back_label.modulate.a = 1.0
+
+				balls_back_tween = create_tween().set_parallel(false)
+				balls_back_tween.tween_interval(2.0)
+				balls_back_tween.tween_property(balls_back_label, "modulate:a", 0.0, 0.5)
+				balls_back_tween.tween_callback(func():
+					if is_instance_valid(balls_back_label):
+						balls_back_label.visible = false
+						balls_back_label.modulate.a = 1.0
+				)
+
 			num_balls = 2
-	
+
 	if redemption:
 		if throws[-1]["cup"] == -1:
 			lost = true
@@ -618,26 +659,26 @@ func throw_finished():
 			return
 		elif len(my_cups.cups_in_play) == 0:
 			if mode != "h":
-				my_cups.reset_cups([0,1,2])
-				replay_cups.reset_cups([0,1,2])
+				my_cups.reset_cups([0, 1, 2])
+				replay_cups.reset_cups([0, 1, 2])
 				overtime_label.popup()
 				await get_tree().create_timer(1.5).timeout
 				num_balls = 0
-	
+
 	if num_balls > 0 and not game_over:
 		if preview_ball != null and is_instance_valid(preview_ball):
 			var b := preview_ball
 			preview_ball = null
-			
+
 			b.freeze = true
 			b.collision_layer = 0
 			b.collision_mask = 0
-			
+
 			var tween := create_tween()
 			tween.tween_property(
 				b, "position", player_ball_start_pos, 0.35
 			).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-			
+
 			tween.tween_callback(func():
 				if is_instance_valid(b):
 					b.freeze = false
@@ -653,38 +694,13 @@ func throw_finished():
 	elif not game_over:
 		var outgoing := export_replay()
 		send_game_data(outgoing)
+		is_my_turn = false
+		ball_ready = false
+		current_ball = null
+		dragging = false
+
 		if not game_over:
 			play_sent_animation()
-
-func set_boards(parsed_replay: Dictionary):
-	var my_board: Array
-	var other_board: Array
-	if player == 1:
-		my_board = parsed_replay["p1_board"]
-		other_board = parsed_replay["p2_board"]
-	elif player == 2:
-		my_board = parsed_replay["p2_board"]
-		other_board = parsed_replay["p1_board"]
-
-	# Random mode:
-	if mode == "h":
-		var seed_value: int = int(parsed_replay.get("seed", 0))
-		# Fall back to the default seed from _set_game_data if needed
-		if seed_value == 0 and _current_seed != 0:
-			seed_value = _current_seed
-		var positions: Array = _generate_random_cup_positions(seed_value)
-		my_cups.mirror_x = false
-		replay_cups.mirror_x = true
-		my_cups.apply_random_positions(positions)
-		replay_cups.apply_random_positions(positions)
-	else:
-		# Normal mode
-		my_cups.random_positions.clear()
-		replay_cups.random_positions.clear()
-
-	my_cups.prev_cups = my_board
-	my_cups.set_cups_in_play(my_board)
-	replay_cups.set_cups_in_play(other_board)
 
 func export_board(exp_player: int):
 	var board: Array
@@ -697,31 +713,37 @@ func export_board(exp_player: int):
 	for cup_idx in board:
 		result += str(cup_idx)+","
 	return result.substr(0, len(result)-1)
-	
+
 func export_replay() -> String:
-	var replay_str = str("board:",start_replay_boards,"|")
+	var replay_str = str("board:", start_replay_boards, "|")
+
 	for move in throws:
-		replay_str += "move:"+convert_replay(move["poses"])
+		var converted := ""
+
+		for pos in move["poses"]:
+			converted += conv(((-pos.x) + 3.0) / 6.0)
+			converted += conv((pos.y + 2.0) * 0.25)
+			converted += conv((((2.0 * -1.0 - pos.z) + 0.1) + 4.0) * 0.125)
+
+		replay_str += "move:" + converted
+
 		if move["cup"] > -1:
 			replay_str += str(move["cup"])
+
 		replay_str += "&24|"
-	replay_str += str("board:",export_board(1),"&",export_board(2))
+
+	replay_str += str("board:", export_board(1), "&", export_board(2))
+
 	var avatar_key := ("avatar1" if player == 1 else "avatar2")
 	var export_data = {"replay": replay_str}
+
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		export_data[avatar_key] = player_avatar_display.get_avatar_data_string()
+
 	if lost:
 		export_data["winner"] = my_uuid + "|-1"
 
 	return JSON.stringify(export_data)
-
-func convert_replay(poses: Array[Vector3]):
-	var result: String = ""
-	for pos in poses:
-		result += conv(((-pos.x) + 3.0) / 6.0)
-		result += conv((pos.y + 2.0) * 0.25)
-		result += conv((((2.0 * -1.0 - pos.z) + 0.1) + 4.0) * 0.125)
-	return result
 
 func conv(input_float: float) -> String:
 	var max_encoded_integer_value = CHARMAP_LEN * CHARMAP_LEN - 1
@@ -735,12 +757,12 @@ func conv(input_float: float) -> String:
 	var char1: String = CHARMAP[first_idx]
 	var char2: String = CHARMAP[second_idx]
 	return char1 + char2
-	
+
 func convback(enc: String) -> float:
 	var first_idx = CHARMAP.find(enc[0])
 	var second_idx = CHARMAP.find(enc[1])
 	return float(second_idx + first_idx * CHARMAP_LEN) / float(CHARMAP_LEN * CHARMAP_LEN - 1)
-	
+
 func spawn_ball(is_replay: bool = false) -> RigidBody3D:
 	var new_ball: PongBall = ball.duplicate()
 	if is_replay:
@@ -755,43 +777,7 @@ func spawn_ball(is_replay: bool = false) -> RigidBody3D:
 	add_child(new_ball)
 	current_ball = new_ball
 	return new_ball
-	
-func spawn_preview_ball() -> PongBall:
-	var new_ball: PongBall = ball.duplicate()
-	new_ball.position = player_ball_start_pos + second_ball_offset
-	new_ball.freeze = true
-	new_ball.is_mine = true
-	new_ball.collision_layer = 0
-	new_ball.collision_mask = 0
-	
-	add_child(new_ball)
-	return new_ball
-	
-func parseReplay(replay: String) -> Dictionary:
-	var result = {"moves": []}
-	for elem in replay.split("|"):
-		var spl = elem.split(":")
-		if spl[0] == "board":
-			if "p1_board" not in result:
-				var boards = spl[1].split("&")
-				result["p1_board"] = convert_arr(boards[0])
-				result["p2_board"] = convert_arr(boards[1])
-			else:
-				start_replay_boards = spl[1]
-		if spl[0] == "move":
-			var move = []
-			var move_spl = spl[1].split("&")[0]
-			for idx in range(0, len(move_spl), 6):
-				if idx+5 < len(move_spl):
-					var x = convback(move_spl[idx] + move_spl[idx+1]) * 6.0 - 3.0
-					var y = convback(move_spl[idx+2] + move_spl[idx+3]) * 4.0 - 2.0
-					var z = convback(move_spl[idx+4] + move_spl[idx+5]) * 8.0 - 4.0
-					move.append(Vector3(x, y, z))
-			if len(move_spl) % 6 > 0:
-				move.append(int(move_spl[-1]))
-			result["moves"].append(move)
-	return result
-	
+
 func playReplay(parsed: Dictionary):
 	camera.position = Vector3(0.0, 1.147, -3.486)
 	
@@ -843,36 +829,36 @@ func playReplay(parsed: Dictionary):
 
 		var is_final_move: bool = (idx + 1 == len(moves))
 		tween.finished.connect(_on_replay_finished.bind(new_ball, move, is_final_move))
-		
+
 func _on_replay_finished(new_ball: PongBall, move: Array, final_move: bool):
 	if move[-1] is int:
 		var hit_cup = move[-1] + 1
 		print("replay hit cup ", hit_cup, "!!!")
 		replay_cups.remove_cup(hit_cup)
+
 	new_ball.queue_free()
-	
+
 	if final_move:
-		_clear_active_balls()
-		
+		for child in get_children():
+			if child is PongBall and child != ball:
+				child.queue_free()
+
+		current_ball = null
+		ball_ready = false
+		dragging = false
+
 		await get_tree().create_timer(1).timeout
-		
+
 		var cam_tween = create_tween()
 		cam_tween.tween_property(
 			camera, "position", Vector3(0.0, 1.147, -1.73), 1.0
 		).from(camera.position).set_trans(Tween.TRANS_SINE)
 		cam_tween.play()
-		
+
 		await cam_tween.finished
-		
+
 		played_replay = true
 		_process_game_state()
-		
-func convert_arr(csv: String):
-	var result = []
-	if len(csv) > 0:
-		for elem in csv.split(','):
-			result.append(int(elem))
-	return result
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _settings_open or spectator_mode or not ball_ready or current_ball == null:
@@ -886,12 +872,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif dragging:
 			dragging = false
 			_ios_throw_release(mb.position)
-			
-func _screen_drag_to_world_delta(screen_start: Vector2, screen_end: Vector2) -> Vector2:
-	var sdx: float = screen_end.x - screen_start.x
-	var sdy: float = screen_end.y - screen_start.y
-	return Vector2(-sdx * ios_screen_to_world_scale, -sdy * ios_screen_to_world_scale)
-	
+
 func _ios_throw_release(release_screen_pos: Vector2) -> void:
 	if current_ball == null:
 		return
@@ -900,32 +881,47 @@ func _ios_throw_release(release_screen_pos: Vector2) -> void:
 	var dx_world: float = -screen_delta.x * ios_screen_to_world_scale
 	var dz_world: float = -screen_delta.y * ios_screen_to_world_scale
 	var drag_len: float = sqrt(dx_world * dx_world + dz_world * dz_world)
+
 	if drag_len < IOS_DRAG_DEAD_DIST:
-		ball_ready = true   # let the player try again
+		ball_ready = true
 		return
 
-	# Forward force from drag distance
 	var scaled_dx: float = dx_world * IOS_H_SCALE
-	var dist: float = sqrt(scaled_dx * scaled_dx + dz_world * dz_world) * 0.9   # ratio=1.0 case
+	var dist: float = sqrt(scaled_dx * scaled_dx + dz_world * dz_world) * 0.9
 	var forward_force: float = max(dist * IOS_POWER_SLOPE, IOS_POWER_FLOOR)
 	var abs_force: float = abs(forward_force)
 
-	# Preaim X/Z targets
 	var angle_factor: float = (dx_world / drag_len) if drag_len > 1e-6 else 0.0
 	var fx_target: float = abs_force / IOS_X_NORM * IOS_X_GAIN * angle_factor
 	var ios_fz_target: float = IOS_Z_BIAS + (abs_force / IOS_Z_NORM) * IOS_Z_GAIN
 	var forward_z_target: float = ball_popo.z + (abs(ios_fz_target) - abs(IOS_Z_BIAS))
 
-	# Aim assist
-	var target_cup: Vector3 = _ios_find_nearest_cup_xz(current_ball.global_position)
+	var probe: Vector3 = current_ball.global_position + Vector3(0.0, IOS_BALL_Y_AIM_OFFSET, 0.0)
+	var target_cup: Vector3 = current_ball.global_position + Vector3(0.0, 0.0, -2.0)
+	var best_d: float = INF
+
+	if is_instance_valid(my_cups):
+		for cup in my_cups.get_children():
+			if cup == null or not (cup is Node3D):
+				continue
+			if cup.name == &"cupremoved" or not (cup as Node3D).visible:
+				continue
+
+			var p: Vector3 = (cup as Node3D).global_position
+			var d: float = probe.distance_to(p)
+
+			if d < best_d:
+				best_d = d
+				target_cup = p
+
 	var final_x: float = lerp(fx_target, target_cup.x, ios_aim_assist)
 	var final_z: float = lerp(forward_z_target, target_cup.z, ios_aim_assist)
 
-	# Long vs short arc branch
 	var ball_pos: Vector3 = current_ball.global_position
 	var fx_impulse: float
 	var fy_impulse: float
 	var fz_impulse: float
+
 	if ios_fz_target <= IOS_Z_SPLIT:
 		fx_impulse = (final_x - ball_pos.x) * IOS_LONG_GAIN
 		fy_impulse = IOS_LONG_Y
@@ -935,31 +931,28 @@ func _ios_throw_release(release_screen_pos: Vector2) -> void:
 		fy_impulse = 4.0 * ((abs(final_z) - 1.05) / -7.2 + 1.0) + IOS_SHORT_Y_OFFSET
 		fz_impulse = (final_z - ball_pos.z) * IOS_SHORT_GAIN
 
-	# Fire
 	var thrown_ball: PongBall = current_ball
 	thrown_ball.freeze = false
 	thrown_ball.apply_impulse(Vector3(fx_impulse, fy_impulse, fz_impulse))
 	thrown_ball.thrown = true
 	ball_ready = false
 	current_ball = null
-	_watch_ios_ball_until_finished(thrown_ball)
-	
-func _watch_ios_ball_until_finished(b: PongBall) -> void:
+
 	var min_wait_time: float = 1.0
 	var max_wait_time: float = 5.0
 	var still_time: float = 0.0
 	var elapsed: float = 0.0
 
-	while is_instance_valid(b):
+	while is_instance_valid(thrown_ball):
 		await get_tree().create_timer(0.1).timeout
 		elapsed += 0.1
 
 		if elapsed < min_wait_time:
 			continue
 
-		var speed := b.linear_velocity.length()
+		var speed := thrown_ball.linear_velocity.length()
 		var too_slow := speed < 0.08
-		var out_of_play := b.global_position.y < -1.2 or b.global_position.z > 0.75 or b.global_position.z < -2.6
+		var out_of_play := thrown_ball.global_position.y < -1.2 or thrown_ball.global_position.z > 0.75 or thrown_ball.global_position.z < -2.6
 
 		if too_slow:
 			still_time += 0.1
@@ -967,27 +960,8 @@ func _watch_ios_ball_until_finished(b: PongBall) -> void:
 			still_time = 0.0
 
 		if still_time >= 0.4 or out_of_play or elapsed >= max_wait_time:
-			if is_instance_valid(b):
-				b.remove()
+			if is_instance_valid(thrown_ball):
+				thrown_ball.remove()
 			else:
 				throw_finished()
 			return
-
-func _ios_find_nearest_cup_xz(ball_pos: Vector3) -> Vector3:
-	var probe: Vector3 = ball_pos + Vector3(0.0, IOS_BALL_Y_AIM_OFFSET, 0.0)
-	var best: Vector3 = ball_pos + Vector3(0.0, 0.0, -2.0)
-	var best_d: float = INF
-	if not is_instance_valid(my_cups):
-		return best
-	for cup in my_cups.get_children():
-		if cup == null or not (cup is Node3D):
-			continue
-		if cup.name == &"cupremoved" or not (cup as Node3D).visible:
-			continue
-		var p: Vector3 = (cup as Node3D).global_position
-		var d: float = probe.distance_to(p)
-		if d < best_d:
-			best_d = d
-			best = p
-	return best
-	
