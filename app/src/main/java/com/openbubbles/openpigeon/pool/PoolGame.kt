@@ -69,6 +69,13 @@ open class PoolGame : Game {
             game == "pool3" ->
                 R.drawable.pool_plus_normal_preview
 
+            // Added checks for 9 Ball previews based on the game string
+            game == "pool2" && mode == "h" ->
+                R.drawable.pool_hard_preview_9ball
+
+            game == "pool2" ->
+                R.drawable.pool_normal_preview_9ball
+
             mode == "h" ->
                 R.drawable.pool_hard_preview
 
@@ -149,13 +156,14 @@ class NineBallGame : PoolGame() {
         }
     }
 
+    // Updated the overridden gamePoster to use the 9 ball specific drawables
     override fun gamePoster(config: Map<String, String>?): Int {
         val mode = config?.get("mode") ?: if (difficulty == "Hard") "h" else "n"
 
         return if (mode == "h") {
-            R.drawable.pool_hard_preview
+            R.drawable.pool_hard_preview_9ball
         } else {
-            R.drawable.pool_normal_preview
+            R.drawable.pool_normal_preview_9ball
         }
     }
 

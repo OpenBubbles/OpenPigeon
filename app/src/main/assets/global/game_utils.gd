@@ -183,8 +183,8 @@ static func open_settings_popup(game: Node, media_plugin, settings_button: Butto
 	dim.color = Color(0, 0, 0, 0.5)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-	var popup := SETTINGS_POPUP_SCENE.instantiate()
-	var popup_script := popup as SettingsPopup
+	var popup_script: SettingsPopup = SETTINGS_POPUP_SCENE.instantiate() as SettingsPopup
+	var popup: Control = popup_script
 	var root := game.get_tree().root
 	root.add_child(dim)
 	root.add_child(popup)
@@ -193,25 +193,24 @@ static func open_settings_popup(game: Node, media_plugin, settings_button: Butto
 	root.move_child(dim, root.get_child_count() - 2)
 	popup_script.setup_popup(dim)
 
-	# Music row — common to every game.
+	# Music row, common to every game.
 	if media_plugin:
-		var row := HBoxContainer.new()
-		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var lbl := Label.new()
-		lbl.text = "Music"
-		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var toggle := CheckButton.new()
-		toggle.button_pressed = media_plugin.isMusicEnabled()
-		toggle.toggled.connect(func(enabled: bool) -> void:
+		var music_toggled := func(enabled: bool) -> void:
 			media_plugin.setMusicEnabled(enabled)
+
 			if enabled:
 				start_music(game, music_stream, media_plugin)
 			else:
 				stop_music(game)
+
+		var music_row: Control = popup_script.make_game_switch_card(
+			"Music",
+			"Background music",
+			media_plugin.isMusicEnabled(),
+			music_toggled
 		)
-		row.add_child(lbl)
-		row.add_child(toggle)
-		popup_script.custom_settings_container.add_child(row)
+
+		popup_script.add_custom_setting(music_row)
 
 	# Per-game extra rows / signal hookups.
 	if add_rows.is_valid():
@@ -235,13 +234,20 @@ static func open_settings_popup(game: Node, media_plugin, settings_button: Butto
 	await game.get_tree().process_frame
 
 	var vp := game.get_viewport().get_visible_rect().size
-	var w := vp.x * 0.95
-	var h: float = popup.get_combined_minimum_size().y
+	var combined_size: Vector2 = (popup as Control).get_combined_minimum_size()
+	var min_w: float = min(vp.x * 0.92, 420.0)
+	var max_w: float = min(vp.x * 0.92, 640.0)
+	var w: float = clampf(combined_size.x, min_w, max_w)
+	var h: float = combined_size.y
+
 	popup.size = Vector2(w, h)
-	popup.position = Vector2((vp.x - w) / 2, vp.y)
-	var target_y := vp.y - h - 50.0
+	popup.position = Vector2((vp.x - w) / 2.0, vp.y)
+
+	var target_y: float = max(20.0, vp.y - h - 50.0)
 	var slide := game.create_tween()
-	slide.tween_property(popup, "position", Vector2((vp.x - w) / 2, target_y), 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	slide.tween_property(popup, "position", Vector2((vp.x - w) / 2.0, target_y), 0.5)\
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+
 	popup.grab_focus()
 
 # ---------- Music ----------

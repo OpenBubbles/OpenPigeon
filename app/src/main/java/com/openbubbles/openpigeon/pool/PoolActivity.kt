@@ -2237,6 +2237,8 @@ class PoolActivity : AppCompatActivity() {
         renderer.bitmap = BitmapFactory.decodeResource(
             resources,
             when {
+                isNineBall && isHard -> R.drawable.pool_transparent_9ball_hard
+                isNineBall -> R.drawable.pool_transparent_9ball
                 isEightBallPlus && isHard -> R.drawable.pool_transparent_plus_hard
                 isEightBallPlus -> R.drawable.pool_transparent_plus
                 isHard -> R.drawable.pool_transparent_hard

@@ -57,12 +57,17 @@ func _ready():
 	self.custom_minimum_size.x = 400
 	if SettingsManager and SettingsManager.has_method("ensure_avatar_defaults"):
 		SettingsManager.ensure_avatar_defaults()
+
 	_setup_theme_button()
+	_style_theme_dropdown()
 	_add_dark_mode_toggle()
 	_setup_avatar_customizer()
 	
-	var saved_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
+	var saved_dark: bool = SettingsManager.get_setting("global", "dark_mode", false) == true
 	set_dark_mode(saved_dark, true)
+
+	if is_instance_valid(custom_settings_container):
+		custom_settings_container.add_theme_constant_override("separation", 8)
 
 func close_popup():
 	SettingsManager.avatar_changed.emit()
@@ -92,19 +97,23 @@ func _populate_theme_dropdown():
 		return
 	
 	theme_option_button.clear()
-	theme_option_button.item_selected.connect(_on_theme_option_button_item_selected)
 
-	#theme_option_button.add_item("Default", 0)
-	#theme_option_button.add_item("Default (Dark)", 1)
-	#theme_option_button.add_item("Penguin", 2)
-	#theme_option_button.add_item("Penguin (Dark)", 3)
+	if not theme_option_button.item_selected.is_connected(_on_theme_option_button_item_selected):
+		theme_option_button.item_selected.connect(_on_theme_option_button_item_selected)
+
+	var theme_names: Array[String] = [
+	]
+
+	for i in range(theme_names.size()):
+		theme_option_button.add_item(theme_names[i], i)
 	
-	var saved_theme = SettingsManager.get_setting("global", "theme", "Default")
+	var saved_theme: String = str(SettingsManager.get_setting("global", "theme", "Default"))
+
 	for i in range(theme_option_button.item_count):
 		if theme_option_button.get_item_text(i) == saved_theme:
 			theme_option_button.select(i)
 			break
-			
+
 func _populate_theme_previews():
 	for child in preview_box.get_children():
 		child.queue_free()
@@ -836,6 +845,211 @@ func _sync_theme_dropdown_from_dark(dark_on: bool):
 	SettingsManager.set_setting("global", "theme", desired)
 	settings_theme_selected.emit(desired)
 
+func _style_theme_dropdown() -> void:
+	if not is_instance_valid(theme_dropdown_container) or not is_instance_valid(theme_option_button):
+		return
+
+	if theme_dropdown_container is BoxContainer:
+		var box := theme_dropdown_container as BoxContainer
+		box.add_theme_constant_override("separation", 8)
+		box.alignment = BoxContainer.ALIGNMENT_CENTER
+
+	theme_dropdown_container.custom_minimum_size = Vector2(0, 86)
+	theme_dropdown_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var label := theme_dropdown_container.get_node_or_null("Label") as Label
+	if is_instance_valid(label):
+		label.text = "Theme"
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.add_theme_font_size_override("font_size", 15)
+
+	theme_option_button.custom_minimum_size = Vector2(300, 44)
+	theme_option_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	theme_option_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	theme_option_button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	theme_option_button.focus_mode = Control.FOCUS_NONE
+	theme_option_button.add_theme_font_size_override("font_size", 16)
+	theme_option_button.add_theme_color_override("font_color", Color.WHITE)
+	theme_option_button.add_theme_color_override("font_hover_color", Color.WHITE)
+	theme_option_button.add_theme_color_override("font_pressed_color", Color.WHITE)
+
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.12, 0.12, 0.14, 0.88)
+	normal.border_color = Color(1.0, 1.0, 1.0, 0.20)
+	normal.border_width_left = 1
+	normal.border_width_top = 1
+	normal.border_width_right = 1
+	normal.border_width_bottom = 1
+	normal.corner_radius_top_left = 14
+	normal.corner_radius_top_right = 14
+	normal.corner_radius_bottom_left = 14
+	normal.corner_radius_bottom_right = 14
+	normal.content_margin_left = 18
+	normal.content_margin_right = 18
+	normal.content_margin_top = 8
+	normal.content_margin_bottom = 8
+
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color(0.17, 0.17, 0.20, 0.94)
+	hover.border_color = Color(1.0, 1.0, 1.0, 0.34)
+
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = Color(0.09, 0.09, 0.11, 0.96)
+	pressed.border_color = Color(1.0, 1.0, 1.0, 0.42)
+
+	theme_option_button.add_theme_stylebox_override("normal", normal)
+	theme_option_button.add_theme_stylebox_override("hover", hover)
+	theme_option_button.add_theme_stylebox_override("pressed", pressed)
+	theme_option_button.add_theme_stylebox_override("focus", hover)
+
+	var popup_menu := theme_option_button.get_popup()
+	if popup_menu != null:
+		popup_menu.add_theme_font_size_override("font_size", 15)
+		popup_menu.add_theme_color_override("font_color", Color(0.95, 0.95, 0.95, 1.0))
+		popup_menu.add_theme_color_override("font_hover_color", Color.WHITE)
+
+		var popup_style := StyleBoxFlat.new()
+		popup_style.bg_color = Color(0.10, 0.10, 0.12, 0.98)
+		popup_style.border_color = Color(1.0, 1.0, 1.0, 0.18)
+		popup_style.border_width_left = 1
+		popup_style.border_width_top = 1
+		popup_style.border_width_right = 1
+		popup_style.border_width_bottom = 1
+		popup_style.corner_radius_top_left = 10
+		popup_style.corner_radius_top_right = 10
+		popup_style.corner_radius_bottom_left = 10
+		popup_style.corner_radius_bottom_right = 10
+		popup_menu.add_theme_stylebox_override("panel", popup_style)
+
+
+func make_game_switch_card(title: String, subtitle: String, initial_on: bool, on_toggled: Callable) -> Control:
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.custom_minimum_size = Vector2(0, 62)
+
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color(0.10, 0.10, 0.12, 0.54)
+	card_style.border_color = Color(1.0, 1.0, 1.0, 0.14)
+	card_style.border_width_left = 1
+	card_style.border_width_top = 1
+	card_style.border_width_right = 1
+	card_style.border_width_bottom = 1
+	card_style.corner_radius_top_left = 16
+	card_style.corner_radius_top_right = 16
+	card_style.corner_radius_bottom_left = 16
+	card_style.corner_radius_bottom_right = 16
+	card_style.content_margin_left = 12
+	card_style.content_margin_right = 12
+	card_style.content_margin_top = 8
+	card_style.content_margin_bottom = 8
+	card.add_theme_stylebox_override("panel", card_style)
+
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	card.add_child(row)
+
+	var copy := VBoxContainer.new()
+	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_child(copy)
+
+	var title_label := Label.new()
+	title_label.text = title
+	title_label.add_theme_font_size_override("font_size", 16)
+	title_label.add_theme_color_override("font_color", Color.WHITE)
+	copy.add_child(title_label)
+
+	var subtitle_label := Label.new()
+	subtitle_label.text = subtitle
+	subtitle_label.add_theme_font_size_override("font_size", 12)
+	subtitle_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.62))
+	copy.add_child(subtitle_label)
+
+	var switch := _make_game_switch_button()
+	switch.set_pressed_no_signal(initial_on)
+	switch.toggled.connect(func(enabled: bool) -> void:
+		_update_game_switch_visual(switch, enabled, false)
+		if on_toggled.is_valid():
+			on_toggled.call(enabled)
+	)
+
+	row.add_child(switch)
+	_update_game_switch_visual(switch, initial_on, true)
+
+	return card
+
+
+func _make_game_switch_button() -> Button:
+	var btn := Button.new()
+	btn.toggle_mode = true
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.custom_minimum_size = Vector2(66, 34)
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_END
+	btn.clip_contents = false
+
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(0.22, 0.22, 0.24, 1.0)
+	track.border_color = Color(1.0, 1.0, 1.0, 0.18)
+	track.border_width_left = 1
+	track.border_width_top = 1
+	track.border_width_right = 1
+	track.border_width_bottom = 1
+	track.corner_radius_top_left = 17
+	track.corner_radius_top_right = 17
+	track.corner_radius_bottom_left = 17
+	track.corner_radius_bottom_right = 17
+	btn.add_theme_stylebox_override("normal", track)
+	btn.add_theme_stylebox_override("hover", track)
+	btn.add_theme_stylebox_override("pressed", track)
+	btn.add_theme_stylebox_override("focus", track)
+
+	var knob := PanelContainer.new()
+	knob.name = "Knob"
+	knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	knob.custom_minimum_size = Vector2(28, 28)
+	knob.size = Vector2(28, 28)
+	knob.position = Vector2(3, 3)
+
+	var knob_style := StyleBoxFlat.new()
+	knob_style.bg_color = Color.WHITE
+	knob_style.corner_radius_top_left = 14
+	knob_style.corner_radius_top_right = 14
+	knob_style.corner_radius_bottom_left = 14
+	knob_style.corner_radius_bottom_right = 14
+	knob.add_theme_stylebox_override("panel", knob_style)
+	btn.add_child(knob)
+
+	return btn
+
+
+func _update_game_switch_visual(btn: Button, enabled: bool, instant: bool) -> void:
+	if not is_instance_valid(btn):
+		return
+
+	var track := btn.get_theme_stylebox("normal", "Button") as StyleBoxFlat
+	if track:
+		var next_track := track.duplicate() as StyleBoxFlat
+		next_track.bg_color = Color(0.40, 0.32, 0.86, 1.0) if enabled else Color(0.22, 0.22, 0.24, 1.0)
+		next_track.border_color = Color(1.0, 1.0, 1.0, 0.26) if enabled else Color(1.0, 1.0, 1.0, 0.18)
+		btn.add_theme_stylebox_override("normal", next_track)
+		btn.add_theme_stylebox_override("hover", next_track)
+		btn.add_theme_stylebox_override("pressed", next_track)
+		btn.add_theme_stylebox_override("focus", next_track)
+
+	var knob := btn.get_node_or_null("Knob") as PanelContainer
+	if not is_instance_valid(knob):
+		return
+
+	var target_x: float = btn.custom_minimum_size.x - knob.size.x - 3.0 if enabled else 3.0
+
+	if instant:
+		knob.position.x = target_x
+	else:
+		var tw := create_tween()
+		tw.tween_property(knob, "position:x", target_x, 0.16)\
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 func _on_dim_rect_gui_input(event: InputEvent):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
