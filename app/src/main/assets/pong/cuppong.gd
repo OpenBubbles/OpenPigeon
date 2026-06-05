@@ -79,11 +79,13 @@ const IOS_LONG_Y: float = 4.12
 const IOS_SHORT_GAIN: float = 1.35
 const IOS_SHORT_Y_OFFSET: float = -3.0
 const IOS_BALL_Y_AIM_OFFSET: float = 0.45
-const IOS_DRAG_DEAD_DIST: float = 0.18
+const IOS_DRAG_DEAD_DIST: float = 0.06
 
-# Aim-assist lerp toward the nearest cup, matching the typical case
-@export var ios_aim_assist: float = 0.28
-# Screen-pixel -> world-meter conversion. Tune up for easier throws
+# iOS seems to use about 0.21 to 0.31 depending on player/cup state.
+# Keep this slightly generous for our version.
+@export var ios_aim_assist: float = 0.20
+
+# Screen-pixel -> world-meter conversion.
 @export var ios_screen_to_world_scale: float = 0.0030
 
 var player: int
@@ -109,10 +111,10 @@ func _on_game_ready() -> void:
 	if is_instance_valid(main_overlay):
 		main_overlay.visible = show_overlay
 
-	my_cups = get_node("cups2")
-	replay_cups = get_node("cups1")
-	camera = get_node("Camera3D")
-	ball = get_node("ball")
+	my_cups = get_node_or_null("cups2") as Cups
+	replay_cups = get_node_or_null("cups1") as Cups
+	camera = get_node_or_null("Camera3D") as Camera3D
+	ball = get_node_or_null("ball") as RigidBody3D
 
 	if _debug_perf:
 		var parent: Node = get_tree().root
@@ -189,6 +191,19 @@ func _on_game_ready() -> void:
 func _set_game_data(new_replay: String):
 	var parsed = JSON.parse_string(new_replay)
 	print("NEW REPLAY: " + str(parsed))
+	
+	if not is_instance_valid(my_cups):
+		my_cups = get_node_or_null("cups2") as Cups
+	if not is_instance_valid(replay_cups):
+		replay_cups = get_node_or_null("cups1") as Cups
+	if not is_instance_valid(camera):
+		camera = get_node_or_null("Camera3D") as Camera3D
+	if not is_instance_valid(ball):
+		ball = get_node_or_null("ball") as RigidBody3D
+
+	if not is_instance_valid(my_cups) or not is_instance_valid(replay_cups):
+		call_deferred("_set_game_data", new_replay)
+		return
 	
 	is_my_turn = parsed["isYourTurn"]
 	player = int(parsed["player"])
@@ -891,13 +906,14 @@ func _ios_throw_release(release_screen_pos: Vector2) -> void:
 	var forward_force: float = max(dist * IOS_POWER_SLOPE, IOS_POWER_FLOOR)
 	var abs_force: float = abs(forward_force)
 
-	var angle_factor: float = (dx_world / drag_len) if drag_len > 1e-6 else 0.0
-	var fx_target: float = abs_force / IOS_X_NORM * IOS_X_GAIN * angle_factor
-	var ios_fz_target: float = IOS_Z_BIAS + (abs_force / IOS_Z_NORM) * IOS_Z_GAIN
-	var forward_z_target: float = ball_popo.z + (abs(ios_fz_target) - abs(IOS_Z_BIAS))
+	var angle_factor: float = (dx_world / drag_len) if drag_len > 0.000001 else 0.0
 
-	var probe: Vector3 = current_ball.global_position + Vector3(0.0, IOS_BALL_Y_AIM_OFFSET, 0.0)
-	var target_cup: Vector3 = current_ball.global_position + Vector3(0.0, 0.0, -2.0)
+	var raw_x_target: float = ball_popo.x + (abs_force / IOS_X_NORM * IOS_X_GAIN * angle_factor)
+	var ios_fz_target: float = IOS_Z_BIAS + (abs_force / IOS_Z_NORM) * IOS_Z_GAIN
+
+	var raw_z_target: float = ball_popo.z + (abs(ios_fz_target) - abs(IOS_Z_BIAS))
+
+	var target_cup: Vector3 = Vector3(raw_x_target, ball_popo.y, raw_z_target)
 	var best_d: float = INF
 
 	if is_instance_valid(my_cups):
@@ -908,14 +924,23 @@ func _ios_throw_release(release_screen_pos: Vector2) -> void:
 				continue
 
 			var p: Vector3 = (cup as Node3D).global_position
-			var d: float = probe.distance_to(p)
+			var d: float = Vector2(raw_x_target - p.x, raw_z_target - p.z).length()
 
 			if d < best_d:
 				best_d = d
 				target_cup = p
 
-	var final_x: float = lerp(fx_target, target_cup.x, ios_aim_assist)
-	var final_z: float = lerp(forward_z_target, target_cup.z, ios_aim_assist)
+	var assist: float = ios_aim_assist
+
+	if best_d > 0.55:
+		assist = 0.0
+	elif best_d > 0.34:
+		assist *= 0.45
+
+	assist = clampf(assist, 0.0, 0.26)
+
+	var final_x: float = lerp(raw_x_target, target_cup.x, assist)
+	var final_z: float = lerp(raw_z_target, target_cup.z, assist)
 
 	var ball_pos: Vector3 = current_ball.global_position
 	var fx_impulse: float
@@ -933,10 +958,20 @@ func _ios_throw_release(release_screen_pos: Vector2) -> void:
 
 	var thrown_ball: PongBall = current_ball
 	thrown_ball.freeze = false
+	thrown_ball.linear_velocity = Vector3.ZERO
+	thrown_ball.angular_velocity = Vector3.ZERO
 	thrown_ball.apply_impulse(Vector3(fx_impulse, fy_impulse, fz_impulse))
 	thrown_ball.thrown = true
 	ball_ready = false
 	current_ball = null
+
+	print("[CUPPONG_THROW] dx=", dx_world,
+		" dz=", dz_world,
+		" raw_target=(", raw_x_target, ", ", raw_z_target, ")",
+		" target_cup=", target_cup,
+		" assist=", assist,
+		" impulse=(", fx_impulse, ", ", fy_impulse, ", ", fz_impulse, ")"
+	)
 
 	var min_wait_time: float = 1.0
 	var max_wait_time: float = 5.0
@@ -950,9 +985,9 @@ func _ios_throw_release(release_screen_pos: Vector2) -> void:
 		if elapsed < min_wait_time:
 			continue
 
-		var speed := thrown_ball.linear_velocity.length()
-		var too_slow := speed < 0.08
-		var out_of_play := thrown_ball.global_position.y < -1.2 or thrown_ball.global_position.z > 0.75 or thrown_ball.global_position.z < -2.6
+		var speed: float = thrown_ball.linear_velocity.length()
+		var too_slow: bool = speed < 0.08
+		var out_of_play: bool = thrown_ball.global_position.y < -1.2 or thrown_ball.global_position.z > 0.75 or thrown_ball.global_position.z < -2.6
 
 		if too_slow:
 			still_time += 0.1
