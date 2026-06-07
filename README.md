@@ -8,6 +8,7 @@ OpenPigeon is fully open-source, and we're actively looking for game developers 
 
 ## Supported Games
 - 8 Ball (All Modes)
+- 9 Ball
 - 20 Questions
 - Anagrams
 - Archery
