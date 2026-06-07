@@ -179,16 +179,21 @@ val importGodotAssets by tasks.registering(Exec::class) {
 
     outputs.dir(godotHiddenFolder)
 
+    outputs.upToDateWhen { false }
+
+    doFirst {
+        delete(godotProjectDir.dir(".godot/editor").asFile)
+    }
+
     commandLine(
         godotCmd,
         "--headless",
         "--path",
         godotProjectDir.asFile.absolutePath,
-        "--editor",
+        "--import",
         "--quit"
     )
 }
-
 /**
  * Debug pipeline:
  * import -> sync whole project assets into build/generated/godotAssets/debug
@@ -203,6 +208,10 @@ val prepareGodotDebugAssets by tasks.registering(Sync::class) {
     into(debugGodotAssetsDir)
 
     includeEmptyDirs = false
+
+    doFirst {
+        delete(debugGodotAssetsDir.get().asFile)
+    }
 }
 
 /**
@@ -243,6 +252,10 @@ val prepareGodotReleaseAssets by tasks.registering(Sync::class) {
     into(releaseGodotAssetsDir)
 
     includeEmptyDirs = false
+
+    doFirst {
+        delete(releaseGodotAssetsDir.get().asFile)
+    }
 
     from(godotProjectDir.dir(".godot/imported")) {
         include("RedCupAlbedo.png-*.s3tc.ctex")
