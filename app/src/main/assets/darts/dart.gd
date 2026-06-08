@@ -17,13 +17,33 @@ signal on_hit_board(score: Array[int])
 
 var _tween: Tween
 
+const LOG_TAG := "Dart"
+var DEBUG_DART := false
+
+func dbg(msg: String) -> void:
+	if DEBUG_DART:
+		OpLog.d(LOG_TAG, msg)
+
 func _ready() -> void:
 	game = get_parent()
 	dartboard = get_parent().get_node("dart_board")
 
+	OpLog.d(LOG_TAG, [
+		"dart_ready game_valid=", is_instance_valid(game),
+		" dartboard_valid=", is_instance_valid(dartboard)
+	])
+
 func throw(p_end_pos: Vector3):
 	start_pos = self.position
 	end_pos = p_end_pos
+	
+	OpLog.event(LOG_TAG, [
+		"throw start=", start_pos,
+		" end=", end_pos,
+		" is_mine=", is_mine,
+		" duration=", duration,
+		" arc_height=", arc_height
+	])
 
 	var control_x = (start_pos.x + end_pos.x) / 2.0
 	var control_z = (start_pos.z + end_pos.z) / 2.0
@@ -83,12 +103,30 @@ func _process(delta: float) -> void:
 	if not finished and self.position.z <= 0.068:
 		var dartboard_local_pos = Vector3(self.position.x, 0.344 - self.position.y, self.position.z)
 		var pos_2d = Vector2(dartboard_local_pos.x, dartboard_local_pos.y)
+
 		if is_mine:
-			print("dart pos: " + str(pos_2d))
 			var score = dartboard.get_score(pos_2d)
+
+			OpLog.event(LOG_TAG, [
+				"dart_hit_board mine=true pos_2d=", pos_2d,
+				" world_pos=", self.position,
+				" score=", score
+			])
+
 			if on_hit_board.has_connections():
 				on_hit_board.emit(score)
+			else:
+				OpLog.w(LOG_TAG, ["dart_hit_no_signal_connections score=", score])
 		else:
-			print("replay hit: " + str(replay_hit))
-			dartboard.set_replay_highlight(pos_2d, replay_hit[1], replay_hit[2])
-		finished = true 
+			OpLog.event(LOG_TAG, [
+				"dart_replay_hit pos_2d=", pos_2d,
+				" world_pos=", self.position,
+				" replay_hit=", replay_hit
+			])
+
+			if replay_hit.size() >= 3:
+				dartboard.set_replay_highlight(pos_2d, replay_hit[1], replay_hit[2])
+			else:
+				OpLog.w(LOG_TAG, ["dart_replay_hit_bad_data replay_hit=", replay_hit])
+
+		finished = true

@@ -59,6 +59,13 @@ var prev_board_str: String = ""
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
 	
+const LOG_TAG := "Mancala"
+var DEBUG_MANCALA := false
+
+func dbg(msg: String) -> void:
+	if DEBUG_MANCALA:
+		OpLog.d(LOG_TAG, msg)
+	
 func _get_dev_data() -> String:
 	return '{"isYourTurn": true,"mode": "n","player": "2","replay": "board:&2,2&2&&3,3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&1,13,12&13,11,12,11,13,12,11,1,13,3,11,2&13,13,11,12,2|move:2,4|board:12&2,2&2&&3,3&11&3,3,1,2,1,12,3,3,12&12,12,13,13,3,3,13,1,3,2&3&11,3&&&13,11,12,11,13,12,11,1,13,3,11,2,1&13,13,11,12,2,13","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","subcaption": "Capture Mode","id": "ziadBSjDYgc4ruev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
 	
@@ -73,26 +80,32 @@ func _get_rules_text() -> String:
 
 func _debug_pit_input_layers() -> void:
 	for pit in pit_nodes:
-		print("=== Pit", pit.index, "layers ===")
+		dbg("pit_layers index=%s" % str(pit.index))
+
 		for node in pit.get_children():
 			var info = ""
+
 			if node is CollisionShape2D:
-				info = "CollisionShape2D, disabled=%s" % node.disabled
+				info = "CollisionShape2D disabled=%s" % str(node.disabled)
 			elif node is Area2D:
-				info = "Area2D, pickable=%s" % node.input_pickable
+				info = "Area2D pickable=%s" % str(node.input_pickable)
 			elif node is Control:
-				info = "Control, mouse_filter=%d" % node.mouse_filter
+				info = "Control mouse_filter=%d" % node.mouse_filter
 			else:
-				info = "%s (%s)" % [node.get_class(), node.visible if node.has_method("is_visible") else ""]
-			print("    ", node.name, "→", info)
+				info = "%s visible=%s" % [
+					node.get_class(),
+					str(node.visible if node.has_method("is_visible") else "")
+				]
+
+			dbg("pit_layer child=%s info=%s" % [str(node.name), info])
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		print("Unhandled Click at: ", event.position)
+		dbg("unhandled_click pos=%s" % str(event.position))
 
 func _on_game_ready() -> void:
 	game_settings_category = SettingsManager.get_game_name_from_path(get_tree().current_scene.scene_file_path)
-	print("Current game scene for settings: ", game_settings_category)
+	OpLog.i(LOG_TAG, ["game_ready settings_category=", game_settings_category])
 
 	_load_game_specific_settings()
 
@@ -119,6 +132,11 @@ func _on_game_ready() -> void:
 	add_child(_carrying_stones_container)
 	_carrying_stones_container.z_index = 90
 	_apply_board_sprite_modulate()
+	OpLog.i(LOG_TAG, [
+		"game_ready_done theme=", current_theme_name,
+		" pit_nodes=", pit_nodes.size(),
+		" mode=", mode
+	])
 	
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if not is_instance_valid(background):
@@ -140,14 +158,19 @@ func _apply_bg_for_dark(is_dark: bool) -> void:
 	background.color = color
 
 func _set_game_data(raw_text: String) -> void:
+	OpLog.event(LOG_TAG, ["set_game_data_in raw=", raw_text])
+
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
 	var res = JSON.parse_string(raw_text)
 
 	if typeof(res) != TYPE_DICTIONARY:
+		OpLog.e(LOG_TAG, ["set_game_data_parse_failed raw=", raw_text])
 		return
 
-	print("[PARSE] Raw game data received:", res)
-
+	OpLog.i(LOG_TAG, [
+		"set_game_data_parsed keys=", (res as Dictionary).keys()
+	])
+	
 	_skip_replay_animation = false
 	in_replay = false
 	_is_animating = false
@@ -180,6 +203,17 @@ func _set_game_data(raw_text: String) -> void:
 	player_str = int(res.get("player", player))
 	mode = String(res.get("mode", mode))
 	is_your_turn = bool(res.get("isYourTurn", false))
+	
+	OpLog.i(LOG_TAG, [
+		"set_game_data_fields my_uuid=", my_uuid,
+		" player1=", p1_id,
+		" player2=", p2_id,
+		" player_str=", player_str,
+		" mode=", mode,
+		" isYourTurn=", is_your_turn,
+		" has_winner=", winner_payload != "",
+		" replay_len=", String(res.get("replay", "")).length()
+	])
 
 	if my_uuid != "" and p1_id != "" and p2_id != "":
 		if my_uuid == p1_id:
@@ -203,7 +237,7 @@ func _set_game_data(raw_text: String) -> void:
 		opponent_avatar_key = "avatar2" if player == 1 else "avatar1"
 
 	if spectator_mode:
-		print("Spectator Mode Enabled!")
+		OpLog.i(LOG_TAG, "spectator_mode_enabled")
 
 		if is_instance_valid(spec_label):
 			spec_label.visible = true
@@ -226,7 +260,13 @@ func _set_game_data(raw_text: String) -> void:
 			if is_instance_valid(opp_avatar_display):
 				opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
-	print("YOUR TURN?: ", is_your_turn, " MY TURN?: ", is_my_turn, " Spectator Mode: ", spectator_mode)
+	OpLog.i(LOG_TAG, [
+		"resolved_player player=", player,
+		" player_str=", player_str,
+		" is_your_turn=", is_your_turn,
+		" is_my_turn=", is_my_turn,
+		" spectator=", spectator_mode
+	])
 
 	_apply_bg_for_dark(is_dark)
 	_apply_board_layout(is_my_turn)
@@ -247,7 +287,7 @@ func _set_game_data(raw_text: String) -> void:
 
 		_refresh_all_pits()
 	else:
-		print("_set_game_data: no replay board found, keeping default layout.")
+		OpLog.w(LOG_TAG, "set_game_data_no_replay_board keeping_default_layout")
 
 	if parsed.moves.size() > 0:
 		replay_moves = parsed.moves
@@ -259,7 +299,7 @@ func _set_game_data(raw_text: String) -> void:
 
 		for i in range(replay_moves.size()):
 			if _skip_replay_animation:
-				print("Replay skipped.")
+				OpLog.i(LOG_TAG, "replay_skipped")
 				break
 
 			var move_data = replay_moves[i]
@@ -314,6 +354,7 @@ func _set_game_data(raw_text: String) -> void:
 			if _skip_replay_animation:
 				_refresh_all_pits()
 		else:
+			OpLog.w(LOG_TAG, "set_game_data_no_final_board_after_replay")
 			push_warning("_set_game_data: No final board state available for post-replay update.")
 
 		_skip_replay_animation = false
@@ -327,6 +368,12 @@ func _set_game_data(raw_text: String) -> void:
 	if winner_payload != "":
 		_apply_winner_payload(winner_payload, p1_id, p2_id)
 		return
+		
+	OpLog.i(LOG_TAG, [
+		"set_game_data_replay_done raw_boards=", raw_boards.size(),
+		" replay_moves=", replay_moves.size(),
+		" prev_board_len=", prev_board_str.length()
+	])
 
 	await check_win()
 
@@ -339,13 +386,26 @@ func _set_game_data(raw_text: String) -> void:
 		start_waiting_animation()
 	else:
 		stop_waiting_animation()
-		
+
+	OpLog.i(LOG_TAG, [
+		"set_game_data_done is_my_turn=", is_my_turn,
+		" game_over=", game_over,
+		" in_replay=", in_replay,
+		" spectator=", spectator_mode,
+		" player=", player,
+		" winner_id=", winner_id
+	])
+
 func parse_replay_string(raw: String) -> Dictionary:
 	var out = {
 		"boards": [],
 		"moves": [],
 		"raw_boards": []
 	}
+
+	if raw.strip_edges() == "":
+		OpLog.d(LOG_TAG, "parse_replay empty")
+		return out
 
 	for chunk in raw.strip_edges().split("|"):
 		if chunk.begins_with("board:"):
@@ -358,6 +418,14 @@ func parse_replay_string(raw: String) -> Dictionary:
 				if s != "":
 					mv.append(float(s))
 			out["moves"].append(mv)
+		elif chunk.strip_edges() != "":
+			OpLog.w(LOG_TAG, ["parse_replay_unknown_chunk chunk=", chunk])
+
+	OpLog.i(LOG_TAG, [
+		"parse_replay_done raw_len=", raw.length(),
+		" boards=", out["boards"].size(),
+		" moves=", out["moves"].size()
+	])
 
 	return out
 	
@@ -392,17 +460,17 @@ func _init_mancala_board_structure() -> void:
 		if debug_label and debug_label is Label:
 			debug_label.text = str(i)
 		else:
-			print("No Label for Debug!")
+			dbg("missing_debug_label pit=%d" % i)
 		
 	pits.clear()
 	for i in range(PIT_COUNT):
 		pits.append([])
 
-	print("Mancala board structure initialized.")
+	OpLog.i(LOG_TAG, ["board_structure_initialized pits=", pit_nodes.size()])
 	dot_timer.timeout.connect(_on_dot_timer_timeout)
 
 func _apply_board_layout(_is_current_turn: bool) -> void:
-	print("YOU ARE PLAYER: ", player)
+	OpLog.d(LOG_TAG, ["apply_board_layout player=", player, " is_my_turn=", is_my_turn])
 	if player == 1:
 		offsets = [
 			Vector2(125, 171.5), Vector2(125, 262.5), Vector2(125, 355.5),
@@ -422,7 +490,7 @@ func _apply_board_layout(_is_current_turn: bool) -> void:
 			Vector2(170, 723.5) # Store
 		]
 	else:
-		print("Cannot Setup Board!! (Player or turn info missing)")
+		OpLog.w(LOG_TAG, ["cannot_setup_board player=", player, " is_my_turn=", is_my_turn])
 	for i in range(PIT_COUNT):
 		if i < pit_nodes.size() and i < offsets.size():
 			pit_nodes[i].position = offsets[i]
@@ -442,13 +510,13 @@ func _apply_board_layout(_is_current_turn: bool) -> void:
 				initial_stones.append(base_label + (_k % 3))
 			pits[i] = initial_stones
 
-	print("Board layout applied and initial stones set.")
+	OpLog.i(LOG_TAG, ["board_layout_applied player=", player, " mode=", mode])
 	if is_my_turn:
 		_start_pit_highlights()
 		stop_waiting_animation()
 
 func _start_pit_highlights() -> void:
-	print("Starting Pit Highlights! Player: ", player)
+	dbg("start_pit_highlights player=%d" % player)
 	for pit in pit_nodes:
 		(pit.get_node("HighlightCircle") as ColorRect).visible = false
 	var first = 0 if player == 1 else 7
@@ -464,40 +532,51 @@ func _start_pit_highlights() -> void:
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		tw.tween_property(mat, "shader_parameter/alpha_fade", 0.0, 0.5) \
 			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-			
+
 func _stop_pit_highlights() -> void:
-	print("Stopped Pit Highlights!!")
+	dbg("stop_pit_highlights")
 	for pit in pit_nodes:
 		var hl = pit.get_node("HighlightCircle") as ColorRect
 		hl.visible = false
 
 func _on_pit_clicked(idx: int) -> void:
 	if _is_animating:
+		OpLog.d(LOG_TAG, ["pit_click_ignored animating=true idx=", idx])
 		return
+
 	if game_over:
-		print("Game is over. No more moves.")
+		OpLog.w(LOG_TAG, ["pit_click_blocked game_over=true idx=", idx])
 		return
-		
+
 	_stop_pit_highlights()
 
-	print("Pit clicked: ", idx)
+	OpLog.event(LOG_TAG, [
+		"pit_clicked idx=", idx,
+		" player=", player,
+		" is_my_turn=", is_my_turn,
+		" pit_size=", pits[idx].size() if idx >= 0 and idx < pits.size() else -1
+	])
+
 	if not is_my_turn:
-		print("Not your turn.")
+		OpLog.w(LOG_TAG, ["pit_click_blocked not_my_turn idx=", idx])
 		return
 
 	if ((player == 1 and (idx < 0 or idx > 5)) or (player == 2 and (idx < 7 or idx > 12))):
-		print("Cannot click opponent's pit or a store pit.")
+		OpLog.w(LOG_TAG, [
+			"pit_click_blocked invalid_side_or_store idx=", idx,
+			" player=", player
+		])
 		_start_pit_highlights()
 		return
+
 	if pits[idx].size() == 0:
-		print("Cannot click an empty pit.")
+		OpLog.w(LOG_TAG, ["pit_click_blocked empty_pit idx=", idx])
 		_start_pit_highlights()
 		return
-		
+
 	var pit_offset: int = idx if idx < 6 else idx - 7
 	moves_made.append(str(player) + "," + str(pit_offset))
 
-	print("[INPUT] Pit clicked:", idx)
 	_is_animating = true
 
 	var start_pit_node = pit_nodes[idx]
@@ -511,10 +590,10 @@ func _on_pit_clicked(idx: int) -> void:
 		Vector2(1.2, 1.2),
 		PIT_PICKUP_TIME * 0.7
 	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	
+
 	await tween_pickup_scale.finished
 	await _sow_from(idx)
-	
+
 	if game_over:
 		_is_animating = false
 		_stop_pit_highlights()
@@ -525,11 +604,11 @@ func _on_pit_clicked(idx: int) -> void:
 	if _last_sown_pit != -1:
 		if _last_sown_pit == 6 or _last_sown_pit == 13:
 			give_free_turn = true
-			print("DEBUG: Last stone landed in own store pit -> free turn!")
+			OpLog.event(LOG_TAG, ["free_turn last_sown_pit=", _last_sown_pit])
 		else:
-			print("DEBUG: Last stone landed in pit ", _last_sown_pit, " (not a store pit for free turn).")
+			dbg("no_free_turn last_sown_pit=%d" % _last_sown_pit)
 	else:
-		print("DEBUG: No stone was sown (this shouldn't happen after _sow_from).")
+		OpLog.w(LOG_TAG, "last_sown_pit_missing_after_sow")
 
 	if give_free_turn:
 		is_my_turn = true
@@ -539,13 +618,12 @@ func _on_pit_clicked(idx: int) -> void:
 		free_turn_tween.tween_interval(1.0)
 		free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
 	else:
-		print("END TURN!")
 		_end_turn()
-		
+
 	_is_animating = false
 	if is_my_turn:
 		_start_pit_highlights()
-		
+
 func _add_stone_to_pit(pit_idx: int, stone_node: Node2D, stone_label: int) -> void:
 	var pit_container := pit_nodes[pit_idx].get_node("StonesContainer") as Node2D
 	pit_container.add_child(stone_node)
@@ -659,23 +737,26 @@ func _layout_pit_stones(i: int) -> void:
 
 func _sow_from(start_idx: int) -> void:
 	var current_sowing_pit_idx = start_idx
-	
+
 	while true:
 		if _skip_replay_animation:
-			print("Sow from interrupted by skip button.")
+			OpLog.i(LOG_TAG, "sow_interrupted_by_skip")
 			break
 
 		var current_sow_player = player_str
 		if not in_replay and is_my_turn:
 			current_sow_player = player
 		else:
-			print("SOW STATS!!!!~~ IS ANIMATING: ", _is_animating, " IS MY TURN: ", is_my_turn, " CURRENT SOW PLAYER: ", current_sow_player, " IN_REPLAY: ", in_replay, " PLAYER_STR: ", player_str," PLAYER: ", player)
+			dbg("sow_stats animating=%s is_my_turn=%s current_sow_player=%d in_replay=%s player_str=%d player=%d" % [
+				str(_is_animating), str(is_my_turn), current_sow_player, str(in_replay), player_str, player
+			])
 
 		var player1_side_empty = true
 		for i in range(0, 6):
 			if pits[i].size() > 0:
 				player1_side_empty = false
 				break
+
 		var player2_side_empty = true
 		for i in range(7, 13):
 			if pits[i].size() > 0:
@@ -683,7 +764,11 @@ func _sow_from(start_idx: int) -> void:
 				break
 
 		if (current_sow_player == 1 and player1_side_empty) or (current_sow_player == 2 and player2_side_empty):
-			print("GAME OVER: Current sowing player's pits are all empty before sowing from ", current_sowing_pit_idx)
+			OpLog.event(LOG_TAG, [
+				"sow_game_over_side_empty current_sow_player=", current_sow_player,
+				" start_idx=", current_sowing_pit_idx
+			])
+
 			var opponent_store_idx = 6 if current_sow_player == 2 else 13
 			var pits_to_take = [7, 8, 9, 10, 11, 12] if current_sow_player == 1 else [0, 1, 2, 3, 4, 5]
 			await _animate_sweep(pits_to_take, opponent_store_idx)
@@ -691,21 +776,25 @@ func _sow_from(start_idx: int) -> void:
 
 		if pits[current_sowing_pit_idx].size() == 0:
 			break
-		
+
 		var stones_to_sow = pits[current_sowing_pit_idx].size()
 		if stones_to_sow == 0:
 			break
-			
+
 		var start_pit_node = pit_nodes[current_sowing_pit_idx]
 		var start_container = start_pit_node.get_node("StonesContainer") as Node2D
 
 		var carried_stone_labels: Array = pits[current_sowing_pit_idx].duplicate()
+
 		for c in start_container.get_children():
 			c.queue_free()
+
 		pits[current_sowing_pit_idx].clear()
 		_refresh_pit_count_label(current_sowing_pit_idx)
+
 		var current_idx = current_sowing_pit_idx
 		var carried_visual_stones: Array[Node2D] = []
+
 		for stone_label in carried_stone_labels:
 			var s = StoneScene.instantiate() as Node2D
 			s.scale = BASE_STONE_SCALE
@@ -715,27 +804,48 @@ func _sow_from(start_idx: int) -> void:
 			carried_visual_stones.append(s)
 
 		await get_tree().create_timer(0.01).timeout
-		print("DEBUG: pits_root global_position: ", pits_root.global_position)
-		print("DEBUG: start_pit_node local position: ", start_pit_node.global_position, " Current Sowing Pit Index: ", current_sowing_pit_idx)
+
 		_carrying_stones_container.global_position = start_pit_node.global_position
-		print("DEBUG: Carrying container set to start pit position: ", _carrying_stones_container.global_position, " (start_pit_node global: ", start_pit_node.global_position, ")")
-		
+
+		dbg("sow_start pit=%d stones=%d pits_root=%s start_global=%s carrying_global=%s" % [
+			current_sowing_pit_idx,
+			carried_stone_labels.size(),
+			str(pits_root.global_position),
+			str(start_pit_node.global_position),
+			str(_carrying_stones_container.global_position)
+		])
+
 		var pickup_tween = create_tween()
 		if pickup_tween == null:
+			OpLog.e(LOG_TAG, "pickup_tween_null")
 			push_error("pickup_tween is null during initial pickup! Aborting.")
 			return
 
-		pickup_tween.tween_property(_carrying_stones_container, "scale", Vector2(BOUNCE_SCALE_FACTOR, BOUNCE_SCALE_FACTOR), BOUNCE_DURATION / 2.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-		pickup_tween.tween_property(_carrying_stones_container, "scale", Vector2(1.0, 1.0), BOUNCE_DURATION / 2.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		pickup_tween.tween_property(
+			_carrying_stones_container,
+			"scale",
+			Vector2(BOUNCE_SCALE_FACTOR, BOUNCE_SCALE_FACTOR),
+			BOUNCE_DURATION / 2.0
+		).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+		pickup_tween.tween_property(
+			_carrying_stones_container,
+			"scale",
+			Vector2(1.0, 1.0),
+			BOUNCE_DURATION / 2.0
+		).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+
 		await pickup_tween.finished
-		print("DEBUG: Carrying container position after pickup tween: ", _carrying_stones_container.global_position)
+
+		dbg("sow_after_pickup carrying_global=%s" % str(_carrying_stones_container.global_position))
+
 		while carried_visual_stones.size() > 0:
 			if _skip_replay_animation:
-				print("Stone distribution interrupted by skip button.")
+				OpLog.i(LOG_TAG, "stone_distribution_interrupted_by_skip")
 				for c in _carrying_stones_container.get_children():
 					c.queue_free()
 				return
-								
+
 			current_idx = (current_idx + 1) % PIT_COUNT
 
 			if (current_sow_player == 1 and current_idx == 13) or (current_sow_player == 2 and current_idx == 6):
@@ -743,21 +853,51 @@ func _sow_from(start_idx: int) -> void:
 
 			var target_pit_node = pit_nodes[current_idx]
 			var target_global_position_for_pile = target_pit_node.global_position
-			print("DEBUG: Moving to target pit ", current_idx, " at global position: ", target_global_position_for_pile)
+
+			dbg("sow_travel_to_pit current_idx=%d target_global=%s remaining=%d" % [
+				current_idx,
+				str(target_global_position_for_pile),
+				carried_visual_stones.size()
+			])
 
 			var travel_tween = create_tween()
 			if travel_tween == null:
+				OpLog.e(LOG_TAG, "travel_tween_null")
 				push_error("travel_tween is null during movement! Aborting sowing animation.")
 				return
 
-			travel_tween.tween_property(_carrying_stones_container, "global_position", target_global_position_for_pile, PILE_TRAVEL_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			travel_tween.tween_property(
+				_carrying_stones_container,
+				"global_position",
+				target_global_position_for_pile,
+				PILE_TRAVEL_TIME
+			).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
 			travel_tween.set_parallel(true)
-			travel_tween.tween_property(_carrying_stones_container, "scale", Vector2(BOUNCE_SCALE_FACTOR, BOUNCE_SCALE_FACTOR), PILE_TRAVEL_TIME / 2.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-			travel_tween.tween_property(_carrying_stones_container, "scale", Vector2(1.0, 1.0), PILE_TRAVEL_TIME / 2.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN).set_delay(PILE_TRAVEL_TIME / 2.0)
+
+			travel_tween.tween_property(
+				_carrying_stones_container,
+				"scale",
+				Vector2(BOUNCE_SCALE_FACTOR, BOUNCE_SCALE_FACTOR),
+				PILE_TRAVEL_TIME / 2.0
+			).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+			travel_tween.tween_property(
+				_carrying_stones_container,
+				"scale",
+				Vector2(1.0, 1.0),
+				PILE_TRAVEL_TIME / 2.0
+			).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN).set_delay(PILE_TRAVEL_TIME / 2.0)
+
 			await travel_tween.finished
-			print("DEBUG: Carrying container position after travel tween to pit ", current_idx, ": ", _carrying_stones_container.global_position)
+
+			dbg("sow_after_travel current_idx=%d carrying_global=%s" % [
+				current_idx,
+				str(_carrying_stones_container.global_position)
+			])
+
 			if _skip_replay_animation:
-				print("Stone distribution interrupted after travel by skip button.")
+				OpLog.i(LOG_TAG, "stone_distribution_interrupted_after_travel")
 				for c in _carrying_stones_container.get_children():
 					c.queue_free()
 				return
@@ -771,47 +911,63 @@ func _sow_from(start_idx: int) -> void:
 
 				if carried_visual_stones.size() > 0:
 					await get_tree().create_timer(STONE_DROP_DELAY / 2.0).timeout
+
 					if _skip_replay_animation:
-						print("Stone distribution interrupted during delay by skip button.")
+						OpLog.i(LOG_TAG, "stone_distribution_interrupted_during_delay")
 						for c in _carrying_stones_container.get_children():
 							c.queue_free()
 						return
 
 		_last_sown_pit = current_idx
-		
-		# Avalanche Mode Logic
+
+		OpLog.i(LOG_TAG, [
+			"sow_finished last_sown_pit=", _last_sown_pit,
+			" current_sow_player=", current_sow_player,
+			" mode=", mode,
+			" stones_in_last=", pits[_last_sown_pit].size()
+		])
+
 		if mode == "an" or mode == "ah":
-			print("Avalanche mode active. Last stone landed in pit: ", _last_sown_pit)
 			var player_store_idx = 6 if current_sow_player == 1 else 13
-			
+
+			OpLog.event(LOG_TAG, [
+				"avalanche_check last_sown_pit=", _last_sown_pit,
+				" player_store_idx=", player_store_idx,
+				" stones=", pits[_last_sown_pit].size()
+			])
+
 			if _last_sown_pit == player_store_idx:
-				print("Avalanche ends: Last stone landed in player's store.")
+				dbg("avalanche_ends_store")
 				break
-			
+
 			if pits[_last_sown_pit].size() == 1:
-				print("Avalanche ends: Last stone landed in an empty pit (now 1 stone).")
+				dbg("avalanche_ends_empty_pit")
 				break
-			
-			print("Avalanche continues: Picking up stones from pit ", _last_sown_pit)
+
+			OpLog.event(LOG_TAG, [
+				"avalanche_continues from_pit=", _last_sown_pit,
+				" stones=", pits[_last_sown_pit].size()
+			])
+
 			if current_sowing_pit_idx == 6 or current_sowing_pit_idx == 13:
 				break
+
 			current_sowing_pit_idx = _last_sown_pit
 		else:
 			var should_capture = false
-			if not in_replay:
-				if current_sow_player == 1 and _last_sown_pit >= 0 and _last_sown_pit <= 5 and pits[_last_sown_pit].size() == 1:
-					should_capture = true
-				elif current_sow_player == 2 and _last_sown_pit >= 7 and _last_sown_pit <= 12 and pits[_last_sown_pit].size() == 1:
-					should_capture = true
-			else:
-				if current_sow_player == 1 and _last_sown_pit >= 0 and _last_sown_pit <= 5 and pits[_last_sown_pit].size() == 1:
-					should_capture = true
-				elif current_sow_player == 2 and _last_sown_pit >= 7 and _last_sown_pit <= 12 and pits[_last_sown_pit].size() == 1:
-					should_capture = true
+
+			if current_sow_player == 1 and _last_sown_pit >= 0 and _last_sown_pit <= 5 and pits[_last_sown_pit].size() == 1:
+				should_capture = true
+			elif current_sow_player == 2 and _last_sown_pit >= 7 and _last_sown_pit <= 12 and pits[_last_sown_pit].size() == 1:
+				should_capture = true
 
 			if should_capture:
-				print("DEBUG: Capture condition met! Last stone landed in pit ", _last_sown_pit, " which was empty before this stone.")
-				
+				OpLog.event(LOG_TAG, [
+					"capture_condition_met last_sown_pit=", _last_sown_pit,
+					" current_sow_player=", current_sow_player,
+					" in_replay=", in_replay
+				])
+
 				var opposite_pit_idx = -1
 				if current_sow_player == 1:
 					opposite_pit_idx = 12 - _last_sown_pit
@@ -821,84 +977,116 @@ func _sow_from(start_idx: int) -> void:
 				var player_store_idx = 6 if current_sow_player == 1 else 13
 
 				if opposite_pit_idx != -1 and pits[opposite_pit_idx].size() > 0:
-					print("DEBUG: Capturing stones from opposite pit ", opposite_pit_idx)
+					OpLog.event(LOG_TAG, [
+						"capture_stones last_sown_pit=", _last_sown_pit,
+						" opposite_pit=", opposite_pit_idx,
+						" store=", player_store_idx,
+						" opposite_count=", pits[opposite_pit_idx].size()
+					])
 
 					var captured_stones = []
+
 					if pits[_last_sown_pit].size() > 0:
 						captured_stones.append(pits[_last_sown_pit].pop_back())
+
 					captured_stones.append_array(pits[opposite_pit_idx])
 					pits[opposite_pit_idx].clear()
-					print("DEBUG: Displaying 'Captured!' label for live player.")
+
 					free_turn_label.text = "Captured!"
 					free_turn_label.visible = true
+
 					var free_turn_tween = create_tween()
 					free_turn_tween.tween_interval(0.5)
 					free_turn_tween.tween_callback(func(): free_turn_label.visible = false)
+
 					free_turn_label.add_theme_color_override("font_color", Color(1, 1, 1))
 					free_turn_label.add_theme_color_override("background_color", Color(1.0, 0.84, 0.0))
+
 					await _animate_capture(captured_stones, _last_sown_pit, opposite_pit_idx, player_store_idx)
+
 					if _skip_replay_animation:
-						print("Capture animation interrupted by skip button.")
+						OpLog.i(LOG_TAG, "capture_animation_interrupted_by_skip")
 						return
+
 					pits[player_store_idx].append_array(captured_stones)
 					_refresh_pit_count_label(_last_sown_pit)
 					_refresh_pit_count_label(opposite_pit_idx)
 					_refresh_pit_count_label(player_store_idx)
 				else:
-					print("DEBUG: Opposite pit ", opposite_pit_idx, " is empty or invalid. No capture.")
+					dbg("capture_not_available opposite_pit=%d" % opposite_pit_idx)
+
 			break
+
 	for child in _carrying_stones_container.get_children():
 		child.queue_free()
+
 	_carrying_stones_container.scale = Vector2(1.0, 1.0)
 	await check_win()
 
 func _animate_capture(stones_to_capture: Array, last_sown_pit_idx: int, opposite_pit_idx: int, player_store_idx: int) -> void:
-	print("Animating capture of ", stones_to_capture.size(), " stones to store ", player_store_idx)
-	
+	OpLog.event(LOG_TAG, [
+		"animate_capture stones=", stones_to_capture.size(),
+		" last_sown_pit=", last_sown_pit_idx,
+		" opposite_pit=", opposite_pit_idx,
+		" store=", player_store_idx
+	])
+
 	var store_node = pit_nodes[player_store_idx]
 	var store_container = store_node.get_node("StonesContainer") as Node2D
 
 	var last_sown_pit_node = pit_nodes[last_sown_pit_idx]
 	var opposite_pit_node = pit_nodes[opposite_pit_idx]
+
 	var visual_stones_from_last_sown = []
 	var ls_container = last_sown_pit_node.get_node("StonesContainer")
+
 	for child in ls_container.get_children():
 		if child is Node2D:
 			visual_stones_from_last_sown.append(child)
+
 	var visual_stones_from_opposite = []
 	var opp_container = opposite_pit_node.get_node("StonesContainer")
+
 	for child in opp_container.get_children():
 		if child is Node2D:
 			visual_stones_from_opposite.append(child)
+
 	var all_visual_stones_to_capture = visual_stones_from_last_sown + visual_stones_from_opposite
-	
+
 	for s_visual in visual_stones_from_last_sown:
 		ls_container.remove_child(s_visual)
 		_carrying_stones_container.add_child(s_visual)
 		s_visual.global_position = last_sown_pit_node.global_position
-	
+
 	for s_visual in visual_stones_from_opposite:
 		opp_container.remove_child(s_visual)
 		_carrying_stones_container.add_child(s_visual)
 		s_visual.global_position = opposite_pit_node.global_position
-	
+
 	_refresh_pit_count_label(last_sown_pit_idx)
 	_refresh_pit_count_label(opposite_pit_idx)
+
 	var capture_tween = create_tween()
 	if capture_tween == null:
+		OpLog.e(LOG_TAG, "capture_tween_null")
 		push_error("capture_tween is null during capture animation!")
+
 		for s_visual in all_visual_stones_to_capture:
 			s_visual.queue_free()
+
 		return
+
 	var target_global_pos_for_capture = store_node.global_position
-	
+
 	capture_tween.tween_property(
-		_carrying_stones_container, "global_position",
+		_carrying_stones_container,
+		"global_position",
 		target_global_pos_for_capture,
 		PILE_TRAVEL_TIME * 1.5
 	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 
 	await capture_tween.finished
+
 	for s_visual in all_visual_stones_to_capture:
 		if s_visual:
 			_carrying_stones_container.remove_child(s_visual)
@@ -914,12 +1102,13 @@ func _animate_capture(stones_to_capture: Array, last_sown_pit_idx: int, opposite
 			shadow.position = s_visual.position + Vector2(5, 5)
 			shadow.z_index = -1
 			store_container.add_child(shadow)
+
 		await get_tree().create_timer(STONE_DROP_DELAY / (all_visual_stones_to_capture.size() + 1)).timeout
 
 	for child in _carrying_stones_container.get_children():
 		child.queue_free()
-	
-	print("Capture animation finished.")
+
+	OpLog.i(LOG_TAG, "capture_animation_finished")
 
 func _end_turn() -> void:
 	avatar_key = "avatar" + str(player)
@@ -965,7 +1154,9 @@ func _refresh_pit_count_label(i: int) -> void:
 	const OFFY = 10
 	const Mx = 50
 	const My = 50
-	print("REFRESH COUNT:: PLAYER: ", player, " Pit Number: ", i, " In Replay?: ", in_replay)
+	dbg("refresh_count player=%d pit=%d in_replay=%s count=%d" % [
+		player, i, str(in_replay), pits[i].size()
+	])
 	if player == 1:
 		if i == 6 or i == 13:
 			if i == 6:
@@ -991,15 +1182,21 @@ func _refresh_pit_count_label(i: int) -> void:
 			else:
 				lbl.position = base + Vector2(-Mx - lw/2, -lh/2)
 	else:
-		print("Shouldn't Update Label as it is not my turn")
+		OpLog.w(LOG_TAG, ["refresh_label_unknown_player player=", player, " pit=", i])
 
 func _place_stone(_container: Node2D, _base_pos: Vector2, _label: int) -> void:
 	pass
 	
 func send_game() -> void:
-	print("Send Game Called!")
+	OpLog.i(LOG_TAG, [
+		"send_game_start spectator=", spectator_mode,
+		" player=", player,
+		" moves_made=", moves_made,
+		" game_over=", game_over
+	])
 
 	if spectator_mode:
+		OpLog.w(LOG_TAG, "send_game_blocked spectator=true")
 		return
 
 	is_my_turn = false
@@ -1009,6 +1206,7 @@ func send_game() -> void:
 	for m in moves_made:
 		all_moves += "move:" + m + "|"
 
+	var sent_moves := moves_made.duplicate()
 	moves_made.clear()
 
 	var post_board_str = "board:"
@@ -1032,14 +1230,28 @@ func send_game() -> void:
 	if player != 0 and is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		var avatar_string = player_avatar_display.get_avatar_data_string()
 		payload[avatar_key] = avatar_string
-		print("Adding my avatar data to payload with key '", avatar_key, "'")
+		OpLog.d(LOG_TAG, ["send_game_avatar_added key=", avatar_key])
 
 	if await check_win():
 		if game_over and win_loss_state != "":
 			payload["winner"] = my_uuid + "|" + win_loss_state
+			OpLog.event(LOG_TAG, [
+				"send_game_winner winner=", payload["winner"],
+				" winner_id=", winner_id,
+				" win_loss_state=", win_loss_state
+			])
 
 	var game_data = JSON.stringify(payload)
-	print("Game data being sent: " + game_data)
+
+	OpLog.event(LOG_TAG, [
+		"send_game_out player=", player,
+		" mode=", mode,
+		" moves=", sent_moves,
+		" prev_board_len=", prev_board_str.length(),
+		" replay_len=", str(payload["replay"]).length(),
+		" has_winner=", payload.has("winner"),
+		" raw=", game_data
+	])
 
 	send_game_data(game_data)
 
@@ -1047,10 +1259,19 @@ func send_game() -> void:
 		stop_waiting_animation()
 	else:
 		play_sent_animation()
-		
+
 func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: String = "") -> void:
+	OpLog.event(LOG_TAG, [
+		"apply_winner_payload payload=", winner_payload,
+		" p1=", p1_id,
+		" p2=", p2_id,
+		" my_uuid=", my_uuid,
+		" spectator=", spectator_mode
+	])
+
 	var parts := winner_payload.split("|", false)
 	if parts.size() < 2:
+		OpLog.w(LOG_TAG, ["bad_winner_payload payload=", winner_payload])
 		return
 
 	var sender_uuid := String(parts[0])
@@ -1081,10 +1302,17 @@ func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: St
 		if sender_uuid != my_uuid:
 			local_state = "-1" if sender_state == "1" else "1"
 
+	OpLog.i(LOG_TAG, [
+		"winner_resolved sender_uuid=", sender_uuid,
+		" sender_state=", sender_state,
+		" local_state=", local_state,
+		" winning_player=", winning_player
+	])
+
 	_show_result_from_state(local_state, winning_player)
-		
+
 func check_win() -> bool:
-	print("Checking for game over condition...")
+	OpLog.d(LOG_TAG, "check_win_start")
 
 	if game_over:
 		return true
@@ -1101,23 +1329,37 @@ func check_win() -> bool:
 			player2_side_empty = false
 			break
 
+	OpLog.d(LOG_TAG, [
+		"check_win_sides p1_empty=", player1_side_empty,
+		" p2_empty=", player2_side_empty,
+		" p1_store=", pits[6].size(),
+		" p2_store=", pits[13].size()
+	])
+
 	if not player1_side_empty and not player2_side_empty:
 		return false
 
-	print("Game over: One player's side is empty.")
+	OpLog.event(LOG_TAG, [
+		"game_over_side_empty p1_empty=", player1_side_empty,
+		" p2_empty=", player2_side_empty
+	])
 
 	if player1_side_empty:
-		print("Player 1's side empty -> animate stones from Player 2 pits to Store 13.")
+		OpLog.event(LOG_TAG, "sweep_player2_side_to_store13")
 		await _animate_sweep([7, 8, 9, 10, 11, 12], 13)
 	elif player2_side_empty:
-		print("Player 2's side empty -> animate stones from Player 1 pits to Store 6.")
+		OpLog.event(LOG_TAG, "sweep_player1_side_to_store6")
 		await _animate_sweep([0, 1, 2, 3, 4, 5], 6)
 		_refresh_pit_count_label(6)
 
 	var p1: int = pits[6].size()
 	var p2: int = pits[13].size()
 
-	print("Final scores: Player 1 (store 6): ", p1, ", Player 2 (store 13): ", p2)
+	OpLog.event(LOG_TAG, [
+		"final_scores p1=", p1,
+		" p2=", p2,
+		" local_player=", player
+	])
 
 	if p1 > p2:
 		winner_id = 1
@@ -1130,7 +1372,7 @@ func check_win() -> bool:
 		_show_result_from_state("0")
 
 	return true
-	
+
 func _show_result_from_state(state: String, spectator_winner_player: int = 0) -> void:
 	game_over = true
 	disp_winner = true
@@ -1178,7 +1420,16 @@ func _show_result_from_state(state: String, spectator_winner_player: int = 0) ->
 
 		if is_instance_valid(opp_avatar_display):
 			GameUtils._show_win_burst(opp_avatar_display)
-
+	OpLog.event(LOG_TAG, [
+		"show_result state=", state,
+		" spectator_winner_player=", spectator_winner_player,
+		" player=", player,
+		" spectator=", spectator_mode,
+		" winner_id=", winner_id,
+		" win_loss_text=", win_loss_label.text,
+		" p1_store=", pits[6].size() if pits.size() > 6 else -1,
+		" p2_store=", pits[13].size() if pits.size() > 13 else -1
+	])
 	win_loss_label.visible = true
 	win_loss_label.scale = Vector2.ZERO
 	win_loss_label.pivot_offset = win_loss_label.size / 2
@@ -1255,7 +1506,7 @@ func _animate_sweep(pit_indices: Array, store_idx: int) -> void:
 	
 func _on_skip_button_pressed() -> void:
 	if in_replay:
-		print("Skip button pressed during replay!")
+		OpLog.event(LOG_TAG, "skip_replay_pressed")
 		_skip_replay_animation = true
 
 func _get_rules_text_for_mode() -> String:
@@ -1314,7 +1565,12 @@ No rule info found for this mode.
 """
 
 func play_sent_animation():
-	if not is_instance_valid(sent_label) or game_over:
+	if not is_instance_valid(sent_label):
+		OpLog.w(LOG_TAG, "sent_animation_missing_label")
+		return
+
+	if game_over:
+		OpLog.d(LOG_TAG, "sent_animation_skipped game_over=true")
 		return
 
 	if sent_tween and sent_tween.is_running():
@@ -1473,7 +1729,7 @@ func _get_mancala_themes() -> Dictionary:
 		# Store the generated texture object directly in the dictionary
 		themes_data[theme_name] = {"texture": preview_tex}
 	
-	print("Dynamic theme previews generated:", themes_data.keys())
+	OpLog.d(LOG_TAG, ["theme_previews_generated themes=", themes_data.keys()])
 	return themes_data
 	
 func _apply_board_sprite_modulate() -> void:

@@ -1,19 +1,25 @@
 extends Button
 
-# Called when the node enters the scene tree for the first time.
+const LOG_TAG := "Connect4Button"
+
 func _ready() -> void:
 	pass
 
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	pass
 
 func _pressed() -> void:
-	if name == "SendButton":
-		var board: ConnectGameBoard = get_node("../GameBoard")
-		var appPlugin := Engine.get_singleton("AppPlugin")
-		if appPlugin:
-			appPlugin.updateGameData(board.export_replay())
-		else:
-			print(board.export_replay())
-			print("App not connected!")
+	if name != "SendButton":
+		return
+
+	var board: ConnectGameBoard = get_node("../GameBoard")
+	var appPlugin := Engine.get_singleton("AppPlugin")
+
+	if appPlugin:
+		OpLog.event(LOG_TAG, "legacy_send_button_updateGameData")
+		appPlugin.updateGameData(board.export_replay())
+	else:
+		OpLog.w(LOG_TAG, [
+			"legacy_send_button_no_app_plugin replay=",
+			board.export_replay()
+		])

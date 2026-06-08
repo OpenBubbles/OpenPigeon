@@ -264,7 +264,7 @@ val prepareGodotReleaseAssets by tasks.registering(Sync::class) {
 
     from(godotProjectDir) {
         include("attributions.html")
-include("global/gp_wg_*.txt")
+        include("global/gp_wg_*.txt")
     }
 }
 

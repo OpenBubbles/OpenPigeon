@@ -2,6 +2,8 @@ extends Panel
 
 @onready var board: ConnectGameBoard = %GameBoard
 
+const LOG_TAG := "Connect4Row"
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb: InputEventMouseButton = event as InputEventMouseButton
@@ -13,9 +15,11 @@ func _input(event: InputEvent) -> void:
 			return
 
 		if board.waitingForOpponent:
+			OpLog.d(LOG_TAG, ["row_click_blocked waiting=true row=", name])
 			return
 
 		var col: int = int(name.replace("Row", ""))
+		OpLog.event(LOG_TAG, ["row_pointer_down col=", col, " input=mouse"])
 		board.column_pointer_down(col, mb.position)
 		get_viewport().set_input_as_handled()
 
@@ -29,8 +33,10 @@ func _input(event: InputEvent) -> void:
 			return
 
 		if board.waitingForOpponent:
+			OpLog.d(LOG_TAG, ["row_touch_blocked waiting=true row=", name])
 			return
 
 		var col: int = int(name.replace("Row", ""))
+		OpLog.event(LOG_TAG, ["row_pointer_down col=", col, " input=touch"])
 		board.column_pointer_down(col, touch.position)
 		get_viewport().set_input_as_handled()

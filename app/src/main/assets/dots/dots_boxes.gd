@@ -46,6 +46,13 @@ var red_marker_tex: Texture2D = preload("res://dots/red_marker.png")
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
 	
+const LOG_TAG := "DotsBoxes"
+var DEBUG_DOTS_BOXES := false
+
+func dbg(msg: String) -> void:
+	if DEBUG_DOTS_BOXES:
+		OpLog.d(LOG_TAG, msg)
+	
 func _get_dev_data() -> String:
 	return '{"isYourTurn": true,"size": "4","player": "2","replay": "board:1,0,2,0,3#2,0,1,0,2#1,0,0,0,1#2,2,1,2,2#1,3,0,3,1#2,2,0,2,1#1,1,1,1,2#2,1,0,1,1#1,3,2,3,3#2,1,2,1,3#1,3,1,3,2#2,2,2,2,3#1,1,0,2,0|line:2,1,1,2,1|square:2,1,0|line:2,1,2,2,2|square:2,1,1|line:2,1,3,2,3|square:2,1,2|line:2,2,0,3,0|board:1,0,2,0,3#2,0,1,0,2#1,0,0,0,1#2,2,1,2,2#1,3,0,3,1#2,2,0,2,1#1,1,1,1,2#2,1,0,1,1#1,3,2,3,3#2,1,2,1,3#1,3,1,3,2#2,2,2,2,3#1,1,0,2,0#2,1,1,2,1#2,1,2,2,2#2,1,3,2,3#2,2,0,3,0#2,1,0#2,1,1#2,1,2","sender":"7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX","version": "5","tver": "5","ios": "18.5","id": "dev","player2": "7482724F-04A2-4917-9EB3-8857DD4D44EAP3AIzX"}'
 	
@@ -59,7 +66,7 @@ func _on_game_ready() -> void:
 	var sb := StyleBoxFlat.new()
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
 
-	print("Dark Mode: ", is_dark)
+	OpLog.i(LOG_TAG, ["game_ready dark_mode=", is_dark, " board_size=", board_size])
 
 	_apply_bg_for_dark(is_dark)
 
@@ -102,10 +109,12 @@ func _on_game_ready() -> void:
 		if grid.has_signal("temp_line_changed"):
 			if not grid.is_connected("temp_line_changed", Callable(self, "_on_temp_line_changed")):
 				grid.connect("temp_line_changed", Callable(self, "_on_temp_line_changed"))
-				print("[Grid] connected temp_line_changed")
+				OpLog.d(LOG_TAG, "connected_temp_line_changed")
 		else:
+			OpLog.w(LOG_TAG, "grid_temp_line_changed_signal_missing")
 			push_warning("[Grid] temp_line_changed signal missing")
 	else:
+		OpLog.e(LOG_TAG, "missing_dots_grid_node")
 		push_warning("No %DotsGrid in scene")
 
 	if is_instance_valid(send_button):
@@ -116,16 +125,28 @@ func _on_game_ready() -> void:
 		if not send_button.pressed.is_connected(_on_send_pressed):
 			send_button.pressed.connect(_on_send_pressed)
 
-		print("[SendButton] ready; visible=", send_button.visible, " a=", send_button.modulate.a)
+		OpLog.d(LOG_TAG, [
+			"send_button_ready visible=", send_button.visible,
+			" alpha=", send_button.modulate.a
+		])
 	else:
+		OpLog.w(LOG_TAG, "missing_send_button")
 		push_warning("No %SendButton in scene")
 
 	_apply_player_color_icons()
-	
+
 func _set_game_data(raw_text: String) -> void:
-	var res: Dictionary = JSON.parse_string(raw_text)
-	if typeof(res) != TYPE_DICTIONARY:
+	OpLog.event(LOG_TAG, ["set_game_data_in raw=", raw_text])
+
+	var parsed: Variant = JSON.parse_string(raw_text)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		OpLog.e(LOG_TAG, [
+			"set_game_data_parse_failed type=", typeof(parsed),
+			" raw=", raw_text
+		])
 		return
+
+	var res: Dictionary = parsed
 
 	game_over = false
 	game_ended = false
@@ -140,14 +161,26 @@ func _set_game_data(raw_text: String) -> void:
 		win_loss_label.text = ""
 		win_loss_label.scale = Vector2.ONE
 
-	print("RAW INCOMING DATA: ", res)
-
 	var p1_id: String = res.get("player1", "")
 	var p2_id: String = res.get("player2", "")
 	var opponent_avatar_key := ""
 
 	turn_owner = clamp(int(res.get("player", 1)), 1, 2)
 	is_your_turn = bool(res.get("isYourTurn", false))
+
+	var replay_str: String = String(res.get("replay", ""))
+	var winner_payload: String = String(res.get("winner", ""))
+
+	OpLog.i(LOG_TAG, [
+		"set_game_data_fields my_uuid=", my_uuid,
+		" player1=", p1_id,
+		" player2=", p2_id,
+		" turn_owner=", turn_owner,
+		" isYourTurn=", is_your_turn,
+		" size=", res.get("size", board_size),
+		" replay_len=", replay_str.length(),
+		" has_winner=", winner_payload != ""
+	])
 
 	if my_uuid != "" and p1_id != "" and p2_id != "":
 		player = (1 if my_uuid == p1_id else (2 if my_uuid == p2_id else 0))
@@ -176,6 +209,13 @@ func _set_game_data(raw_text: String) -> void:
 	else:
 		opponent_avatar_key = "avatar1"
 
+	OpLog.i(LOG_TAG, [
+		"resolved_player player=", player,
+		" spectator=", spectator_mode,
+		" is_your_turn=", is_your_turn,
+		" opponent_avatar_key=", opponent_avatar_key
+	])
+
 	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
 		var avatar_string = res[opponent_avatar_key]
 		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
@@ -195,16 +235,18 @@ func _set_game_data(raw_text: String) -> void:
 
 	if is_instance_valid(grid) and grid.has_method("set_grid"):
 		grid.call("set_grid", board_size)
+	else:
+		OpLog.w(LOG_TAG, "grid_missing_set_grid")
 
-	var replay_str: String = String(res.get("replay", ""))
 	await _load_pre_state_and_replay(replay_str)
 
-	if res.has("winner") and String(res.get("winner", "")) != "":
-		_apply_winner_payload(String(res.get("winner", "")), p1_id, p2_id)
+	if winner_payload != "":
+		OpLog.event(LOG_TAG, ["winner_payload_received payload=", winner_payload])
+		_apply_winner_payload(winner_payload, p1_id, p2_id)
 		return
 
 	is_my_turn = is_your_turn
-	
+
 	game_ended = await check_win()
 
 	if game_ended:
@@ -215,7 +257,18 @@ func _set_game_data(raw_text: String) -> void:
 		start_waiting_animation()
 	else:
 		stop_waiting_animation()
-		
+
+	OpLog.i(LOG_TAG, [
+		"set_game_data_done player=", player,
+		" is_my_turn=", is_my_turn,
+		" spectator=", spectator_mode,
+		" game_over=", game_over,
+		" game_ended=", game_ended,
+		" my_score=", my_score,
+		" opp_score=", opp_score,
+		" turn_steps=", _turn_steps.size()
+	])
+
 func _load_pre_state_and_replay(replay_str: String) -> void:
 	_loading_replay = true
 
@@ -229,11 +282,23 @@ func _load_pre_state_and_replay(replay_str: String) -> void:
 	opponent_post_lines = parsed.get("post_lines", [])
 	opponent_post_squares = parsed.get("post_squares", [])
 
+	OpLog.i(LOG_TAG, [
+		"load_replay pre_lines=", pre_lines.size(),
+		" pre_squares=", pre_squares.size(),
+		" moves=", moves.size(),
+		" post_lines=", opponent_post_lines.size(),
+		" post_squares=", opponent_post_squares.size(),
+		" replay_len=", replay_str.length()
+	])
+
 	if is_instance_valid(grid) and grid.has_method("load_lines_and_squares_state"):
 		grid.call("load_lines_and_squares_state", pre_lines, pre_squares)
+	else:
+		OpLog.w(LOG_TAG, "grid_missing_load_lines_and_squares_state")
 
 	if not moves.is_empty() and is_instance_valid(grid) and grid.has_method("replay_line_move"):
 		for move in moves:
+			OpLog.event(LOG_TAG, ["replay_line_move move=", move])
 			await grid.call("replay_line_move", move)
 			await get_tree().create_timer(0.7).timeout
 
@@ -245,7 +310,13 @@ func _load_pre_state_and_replay(replay_str: String) -> void:
 			opp_score_label.text = "0"
 
 	_loading_replay = false
-	
+
+	OpLog.i(LOG_TAG, [
+		"load_replay_done committed_lines=", prev_lines_cache.size(),
+		" my_score=", my_score,
+		" opp_score=", opp_score
+	])
+
 func _set_is_my_turn(v: bool) -> void:
 	is_my_turn = v
 	if v:
@@ -265,16 +336,27 @@ func _apply_turn_state() -> void:
 		
 func _parse_replay_dnb(raw: String) -> Dictionary:
 	var out := {
-		"pre_board_str": "", "post_board_str": "", "pre_lines": [], "pre_squares": [], 
-		"moves": [], "post_lines": [], "post_squares": []
+		"pre_board_str": "",
+		"post_board_str": "",
+		"pre_lines": [],
+		"pre_squares": [],
+		"moves": [],
+		"post_lines": [],
+		"post_squares": []
 	}
-	if raw.strip_edges() == "": return out
+
+	if raw.strip_edges() == "":
+		OpLog.d(LOG_TAG, "parse_replay empty")
+		return out
+
 	var parts := raw.split("|")
 	var is_first_board := true
+
 	for p in parts:
 		if p.begins_with("board:"):
 			var b := p.substr(6)
 			var br := _parse_board_string(b)
+
 			if is_first_board:
 				out["pre_board_str"] = b
 				out["pre_lines"] = br["lines"]
@@ -286,7 +368,25 @@ func _parse_replay_dnb(raw: String) -> Dictionary:
 				out["post_squares"] = br["squares"]
 		elif p.begins_with("line:"):
 			var mv := _csv_to_ints(p.substr(5))
-			if mv.size() >= 5: out["moves"].append([mv[0], mv[1], mv[2], mv[3], mv[4]])
+			if mv.size() >= 5:
+				out["moves"].append([mv[0], mv[1], mv[2], mv[3], mv[4]])
+			else:
+				OpLog.w(LOG_TAG, ["parse_replay_bad_line chunk=", p])
+		elif p.begins_with("square:"):
+			# Squares are included in replay for payload parity but are applied from board snapshots.
+			dbg("parse_replay_square_chunk %s" % p)
+		elif p.strip_edges() != "":
+			OpLog.w(LOG_TAG, ["parse_replay_unknown_chunk chunk=", p])
+
+	OpLog.i(LOG_TAG, [
+		"parse_replay_done parts=", parts.size(),
+		" pre_lines=", out["pre_lines"].size(),
+		" pre_squares=", out["pre_squares"].size(),
+		" moves=", out["moves"].size(),
+		" post_lines=", out["post_lines"].size(),
+		" post_squares=", out["post_squares"].size()
+	])
+
 	return out
 
 func _parse_board_string(b: String) -> Dictionary:
@@ -345,7 +445,7 @@ func _apply_player_color_icons() -> void:
 
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
-		print("Is Dark: ", is_dark)
+		OpLog.d(LOG_TAG, ["apply_background is_dark=", is_dark])
 		background.color = Color("#261a19") if is_dark else Color("#947972")
 
 func _on_resized() -> void:
@@ -436,9 +536,19 @@ func _update_send_button_visibility(should_show: bool) -> void:
 			)
 
 func _on_send_pressed() -> void:
-	print("[SendButton] pressed -> committing temp line and sending")
+	OpLog.event(LOG_TAG, [
+		"send_pressed game_over=", game_over,
+		" spectator=", spectator_mode,
+		" is_my_turn=", is_my_turn,
+		" turn_steps=", _turn_steps.size()
+	])
 
 	if game_over or spectator_mode or not is_my_turn:
+		OpLog.w(LOG_TAG, [
+			"send_pressed_blocked game_over=", game_over,
+			" spectator=", spectator_mode,
+			" is_my_turn=", is_my_turn
+		])
 		_update_send_button_visibility(false)
 		return
 
@@ -446,8 +556,10 @@ func _on_send_pressed() -> void:
 
 	if is_instance_valid(grid) and grid.has_method("commit_temp_line_now"):
 		committed = bool(grid.call("commit_temp_line_now"))
+	else:
+		OpLog.w(LOG_TAG, "grid_missing_commit_temp_line_now")
 
-	print("[Send] commit_temp_line_now -> ", committed)
+	OpLog.i(LOG_TAG, ["commit_temp_line_now committed=", committed])
 
 	is_my_turn = false
 
@@ -458,13 +570,12 @@ func _on_send_pressed() -> void:
 
 	if has_method("send_game"):
 		call_deferred("send_game")
-		
+
 func send_game() -> void:
-	print("[Send] send_game() called")
 	await get_tree().process_frame
 
 	if _turn_steps.is_empty():
-		print("[Send] No committed steps this turn; abort")
+		OpLog.w(LOG_TAG, "send_game_blocked no_committed_steps")
 		_update_send_button_visibility(false)
 		return
 
@@ -511,14 +622,32 @@ func send_game() -> void:
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
 
 	game_ended = await check_win()
+
 	if game_ended:
-		print("Check Win 773 my_player: ", my_uuid, " win_loss_state: ", win_loss_state)
+		OpLog.event(LOG_TAG, [
+			"send_game_check_win game_ended=true my_uuid=", my_uuid,
+			" win_loss_state=", win_loss_state
+		])
 
 		if win_loss_state != "":
 			payload["winner"] = my_uuid + "|" + win_loss_state
 
-	print("[Send] PAYLOAD: ", payload)
-	send_game_data(JSON.stringify(payload))
+	var json := JSON.stringify(payload)
+
+	OpLog.event(LOG_TAG, [
+		"send_game_out player=", player,
+		" new_lines=", new_lines.size(),
+		" new_squares=", new_squares.size(),
+		" final_lines=", final_lines.size(),
+		" final_squares=", final_squares.size(),
+		" game_ended=", game_ended,
+		" game_over=", game_over,
+		" has_winner=", payload.has("winner"),
+		" replay_len=", replay.length(),
+		" raw=", json
+	])
+
+	send_game_data(json)
 
 	is_my_turn = false
 
@@ -534,17 +663,39 @@ func send_game() -> void:
 
 	prev_lines_cache = final_lines
 	_turn_steps.clear()
-	
+
 func _on_line_committed_bl(p: int, x1: int, y1: int, x2: int, y2: int) -> void:
 	var mv := [p, x1, y1, x2, y2]
+
 	for step in _turn_steps:
 		if step.has("line") and step["line"] == mv:
+			OpLog.d(LOG_TAG, ["duplicate_line_commit_ignored line=", mv])
 			return
+
 	_turn_steps.append({ "line": mv, "squares": [] })
+
+	OpLog.event(LOG_TAG, [
+		"line_committed player=", p,
+		" line=", mv,
+		" turn_steps=", _turn_steps.size()
+	])
 
 func _on_square_completed_bl(p: int, x_bl: int, y_bl: int) -> void:
 	if _turn_steps.size() > 0:
-		_turn_steps[_turn_steps.size() - 1]["squares"].append([p, x_bl, y_bl])
+		var sq := [p, x_bl, y_bl]
+		_turn_steps[_turn_steps.size() - 1]["squares"].append(sq)
+
+		OpLog.event(LOG_TAG, [
+			"square_completed player=", p,
+			" square=", sq,
+			" current_step=", _turn_steps[_turn_steps.size() - 1]
+		])
+	else:
+		OpLog.w(LOG_TAG, [
+			"square_completed_without_turn_step player=", p,
+			" x=", x_bl,
+			" y=", y_bl
+		])
 
 func _find_new_moves(current_lines: Array, prev_lines: Array) -> Array:
 	var new_moves: Array = []
@@ -628,9 +779,9 @@ func _get_rules_text() -> String:
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
-		print("Warning: sent_label is not valid for play_sent_animation.")
+		OpLog.w(LOG_TAG, "sent_animation_missing_label")
 		return
-	
+
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()
 
@@ -661,60 +812,95 @@ func play_sent_animation() -> void:
 		else:
 			stop_waiting_animation()
 	)
-	
+
 func check_win() -> bool:
-	print("--- CHECKING WIN CONDITION ---")
-	if my_score + opp_score < (board_size - 1) * (board_size - 1):
-		print("-> RESULT: Game Continues. More than 2 colors remain or combined score is too low.")
+	var total_boxes := (board_size - 1) * (board_size - 1)
+	var claimed := my_score + opp_score
+
+	OpLog.d(LOG_TAG, [
+		"check_win claimed=", claimed,
+		" total_boxes=", total_boxes,
+		" my_score=", my_score,
+		" opp_score=", opp_score,
+		" game_over=", game_over,
+		" spectator=", spectator_mode
+	])
+
+	if claimed < total_boxes:
 		return false
-	print("-> WIN CONDITION MET: 2 or fewer colors remain.")
-	
+
 	var was_over = game_over
 	game_over = true
+
 	if not was_over:
-		print("-> Evaluating final scores. My score: %d, Opponent's score: %d" % [my_score, opp_score])
+		OpLog.event(LOG_TAG, [
+			"win_condition_met my_score=", my_score,
+			" opp_score=", opp_score,
+			" player=", player,
+			" spectator=", spectator_mode
+		])
+
 		if my_score > opp_score:
-			print("-> FINAL TALLY: YOU WIN!")
+			OpLog.event(LOG_TAG, "final_tally local_win")
 			GameUtils._show_win_burst(player_avatar_display)
+
 			if not spectator_mode:
 				win_loss_label.text = "YOU WIN!"
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 			else:
 				win_loss_label.text = "Player 1 Wins!"
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
 			win_loss_state = "1"
 		elif opp_score > my_score:
-			print("-> FINAL TALLY: YOU LOSE")
+			OpLog.event(LOG_TAG, "final_tally local_loss")
 			GameUtils._show_win_burst(opp_avatar_display)
-			win_loss_label.text = "YOU LOSE"
+
 			if not spectator_mode:
 				win_loss_label.text = "YOU LOSE"
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
 			else:
 				win_loss_label.text = "Player 2 Wins!"
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
 			win_loss_state = "-1"
 		else:
-			print("-> FINAL TALLY: TIE!")
+			OpLog.event(LOG_TAG, "final_tally_draw")
 			win_loss_label.text = "DRAW!"
 			win_loss_state = "0"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
+
+		OpLog.event(LOG_TAG, [
+			"show_result state=", win_loss_state,
+			" text=", win_loss_label.text,
+			" my_score=", my_score,
+			" opp_score=", opp_score
+		])
 
 		win_loss_label.visible = true
 		await get_tree().process_frame
 		win_loss_label.scale = Vector2.ZERO
 		win_loss_label.pivot_offset = win_loss_label.size / 2
-		
+
 		var tween_in = create_tween()
 		tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	else:
-		print("-> Game was already marked as over. No new result displayed.")
+		OpLog.d(LOG_TAG, "check_win_already_game_over")
 
 	return true
 
 func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: String = "") -> void:
+	OpLog.event(LOG_TAG, [
+		"apply_winner_payload payload=", winner_payload,
+		" p1=", p1_id,
+		" p2=", p2_id,
+		" my_uuid=", my_uuid,
+		" spectator=", spectator_mode
+	])
+
 	var parts := winner_payload.split("|", false)
 	if parts.size() < 2:
+		OpLog.w(LOG_TAG, ["bad_winner_payload payload=", winner_payload])
 		return
 
 	var sender_uuid := String(parts[0])
@@ -777,6 +963,15 @@ func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: St
 			win_loss_label.text = "YOU WIN!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 			GameUtils._show_win_burst(player_avatar_display)
+
+	OpLog.event(LOG_TAG, [
+		"winner_resolved sender_uuid=", sender_uuid,
+		" result=", result,
+		" local_state=", win_loss_state,
+		" text=", win_loss_label.text,
+		" my_score=", my_score,
+		" opp_score=", opp_score
+	])
 
 	win_loss_label.visible = true
 	win_loss_label.scale = Vector2.ONE

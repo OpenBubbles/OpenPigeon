@@ -58,6 +58,8 @@ var sent_label_tween: Tween
 var _send_btn_shown_y := 0.0
 var _send_btn_hidden_y := 0.0
 
+const LOG_TAG := "Gomoku"
+
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
 	
@@ -96,21 +98,28 @@ func _on_game_ready() -> void:
 		if not send_button.pressed.is_connected(_on_send_button_pressed):
 			send_button.pressed.connect(_on_send_button_pressed)
 
-		print("[SendButton] ready; visible=", send_button.visible, " a=", send_button.modulate.a)
+		OpLog.d(LOG_TAG, [
+			"send_button_ready visible=", send_button.visible,
+			" alpha=", send_button.modulate.a,
+			" shown_y=", _send_btn_shown_y,
+			" hidden_y=", _send_btn_hidden_y
+		])
 	else:
+		OpLog.w(LOG_TAG, "missing_send_button")
 		push_warning("No %SendButton in scene")
 		
 	_setup_place_hint_label()
 	_update_place_hint_visibility()
 		
 func _set_game_data(raw_text: String) -> void:
+	OpLog.event(LOG_TAG, ["set_game_data_in raw=", raw_text])
+
 	var res: Variant = JSON.parse_string(raw_text)
 	if typeof(res) != TYPE_DICTIONARY:
-		print("[GOMOKU] Bad JSON for _set_game_data")
+		OpLog.e(LOG_TAG, ["set_game_data_parse_failed raw=", raw_text])
 		return
 
 	var d: Dictionary = res
-	print("INCOMING DATA: ", d)
 
 	game_over = false
 	game_ended = false
@@ -145,6 +154,18 @@ func _set_game_data(raw_text: String) -> void:
 	var sender_player: int = clampi(int(sender_s), 1, 2)
 	var opponent_avatar_key := ""
 
+	OpLog.i(LOG_TAG, [
+		"set_game_data_fields game_id=", game_id,
+		" my_uuid=", my_uuid,
+		" player1=", p1_id,
+		" player2=", p2_id,
+		" sender_player=", sender_player,
+		" isYourTurn=", is_your_turn,
+		" map_len=", map_str.length(),
+		" move=", move_str,
+		" has_winner=", winner_payload != ""
+	])
+
 	if p1_id != "" and p2_id != "":
 		if my_uuid != "" and my_uuid == p1_id:
 			player = 1
@@ -157,6 +178,12 @@ func _set_game_data(raw_text: String) -> void:
 		player = (1 if ((sender_player == 2 and is_your_turn) or (sender_player == 1 and not is_your_turn)) else 2)
 
 	is_my_turn = is_your_turn and not spectator_mode
+
+	OpLog.i(LOG_TAG, [
+		"resolved_player player=", player,
+		" is_my_turn=", is_my_turn,
+		" spectator=", spectator_mode
+	])
 
 	if is_instance_valid(spec_label):
 		spec_label.visible = spectator_mode
@@ -188,8 +215,15 @@ func _set_game_data(raw_text: String) -> void:
 	_clear_board_visuals()
 	_make_runtime_nodes()
 
+	OpLog.d(LOG_TAG, [
+		"board_reset inferred_dim=", inferred_dim,
+		" board_size=", board_size
+	])
+
 	if map_str.length() > 0:
 		var dim: int = _infer_dim_from_map(map_str)
+		var placed_from_map := 0
+
 		for i in map_str.length():
 			var ch := String(map_str[i])
 			if ch == "1" or ch == "2":
@@ -198,6 +232,12 @@ func _set_game_data(raw_text: String) -> void:
 				var row := i / dim
 				var g := _proto_to_grid(row, col, dim)
 				_place_stone_direct(g, int(ch))
+				placed_from_map += 1
+
+		OpLog.i(LOG_TAG, [
+			"map_applied dim=", dim,
+			" stones=", placed_from_map
+		])
 
 	if move_str != "":
 		var parts: PackedStringArray = move_str.split(",", false)
@@ -213,7 +253,24 @@ func _set_game_data(raw_text: String) -> void:
 				moves.append({"x": gg.x, "y": gg.y, "p": mp})
 				_current_move = gg
 
+				OpLog.event(LOG_TAG, [
+					"incoming_move_applied proto_row=", row,
+					" proto_col=", col,
+					" grid=", gg,
+					" p=", mp
+				])
+			else:
+				OpLog.w(LOG_TAG, [
+					"incoming_move_rejected move=", move_str,
+					" grid=", gg,
+					" in_bounds=", _grid_in_bounds(gg),
+					" cell=", board_state[gg.y][gg.x] if _grid_in_bounds(gg) else -1
+				])
+		else:
+			OpLog.w(LOG_TAG, ["bad_incoming_move move=", move_str])
+
 	if winner_payload != "":
+		OpLog.event(LOG_TAG, ["winner_payload_received payload=", winner_payload])
 		_apply_winner_payload(winner_payload, p1_id, p2_id)
 		return
 
@@ -231,14 +288,20 @@ func _set_game_data(raw_text: String) -> void:
 		_return_active_to_bowl()
 	else:
 		_finalize_active_tile()
-		
+
 	_update_place_hint_visibility()
 
 	_ui_gesture_block = false
 	_is_dragging = false
 
-	print("IS MY TURN?: ", is_my_turn, " | GAME OVER?: ", game_over, " | PLAYER NUM?: ", player)
-	
+	OpLog.i(LOG_TAG, [
+		"set_game_data_done is_my_turn=", is_my_turn,
+		" game_over=", game_over,
+		" game_ended=", game_ended,
+		" player=", player,
+		" moves=", moves.size()
+	])
+
 func _panel_inner_rect() -> Rect2:
 	var r := Board.get_rect()
 	var sb := Board.get_theme_stylebox("panel")
@@ -594,8 +657,13 @@ func _place_or_move_active_to(g: Vector2i, from_drag: bool = false) -> void:
 	_has_uncommitted_move = true
 	_show_send_button()
 
-	print("[MOVE] Placing stone p=", p, " at ", g, " player=", player)
-	print("[MOVE] Board updated; calling _update_win_preview_for_current_move()")
+	OpLog.event(LOG_TAG, [
+		"local_move_selected grid=", g,
+		" p=", p,
+		" player=", player,
+		" from_drag=", from_drag
+	])
+
 	_update_win_preview_for_current_move()
 
 	for i in range(moves.size() - 1, -1, -1):
@@ -605,7 +673,11 @@ func _place_or_move_active_to(g: Vector2i, from_drag: bool = false) -> void:
 			break
 
 	moves.append({"x": g.x, "y": g.y, "p": p})
-	print("[MOVE] Moves history now: ", moves)
+
+	OpLog.d(LOG_TAG, [
+		"moves_history size=", moves.size(),
+		" latest=", moves[-1]
+	])
 
 func _return_active_to_bowl() -> void:
 	if _active_tile == null:
@@ -856,7 +928,7 @@ func _on_send_button_pressed() -> void:
 	
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
-		print("Warning: sent_label is not valid for play_sent_animation.")
+		OpLog.w(LOG_TAG, "sent_animation_missing_label")
 		return
 
 	if game_over:
@@ -951,14 +1023,26 @@ func _find_five_or_more(p: int) -> Array:
 					cy += d.y
 
 				if coords.size() >= 5:
-					print("Found 5+ run for player ", p, " -> ", coords)
+					OpLog.event(LOG_TAG, [
+						"found_five_or_more p=", p,
+						" coords=", coords
+					])
 					return coords
 
 	return []
-	
+
 func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: String = "") -> void:
+	OpLog.event(LOG_TAG, [
+		"apply_winner_payload payload=", winner_payload,
+		" p1=", p1_id,
+		" p2=", p2_id,
+		" my_uuid=", my_uuid,
+		" spectator=", spectator_mode
+	])
+
 	var parts := winner_payload.split("|", false)
 	if parts.size() < 2:
+		OpLog.w(LOG_TAG, ["bad_winner_payload payload=", winner_payload])
 		return
 
 	var sender_uuid := String(parts[0])
@@ -989,8 +1073,15 @@ func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: St
 		if sender_uuid != my_uuid:
 			local_state = "-1" if sender_state == "1" else "1"
 
+	OpLog.i(LOG_TAG, [
+		"winner_resolved sender_uuid=", sender_uuid,
+		" sender_state=", sender_state,
+		" local_state=", local_state,
+		" winning_player=", winning_player
+	])
+
 	_show_result_from_state(local_state, winning_player)
-	
+
 func _show_result_from_state(state: String, spectator_winner_player: int = 0) -> void:
 	game_over = true
 	game_ended = true
@@ -999,6 +1090,14 @@ func _show_result_from_state(state: String, spectator_winner_player: int = 0) ->
 	_has_uncommitted_move = false
 	_ui_gesture_block = false
 	_is_dragging = false
+	
+	OpLog.event(LOG_TAG, [
+		"show_result state=", state,
+		" spectator_winner_player=", spectator_winner_player,
+		" player=", player,
+		" spectator=", spectator_mode,
+		" last_win_coords=", last_win_coords
+	])
 
 	stop_waiting_animation()
 	_hide_send_button()
@@ -1045,54 +1144,67 @@ func _show_result_from_state(state: String, spectator_winner_player: int = 0) ->
 	tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 
 func check_win() -> bool:
-	print("--- CHECKING WIN CONDITION (5+ in-a-row) ---")
-	print("[WIN] player=", player, " current_move=", _current_move)
+	OpLog.d(LOG_TAG, [
+		"check_win start player=", player,
+		" current_move=", _current_move
+	])
 
 	var p1_coords: Array = []
 	var p2_coords: Array = []
 
 	if _current_move.x >= 0 and _current_move.y >= 0:
 		var cur_p: int = int(board_state[_current_move.y][_current_move.x])
-		print("[WIN] Current cell value=", cur_p)
+
+		OpLog.d(LOG_TAG, [
+			"check_win current_cell value=", cur_p,
+			" current_move=", _current_move
+		])
 
 		if cur_p == 2:
 			p1_coords = _get_line_through_cell(2, _current_move)
-			print("[WIN] Line through current move for Player 1: ", p1_coords)
+			OpLog.d(LOG_TAG, ["check_win p1_line=", p1_coords])
 		elif cur_p == 1:
 			p2_coords = _get_line_through_cell(1, _current_move)
-			print("[WIN] Line through current move for Player 2: ", p2_coords)
+			OpLog.d(LOG_TAG, ["check_win p2_line=", p2_coords])
 
 	if p1_coords.is_empty() and p2_coords.is_empty():
-		print("[WIN] No line found through current move; doing full-board scan.")
+		OpLog.d(LOG_TAG, "check_win full_board_scan")
 		p1_coords = _find_five_or_more(2)
 		p2_coords = _find_five_or_more(1)
 	else:
-		print("[WIN] Skipping full scan; already have line via current move.")
+		OpLog.d(LOG_TAG, "check_win skip_full_scan_line_found")
 
 	var p1_has: bool = p1_coords.size() >= 5
 	var p2_has: bool = p2_coords.size() >= 5
 
-	print("[WIN] p1_has=", p1_has, " p2_has=", p2_has)
+	OpLog.i(LOG_TAG, [
+		"check_win result p1_has=", p1_has,
+		" p2_has=", p2_has,
+		" p1_len=", p1_coords.size(),
+		" p2_len=", p2_coords.size()
+	])
 
 	if not p1_has and not p2_has:
-		print("[WIN] RESULT: Game continues. No 5+ in-a-row found.")
 		last_win_coords = []
 		return false
 
 	if p1_has and not p2_has:
 		last_win_coords = p1_coords
+		OpLog.event(LOG_TAG, ["game_finished winner_player=1 coords=", last_win_coords])
 		_show_result_from_state("1" if player == 1 else "-1", 1)
 	elif p2_has and not p1_has:
 		last_win_coords = p2_coords
+		OpLog.event(LOG_TAG, ["game_finished winner_player=2 coords=", last_win_coords])
 		_show_result_from_state("1" if player == 2 else "-1", 2)
 	else:
 		last_win_coords = []
+		OpLog.event(LOG_TAG, "game_finished draw both_players_have_line")
 		_show_result_from_state("0")
 
 	if is_instance_valid(_win_preview_node):
 		_win_preview_node.coords = last_win_coords
 		_win_preview_node.queue_redraw()
-		print("[WIN] Win overlay coords set to: ", last_win_coords)
+		OpLog.d(LOG_TAG, ["win_overlay_coords=", last_win_coords])
 
 	return true
 
@@ -1100,7 +1212,7 @@ func send_game() -> void:
 	await get_tree().process_frame
 
 	if _current_move.x < 0:
-		print("[Send] No move.")
+		OpLog.w(LOG_TAG, "send_game_blocked no_current_move")
 		_hide_send_button()
 		return
 
@@ -1122,9 +1234,28 @@ func send_game() -> void:
 
 	if game_ended and win_loss_state != "":
 		payload["winner"] = my_uuid + "|" + win_loss_state
+		OpLog.event(LOG_TAG, [
+			"send_game_winner winner=", payload["winner"],
+			" win_loss_state=", win_loss_state
+		])
 
-	send_game_data(JSON.stringify(payload))
-	print("OUTGOING DATA", payload)
+	var json := JSON.stringify(payload)
+
+	OpLog.event(LOG_TAG, [
+		"send_game_out player=", player,
+		" p=", p,
+		" current_move=", _current_move,
+		" proto_row=", send_row,
+		" proto_col=", send_col,
+		" board_size=", board_size,
+		" game_ended=", game_ended,
+		" game_over=", game_over,
+		" has_winner=", payload.has("winner"),
+		" map_len=", str(payload["map"]).length(),
+		" raw=", json
+	])
+
+	send_game_data(json)
 
 	_has_uncommitted_move = false
 	_hide_send_button()
@@ -1133,10 +1264,13 @@ func send_game() -> void:
 	_finalize_active_tile()
 
 	if not game_ended:
-		print("[SEND] No win detected; clearing preview.")
+		OpLog.d(LOG_TAG, "send_game_no_win_clear_preview")
 		_clear_win_preview()
 	else:
-		print("[SEND] Game ended with win_loss_state=", win_loss_state, " - keeping preview line.")
+		OpLog.d(LOG_TAG, [
+			"send_game_keep_preview win_loss_state=", win_loss_state,
+			" last_win_coords=", last_win_coords
+		])
 
 	_top_up_bowl(PlayerBowl)
 	_top_up_bowl(OppBowl)
@@ -1145,7 +1279,7 @@ func send_game() -> void:
 		stop_waiting_animation()
 	else:
 		play_sent_animation()
-		
+
 func _proto_to_grid(row: int, col: int, dim: int) -> Vector2i:
 	var x_grid := col
 	var y_grid := (dim - 1) - row
@@ -1179,7 +1313,7 @@ func _infer_dim_from_map(m:String)->int:
 
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
-		print("Is Dark: ", is_dark)
+		OpLog.d(LOG_TAG, ["apply_background is_dark=", is_dark])
 		background.color = Color("#261a19") if is_dark else Color("#947972")
 
 func _get_rules_text() -> String:
@@ -1284,26 +1418,29 @@ func _clear_win_preview() -> void:
 
 func _update_win_preview_for_current_move() -> void:
 	if _current_move.x < 0 or _current_move.y < 0:
-		print("[PREVIEW] No current move; clearing preview.")
+		OpLog.d(LOG_TAG, "preview_clear no_current_move")
 		_clear_win_preview()
 		return
 
 	var p: int = int(board_state[_current_move.y][_current_move.x])
 	if p == 0:
-		print("[PREVIEW] Current move cell is empty; clearing preview.")
+		OpLog.d(LOG_TAG, ["preview_clear empty_current_move current_move=", _current_move])
 		_clear_win_preview()
 		return
 
-	print("[PREVIEW] Checking current_move=", _current_move, " value=", p)
-
 	var coords := _get_line_through_cell(p, _current_move)
-	print("[PREVIEW] Line through cell: ", coords, " size=", coords.size())
+
+	OpLog.d(LOG_TAG, [
+		"preview_check current_move=", _current_move,
+		" p=", p,
+		" line_size=", coords.size(),
+		" coords=", coords
+	])
 
 	if coords.size() >= 5:
-		print("[PREVIEW] Found 5+ in line; showing golden outline.")
 		_preview_win_line = coords
+		OpLog.event(LOG_TAG, ["preview_win_line_found coords=", coords])
 	else:
-		print("[PREVIEW] Less than 5 stones in line; clearing preview.")
 		_preview_win_line.clear()
 
 	if is_instance_valid(_win_preview_node):

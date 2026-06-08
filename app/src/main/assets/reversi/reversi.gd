@@ -16,6 +16,7 @@ extends BaseGame
 @onready var main_vbox: Control = %MainVBoxContainer
 
 const BOARD_SIZE = 8
+const LOG_TAG := "Reversi"
 
 var board = []
 var player_symbol = ""
@@ -364,8 +365,11 @@ func _flip_squash(cell: Control, to_symbol: String) -> void:
 		.set_ease(Tween.EASE_IN)
 
 func initialize_board_pieces():
-	print("initial pre_board", pre_board_data)
-	print("initial post_board", post_board_data)
+	OpLog.d(LOG_TAG, [
+		"initialize_board_pieces pre_size=", pre_board_data.size(),
+		" post_size=", post_board_data.size()
+	])
+
 	for y in range(BOARD_SIZE):
 		for x in range(BOARD_SIZE):
 			set_piece(x, y, "", true)
@@ -439,7 +443,6 @@ func place_star_points():
 		star_layer.add_child(star)
 
 func update_piece_counts() -> Dictionary:
-	print("Update Piece Counts Called!")
 	var white_count = 0
 	var black_count = 0
 
@@ -461,10 +464,17 @@ func update_piece_counts() -> Dictionary:
 	else:
 		opp_count_label.text = str(black_count)
 		player_count_label.text = str(white_count)
+
 	white_score = white_count
 	black_score = black_count
 
-	print("White Count:", white_count, "Black Count:", black_count)
+	OpLog.d(LOG_TAG, [
+		"score_update white=", white_count,
+		" black=", black_count,
+		" temp_active=", temp_piece_active,
+		" player=", player
+	])
+
 	return {"white": white_count, "black": black_count}
 
 func highlight_valid_moves():
@@ -483,10 +493,16 @@ func highlight_valid_moves():
 		place_temp_piece_visual(temp_piece_x, temp_piece_y, player_symbol)
 
 func _set_game_data(new_game_data_json: String):
+	OpLog.event(LOG_TAG, ["set_game_data_in raw=", new_game_data_json])
+
 	var parsed_data = JSON.parse_string(new_game_data_json)
 
 	if not (parsed_data is Dictionary):
-		print("Parsed Data is not dictionary")
+		OpLog.e(LOG_TAG, [
+			"set_game_data parse_failed type=", typeof(parsed_data),
+			" raw=", new_game_data_json
+		])
+
 		initialize_board_pieces()
 		update_piece_counts()
 		highlight_valid_moves()
@@ -521,8 +537,12 @@ func _set_game_data(new_game_data_json: String):
 
 	var opponent_avatar_key := ""
 
-	print("My UUID: ", my_uuid, " Player 1 ID: ", player1_id, " Player 2 ID: ", player2_id)
-	print("Pre Player Your Turn: ", is_your_turn, " Pre Player My Turn: ", is_my_turn)
+	OpLog.i(LOG_TAG, [
+		"set_game_data ids my_uuid=", my_uuid,
+		" player1=", player1_id,
+		" player2=", player2_id,
+		" isYourTurn=", is_your_turn
+	])
 
 	if my_uuid != "" and player1_id != "" and player2_id != "":
 		if my_uuid == player1_id:
@@ -531,20 +551,20 @@ func _set_game_data(new_game_data_json: String):
 			opponent_avatar_key = "avatar2"
 			is_my_turn = is_your_turn
 			spectator_mode = false
-			print("Set Player to 1")
+			OpLog.i(LOG_TAG, "resolved_player player=1 symbol=black")
 		elif my_uuid == player2_id:
 			player = 2
 			player_symbol = "⚪"
 			opponent_avatar_key = "avatar1"
 			is_my_turn = is_your_turn
 			spectator_mode = false
-			print("Set Player to 2")
+			OpLog.i(LOG_TAG, "resolved_player player=2 symbol=white")
 		else:
 			spectator_mode = true
 			is_my_turn = false
 			player = 1
 			player_symbol = "⚫"
-			print("Spectator Mode Enabled!")
+			OpLog.i(LOG_TAG, "resolved_player spectator=true")
 	else:
 		if is_your_turn:
 			player = 1
@@ -558,14 +578,25 @@ func _set_game_data(new_game_data_json: String):
 		is_my_turn = is_your_turn
 		spectator_mode = false
 
+		OpLog.w(LOG_TAG, [
+			"fallback_player_resolution player=", player,
+			" symbol=", player_symbol,
+			" player1_empty=", player1_id == "",
+			" player2_empty=", player2_id == ""
+		])
+
 	if is_instance_valid(spec_label):
 		spec_label.visible = spectator_mode
 
 	setup_score_labels()
 
-	print("Is My Turn: ", is_my_turn)
-	print("My Numerical Player (1=Black, 2=White): ", player)
-	print("My Player Symbol: ", player_symbol)
+	OpLog.i(LOG_TAG, [
+		"set_game_data_state player=", player,
+		" symbol=", player_symbol,
+		" is_my_turn=", is_my_turn,
+		" spectator=", spectator_mode,
+		" winner_payload=", winner_payload
+	])
 
 	if spectator_mode:
 		if parsed_data.has("avatar1") and is_instance_valid(player_avatar_display):
@@ -583,6 +614,11 @@ func _set_game_data(new_game_data_json: String):
 
 	replay = str(parsed_data.get("replay", ""))
 
+	OpLog.i(LOG_TAG, [
+		"set_game_data_replay replay_len=", replay.length(),
+		" replay_empty=", replay.is_empty()
+	])
+
 	if replay.is_empty():
 		initialize_board_pieces()
 		pre_board_data = get_current_board_as_array()
@@ -595,15 +631,16 @@ func _set_game_data(new_game_data_json: String):
 		elif "pre_board" in temp_parsed_replay and temp_parsed_replay["pre_board"] is Array:
 			pre_board_data = temp_parsed_replay["pre_board"]
 		else:
+			OpLog.w(LOG_TAG, "set_game_data replay_missing_board_data")
 			pre_board_data.clear()
 			pre_board_data.resize(BOARD_SIZE * BOARD_SIZE)
 			pre_board_data.fill(0)
 
 		await process_game_state()
-		print("Updating Piece Counts")
 		update_piece_counts()
 
 	if winner_payload != "":
+		OpLog.event(LOG_TAG, ["winner_payload_received payload=", winner_payload])
 		_apply_winner_payload(winner_payload, player1_id, player2_id)
 		return
 
@@ -616,7 +653,7 @@ func _set_game_data(new_game_data_json: String):
 
 	if is_my_turn and not game_over:
 		highlight_valid_moves()
-
+		
 func reset_board_to_pre_data():
 	for idx in range(BOARD_SIZE * BOARD_SIZE):
 		@warning_ignore("integer_division")
@@ -790,17 +827,26 @@ func check_win() -> bool:
 	var opponent_player = "⚫" if player_symbol == "⚪" else "⚪"
 	var opponent_has_moves = has_any_valid_moves(opponent_player)
 
-	print("Game Over Status: ", game_over)
-	print("Our Possible Moves: ", current_has_moves)
-	print("Opponent Possible Moves: ", opponent_has_moves)
+	OpLog.d(LOG_TAG, [
+		"check_win game_over=", game_over,
+		" current_has_moves=", current_has_moves,
+		" opponent_has_moves=", opponent_has_moves,
+		" white_score=", white_score,
+		" black_score=", black_score,
+		" player=", player
+	])
 
 	if game_over:
 		return true
 
 	if current_has_moves or opponent_has_moves:
 		return false
-
-	print("Valid, player: ", player, " White Score: ", white_score, " Black Score: ", black_score)
+		
+	OpLog.event(LOG_TAG, [
+		"game_finished white_score=", white_score,
+		" black_score=", black_score,
+		" player=", player
+	])
 
 	if white_score == black_score:
 		_show_result_from_state("0")
@@ -948,14 +994,15 @@ func play_replay(replay_string: String):
 		send_button.visible = false
 
 func parse_replay(replay_string: String) -> Dictionary:
-	var result = {"move": []}
+	OpLog.d(LOG_TAG, ["parse_replay start len=", replay_string.length()])
 
+	var result = {"move": []}
 	var elements = replay_string.split("|")
 
 	for i in range(elements.size()):
 		var elem = elements[i]
 		var spl = elem.split(":")
-		
+
 		if spl.size() < 2:
 			continue
 
@@ -966,7 +1013,7 @@ func parse_replay(replay_string: String) -> Dictionary:
 			var state_key = "pre_board"
 			if "pre_board" in result:
 				state_key = "post_board"
-			
+
 			var board_data: Array[int] = []
 			var state_spl = data_str.split(",")
 
@@ -975,11 +1022,13 @@ func parse_replay(replay_string: String) -> Dictionary:
 					if not val_str.is_empty():
 						board_data.append(int(val_str))
 					else:
-						print("parse_replay: Skipped empty board value string.")
+						OpLog.w(LOG_TAG, ["parse_replay skipped_empty_board_value index=", i])
 			else:
-				print("parse_replay: Board data split was empty.")
+				OpLog.w(LOG_TAG, ["parse_replay empty_board_split index=", i])
+
 			result[state_key] = board_data
-			
+			OpLog.d(LOG_TAG, [state_key, "_size=", board_data.size()])
+
 		elif type == "move":
 			var move = []
 			var move_spl = data_str.split(",")
@@ -988,12 +1037,20 @@ func parse_replay(replay_string: String) -> Dictionary:
 				for val in move_spl:
 					move.append(float(val))
 				result["move"].append(move)
+				OpLog.d(LOG_TAG, ["parse_replay move=", move])
 			else:
-				print("parse_replay: Move data has less than 3 parts. Skipping.")
+				OpLog.w(LOG_TAG, ["parse_replay bad_move_data data=", data_str])
 		else:
-			print("parse_replay: Unknown type: '", type, "'. Skipping.")
+			OpLog.w(LOG_TAG, ["parse_replay unknown_type=", type])
+
+	OpLog.i(LOG_TAG, [
+		"parse_replay done moves=", result["move"].size(),
+		" has_pre=", "pre_board" in result,
+		" has_post=", "post_board" in result
+	])
+
 	return result
-	
+
 func _preview_flip_visual(x: int, y: int, to_symbol: String) -> void:
 	var cell: Control = board[y][x] as Control
 	_ensure_piece_nodes(cell)
@@ -1033,12 +1090,33 @@ func preview_flip_pieces(x: int, y: int, player_symbol_to_check: String):
 
 func on_cell_pressed(x: int, y: int) -> void:
 	if not is_my_turn or game_over:
+		OpLog.d(LOG_TAG, [
+			"cell_press_ignored x=", x,
+			" y=", y,
+			" is_my_turn=", is_my_turn,
+			" game_over=", game_over
+		])
 		return
 
 	var current_piece = get_piece(x, y)
 	var directions = get_flippable_directions(x, y, player_symbol)
+
 	if current_piece != "" or directions.size() == 0:
+		OpLog.d(LOG_TAG, [
+			"invalid_move x=", x,
+			" y=", y,
+			" current_piece=", current_piece,
+			" directions=", directions.size(),
+			" symbol=", player_symbol
+		])
 		return
+
+	OpLog.event(LOG_TAG, [
+		"move_selected x=", x,
+		" y=", y,
+		" symbol=", player_symbol,
+		" directions=", directions.size()
+	])
 
 	var empty_count = 0
 	for ty in range(BOARD_SIZE):
@@ -1134,6 +1212,7 @@ func on_send_button_pressed():
 	
 func send_game(final_x: int, final_y: int) -> void:
 	if spectator_mode:
+		OpLog.w(LOG_TAG, ["send_game_blocked spectator=true x=", final_x, " y=", final_y])
 		return
 
 	var move_arr = [final_x, 7 - final_y, player]
@@ -1154,17 +1233,30 @@ func send_game(final_x: int, final_y: int) -> void:
 	if player != 0 and is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		var avatar_string = player_avatar_display.get_avatar_data_string()
 		result[avatar_key] = avatar_string
-		print("Adding my avatar data to payload with key '", avatar_key, "'")
+		OpLog.d(LOG_TAG, ["send_game avatar_added key=", avatar_key])
 
 	if check_win():
 		if win_loss_state != "":
 			result["winner"] = my_uuid + "|" + win_loss_state
+			OpLog.event(LOG_TAG, [
+				"send_game_winner winner=", result["winner"],
+				" white_score=", white_score,
+				" black_score=", black_score
+			])
 	else:
 		play_sent_animation()
 
 	var game_data = JSON.stringify(result)
 
-	print("Game data being sent: " + game_data)
+	OpLog.event(LOG_TAG, [
+		"send_game_out move=", move_arr,
+		" player=", player,
+		" symbol=", player_symbol,
+		" pre_board_size=", pre_board_data.size(),
+		" post_board_size=", post_board_data.size(),
+		" raw=", game_data
+	])
+
 	send_game_data(game_data)
 
 	my_moves.clear()

@@ -55,7 +55,14 @@ var _column_highlight_tween: Tween
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
-	
+
+const LOG_TAG := "Connect4"
+var DEBUG_CONNECT4 := false
+
+func dbg(msg: String) -> void:
+	if DEBUG_CONNECT4:
+		OpLog.d(LOG_TAG, msg)
+
 func _get_dev_data() -> String:
 	return '{"isYourTurn":true,"player":"2","replay":"board:1,1,1,0,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0"}'
 	
@@ -68,16 +75,31 @@ func _get_rules_title() -> String:
 func _on_game_ready() -> void:
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
 
+	OpLog.i(LOG_TAG, [
+		"game_ready dark_mode=", is_dark,
+		" player=", player,
+		" replay_empty=", replay.is_empty()
+	])
+
 	if is_instance_valid(background):
 		background.color = Color("352925ff") if is_dark else Color("#d8c7c2")
+	else:
+		OpLog.w(LOG_TAG, "missing_background")
 
 	if is_instance_valid(send_button):
 		send_button.disabled = true
 		_update_send_button_visibility(false)
+
 		if not send_button.pressed.is_connected(send_game):
 			send_button.pressed.connect(send_game)
+	else:
+		OpLog.w(LOG_TAG, "missing_send_button")
 
 	if player == 0 or replay.is_empty():
+		OpLog.d(LOG_TAG, [
+			"game_ready_skip_hydrate player=", player,
+			" replay_empty=", replay.is_empty()
+		])
 		return
 
 	_label_you_box()
@@ -101,8 +123,18 @@ func _clear_board_pieces() -> void:
 	_reset_board_state()
 
 func _set_game_data(new_replay: String) -> void:
-	var data: Dictionary = JSON.parse_string(new_replay)
-	print("[INCOMING] Raw Data: ", data)
+	OpLog.event(LOG_TAG, ["set_game_data_in raw=", new_replay])
+
+	var parsed: Variant = JSON.parse_string(new_replay)
+
+	if typeof(parsed) != TYPE_DICTIONARY:
+		OpLog.e(LOG_TAG, [
+			"set_game_data_parse_failed type=", typeof(parsed),
+			" raw=", new_replay
+		])
+		return
+
+	var data: Dictionary = parsed
 
 	isTurn = bool(data.get("isYourTurn", false))
 	replay = String(data.get("replay", ""))
@@ -110,6 +142,16 @@ func _set_game_data(new_replay: String) -> void:
 	var p1_id: String = String(data.get("player1", ""))
 	var p2_id: String = String(data.get("player2", ""))
 	turn_owner = clamp(int(data.get("player", 1)), 1, 2)
+
+	OpLog.i(LOG_TAG, [
+		"set_game_data_fields my_uuid=", my_uuid,
+		" player1=", p1_id,
+		" player2=", p2_id,
+		" turn_owner=", turn_owner,
+		" isTurn=", isTurn,
+		" replay_len=", replay.length(),
+		" has_winner=", String(data.get("winner", "")) != ""
+	])
 
 	if my_uuid != "" and p1_id != "" and p2_id != "":
 		if my_uuid == p1_id:
@@ -128,6 +170,12 @@ func _set_game_data(new_replay: String) -> void:
 
 	spectator_mode = (player == 0)
 
+	OpLog.i(LOG_TAG, [
+		"resolved_player player=", player,
+		" spectator=", spectator_mode,
+		" isTurn=", isTurn
+	])
+
 	if is_instance_valid(spec_label):
 		spec_label.visible = spectator_mode
 
@@ -145,6 +193,8 @@ func _set_game_data(new_replay: String) -> void:
 		var opp_data: Dictionary = GameUtils._parse_avatar_string(String(data[opp_key]))
 		if is_instance_valid(opp_avatar_display):
 			opp_avatar_display.call_deferred("update_avatar_from_data", opp_data)
+	else:
+		dbg("opponent_avatar_missing key=%s" % opp_key)
 
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()
@@ -156,6 +206,8 @@ func _set_game_data(new_replay: String) -> void:
 	if is_instance_valid(player_piece) and is_instance_valid(opp_piece):
 		player_piece.texture = PIECE_TEX[getPlayerColor(false)]
 		opp_piece.texture = PIECE_TEX[getPlayerColor(true)]
+	else:
+		OpLog.w(LOG_TAG, "piece_icons_missing")
 
 	if is_instance_valid(you_label):
 		you_label.text = "You"
@@ -165,11 +217,20 @@ func _set_game_data(new_replay: String) -> void:
 
 	winner = String(data.get("winner", ""))
 
+	if winner != "":
+		OpLog.event(LOG_TAG, ["winner_payload_received payload=", winner])
+
 	stop_waiting_animation()
 	_update_send_button_visibility(false)
 	can_interact = false
 
 	var replay_will_apply := _hydrate_board_from_replay(replay)
+
+	OpLog.i(LOG_TAG, [
+		"set_game_data_replay hydrate_started=", replay_will_apply,
+		" replay_len=", replay.length()
+	])
+
 	if not replay_will_apply:
 		_finish_replay_turn_state()
 
@@ -205,16 +266,25 @@ func _finish_replay_turn_state() -> void:
 		waitingForOpponent = false
 		stop_waiting_animation()
 		_update_send_button_visibility(false)
+
+		OpLog.i(LOG_TAG, "finish_replay_turn_state game_over=true")
 		return
 
 	if _is_board_full():
+		OpLog.event(LOG_TAG, "finish_replay_board_full_draw")
 		_finalize_draw()
 		return
 
 	can_interact = (not spectator_mode) and isTurn
 	waitingForOpponent = (not spectator_mode) and (not isTurn)
 
-	print("Can Interact: ", can_interact, " | Spectator Mode: ", spectator_mode, " | Game Over: ", game_over, " | Is Turn: ", isTurn)
+	OpLog.i(LOG_TAG, [
+		"finish_replay_turn_state can_interact=", can_interact,
+		" spectator=", spectator_mode,
+		" game_over=", game_over,
+		" isTurn=", isTurn,
+		" waiting=", waitingForOpponent
+	])
 
 	if waitingForOpponent:
 		_set_waiting(true)
@@ -235,6 +305,11 @@ func _finalize_draw() -> void:
 	waitingForOpponent = false
 	win_loss_state = "0"
 
+	OpLog.event(LOG_TAG, [
+		"finalize_draw player=", player,
+		" spectator=", spectator_mode
+	])
+
 	stop_waiting_animation()
 	_update_send_button_visibility(false)
 
@@ -249,32 +324,54 @@ func _finalize_draw() -> void:
 
 		var t_in: Tween = create_tween()
 		t_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	else:
+		OpLog.w(LOG_TAG, "draw_missing_win_loss_label")
 
 func _hydrate_board_from_replay(rep: String) -> bool:
 	if rep.is_empty():
+		OpLog.d(LOG_TAG, "hydrate_replay_skipped empty")
 		return false
 
 	if rep == _last_applied_replay:
+		OpLog.d(LOG_TAG, ["hydrate_replay_skipped duplicate len=", rep.length()])
 		return false
 
 	_last_applied_replay = rep
 	_replay_apply_id += 1
+
+	OpLog.event(LOG_TAG, [
+		"hydrate_replay_start apply_id=", _replay_apply_id,
+		" replay_len=", rep.length()
+	])
+
 	call_deferred("_apply_replay_with_drop", rep, _replay_apply_id)
 	return true
 
 func _apply_replay_with_drop(rep: String, apply_id: int) -> void:
+	OpLog.i(LOG_TAG, [
+		"apply_replay_with_drop start apply_id=", apply_id,
+		" current_apply_id=", _replay_apply_id,
+		" len=", rep.length()
+	])
+
 	_clear_board_pieces()
 
 	var parts: PackedStringArray = rep.split("|")
 	if parts.is_empty():
+		OpLog.e(LOG_TAG, "apply_replay_failed empty_parts")
 		return
 
 	var head: String = String(parts[0])
 	if not head.begins_with("board:"):
+		OpLog.e(LOG_TAG, ["apply_replay_failed missing_board_head head=", head])
 		return
 
 	var board: PackedStringArray = head.substr(6).split(",")
 	if board.size() < BOARD_W * BOARD_H:
+		OpLog.e(LOG_TAG, [
+			"apply_replay_failed short_board size=", board.size(),
+			" expected=", BOARD_W * BOARD_H
+		])
 		return
 
 	var has_move: bool = false
@@ -290,6 +387,10 @@ func _apply_replay_with_drop(rep: String, apply_id: int) -> void:
 				my = int(mv[1])
 				mpid = int(mv[2])
 				has_move = (mx >= 0 and mx < BOARD_W and my >= 0 and my < BOARD_H and mpid > 0)
+			else:
+				OpLog.w(LOG_TAG, ["bad_replay_move part=", p])
+
+	var static_count := 0
 
 	for y in range(0, BOARD_H):
 		for x in range(0, BOARD_W):
@@ -303,6 +404,15 @@ func _apply_replay_with_drop(rep: String, apply_id: int) -> void:
 
 			if v == 1 or v == 2:
 				_spawn_piece_static(x, v, y)
+				static_count += 1
+
+	OpLog.i(LOG_TAG, [
+		"apply_replay_board_loaded static_count=", static_count,
+		" has_move=", has_move,
+		" move_x=", mx,
+		" move_y=", my,
+		" move_pid=", mpid
+	])
 
 	if has_move:
 		board_state[_idx(mx, my)] = mpid
@@ -355,12 +465,21 @@ func _spawn_piece_drop_anim(x: int, pid: int, y: int, apply_id: int) -> void:
 
 func _place_or_move_piece_to_column(col: int, from_drag: bool) -> void:
 	if _is_blocking_menu_open():
+		OpLog.w(LOG_TAG, ["place_blocked menu_open col=", col, " from_drag=", from_drag])
 		return
 
 	if game_over or not can_interact or spectator_mode:
+		OpLog.w(LOG_TAG, [
+			"place_blocked state col=", col,
+			" from_drag=", from_drag,
+			" game_over=", game_over,
+			" can_interact=", can_interact,
+			" spectator=", spectator_mode
+		])
 		return
 
 	if col < 0 or col >= BOARD_W:
+		OpLog.w(LOG_TAG, ["place_blocked bad_col col=", col])
 		return
 
 	var color: String = getPlayerColor()
@@ -377,11 +496,14 @@ func _place_or_move_piece_to_column(col: int, from_drag: bool) -> void:
 
 		if old_x == col and old_y >= 0 and not from_drag:
 			board_state[_idx(old_x, old_y)] = pid
+			OpLog.d(LOG_TAG, ["place_same_column_noop col=", col, " row=", old_y])
 			return
 
 	var row: int = get_piece_y(col)
 
 	if row < 0:
+		OpLog.w(LOG_TAG, ["place_blocked column_full col=", col])
+
 		if old_x >= 0 and old_x < BOARD_W and old_y >= 0 and old_y < BOARD_H:
 			board_state[_idx(old_x, old_y)] = pid
 
@@ -394,6 +516,17 @@ func _place_or_move_piece_to_column(col: int, from_drag: bool) -> void:
 		return
 
 	var is_first_piece: bool = not is_instance_valid(droppedPiece)
+
+	OpLog.event(LOG_TAG, [
+		"local_piece_placed col=", col,
+		" row=", row,
+		" pid=", pid,
+		" color=", color,
+		" from_drag=", from_drag,
+		" first_piece=", is_first_piece,
+		" old_x=", old_x,
+		" old_y=", old_y
+	])
 
 	if is_first_piece:
 		droppedPiece = _make_board_piece_for_column(col, color)
@@ -416,6 +549,7 @@ func _place_or_move_piece_to_column(col: int, from_drag: bool) -> void:
 		await get_tree().process_frame
 		await send_game()
 	elif _is_board_full():
+		OpLog.event(LOG_TAG, "local_move_filled_board_draw")
 		_finalize_draw()
 		await get_tree().process_frame
 		await send_game()
@@ -424,9 +558,11 @@ func _place_or_move_piece_to_column(col: int, from_drag: bool) -> void:
 
 func send_game() -> void:
 	if _is_blocking_menu_open():
+		OpLog.w(LOG_TAG, "send_game_blocked menu_open")
 		return
 
 	if droppedPiece == null:
+		OpLog.w(LOG_TAG, "send_game_blocked no_dropped_piece")
 		return
 
 	await get_tree().process_frame
@@ -452,15 +588,33 @@ func send_game() -> void:
 
 	if game_over and win_loss_state != "":
 		payload["winner"] = "%s|%s" % [my_uuid, win_loss_state]
+		OpLog.event(LOG_TAG, [
+			"send_game_winner winner=", payload["winner"],
+			" win_loss_state=", win_loss_state
+		])
 
 	var avatar_key: String = "avatar1" if player == 1 else "avatar2"
 
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.call("get_avatar_data_string")
 
-	print("[SEND] Payload: ", payload)
-	send_game_data(JSON.stringify(payload))
+	var json := JSON.stringify(payload)
+
+	OpLog.event(LOG_TAG, [
+		"send_game_out player=", player,
+		" move_x=", move_x,
+		" move_y=", move_y,
+		" move_color=", move_color,
+		" game_over=", game_over,
+		" has_winner=", payload.has("winner"),
+		" replay_len=", str(payload["replay"]).length(),
+		" raw=", json
+	])
+
+	send_game_data(json)
+
 	_restore_local_piece_icon()
+
 	if is_instance_valid(droppedPiece):
 		droppedPiece.z_index = 5
 
@@ -558,7 +712,9 @@ func _update_send_button_visibility(should_show: bool) -> void:
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
+		OpLog.w(LOG_TAG, "sent_animation_missing_label")
 		return
+
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()
 
@@ -590,7 +746,7 @@ func play_sent_animation() -> void:
 		if waitingForOpponent and not isTurn and not can_interact:
 			start_waiting_animation()
 	)
-	
+
 func _player_id_to_color(pid: int) -> String:
 	return PIECE_YELLOW if pid == 1 else PIECE_RED
 
@@ -1144,6 +1300,13 @@ func _check_and_finalize_from_board() -> bool:
 
 	var coords: Array[Vector2i] = win["coords"]
 
+	OpLog.event(LOG_TAG, [
+		"win_sequence_found pid=", int(win["pid"]),
+		" coords=", coords,
+		" player=", player,
+		" spectator=", spectator_mode
+	])
+
 	for c in coords:
 		var n: Node2D = get_node_or_null("%d,%d" % [c.x, c.y])
 		if n:
@@ -1238,6 +1401,15 @@ func _finalize_win(winner_pid: int) -> void:
 			GameUtils._show_win_burst(opp_avatar_display)
 			win_loss_label.text = "YOU LOSE"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
+	OpLog.event(LOG_TAG, [
+		"show_result winner_pid=", winner_pid,
+		" player=", player,
+		" spectator=", spectator_mode,
+		" i_won=", i_won,
+		" win_loss_state=", win_loss_state,
+		" text=", win_loss_label.text
+	])
 
 	win_loss_label.visible = true
 	await get_tree().process_frame

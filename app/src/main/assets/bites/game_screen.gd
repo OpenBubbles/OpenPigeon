@@ -7,6 +7,8 @@ const TOTAL_TIME_SEC := 80
 const TILE_MARGIN := Vector2(2.0, 2.0)
 const BOARD_COLS := 8
 const BOARD_ROWS := 9
+const LOG_TAG := "WordBitesGameScreen"
+var DEBUG_WORDBITES_SCREEN := false
 
 @onready var sent_label: Label = %SentLabel
 @onready var waiting_label: Label = %WaitForOpponentLabel
@@ -47,6 +49,10 @@ var tiles: Array[Control] = []
 var _drag_tile: Control = null
 var _drag_offset: Vector2 = Vector2.ZERO
 
+func dbg(msg: String) -> void:
+	if DEBUG_WORDBITES_SCREEN:
+		OpLog.d(LOG_TAG, msg)
+
 func _ready() -> void:
 	main_vbox.add_theme_constant_override("separation", 24)
 	
@@ -67,11 +73,11 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_init_board()
 
-
 func _load_dictionary() -> void:
 	word_dict.clear()
 	var f := FileAccess.open(DICT_PATH, FileAccess.READ)
 	if f == null:
+		OpLog.e(LOG_TAG, ["dictionary_open_failed path=", DICT_PATH])
 		push_error("Could not open dictionary file: %s" % DICT_PATH)
 		return
 
@@ -83,6 +89,7 @@ func _load_dictionary() -> void:
 
 	f.close()
 
+	OpLog.i(LOG_TAG, ["dictionary_loaded words=", word_dict.size()])
 
 func _update_word_score_labels() -> void:
 	if words_label:
@@ -445,11 +452,13 @@ func _debug_print_order(label: String, tile_buttons: Array, key: String) -> void
 	for k in seen_orders.keys():
 		keys.append(k)
 
-	print("--- ", label, " ---")
-	print("  key: ", key)
-	print("  visual letters: ", letters_str)
-	print("  seen_orders.size(): ", seen_orders.size())
-	print("  seen keys: ", keys)
+	dbg("order_debug label=%s key=%s visual_letters=%s seen_count=%d seen_keys=%s" % [
+		label,
+		key,
+		letters_str,
+		seen_orders.size(),
+		str(keys)
+	])
 
 func _init_board() -> void:
 	if not is_instance_valid(board_grid):

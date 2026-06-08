@@ -56,6 +56,13 @@ var _move_in_progress: bool = false
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
 	
+const LOG_TAG := "Filler"
+var DEBUG_FILLER := false
+
+func dbg(msg: String) -> void:
+	if DEBUG_FILLER:
+		OpLog.d(LOG_TAG, msg)
+	
 func _get_dev_data() -> String:
 	return '{ "isYourTurn": true, "player": "2", "seed": "0", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "style1": "0", "style2": "0", "avatar2": "body,0|eyes,2|mouth,6|acc,0|wins,0|bg_color,0.758100,0.554724,0.647306|body_color,0.114548,0.061022,0.017790|glasses,0|stache,0|backdrop,0|hair,6|clothes,0|hair_color,0.325444,0.509636,0.885538|clothes_color,0.987590,0.452528,0.395021", "player2": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "id": "dev", "ios": "16.3.1", "num": "2", "game": "fill", "mode": "0", "tver": "5", "build": "56", "version": "0" }'
 	
@@ -70,17 +77,27 @@ func _on_game_ready():
 	_apply_bg_for_dark(is_dark)
 
 	randomize()
-	print("Scene ready!")
+	OpLog.i(LOG_TAG, ["game_ready dark_mode=", is_dark])
 
 	setup_color_selector()
 	init_color_selector_collapsed()
 	setup_board_structure()
 
+	OpLog.i(LOG_TAG, [
+		"game_ready_done board=", BOARD_WIDTH, "x", BOARD_HEIGHT,
+		" colors=", COLORS.size()
+	])
+
 func _set_game_data(new_game_data_json: String):
+	OpLog.event(LOG_TAG, ["set_game_data_in raw=", new_game_data_json])
+
 	var parsed = JSON.parse_string(new_game_data_json)
-	print("RAW INCOMING DATA: ", parsed)
 
 	if typeof(parsed) != TYPE_DICTIONARY:
+		OpLog.e(LOG_TAG, [
+			"set_game_data_parse_failed type=", typeof(parsed),
+			" raw=", new_game_data_json
+		])
 		return
 
 	stop_pulsing_all_cells()
@@ -104,6 +121,20 @@ func _set_game_data(new_game_data_json: String):
 	var replay_str: String = String(data.get("replay", ""))
 	var player1_id: String = String(data.get("player1", ""))
 	var player2_id: String = String(data.get("player2", ""))
+	var winner_payload: String = String(data.get("winner", ""))
+	var sender_player: int = int(data.get("player", 1))
+
+	OpLog.i(LOG_TAG, [
+		"set_game_data_fields my_uuid=", my_uuid,
+		" player1=", player1_id,
+		" player2=", player2_id,
+		" sender_player=", sender_player,
+		" isYourTurn=", is_your_turn,
+		" replay_len=", replay_str.length(),
+		" has_seed=", data.has("seed"),
+		" seed=", data.get("seed", "MISSING"),
+		" has_winner=", winner_payload != ""
+	])
 
 	var opponent_avatar_key := ""
 
@@ -119,11 +150,18 @@ func _set_game_data(new_game_data_json: String):
 			player = 1
 			opponent_avatar_key = "avatar2"
 	else:
-		player = (3 - int(data.get("player", 1))) if is_your_turn else int(data.get("player", 1))
+		player = (3 - sender_player) if is_your_turn else sender_player
 		player = clamp(player, 1, 2)
 		opponent_avatar_key = "avatar2" if player == 1 else "avatar1"
 
 	is_my_turn = is_your_turn and not spectator_mode
+
+	OpLog.i(LOG_TAG, [
+		"resolved_player player=", player,
+		" is_my_turn=", is_my_turn,
+		" spectator=", spectator_mode,
+		" opponent_avatar_key=", opponent_avatar_key
+	])
 
 	if is_instance_valid(spec_label):
 		spec_label.visible = spectator_mode
@@ -147,15 +185,22 @@ func _set_game_data(new_game_data_json: String):
 	_loading_replay = true
 
 	if replay_str != "":
-		print("Replaying Board")
+		OpLog.i(LOG_TAG, ["replay_start len=", replay_str.length(), " play_animation=", is_my_turn])
 		await parse_replay_string(replay_str, is_my_turn)
 	else:
-		print("New Board Generation")
+		OpLog.i(LOG_TAG, "new_board_generation")
+
 		if data.has("seed") and str(data["seed"]).is_valid_int():
-			print("Seed from JSON: ", data.get("seed", "MISSING"), " (type: ", typeof(data.get("seed", null)), ")")
+			OpLog.i(LOG_TAG, [
+				"generate_board_from_seed seed=", data.get("seed", "MISSING"),
+				" seed_type=", typeof(data.get("seed", null))
+			])
 			generate_filler_colors(int(data["seed"]))
 		else:
-			print("Seed from JSON: ", data.get("seed", "MISSING"), " (type: ", typeof(data.get("seed", null)), ")")
+			OpLog.w(LOG_TAG, [
+				"generate_board_without_valid_seed seed=", data.get("seed", "MISSING"),
+				" seed_type=", typeof(data.get("seed", null))
+			])
 			generate_filler_colors()
 
 		apply_colors_to_cells()
@@ -164,8 +209,9 @@ func _set_game_data(new_game_data_json: String):
 
 	_loading_replay = false
 
-	if data.has("winner") and String(data.get("winner", "")) != "":
-		_apply_winner_payload(String(data.get("winner", "")), player1_id, player2_id)
+	if winner_payload != "":
+		OpLog.event(LOG_TAG, ["winner_payload_received payload=", winner_payload])
+		_apply_winner_payload(winner_payload, player1_id, player2_id)
 		return
 
 	game_ended = check_win()
@@ -185,11 +231,17 @@ func _set_game_data(new_game_data_json: String):
 		hide_color_selector()
 		stop_waiting_animation()
 
-	print("PLAYER DEBUG → player:", player,
-		" | player1_id:", player1_id,
-		" | player2_id:", player2_id,
-		" | is_my_turn:", is_my_turn,
-		" | spectator:", spectator_mode)
+	OpLog.i(LOG_TAG, [
+		"set_game_data_done player=", player,
+		" player1_id=", player1_id,
+		" player2_id=", player2_id,
+		" is_my_turn=", is_my_turn,
+		" spectator=", spectator_mode,
+		" game_over=", game_over,
+		" game_ended=", game_ended,
+		" my_count=", my_count,
+		" op_count=", op_count
+	])
 
 func _update_start_positions() -> void:
 	if player == 2:
@@ -373,10 +425,10 @@ func setup_board_structure():
 				if highlight and highlight is TextureRect:
 					highlight.texture = create_radial_gradient_texture(64)
 					highlight.visible = false
-					
+
 func setup_color_selector():
 	if not color_selector:
-		print("237 not color selector!")
+		OpLog.w(LOG_TAG, "setup_color_selector_missing_node")
 		return
 
 	for i in COLORS:
@@ -385,7 +437,9 @@ func setup_color_selector():
 		outer_container.custom_minimum_size = Vector2(64, 64)
 		outer_container.size_flags_horizontal = Control.SIZE_FILL
 		outer_container.size_flags_vertical = Control.SIZE_FILL
-		print("setting up button ", i)
+
+		dbg("setup_color_button color=%d" % i)
+
 		var center := CenterContainer.new()
 		center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		center.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -408,16 +462,20 @@ func setup_color_selector():
 		outer_container.add_child(center)
 		color_selector.add_child(outer_container)
 
+	OpLog.i(LOG_TAG, ["color_selector_setup colors=", COLORS.size()])
+
 func update_color_selector_states():
-	
-	print("271 Update Selectors. Left Color is ",left_color," Right Color is ",right_color)
+	dbg("update_selector_states left_color=%d right_color=%d" % [left_color, right_color])
+
 	for i in COLORS:
 		var container = color_selector.get_node_or_null("Wrapper_%d" % i)
 		if not container:
+			OpLog.w(LOG_TAG, ["selector_missing_wrapper color=", i])
 			continue
 
 		var btn = container.find_child("Color_%d" % i, true, false)
 		if not btn:
+			OpLog.w(LOG_TAG, ["selector_missing_button color=", i])
 			continue
 
 		if i == left_color or i == right_color:
@@ -428,22 +486,23 @@ func update_color_selector_states():
 			btn.disabled = false
 			btn.scale = Vector2(1, 1)
 			btn.mouse_filter = Control.MOUSE_FILTER_STOP
-			
+
 func update_ui_from_board_state():
 	var my_start = left_start
 	var opponent_start = right_start
 	var my_current_color = get_color_from_position(my_start)
 	var opponent_current_color = get_color_from_position(opponent_start)
+
 	my_count = get_connected_cells(my_start, my_current_color).size()
 	op_count = get_connected_cells(opponent_start, opponent_current_color).size()
 	left_color = my_current_color
 	right_color = opponent_current_color
-	
+
 	left_score_label.text = "%02d" % my_count
 	right_score_label.text = "%02d" % op_count
 	left_bg.color = COLOR_MAP.get(left_color, Color.GRAY)
 	right_bg.color = COLOR_MAP.get(right_color, Color.GRAY)
-	
+
 	left_score_label.add_theme_color_override(
 		"font_color",
 		_get_score_text_color(left_color)
@@ -453,24 +512,47 @@ func update_ui_from_board_state():
 		"font_color",
 		_get_score_text_color(right_color)
 	)
-	
+
 	update_color_selector_states()
-	print("253 UI Updated! Left Score (Me): %d, Right Score (Opp): %d" % [my_count, op_count])
-	
+
+	OpLog.d(LOG_TAG, [
+		"ui_updated my_count=", my_count,
+		" op_count=", op_count,
+		" left_color=", left_color,
+		" right_color=", right_color,
+		" player=", player
+	])
+
 func _get_score_text_color(bg_color_index: int) -> Color:
 	if bg_color_index == 1 or bg_color_index == 2:
 		return Color(0.05, 0.05, 0.05)
 
 	return Color.WHITE
-			
+
 func _on_color_selection_made(selected_color_index: int):
 	if _loading_replay or spectator_mode or _move_in_progress:
+		OpLog.w(LOG_TAG, [
+			"color_selection_blocked busy_or_spectator color=", selected_color_index,
+			" loading_replay=", _loading_replay,
+			" spectator=", spectator_mode,
+			" move_in_progress=", _move_in_progress
+		])
 		return
 
 	if not is_my_turn or game_over:
+		OpLog.w(LOG_TAG, [
+			"color_selection_blocked turn_or_game_over color=", selected_color_index,
+			" is_my_turn=", is_my_turn,
+			" game_over=", game_over
+		])
 		return
 
 	if [left_color, right_color].has(selected_color_index):
+		OpLog.w(LOG_TAG, [
+			"color_selection_blocked_forbidden color=", selected_color_index,
+			" left_color=", left_color,
+			" right_color=", right_color
+		])
 		return
 
 	_move_in_progress = true
@@ -499,6 +581,17 @@ func _on_color_selection_made(selected_color_index: int):
 		if not all_cells_to_change.has(pos):
 			all_cells_to_change.append(pos)
 
+	OpLog.event(LOG_TAG, [
+		"color_selected color=", selected_color_index,
+		" player=", player,
+		" connected=", connected.size(),
+		" border=", border.size(),
+		" added=", added.size(),
+		" total_change=", all_cells_to_change.size(),
+		" pre_my_count=", my_count,
+		" pre_op_count=", op_count
+	])
+
 	for pos in all_cells_to_change:
 		color_board[pos.y][pos.x] = selected_color_index
 
@@ -525,16 +618,32 @@ func _on_color_selection_made(selected_color_index: int):
 	game_ended = check_win()
 
 	if game_ended:
-		print("Check Win 773 my_player: ", my_uuid, " win_loss_state: ", win_loss_state)
+		OpLog.event(LOG_TAG, [
+			"move_caused_game_end my_uuid=", my_uuid,
+			" win_loss_state=", win_loss_state,
+			" my_count=", my_count,
+			" op_count=", op_count
+		])
 
 		if win_loss_state != "":
 			result["winner"] = my_uuid + "|" + win_loss_state
 
-	print(result)
-	send_game_data(JSON.stringify(result))
+	var json := JSON.stringify(result)
+
+	OpLog.event(LOG_TAG, [
+		"send_game_out color=", selected_color_index,
+		" player=", player,
+		" my_count=", my_count,
+		" op_count=", op_count,
+		" game_ended=", game_ended,
+		" has_winner=", result.has("winner"),
+		" replay_len=", str(result["replay"]).length(),
+		" raw=", json
+	])
+
+	send_game_data(json)
 
 	is_my_turn = false
-
 	_move_in_progress = false
 
 	if not game_ended:
@@ -542,35 +651,38 @@ func _on_color_selection_made(selected_color_index: int):
 	else:
 		stop_waiting_animation()
 		hide_color_selector()
-		
+
 func start_pulsing_my_cells():
-	print("--- DEBUG: Attempting to start pulse animation. ---")
-	
 	var my_start_pos = left_start
 	var my_color = get_color_from_position(my_start_pos)
-	print("Player's corner color identified as: ", my_color)
-	
 	var my_cells = get_connected_cells(my_start_pos, my_color)
-	print("Found %d connected cells to animate." % my_cells.size())
-	
+
+	dbg("pulse_start color=%d cells=%d" % [my_color, my_cells.size()])
+
 	if my_cells.is_empty():
-		print("DEBUG: No cells found to animate. Aborting.")
+		OpLog.w(LOG_TAG, [
+			"pulse_no_cells start=", my_start_pos,
+			" color=", my_color
+		])
 		return
 
 	var success_count = 0
+
 	for cell_pos in my_cells:
 		var cell_node = board[cell_pos.y][cell_pos.x]
+
 		if is_instance_valid(cell_node):
 			var anim_player = cell_node.get_node_or_null("HighlightAnim")
+
 			if is_instance_valid(anim_player):
 				anim_player.play("pulse")
 				success_count += 1
 			else:
-				print("-> ERROR: Cell at %s is MISSING its AnimationPlayer node." % str(cell_pos))
+				OpLog.w(LOG_TAG, ["pulse_missing_animation_player cell=", cell_pos])
 		else:
-			print("-> WARNING: Cell node at %s is not valid." % str(cell_pos))
-			
-	print("--- DEBUG: Pulse animation process finished. Played on %d/%d cells. ---" % [success_count, my_cells.size()])
+			OpLog.w(LOG_TAG, ["pulse_invalid_cell_node cell=", cell_pos])
+
+	dbg("pulse_done success=%d total=%d" % [success_count, my_cells.size()])
 
 func stop_pulsing_all_cells():
 	for y in range(BOARD_HEIGHT):
@@ -789,20 +901,39 @@ func init_color_selector_collapsed():
 
 
 func parse_replay_string(replay_str: String, play_animation: bool):
+	OpLog.i(LOG_TAG, [
+		"parse_replay_start len=", replay_str.length(),
+		" play_animation=", play_animation
+	])
+
 	var parts = replay_str.split("|")
 
 	if parts.size() != 3:
-		print("Invalid replay format")
+		OpLog.e(LOG_TAG, [
+			"invalid_replay_format parts=", parts.size(),
+			" raw=", replay_str
+		])
 		return
 
 	var pre_part: String = parts[0]
+	var move_part: String = parts[1]
 	var post_part: String = parts[2]
 
 	if not pre_part.begins_with("board:") or not post_part.begins_with("board:"):
+		OpLog.e(LOG_TAG, [
+			"invalid_replay_board_parts pre=", pre_part,
+			" post=", post_part
+		])
 		return
 
 	var pre_vals = pre_part.substr(6).split(",")
 	var post_vals = post_part.substr(6).split(",")
+
+	OpLog.i(LOG_TAG, [
+		"parse_replay_parts pre_vals=", pre_vals.size(),
+		" post_vals=", post_vals.size(),
+		" move=", move_part
+	])
 
 	var post_board_snapshot: Array = []
 
@@ -832,6 +963,12 @@ func parse_replay_string(replay_str: String, play_animation: bool):
 		var final_color_idx: int = int(post_board_snapshot[right_start.y][right_start.x])
 		var final_claimed_cells: Array[Vector2i] = get_connected_cells_in_board(post_board_snapshot, right_start, final_color_idx)
 
+		OpLog.event(LOG_TAG, [
+			"replay_animation_start final_color=", final_color_idx,
+			" final_claimed_cells=", final_claimed_cells.size(),
+			" right_start=", right_start
+		])
+
 		await play_move_animation(right_start, final_claimed_cells, final_color_idx)
 
 		color_board.clear()
@@ -845,7 +982,15 @@ func parse_replay_string(replay_str: String, play_animation: bool):
 		apply_colors_to_cells()
 		await _apply_visual_board_transform()
 		update_ui_from_board_state()
-		
+
+	OpLog.i(LOG_TAG, [
+		"parse_replay_done play_animation=", play_animation,
+		" my_count=", my_count,
+		" op_count=", op_count,
+		" left_color=", left_color,
+		" right_color=", right_color
+	])
+
 func get_color_from_position(pos: Vector2i) -> int:
 	if pos.y >= 0 and pos.y < BOARD_HEIGHT and pos.x >= 0 and pos.x < BOARD_WIDTH:
 		return color_board[pos.y][pos.x]
@@ -924,12 +1069,21 @@ func get_current_board_as_array() -> Array:
 		for x in range(BOARD_WIDTH):
 			flat_board.append(color_board[y][x])
 
-	print("Current Board Layout Sent: ", flat_board)
+	dbg("current_board_flat len=%d data=%s" % [flat_board.size(), str(flat_board)])
 	return flat_board
 
 func _apply_winner_payload(winner_payload: String, player1_id: String = "", player2_id: String = "") -> void:
+	OpLog.event(LOG_TAG, [
+		"apply_winner_payload payload=", winner_payload,
+		" player1=", player1_id,
+		" player2=", player2_id,
+		" my_uuid=", my_uuid,
+		" spectator=", spectator_mode
+	])
+
 	var parts := winner_payload.split("|", false)
 	if parts.size() < 2:
+		OpLog.w(LOG_TAG, ["bad_winner_payload payload=", winner_payload])
 		return
 
 	var sender_uuid := String(parts[0])
@@ -955,8 +1109,14 @@ func _apply_winner_payload(winner_payload: String, player1_id: String = "", play
 		if sender_uuid != my_uuid:
 			local_state = "-1" if sender_state == "1" else "1"
 
+	OpLog.i(LOG_TAG, [
+		"winner_resolved sender_uuid=", sender_uuid,
+		" sender_state=", sender_state,
+		" local_state=", local_state
+	])
+
 	_show_result_from_state(local_state)
-	
+
 func _show_result_from_state(state: String) -> void:
 	game_over = true
 	game_ended = true
@@ -977,6 +1137,7 @@ func _show_result_from_state(state: String) -> void:
 		else:
 			win_loss_label.text = "YOU WIN!"
 		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
 		if is_instance_valid(player_avatar_display):
 			GameUtils._show_win_burst(player_avatar_display)
 	else:
@@ -986,8 +1147,20 @@ func _show_result_from_state(state: String) -> void:
 		else:
 			win_loss_label.text = "YOU LOSE"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
 		if is_instance_valid(opp_avatar_display):
 			GameUtils._show_win_burst(opp_avatar_display)
+
+	OpLog.event(LOG_TAG, [
+		"show_result state=", state,
+		" text=", win_loss_label.text,
+		" spectator=", spectator_mode,
+		" player=", player,
+		" my_count=", my_count,
+		" op_count=", op_count,
+		" left_color=", left_color,
+		" right_color=", right_color
+	])
 
 	win_loss_label.visible = true
 	win_loss_label.scale = Vector2.ZERO
@@ -997,26 +1170,34 @@ func _show_result_from_state(state: String) -> void:
 	tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 
 func check_win() -> bool:
-	print("--- CHECKING WIN CONDITION ---")
-
 	var unique_colors = get_unique_colors_on_board()
-	print("-> Unique colors on board: %s (Count: %d)" % [unique_colors, unique_colors.size()])
+
+	OpLog.d(LOG_TAG, [
+		"check_win unique_colors=", unique_colors,
+		" unique_count=", unique_colors.size(),
+		" my_count=", my_count,
+		" op_count=", op_count,
+		" total=", my_count + op_count,
+		" board_total=", BOARD_HEIGHT * BOARD_WIDTH
+	])
 
 	if unique_colors.size() > 2 or my_count + op_count < (BOARD_HEIGHT * BOARD_WIDTH):
-		print("-> RESULT: Game Continues. More than 2 colors remain or combined score is too low.")
 		return false
 
-	print("-> WIN CONDITION MET: 2 or fewer colors remain.")
-	print("-> Evaluating final scores. My score: %d, Opponent's score: %d" % [my_count, op_count])
+	OpLog.event(LOG_TAG, [
+		"win_condition_met unique_colors=", unique_colors,
+		" my_count=", my_count,
+		" op_count=", op_count
+	])
 
 	if my_count > op_count:
-		print("-> FINAL TALLY: YOU WIN!")
+		OpLog.event(LOG_TAG, "final_tally local_win")
 		_show_result_from_state("1")
 	elif op_count > my_count:
-		print("-> FINAL TALLY: YOU LOSE")
+		OpLog.event(LOG_TAG, "final_tally local_loss")
 		_show_result_from_state("-1")
 	else:
-		print("-> FINAL TALLY: TIE!")
+		OpLog.event(LOG_TAG, "final_tally_draw")
 		_show_result_from_state("0")
 
 	return true
@@ -1032,10 +1213,11 @@ func get_unique_colors_on_board() -> Array:
 
 func play_sent_animation():
 	if not is_instance_valid(sent_label):
-		print("Warning: sent_label is not valid for play_sent_animation.")
+		OpLog.w(LOG_TAG, "sent_animation_missing_label")
 		return
 
 	if game_over:
+		OpLog.d(LOG_TAG, "sent_animation_skipped game_over=true")
 		return
 
 	if sent_tween and sent_tween.is_running():
@@ -1068,7 +1250,7 @@ func play_sent_animation():
 		else:
 			stop_waiting_animation()
 	)
-	
+
 func _get_rules_text() -> String:
 	return """
 [font_size={18px}]

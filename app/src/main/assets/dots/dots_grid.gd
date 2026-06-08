@@ -36,6 +36,12 @@ var hover_edge: Dictionary = {"type":"", "r":-1, "c":-1} # {type:"h"/"v", r, c}
 var temp_mode: bool = false
 var temp_edge: Dictionary = {"type":"", "r":-1, "c":-1}
 
+const LOG_TAG := "DotsGrid"
+var DEBUG_DOTS_GRID := false
+
+func dbg(msg: String) -> void:
+	if DEBUG_DOTS_GRID:
+		OpLog.d(LOG_TAG, msg)
 
 func _ready() -> void:
 	mouse_filter = MOUSE_FILTER_PASS
@@ -83,6 +89,12 @@ func _reset(n: int) -> void:
 	_on_resized()
 	emit_signal("turn_changed")
 	emit_signal("score_changed", score[0], score[1])
+	
+	OpLog.i(LOG_TAG, [
+		"grid_reset N=", N,
+		" total_edges=", total_edges
+	])
+	
 	queue_redraw()
 	
 func _is_box_animating(br: int, bc: int) -> bool:
@@ -115,6 +127,8 @@ func get_temp_line() -> Array:
 	return [line_owner, int(seg[0]), int(seg[1]), int(seg[2]), int(seg[3])]
 
 func clear_temp_line() -> void:
+	if has_temp_line():
+		OpLog.d(LOG_TAG, ["clear_temp_line previous=", temp_edge])
 	if is_instance_valid($AnimationLine):
 		$AnimationLine.visible = false
 	_stop_temp_pulse()
@@ -155,7 +169,16 @@ func _gui_input(e: InputEvent) -> void:
 		var rr2: int = int(pick2.get("r", -1))
 		var cc2: int = int(pick2.get("c", -1))
 
+		OpLog.event(LOG_TAG, [
+			"grid_click pick_type=", k2,
+			" r=", rr2,
+			" c=", cc2,
+			" player=", player,
+			" temp_mode=", temp_mode
+		])
+
 		if k2 == "":
+			OpLog.d(LOG_TAG, "grid_click_no_edge")
 			clear_temp_line()
 			return
 
@@ -166,7 +189,19 @@ func _gui_input(e: InputEvent) -> void:
 			free_ok = (v_edges[rr2][cc2] == -1)
 
 		if not free_ok:
+			OpLog.w(LOG_TAG, [
+				"grid_click_edge_not_free type=", k2,
+				" r=", rr2,
+				" c=", cc2
+			])
 			return
+
+		OpLog.event(LOG_TAG, [
+			"grid_click_completes_box_immediate type=", k2,
+			" r=", rr2,
+			" c=", cc2,
+			" player=", player
+		])
 
 		if _would_complete_box(k2, rr2, cc2):
 			clear_temp_line()
@@ -174,6 +209,14 @@ func _gui_input(e: InputEvent) -> void:
 			_claim_edge(k2, rr2, cc2)
 			return
 		temp_edge = {"type":k2, "r":rr2, "c":cc2, "owner": player}
+
+		OpLog.event(LOG_TAG, [
+			"temp_line_set type=", k2,
+			" r=", rr2,
+			" c=", cc2,
+			" owner=", player
+		])
+
 		_play_line_animation(k2, rr2, cc2, player, true)
 		emit_signal("temp_line_changed", true)
 		queue_redraw()
@@ -199,9 +242,9 @@ func _would_complete_box(kind: String, r: int, c: int) -> bool:
 				return true
 	return false
 
-			
 func set_input_enabled(v: bool) -> void:
 	input_enabled = v
+	OpLog.d(LOG_TAG, ["input_enabled=", input_enabled, " player=", player])
 
 func _pick_edge(pos: Vector2) -> Dictionary:
 	var hit_px: float = min(step.x, step.y) * 0.50
@@ -251,9 +294,25 @@ func _claim_edge(kind: String, r: int, c: int) -> void:
 		return
 		
 	var seg := _edge_to_segment_bl(kind, r, c)
+	
+	OpLog.event(LOG_TAG, [
+		"claim_edge kind=", kind,
+		" r=", r,
+		" c=", c,
+		" player=", player,
+		" seg=", seg
+	])
+	
 	emit_signal("line_committed_bl", player, int(seg[0]), int(seg[1]), int(seg[2]), int(seg[3]))
 	edges_claimed += 1
 	var made_box: int = _check_boxes_from_edge(kind, r, c)
+	
+	OpLog.i(LOG_TAG, [
+		"claim_edge_result made_box=", made_box,
+		" score=", score,
+		" edges_claimed=", edges_claimed,
+		" total_edges=", total_edges
+	])
 
 	if made_box == 0:
 		player = 3 - player
@@ -302,6 +361,15 @@ func _check_boxes_from_edge(kind: String, r: int, c: int) -> int:
 			last_completed_boxes_bl.append([player, int(bl4[0]), int(bl4[1])])
 			emit_signal("square_completed_bl", player, int(bl4[0]), int(bl4[1]))
 			won += 1
+			
+	if won > 0:
+		OpLog.event(LOG_TAG, [
+			"boxes_completed count=", won,
+			" player=", player,
+			" score=", score,
+			" last_completed=", last_completed_boxes_bl
+		])
+
 	return won
 	
 func _start_temp_pulse(anim_line: Line2D) -> void:
@@ -402,9 +470,10 @@ func _is_box_complete(br: int, bc: int) -> bool:
 	if v_edges[br][bc] == -1: return false
 	if v_edges[br][bc + 1] == -1: return false
 	return true
-	
+
 func commit_temp_line_now() -> bool:
 	if String(temp_edge.get("type", "")) == "":
+		OpLog.w(LOG_TAG, "commit_temp_line_blocked no_temp_line")
 		return false
 
 	var k: String = String(temp_edge["type"])
@@ -412,8 +481,20 @@ func commit_temp_line_now() -> bool:
 	var c: int = int(temp_edge["c"])
 
 	if not _is_edge_free(k, r, c):
+		OpLog.w(LOG_TAG, [
+			"commit_temp_line_blocked edge_not_free type=", k,
+			" r=", r,
+			" c=", c
+		])
 		return false
-		
+
+	OpLog.event(LOG_TAG, [
+		"commit_temp_line type=", k,
+		" r=", r,
+		" c=", c,
+		" player=", player
+	])
+
 	_play_line_animation(k, r, c, player, false)
 
 	if k == "h":
@@ -421,6 +502,7 @@ func commit_temp_line_now() -> bool:
 	elif k == "v":
 		v_edges[r][c] = player
 	else:
+		OpLog.w(LOG_TAG, ["commit_temp_line_bad_type type=", k])
 		return false
 
 	edges_claimed += 1
@@ -441,10 +523,14 @@ func commit_temp_line_now() -> bool:
 	queue_redraw()
 
 	if score[0] + score[1] == (N - 1) * (N - 1):
+		OpLog.event(LOG_TAG, [
+			"grid_game_over score=", score,
+			" boxes_total=", (N - 1) * (N - 1)
+		])
 		emit_signal("game_over", score[0], score[1])
 
 	return true
-	
+
 func get_last_completed_boxes() -> Array:
 	return last_completed_boxes_bl.duplicate(true)
 	
@@ -530,6 +616,11 @@ func _draw_box_x(br: int, bc: int, col: Color) -> void:
 	draw_line(b0, b1, col, line_width * 0.75, true)
 
 func load_lines_and_squares_state(lines: Array, squares: Array) -> void:
+	OpLog.i(LOG_TAG, [
+		"load_lines_and_squares_state lines=", lines.size(),
+		" squares=", squares.size(),
+		" N=", N
+	])
 	_reset(N)
 	for l in lines:
 		if typeof(l) == TYPE_ARRAY and l.size() >= 5:
@@ -560,6 +651,12 @@ func load_lines_and_squares_state(lines: Array, squares: Array) -> void:
 				score[p - 1] += 1
 	
 	emit_signal("score_changed", score[0], score[1])
+	
+	OpLog.i(LOG_TAG, [
+		"load_lines_and_squares_done score=", score,
+		" edges_claimed=", edges_claimed
+	])
+	
 	queue_redraw()
 
 func load_lines_state(lines: Array) -> void:
@@ -600,9 +697,12 @@ func load_lines_state(lines: Array) -> void:
 	queue_redraw()
 
 func replay_line_move(move: Array) -> void:
-	if typeof(move) != TYPE_ARRAY or move.size() < 5:
-		return
+	OpLog.event(LOG_TAG, ["replay_line_move move=", move])
 	
+	if typeof(move) != TYPE_ARRAY or move.size() < 5:
+		OpLog.w(LOG_TAG, ["replay_line_move_bad_data move=", move])
+		return
+
 	var p_owner12: int = clamp(int(move[0]), 1, 2)
 	var x1: int = int(move[1])
 	var y1: int = int(move[2])
@@ -611,6 +711,10 @@ func replay_line_move(move: Array) -> void:
 
 	var m: Dictionary = _segment_to_edge(x1, y1, x2, y2)
 	if not bool(m.get("ok", false)):
+		OpLog.w(LOG_TAG, [
+			"replay_line_segment_to_edge_failed move=", move,
+			" applying_direct=true"
+		])
 		_apply_committed_line(p_owner12, x1, y1, x2, y2)
 		return
 		

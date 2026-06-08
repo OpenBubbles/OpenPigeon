@@ -6,6 +6,13 @@ const LETTER_VOID: Texture2D = preload("res://anagrams/letter_void.png")
 const LETTER_PLACEHOLDER: Texture2D = preload("res://anagrams/placeholder.png")
 const DICT_PATH := "res://global/gp_wg_en2.txt"
 
+const LOG_TAG := "AnagramsGameScreen"
+var DEBUG_ANAGRAMS_SCREEN := false
+
+func dbg(msg: String) -> void:
+	if DEBUG_ANAGRAMS_SCREEN:
+		OpLog.d(LOG_TAG, msg)
+
 const TOTAL_TIME_SEC := 60
 
 @export var letters: String = "ABCDEF"
@@ -71,22 +78,26 @@ func _ready() -> void:
 	if not shuffle_button.pressed.is_connected(_on_shuffle_pressed):
 		shuffle_button.pressed.connect(_on_shuffle_pressed)
 
-	
 func _load_dictionary() -> void:
 	word_dict.clear()
+
 	var f := FileAccess.open(DICT_PATH, FileAccess.READ)
 	if f == null:
+		OpLog.e(LOG_TAG, ["dictionary_open_failed path=", DICT_PATH])
 		push_error("Could not open dictionary file: %s" % DICT_PATH)
 		return
 
 	while not f.eof_reached():
 		var line := f.get_line().strip_edges()
+
 		if line.is_empty():
 			continue
+
 		word_dict[line.to_upper()] = true
 
 	f.close()
 
+	OpLog.i(LOG_TAG, ["dictionary_loaded words=", word_dict.size()])
 
 func _update_word_score_labels() -> void:
 	if words_label:
@@ -277,7 +288,11 @@ func _on_shuffle_pressed() -> void:
 			break
 
 		if attempts > 32:
-			print(">>> Resetting seen_orders after too many duplicate shuffles")
+			OpLog.w(LOG_TAG, [
+				"shuffle_reset_seen_orders attempts=", attempts,
+				" seen_orders=", seen_orders.size(),
+				" max_orders=", max_orders
+			])
 			seen_orders.clear()
 			break
 
@@ -639,32 +654,58 @@ func _on_source_letter_pressed(letter_index: int) -> void:
 
 func _on_enter_pressed() -> void:
 	if selected_indices.size() < 3:
+		OpLog.d(LOG_TAG, ["enter_blocked too_few_letters count=", selected_indices.size()])
 		return
 
 	var word := ""
+
 	for idx in selected_indices:
 		word += letters[idx]
+
 	var upper := word.to_upper()
 
 	if not word_dict.has(upper):
+		OpLog.event(LOG_TAG, [
+			"word_rejected reason=not_in_dictionary word=", upper,
+			" selected_count=", selected_indices.size()
+		])
+
 		_flash_void_row_invalid()
 		_show_word_feedback("%s (Not in the vocabulary)" % upper, false)
 		_reset_selection_back_to_source()
 		return
 
 	if used_words.has(upper):
+		OpLog.event(LOG_TAG, [
+			"word_rejected reason=already_used word=", upper
+		])
+
 		_flash_void_row_invalid()
 		_show_word_feedback("%s (Already Used)" % upper, false)
 		_reset_selection_back_to_source()
 		return
 
 	var gained := _get_word_score(upper.length())
+
 	if gained <= 0:
+		OpLog.w(LOG_TAG, [
+			"word_rejected reason=no_score word=", upper,
+			" len=", upper.length(),
+			" gained=", gained
+		])
 		_reset_selection_back_to_source()
 		return
 
 	used_words[upper] = true
 	_add_score(gained, upper)
+
+	OpLog.event(LOG_TAG, [
+		"word_accepted word=", upper,
+		" points=", gained,
+		" score=", score,
+		" word_count=", word_count + 1
+	])
+
 	_reset_selection_back_to_source()
 
 func _get_word_score(wlen: int) -> int:
@@ -841,27 +882,38 @@ func _update_timer_label() -> void:
 func _on_time_up() -> void:
 	for btn in source_buttons:
 		btn.disabled = true
+
 	for btn in picked_buttons:
 		btn.disabled = true
 
 	enter_button.disabled = true
 	enter_button.self_modulate.a = 0.3
 
+	OpLog.event(LOG_TAG, [
+		"time_up score=", score,
+		" word_count=", word_count,
+		" used_words=", used_words.size()
+	])
+
 	emit_signal("time_up")
 
 func _debug_print_order(label: String, tiles: Array, key: String) -> void:
 	var letters_str := ""
+
 	for btn in tiles:
 		if btn.get_child_count() > 0 and btn.get_child(0) is Label:
 			var lbl := btn.get_child(0) as Label
 			letters_str += lbl.text
 
 	var keys: Array[String] = []
+
 	for k in seen_orders.keys():
 		keys.append(k)
 
-	print("--- ", label, " ---")
-	print("  key: ", key)
-	print("  visual letters: ", letters_str)
-	print("  seen_orders.size(): ", seen_orders.size())
-	print("  seen keys: ", keys)
+	dbg("order_debug label=%s key=%s visual_letters=%s seen_count=%d seen_keys=%s" % [
+		label,
+		key,
+		letters_str,
+		seen_orders.size(),
+		str(keys)
+	])

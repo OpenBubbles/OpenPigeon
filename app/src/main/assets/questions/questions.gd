@@ -23,6 +23,7 @@ extends BaseGame
 
 const OpponentAvatarScene: PackedScene = preload("res://global/avatar_textures/AvatarThumbnail.tscn")
 const MUSIC_STREAM := preload("res://global/audio/20questions.ogg")
+const LOG_TAG := "Questions"
 var _opponent_avatar_data: Dictionary = {}
 var _answer_avatar_data: Dictionary = {}
 var _my_avatar_string: String = ""
@@ -165,18 +166,17 @@ func _get_s(parsed_dict: Dictionary, key: String, def: String = "") -> String:
 	if typeof(v) == TYPE_ARRAY and v.size() > 0:
 		return str(v[0])
 	return str(v)
-	
+
 func _on_text_focus_entered() -> void:
 	if game_over:
 		return
-	print("Text Focus Entered")
+	OpLog.d(LOG_TAG, "text_focus_entered")
 	questions_container.visible = false
-	
+
 func _on_text_focus_exited() -> void:
-	print("Text Focus Exited")
+	OpLog.d(LOG_TAG, "text_focus_exited")
 	questions_container.visible = true
 
-		
 func _flash_textbox_red() -> void:
 	if not is_instance_valid(text_box):
 		return
@@ -263,15 +263,15 @@ func _on_keyboard_closed() -> void:
 
 	
 func _set_game_data(data_json: String) -> void:
+	OpLog.event(LOG_TAG, ["set_game_data_in raw=", data_json])
+
 	var parsed_v: Variant = JSON.parse_string(data_json)
 	if typeof(parsed_v) != TYPE_DICTIONARY:
-		printerr("Bad game data JSON")
+		OpLog.e(LOG_TAG, ["set_game_data_parse_failed raw=", data_json])
 		return
 
 	var parsed: Dictionary = parsed_v
 	last_raw_payload = parsed.duplicate(true)
-
-	print("RAW DATA:", parsed)
 
 	game_over = false
 	winner = 0
@@ -299,6 +299,16 @@ func _set_game_data(data_json: String) -> void:
 	_player1_id = player1
 	_player2_id = player2
 
+	OpLog.i(LOG_TAG, [
+		"set_game_data_ids my_uuid=", my_uuid,
+		" incoming_my_id=", incoming_my_id,
+		" player1=", _player1_id,
+		" player2=", _player2_id,
+		" isYourTurn=", is_my_turn,
+		" server_player_hint=", server_player_hint,
+		" game_id=", game_id
+	])
+
 	spectator_mode = false
 
 	if _local_player_id != "":
@@ -324,6 +334,15 @@ func _set_game_data(data_json: String) -> void:
 			i_am_player = 1
 	else:
 		i_am_player = 2 if server_player_hint == 1 else 1
+
+	OpLog.i(LOG_TAG, [
+		"resolved_player i_am_player=", i_am_player,
+		" spectator=", spectator_mode,
+		" local_player_id=", _local_player_id,
+		" player1=", _player1_id,
+		" player2=", _player2_id,
+		" turn_before_question_logic=", is_my_turn
+	])
 
 	_set_wait_base_text()
 	_update_description_fill()
@@ -354,6 +373,11 @@ func _set_game_data(data_json: String) -> void:
 		elif typeof(raw) == TYPE_STRING:
 			joined = str(raw)
 
+		OpLog.d(LOG_TAG, [
+			"questions_field len=", joined.length(),
+			" type=", typeof(raw)
+		])
+
 		if joined != "":
 			var cleaned: String = joined.replace("['", "").replace("']", "")
 			cleaned = cleaned.replace("[", "").replace("]", "")
@@ -369,18 +393,16 @@ func _set_game_data(data_json: String) -> void:
 					var q_resp: int = int(parts[2])
 					questions.append({ "text": q_text, "idx": q_idx, "resp": q_resp })
 				elif chunk.strip_edges() != "":
+					OpLog.w(LOG_TAG, ["questions_parse_fallback chunk=", chunk])
 					questions.append({ "text": chunk, "idx": questions.size() + 1, "resp": 0 })
 
 	if parsed.has("response") and questions.size() > 0:
 		var resp_txt: String = _get_s(parsed, "response", "")
 		questions[-1]["response_text"] = resp_txt
 
-	dbg("set_game_data: is_my_turn=%s, server_player_hint=%s, i_am_player=%s" % [str(is_my_turn), str(server_player_hint), str(i_am_player)])
-	dbg("set_game_data: parsed questions count=%d" % questions.size())
+	var unanswered := 0
 
 	if questions.size() > 0:
-		var unanswered := 0
-
 		for q in questions:
 			if int(q.get("resp", 0)) == 0:
 				unanswered += 1
@@ -392,12 +414,20 @@ func _set_game_data(data_json: String) -> void:
 		else:
 			is_my_turn = false
 
-		dbg("set_game_data: unanswered=%d" % unanswered)
+	OpLog.i(LOG_TAG, [
+		"questions_loaded count=", questions.size(),
+		" unanswered=", unanswered,
+		" i_am_player=", i_am_player,
+		" final_is_my_turn=", is_my_turn,
+		" game_over=", game_over
+	])
 
 	_renumber_from_one()
 
 	if parsed.has("winner") and _get_s(parsed, "winner", "") != "":
-		_apply_winner_payload(_get_s(parsed, "winner", ""), player1, player2)
+		var winner_payload := _get_s(parsed, "winner", "")
+		OpLog.event(LOG_TAG, ["winner_payload_received payload=", winner_payload])
+		_apply_winner_payload(winner_payload, player1, player2)
 	else:
 		check_win()
 
@@ -414,7 +444,7 @@ func _set_game_data(data_json: String) -> void:
 	else:
 		stop_waiting_animation()
 		_maybe_show_answer_popup()
-		
+
 func _show_result_from_state(state: String, spectator_winner_player: int = 0) -> void:
 	game_over = true
 	is_my_turn = false
@@ -474,10 +504,19 @@ func _show_result_from_state(state: String, spectator_winner_player: int = 0) ->
 	var tween_in := create_tween()
 	tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6) \
 		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-		
+
 func _apply_winner_payload(winner_payload: String, player1_id: String = "", player2_id: String = "") -> void:
+	OpLog.event(LOG_TAG, [
+		"apply_winner_payload payload=", winner_payload,
+		" player1=", player1_id,
+		" player2=", player2_id,
+		" my_uuid=", my_uuid,
+		" spectator=", spectator_mode
+	])
+
 	var parts := winner_payload.split("|", false)
 	if parts.size() < 2:
+		OpLog.w(LOG_TAG, ["bad_winner_payload payload=", winner_payload])
 		return
 
 	var sender_uuid := String(parts[0])
@@ -508,8 +547,15 @@ func _apply_winner_payload(winner_payload: String, player1_id: String = "", play
 		if sender_uuid != my_uuid:
 			local_state = "-1" if sender_state == "1" else "1"
 
+	OpLog.i(LOG_TAG, [
+		"winner_resolved sender_uuid=", sender_uuid,
+		" sender_state=", sender_state,
+		" local_state=", local_state,
+		" winning_player=", winning_player
+	])
+
 	_show_result_from_state(local_state, winning_player)
-	
+
 func check_win() -> bool:
 	if game_over:
 		return true
@@ -526,8 +572,17 @@ func check_win() -> bool:
 		if r == 4:
 			any_correct = true
 
+	OpLog.d(LOG_TAG, [
+		"check_win answered=", answered,
+		" qcount=", questions.size(),
+		" any_correct=", any_correct,
+		" max=", MAX_QUESTIONS,
+		" i_am_player=", i_am_player,
+		" spectator=", spectator_mode
+	])
+
 	if any_correct:
-		print("[20Q] GAME OVER: Player 1 wins, guessed correctly.")
+		OpLog.event(LOG_TAG, "game_over player1_wins guessed_correctly")
 
 		if spectator_mode:
 			_show_result_from_state("1", 1)
@@ -537,7 +592,7 @@ func check_win() -> bool:
 		return true
 
 	if answered >= MAX_QUESTIONS:
-		print("[20Q] GAME OVER: Player 2 wins, no correct guess in 20.")
+		OpLog.event(LOG_TAG, "game_over player2_wins max_questions_reached")
 
 		if spectator_mode:
 			_show_result_from_state("-1", 2)
@@ -549,7 +604,7 @@ func check_win() -> bool:
 	game_over = false
 	winner = 0
 	return false
-	
+
 func _question_color_for_index(idx: int) -> Color:
 	var deg := (360.0 / 20.0) * float(idx)
 	var h := fposmod(deg / 360.0, 1.0)
@@ -557,14 +612,12 @@ func _question_color_for_index(idx: int) -> Color:
 
 func _update_upcoming_input_chip_color() -> void:
 	if not is_instance_valid(questions_text_container):
-		print("NO TEXT CONTINER")
+		OpLog.w(LOG_TAG, "update_chip_color_missing_container")
 		return
 	var next_number := questions.size() + 1
 	var c := _question_color_for_index(next_number)
-	print("Next Color: ", c)
-
 	var sb := questions_text_container.get_theme_stylebox("panel")
-	print("SB: ", sb)
+	OpLog.d(LOG_TAG, ["update_chip_color next_number=", next_number, " color=", c])
 	var sbf := sb as StyleBoxFlat
 	if sbf:
 		sbf.bg_color = c
@@ -613,20 +666,35 @@ func _make_scrollbars_invisible() -> void:
 		hbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 func _replay_from_state() -> void:
-	print("==== Replay 20Q ====")
-	print("I am P", i_am_player, " | turn=", is_my_turn, " | answer='", secret_answer, "'")
+	OpLog.d(LOG_TAG, [
+		"replay_state i_am_player=", i_am_player,
+		" is_my_turn=", is_my_turn,
+		" answer=", secret_answer,
+		" qcount=", questions.size()
+	])
+
 	for q in questions:
-		print("#", q["idx"], "  ", q["text"], "  resp=", int(q["resp"]))
-	print("====================")
+		OpLog.d(LOG_TAG, [
+			"replay_question idx=", q.get("idx", -1),
+			" text=", q.get("text", ""),
+			" resp=", int(q.get("resp", 0))
+		])
 
 func _on_send_pressed() -> void:
 	if spectator_mode or game_over or (not is_my_turn) or (not is_instance_valid(text_box)):
+		OpLog.w(LOG_TAG, [
+			"send_pressed_blocked spectator=", spectator_mode,
+			" game_over=", game_over,
+			" is_my_turn=", is_my_turn,
+			" text_box_valid=", is_instance_valid(text_box)
+		])
 		return
 
 	var raw := text_box.text
 	var cleaned := _sanitize_input(raw, true)
 
 	if cleaned == "":
+		OpLog.w(LOG_TAG, ["empty_question_blocked raw_len=", raw.length()])
 		_flash_textbox_red()
 		_on_text_focus_exited()
 		return
@@ -641,6 +709,13 @@ func _on_send_pressed() -> void:
 
 	questions.append({ "text": text_to_send, "idx": next_idx, "resp": resp_code })
 
+	OpLog.event(LOG_TAG, [
+		"question_added idx=", next_idx,
+		" text=", text_to_send,
+		" qcount=", questions.size(),
+		" i_am_player=", i_am_player
+	])
+
 	check_win()
 	_render_all_questions()
 	_update_upcoming_input_chip_color()
@@ -652,7 +727,11 @@ func _on_send_pressed() -> void:
 		if asked_count >= MAX_QUESTIONS:
 			check_win()
 			_update_ui_interactivity()
-			print("P1 reached 20 questions without correct guess. You lose.")
+			OpLog.event(LOG_TAG, [
+				"max_questions_reached asked_count=", asked_count,
+				" game_over=", game_over,
+				" winner=", winner
+			])
 
 	send_game()
 
@@ -664,9 +743,16 @@ func _on_send_pressed() -> void:
 		stop_waiting_animation()
 
 	_update_description_fill()
-	
+
 func _apply_answer_code_to_idx(target_idx: int, code: int) -> void:
 	if game_over or i_am_player != 2 or questions.size() == 0:
+		OpLog.w(LOG_TAG, [
+			"answer_blocked idx=", target_idx,
+			" code=", code,
+			" game_over=", game_over,
+			" i_am_player=", i_am_player,
+			" qcount=", questions.size()
+		])
 		return
 
 	var found := false
@@ -678,16 +764,28 @@ func _apply_answer_code_to_idx(target_idx: int, code: int) -> void:
 			break
 
 	if not found:
-		dbg("apply_idx: NOT FOUND or already answered")
+		OpLog.w(LOG_TAG, [
+			"answer_not_found_or_already_answered idx=", target_idx,
+			" code=", code
+		])
 		return
+
+	OpLog.event(LOG_TAG, [
+		"answer_applied idx=", target_idx,
+		" code=", code,
+		" text=", _response_text(code),
+		" qcount=", questions.size()
+	])
 
 	_render_all_questions()
 	check_win()
 
 	if code == 4:
-		dbg("apply_idx: guessed-it selected; game_over=%s winner=%d before send" % [str(game_over), winner])
-
-	dbg("apply_idx: updated; calling send_game() & _maybe_show_answer_popup")
+		OpLog.event(LOG_TAG, [
+			"guessed_it_selected idx=", target_idx,
+			" game_over=", game_over,
+			" winner=", winner
+		])
 
 	send_game()
 	_update_ui_interactivity()
@@ -697,7 +795,7 @@ func _apply_answer_code_to_idx(target_idx: int, code: int) -> void:
 		stop_waiting_animation()
 
 	dbg("apply_idx: target_idx=%d code=%d i_am_player=%d game_over=%s qcount=%d" % [target_idx, code, i_am_player, str(game_over), questions.size()])
-	
+
 func _apply_answer_code_to_pending(code: int) -> void:
 	if game_over or i_am_player != 2 or questions.size() == 0:
 		return
@@ -710,6 +808,7 @@ func _apply_answer_code_to_pending(code: int) -> void:
 
 func send_game() -> void:
 	if spectator_mode:
+		OpLog.w(LOG_TAG, "send_game_blocked spectator=true")
 		return
 
 	if _local_player_id == "":
@@ -748,6 +847,7 @@ func send_game() -> void:
 
 		if latest_question != "":
 			payload["description"] = latest_question
+			OpLog.d(LOG_TAG, ["description_set latest_question=", latest_question])
 
 	var my_avatar := _my_avatar_string
 
@@ -778,9 +878,25 @@ func send_game() -> void:
 		var sender_id := _local_player_id if _local_player_id != "" else my_uuid
 		payload["winner"] = sender_id + "|" + outgoing_state
 
+		OpLog.event(LOG_TAG, [
+			"send_game_winner winner=", payload["winner"],
+			" local_winner=", winner,
+			" i_am_player=", i_am_player
+		])
+
 	var json := JSON.stringify(payload)
 
-	print("Sending: ", json)
+	OpLog.event(LOG_TAG, [
+		"send_game_out qcount=", questions.size(),
+		" unanswered=", _count_unanswered(),
+		" i_am_player=", i_am_player,
+		" is_my_turn=", is_my_turn,
+		" game_over=", game_over,
+		" has_winner=", payload.has("winner"),
+		" has_description=", payload.has("description"),
+		" raw=", json
+	])
+
 	send_game_data(json)
 
 	if game_over:
@@ -862,13 +978,13 @@ func _on_questions_resized() -> void:
 
 func _on_questions_child_entered(_node: Node) -> void:
 	_smooth_scroll_to_bottom()
-	
+
 func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 	var idx := int(q["idx"])
 	var col := _question_color_for_index(idx)
 	var resp_code := int(q.get("resp", 0))
 
-	print("[20Q][row] build idx=", idx, " latest=", is_latest, " resp=", resp_code)
+	dbg("row_build idx=%d latest=%s resp=%d" % [idx, str(is_latest), resp_code])
 
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -892,9 +1008,9 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 	row.add_child(left_holder)
 
 	if is_latest and OpponentAvatarScene != null:
-		print("[20Q][row] Will show opponent avatar. PackedScene ok? ", OpponentAvatarScene != null)
+		dbg("row_avatar creating latest_idx=%d" % idx)
 		var opp_inst := OpponentAvatarScene.instantiate()
-		print("[20Q][row] Instantiated avatar. Type=", opp_inst.get_class())
+		dbg("row_avatar instantiated type=%s" % opp_inst.get_class())
 
 		if opp_inst is Control:
 			opp_inst.name = "OpponentAvatar"
@@ -907,23 +1023,26 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 			opp_inst.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			left_stack.add_child(opp_inst)
 			opp_inst.scale = Vector2(0.75, 0.75)
-			print("[20Q][row] Avatar added as child. left_stack size=", left_stack.get_rect().size)
+			dbg("row_avatar added left_stack_size=%s" % str(left_stack.get_rect().size))
 
 			if _opponent_avatar_data.is_empty():
-				print("[20Q][row] _opponent_avatar_data empty. Using defaults.")
+				OpLog.w(LOG_TAG, "row_avatar_data_empty_using_defaults")
 				_opponent_avatar_data = GameUtils._parse_avatar_string("")
 			else:
-				print("[20Q][row] Using provided avatar data: ", _opponent_avatar_data)
+				dbg("row_avatar using_provided_avatar_data")
 
 			if opp_inst.has_method("update_avatar_from_data"):
-				print("[20Q][row] Calling update_avatar_from_data on avatar...")
+				dbg("row_avatar calling_update_avatar_from_data")
 				opp_inst.call_deferred("update_avatar_from_data", _opponent_avatar_data)
 			else:
-				print("[20Q][row][WARN] Avatar root lacks 'update_avatar_from_data'. Node=", opp_inst, " Script=", opp_inst.get_script())
+				OpLog.w(LOG_TAG, [
+					"row_avatar_missing_update_method node=", opp_inst,
+					" script=", opp_inst.get_script()
+				])
 		else:
-			print("[20Q][row][WARN] Avatar instance is not Control. Got: ", opp_inst)
+			OpLog.w(LOG_TAG, ["row_avatar_instance_not_control got=", opp_inst])
 	else:
-		print("[20Q][row] Showing history '?' instead of avatar (is_latest=", is_latest, ")")
+		dbg("row_history_question_mark is_latest=%s" % str(is_latest))
 		var qmark := Label.new()
 		qmark.name = "HistoryQuestionMark"
 		qmark.text = "?"
@@ -987,16 +1106,28 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 	call_deferred("_debug_print_row_layout", row)
 	return row
 
-
 func _debug_print_row_layout(row: HBoxContainer) -> void:
 	if not is_instance_valid(row):
 		return
+
 	var left_stack := row.get_node_or_null("LeftHolder/LeftStack") as Control
-	var avatar := left_stack.get_node_or_null("OpponentAvatar")
-	print("[20Q][rowdbg] row size=", row.get_rect().size, " left_stack size=", (left_stack.get_rect().size if left_stack else Vector2.ZERO))
+	var avatar := left_stack.get_node_or_null("OpponentAvatar") if left_stack else null
+
+	dbg("row_layout row_size=%s left_stack_size=%s" % [
+		str(row.get_rect().size),
+		str(left_stack.get_rect().size if left_stack else Vector2.ZERO)
+	])
+
 	if avatar:
-		print("[20Q][rowdbg] avatar rect=", (avatar as Control).get_rect(), " anchors=FULL? (", (avatar as Control).anchor_left, ",", (avatar as Control).anchor_top, ",", (avatar as Control).anchor_right, ",", (avatar as Control).anchor_bottom, ")")
-	
+		var avatar_control := avatar as Control
+		dbg("row_layout avatar_rect=%s anchors=(%s,%s,%s,%s)" % [
+			str(avatar_control.get_rect()),
+			str(avatar_control.anchor_left),
+			str(avatar_control.anchor_top),
+			str(avatar_control.anchor_right),
+			str(avatar_control.anchor_bottom)
+		])
+
 func _make_response_chip(code: int) -> Control:
 	var txt := _response_text(code)
 	var col := _response_color(code)
@@ -1170,7 +1301,7 @@ func _show_answer_overlay_for(idx: int, text: String, col: Color) -> void:
 			btn.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	overlay.visible = true
-	print("VISIBLE OVERLAY")
+	OpLog.event(LOG_TAG, ["answer_overlay_visible idx=", idx, " text=", text])
 	overlay.move_to_front()
 	var vp_w := get_viewport_rect().size.x
 	var card := overlay.get_node_or_null("Card") as Control
@@ -1195,7 +1326,8 @@ func _hide_answer_overlay() -> void:
 	dbg("overlay: HIDE")
 	
 func dbg(msg: String) -> void:
-	print("[20Q] ", msg)
+	if DEBUG_20Q:
+		OpLog.d(LOG_TAG, msg)
 
 func _update_description_fill() -> void:
 	if not is_instance_valid(_desc_rich):
@@ -1247,7 +1379,7 @@ func _renumber_from_one() -> void:
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
-		print("Warning: sent_label is not valid for play_sent_animation.")
+		OpLog.w(LOG_TAG, "sent_animation_missing_label")
 		_set_wait_base_text()
 		start_waiting_animation()
 		return
