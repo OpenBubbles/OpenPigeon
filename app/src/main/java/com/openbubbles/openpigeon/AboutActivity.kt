@@ -158,37 +158,38 @@ class AboutActivity : Activity() {
 
 private fun buildAboutMessage(currentYear: Int, versionText: String): String {
     return """
-		$versionText
-
-		Copyright © $currentYear OpenPigeon Contributors
-		
-		OpenPigeon is fully open-source, and we're looking for game developers to contribute to their favorite games. If you're interested, find out more on GitHub.
-
-		Thank you to our contributors!
-		8 Ball - Copper + ty8447
-		20 Questions - ty8447
-		Anagrams - ty8447
-		Archery - jakecrowley + ty8447
-		Basketball - jakecrowley + ty8447
-		Checkers - jakecrowley + ty8447
-		Chess - chasedredmon + ty8447
-		Crazy 8 - Copper + ty8447
-		Cup Pong - jakecrowley + ty8447
-		Darts - jakecrowley + ty8447
-		Dots & Boxes - ty8447
-		Filler - ty8447
-		Four in a Row - jakecrowley + ty8447
-		Gomoku - ty8447
-		Mancala - ty8447
-		Paintball - ty8447
-		Reversi - ty8447
-		Sea Battle - Copper + ty8447
-		Tanks - ty8447
-		Wordbites - ty8447
-		Word Hunt - npulse4 + ty8447
-
-		Are you a developer? Add your favorite game on GitHub!
-	""".trimIndent()
+        |$versionText
+        |
+        |Copyright © $currentYear OpenPigeon Contributors
+        |
+        |OpenPigeon is fully open-source, and we're looking for game developers to contribute to their favorite games. If you're interested, find out more on GitHub.
+        |
+        |Thank you to our contributors!
+        |8 Ball - Copper + ty8447
+        |9 Ball - ty8447
+        |20 Questions - ty8447
+        |Anagrams - ty8447
+        |Archery - jakecrowley + ty8447
+        |Basketball - jakecrowley + ty8447
+        |Checkers - jakecrowley + ty8447
+        |Chess - chasedredmon + ty8447
+        |Crazy 8 - Copper + ty8447
+        |Cup Pong - jakecrowley + ty8447
+        |Darts - jakecrowley + ty8447
+        |Dots & Boxes - ty8447
+        |Filler - ty8447
+        |Four in a Row - jakecrowley + ty8447
+        |Gomoku - ty8447
+        |Mancala - ty8447
+        |Paintball - ty8447
+        |Reversi - ty8447
+        |Sea Battle - Copper + ty8447
+        |Tanks - ty8447
+        |Wordbites - ty8447
+        |Word Hunt - npulse4 + ty8447
+        |
+        |Are you a developer? Add your favorite game on GitHub!
+    """.trimMargin()
 }
 
 @Composable
