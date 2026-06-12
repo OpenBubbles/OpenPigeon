@@ -1,6 +1,13 @@
 extends RigidBody3D
 class_name PongBall
 
+const LOG_TAG := "PongBall"
+const DEBUG_PONG_BALL := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_PONG_BALL:
+		OpLog.d(LOG_TAG, parts)
+
 var game: PongGame
 var hit_cup: StaticBody3D = null
 var made_in: StaticBody3D = null
@@ -69,19 +76,17 @@ func _physics_process(_delta: float) -> void:
 		return
 
 	if collisions.size() > 0:
-		print("ball_contact pos=(%.3f, %.3f, %.3f) vel=%s hit_count=%d" % [
-			position.x,
-			position.y,
-			position.z,
-			str(linear_velocity),
-			collisions.size()
+		dbg([
+			"ball_contact pos=", global_position,
+			" vel=", linear_velocity,
+			" count=", collisions.size()
 		])
 
 		for c: Node3D in collisions:
-			print("  collider name='%s' parent='%s' parent_path='%s'" % [
-				c.name,
-				c.get_parent().name if c.get_parent() else "<no parent>",
-				str(c.get_path())
+			dbg([
+				"collider name=", c.name,
+				" parent=", c.get_parent().name if c.get_parent() else "<no parent>",
+				" path=", str(c.get_path())
 			])
 
 	if made_in == null and hit_cup == null:
@@ -97,7 +102,7 @@ func _physics_process(_delta: float) -> void:
 				_set_hit_cup(parent)
 				break
 			else:
-				print("rim / outside cup")
+				dbg(["rim_or_outside_cup pos=", global_position, " vel=", linear_velocity])
 
 	_store_prev_position()
 
@@ -134,7 +139,12 @@ func _update_cup_entry_check() -> void:
 
 		if soft_cup_frames >= CUP_MIN_FRAMES or (deep_in_cup and dist <= CUP_ENTER_RADIUS):
 			made_in = hit_cup.duplicate()
-			print("confirmed made it in! " + str(made_in.name))
+			OpLog.i(LOG_TAG, [
+				"cup_made cup=", made_in.name,
+				" frames=", soft_cup_frames,
+				" pos=", global_position,
+				" vel=", linear_velocity
+			])
 			await game.my_cups.remove_cup(int(made_in.name.replace("cup", "")))
 			remove()
 			return
@@ -142,7 +152,12 @@ func _update_cup_entry_check() -> void:
 		soft_cup_frames = max(0, soft_cup_frames - 1)
 
 		if clearly_out:
-			print("cup rejected / bounced out")
+			OpLog.i(LOG_TAG, [
+				"cup_rejected cup=", soft_cup_name,
+				" frames=", soft_cup_frames,
+				" pos=", global_position,
+				" vel=", linear_velocity
+			])
 			hit_cup = null
 			soft_cup_frames = 0
 
@@ -210,7 +225,11 @@ func _set_hit_cup(cup: StaticBody3D) -> void:
 	soft_cup_frames = 0
 	num_collisions = 0
 
-	print("cup entered " + str(cup.name))
+	OpLog.i(LOG_TAG, [
+		"cup_entered cup=", cup.name,
+		" pos=", global_position,
+		" vel=", linear_velocity
+	])
 
 	if self.physics_material_override != null:
 		self.physics_material_override.bounce = minf(self.physics_material_override.bounce, 0.08)
@@ -222,6 +241,7 @@ func _store_prev_position() -> void:
 
 
 func throw(x_force: float, y_force: float):
+	OpLog.i(LOG_TAG, ["throw_old_api xForce=", x_force, " yForce=", y_force, " pos=", global_position])
 	apply_impulse(Vector3(-x_force, -1.30, y_force))
 	thrown = true
 	_store_prev_position()
@@ -233,9 +253,10 @@ func remove():
 	if is_mine:
 		if made_in != null:
 			var cup_num: int = int(made_in.name.replace("cup", ""))
-			print("MADE IN CUP NUM: " + str(cup_num))
+			OpLog.i(LOG_TAG, ["ball_remove made cup=", cup_num, " replayPoints=", replay_poses.size()])
 			game.throws.append({"poses": replay_poses, "cup": cup_num - 1})
 		else:
+			OpLog.i(LOG_TAG, ["ball_remove miss replayPoints=", replay_poses.size()])
 			game.throws.append({"poses": replay_poses, "cup": -1})
 
 		game.throw_finished()

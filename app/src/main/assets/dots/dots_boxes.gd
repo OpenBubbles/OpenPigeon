@@ -63,6 +63,7 @@ func _get_rules_title() -> String:
 	return "Dots & Boxes"
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	var sb := StyleBoxFlat.new()
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
 

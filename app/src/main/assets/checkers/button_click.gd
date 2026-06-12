@@ -1,28 +1,24 @@
 extends Button
 
+const LOG_TAG := "ButtonClick"
 
-# Called when the node enters the scene tree for the first time.
 func _ready() -> void:
-	pass # Replace with function body.
-
-
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-func _process(delta: float) -> void:
 	pass
 
-
 func _pressed() -> void:
-	if name == "SendButton":
-		print("Send clicked")
-		var board: CheckersBoardTop = get_node("../CheckersBoardTop")
+	if name != "SendButton":
+		return
 
-		var appPlugin := Engine.get_singleton("AppPlugin")
-		if appPlugin:
-			appPlugin.updateGameData(board.export_replay())
-		else:
-			print("app not connected??")
-			
-	elif name == "UndoButton":
-		print("Undo clicked")
-		var board: CheckersBoardTop = get_node("../CheckersBoardTop")
-		board.undo_move()
+	var board := get_node_or_null("../GameBoard")
+	if board == null or not board.has_method("export_replay"):
+		OpLog.e(LOG_TAG, "SendButton pressed but ../GameBoard.export_replay is not available")
+		return
+
+	var payload: String = board.export_replay()
+	OpLog.event(LOG_TAG, ["send_button_out raw=", payload])
+
+	var appPlugin := Engine.get_singleton("AppPlugin") if Engine.has_singleton("AppPlugin") else null
+	if appPlugin:
+		appPlugin.updateGameData(payload)
+	else:
+		OpLog.w(LOG_TAG, "AppPlugin not connected; payload was not sent")

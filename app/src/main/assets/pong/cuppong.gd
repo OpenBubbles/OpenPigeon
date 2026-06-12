@@ -15,6 +15,30 @@ var CHARMAP = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789~!@
 var CHARMAP_LEN = len(CHARMAP)
 const MUSIC_STREAM := preload("res://global/audio/pong.ogg")
 
+const LOG_TAG := "Cup Pong"
+const DEBUG_PONG := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_PONG:
+		OpLog.d(LOG_TAG, parts)
+
+func _cup_summary(cups: Cups) -> String:
+	if not is_instance_valid(cups):
+		return "invalid"
+
+	return "name=%s inPlay=%s count=%d random=%d mirrorX=%s" % [
+		cups.name,
+		str(cups.cups_in_play),
+		cups.cups_in_play.size(),
+		cups.random_positions.size(),
+		str(cups.mirror_x)
+	]
+
+func _replay_move_count(value: String) -> int:
+	if value.is_empty():
+		return 0
+	return value.count("move:")
+
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var winner_label: Label = %WinLossLabel
@@ -106,6 +130,7 @@ func _get_rules_title() -> String:
 	return "Cup Pong"
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	screen_size = get_viewport().get_visible_rect().size
 
 	if is_instance_valid(main_overlay):
@@ -187,10 +212,24 @@ func _on_game_ready() -> void:
 	_stabilize_geometry(self)
 
 	Engine.physics_jitter_fix = 0.5
+	
+	OpLog.i(LOG_TAG, [
+		"game_ready screen=", screen_size,
+		" myCups=", is_instance_valid(my_cups),
+		" replayCups=", is_instance_valid(replay_cups),
+		" camera=", is_instance_valid(camera),
+		" ball=", is_instance_valid(ball)
+	])
 
 func _set_game_data(new_replay: String):
+	OpLog.event(LOG_TAG, ["set_game_data_in raw=", new_replay])
+
 	var parsed = JSON.parse_string(new_replay)
-	print("NEW REPLAY: " + str(parsed))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", new_replay])
+		return
+
+	dbg(["set_game_data parsed=", parsed])
 	
 	if not is_instance_valid(my_cups):
 		my_cups = get_node_or_null("cups2") as Cups
@@ -202,6 +241,10 @@ func _set_game_data(new_replay: String):
 		ball = get_node_or_null("ball") as RigidBody3D
 
 	if not is_instance_valid(my_cups) or not is_instance_valid(replay_cups):
+		OpLog.w(LOG_TAG, [
+			"set_game_data deferred missing nodes myCups=", is_instance_valid(my_cups),
+			" replayCups=", is_instance_valid(replay_cups)
+		])
 		call_deferred("_set_game_data", new_replay)
 		return
 	
@@ -215,22 +258,23 @@ func _set_game_data(new_replay: String):
 		var seed_value: int = _current_seed
 		var positions: Array = _generate_random_cup_positions(seed_value)
 
-		print("=== Random cup positions for seed %d ===" % seed_value)
 		var min_x := 999.0
 		var max_x := -999.0
 		var min_z := 999.0
 		var max_z := -999.0
 
-		for i in range(positions.size()):
-			var p: Vector3 = positions[i]
-			print("  [%d] x=%.4f y=%.4f z=%.4f" % [i, p.x, p.y, p.z])
+		for p: Vector3 in positions:
 			min_x = min(min_x, p.x)
 			max_x = max(max_x, p.x)
 			min_z = min(min_z, p.z)
 			max_z = max(max_z, p.z)
 
-		print("  bounds: x=[%.3f, %.3f] z=[%.3f, %.3f]" % [min_x, max_x, min_z, max_z])
-		print("  normal-mode bounds: x=[-0.142, 0.142] z=[-2.207, -1.967]")
+		dbg([
+			"random_cups seed=", seed_value,
+			" count=", positions.size(),
+			" boundsX=", Vector2(min_x, max_x),
+			" boundsZ=", Vector2(min_z, max_z)
+		])
 
 		my_cups.mirror_x = false
 		replay_cups.mirror_x = true
@@ -279,8 +323,28 @@ func _set_game_data(new_replay: String):
 	num_balls = 2
 	throws = []
 		
+	OpLog.i(LOG_TAG, [
+		"set_game_data parsed turn=", is_my_turn,
+		" player=", player,
+		" mode=", mode,
+		" seed=", _current_seed,
+		" spectator=", spectator_mode,
+		" replayLen=", replay_string.length(),
+		" replayMoves=", _replay_move_count(replay_string),
+		" winner=", winner
+	])
+
 	_process_game_state()
-	print("Game Over: ", game_over, " Winner: ", winner )
+
+	OpLog.i(LOG_TAG, [
+		"set_game_data_done gameOver=", game_over,
+		" lost=", lost,
+		" numBalls=", num_balls,
+		" redemption=", redemption,
+		" myCups={", _cup_summary(my_cups), "}",
+		" replayCups={", _cup_summary(replay_cups), "}"
+	])
+
 	if not is_my_turn and not game_over and not spectator_mode:
 		start_waiting_animation()
 	else:
@@ -358,16 +422,16 @@ func _process(delta: float) -> void:
 		]
 		
 		if max_ms > 25.0:
-			print(
-				"LONG FRAME: ", max_ms, " ms",
-				"  fps=", fps,
-				"  draw_calls=", draw_calls,
-				"  objects=", render_objects,
-				"  prim=", render_primitives,
-				"  balls=", ball_count,
-				"  is_my_turn=", is_my_turn,
-				"  played_replay=", played_replay
-			)
+			OpLog.w(LOG_TAG, [
+				"long_frame maxMs=", max_ms,
+				" fps=", fps,
+				" drawCalls=", draw_calls,
+				" objects=", render_objects,
+				" primitives=", render_primitives,
+				" balls=", ball_count,
+				" turn=", is_my_turn,
+				" playedReplay=", played_replay
+			])
 		
 		_frame_accum = 0.0
 		_frame_count = 0
@@ -382,6 +446,7 @@ func check_winner() -> bool:
 
 	var parts := winner.split("|", false)
 	if parts.size() < 2:
+		OpLog.w(LOG_TAG, ["winner malformed raw=", winner])
 		return false
 
 	var sender_uuid := String(parts[0])
@@ -415,6 +480,8 @@ func _handle_game_over_i_lost() -> void:
 	if game_over:
 		return
 
+	OpLog.i(LOG_TAG, ["game_end result=lose winner=", winner])
+
 	game_over = true
 	lost = true
 	num_balls = 0
@@ -434,6 +501,8 @@ func _handle_game_over_i_won() -> void:
 	if game_over:
 		return
 
+	OpLog.i(LOG_TAG, ["game_end result=win winner=", winner])
+
 	game_over = true
 	num_balls = 0
 	ball_ready = false
@@ -450,7 +519,7 @@ func _handle_game_over_i_won() -> void:
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
-		print("Warning: sent_label is not valid for play_sent_animation.")
+		OpLog.w(LOG_TAG, "play_sent_animation skipped: sent_label invalid")
 		return
 	
 	if sent_tween and sent_tween.is_running():
@@ -521,6 +590,14 @@ func _generate_random_cup_positions(seed_value: int) -> Array:
 	return positions
 
 func _process_game_state():
+	OpLog.i(LOG_TAG, [
+		"process_state_start turn=", is_my_turn,
+		" playedReplay=", played_replay,
+		" replayMoves=", _replay_move_count(replay_string),
+		" gameOver=", game_over,
+		" numBalls=", num_balls,
+		" redemption=", redemption
+	])
 	if played_replay == false:
 		if not replay_string.is_empty():
 			var parsed_replay := {"moves": []}
@@ -564,6 +641,7 @@ func _process_game_state():
 						move.append(int(move_spl[-1]))
 
 					parsed_replay["moves"].append(move)
+					dbg(["parsed_replay_move index=", parsed_replay["moves"].size() - 1, " points=", move.size()])
 
 			var my_board: Array
 			var other_board: Array
@@ -574,6 +652,13 @@ func _process_game_state():
 			else:
 				my_board = parsed_replay["p2_board"]
 				other_board = parsed_replay["p1_board"]
+				
+			OpLog.i(LOG_TAG, [
+				"replay_parsed moves=", parsed_replay["moves"].size(),
+				" myBoard=", my_board,
+				" otherBoard=", other_board,
+				" player=", player
+			])
 
 			if mode == "h":
 				var seed_value: int = int(parsed_replay.get("seed", 0))
@@ -644,7 +729,25 @@ func _process_game_state():
 			add_child(new_ball)
 			preview_ball = new_ball
 
+	OpLog.i(LOG_TAG, [
+		"process_state_done turn=", is_my_turn,
+		" playedReplay=", played_replay,
+		" ballReady=", ball_ready,
+		" numBalls=", num_balls,
+		" throws=", throws.size(),
+		" myCups={", _cup_summary(my_cups), "}",
+		" replayCups={", _cup_summary(replay_cups), "}"
+	])
+
 func throw_finished():
+	OpLog.i(LOG_TAG, [
+		"throw_finished throws=", throws.size(),
+		" lastCup=", throws[-1]["cup"] if throws.size() > 0 else "none",
+		" numBalls=", num_balls,
+		" redemption=", redemption,
+		" myCups=", my_cups.cups_in_play if is_instance_valid(my_cups) else []
+	])
+	
 	if len(throws) > 0 and len(throws) % 2 == 0:
 		if throws[-1]["cup"] > -1 and throws[-2]["cup"] > -1:
 			if is_instance_valid(balls_back_label):
@@ -670,6 +773,7 @@ func throw_finished():
 			lost = true
 			var outgoing := export_replay()
 			_handle_game_over_i_lost()
+			OpLog.event(LOG_TAG, ["send_game_out redemption_loss raw=", outgoing])
 			send_game_data(outgoing)
 			return
 		elif len(my_cups.cups_in_play) == 0:
@@ -708,6 +812,7 @@ func throw_finished():
 			current_ball = spawn_ball()
 	elif not game_over:
 		var outgoing := export_replay()
+		OpLog.event(LOG_TAG, ["send_game_out turn_end raw=", outgoing])
 		send_game_data(outgoing)
 		is_my_turn = false
 		ball_ready = false
@@ -758,7 +863,15 @@ func export_replay() -> String:
 	if lost:
 		export_data["winner"] = my_uuid + "|-1"
 
-	return JSON.stringify(export_data)
+	var out_json := JSON.stringify(export_data)
+	OpLog.event(LOG_TAG, [
+		"export_replay_out throws=", throws.size(),
+		" lost=", lost,
+		" replayMoves=", _replay_move_count(replay_str),
+		" replayLen=", replay_str.length(),
+		" raw=", out_json
+	])
+	return out_json
 
 func conv(input_float: float) -> String:
 	var max_encoded_integer_value = CHARMAP_LEN * CHARMAP_LEN - 1
@@ -791,6 +904,12 @@ func spawn_ball(is_replay: bool = false) -> RigidBody3D:
 
 	add_child(new_ball)
 	current_ball = new_ball
+	dbg([
+		"spawn_ball replay=", is_replay,
+		" pos=", new_ball.position,
+		" numBalls=", num_balls,
+		" ballReady=", ball_ready
+	])
 	return new_ball
 
 func playReplay(parsed: Dictionary):
@@ -798,8 +917,15 @@ func playReplay(parsed: Dictionary):
 	
 	var moves = parsed["moves"]
 	
+	OpLog.i(LOG_TAG, [
+		"play_replay_start moves=", moves.size(),
+		" p1Board=", parsed.get("p1_board", []),
+		" p2Board=", parsed.get("p2_board", [])
+	])
+	
 	for idx in range(len(moves)):
 		var move: Array = moves[idx]
+		dbg(["play_replay_move index=", idx, " rawPoints=", move.size()])
 		
 		await get_tree().create_timer(1).timeout
 		
@@ -817,7 +943,9 @@ func playReplay(parsed: Dictionary):
 			else:
 				move_cleaned.append(move[-1])
 
-		if move_cleaned.size() == 0: continue
+		if move_cleaned.size() == 0:
+			OpLog.w(LOG_TAG, ["play_replay skipped empty move index=", idx])
+			continue
 
 		new_ball.position = move_cleaned[0]
 		
@@ -848,7 +976,7 @@ func playReplay(parsed: Dictionary):
 func _on_replay_finished(new_ball: PongBall, move: Array, final_move: bool):
 	if move[-1] is int:
 		var hit_cup = move[-1] + 1
-		print("replay hit cup ", hit_cup, "!!!")
+		OpLog.i(LOG_TAG, ["replay_hit_cup cup=", hit_cup])
 		replay_cups.remove_cup(hit_cup)
 
 	new_ball.queue_free()
@@ -871,6 +999,10 @@ func _on_replay_finished(new_ball: PongBall, move: Array, final_move: bool):
 		cam_tween.play()
 
 		await cam_tween.finished
+		
+		OpLog.i(LOG_TAG, [
+			"play_replay_done replayCups={", _cup_summary(replay_cups), "}"
+		])
 
 		played_replay = true
 		_process_game_state()
@@ -898,6 +1030,7 @@ func _ios_throw_release(release_screen_pos: Vector2) -> void:
 	var drag_len: float = sqrt(dx_world * dx_world + dz_world * dz_world)
 
 	if drag_len < IOS_DRAG_DEAD_DIST:
+		dbg(["throw_cancelled dead_drag len=", drag_len])
 		ball_ready = true
 		return
 
@@ -965,13 +1098,16 @@ func _ios_throw_release(release_screen_pos: Vector2) -> void:
 	ball_ready = false
 	current_ball = null
 
-	print("[CUPPONG_THROW] dx=", dx_world,
+	OpLog.i(LOG_TAG, [
+		"throw_release dx=", dx_world,
 		" dz=", dz_world,
-		" raw_target=(", raw_x_target, ", ", raw_z_target, ")",
-		" target_cup=", target_cup,
+		" dragLen=", drag_len,
+		" rawTarget=", Vector2(raw_x_target, raw_z_target),
+		" targetCup=", target_cup,
+		" bestCupDist=", best_d,
 		" assist=", assist,
-		" impulse=(", fx_impulse, ", ", fy_impulse, ", ", fz_impulse, ")"
-	)
+		" impulse=", Vector3(fx_impulse, fy_impulse, fz_impulse)
+	])
 
 	var min_wait_time: float = 1.0
 	var max_wait_time: float = 5.0
@@ -995,6 +1131,13 @@ func _ios_throw_release(release_screen_pos: Vector2) -> void:
 			still_time = 0.0
 
 		if still_time >= 0.4 or out_of_play or elapsed >= max_wait_time:
+			OpLog.i(LOG_TAG, [
+				"throw_resolved elapsed=", elapsed,
+				" speed=", speed,
+				" stillTime=", still_time,
+				" outOfPlay=", out_of_play,
+				" pos=", thrown_ball.global_position if is_instance_valid(thrown_ball) else Vector3.ZERO
+			])
 			if is_instance_valid(thrown_ball):
 				thrown_ball.remove()
 			else:

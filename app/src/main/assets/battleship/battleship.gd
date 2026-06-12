@@ -61,6 +61,49 @@ const SHIP_TEMPLATES := {
 	10: "pos:2,7&num:0,0,0,0&rot:1|pos:7,6&num:0,0,0&rot:1|pos:3,1&num:0,0,0&rot:1|pos:2,3&num:0,0&rot:0|pos:7,2&num:0,0&rot:0|pos:0,0&num:0,0&rot:1|pos:2,9&num:0&rot:0|pos:0,6&num:0&rot:1|pos:9,9&num:0&rot:0|pos:0,3&num:0&rot:1",
 }
 
+const LOG_TAG := "Battleship"
+const DEBUG_BATTLESHIP := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_BATTLESHIP:
+		OpLog.d(LOG_TAG, parts)
+
+func _csv_true_count(csv: String) -> int:
+	if csv.is_empty():
+		return 0
+
+	var count := 0
+	for item in csv.split(",", false):
+		if item == "1":
+			count += 1
+	return count
+
+func _bool_array_true_count(values: Array) -> int:
+	var count := 0
+	for value in values:
+		if bool(value):
+			count += 1
+	return count
+
+func _bg_summary(bg: BattleGround) -> String:
+	if not is_instance_valid(bg):
+		return "invalid"
+
+	var sunk := 0
+	for ship in bg.ships:
+		if is_instance_valid(ship) and ship.is_sunk():
+			sunk += 1
+
+	return "name=%s size=%dx%d ships=%d sunk=%d bullets=%d marked=%d" % [
+		bg.name,
+		bg.columns,
+		bg.rows,
+		bg.ships.size(),
+		sunk,
+		_bool_array_true_count(bg.bullets),
+		_bool_array_true_count(bg.marked_cells)
+	]
+
 const BUFFER_OFFSETS_ORTHO: Array[Vector2i] = [
 	Vector2i(0, 0),
 	Vector2i(1, 0),
@@ -112,6 +155,7 @@ func _add_settings_rows(_container, popup_script) -> void:
 	popup_script.settings_theme_selected.connect(_on_theme_changed)
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	if player == null:
 		if is_instance_valid(state):
 			state.visible = false
@@ -144,6 +188,8 @@ func _on_game_ready() -> void:
 
 	if replay == null or player == null:
 		return
+		
+	OpLog.i(LOG_TAG, ["game_ready player=", player, " localMode=", appPlugin == null])
 
 	if water_rect and water_rect.material is ShaderMaterial:
 		var mat := water_rect.material as ShaderMaterial
@@ -157,30 +203,25 @@ func _on_game_ready() -> void:
 					break
 
 func _set_game_data(new_replay: String) -> void:
-	print("\n==========================")
-	print("[SET_GAME_DATA] NEW PAYLOAD RECEIVED")
-	print("==========================")
-	print("[RAW JSON STRING]: ", new_replay)
+	OpLog.event(LOG_TAG, ["set_game_data_in raw=", new_replay])
 
 	var parsed = JSON.parse_string(new_replay)
 	if typeof(parsed) != TYPE_DICTIONARY:
-		print("[SET_GAME_DATA] ERROR: Parsed payload is not a Dictionary. Parsed value: ", parsed)
+		OpLog.e(LOG_TAG, ["set_game_data invalid JSON parsed=", parsed, " raw=", new_replay])
 		return
-
-	print("[PARSED DATA]: ", parsed)
 
 	replay.clear()
 	var greplay: String = parsed.get("replay", "")
-	print("[REPLAY FIELD FROM PAYLOAD]: ", greplay)
+	dbg(["replay_field=", greplay])
 
 	if not greplay.is_empty():
 		replay = greplay.split("|", false)
-		print("[REPLAY ARRAY PARSED]: ", replay)
+		dbg(["replay_array=", replay])
 	else:
-		print("[REPLAY] No moves in replay")
+		dbg("replay empty")
 
 	var raw_turn = parsed.get("isYourTurn", false)
-	print("[TURN RAW] value:", raw_turn, " typeof=", typeof(raw_turn))
+	dbg(["turn_raw=", raw_turn, " type=", typeof(raw_turn)])
 	isTurn = raw_turn
 
 	my_player = parsed.get("myPlayerId", "")
@@ -195,20 +236,24 @@ func _set_game_data(new_replay: String) -> void:
 	var bullets2: String = parsed.get("bullets2", "")
 	var skip: String = parsed.get("skip_ships", "")
 	var bsize: int = int(parsed.get("size", 8))
-
-	print("[PLAYER TURN FLAG isYourTurn]: ", isTurn)
-	print("[PAYLOAD PLAYER]: ", payload_player)
-	print("[MY PLAYER ID]: ", my_player)
-	print("[P1 ID]: ", p1_id, "  [P2 ID]: ", p2_id)
-	print("[BOARD SIZE]: ", bsize)
-	print("[SHIPS1]: ", s1)
-	print("[SHIPS2]: ", s2)
-	print("[BULLETS1]: ", bullets1)
-	print("[BULLETS2]: ", bullets2)
-	print("[SKIP_SHIPS]: ", skip)
+	
+	OpLog.i(LOG_TAG, [
+		"set_game_data parsed turn=", isTurn,
+		" payloadPlayer=", payload_player,
+		" localPlayer=", my_player,
+		" p1=", p1_id,
+		" p2=", p2_id,
+		" size=", bsize,
+		" replayMoves=", replay.size(),
+		" ships1Len=", s1.length(),
+		" ships2Len=", s2.length(),
+		" bullets1=", _csv_true_count(bullets1),
+		" bullets2=", _csv_true_count(bullets2),
+		" skipShipsLen=", skip.length()
+	])
 
 	spectator_mode = my_player != "" and p1_id != "" and p2_id != "" and my_player != p1_id and my_player != p2_id
-	print("[SPECTATOR MODE]: ", spectator_mode)
+	OpLog.i(LOG_TAG, ["spectator_mode=", spectator_mode])
 
 	var resolved_player := payload_player
 
@@ -233,14 +278,13 @@ func _set_game_data(new_replay: String) -> void:
 
 	player = resolved_player
 
-	print("[PLAYER RESOLVE] payload_player=", payload_player,
-		" my_id=", my_player,
-		" p1_id=", p1_id,
-		" p2_id=", p2_id,
+	OpLog.i(LOG_TAG, [
+		"player_resolve payloadPlayer=", payload_player,
+		" myId=", my_player,
 		" isTurn=", isTurn,
-		" spectator_mode=", spectator_mode,
-		" => LOCAL PLAYER = ", player,
-		" (", ("P1" if player == 1 else "P2"), ")")
+		" spectator=", spectator_mode,
+		" localPlayer=", player
+	])
 
 	if is_instance_valid(spectator_label):
 		spectator_label.visible = spectator_mode
@@ -292,9 +336,7 @@ func _set_game_data(new_replay: String) -> void:
 	if is_instance_valid(theirBattleground):
 		their_bg_name = String(theirBattleground.name)
 
-	print("[BOARD MAP] Local player is P", player,
-		" -> myBattleground=", my_bg_name,
-		", theirBattleground=", their_bg_name)
+	OpLog.i(LOG_TAG, ["board_map player=", player, " my=", my_bg_name, " their=", their_bg_name])
 
 	if is_instance_valid(theirBattleground):
 		theirBattleground.set_grid_tint(Color.BLACK)
@@ -303,34 +345,34 @@ func _set_game_data(new_replay: String) -> void:
 	var opp_avatar := _get_opp_avatar_display()
 
 	if is_instance_valid(my_avatar) and my_avatar.has_method("update_display_from_settings"):
-		print("[AVATAR] Loading local avatar from settings immediately.")
+		dbg("avatar loading local settings")
 		my_avatar.call_deferred("update_display_from_settings")
 
 	if parsed.has(player_avatar_key):
 		var player_avatar_string: String = str(parsed[player_avatar_key])
-		print("[AVATAR] Player avatar string (", player_avatar_key, "): ", player_avatar_string)
+		dbg(["avatar local key=", player_avatar_key, " len=", player_avatar_string.length()])
 		var player_data: Dictionary = GameUtils._parse_avatar_string(player_avatar_string)
 		if is_instance_valid(my_avatar):
 			my_avatar.call_deferred("update_avatar_from_data", player_data)
 
 	if parsed.has(opponent_avatar_key):
 		var opp_avatar_string: String = str(parsed[opponent_avatar_key])
-		print("[AVATAR] Opponent avatar string (", opponent_avatar_key, "): ", opp_avatar_string)
+		dbg(["avatar opponent key=", opponent_avatar_key, " len=", opp_avatar_string.length()])
 		var opp_data: Dictionary = GameUtils._parse_avatar_string(opp_avatar_string)
 		if is_instance_valid(opp_avatar):
 			opp_avatar.call_deferred("update_avatar_from_data", opp_data)
 
 	if not s1.is_empty():
-		print("[BOARD LOAD] Applying ships1 to battleground1 (P1 board)")
+		dbg(["board_load ships1 len=", s1.length()])
 		battleground1.from_encoded(s1)
 	else:
-		print("[BOARD LOAD] ships1 is empty; battleground1 starts empty")
+		dbg("board_load ships1 empty")
 
 	if not s2.is_empty():
-		print("[BOARD LOAD] Applying ships2 to battleground2 (P2 board)")
+		dbg(["board_load ships2 len=", s2.length()])
 		battleground2.from_encoded(s2)
 	else:
-		print("[BOARD LOAD] ships2 is empty; battleground2 starts empty")
+		dbg("board_load ships2 empty")
 	if spectator_mode:
 		for bg in [battleground1, battleground2]:
 			if not is_instance_valid(bg):
@@ -341,14 +383,12 @@ func _set_game_data(new_replay: String) -> void:
 	var my_ships_encoded := (s1 if player == 1 else s2)
 
 	if not spectator_mode and my_ships_encoded.is_empty():
-		print("[INIT BOARD] No existing ships for local player P", player, " → generating random layout on ", myBattleground.name)
+		OpLog.i(LOG_TAG, ["init_board randomize localPlayer=", player, " board=", myBattleground.name])
 		_randomize_my_ships(bsize)
 	else:
-		print("[INIT BOARD] Not randomizing: spectator_mode=", spectator_mode,
-			" my_ships_empty=", my_ships_encoded.is_empty(),
-			" (P", player, ")")
+		dbg(["init_board not_randomizing spectator=", spectator_mode, " shipsEmpty=", my_ships_encoded.is_empty(), " player=", player])
 	if spectator_mode and not greplay.is_empty():
-		print("[SET_GAME_DATA] Spectator replay: preparing board and playing replay.")
+		OpLog.i(LOG_TAG, ["spectator_replay replayMoves=", replay.size()])
 		_apply_bullets_from_payload(battleground1, bullets1)
 		_apply_bullets_from_payload(battleground2, bullets2)
 		show_battleground(false)
@@ -357,11 +397,16 @@ func _set_game_data(new_replay: String) -> void:
 			play_replay(greplay, false)
 	show_battleground(true)
 
-	print("[SET_GAME_DATA] FINAL isTurn: ", isTurn, "  spectator_mode: ", spectator_mode)
-	print("[SET_GAME_DATA] replay array: ", replay)
+	OpLog.i(LOG_TAG, [
+		"set_game_data_done turn=", isTurn,
+		" spectator=", spectator_mode,
+		" replayMoves=", replay.size(),
+		" myBoard={", _bg_summary(myBattleground), "}",
+		" theirBoard={", _bg_summary(theirBattleground), "}"
+	])
 
 	if isTurn and not spectator_mode:
-		print("[SET_GAME_DATA] It IS our turn. Entering 'my turn' flow.")
+		OpLog.i(LOG_TAG, "enter_turn_flow")
 		
 		if is_instance_valid(battleground1):
 			battleground1.process_mode = Node.PROCESS_MODE_INHERIT
@@ -374,7 +419,7 @@ func _set_game_data(new_replay: String) -> void:
 		stop_waiting_animation()
 
 		if not greplay.is_empty():
-			print("[SET_GAME_DATA] Replay is NOT empty. Will play last move from: ", greplay)
+			OpLog.i(LOG_TAG, ["turn_flow play_replay moves=", replay.size()])
 
 			_set_setup_mode(false)
 			if is_instance_valid(start_button):
@@ -387,25 +432,25 @@ func _set_game_data(new_replay: String) -> void:
 
 			play_replay(greplay)
 		else:
-			print("[SET_GAME_DATA] Replay is EMPTY. This is initial setup for our board.")
+			OpLog.i(LOG_TAG, "turn_flow initial_setup")
 			_set_setup_mode(true)
 
 	else:
-		print("[SET_GAME_DATA] It is NOT our turn, or we are a spectator. isTurn=", isTurn, " spectator_mode=", spectator_mode)
+		OpLog.i(LOG_TAG, ["wait_flow turn=", isTurn, " spectator=", spectator_mode])
 		_set_setup_mode(false)
 		if is_instance_valid(start_button):
 			start_button.disabled = true
 		
 		if not skip.is_empty():
 			var flipped_skip := _flip_ships_encoded_vertical(skip, bsize)
-			print("[SET_GAME_DATA] Applying skip_ships layout to opponent board with vertical flip. original=", skip, " flipped=", flipped_skip)
+			OpLog.i(LOG_TAG, ["apply_skip_ships originalLen=", skip.length(), " flippedLen=", flipped_skip.length()])
 			theirBattleground.from_encoded(flipped_skip)
 
 		_apply_bullets_from_payload(battleground1, bullets1)
 		_apply_bullets_from_payload(battleground2, bullets2)
 
 		if theirBattleground.is_over():
-			print("[SET_GAME_DATA] Opponent board is already over -> we won.")
+			OpLog.i(LOG_TAG, "opponent_board_already_over")
 			mark_end(true)
 			return
 
@@ -418,27 +463,28 @@ func _set_game_data(new_replay: String) -> void:
 			theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
 
 func play_replay(preplay: String, enter_turn_after: bool = true) -> void:
-	print("\n========== PLAY_REPLAY START ==========")
-	print("[PLAY_REPLAY] Incoming replay string: ", preplay)
-	
+	var moves := preplay.split("|", false)
+
+	OpLog.i(LOG_TAG, [
+		"play_replay_start moves=", moves.size(),
+		" enterTurnAfter=", enter_turn_after,
+		" raw=", preplay
+	])
+
 	clouds_rect.visible = false
 	var m := clouds_rect.modulate
 	m.a = 0.0
 	clouds_rect.modulate = m
 
-	var moves := preplay.split("|", false)
-	print("[PLAY_REPLAY] Parsed moves: ", moves)
-
 	if moves.is_empty():
-		print("[PLAY_REPLAY] No moves to replay — entering my turn immediately.")
-		print("========== PLAY_REPLAY END — EMPTY ==========\n")
+		OpLog.i(LOG_TAG, "play_replay_empty")
 		if enter_turn_after:
 			await get_tree().create_timer(1.0).timeout
 			my_battleground_ready()
 		return
 
 	if not is_instance_valid(myBattleground):
-		print("[PLAY_REPLAY] ERROR — myBattleground is not valid.")
+		OpLog.e(LOG_TAG, "play_replay skipped: myBattleground invalid")
 		if enter_turn_after:
 			await get_tree().create_timer(1.0).timeout
 			my_battleground_ready()
@@ -457,49 +503,45 @@ func play_replay(preplay: String, enter_turn_after: bool = true) -> void:
 
 		var parts := move.split(",", false)
 		if parts.size() < 2:
-			print("[PLAY_REPLAY] ERROR — malformed move entry: ", move)
+			OpLog.w(LOG_TAG, ["play_replay malformed move=", move])
 			continue
 
 		var x := int(parts[0])
 		var wire_y := int(parts[1])
-
 		var local_y := _flip_y_index(wire_y, myBattleground.rows)
 		var v := Vector2(x, local_y)
 
-		print("[PLAY_REPLAY] Move ", i, "/", moves.size() - 1,
-			" raw=(", x, ",", wire_y, ")",
-			" local=(", v.x, ",", v.y, ")")
+		dbg(["play_replay moveIndex=", i, " raw=", move, " local=", v])
 
 		if v.x < 0 or v.x >= myBattleground.columns or v.y < 0 or v.y >= myBattleground.rows:
-			print("[PLAY_REPLAY] WARNING — local coords out of bounds, skipping move: ", v)
+			OpLog.w(LOG_TAG, ["play_replay out_of_bounds local=", v, " raw=", move])
 			continue
 
 		var start_delay := 0.5 * float(scheduled_moves)
 
 		_replay_pending += 1
 		_start_replay_move_async(v, start_delay, token)
-
 		scheduled_moves += 1
 
 	if _replay_pending == 0:
-		print("[PLAY_REPLAY] No valid moves parsed; entering my turn.")
-		print("========== PLAY_REPLAY END — NONE SCHEDULED ==========\n")
+		OpLog.w(LOG_TAG, ["play_replay no_valid_moves raw=", preplay])
 		if enter_turn_after:
 			await get_tree().create_timer(1.0).timeout
 			my_battleground_ready()
 		return
 
-	print("[PLAY_REPLAY] Scheduled ", _replay_pending, " replay moves. Waiting for completion…")
+	OpLog.i(LOG_TAG, ["play_replay_scheduled pending=", _replay_pending])
 	await replay_finished
 	await get_tree().process_frame
+
 	if token != _replay_token:
-		print("[PLAY_REPLAY] Ignoring replay_finished (stale token).")
+		OpLog.w(LOG_TAG, "play_replay stale token ignored")
 		return
+
 	replay.clear()
 	await get_tree().create_timer(1.0).timeout
-	
-	print("[PLAY_REPLAY] All replay animations finished. Transitioning into my active turn.")
-	print("========== PLAY_REPLAY END ==========\n")
+
+	OpLog.i(LOG_TAG, ["play_replay_done myBoard={", _bg_summary(myBattleground), "}"])
 	my_battleground_ready()
 
 func _start_replay_move_async(local_pos: Vector2, delay: float, token: int) -> void:
@@ -509,7 +551,7 @@ func _start_replay_move_async(local_pos: Vector2, delay: float, token: int) -> v
 		return
 
 	_replay_pending -= 1
-	print("[PLAY_REPLAY] Move finished. Remaining: ", _replay_pending)
+	dbg(["play_replay_move_finished remaining=", _replay_pending])
 
 	if _replay_pending <= 0:
 		_replay_pending = 0
@@ -783,74 +825,75 @@ func _set_board_active(container: Control, board: BattleGround, active: bool) ->
 		board.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
 
 func send_update():
-	print("\n========== SEND_UPDATE ==========")
-	print("[SEND] Preparing outbound update…")
+	OpLog.i(LOG_TAG, ["send_update_start player=", player, " isEnd=", is_end, " winner=", winner])
 
 	if not is_instance_valid(myBattleground):
-		push_error("[SEND] myBattleground invalid")
+		OpLog.e(LOG_TAG, "send_update skipped: myBattleground invalid")
 		return
 
 	if myBattleground.rows <= 0 or myBattleground.columns <= 0:
-		push_error("[SEND] Invalid battleground dimensions rows=%s cols=%s" % [myBattleground.rows, myBattleground.columns])
+		OpLog.e(LOG_TAG, ["send_update invalid dimensions rows=", myBattleground.rows, " cols=", myBattleground.columns])
 		return
 
 	for ship in myBattleground.ships:
 		if ship == null or not is_instance_valid(ship):
-			push_error("[SEND] Invalid ship found before encode_ships")
+			OpLog.e(LOG_TAG, "send_update invalid ship found before encode_ships")
 			return
 
 	var myEncoded := myBattleground.encode_ships()
 	if myEncoded == null:
-		push_error("[SEND] encode_ships returned null")
+		OpLog.e(LOG_TAG, "send_update encode_ships returned null")
 		return
 
 	var bullets := myBattleground.encode_bullets()
 	if bullets == null:
-		push_error("[SEND] encode_bullets returned null")
+		OpLog.e(LOG_TAG, "send_update encode_bullets returned null")
 		return
 
 	var flipped_ships := _flip_ships_encoded_vertical(myEncoded, myBattleground.rows)
 	var flipped_bullets := _flip_bullets_vertical(bullets, myBattleground.rows, myBattleground.columns)
 
-	print("[SEND] Ships encoded (Original): ", myEncoded)
-	print("[SEND] Ships encoded (Flipped):  ", flipped_ships)
-	print("[SEND] Bullets encoded (Original): ", bullets)
-	
 	var msg := {
 		"bullets" + str(player): flipped_bullets,
 	}
 
 	if not myEncoded.is_empty():
 		msg["ships" + str(player)] = flipped_ships
-		print("[SEND] Including ships for player ", player, " (first-time send).")
 	else:
-		print("[SEND] Skipping ships: ")
+		dbg("send_update skipping empty ships")
 
 	var my_avatar := _get_my_avatar_display()
 	if is_instance_valid(my_avatar) and my_avatar.has_method("get_avatar_data_string"):
 		var avatar_key := "avatar%d" % player
 		msg[avatar_key] = my_avatar.call("get_avatar_data_string")
-		print("[SEND] Avatar data included under key: ", avatar_key)
+		dbg(["send_update avatarKey=", avatar_key])
 
+	var replay_str := ""
 	if not replay.is_empty():
-		msg["replay"] = "|".join(replay)
-		print("[SEND] Replay string included: ", msg["replay"])
+		replay_str = "|".join(replay)
+		msg["replay"] = replay_str
 
-		msg["skip_ships"] = theirBattleground.encode_ships()
-		msg["skip_bullets"] = theirBattleground.encode_bullets()
-		print("[SEND] skip_ships: ", msg["skip_ships"])
-		print("[SEND] skip_bullets: ", msg["skip_bullets"])
+		if is_instance_valid(theirBattleground):
+			msg["skip_ships"] = theirBattleground.encode_ships()
+			msg["skip_bullets"] = theirBattleground.encode_bullets()
 
 	if is_end:
 		msg["winner"] = my_player + "|" + ("1" if winner else "-1")
-		print("[SEND] Winner flag included: ", msg["winner"])
 
-	var encoded = JSON.stringify(msg)
+	var encoded := JSON.stringify(msg)
+
+	OpLog.event(LOG_TAG, [
+		"send_game_out player=", player,
+		" replayMoves=", replay.size(),
+		" shipsLen=", myEncoded.length(),
+		" bullets=", _csv_true_count(bullets),
+		" winner=", str(msg.get("winner", "")),
+		" myBoard={", _bg_summary(myBattleground), "}",
+		" theirBoard={", _bg_summary(theirBattleground), "}",
+		" raw=", encoded
+	])
+
 	send_game_data(encoded)
-
-	print("[SEND] FINAL JSON SENT TO APP PLUGIN:")
-	print(encoded)
-	print("===================================\n")
 
 	replay.clear()
 
@@ -1320,18 +1363,18 @@ func _flip_ships_encoded_vertical(encoded: String, rows: int) -> String:
 	return "|".join(flipped_pieces)
 
 func _on_fire_button_pressed() -> void:
-	print("Fire pressed")
+	OpLog.i(LOG_TAG, "fire_pressed")
 
 	if not fireMode or not is_instance_valid(theirBattleground):
-		print("[FIRE_BUTTON] Ignored — fireMode:", fireMode, " theirBattleground valid:", is_instance_valid(theirBattleground))
+		OpLog.w(LOG_TAG, ["fire_ignored fireMode=", fireMode, " theirValid=", is_instance_valid(theirBattleground)])
 		return
 
 	var grid := theirBattleground.targeting_grid
 	if grid.x < 0 or grid.y < 0:
-		print("[FIRE_BUTTON] No valid target selected. targeting_grid:", grid)
+		OpLog.w(LOG_TAG, ["fire_no_target grid=", grid])
 		return
 
-	print("[FIRE_BUTTON] Firing at grid: ", grid)
+	OpLog.i(LOG_TAG, ["fire_start grid=", grid])
 	
 	if is_instance_valid(fire_button):
 		fire_button.disabled = true
@@ -1344,9 +1387,9 @@ func _on_fire_button_pressed() -> void:
 	if is_instance_valid(choose_target_label):
 		choose_target_label.visible = false
 
-	print("[FIRE_BUTTON] Started Bomb Fall animation")
+	dbg("fire bomb_animation_start")
 	await _play_bomb_fall_animation_for_board(theirBattleground, grid, false, 2.0)
-	print("[FIRE_BUTTON] Finished Bomb Fall animation")
+	dbg("fire bomb_animation_done")
 
 	var top_x := int(grid.x)
 	var rows := theirBattleground.rows
@@ -1355,15 +1398,15 @@ func _on_fire_button_pressed() -> void:
 	var move_str := "%d,%d" % [top_x, top_y]
 	replay.append(move_str)
 
-	print("[FIRE_BUTTON] Replay now (wire coords with vertical flip for opponent): ", replay)
+	dbg(["fire replay=", replay])
 
 
 	var hit: bool = theirBattleground.fire(grid)
-	print("[FIRE_BUTTON] Hit result: ", hit)
+	OpLog.i(LOG_TAG, ["fire_result grid=", grid, " wire=", move_str, " hit=", hit, " replayMoves=", replay.size()])
 
 	if not hit:
 		await get_tree().create_timer(1.0).timeout
-		print("[FIRE_BUTTON] Miss → sending update and waiting for opponent.")
+		OpLog.i(LOG_TAG, "fire_miss_send_update")
 		send_update()
 	else:
 		var vp := get_viewport()
@@ -1391,7 +1434,7 @@ func _on_fire_button_pressed() -> void:
 			)
 		
 		if theirBattleground.is_over():
-			print("[FIRE_BUTTON] Opponent board is over — we win. Sending final update.")
+			OpLog.i(LOG_TAG, "fire_win_send_final_update")
 			mark_end(true)
 			send_update()
 		else:
@@ -1416,21 +1459,21 @@ func _on_fire_button_pressed() -> void:
 				var label_tween := create_tween()
 				label_tween.tween_property(choose_target_label, "modulate:a", 1.0, 1.0)
 				
-			print("[FIRE_BUTTON] Hit → player gets another turn. Ready for next shot.")
+			OpLog.i(LOG_TAG, "fire_hit_extra_turn")
 
 func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2, from_right: bool, plane_duration: float = 2.0) -> void:
 	if not is_instance_valid(board):
-		print("SOMETHING FAILED IN BOMB FALL (missing board)")
+		OpLog.e(LOG_TAG, "bomb_animation skipped: missing board")
 		return
 	
 	var bomb_tex: Texture2D = BOMB_TEXTURE_PATH
 	var plane_tex: Texture2D = PLANE_TEXTURE_PATH
 	
 	if bomb_tex == null:
-		print("Bomb texture not found")
+		OpLog.e(LOG_TAG, "bomb_animation skipped: bomb texture missing")
 		return
 	if plane_tex == null:
-		print("Plane texture not found")
+		OpLog.e(LOG_TAG, "bomb_animation skipped: plane texture missing")
 		return
 	
 	var cell_center_local: Vector2 = board.grid_to_coord(
@@ -1544,18 +1587,18 @@ func _run_replay_move(local_pos: Vector2, delay: float) -> void:
 		var hit : bool = myBattleground.replay_fire(local_pos)
 		if hit:
 			_haptic_explosion(1.0, 45)
-		print("[PLAY_REPLAY] Applied replay fire at ", local_pos, " hit=", hit)
+		OpLog.i(LOG_TAG, ["replay_fire pos=", local_pos, " hit=", hit])
 		await get_tree().process_frame
 	else:
-		print("[PLAY_REPLAY] WARNING – myBattleground invalid when applying replay fire")
+		OpLog.w(LOG_TAG, "replay_fire skipped: myBattleground invalid")
 
-	print("[PLAY_REPLAY] Replayed visual move at ", local_pos)
+	dbg(["replay_visual_done pos=", local_pos])
 
 func mark_end(win: bool):
 	state.text = ""
 	var my_avatar := _get_my_avatar_display()
 	var opp_avatar := _get_opp_avatar_display()
-	print("setting their process mode to " + str(false))
+	dbg("mark_end disabling opponent process mode")
 	stop_waiting_animation()
 	winner = win
 	is_end = true
@@ -1568,7 +1611,7 @@ func mark_end(win: bool):
 		winner_label.add_theme_color_override("font_color", Color(1.0, 0.84, 0.0))
 		if is_instance_valid(my_avatar):
 			GameUtils._show_win_burst(my_avatar)
-		print("check_winner: YOU WIN (final)")
+		OpLog.i(LOG_TAG, "game_end win=true")
 		return true
 	else:
 		if not spectator_mode:
@@ -1580,11 +1623,11 @@ func mark_end(win: bool):
 		winner_label.visible = true
 		if is_instance_valid(opp_avatar):
 			GameUtils._show_win_burst(opp_avatar)
-		print("check_winner: YOU LOSE (final)")
+		OpLog.i(LOG_TAG, "game_end win=false")
 		return true
 
 func _on_start_button_pressed() -> void:
-	print("Start pressed")
+	OpLog.i(LOG_TAG, ["start_pressed fireMode=", fireMode])
 	
 	if not fireMode:
 		if is_instance_valid(myBattleground):
@@ -1638,7 +1681,7 @@ func _get_rules_text() -> String:
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
-		print("Warning: sent_label is not valid for play_sent_animation.")
+		OpLog.w(LOG_TAG, "play_sent_animation skipped: sent_label invalid")
 		return
 	
 	if sent_tween and sent_tween.is_running():

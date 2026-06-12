@@ -408,6 +408,18 @@ class Crazy8Activity : ComponentActivity() {
     private var musicEnabled = false
     private var musicTrack: AudioTrack? = null
 
+    private var gameOpenedLogged = false
+
+    private fun logGameOpened(msg: Map<String, String>) {
+        if (gameOpenedLogged) return
+        gameOpenedLogged = true
+
+        OpenPigeonLog.title(
+            "Crazy8",
+            "Crazy 8",
+            "roomPresent=${!msg["room"].isNullOrBlank()} player=${msg["player"].orEmpty()}"
+        )
+    }
     fun getPrefs(): SharedPreferences {
         return getSharedPreferences("crazy_prefs", MODE_PRIVATE)
     }
@@ -790,6 +802,8 @@ class Crazy8Activity : ComponentActivity() {
             this.gameSessionIPC = gameSessionIPC
             val currentMessage = gameSessionIPC.getCurrentMessage(sessionId)
             if (currentMessage.isNotEmpty()) {
+                logGameOpened(currentMessage)
+
                 gameSessionIPC.lockMsgHandle(sessionId)
                 gameSessionIPC.setSuppressNotifications(sessionId, true)
 

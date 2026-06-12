@@ -99,6 +99,7 @@ func _get_rules_title() -> String:
 	return "Reversi"
 
 func _on_game_ready():
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_bg_for_dark(is_dark)
 

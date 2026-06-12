@@ -76,6 +76,8 @@ var flip_board_ui: bool = false  # Whether to flip the board UI to put local pla
 @onready var win_loss_label: Label = %WinLossLabel
 
 const MUSIC_STREAM := preload("res://global/audio/chess.ogg")
+const CHESS_VERBOSE_LOGS := false
+const LOG_TAG := "Chess"
 
 var sent_tween: Tween
 var win_loss_tween: Tween
@@ -220,9 +222,8 @@ func _calculate_player_index(is_your_turn: bool, message_player: int) -> int:
 
 # ---------- Ready / plugin ----------
 func _on_game_ready() -> void:
-	# Enable DEBUG logging in debug builds (production defaults to INFO for performance)
-	if OS.has_feature("debug"):
-		ChessDebug.set_level(ChessDebug.LogLevel.DEBUG)
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
+	ChessDebug.set_level(ChessDebug.LogLevel.DEBUG if CHESS_VERBOSE_LOGS else ChessDebug.LogLevel.INFO)
 
 	_log_init.info("_ready() start")
 
@@ -256,11 +257,11 @@ func _on_game_ready() -> void:
 	_log_init.info("_ready() complete")
 
 func _set_game_data(raw: String) -> void:
-	_log_data.debug("_set_game_data invoked; raw length=%d" % raw.length())
+	_log_data.info("set_game_data_in raw=%s" % raw)
 
 	# Prevent concurrent executions to avoid race conditions with animations and UI rebuilds
 	if is_processing_game_data:
-		_log_data.trace("_set_game_data: already processing, ignoring concurrent call")
+		_log_data.warn("set_game_data ignored because another payload is still processing; rawLen=%d" % raw.length())
 		return
 	is_processing_game_data = true
 
@@ -277,7 +278,13 @@ func _set_game_data_impl(raw: String) -> void:
 	var ui_already_rebuilt: bool = false  # Track if we rebuilt UI early (before animation)
 	var data: Variant = JSON.parse_string(raw)
 	var opponent_avatar_key = ""
+	var replay: String = ""
 	_log_data.debug("_set_game_data parse result type=%s" % typeof(data))
+
+	if typeof(data) != TYPE_DICTIONARY:
+		_log_data.error("set_game_data invalid JSON type=%s raw=%s" % [str(typeof(data)), raw])
+		return
+
 	if typeof(data) == TYPE_DICTIONARY:
 		_log_data.debug("_set_game_data: dictionary keys = %s" % str(data.keys()))
 
@@ -328,7 +335,7 @@ func _set_game_data_impl(raw: String) -> void:
 		_log_data.debug("my_player_id=%s" % my_player_id)
 
 		# Parse the game state - GamePigeon format only
-		var replay = str(data.get("replay", ""))
+		replay = str(data.get("replay", ""))
 		_log_data.debug("replay='%s'" % replay)
 		if replay.begins_with("board:") or replay.find("|board:") != -1:
 			# GamePigeon format
@@ -386,6 +393,20 @@ func _set_game_data_impl(raw: String) -> void:
 					game_over_reason = ChessEngine.state_description(game_over_state, game_over_winner_side)
 
 				_log_data.debug("Parsed winner payload: sender=%s result=%s winner_side=%s" % [winner_sender, win_loss_state, game_over_winner_side])
+	
+	_log_data.info("set_game_data parsed turn=%s waiting=%s player=%d color=%s flip=%s replayLen=%d boards=%d moves=%d winner=%s gameOver=%s reason=%s" % [
+		str(isTurn),
+		str(waitingForOpponent),
+		my_player_index,
+		my_color,
+		str(flip_board_ui),
+		replay.length(),
+		replay.count("board:"),
+		replay.count("move:"),
+		str(data.has("winner")),
+		str(game_over),
+		game_over_reason
+	])
 
 	_log_data.game_state("_set_game_data end", _game_state_dict())
 
@@ -1169,31 +1190,31 @@ func _handle_selection_tap(sq: Vector2i, piece: String) -> void:
 	if piece != "" and piece[0] == turn and (local_mode or piece[0] == my_color):
 		var candidate_moves: Array[Vector2i] = _legal_moves_for_square(sq)
 		if candidate_moves.size() == 0:
-			_log_ui.info("_handle_selection_tap: %s at %s has no legal moves" % [piece, _square_name(sq)])
+			_log_ui.debug("_handle_selection_tap: %s at %s has no legal moves" % [piece, _square_name(sq)])
 		else:
 			selected = sq
 			legal_moves = candidate_moves
 			highlighted.clear()
 			for m in legal_moves:
 				highlighted.append(m)
-			_log_ui.info("_handle_selection_tap: selected %s at %s ; moves=%d" % [piece, _square_name(sq), legal_moves.size()])
+			_log_ui.debug("_handle_selection_tap: selected %s at %s ; moves=%d" % [piece, _square_name(sq), legal_moves.size()])
 			_refresh_board_ui()
 	else:
 		_log_ui.debug("_handle_selection_tap: can't select (empty or not permitted)")
 
 ## Handle tap when a piece is already selected - try to move or reselect
 func _handle_move_tap(sq: Vector2i, piece: String) -> void:
-	_log_ui.info("_handle_move_tap: piece selected at %s ; checking move to %s" % [_square_name(selected), _square_name(sq)])
+	_log_ui.debug("_handle_move_tap: piece selected at %s ; checking move to %s" % [_square_name(selected), _square_name(sq)])
 
 	# Check if tapped square is a legal move destination
 	for m in legal_moves:
 		if m == sq:
-			_log_ui.info("_handle_move_tap: legal move %s -> %s" % [_square_name(selected), _square_name(sq)])
+			_log_ui.debug("_handle_move_tap: legal move %s -> %s" % [_square_name(selected), _square_name(sq)])
 
 			# Check if this is a pawn promotion move
 			var moving_piece: String = board[selected.y][selected.x]
 			if _is_promotion_move(moving_piece, sq.y):
-				_log_ui.info("_handle_move_tap: promotion move detected")
+				_log_ui.debug("_handle_move_tap: promotion move detected")
 				promotion_pending_from = selected
 				promotion_pending_to = sq
 				_clear_selection()
@@ -1214,7 +1235,7 @@ func _handle_move_tap(sq: Vector2i, piece: String) -> void:
 	if piece != "" and piece[0] == turn and (local_mode or piece[0] == my_color):
 		var candidate_moves: Array[Vector2i] = _legal_moves_for_square(sq)
 		if candidate_moves.size() == 0:
-			_log_ui.info("_handle_move_tap: reselect %s at %s has no legal moves" % [piece, _square_name(sq)])
+			_log_ui.debug("_handle_move_tap: reselect %s at %s has no legal moves" % [piece, _square_name(sq)])
 			_clear_selection()
 			_refresh_board_ui()
 		else:
@@ -1223,12 +1244,12 @@ func _handle_move_tap(sq: Vector2i, piece: String) -> void:
 			highlighted.clear()
 			for m in legal_moves:
 				highlighted.append(m)
-			_log_ui.info("_handle_move_tap: reselected %s at %s ; moves=%d" % [piece, _square_name(sq), legal_moves.size()])
+			_log_ui.debug("_handle_move_tap: reselected %s at %s ; moves=%d" % [piece, _square_name(sq), legal_moves.size()])
 			_refresh_board_ui()
 	else:
 		_clear_selection()
 		_refresh_board_ui()
-		_log_ui.info("_handle_move_tap: deselected")
+		_log_ui.debug("_handle_move_tap: deselected")
 
 ## Check if a pawn move is a promotion move
 ## Delegates to ChessPiece for single source of truth
@@ -1283,7 +1304,12 @@ func gp_array_to_board(gp_array_str: String) -> void:
 
 func parse_gp_replay(replay: String) -> void:
 	"""Parse GamePigeon replay string format: board:<prev>|move:<from_f>,<from_r>,<to_f>,<to_r>|board:<current>"""
-	_log_data.debug("parse_gp_replay: '%s'" % replay)
+	_log_data.info("parse_replay_start replayLen=%d boards=%d moves=%d" % [
+		replay.length(),
+		replay.count("board:"),
+		replay.count("move:")
+	])
+	_log_data.debug("parse_gp_replay raw=%s" % replay)
 
 	# Use ChessNotation to parse the replay string
 	var parsed: Dictionary = ChessNotation.parse_gp_replay(replay)
@@ -1294,7 +1320,7 @@ func parse_gp_replay(replay: String) -> void:
 	var has_move: bool = parsed["has_move"]
 
 	if current_board == "":
-		_log_data.info("parse_gp_replay: no board state found in replay")
+		_log_data.warn("parse_replay skipped: no current board found raw=%s" % replay)
 		return
 
 	# If we have move coordinates, animate the move
@@ -1333,6 +1359,16 @@ func parse_gp_replay(replay: String) -> void:
 		_evaluate_check_and_update_flags()
 	else:
 		pending_evaluate = true
+		
+	_log_data.info("parse_replay_done hasMove=%s from=%s to=%s castling=%s gameOver=%s reason=%s" % [
+		str(has_move),
+		_square_name(move_from),
+		_square_name(move_to),
+		castling,
+		str(game_over),
+		game_over_reason
+	])
+	
 	_log_data.game_state("parse_gp_replay end", _game_state_dict())
 
 func to_position_key() -> String:
@@ -1367,7 +1403,7 @@ func _legal_moves_for_square(from_sq: Vector2i) -> Array[Vector2i]:
 		return []
 	_log_game.debug("_legal_moves_for_square: generating for %s at %s" % [piece, _square_name(from_sq)])
 	var legal: Array[Vector2i] = ChessEngine.get_legal_moves(board, from_sq, turn, en_passant, castling)
-	_log_game.info("  legal moves count=%d" % legal.size())
+	_log_game.debug("legal moves count=%d" % legal.size())
 	return legal
 
 # Execute the physical move on the board (first half of move logic)
@@ -1492,8 +1528,15 @@ func _commit_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 	# Send to host through BaseGame
 	_log_game.game_state("_commit_move before send", _game_state_dict())
 	if not local_mode:
-		_log_game.debug("_commit_move sending game data: %s" % str(to_send))
-		send_game_data(JSON.stringify(to_send))
+		var out_json := JSON.stringify(to_send)
+		_log_game.info("send_game_out from=%s to=%s winner=%s replayLen=%d raw=%s" % [
+			_square_name(from_sq),
+			_square_name(to_sq),
+			str(to_send.get("winner", "")),
+			gp_replay.length(),
+			out_json
+		])
+		send_game_data(out_json)
 	else:
 		_log_game.debug("_commit_move local-only; not sending to appPlugin")
 	_log_game.info("_commit_move complete")
@@ -1623,7 +1666,7 @@ func _get_rules_text() -> String:
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
-		print("Warning: sent_label is not valid for play_sent_animation.")
+		_log_ui.warn("play_sent_animation skipped: sent_label is not valid")
 		return
 	
 	if sent_tween and sent_tween.is_running():

@@ -6,6 +6,33 @@ var elapsedTime: float = 0.0
 const MUSIC_STREAM := preload("res://global/audio/basketball.ogg")
 const MIN_DRAG_DISTANCE := 30.0
 
+const LOG_TAG := "Basketball"
+const DEBUG_BASKETBALL := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_BASKETBALL:
+		OpLog.d(LOG_TAG, parts)
+
+func _replay_shot_count(value) -> int:
+	if isNullOrEmpty(value):
+		return 0
+	return String(value).split("|", false).size()
+
+func _replay_len(value) -> int:
+	if value == null:
+		return 0
+	return String(value).length()
+
+func _score_summary() -> String:
+	return "my=%d opp=%d score1=%s score2=%s skip1=%s skip2=%s" % [
+		myScore,
+		oppScore,
+		str(score1),
+		str(score2),
+		str(skip_score1),
+		str(skip_score2)
+	]
+
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var winner_label: Label = %WinLossLabel
@@ -95,6 +122,7 @@ func _get_dev_data() -> String:
 	return '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "18", "skip_score2": "46", "player": "2", "score1": "18", "score2": "23", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "h", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Lets play Basketball!", "game_name": "Basketball", "replay": "60,0.264,0,0"}'
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	if not _ui_initialized:
 		_ui_initialized = true
 
@@ -106,6 +134,14 @@ func _on_game_ready() -> void:
 			start_button.pressed.connect(start_button_pressed)
 		if is_instance_valid(skip_button):
 			skip_button.pressed.connect(skipReplay)
+			
+	OpLog.i(LOG_TAG, [
+		"game_ready localMode=", appPlugin == null,
+		" dataSet=", gameDataSet,
+		" mode=", game_mode,
+		" player=", str(player),
+		" turn=", str(isTurn)
+	])
 
 	if not gameDataSet:
 		return
@@ -225,6 +261,8 @@ func _input(event: InputEvent) -> void:
 			if event.pressed:
 				if not _is_touch_on_current_ball(event.position):
 					return
+				
+				dbg(["drag_start pos=", event.position, " player=", player, " ball=", currentBall[player].name])
 
 				drag_start_pos = event.position
 				dragging = true
@@ -234,10 +272,20 @@ func _input(event: InputEvent) -> void:
 					var delta = drag_end_pos - drag_start_pos
 
 					if delta.length() < MIN_DRAG_DISTANCE:
+						dbg(["drag_cancelled len=", delta.length()])
 						dragging = false
 						return
 
 					var x_delta_lerp = interpolate_x_delta(delta.x)
+
+					OpLog.i(LOG_TAG, [
+						"shot_release player=", player,
+						" drag=", delta,
+						" dragLen=", delta.length(),
+						" xDelta=", x_delta_lerp,
+						" elapsed=", elapsedTime,
+						" shotNum=", ballNum[player] - 1
+					])
 
 					currentBall[player].shoot(x_delta_lerp)
 					currentBall[player] = null
@@ -254,6 +302,11 @@ func interpolate_x_delta(value: float) -> float:
 
 func playReplay(player_num: int, replay_str: String) -> float:
 	replayPlaying = true
+	OpLog.i(LOG_TAG, [
+		"play_replay_start player=", player_num,
+		" shots=", _replay_shot_count(replay_str),
+		" raw=", replay_str
+	])
 	var replayShots = replay_str.split('|')
 	var replayBallNum = 0
 	var last_time_delay: float = 0.0
@@ -261,11 +314,18 @@ func playReplay(player_num: int, replay_str: String) -> float:
 	for shot in replayShots:
 		var shotSplit = shot.split(',')
 		if shotSplit.size() < 4:
+			OpLog.w(LOG_TAG, ["play_replay malformed shot=", shot])
 			continue
 
 		var timeDelay: float = float(shotSplit[0]) / 60.0
 		var x_delta: float = float(shotSplit[1])
 		var did_go_in: bool = bool(int(shotSplit[3]))
+		dbg([
+			"play_replay_schedule player=", player_num,
+			" delay=", timeDelay,
+			" x=", x_delta,
+			" didGoIn=", did_go_in
+		])
 		last_time_delay = max(last_time_delay, timeDelay)
 		
 		var shotTimer = Timer.new()
@@ -290,6 +350,7 @@ func playReplay(player_num: int, replay_str: String) -> float:
 			
 		replayBallNum += 1
 
+	OpLog.i(LOG_TAG, ["play_replay_scheduled player=", player_num, " lastDelay=", last_time_delay])
 	return last_time_delay
 	
 func _schedule_replay_auto_finish(delay_seconds: float) -> void:
@@ -309,6 +370,12 @@ func _schedule_replay_auto_finish(delay_seconds: float) -> void:
 	replayEndTimer.start()
 
 func _finish_replay(finalize_scores: bool = true) -> void:
+	OpLog.i(LOG_TAG, [
+		"finish_replay_start finalize=", finalize_scores,
+		" turnNum=", turnNum,
+		" replayFinished=", replayFinished,
+		" ", _score_summary()
+	])
 	for timer in replayTimers:
 		if is_instance_valid(timer):
 			timer.stop()
@@ -341,6 +408,13 @@ func _finish_replay(finalize_scores: bool = true) -> void:
 	replayFinished = true
 	elapsedTime = 0.0
 	stop_waiting_animation()
+	
+	OpLog.i(LOG_TAG, [
+		"finish_replay_done gameOver=", game_over,
+		" turn=", isTurn,
+		" replayFinished=", replayFinished,
+		" ", _score_summary()
+	])
 
 	refresh_ui_state()
 
@@ -417,14 +491,24 @@ func _check_ball_score_crossing(ball: BasketballBall) -> void:
 
 		var ball_player: int = int(ball.get_meta("player_num", 0))
 		if ball_player != 0:
+			OpLog.i(LOG_TAG, [
+				"score_crossing player=", ball_player,
+				" shotKey=", shot_key,
+				" crossPos=", cross_pos,
+				" hoop=", hoop_center,
+				" dx=", dx,
+				" dz=", dz,
+				" vel=", ball.linear_velocity
+			])
 			incrementScore(ball_player)
 
 func skipReplay():
+	OpLog.i(LOG_TAG, ["skip_replay pressed turnNum=", turnNum])
 	_finish_replay(true)
 
 func refresh_ui_state() -> void:
 	if gamePlaying or replayPlaying:
-		print("Game or Replay Playing")
+		dbg(["refresh_ui blocked gamePlaying=", gamePlaying, " replayPlaying=", replayPlaying])
 		round_container.visible = false
 		return
 
@@ -439,18 +523,23 @@ func refresh_ui_state() -> void:
 			r_other = getReplay(2)
 
 		if not isNullOrEmpty(r_self) and not isNullOrEmpty(r_other):
-			print("Starting replay playback")
+			OpLog.i(LOG_TAG, [
+				"refresh_ui start_replay turnNum=", turnNum,
+				" spectator=", spectator_mode,
+				" selfShots=", _replay_shot_count(r_self),
+				" otherShots=", _replay_shot_count(r_other)
+			])
 			stop_waiting_animation()
 			round_container.visible = false
 
 			ballNum = {1: 1, 2: 1}
 
 			if turnNum >= 5:
-				print("Turn Number > 5")
+				dbg("refresh_ui replay round2/final scores")
 				setScore(1, score1)
 				setScore(2, score2)
 			else:
-				print("Turn Number < 5")
+				dbg("refresh_ui replay round1 scores")
 				setScore(1, 0)
 				setScore(2, 0)
 
@@ -465,7 +554,7 @@ func refresh_ui_state() -> void:
 			clearBalls()
 			spawnBall(1)
 			spawnBall(2)
-			print("PLAYING REPLAY>>>")
+			dbg("refresh_ui replay timers starting")
 			var replay1_end: float = playReplay(1, r_self if spectator_mode else getReplay(1))
 			var replay2_end: float = playReplay(2, r_other if spectator_mode else getReplay(2))
 			_schedule_replay_auto_finish(max(replay1_end, replay2_end))
@@ -474,7 +563,10 @@ func refresh_ui_state() -> void:
 			return
 
 		if not isNullOrEmpty(r_self) and isNullOrEmpty(r_other):
-			print("We already played, opponent replay missing")
+			OpLog.i(LOG_TAG, [
+				"refresh_ui waiting_for_opponent_replay turnNum=", turnNum,
+				" selfShots=", _replay_shot_count(r_self)
+			])
 			round_container.visible = false
 			skip_button.visible = false
 
@@ -490,11 +582,11 @@ func refresh_ui_state() -> void:
 
 			return
 
-		print("Opponent has not played yet, allowing us to play")
+		OpLog.i(LOG_TAG, ["refresh_ui opponent_missing_allow_play turnNum=", turnNum])
 		stop_waiting_animation()
 
 	if isTurn == false:
-		print("Is Turn False")
+		OpLog.i(LOG_TAG, ["refresh_ui wait turn=false turnNum=", turnNum, " spectator=", spectator_mode])
 		round_container.visible = false
 		skip_button.visible = false
 
@@ -510,11 +602,11 @@ func refresh_ui_state() -> void:
 			start_waiting_animation()
 		return
 
-	print("Is Turn True")
+	OpLog.i(LOG_TAG, ["refresh_ui turn=true turnNum=", turnNum, " spectator=", spectator_mode])
 	stop_waiting_animation()
 
 	if turnNum >= 3:
-		print("Turn >= 3")
+		dbg(["refresh_ui turn>=3 turnNum=", turnNum])
 
 		if spectator_mode:
 			round_container.visible = false
@@ -531,13 +623,13 @@ func refresh_ui_state() -> void:
 
 		waiting_blur.visible = true
 		round_label.text = "Round 2"
-		print("Round 2 Shown")
+		OpLog.i(LOG_TAG, ["round_ready round=2 ", _score_summary()])
 		round_container.visible = true
 		return
 
 	round_label.text = "Round 1"
 	waiting_blur.visible = true
-	print("Round 1 Shown")
+	OpLog.i(LOG_TAG, ["round_ready round=1 ", _score_summary()])
 	round_container.visible = true
 
 func spawnBall(player_num: int, didGoInReplay = null) -> BasketballBall:
@@ -614,12 +706,27 @@ func spawnBall(player_num: int, didGoInReplay = null) -> BasketballBall:
 
 	ballNum[player_num] += 1
 	currentBall[player_num] = new_ball
+	dbg([
+		"spawn_ball player=", player_num,
+		" shotNum=", shot_num,
+		" replayResult=", str(didGoInReplay),
+		" pos=", new_ball.position,
+		" rot=", new_ball.rotation,
+		" runId=", _score_run_id,
+		" key=", new_ball.get_meta("score_key")
+	])
 	return new_ball
 
 var my_player
 func _set_game_data(new_replay: String, saved: bool = false):
+	OpLog.event(LOG_TAG, ["set_game_data_in saved=", saved, " raw=", new_replay])
+
 	var parsed = JSON.parse_string(new_replay)
-	print("NEW REPLAY: " + str(parsed))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", new_replay])
+		return
+
+	dbg(["set_game_data parsed=", parsed])
 	loaded_has_winner = parsed.has("winner") and not isNullOrEmpty(str(parsed["winner"]))
 	winner_sent = loaded_has_winner
 	
@@ -627,14 +734,20 @@ func _set_game_data(new_replay: String, saved: bool = false):
 	_apply_basketball_mode()
 	
 	if gamePlaying == true:
-		print("Message received during game, saving!")
+		OpLog.i(LOG_TAG, ["set_game_data deferred because gamePlaying=true rawLen=", new_replay.length()])
 		receivedMessage = new_replay
 		return
 	
 	turnNum = int(parsed["num"])
 	isTurn = parsed["isYourTurn"]
 	player = int(parsed["player"])
-	print("Turn Num: ", turnNum, " IsTurn: ", isTurn, " Player: ", player)
+	OpLog.i(LOG_TAG, [
+		"set_game_data parsed_initial turnNum=", turnNum,
+		" isTurn=", isTurn,
+		" payloadPlayer=", player,
+		" mode=", game_mode,
+		" saved=", saved
+	])
 
 	# Round 1 needs to be playable by both the sender and receiver.
 	# After round 1, keep the original opponent/player flip behavior.
@@ -645,7 +758,7 @@ func _set_game_data(new_replay: String, saved: bool = false):
 
 	stop_waiting_animation()
 
-	print("YOU ARE PLAYER " + str(player))
+	OpLog.i(LOG_TAG, ["player_resolve player=", player, " isTurn=", isTurn, " turnNum=", turnNum])
 	my_player = parsed.get("myPlayerId", null)
 	
 	var player1_id := str(parsed.get("player1", ""))
@@ -661,7 +774,7 @@ func _set_game_data(new_replay: String, saved: bool = false):
 		player = 1
 		isTurn = false
 		gamePlaying = false
-		print("SPECTATOR MODE ACTIVE")
+		OpLog.i(LOG_TAG, "spectator_mode=true")
 		if is_instance_valid(spectator_label):
 			spectator_label.show()
 	else:
@@ -714,6 +827,22 @@ func _set_game_data(new_replay: String, saved: bool = false):
 			replay3 = replay
 		if isNullOrEmpty(replay4) and not isNullOrEmpty(replay2):
 			replay4 = replay2
+	
+	OpLog.i(LOG_TAG, [
+		"set_game_data_done turnNum=", turnNum,
+		" player=", player,
+		" isTurn=", isTurn,
+		" spectator=", spectator_mode,
+		" mode=", game_mode,
+		" seed=", str(game_seed),
+		" seed2=", str(seed2),
+		" replay1Shots=", _replay_shot_count(replay),
+		" replay2Shots=", _replay_shot_count(replay2),
+		" replay3Shots=", _replay_shot_count(replay3),
+		" replay4Shots=", _replay_shot_count(replay4),
+		" loadedWinner=", loaded_has_winner,
+		" ", _score_summary()
+	])
 
 	if not saved:
 		allow_waiting_from_loaded_data = true
@@ -741,7 +870,7 @@ func sendGameData() -> void:
 		var oppFinalScore : int = skip_score1 if player == 2 else skip_score2
 		var winNum = 1 if myScore > oppFinalScore else (-1 if myScore < oppFinalScore else 0)
 		gameData["winner"] = str(my_player) + "|" + str(winNum)
-		print("My Final Score: ", myScore, " Opp Final Score: ", oppFinalScore, " winNum: ", winNum)
+		OpLog.i(LOG_TAG, ["winner_payload myScore=", myScore, " oppFinalScore=", oppFinalScore, " winNum=", winNum])
 	if game_over:
 		stop_waiting_animation()
 		showWinner()
@@ -750,23 +879,37 @@ func sendGameData() -> void:
 	var avatar_key := ("avatar1" if player == 1 else "avatar2")
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		gameData[avatar_key] = player_avatar_display.get_avatar_data_string()
-	print("Sending game data: " + JSON.stringify(gameData))
 	var game_data = JSON.stringify(gameData)
+	OpLog.event(LOG_TAG, [
+		"send_game_out turnNum=", turnNum,
+		" scoreKey=", scoreKey,
+		" replayKey=", replayKey,
+		" myReplayShots=", _replay_shot_count(myReplay),
+		" winner=", str(gameData.get("winner", "")),
+		" ", _score_summary(),
+		" raw=", game_data
+	])
 	appPlugin = Engine.get_singleton("AppPlugin")
 	if appPlugin:
 		appPlugin.updateGameData(game_data)
 	else:
-		print("App not connected! " + game_data)
+		OpLog.w(LOG_TAG, ["AppPlugin not connected; payload not sent raw=", game_data])
 
 func start_button_pressed():
 	if spectator_mode:
 		return
 	round_container.visible = false
 	waiting_blur.visible = false
-	print("Start Button Pressed")
+	OpLog.i(LOG_TAG, ["start_pressed turnNum=", turnNum, " player=", player])
 	startGame()
 
 func startGame() -> void:
+	OpLog.i(LOG_TAG, [
+		"start_game player=", player,
+		" turnNum=", turnNum,
+		" mode=", game_mode,
+		" runId=", _score_run_id + 1
+	])
 	ballNum = {1: 1, 2: 1}
 	_score_run_id += 1
 	_scored_shot_keys.clear()
@@ -785,6 +928,7 @@ func startGame() -> void:
 	if is_instance_valid(moving_hoop_root):
 		_set_moving_hoop_x(0.0)
 	spawnBall(player)
+	OpLog.i(LOG_TAG, ["start_game_done ", _score_summary()])
 
 func _haptic_explosion(strength: float = 0.35, duration_ms: int = 22) -> void:
 	if not (OS.has_feature("android") or OS.has_feature("ios")):
@@ -798,7 +942,7 @@ func incrementScore(player_num: int) -> void:
 	var last_ms: int = int(_last_score_msec_by_player.get(player_num, -1000000))
 
 	if now_ms - last_ms < SCORE_DUPLICATE_LOCK_MS:
-		print("[SCORE] Ignoring duplicate score for player ", player_num, " after ", now_ms - last_ms, "ms")
+		OpLog.w(LOG_TAG, ["score_duplicate_ignored player=", player_num, " deltaMs=", now_ms - last_ms])
 		return
 
 	_last_score_msec_by_player[player_num] = now_ms
@@ -810,18 +954,20 @@ func incrementScore(player_num: int) -> void:
 	else:
 		oppScore += 1
 		oppScoreLabel.text = str(oppScore).pad_zeros(2)
+	OpLog.i(LOG_TAG, ["score_increment player=", player_num, " ", _score_summary()])
 
 func setScore(player_num: int, score: int) -> void:
-	print("SETTING SCORE FOR PLAYER " + str(player_num) + " to " + str(score))
+	dbg(["set_score player=", player_num, " score=", score])
+
 	if player_num == player:
 		_haptic_explosion()
 		myScore = score
-		print("MY SCORE: ", myScore)
 		youScoreLabel.text = str(myScore).pad_zeros(2)
 	else:
 		oppScore = score
-		print("OPP SCORE: ", oppScore)
 		oppScoreLabel.text = str(oppScore).pad_zeros(2)
+
+	dbg(["set_score_done player=", player_num, " ", _score_summary()])
 
 func isNullOrEmpty(value) -> bool:
 	if value == null:
@@ -829,14 +975,17 @@ func isNullOrEmpty(value) -> bool:
 	return String(value).length() == 0
 
 func clearBalls() -> void:
+	var cleared := 0
 	for node in get_children():
 		if node.name.begins_with("Ball_P"):
 			node.set_meta("score_counted", true)
 			node.name = "Cleared_" + String(node.name)
+			cleared += 1
 			node.queue_free()
 
 	currentBall[1] = null
 	currentBall[2] = null
+	dbg(["clear_balls count=", cleared])
 
 func _physics_process(delta: float) -> void:
 	if game_mode == "h" and is_instance_valid(moving_hoop_root):
@@ -886,11 +1035,11 @@ func _process(delta: float) -> void:
 			await get_tree().create_timer(3).timeout
 			
 			if receivedMessage != null:
-				print("Received message during game! Setting new data..")
+				OpLog.i(LOG_TAG, "applying_deferred_message_after_game")
 				_set_game_data(receivedMessage, true)
 			
 			if wasReplayPlaying == false:
-				print("SENDING DATA")
+				OpLog.i(LOG_TAG, ["game_timer_done sending_data turnNum=", turnNum, " ", _score_summary()])
 				sendGameData()
 				if player == 1:
 					if turnNum <= 3:
@@ -910,12 +1059,12 @@ func _process(delta: float) -> void:
 				
 			clearBalls()
 			isTurn = false			
-			print("ready up!")
+			OpLog.i(LOG_TAG, ["game_round_done ready_up turnNum=", turnNum, " ", _score_summary()])
 			refresh_ui_state()
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
-		print("Warning: sent_label is not valid for play_sent_animation.")
+		OpLog.w(LOG_TAG, "play_sent_animation skipped: sent_label invalid")
 		return
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()

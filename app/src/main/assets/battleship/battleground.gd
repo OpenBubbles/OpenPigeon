@@ -2,6 +2,13 @@ extends Node2D
 
 class_name BattleGround
 
+const LOG_TAG := "Battleground"
+const DEBUG_BATTLEGROUND := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_BATTLEGROUND:
+		OpLog.d(LOG_TAG, parts)
+
 @export var columns: int = 8
 @export var rows: int = 6
 @export var rect_size: Vector2 = Vector2(512, 384)
@@ -34,7 +41,7 @@ enum GridState {
 }
 
 func clear_battleground():
-	print("CLEAR BATTLEGROUND")
+	dbg(["clear_battleground name=", name, " size=", columns, "x", rows])
 	for child in get_children():
 		remove_child(child)
 	if target != null:
@@ -68,7 +75,6 @@ func encode_ships() -> String:
 	return "|".join(ships.map(func(ship): return ship.encode_state()))
 
 func encode_bullets() -> String:
-	print("Encode Bullets")
 	return ",".join(bullets.map(func(bullet): return '1' if bullet else '0'))
 	
 func encode_hits() -> String:
@@ -95,7 +101,7 @@ func from_hits(h: String) -> void:
 
 	var list := h.split(",")
 	if list.size() != rows * columns:
-		print("[FROM_HITS] Warning: hit list size mismatch. Ignoring.")
+		OpLog.w(LOG_TAG, ["from_hits size mismatch name=", name, " got=", list.size(), " expected=", rows * columns])
 		return
 
 	for y in range(rows):
@@ -118,7 +124,7 @@ func from_hits(h: String) -> void:
 			mark(Vector2(x, y), BattlegroundMarker.MarkerMode.ELIMINATED)
 
 func from_bullets(b: String):
-	print("From Bullets")
+	dbg(["from_bullets name=", name, " len=", b.length()])
 	bullets.assign(Array(b.split(",")).map(func(bullet): return bullet == '1'))
 	for x in range(columns):
 		for y in range(rows):
@@ -132,14 +138,14 @@ func from_bullets(b: String):
 func from_encoded(encoded: String):
 	clear_battleground()
 	if encoded.is_empty():
-		print("[FROM_ENCODED] Empty encoded string, nothing to place")
+		dbg(["from_encoded empty name=", name])
 		return
 
-	print("[FROM_ENCODED] Applying encoded layout: ", encoded)
+	dbg(["from_encoded name=", name, " len=", encoded.length()])
 	for encodedShip in encoded.split("|"):
 		if encodedShip.is_empty():
 			continue
-		print("[FROM_ENCODED]  -> ship: ", encodedShip)
+		dbg(["from_encoded ship=", encodedShip])
 		var ship := ship_class.instantiate() as Patrolboat
 		add_child(ship)
 		ship.decode_ship(encodedShip, self)

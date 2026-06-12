@@ -20,6 +20,8 @@ static var current_level: LogLevel = LogLevel.INFO
 
 ## Prefix for all chess log messages
 const LOG_PREFIX: String = "CHESS"
+const OP_LOG_TAG: String = "Chess"
+static var route_to_op_log: bool = true
 
 ## Enable/disable timestamps in log output
 static var show_timestamps: bool = false
@@ -49,6 +51,17 @@ static func level_name(level: LogLevel) -> String:
 		LogLevel.ERROR: return "ERROR"
 		LogLevel.NONE: return "NONE"
 	return "???"
+	
+static func _get_op_log() -> Node:
+	var loop := Engine.get_main_loop()
+	if loop == null or not (loop is SceneTree):
+		return null
+
+	var tree := loop as SceneTree
+	if tree.root == null:
+		return null
+
+	return tree.root.get_node_or_null("/root/OpLog")
 
 ## Internal logging implementation
 static func _log(level: LogLevel, message: String, context: String = "") -> void:
@@ -57,22 +70,44 @@ static func _log(level: LogLevel, message: String, context: String = "") -> void
 
 	var parts: Array[String] = []
 
-	# Timestamp (optional)
 	if show_timestamps:
 		var time: Dictionary = Time.get_time_dict_from_system()
 		parts.append("[%02d:%02d:%02d]" % [time.hour, time.minute, time.second])
 
-	# Prefix and level
 	parts.append("[%s:%s]" % [LOG_PREFIX, level_name(level)])
 
-	# Context (optional)
 	if show_context and context != "":
 		parts.append("[%s]" % context)
 
-	# Message
 	parts.append(message)
 
-	print(" ".join(parts))
+	var line := " ".join(parts)
+
+	if route_to_op_log:
+		var op_log := _get_op_log()
+		if op_log != null:
+			match level:
+				LogLevel.TRACE, LogLevel.DEBUG:
+					if op_log.has_method("d"):
+						op_log.call("d", OP_LOG_TAG, line)
+						return
+				LogLevel.INFO:
+					if op_log.has_method("i"):
+						op_log.call("i", OP_LOG_TAG, line)
+						return
+				LogLevel.WARNING:
+					if op_log.has_method("w"):
+						op_log.call("w", OP_LOG_TAG, line)
+						return
+				LogLevel.ERROR:
+					if op_log.has_method("e"):
+						op_log.call("e", OP_LOG_TAG, line)
+						return
+
+	if level >= LogLevel.ERROR:
+		printerr(line)
+	else:
+		print(line)
 
 ## Log a TRACE level message (most verbose)
 static func trace(message: String, context: String = "") -> void:

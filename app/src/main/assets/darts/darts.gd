@@ -63,6 +63,7 @@ func _get_rules_title() -> String:
 	return "Darts"
 
 func _on_game_ready():
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	main_dart = get_node("dart")
 
 	OpLog.i(LOG_TAG, [

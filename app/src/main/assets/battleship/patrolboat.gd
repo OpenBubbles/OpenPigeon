@@ -2,6 +2,13 @@ extends Sprite2D
 
 class_name Patrolboat
 
+const LOG_TAG := "Patrolboat"
+const DEBUG_PATROLBOAT := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_PATROLBOAT:
+		OpLog.d(LOG_TAG, parts)
+
 @export var textures: Array[Texture2D]
 var this_battleground: BattleGround = null
 var my_len = 0
@@ -59,16 +66,16 @@ func validate_position(pos: Vector2, horizontal: bool) -> bool:
 			thisPos += Vector2(0, i)
 		
 		if thisPos.x >= this_battleground.columns or thisPos.x < 0:
-			print("rejecting OOB")
+			dbg(["reject_position oob_x pos=", pos, " horizontal=", horizontal])
 			return false
 		
 		if thisPos.y < 0 or thisPos.y >= this_battleground.rows:
-			print("rejecting OOB y")
+			dbg(["reject_position oob_y pos=", pos, " horizontal=", horizontal])
 			return false
 			
 		var idx = thisPos.y * this_battleground.columns + thisPos.x
 		if this_battleground.ship_grid[idx] != null and this_battleground.ship_grid[idx] != self:
-			print("rejecting")
+			dbg(["reject_position conflict pos=", pos, " horizontal=", horizontal])
 			return false
 	return true
 
@@ -139,7 +146,7 @@ func _input(event: InputEvent) -> void:
 			var delta = Time.get_ticks_msec() - down_frame
 			if delta < 200:
 				set_grid_rotation(!is_horizontal)
-			print("not dragging")
+			dbg(["drag_end pos=", current_grid_pos, " horizontal=", is_horizontal])
 	elif event is InputEventMouseMotion and is_dragging:
 		var pos = event.position - this_battleground.get_transform().get_origin()
 		set_grid_position(this_battleground.coord_to_grid(pos) - start_offset, is_horizontal)
@@ -174,4 +181,4 @@ func _on_area_2d_input_event(viewport: Node, event: InputEvent, shape_idx: int) 
 			var pos = event.position - this_battleground.get_transform().get_origin()
 			start_offset = this_battleground.coord_to_grid(pos) - current_grid_pos
 			down_frame = Time.get_ticks_msec()
-			print("Dragging")
+			dbg(["drag_start pos=", current_grid_pos, " horizontal=", is_horizontal])

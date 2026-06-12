@@ -50,6 +50,19 @@ class WordHuntActivity : AppCompatActivity() {
     private val gameUI = GameUI()
     private lateinit var navController: NavHostController
 
+    private var gameOpenedLogged = false
+
+    private fun logGameOpened(msg: Map<String, String>, player: Int, startDestination: String) {
+        if (gameOpenedLogged) return
+        gameOpenedLogged = true
+
+        OpenPigeonLog.title(
+            "WordHunt",
+            "Word Hunt",
+            "mode=${msg["mode"].orEmpty()} letters=${msg["letters"]?.length ?: 0} player=$player start=$startDestination score1=${!msg["score1"].isNullOrBlank()} score2=${!msg["score2"].isNullOrBlank()}"
+        )
+    }
+
     enum class GameMode(val gridSize: Int, val invalidPositions: List<Pair<Int, Int>>, val drawable: Int){
         MODE1(4, emptyList(), R.drawable.wordhunt_board_mode1),
         MODE2(5, listOf(
@@ -425,7 +438,7 @@ class WordHuntActivity : AppCompatActivity() {
             // This is called when the service is bound
             this.gameSessionIPC = gameSessionIPC
             currentMessage = gameSessionIPC.getCurrentMessage(sessionId)
-            OpenPigeonLog.i("message", "currentMessage: $currentMessage")
+            OpenPigeonLog.i("WordHunt", "currentMessage loaded keys=${currentMessage.keys.sorted()}")
 
             if (currentMessage.isNotEmpty()) {
                 gameSessionIPC.lockMsgHandle(sessionId)
@@ -448,6 +461,8 @@ class WordHuntActivity : AppCompatActivity() {
                 } else {
                     GameUI.Screen.Intro.route
                 }
+
+                logGameOpened(currentMessage, player, startDestination)
 
                 setContent {
                     currentMessageState = remember { mutableStateOf(currentMessage) }

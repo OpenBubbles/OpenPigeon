@@ -66,6 +66,7 @@ func _get_dev_data() -> String:
 	return '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	if not start_button.pressed.is_connected(_on_start_button_pressed):
 		start_button.pressed.connect(_on_start_button_pressed)
 	if not back_button.pressed.is_connected(_on_back_button_pressed):

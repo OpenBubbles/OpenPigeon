@@ -97,6 +97,7 @@ Find as many valid words as possible before time runs out.
 """
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	if is_instance_valid(start_button):
 		if not start_button.pressed.is_connected(_on_start_button_pressed):
 			start_button.pressed.connect(_on_start_button_pressed)

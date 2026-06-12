@@ -1,6 +1,13 @@
 extends Node3D
 class_name Cups
 
+const LOG_TAG := "Cups"
+const DEBUG_CUPS := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_CUPS:
+		OpLog.d(LOG_TAG, parts)
+
 var prev_cups: Array
 var cups_in_play: Array = [0,1,2,3,4,5,6,7,8,9]
 var random_positions: Dictionary = {}
@@ -13,6 +20,7 @@ func _ready():
 		mesh3d.mesh.surface_set_material(0, mesh3d.mesh.surface_get_material(0).duplicate())
 
 func reset_cups(cups: Array):
+	dbg(["reset_cups name=", name, " cups=", cups])
 	var all_cups = get_children()
 	for cup_idx in range(len(all_cups)):
 		all_cups[cup_idx].name = "cupremoved"
@@ -30,8 +38,10 @@ func apply_random_positions(positions: Array) -> void:
 	random_positions.clear()
 	for i in range(min(positions.size(), 10)):
 		random_positions[i] = positions[i]
+	dbg(["apply_random_positions name=", name, " count=", random_positions.size(), " mirrorX=", mirror_x])
 
 func set_cups_in_play(cups: Array):
+	dbg(["set_cups_in_play name=", name, " from=", cups_in_play, " to=", cups])
 	for cup_idx in cups_in_play:
 		if cup_idx not in cups:
 			var cup = get_child(cup_idx)
@@ -72,13 +82,14 @@ func remove_cup(cup_num: int):
 	anim.play()
 
 	cups_in_play.remove_at(cups_in_play.find(cup_num-1))
+	OpLog.i(LOG_TAG, ["remove_cup name=", name, " cup=", cup_num, " remaining=", cups_in_play])
 
 	# In random mode don't rerack cups
 	if random_positions.size() == 0:
 		arrangeCups()
-	print(cups_in_play)
 
 func _arrange_random() -> void:
+	dbg(["arrange_random name=", name, " inPlay=", cups_in_play, " positions=", random_positions.size()])
 	for cup_idx in cups_in_play:
 		if not random_positions.has(cup_idx):
 			continue
@@ -91,6 +102,7 @@ func _arrange_random() -> void:
 
 func arrangeCups():
 	var num_cups = len(cups_in_play)
+	dbg(["arrange_cups name=", name, " count=", num_cups, " inPlay=", cups_in_play])
 	
 	var tween = get_tree().create_tween()
 	tween.set_loops(1)

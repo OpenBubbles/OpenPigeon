@@ -85,6 +85,35 @@ const CAMERA_LOOK_AT_Y_OFFSET := 0.55	# how far below bullseye to look
 const CAMERA_FOLLOW_FOV := 50.0		 # zoom amount for close-up
 const CAMERA_FOLLOW_LERP_TIME := 0.7	 # tween time into the close-up
 
+const LOG_TAG := "Archery"
+const DEBUG_ARCHERY := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_ARCHERY:
+		OpLog.d(LOG_TAG, parts)
+
+func _score_summary() -> String:
+	return "set=%d shots=%d you=%d opp=%d youSets=%d oppSets=%d gameOver=%s winner=%s" % [
+		set_num,
+		num_shots,
+		you_score,
+		opp_score,
+		you_set_wins,
+		opp_set_wins,
+		str(game_over),
+		send_winner
+	]
+
+func _replay_summary_dict(data: Dictionary) -> String:
+	var move_count := 0
+	var has_pre := data.has("pre_state")
+	var has_post := data.has("post_state")
+
+	if data.has("moves") and data["moves"] is Array:
+		move_count = data["moves"].size()
+
+	return "moves=%d pre=%s post=%s" % [move_count, str(has_pre), str(has_post)]
+
 var set_num: int = 1          # current set (1–3)
 var you_score: int = 0        # per-set score (you)
 var opp_score: int = 0        # per-set score (opponent)
@@ -117,6 +146,7 @@ func _update_set_score_labels() -> void:
 		opp_label.visible = true
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	if is_instance_valid(aim_cursor):
 		aim_cursor.visible = false
 	if is_instance_valid(aim_progress_bar):
@@ -147,9 +177,17 @@ func _on_game_ready() -> void:
 		camera.look_at(center - Vector3(0.0, CAMERA_LOOK_AT_Y_OFFSET, 0.0), Vector3.UP)
 
 	update_distance()
+	
+	OpLog.i(LOG_TAG, [
+		"game_ready localMode=", appPlugin == null,
+		" camera=", is_instance_valid(camera),
+		" target=", is_instance_valid(target),
+		" arrow=", is_instance_valid(arrow),
+		" ", _score_summary()
+	])
 
 func check_winner(completed_round: int = set_num) -> bool:
-	print("check_winner: completed_round=", completed_round, " you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
+	OpLog.i(LOG_TAG, ["check_winner round=", completed_round, " ", _score_summary()])
 
 	# Early clinch only after round 2 or later.
 	if completed_round >= 2:
@@ -166,7 +204,7 @@ func check_winner(completed_round: int = set_num) -> bool:
 			if is_instance_valid(player_avatar_display):
 				GameUtils._show_win_burst(player_avatar_display)
 			send_winner = my_uuid + "|1"
-			print("check_winner: EARLY YOU WIN (2-0 rule)")
+			OpLog.i(LOG_TAG, ["game_end early=true result=win round=", completed_round, " ", _score_summary()])
 			return true
 
 		if opp_set_wins == 2 and you_set_wins == 0:
@@ -183,12 +221,12 @@ func check_winner(completed_round: int = set_num) -> bool:
 			if is_instance_valid(opp_avatar_display):
 				GameUtils._show_win_burst(opp_avatar_display)
 			send_winner = my_uuid + "|-1"
-			print("check_winner: EARLY YOU LOSE (0-2 rule)")
+			OpLog.i(LOG_TAG, ["game_end early=true result=lose round=", completed_round, " ", _score_summary()])
 			return true
 
 	# No final winner unless round 3 has actually completed.
 	if completed_round < 3:
-		print("check_winner: completed_round < 3 and no early clinch; no result yet.")
+		dbg(["check_winner no_result_yet round=", completed_round, " ", _score_summary()])
 		return false
 
 	game_over = true
@@ -204,7 +242,7 @@ func check_winner(completed_round: int = set_num) -> bool:
 		if is_instance_valid(opp_avatar_display):
 			GameUtils._show_win_burst(opp_avatar_display)
 		send_winner = my_uuid + "|0"
-		print("check_winner: DRAW (final)")
+		OpLog.i(LOG_TAG, ["game_end result=draw round=", completed_round, " ", _score_summary()])
 		return true
 	elif you_set_wins > opp_set_wins:
 		if not spectator_mode:
@@ -216,7 +254,7 @@ func check_winner(completed_round: int = set_num) -> bool:
 		if is_instance_valid(player_avatar_display):
 			GameUtils._show_win_burst(player_avatar_display)
 		send_winner = my_uuid + "|1"
-		print("check_winner: YOU WIN (final)")
+		OpLog.i(LOG_TAG, ["game_end result=win round=", completed_round, " ", _score_summary()])
 		return true
 	else:
 		if not spectator_mode:
@@ -229,43 +267,51 @@ func check_winner(completed_round: int = set_num) -> bool:
 		if is_instance_valid(opp_avatar_display):
 			GameUtils._show_win_burst(opp_avatar_display)
 		send_winner = my_uuid + "|-1"
-		print("check_winner: YOU LOSE (final)")
+		OpLog.i(LOG_TAG, ["game_end result=lose round=", completed_round, " ", _score_summary()])
 		return true
 		
 func _process_game_state() -> void:
 	if game_over:
-		print("PROCESS_GAME_STATE: game_over=true, ignoring further state.")
+		OpLog.i(LOG_TAG, ["process_state skipped game_over=true ", _score_summary()])
 		stop_waiting_animation()
 		_hide_wind_panel(0.0)
 		return
 		
-	print("PROCESS_GAME_STATE: num_shots=", num_shots, " isTurn=", isTurn, " replay_empty=", replay.is_empty(), " played_replay=", played_replay, " you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
+	OpLog.i(LOG_TAG, [
+		"process_state_start turn=", isTurn,
+		" spectator=", spectator_mode,
+		" replayEmpty=", replay.is_empty(),
+		" playedReplay=", played_replay,
+		" shouldPlayReplay=", _should_play_replay,
+		" replayProgress=", replay_in_progress,
+		" ", _score_summary()
+	])
 
 	stop_waiting_animation()
 	_hide_wind_panel(0.0)
 
 	if replay_in_progress:
-		print("PROCESS_GAME_STATE: replay already in progress, skipping re-entry")
+		OpLog.w(LOG_TAG, ["process_state skipped replay already in progress ", _score_summary()])
 		return
 
 	if not replay.is_empty() and not played_replay and _should_play_replay:
-		print("PROCESS_GAME_STATE: playing opponent replay first")
+		OpLog.i(LOG_TAG, ["process_state play_replay ", _replay_summary_dict(replay), " ", _score_summary()])
 		replay_in_progress = true
 		played_replay = true
 		await play_replay()
 	else:
 		if not replay.is_empty() and not played_replay:
-			print("PROCESS_GAME_STATE: replay present but _should_play_replay=false; skipping replay (likely our own last turn).")
+			OpLog.i(LOG_TAG, ["process_state skip_own_replay ", _replay_summary_dict(replay), " localIndex=", local_index])
 
 	if (not isTurn or spectator_mode) and not game_over:
-		print("PROCESS_GAME_STATE: not our turn and game_over=", game_over, "; showing waiting UI")
+		OpLog.i(LOG_TAG, ["process_state waiting turn=", isTurn, " spectator=", spectator_mode, " gameOver=", game_over])
 		start_waiting_animation()
 		return
 
 	stop_waiting_animation()
 
 	if num_shots < 3:
-		print("PROCESS_GAME_STATE: preparing shot index", num_shots)
+		OpLog.i(LOG_TAG, ["prepare_shot index=", num_shots, " set=", set_num, " ", _score_summary()])
 
 		if num_shots == 0 and not spectator_mode and not game_over and not has_turn_pre_state:
 			var p1_sets := (you_set_wins if player == 1 else opp_set_wins)
@@ -282,23 +328,28 @@ func _process_game_state() -> void:
 
 			turn_pre_state = [set_num, p1_score, p2_score, p1_sets, p2_sets]
 			has_turn_pre_state = true
-			print("PROCESS_GAME_STATE: captured turn_pre_state=", turn_pre_state)
+			OpLog.i(LOG_TAG, ["captured_turn_pre_state=", turn_pre_state])
 
 		calc_wind()
 		current_arrow = arrow.spawn()
 		if not spectator_mode and not game_over:
 			_show_wind_panel(target.global_position)
 	else:
-		print("PROCESS_GAME_STATE: set finished (local), calling _animate_set_bar_and_award_points()")
+		OpLog.i(LOG_TAG, ["local_set_finished award_points ", _score_summary()])
 		await _animate_set_bar_and_award_points()
 
 func _award_set_points_and_continue(completed_round: int = set_num) -> bool:
+	OpLog.i(LOG_TAG, ["award_set_points round=", completed_round, " ", _score_summary()])
 	var won_now: bool = check_winner(completed_round)
-	send_game_data(export_replay())
+	var out_json := export_replay()
+	OpLog.event(LOG_TAG, ["send_game_out award_set raw=", out_json])
+	send_game_data(out_json)
 	return won_now
 	
 func _send_turn_state_only() -> void:
-	send_game_data(export_replay())
+	var out_json := export_replay()
+	OpLog.event(LOG_TAG, ["send_game_out state_only raw=", out_json])
+	send_game_data(out_json)
 		
 func _spawn_avatar_score_popup(is_you: bool, amount: int, is_miss: bool = false) -> void:
 	var avatar: Control = player_avatar_display if is_you else opp_avatar_display
@@ -348,7 +399,7 @@ func _project_to_plane(screen_pos: Vector2) -> Vector3:
 	var ray_normal: Vector3 = camera.project_ray_normal(screen_pos)
 	
 	if abs(ray_normal.z) < 0.0001:
-		printerr("export_replay: ray is parallel to target plane for screen_pos=%s" % screen_pos)
+		OpLog.e(LOG_TAG, ["project_to_plane ray_parallel screenPos=", screen_pos])
 		return Vector3.ZERO
 	
 	var t := ((target.position.z) - ray_origin.z) / ray_normal.z
@@ -386,19 +437,19 @@ func export_replay() -> String:
 		if pre_state.size() < 5:
 			pre_state.resize(5)
 		set_index_for_turn = pre_state[0]
-		print("export_replay: using turn_pre_state as pre_state: ", pre_state)
+		dbg(["export_replay pre_state=turn_pre_state ", pre_state])
 	elif not replay.is_empty() and replay.has("post_state"):
 		pre_state = replay["post_state"]
 		if pre_state.size() < 5:
 			pre_state.resize(5)
 		set_index_for_turn = pre_state[0]
-		print("export_replay: using replay.post_state as pre_state: ", pre_state)
+		dbg(["export_replay pre_state=replay_post_state ", pre_state])
 	else:
 		var p1_sets := (you_set_wins if player == 1 else opp_set_wins)
 		var p2_sets := (you_set_wins if player == 2 else opp_set_wins)
 		set_index_for_turn = set_num
 		pre_state = [set_index_for_turn, 0, 0, p1_sets, p2_sets]
-		print("export_replay: no prior replay; using default pre_state: ", pre_state)
+		dbg(["export_replay pre_state=default ", pre_state])
 
 	while pre_state.size() < 5:
 		pre_state.append(0)
@@ -441,11 +492,20 @@ func export_replay() -> String:
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		replay_dict[avatar_key] = player_avatar_display.get_avatar_data_string()
 	if send_winner.is_empty() == false:
-		print("Adding Winner Attribute")
+		OpLog.i(LOG_TAG, ["export_replay adding_winner=", send_winner])
 		replay_dict["winner"] = send_winner
 	else:
 		play_sent_animation()
-	print("OUTGOING DATA: ", replay_dict)
+	var out_json := JSON.stringify(replay_dict)
+	OpLog.event(LOG_TAG, [
+		"export_replay_out moves=", moves.size(),
+		" preState=", pre_state,
+		" winner=", send_winner,
+		" replayLen=", replay_str.length(),
+		" ", _score_summary(),
+		" raw=", out_json
+	])
+	return out_json
 	return JSON.stringify(replay_dict)
 
 func _animate_set_win_bump(is_you: bool) -> void:
@@ -463,19 +523,18 @@ func _animate_set_win_bump(is_you: bool) -> void:
 	
 func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 	if set_award_in_progress:
-		print("_animate_set_bar_and_award_points: already in progress, skipping duplicate entry")
+		OpLog.w(LOG_TAG, ["award_set skipped already_in_progress fromReplay=", from_replay])
 		return
 	set_award_in_progress = true
 	_hide_wind_panel(0.0)
-	print("=== _animate_set_bar_and_award_points START === from_replay=", from_replay)
-	print("num_shots:", num_shots, " num:", num, " you_score:", you_score, " opp_score:", opp_score)
+	OpLog.i(LOG_TAG, ["award_set_start fromReplay=", from_replay, " num=", num, " ", _score_summary()])
 
 	if not _top_bar_inited \
 		or not is_instance_valid(top_game_bar) \
 		or not _score_box_inited \
 		or not is_instance_valid(score_box) \
 		or not is_instance_valid(score_label):
-		print("Top bar / score_box / score_label missing, skipping animation.")
+		OpLog.w(LOG_TAG, "award_set missing top bar / score box / score label")
 		if not from_replay:
 			_award_set_points_and_continue()
 		set_award_in_progress = false
@@ -502,19 +561,19 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 	var grow_factor: float = 1.25
 	var target_min_size: Vector2 = _score_box_orig_min_size * grow_factor
 
-	print("Top bar start_global:", start_global, " target_global:", target_global)
+	dbg(["award_set topbar start=", start_global, " target=", target_global])
 
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(top_game_bar, "global_position", target_global, 0.5)
 	tween.parallel().tween_property(score_box, "custom_minimum_size", target_min_size, 0.5)
 	await tween.finished
-	print("Center tween finished")
+	dbg("award_set center_tween_done")
 
 	await get_tree().create_timer(1).timeout
 
 	if not is_second_shooter:
-		print("Mid-set animation: only first shooter has shot; send state only, no winner check, no set award.")
+		OpLog.i(LOG_TAG, ["award_set mid_set send_state_only ", _score_summary()])
 
 		_send_turn_state_only()
 
@@ -526,31 +585,30 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 
 		top_game_bar.set_as_top_level(was_top_level)
 
-		print("Back tween finished (mid-set)")
-		print("=== _animate_set_bar_and_award_points END (mid-set) ===")
+		OpLog.i(LOG_TAG, ["award_set_done mid_set ", _score_summary()])
 		set_award_in_progress = false
 		return
 
 	var start_you: int = you_score
 	var start_opp: int = opp_score
-	print("End-of-set scoring (before awarding set): you=", start_you, " opp=", start_opp)
+	OpLog.i(LOG_TAG, ["award_set end_of_set startYou=", start_you, " startOpp=", start_opp])
 
 	if opp_score > you_score:
 		opp_set_wins += 1
-		print("Set result: OPPONENT wins set -> opp_set_wins=", opp_set_wins)
+		OpLog.i(LOG_TAG, ["set_result opponent_wins ", _score_summary()])
 		_update_set_score_labels()
 		_animate_set_win_bump(false)
 		_spawn_avatar_score_popup(false, 1)
 	elif you_score > opp_score:
 		you_set_wins += 1
-		print("Set result: YOU win set -> you_set_wins=", you_set_wins)
+		OpLog.i(LOG_TAG, ["set_result you_win ", _score_summary()])
 		_update_set_score_labels()
 		_animate_set_win_bump(true)
 		_spawn_avatar_score_popup(true, 1)
 	else:
 		opp_set_wins += 1
 		you_set_wins += 1
-		print("Set result: TIE set -> you_set_wins=", you_set_wins, " opp_set_wins=", opp_set_wins)
+		OpLog.i(LOG_TAG, ["set_result tie ", _score_summary()])
 		_update_set_score_labels()
 		_animate_set_win_bump(true)
 		_animate_set_win_bump(false)
@@ -562,22 +620,21 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 	var match_over_now: bool = false
 
 	if not from_replay:
-		print("Calling _award_set_points_and_continue (end of full set, before score reset)")
+		OpLog.i(LOG_TAG, ["award_set sending_full_set ", _score_summary()])
 		match_over_now = _award_set_points_and_continue(completed_round)
 	else:
 		match_over_now = check_winner(completed_round)
 
 	# If the match just ended, keep the final round score visible.
 	if match_over_now:
-		print("_animate_set_bar_and_award_points: match_over_now=true; preserving final score display")
+		OpLog.i(LOG_TAG, ["award_set match_over preserve_score ", _score_summary()])
 	else:
 		if set_num < 3:
 			update_set_number(set_num + 1)
 			update_distance()
-			print("CALL 506")
 
 		if start_you != 0 or start_opp != 0:
-			print("Starting score tween from:", start_you, start_opp, "to 0,0")
+			dbg(["award_set score_tween from=", Vector2i(start_you, start_opp), " to=0,0"])
 			var score_tween := create_tween()
 			score_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
@@ -590,12 +647,12 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 
 			score_tween.tween_method(update_score, 0.0, 1.0, 0.7)
 			await score_tween.finished
-			print("Score tween finished")
+			dbg("award_set score_tween_done")
 
 		you_score = 0
 		opp_score = 0
 		_update_set_score_labels()
-		print("Per-set scores reset to 0-0")
+		OpLog.i(LOG_TAG, ["set_scores_reset ", _score_summary()])
 
 	await get_tree().create_timer(0.4).timeout
 
@@ -607,8 +664,7 @@ func _animate_set_bar_and_award_points(from_replay: bool = false) -> void:
 
 	top_game_bar.set_as_top_level(was_top_level)
 
-	print("Back tween finished")
-	print("=== _animate_set_bar_and_award_points END (full set) ===")
+	OpLog.i(LOG_TAG, ["award_set_done full_set ", _score_summary()])
 	set_award_in_progress = false
 
 func _hide_wind_panel(duration: float = 0.2) -> void:
@@ -662,9 +718,7 @@ func calc_wind() -> void:
 		+ int(num_shots) * 7919
 	rng.seed = derived_seed
 
-	print("calc_wind: set=", set_num,
-		" num_shots=", num_shots,
-		" derived_seed=", derived_seed)
+	dbg(["calc_wind set=", set_num, " shot=", num_shots, " seed=", derived_seed])
 
 	var angle: float = rng.randf_range(0.0, 360.0)
 
@@ -686,14 +740,19 @@ func calc_wind() -> void:
 	current_wind_angle = Vector2.UP.rotated(deg_to_rad(angle))
 	current_wind_power = power
 	
-	print("wind angle(deg)=", angle,
+	OpLog.i(LOG_TAG, [
+		"wind set=", set_num,
+		" shot=", num_shots,
+		" seed=", derived_seed,
+		" angleDeg=", angle,
 		" vec=", current_wind_angle,
-		" power=", power)
+		" power=", power
+	])
 
 	_update_wind_ui(angle, power)
 
 func _update_wind_ui(angle_degrees: float, power: float) -> void:
-	print(">>> _update_wind_ui CALLED angle=", angle_degrees, " power=", power)
+	dbg(["update_wind_ui angle=", angle_degrees, " power=", power])
 	var t: float = clamp(power / MAX_WIND_POWER, 0.0, 1.0)
 
 	var green: Color = Color(0.792, 0.792, 0.792, 1.0)
@@ -706,20 +765,17 @@ func _update_wind_ui(angle_degrees: float, power: float) -> void:
 	else:
 		color = yellow.lerp(red, (t - 0.5) * 2.0)
 
-	print("_update_wind_ui: angle_degrees=", angle_degrees, " power=", power, " current_wind_angle=", current_wind_angle)
+	dbg(["update_wind_ui currentWind=", current_wind_angle])
 
 	if is_instance_valid(wind_label):
-		print("Have Wind Label")
 		var hex: String = color.to_html(false)
 		wind_label.bbcode_enabled = true
 		wind_label.text = "[center][b]WIND: [color=#%s]%.1f[/color][/b][/center]" % [hex, power]
 
 	if is_instance_valid(wind_arrow_circle):
-		print("Have Wind Arrow Circle")
 		wind_arrow_circle.modulate = color
 
 	if is_instance_valid(wind_arrow):
-		print("Have Wind Arrow (custom draw)")
 
 		var display_angle_deg: float
 		if current_wind_angle.length() > 0.0001:
@@ -743,11 +799,11 @@ func update_set_number(uset_num: int) -> void:
 	if is_instance_valid(set_label):
 		set_label.text = "[center]Set " + str(uset_num) + "[/center]"
 	
-	print("update_set_number 680: set_num =", set_num)
+	OpLog.i(LOG_TAG, ["set_number=", set_num, " targetZ=", target.position.z if is_instance_valid(target) else 0.0])
 	
 func _reconcile_scores_with_post_state() -> void:
 	if not replay.has("post_state"):
-		print("_reconcile_scores_with_post_state: no post_state in replay; skipping.")
+		dbg("reconcile_scores skipped no post_state")
 		return
 
 	var post: Array[int] = replay["post_state"]
@@ -770,11 +826,15 @@ func _reconcile_scores_with_post_state() -> void:
 			target_opp = p1_score_final
 
 	if you_score == target_you and opp_score == target_opp:
-		print("_reconcile_scores_with_post_state: scores already match post_state; no adjustment.")
+		dbg(["reconcile_scores already_match ", _score_summary()])
 		return
 
-	print("_reconcile_scores_with_post_state: reconciling. current you=", you_score,
-		" opp=", opp_score, " target you=", target_you, " target opp=", target_opp)
+	OpLog.i(LOG_TAG, [
+		"reconcile_scores current=", Vector2i(you_score, opp_score),
+		" target=", Vector2i(target_you, target_opp),
+		" spectator=", spectator_mode,
+		" localIndex=", local_index
+	])
 
 	var start_you: int = you_score
 	var start_opp: int = opp_score
@@ -795,12 +855,12 @@ func _reconcile_scores_with_post_state() -> void:
 
 func play_replay() -> void:
 	if not replay_in_progress:
-		print("play_replay: called without replay_in_progress guard, aborting")
+		OpLog.w(LOG_TAG, "play_replay skipped: replay_in_progress=false")
 		return
 	_hide_wind_panel(0.0)
 	update_distance()
 	_update_set_score_labels()
-	print("play_replay: starting, you_score=", you_score, " opp_score=", opp_score, " you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
+	OpLog.i(LOG_TAG, ["play_replay_start ", _replay_summary_dict(replay), " ", _score_summary()])
 
 	var replay_arrows: Array[Arrow] = []
 	if replay.has("moves"):
@@ -818,14 +878,14 @@ func play_replay() -> void:
 
 			var replay_pos := Vector3(move[1], move[2] - REMOTE_Y_FUDGE, move[3])
 
-			print("play_replay: move[", i, "] raw=", move, " adjusted_pos=", replay_pos)
+			OpLog.i(LOG_TAG, ["play_replay_move index=", i, " raw=", move, " adjustedPos=", replay_pos])
 
 			replay_arrows.append(arrow.spawn())
 			var this_arrow: Arrow = replay_arrows[-1]
 
 			this_arrow.shoot(replay_pos, func() -> void:
 				var arrow_score: int = target.calc_score(this_arrow)
-				print("play_replay: arrow hit score=", arrow_score, " (before add_score) opp_score=", opp_score)
+				OpLog.i(LOG_TAG, ["play_replay_score score=", arrow_score, " oppBefore=", opp_score])
 
 				var hit_pos: Vector3 = this_arrow.global_transform.origin
 				_spawn_score_popup(hit_pos, arrow_score, _get_score_color(arrow_score))
@@ -835,7 +895,7 @@ func play_replay() -> void:
 			)
 			await get_tree().create_timer(2.0).timeout
 	else:
-		print("play_replay: no moves in replay")
+		OpLog.w(LOG_TAG, ["play_replay no_moves ", _replay_summary_dict(replay)])
 
 	await cam_reset_pos()
 	
@@ -844,11 +904,10 @@ func play_replay() -> void:
 			arrow_i.queue_free()
 	replay_arrows.clear()
 
-	print("play_replay: finished (before reconcile), you_score=", you_score, " opp_score=", opp_score,
-		" you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
+	OpLog.i(LOG_TAG, ["play_replay_before_reconcile ", _score_summary()])
 
 	await _reconcile_scores_with_post_state()
-	print("play_replay: after reconcile, you_score=", you_score, " opp_score=", opp_score)
+	OpLog.i(LOG_TAG, ["play_replay_after_reconcile ", _score_summary()])
 
 	var should_end_set := false
 	var post_set_num: int = -1
@@ -871,23 +930,25 @@ func play_replay() -> void:
 
 		should_end_set = sets_changed or set_index_changed
 
-		print("play_replay: pre_state=", pre, " post_state=", post,
-			" pre_sets=", pre_sets, " post_sets=", post_sets,
-			" pre_set_num=", pre_set_num, " post_set_num=", post_set_num,
-			" post_scores=", post_scores,
-			" both_have_score=", both_players_have_score,
-			" sets_changed=", sets_changed,
-			" set_index_changed=", set_index_changed,
-			" should_end_set=", should_end_set)
+		OpLog.i(LOG_TAG, [
+			"play_replay_state pre=", pre,
+			" post=", post,
+			" preSets=", pre_sets,
+			" postSets=", post_sets,
+			" postScores=", post_scores,
+			" setsChanged=", sets_changed,
+			" setIndexChanged=", set_index_changed,
+			" shouldEndSet=", should_end_set
+		])
 	else:
-		print("play_replay: no pre/post state; assuming not end-of-set for safety.")
+		OpLog.w(LOG_TAG, "play_replay missing pre/post state; assuming not end-of-set")
 		should_end_set = false
 
 	if should_end_set:
 		await _animate_set_bar_and_award_points(true)
-		print("play_replay: _animate_set_bar_and_award_points(true, ", post_set_num, ") completed (end-of-set)")
+		OpLog.i(LOG_TAG, ["play_replay_set_animation_done postSet=", post_set_num, " ", _score_summary()])
 	else:
-		print("play_replay: not end-of-set; skipping set animation and letting local player shoot.")
+		OpLog.i(LOG_TAG, ["play_replay_done no_set_end ", _score_summary()])
 	replay_in_progress = false
 
 func update_distance() -> void:
@@ -905,6 +966,7 @@ func update_distance() -> void:
 			distance_label.text = "50ft"
 
 func parse_replay(replay_str: String) -> Dictionary:
+	OpLog.i(LOG_TAG, ["parse_replay_start rawLen=", replay_str.length(), " raw=", replay_str])
 	var result = {'moves': []}
 	var replay_split = replay_str.split('|')
 	for elem in replay_split:
@@ -913,12 +975,19 @@ func parse_replay(replay_str: String) -> Dictionary:
 			result[state_name] = convert_to_int_arr(elem.split(':')[1])
 		elif elem.begins_with("move:"):
 			result['moves'].append(convert_to_float_arr(elem.split(':')[1]))
+	OpLog.i(LOG_TAG, ["parse_replay_done ", _replay_summary_dict(result)])
 	return result
 
 var my_player
 func _set_game_data(new_replay: String) -> void:
+	OpLog.event(LOG_TAG, ["set_game_data_in raw=", new_replay])
+
 	var parsed = JSON.parse_string(new_replay)
-	print("NEW REPLAY: ", parsed)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", new_replay])
+		return
+
+	dbg(["set_game_data parsed=", parsed])
 
 	isTurn = parsed["isYourTurn"]
 	player = int(parsed["player"])
@@ -932,7 +1001,16 @@ func _set_game_data(new_replay: String) -> void:
 	spectator_mode = my_player != "" and p1_id != "" and p2_id != "" and my_player != p1_id and my_player != p2_id
 	if is_instance_valid(spectator_label):
 		spectator_label.visible = spectator_mode
-	print("_set_game_data: isTurn=", isTurn, " player(from payload)=", player, " my_player=", my_player, " spectator_mode=", spectator_mode)
+	OpLog.i(LOG_TAG, [
+		"set_game_data parsed_initial turn=", isTurn,
+		" payloadPlayer=", player,
+		" myPlayer=", my_player,
+		" p1=", p1_id,
+		" p2=", p2_id,
+		" spectator=", spectator_mode,
+		" seed=", gseed,
+		" num=", num
+	])
 
 	local_index = 1
 	if not spectator_mode and my_player != "":
@@ -946,7 +1024,7 @@ func _set_game_data(new_replay: String) -> void:
 	elif spectator_mode:
 		player = 1
 
-	print("_set_game_data: resolved player(local)=", player, " local_index=", local_index)
+	OpLog.i(LOG_TAG, ["player_resolve localPlayer=", player, " localIndex=", local_index, " spectator=", spectator_mode])
 
 	if player == 1 or spectator_mode:
 		opponent_avatar_key = "avatar2"
@@ -973,9 +1051,9 @@ func _set_game_data(new_replay: String) -> void:
 
 		var has_pre: bool = replay.has("pre_state")
 		var has_post: bool = replay.has("post_state")
-		print("_set_game_data: has_pre_state=", has_pre, " has_post_state=", has_post, " replay=", replay)
+		OpLog.i(LOG_TAG, ["set_game_data replay_loaded ", _replay_summary_dict(replay)])
 		if incoming_replay_raw == last_replay_raw and replay_in_progress:
-			print("_set_game_data: same replay received while replay_in_progress=true; ignoring duplicate processing request")
+			OpLog.w(LOG_TAG, "set_game_data duplicate replay received while replay_in_progress=true")
 		last_replay_raw = incoming_replay_raw
 
 		var shooter_index: int = 0
@@ -998,31 +1076,33 @@ func _set_game_data(new_replay: String) -> void:
 			else:
 				shooter_index = 0
 
-			print("_set_game_data: shooter_index=", shooter_index,
-				" pre_p1=", pre_p1_score, " pre_p2=", pre_p2_score,
-				" post_p1=", post_p1_score, " post_p2=", post_p2_score)
+			OpLog.i(LOG_TAG, [
+				"replay_shooter shooter=", shooter_index,
+				" pre=", Vector2i(pre_p1_score, pre_p2_score),
+				" post=", Vector2i(post_p1_score, post_p2_score)
+			])
 
 		_should_play_replay = true
 		if not spectator_mode and shooter_index != 0 and shooter_index == local_index:
 			_should_play_replay = false
 
-		print("_set_game_data: _should_play_replay=", _should_play_replay, " local_index=", local_index)
+		OpLog.i(LOG_TAG, ["should_play_replay=", _should_play_replay, " localIndex=", local_index])
 
 		var use_post_for_ui: bool = (not spectator_mode and has_post and shooter_index != 0 and shooter_index == local_index)
 		var state: Array[int]
 
 		if use_post_for_ui:
 			state = replay["post_state"]
-			print("_set_game_data: using POST state for initial UI")
+			OpLog.i(LOG_TAG, "set_game_data using_post_state_for_ui")
 		else:
 			state = replay["pre_state"]
-			print("_set_game_data: using PRE state for initial UI")
+			OpLog.i(LOG_TAG, "set_game_data using_pre_state_for_ui")
 
 		if use_post_for_ui:
-			print("_set_game_data: applying POST set_num from state[0]=", state[0])
+			dbg(["apply_post_set_num=", state[0]])
 			update_set_number(state[0])
 		else:
-			print("_set_game_data: applying set_num from state[0]=", state[0])
+			dbg(["apply_pre_set_num=", state[0]])
 			update_set_number(state[0])
 		update_distance()
 
@@ -1048,8 +1128,7 @@ func _set_game_data(new_replay: String) -> void:
 				you_set_wins = p2_sets
 				opp_set_wins = p1_sets
 
-		print("_set_game_data: mapped you_score=", you_score, " opp_score=", opp_score,
-			" you_sets=", you_set_wins, " opp_sets=", opp_set_wins)
+		OpLog.i(LOG_TAG, ["set_game_data scores_mapped ", _score_summary()])
 		_update_set_score_labels()
 
 	for arrow_i in shots:
@@ -1061,17 +1140,17 @@ func _set_game_data(new_replay: String) -> void:
 	num_shots = 0
 
 	if replay_in_progress:
-		print("_set_game_data: replay already in progress, preserving played_replay state")
+		OpLog.i(LOG_TAG, "set_game_data preserving played_replay during replay")
 	else:
 		played_replay = false
 
 	has_turn_pre_state = false
 	turn_pre_state.clear()
 
-	print("YOU ARE PLAYER ", player, " (local_index=", local_index, ")")
+	OpLog.i(LOG_TAG, ["set_game_data_done player=", player, " localIndex=", local_index, " ", _score_summary()])
 
 	if replay_in_progress and incoming_replay_raw == last_replay_raw:
-		print("_set_game_data: suppressing _process_game_state re-entry for identical replay already in progress")
+		OpLog.w(LOG_TAG, "set_game_data suppress process_state duplicate replay")
 		return
 
 	_process_game_state()
@@ -1093,7 +1172,7 @@ func add_score(score: int, you: bool = true) -> void:
 		opp_score += score
 		new_val = opp_score
 
-	print("add_score called: score=", score, " you=", you, " old_val=", old_val, " new_val=", new_val)
+	OpLog.i(LOG_TAG, ["add_score amount=", score, " you=", you, " old=", old_val, " new=", new_val, " ", _score_summary()])
 
 	var t := create_tween()
 	t.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -1116,11 +1195,11 @@ var initial_pos: Vector2 = Vector2.ZERO
 
 func _unhandled_input(event: InputEvent) -> void:
 	if game_over:
-		print("Input ignored: game_over=true")
+		dbg("input_ignored game_over=true")
 		return
 	
 	if _settings_open or spectator_mode:
-		print("Settings|Spectator: ", _settings_open, spectator_mode)
+		dbg(["input_ignored settings=", _settings_open, " spectator=", spectator_mode])
 		return
 
 	if event is InputEventMouseButton:
@@ -1143,10 +1222,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				camera_zoom(41.5, true)
 				start_aim_timer()
 				_fade_top_bar(false)
-				print("started dragging")
+				OpLog.i(LOG_TAG, ["aim_start pos=", event.position, " shot=", num_shots, " set=", set_num])
 			elif is_dragging:
 				shoot_dart()
-				print("stopped dragging")
+				dbg(["aim_stop pos=", event.position])
 
 	elif event is InputEventMouseMotion:
 		if is_dragging and is_instance_valid(aim_cursor):
@@ -1201,19 +1280,19 @@ func calc_shot_pos() -> Vector3:
 	var screen_pos: Vector2
 
 	screen_pos = aim_cursor.position
-	print("calc_shot_pos: using aim_cursor.position=", screen_pos)
+	dbg(["calc_shot_pos screen=", screen_pos])
 
 	var ray_origin: Vector3 = camera.project_ray_origin(screen_pos)
 	var ray_normal: Vector3 = camera.project_ray_normal(screen_pos)
 
 	if abs(ray_normal.z) < 0.0001:
-		printerr("Ray is parallel to the target plane!!!")
+		OpLog.e(LOG_TAG, ["calc_shot_pos ray_parallel screen=", screen_pos])
 		return Vector3()
 
 	var t: float = ((target.position.z) - ray_origin.z) / ray_normal.z
 	var target_3d_position: Vector3 = ray_origin + ray_normal * t
 
-	print("Projected 3D position: ", target_3d_position)
+	dbg(["calc_shot_pos projected=", target_3d_position])
 	return target_3d_position
 
 func cam_follow_dart() -> void:
@@ -1286,11 +1365,11 @@ func start_aim_timer() -> void:
 
 func shoot_dart() -> void:
 	if game_over:
-		print("shoot_dart: game_over=true, ignoring shot.")
+		OpLog.w(LOG_TAG, "shoot_dart skipped game_over=true")
 		return
 
 	if not bow_fully_drawn:
-		print("shoot_dart: released before bow fully drawn; cancelling shot.")
+		OpLog.i(LOG_TAG, ["shoot_cancelled not_fully_drawn shot=", num_shots, " set=", set_num])
 		is_dragging = false
 		bow_fully_drawn = false
 		reset_aim_tween()
@@ -1312,7 +1391,7 @@ func shoot_dart() -> void:
 	
 	_hide_wind_panel(0.2)
 	var shot_pos: Vector3 = calc_shot_pos()
-	print("initial shot pos (no wind): " + str(shot_pos))
+	OpLog.i(LOG_TAG, ["shot_release basePos=", shot_pos, " shot=", num_shots, " set=", set_num])
 	
 	if current_wind_angle.length() > 0.0 and current_wind_power != 0.0:
 		var set_factor: float = 1.0
@@ -1332,25 +1411,32 @@ func shoot_dart() -> void:
 		var dir: Vector2 = current_wind_angle.normalized()
 		var wind_displacement: Vector2 = dir * displacement_mag
 		
-		print("wind: set=", set_num,
+		OpLog.i(LOG_TAG, [
+			"shot_wind set=", set_num,
 			" power=", current_wind_power,
-			" rings_offset=", rings_offset,
-			" displacement_mag=", displacement_mag,
+			" ringsOffset=", rings_offset,
+			" displacement=", displacement_mag,
 			" dir=", dir,
-			" disp=", wind_displacement)
+			" disp=", wind_displacement
+		])
 		
 		var shot_pos_2d: Vector2 = Vector2(shot_pos.x, shot_pos.y) + wind_displacement
 		shot_pos = Vector3(shot_pos_2d.x, shot_pos_2d.y, shot_pos.z)
-		print("final shot pos (with wind): " + str(shot_pos))
+		OpLog.i(LOG_TAG, ["shot_final pos=", shot_pos])
 	else:
-		print("shoot_dart: wind not applied (angle len="
-			+ str(current_wind_angle.length())
-			+ ", power=" + str(current_wind_power) + ")")
+		dbg(["shot_wind_not_applied angleLen=", current_wind_angle.length(), " power=", current_wind_power])
 
 	var shot_arrow := current_arrow
 	shot_arrow.shoot(shot_pos, func() -> void:
 		var pts: int = target.calc_score(shot_arrow)
 		var hit_pos: Vector3 = shot_arrow.global_transform.origin
+		
+		OpLog.i(LOG_TAG, [
+			"shot_score points=", pts,
+			" hitPos=", shot_arrow.global_transform.origin,
+			" shot=", num_shots,
+			" set=", set_num
+		])
 
 		_spawn_score_popup(hit_pos, pts, _get_score_color(pts))
 
@@ -1367,6 +1453,7 @@ func shoot_dart() -> void:
 	cam_follow_dart()
 	shots.append(shot_arrow)
 	moves.append(shot_pos)
+	OpLog.i(LOG_TAG, ["shot_recorded moves=", moves.size(), " pos=", shot_pos])
 	current_arrow = null
 	
 func reset_aim_tween() -> void:
@@ -1379,7 +1466,7 @@ func reset_aim_tween() -> void:
 
 func _spawn_score_popup(world_pos: Vector3, amount: int, color: Color) -> void:
 	if not is_instance_valid(target) or not is_instance_valid(camera):
-		print("SPAWN POPUP 3D: missing target or camera")
+		OpLog.w(LOG_TAG, "score_popup skipped missing target or camera")
 		return
 
 	var popup := Label3D.new()
@@ -1415,7 +1502,7 @@ func _spawn_score_popup(world_pos: Vector3, amount: int, color: Color) -> void:
 	var start_local: Vector3 = parent_3d.to_local(start_world)
 	popup.position = start_local
 
-	print("SPAWN POPUP 3D: world_pos=", world_pos, " final_world=", final_world, " start_local=", start_local, " amount=", amount)
+	dbg(["score_popup amount=", amount, " world=", world_pos, " final=", final_world])
 
 	var end_local: Vector3 = start_local + Vector3(0.0, 0.35, 0.0)
 
@@ -1444,7 +1531,7 @@ func convert_to_float_arr(cstr: String) -> Array[float]:
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
-		print("Warning: sent_label is not valid for play_sent_animation.")
+		OpLog.w(LOG_TAG, "play_sent_animation skipped: sent_label invalid")
 		return
 	
 	if sent_tween and sent_tween.is_running():

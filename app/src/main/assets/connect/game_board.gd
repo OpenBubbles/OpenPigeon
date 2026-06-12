@@ -73,6 +73,7 @@ func _get_rules_title() -> String:
 	return "Four In A Row"
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
 
 	OpLog.i(LOG_TAG, [

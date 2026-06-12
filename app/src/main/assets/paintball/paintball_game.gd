@@ -42,6 +42,8 @@ const PBShots := preload("res://paintball/paintball_shots.gd")
 const PBState := preload("res://paintball/paintball_state.gd")
 const PBUI := preload("res://paintball/paintball_ui.gd")
 
+const LOG_TAG := "Paintball"
+
 var buttons
 var replay
 var round_mgr
@@ -229,6 +231,7 @@ Pick where to move and where to shoot. Try to hit your opponent before they hit 
 """
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	_build_modules()
 
 	buttons.setup(self)

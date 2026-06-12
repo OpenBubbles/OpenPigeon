@@ -104,6 +104,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		dbg("unhandled_click pos=%s" % str(event.position))
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	game_settings_category = SettingsManager.get_game_name_from_path(get_tree().current_scene.scene_file_path)
 	OpLog.i(LOG_TAG, ["game_ready settings_category=", game_settings_category])
 

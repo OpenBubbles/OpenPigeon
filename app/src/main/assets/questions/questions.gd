@@ -85,6 +85,7 @@ Player 1 tries to guess Player 2's secret answer in 20 questions or less.
 """
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		_my_avatar_string = player_avatar_display.get_avatar_data_string()
 

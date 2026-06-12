@@ -73,6 +73,7 @@ func _get_rules_title() -> String:
 	return "Gomoku"
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	_rng.randomize()
 	_tile_tex = load(TILE_TEXTURE_PATH)
 

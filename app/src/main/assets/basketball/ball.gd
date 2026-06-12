@@ -1,6 +1,13 @@
 extends RigidBody3D
 class_name BasketballBall
 
+const LOG_TAG := "BasketballBall"
+const DEBUG_BASKETBALL_BALL := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_BASKETBALL_BALL:
+		OpLog.d(LOG_TAG, parts)
+
 var didGoInReplay = null
 
 var player = null
@@ -35,10 +42,19 @@ func _physics_process(delta: float) -> void:
 			
 				self.linear_velocity = Vector3(x_nudge, -2.5, 0)
 			didHitHoop = true
+			dbg(["upper_hoop_contact player=", player, " pos=", position, " vel=", linear_velocity, " replay=", str(didGoInReplay)])
 		elif "HoopCollisionSphere" in node.name:
 			self.physics_material_override.bounce = 0.6
 			self.linear_velocity = Vector3(0.0, -2.5, 0)
 			if didGoIn == false and (didGoInReplay == null or didGoInReplay == true):
+				OpLog.i(LOG_TAG, [
+					"hoop_score_contact player=", player,
+					" shotAt=", shotAt,
+					" shotX=", shotX,
+					" pos=", position,
+					" vel=", linear_velocity,
+					" replay=", str(didGoInReplay)
+				])
 				BasketballGame.incrementScore(player)
 			didHitHoop = true
 			didGoIn = true
@@ -52,10 +68,21 @@ func set_didGoInReplay(val: bool):
 func shoot(x_delta: float) -> void:
 	shotAt = BasketballGame.elapsedTime
 	shotX = x_delta
-	var x_force = self.position.x + shotX
+	var x_force: float = self.position.x + shotX
+	var raw_x_force: float = x_force
 	
 	if player != BasketballGame.player:
 		x_force *= -1
+		
+	OpLog.i(LOG_TAG, [
+		"shoot player=", player,
+		" localPlayer=", BasketballGame.player,
+		" shotAt=", shotAt,
+		" shotX=", shotX,
+		" rawXForce=", raw_x_force,
+		" finalXForce=", x_force,
+		" pos=", position
+	])
 
 	self.axis_lock_angular_x = false
 	self.axis_lock_angular_y = false
@@ -76,11 +103,26 @@ func shoot(x_delta: float) -> void:
 	timer.start()
 
 func despawn() -> void:
-	#failsafe in case one misses for some reason
+	# failsafe in case one misses for some reason
 	if didGoInReplay == true and didGoIn == false:
+		OpLog.w(LOG_TAG, [
+			"despawn_replay_score_failsafe player=", player,
+			" shotAt=", shotAt,
+			" shotX=", shotX,
+			" pos=", position
+		])
 		BasketballGame.incrementScore(player)
 		
 	if didGoInReplay == null:
-		BasketballGame.myReplay += str(int(shotAt * 60.0)) + "," + str("%0.3f" % shotX) + ",0," + str(1 if didGoIn else 0) + "|"
+		var replay_entry := str(int(shotAt * 60.0)) + "," + str("%0.3f" % shotX) + ",0," + str(1 if didGoIn else 0)
+		OpLog.i(LOG_TAG, [
+			"shot_finished player=", player,
+			" replayEntry=", replay_entry,
+			" didHitHoop=", didHitHoop,
+			" didGoIn=", didGoIn
+		])
+		BasketballGame.myReplay += replay_entry + "|"
+	else:
+		dbg(["replay_ball_despawn player=", player, " didGoIn=", didGoIn, " expected=", didGoInReplay])
 	queue_free()
 		

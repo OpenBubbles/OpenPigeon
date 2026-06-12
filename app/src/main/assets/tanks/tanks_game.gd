@@ -40,6 +40,8 @@ const HEALTH_TEX := {
 	3: preload("res://tanks/tanks_health_3.png"),
 }
 
+const LOG_TAG := "Tanks"
+
 const TANK1_COLOR := Color(0.25, 0.55, 1.0, 1.0) # Blue
 const TANK2_COLOR := Color(1.0, 0.25, 0.25, 1.0) # Red
 
@@ -96,6 +98,7 @@ func _get_rules_title() -> String:
 	return "Tanks"
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	core = TanksCore.new()
 	add_child(core)
 

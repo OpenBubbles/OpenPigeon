@@ -23,6 +23,39 @@ var black_normal_texture := preload("res://checkers/checker_black.png")
 var red_normal_texture := preload("res://checkers/checker_red.png")
 const MUSIC_STREAM := preload("res://global/audio/checkers.ogg")
 
+const LOG_TAG := "Checkers"
+var DEBUG_CHECKERS := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_CHECKERS:
+		OpLog.d(LOG_TAG, parts)
+
+func _piece_summary() -> String:
+	var red := 0
+	var black := 0
+	var red_kings := 0
+	var black_kings := 0
+
+	if pieces_root == null:
+		return "red=0 redK=0 black=0 blackK=0"
+
+	for child in pieces_root.get_children():
+		var piece := child as Sprite2D
+		if piece == null or not is_instance_valid(piece) or piece.name.begins_with("_captured_"):
+			continue
+
+		var color := get_piece_color(piece)
+		if color == "red":
+			red += 1
+			if is_checker_king(piece):
+				red_kings += 1
+		elif color == "black":
+			black += 1
+			if is_checker_king(piece):
+				black_kings += 1
+
+	return "red=%d redK=%d black=%d blackK=%d" % [red, red_kings, black, black_kings]
+
 var ui_piece_textures := {
 	"red": preload("res://checkers/checker_red.png"),
 	"black": preload("res://checkers/checker_black.png")
@@ -66,6 +99,7 @@ func _get_dev_data() -> String:
 	return '{"isYourTurn":1,"player":"1","replay":"board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|move:6,5,7,4|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0"}'
 
 func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_bg_for_dark(is_dark)
 	if is_instance_valid(board):
@@ -233,9 +267,14 @@ func _current_board_string() -> String:
 
 func _on_send_pressed() -> void:
 	if input_locked:
+		dbg("send_pressed blocked input_locked")
 		return
+
 	if not has_moved or prev_moves.size() < 2:
+		dbg(["send_pressed blocked hasMoved=", has_moved, " prevMoves=", prev_moves.size()])
 		return
+
+	OpLog.i(LOG_TAG, ["send_pressed moves=", prev_moves.size() / 2])
 
 	isTurn = false
 	_animate_send_button(false)
@@ -243,6 +282,7 @@ func _on_send_pressed() -> void:
 
 func send_game_checkers() -> void:
 	if prev_moves.size() < 2:
+		OpLog.w(LOG_TAG, ["send_game_checkers skipped prevMoves=", prev_moves.size()])
 		return
 
 	var steps: Array = []	# each = { "kind": "move"/"attack", "A1": Vector2i, "A2": Vector2i }
@@ -309,7 +349,9 @@ func send_game_checkers() -> void:
 	if wl != "":
 		payload["winner"] = my_player + "|" + ("1" if wl == "win" else "-1")
 
-	send_game_data(JSON.stringify(payload))
+	var out_json := JSON.stringify(payload)
+	OpLog.event(LOG_TAG, ["send_game_out steps=", steps.size(), " winLoss=", wl, " gameOver=", game_is_over, " raw=", out_json])
+	send_game_data(out_json)
 
 	if game_is_over or wl != "":
 		game_over = true
@@ -814,6 +856,7 @@ func _try_commit_move(piece: Sprite2D, to_lx: int, to_ly: int) -> void:
 	_stop_all_jump_pulses(piece)
 
 	var was_jump: bool = abs(from_pos.x - to_lx) == 2 and abs(from_pos.y - to_ly) == 2
+	dbg(["commit_move from=", from_pos, " to=", target, " jump=", was_jump])
 
 	prev_moves.append(Vector2(from_pos.x, from_pos.y))
 	prev_moves.append(Vector2(to_lx, to_ly))
@@ -863,6 +906,7 @@ func _try_commit_move(piece: Sprite2D, to_lx: int, to_ly: int) -> void:
 	input_locked = false
 	
 func _rebuild_from_replay() -> void:
+	OpLog.i(LOG_TAG, ["rebuild_start turn=", isTurn, " spectator=", spectator_mode, " replayLen=", replay.length(), " boards=", replay.count("board:"), " moves=", replay.count("move:") + replay.count("attack:")])
 	replay_locked = true
 	input_locked = true
 
@@ -903,6 +947,8 @@ func _rebuild_from_replay() -> void:
 		initial_board = final_board
 	if final_board.is_empty() and not initial_board.is_empty():
 		final_board = initial_board
+	if initial_board.is_empty():
+		OpLog.w(LOG_TAG, ["rebuild has no board entries raw=", replay])
 
 	if not initial_board.is_empty():
 		for ay in range(8):
@@ -928,6 +974,7 @@ func _rebuild_from_replay() -> void:
 		var kind: String = parts[0]
 		var p := parts[1].split(",")
 		if p.size() < 4:
+			OpLog.w(LOG_TAG, ["rebuild skipped malformed move=", move_entry])
 			continue
 
 		var src_l: Vector2i = _abs_to_logical(int(p[0]), int(p[1]))
@@ -935,6 +982,7 @@ func _rebuild_from_replay() -> void:
 
 		var moved := get_node_or_null("PiecesRoot/%d,%d" % [src_l.x, src_l.y]) as Sprite2D
 		if moved == null:
+			OpLog.w(LOG_TAG, ["rebuild missing source piece move=", move_entry, " src=", src_l])
 			continue
 
 		var move_tw: Tween = move_piece(moved, dst_l.x, dst_l.y, 0.0)
@@ -981,6 +1029,8 @@ func _rebuild_from_replay() -> void:
 			stop_waiting_animation()
 		else:
 			start_waiting_animation()
+			
+	OpLog.i(LOG_TAG, ["rebuild_done moves=", replay_moves.size(), " gameOver=", game_over, " mustJump=", must_jump, " ", _piece_summary()])
 
 	replay_locked = false
 	input_locked = false
@@ -1036,11 +1086,12 @@ func _clear_selected_highlight() -> void:
 		selected_highlight.visible = false
 		
 func _set_game_data(new_replay: String) -> void:
+	OpLog.event(LOG_TAG, ["set_game_data_in raw=", new_replay])
 	var data_raw: Variant = JSON.parse_string(new_replay)
 	if typeof(data_raw) != TYPE_DICTIONARY:
+		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", new_replay])
 		return
 	var data: Dictionary = data_raw
-	print("RAW GAME DATA: ", data_raw)
 
 	isTurn = bool(data.get("isYourTurn", false))
 	replay = String(data.get("replay", ""))
@@ -1091,6 +1142,7 @@ func _set_game_data(new_replay: String) -> void:
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
 	waitingForOpponent = not isTurn
+	OpLog.i(LOG_TAG, ["set_game_data parsed turn=", isTurn, " player=", player, " sender=", data_sender, " spectator=", spectator_mode, " mode=", mode, " replayLen=", replay.length(), " boards=", replay.count("board:"), " moves=", replay.count("move:") + replay.count("attack:")])
 	_apply_player_piece_icons()
 	call_deferred("_rebuild_from_replay")
 	
@@ -1142,6 +1194,7 @@ func export_replay() -> String:
 	var boardStr := ",".join(board_values)
 
 	var move_str := "|"
+	var step_count := prev_moves.size() / 2
 	for i in range(0, prev_moves.size(), 2):
 		var p1: Vector2 = prev_moves[i]
 		var p2: Vector2 = prev_moves[i + 1]
@@ -1165,7 +1218,9 @@ func export_replay() -> String:
 	var wl := check_win_loss()
 	if wl != "":
 		result["winner"] = my_player + "|" + ("1" if wl == "win" else "-1")
-	return JSON.stringify(result)
+	var out_json := JSON.stringify(result)
+	OpLog.event(LOG_TAG, ["export_replay_out steps=", step_count, " winLoss=", wl, " raw=", out_json])
+	return out_json
 
 func check_win_loss() -> String:
 	var num_your_pieces := 0

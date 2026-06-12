@@ -60,7 +60,7 @@ static func board_to_gp_array(board: Array) -> String:
 static func gp_array_to_board(gp_array_str: String) -> Array:
 	var pieces: PackedStringArray = gp_array_str.split(",")
 	if pieces.size() != 64:
-		push_warning("ChessNotation.gp_array_to_board: invalid array size=%d (expected 64)" % pieces.size())
+		ChessDebug.warn("ChessNotation.gp_array_to_board: invalid array size=%d (expected 64)" % pieces.size(), "NOTATION")
 		return []
 
 	var board: Array = []

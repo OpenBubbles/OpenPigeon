@@ -5,6 +5,13 @@ class_name Arrow
 
 const MISS_Z_OFFSET: float = -10.0
 
+const LOG_TAG := "Arrow"
+const DEBUG_ARROW := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_ARROW:
+		OpLog.d(LOG_TAG, parts)
+
 func spawn() -> Arrow:
 	var new_arrow: Arrow = duplicate() as Arrow
 	new_arrow.position = Vector3(0.086, 1.586, 1.373)
@@ -16,9 +23,11 @@ func spawn() -> Arrow:
 	
 
 func shoot(pos: Vector3, callback: Callable) -> void:
-	print("shot at " + str(pos))
+	OpLog.i(LOG_TAG, ["shoot targetPos=", pos, " startPos=", global_position])
 
 	var missed_target := false
+	
+	OpLog.i(LOG_TAG, ["shoot_miss_outside_target adjustedPos=", pos])
 
 	if is_instance_valid(target):
 		if (pos.x < -0.9 or pos.x > 0.9) or (pos.y < 0.45 or pos.y > 2.26):
@@ -46,6 +55,7 @@ func shoot(pos: Vector3, callback: Callable) -> void:
 	fly_tween.tween_property(visual_root, "rotation:x", spin_start + TAU * 0.75, 0.5).set_trans(Tween.TRANS_LINEAR)
 	fly_tween.tween_property(self, "position", pos, 0.5)
 	fly_tween.connect("finished", func() -> void:
+		OpLog.i(LOG_TAG, ["shoot_finished pos=", global_position, " missed=", missed_target])
 		callback.call()
 
 		if missed_target:

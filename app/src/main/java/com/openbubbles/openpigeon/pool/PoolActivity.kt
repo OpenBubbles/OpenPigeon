@@ -70,6 +70,29 @@ class PoolActivity : AppCompatActivity() {
     private lateinit var settingsSheet: SettingsSheet
     private var darkMode = false
 
+    private var gameOpenedLogged = false
+
+    private fun logGameOpened(msg: Map<String, String>) {
+        if (gameOpenedLogged) return
+        gameOpenedLogged = true
+
+        val gameName = msg["game"] ?: msg["name"] ?: msg["gameName"] ?: baseGame.getName()
+        val mode = msg["mode"] ?: "n"
+
+        val title = when (gameName) {
+            "pool2" -> "9 Ball"
+            "pool3" -> "8 Ball+"
+            else -> "8 Ball"
+        }
+
+        val difficulty = if (mode == "h") "Hard" else "Normal"
+
+        OpenPigeonLog.title(
+            "Pool",
+            title,
+            "difficulty=$difficulty replayLen=${msg["replay"]?.length ?: 0} player=${msg["player"].orEmpty()} num=${msg["num"].orEmpty()}"
+        )
+    }
     private var musicEnabled = false
     private var musicTrack: AudioTrack? = null
     private var currentMusicTrackPath: String? = null
@@ -1322,6 +1345,8 @@ class PoolActivity : AppCompatActivity() {
             this.gameSessionIPC = gameSessionIPC
             val currentMessage = gameSessionIPC.getCurrentMessage(sessionId)
             if (currentMessage.isNotEmpty()) {
+                logGameOpened(currentMessage)
+
                 gameSessionIPC.lockMsgHandle(sessionId)
                 gameSessionIPC.setSuppressNotifications(sessionId, true)
                 gameSessionIPC.onMessageUpdated(sessionId) {

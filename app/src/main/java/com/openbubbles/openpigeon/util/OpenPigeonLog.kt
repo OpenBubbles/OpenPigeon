@@ -18,6 +18,9 @@ object OpenPigeonLog {
     private val formatter = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
     private val entries = ArrayDeque<Entry>()
 
+    private var lastTitleKey: String = ""
+    private var lastTitleMs: Long = 0L
+
     private data class Entry(
         val timeMs: Long,
         val level: String,
@@ -29,6 +32,35 @@ object OpenPigeonLog {
     fun event(tag: String, message: String) {
         add("EVENT", tag, message)
         Log.i(tag, message)
+    }
+
+    @Synchronized
+    fun title(tag: String, titleText: String, details: String = "") {
+        val now = System.currentTimeMillis()
+        val key = "$tag|$titleText"
+
+        // Avoid duplicate title blocks if an Activity initializes twice quickly.
+        if (key == lastTitleKey && now - lastTitleMs < 1000L) {
+            return
+        }
+
+        lastTitleKey = key
+        lastTitleMs = now
+
+        val stamp = formatter.format(Date(now))
+
+        event(tag, "============================================================")
+        if (details.isBlank()) {
+            event(tag, "GAME OPENED: $titleText | $stamp")
+        } else {
+            event(tag, "GAME OPENED: $titleText | $stamp | $details")
+        }
+        event(tag, "============================================================")
+    }
+
+    @Synchronized
+    fun gameOpened(gameName: String, details: String = "") {
+        title(gameName, gameName, details)
     }
 
     @Synchronized

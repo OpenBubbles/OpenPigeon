@@ -44,7 +44,7 @@ class Crazy8Game : Game {
             put("room", "$id${annendum}")
             put("avatar2", AvatarView.buildAvatarString())
         }
-        OpenPigeonLog.i("what", data.toString())
+        OpenPigeonLog.i("Crazy8", "new_game_data roomPresent=${data?.containsKey("room") == true} avatar2=${data?.containsKey("avatar2") == true}")
         return data
     }
 
