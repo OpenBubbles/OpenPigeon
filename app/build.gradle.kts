@@ -179,18 +179,12 @@ val importGodotAssets by tasks.registering(Exec::class) {
 
     outputs.dir(godotHiddenFolder)
 
-    outputs.upToDateWhen { false }
-
-    doFirst {
-        delete(godotProjectDir.dir(".godot/editor").asFile)
-    }
-
     commandLine(
         godotCmd,
         "--headless",
         "--path",
         godotProjectDir.asFile.absolutePath,
-        "--import",
+        "--editor",
         "--quit"
     )
 }
@@ -208,10 +202,6 @@ val prepareGodotDebugAssets by tasks.registering(Sync::class) {
     into(debugGodotAssetsDir)
 
     includeEmptyDirs = false
-
-    doFirst {
-        delete(debugGodotAssetsDir.get().asFile)
-    }
 }
 
 /**
