@@ -142,9 +142,11 @@ func _get_settings_avatar_display() -> Control:
 
 func _get_rules_title() -> String:
 	return "Tanks"
+	
+func _ensure_core() -> void:
+	if core != null:
+		return
 
-func _on_game_ready() -> void:
-	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	core = TanksCore.new()
 	add_child(core)
 
@@ -155,6 +157,10 @@ func _on_game_ready() -> void:
 	core.replay_action.connect(_on_replay_action)
 	core.outbound_ready.connect(_send_payload)
 	core.opponent_avatar_ready.connect(_on_opponent_avatar_received)
+
+func _on_game_ready() -> void:
+	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
+	_ensure_core()
 
 	if is_instance_valid(fire_button):
 		if not fire_button.pressed.is_connected(_on_send_pressed):
@@ -227,7 +233,7 @@ func _set_game_data(raw_text: String) -> void:
 		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", raw_text])
 		return
 
-	var data: Dictionary = parsed
+	var data: Dictionary = parsed as Dictionary
 
 	if my_uuid != "":
 		data["myPlayerId"] = my_uuid
@@ -258,6 +264,8 @@ func _set_game_data(raw_text: String) -> void:
 		win_loss_label.text = ""
 		win_loss_label.scale = Vector2.ONE
 		win_loss_label.modulate.a = 1.0
+		
+	_ensure_core()
 
 	core.ingest_game_data(JSON.stringify(data))
 	OpLog.i(LOG_TAG, ["set_game_data core_ingested ", _state_summary()])
