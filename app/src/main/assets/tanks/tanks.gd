@@ -1,6 +1,13 @@
 extends Node2D
 class_name Tank
 
+const LOG_TAG := "Tank"
+const DEBUG_TANK_NODE := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_TANK_NODE:
+		OpLog.d(LOG_TAG, parts)
+
 @onready var body: Sprite2D = %Body
 @onready var barrel_pivot: Node2D = %BarrelPivot
 @onready var barrel_sprite: Sprite2D = %Barrel
@@ -38,6 +45,7 @@ func set_power(power_val: float) -> void:
 
 func set_barrel_display_deg(display_deg: float) -> void:
 	_display_deg = clamp(display_deg, min_display_deg, max_display_deg)
+	dbg(["set_barrel name=", name, " requested=", display_deg, " clamped=", _display_deg])
 
 	barrel_pivot.rotation_degrees = (-_display_deg) + art_zero_offset_deg
 

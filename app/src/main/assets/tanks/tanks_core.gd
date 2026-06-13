@@ -1,6 +1,37 @@
 extends Node
 class_name TanksCore
 
+const LOG_TAG := "TanksCore"
+const DEBUG_TANKS_CORE := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_TANKS_CORE:
+		OpLog.d(LOG_TAG, parts)
+
+func _replay_summary(raw: String) -> String:
+	return "len=%d boards=%d shoots=%d" % [
+		raw.length(),
+		raw.count("board:"),
+		raw.count("shoot:")
+	]
+
+func _board_summary(board: Dictionary) -> String:
+	if board.is_empty():
+		return "empty"
+
+	return "height=%s wind=%s hp1=%s hp2=%s t1x=%s t2x=%s t1rot=%s t2rot=%s t1p=%s t2p=%s" % [
+		str(board.get("height", "")),
+		str(board.get("wind", "")),
+		str(board.get("tank1hp", "")),
+		str(board.get("tank2hp", "")),
+		str(board.get("tank1x", "")),
+		str(board.get("tank2x", "")),
+		str(board.get("tank1rot", "")),
+		str(board.get("tank2rot", "")),
+		str(board.get("tank1power", "")),
+		str(board.get("tank2power", ""))
+	]
+
 signal opponent_avatar_ready(avatar_data: Dictionary)
 signal state_changed
 signal board_loaded(board: Dictionary)
@@ -41,10 +72,13 @@ var _my_power: float = 0.5
 
 func ingest_game_data(raw_text: String) -> void:
 	var res: Variant = JSON.parse_string(raw_text)
-	print("RAW INCOMING DATA: ", res)
 	var opponent_avatar_key = ""
+
 	if typeof(res) != TYPE_DICTIONARY:
+		OpLog.e(LOG_TAG, ["ingest invalid JSON raw=", raw_text])
 		return
+
+	dbg(["ingest raw=", raw_text])
 
 	var d: Dictionary = _normalize_incoming_dict(res as Dictionary)
 
@@ -66,7 +100,13 @@ func ingest_game_data(raw_text: String) -> void:
 		opponent_avatar_key = "avatar2"
 	else:
 		opponent_avatar_key = "avatar1"
-	print("Player: ", player, " | Opponent Avatar Key: ", opponent_avatar_key)
+	OpLog.i(LOG_TAG, [
+		"player_resolve player=", player,
+		" spectator=", spectator_mode,
+		" isYourTurn=", is_your_turn,
+		" turnOwner=", turn_owner,
+		" opponentAvatarKey=", opponent_avatar_key
+	])
 	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
 		var avatar_string = res[opponent_avatar_key]
 		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
@@ -75,6 +115,14 @@ func ingest_game_data(raw_text: String) -> void:
 	steps = _parse_replay(replay_raw)
 	current_board = _find_first_board(steps)
 	_post_shot_board = _find_post_shot_board(steps)
+	
+	OpLog.i(LOG_TAG, [
+		"ingest replay ", _replay_summary(replay_raw),
+		" steps=", steps.size(),
+		" hasWinner=", not winner.is_empty(),
+		" board={", _board_summary(current_board), "}",
+		" postShot={", _board_summary(_post_shot_board), "}"
+	])
 
 	is_my_turn = is_your_turn
 	has_replay = replay_raw.contains("shoot:1")
@@ -188,9 +236,16 @@ func _get_data_deg_for_send(rads: float) -> float:
 	
 func request_send(my_avatar_str: String = "") -> void:
 	var payload: Dictionary = build_outbound_payload(my_avatar_str)
-	print("RAW OUTGOING DATA: ", payload)
 	if payload.is_empty():
+		OpLog.w(LOG_TAG, "request_send skipped empty payload")
 		return
+
+	OpLog.event(LOG_TAG, [
+		"core_outbound_ready replay=", _replay_summary(String(payload.get("replay", ""))),
+		" avatar1=", payload.has("avatar1"),
+		" avatar2=", payload.has("avatar2"),
+		" raw=", JSON.stringify(payload)
+	])
 
 	var safe_payload: Dictionary = payload.duplicate(true)
 
@@ -212,10 +267,13 @@ func send_modified_payload(modified_payload: Dictionary = {}) -> void:
 	_pending_outbound_payload.clear()
 
 	if final_payload.is_empty():
-		print("send_modified_payload: no payload to send")
+		OpLog.w(LOG_TAG, "send_modified_payload skipped empty payload")
 		return
 
-	print("FINAL OUTGOING DATA: ", final_payload)
+	OpLog.event(LOG_TAG, [
+		"core_modified_outbound replay=", _replay_summary(String(final_payload.get("replay", ""))),
+		" raw=", JSON.stringify(final_payload)
+	])
 	_emit_outbound_ready_deferred(final_payload)
 	
 func cancel_pending_payload() -> void:

@@ -67,7 +67,12 @@ func compute_player_hit_debug(impact_world: Vector3) -> bool:
 	var impact_lane: ActionButton3D.Lane = nearest_lane_from_x(impact_world.x)
 	var hit: bool = (impact_lane == g._opp_reveal_lane)
 
-	print("[HITCHECK][PLAYER] impact_x=", impact_world.x, " impact_lane=", impact_lane, " opp_reveal_lane=", g._opp_reveal_lane, " => hit=", hit)
+	OpLog.i("Paintball", [
+		"player_hitcheck impactX=", impact_world.x,
+		" impactLane=", int(impact_lane),
+		" oppRevealLane=", int(g._opp_reveal_lane),
+		" hit=", hit
+	])
 	return hit
 
 func get_muzzle_screen_pos() -> Vector2:
@@ -92,25 +97,25 @@ func get_muzzle_screen_pos() -> Vector2:
 
 func fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached: Callable = Callable()) -> Vector3:
 	if g == null:
-		print("[SHOT] ERROR: game owner is null.")
+		OpLog.e("Paintball", "shot skipped: game owner is null")
 		return Vector3.ZERO
 
 	if not is_instance_valid(g.cam):
-		print("[SHOT] ERROR: cam invalid, cannot fire.")
+		OpLog.e("Paintball", "shot skipped: camera invalid")
 		return Vector3.ZERO
 
 	if g.PAINTBALL_SCENE == null:
-		print("[SHOT] ERROR: PAINTBALL_SCENE is null.")
+		OpLog.e("Paintball", "shot skipped: PAINTBALL_SCENE is null")
 		return Vector3.ZERO
 
 	var inst: Node = g.PAINTBALL_SCENE.instantiate()
 
 	if inst == null:
-		print("[SHOT] ERROR: PaintballProjectile instantiate returned null.")
+		OpLog.e("Paintball", "shot skipped: PaintballProjectile instantiate returned null")
 		return Vector3.ZERO
 
 	if not (inst is PaintballProjectile):
-		print("[SHOT] ERROR: PaintballProjectile scene root is not PaintballProjectile. root=", inst, " script=", inst.get_script())
+		OpLog.e("Paintball", ["shot skipped: scene root is not PaintballProjectile root=", inst, " script=", inst.get_script()])
 		inst.queue_free()
 		return Vector3.ZERO
 
@@ -121,7 +126,10 @@ func fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached: 
 
 	if is_enemy:
 		if not is_instance_valid(g.opponent_sprite):
-			print("[SHOT] ERROR: opponent_sprite invalid for enemy shot.")
+			if not is_instance_valid(g.opponent_sprite):
+				print("[SHOT] ERROR: opponent_sprite invalid for enemy shot.")
+				ball.queue_free()
+				return Vector3.ZERO
 			ball.queue_free()
 			return Vector3.ZERO
 
@@ -139,12 +147,13 @@ func fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached: 
 		tt = maxf(tt, 0.35)
 		muzzle_world = ray_origin + ray_dir * tt
 
-	print("[SHOT] launch is_enemy=", is_enemy,
+	OpLog.i("Paintball", [
+		"shot_launch enemy=", is_enemy,
 		" muzzle=", muzzle_world,
 		" target=", target_fixed,
-		" player_z=", (g.player.global_position.z if is_instance_valid(g.player) else 0.0),
-		" opp_z=", (g.opponent_sprite.global_position.z if is_instance_valid(g.opponent_sprite) else 0.0)
-	)
+		" playerZ=", g.player.global_position.z if is_instance_valid(g.player) else 0.0,
+		" oppZ=", g.opponent_sprite.global_position.z if is_instance_valid(g.opponent_sprite) else 0.0
+	])
 
 	ball.scale = Vector3.ONE * g._paintball_scale
 	ball.speed = (g.ball_speed * 2.25) if is_enemy else g.ball_speed
@@ -215,7 +224,7 @@ func fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached: 
 			break
 
 	if box["got"] != true:
-		print("[SHOT] WARNING: reached_plane timeout after ", timeout_s, "s. Forcing impact.")
+		OpLog.w("Paintball", ["shot_timeout timeout=", timeout_s, " forcedImpact=", target_fixed])
 		box["got"] = true
 		box["impact"] = target_fixed
 

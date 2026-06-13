@@ -52,7 +52,7 @@ func reveal_opponent_sprite() -> void:
 		return
 
 	g._opp_reveal_lane = _nearest_lane_from_x(g.opponent_sprite.global_position.x)
-	print("[OPP] Reveal start. Opp lane=", g._opp_reveal_lane, " opp_x=", g.opponent_sprite.global_position.x)
+	OpLog.i("Paintball", ["opponent_reveal lane=", int(g._opp_reveal_lane), " oppX=", g.opponent_sprite.global_position.x])
 
 	var start_pos: Vector3 = g.opponent_sprite.global_position
 	var end_pos: Vector3 = start_pos + Vector3(0.0, absf(g._opp_sprite_reveal_offset_y), 0.0)
@@ -89,14 +89,7 @@ func fade_out_selected_aim_target() -> void:
 	)
 
 func restore_ui_after_round() -> void:
-	print("[DBG][ROUND_RESTORE_UI] BEFORE restore",
-		" pending_enemy=", g._pending_enemy_shot,
-		" opp_pos_enc=", g._opp_pos_enc,
-		" opp_target_enc=", g._opp_target_enc,
-		" segs=", g._replay_segments.size(),
-		" replay_playback=", g._is_replay_playback,
-		" replay_auto_pending=", g._replay_auto_pending
-	)
+	g.dbg(["round_restore_ui_before ", g._state_summary()])
 
 	if g.replay != null and g.replay.has_method("debug_dump_replay_queue"):
 		g.replay.debug_dump_replay_queue("ROUND_RESTORE_UI_BEFORE")
@@ -140,12 +133,7 @@ func restore_ui_after_round() -> void:
 
 	g._update_move_buttons()
 
-	print("[DBG][ROUND_RESTORE_UI] AFTER restore",
-		" pending_enemy=", g._pending_enemy_shot,
-		" opp_pos_enc=", g._opp_pos_enc,
-		" opp_target_enc=", g._opp_target_enc,
-		" segs=", g._replay_segments.size()
-	)
+	g.dbg(["round_restore_ui_after ", g._state_summary()])
 
 	if g.replay != null and g.replay.has_method("debug_dump_replay_queue"):
 		g.replay.debug_dump_replay_queue("ROUND_RESTORE_UI_AFTER")
@@ -154,24 +142,20 @@ func end_round_fade_and_restore_next_round() -> void:
 	if not is_instance_valid(g.fade_white) or not is_instance_valid(g.cam):
 		return
 
-	print("[DBG][ROUND_END] enter",
-		" replay_playback=", g._is_replay_playback,
-		" auto_pending=", g._replay_auto_pending,
-		" segs=", g._replay_segments.size()
-	)
+	OpLog.i("Paintball", ["round_end_fade_start ", g._state_summary()])
 
 	if g.replay != null and g.replay.has_method("debug_dump_replay_queue"):
 		g.replay.debug_dump_replay_queue("ROUND_END_ENTER")
 
-	print("[ROUND] Fade to white start")
+	g.dbg("round_fade_to_white_start")
 	g.fade_white.visible = true
 
 	var t_in: Tween = g.create_tween()
 	t_in.tween_property(g.fade_white, "color:a", 1.0, g._round_end_white_in).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 	await t_in.finished
-	print("[ROUND] White fully in")
+	g.dbg("round_white_fully_in")
 
-	print("[ROUND] Restoring camera + UI (while white)")
+	g.dbg("round_restore_camera_ui")
 	g.cam.fov = g._cam_start_fov
 	g.cam.global_transform = g._cam_start_xform
 
@@ -190,7 +174,7 @@ func end_round_fade_and_restore_next_round() -> void:
 	g._opp_target_enc = -1
 	g._opp_target_lane = ActionButton3D.Lane.CENTER
 	g._opp_target_world = Vector3.ZERO
-	print("[ROUND] Cleared opponent move state (_pending_enemy_shot=false, enc=-1)")
+	g.dbg("round_cleared_opponent_state")
 
 	restore_ui_after_round()
 
@@ -200,51 +184,40 @@ func end_round_fade_and_restore_next_round() -> void:
 	if is_instance_valid(g.fire_button):
 		g.fire_button.visible = false
 
-	print("[ROUND] Holding white for 0.5s")
+	g.dbg("round_holding_white")
 	await g.get_tree().create_timer(0.5).timeout
 
 	# =========================================================================
 	# MOVED LOGIC: Pop the replay chain and snap positions WHILE screen is white
 	# =========================================================================
-	print("[DBG][ROUND_END] before replay pop/chain",
-		" replay_playback=", g._is_replay_playback,
-		" auto_pending=", g._replay_auto_pending,
-		" segs=", g._replay_segments.size()
-	)
+	g.dbg("round_fade_out_start")
 	if g.replay != null and g.replay.has_method("debug_dump_replay_queue"):
 		g.replay.debug_dump_replay_queue("ROUND_END_BEFORE_POP")
 
 	if g.replay != null and g.replay.has_method("on_round_finished_pop_autoplayed_head_and_chain"):
 		g.replay.on_round_finished_pop_autoplayed_head_and_chain()
 
-	print("[DBG][ROUND_END] after replay pop/chain",
-		" replay_playback=", g._is_replay_playback,
-		" auto_pending=", g._replay_auto_pending,
-		" segs=", g._replay_segments.size(),
-		" pending_enemy=", g._pending_enemy_shot,
-		" opp_pos_enc=", g._opp_pos_enc,
-		" opp_target_enc=", g._opp_target_enc
-	)
+	g.dbg("round_fade_out_done")
 	
 	if g._replay_segments.size() == 0:
 		g._is_replay_playback = false
 		g._replay_auto_pending = false
-		print("[ROUND_END] Replay chain empty. is_replay_playback set to FALSE.")
+		OpLog.i("Paintball", "round_end replay_chain_empty")
 		
 	if g.replay != null and g.replay.has_method("debug_dump_replay_queue"):
 		g.replay.debug_dump_replay_queue("ROUND_END_AFTER_POP")
 	# =========================================================================
 
-	print("[ROUND] Fade out from white start")
+	g.dbg("round_fade_out_from_white_start")
 	var t_out: Tween = g.create_tween()
 	t_out.tween_property(g.fade_white, "color:a", 0.0, g._round_end_white_out).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 	await t_out.finished
 
-	print("[ROUND] Fade out complete, next round ready")
+	OpLog.i("Paintball", ["round_fade_out_done next_round_ready ", g._state_summary()])
 	
 func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	if g._round_sequence_running:
-		print("[ROUND] Sequence already running, abort duplicate call.")
+		OpLog.w("Paintball", ["round_sequence duplicate ignored ", g._state_summary()])
 		return
 
 	g._round_sequence_running = true
@@ -255,14 +228,16 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	var shoot_for_send: ActionButton3D = g._selected_shoot
 
 
-	print("[ROUND] ==============================")
-	print("[ROUND] Sequence start")
-	print("[ROUND] Player lane=", g._player_lane, " Selected shoot=", (g._selected_shoot.lane if g._selected_shoot != null else -1))
-	print("[ROUND] Opponent target lane=", g._opp_target_lane, " Opponent target world=", g._opp_target_world)
-	print("[ROUND] ==============================")
-
-	print("[ROUND][PLAYER] Step 1: Prep opp splat target + fire yellow shot")
-
+	OpLog.i("Paintball", [
+		"round_sequence_start wasReplay=", was_replay,
+		" suppressSend=", suppress_send,
+		" playerLane=", int(g._player_lane),
+		" selectedLane=", g._selected_shoot_lane(),
+		" oppTargetLane=", int(g._opp_target_lane),
+		" oppTargetWorld=", g._opp_target_world,
+		" ", g._state_summary()
+	])
+	
 	var shot_target: Vector3 = player_target_world
 
 	if g._opp_splat != null and is_instance_valid(g._opp_splat) and is_instance_valid(g.opponent_sprite):
@@ -298,21 +273,20 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 
 	var player_impact: Vector3 = await g.shots.fire_paintball_and_wait(shot_target, false)
 
-	print("[ROUND][PLAYER] Step 2: Determine hit/miss")
-
 	var opp_lane_for_hit: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
 	if g._opp_pos_enc != -1:
 		opp_lane_for_hit = g._enc_to_lane(g._opp_pos_enc)
 
 	g._player_hit_last = (g._selected_shoot != null and is_instance_valid(g._selected_shoot) and g._selected_shoot.lane == opp_lane_for_hit)
 
-	print("[HITCHECK][PLAYER] selected_lane=", (-1 if g._selected_shoot == null else int(g._selected_shoot.lane)),
-		" opp_pos_enc=", g._opp_pos_enc,
-		" opp_lane=", int(opp_lane_for_hit),
-		" => hit=", g._player_hit_last)
-
-	print("[ROUND][PLAYER] Result => hit=", g._player_hit_last)
-
+	OpLog.i("Paintball", [
+		"player_shot_result selectedLane=", g._selected_shoot_lane(),
+		" oppPosEnc=", g._opp_pos_enc,
+		" oppLane=", int(opp_lane_for_hit),
+		" hit=", g._player_hit_last,
+		" impact=", player_impact
+	])
+	
 	if g._player_hit_last:
 		if g._opp_splat != null and is_instance_valid(g._opp_splat):
 			if g._opp_splat_tween and g._opp_splat_tween.is_valid():
@@ -327,10 +301,10 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		g._hp_opp = clamp(g._hp_opp - 1, 0, 3)
 		g._apply_hearts_from_hp()
 
-	print("[ROUND][PLAYER] Step 3: Pause 1.0s before opponent returns fire")
+	g.dbg("round_pause_before_enemy")
 	await g.get_tree().create_timer(1.0).timeout
 
-	print("[ROUND][ENEMY] Step 4: Opponent recoil + fire red shot")
+	g.dbg("round_enemy_recoil_start")
 	await g.shots.play_opponent_recoil()
 
 	# Determine hit/miss FIRST using RAW enc (logic)
@@ -365,30 +339,23 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		cam_target.x += lane_x_offset
 		enemy_target_world = cam_target
 
-	print("[ROUND][ENEMY] Target lane=", g._opp_target_lane,
-		" raw_hit_enc=", my_hit_enc,
-		" enemy_hit_last=", g._enemy_hit_last,
-		" computed_target_world=", enemy_target_world
-	)
+	OpLog.i("Paintball", [
+		"enemy_shot_target targetLane=", int(g._opp_target_lane),
+		" rawHitEnc=", my_hit_enc,
+		" enemyHit=", g._enemy_hit_last,
+		" targetWorld=", enemy_target_world
+	])
 
-	print("[ROUND][ENEMY] Step 5: Fire red shot and wait until it passes us")
+	g.dbg("round_enemy_fire_wait_for_plane")
 	var _enemy_impact: Vector3 = await g.shots.fire_paintball_and_wait(enemy_target_world, true)
 
-	print("[ROUND][ENEMY] Step 6: Determine hit/miss (already computed)")
-	print("[HITCHECK][ENEMY] opp_target_enc=", g._opp_target_enc,
-		" my_hit_enc=", my_hit_enc,
-		" player_lane=", int(g._player_lane),
-		" => hit=", g._enemy_hit_last
-	)
-	print("[ROUND][ENEMY] Result => hit=", g._enemy_hit_last)
-
-
-	print("[HITCHECK][ENEMY] opp_target_enc=", g._opp_target_enc,
-		" my_hit_enc=", my_hit_enc,
-		" player_lane=", int(g._player_lane),
-		" => hit=", g._enemy_hit_last
-	)
-	print("[ROUND][ENEMY] Result => hit=", g._enemy_hit_last)
+	OpLog.i("Paintball", [
+		"enemy_shot_result oppTargetEnc=", g._opp_target_enc,
+		" myHitEnc=", my_hit_enc,
+		" playerLane=", int(g._player_lane),
+		" hit=", g._enemy_hit_last,
+		" impact=", _enemy_impact
+	])
 
 	if g._enemy_hit_last:
 		if g.ui != null:
@@ -396,22 +363,22 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 
 
 		g._hp_me = clamp(g._hp_me - 1, 0, 3)
-		print("ME HP: ", g._hp_me, " | OPP HP: ", g._hp_opp, " Comment 4")
+		OpLog.i("Paintball", ["enemy_hit_applied hpMe=", g._hp_me, " hpOpp=", g._hp_opp])
 		g._apply_hearts_from_hp()
 
-		print("[ROUND] Player was hit. Holding 2.0s before fade-to-white")
+		OpLog.i("Paintball", ["player_hit_hold_before_fade hpMe=", g._hp_me, " hpOpp=", g._hp_opp])
 		_end_round_sequence()
 		await g.get_tree().create_timer(2.0).timeout
 
 	g.game_ended = g.check_win()
 	if g.game_ended:
-		print("End Valid")
+		OpLog.i("Paintball", ["round_sequence game_end_detected ", g._state_summary()])
 		g.game_over = true
 		if g.winner == "":
 			g.send_game(true)
 		return
 
-	print("[ROUND] Step 7: End of round fade/restore")
+	OpLog.i("Paintball", ["round_end_fade_restore ", g._state_summary()])
 	_end_round_sequence()
 	await end_round_fade_and_restore_next_round()
 
@@ -420,9 +387,9 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		g._require_new_shoot_selection = (g._selected_shoot == null)
 
 		if suppress_send:
-			print("[ROUND] Completed queued partial head. Not sending. Waiting for next selection.")
+			OpLog.i("Paintball", ["round_done queued_partial_no_send ", g._state_summary()])
 		else:
-			print("[ROUND] Live turn complete. Sending new data to server.")
+			OpLog.i("Paintball", ["round_done live_turn_send ", g._state_summary()])
 			g.send_game()
 			g._selected_shoot = null
 			g._require_new_shoot_selection = true
@@ -434,37 +401,30 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 		g._opp_target_world = Vector3.ZERO
 		g._opp_target_lane = ActionButton3D.Lane.CENTER
 
-	print("[ROUND] Sequence done")
+	OpLog.i("Paintball", ["round_sequence_done ", g._state_summary()])
 	g._round_sequence_running = false
 	g._is_shot_sequence_running = false
 	
 func _end_round_sequence() -> void:
 	g._replay_auto_pending = false
-	print("[ROUND] playback end (leaving is_replay_playback=", g._is_replay_playback, ")")
+	g.dbg(["round_sequence_flags_reset replayPlayback=", g._is_replay_playback])
 
 func play_round() -> void:
 	if not g.is_my_turn or g._is_shot_sequence_running or g._round_sequence_running:
-		print("[INPUT] Ignored play_round (not my turn or sequence running).")
+		OpLog.w("Paintball", ["play_round ignored turn_or_sequence ", g._state_summary()])
 		return
 
 	if g._require_new_shoot_selection or g._selected_shoot == null or not is_instance_valid(g._selected_shoot):
-		print("[PLAYROUND] Blocked: select a shoot target first.")
+		OpLog.w("Paintball", ["play_round blocked no_selection ", g._state_summary()])
 		return
 
-	print("[DBG][PLAY_ROUND_ENTER] is_my_turn=", g.is_my_turn,
-		" pending_enemy=", g._pending_enemy_shot,
-		" my_lane=", int(g._player_lane),
-		" selected=", (-1 if g._selected_shoot == null else int(g._selected_shoot.lane)),
-		" replay_playback=", g._is_replay_playback,
-		" round_seq=", g._round_sequence_running,
-		" shot_seq=", g._is_shot_sequence_running
-	)
+	OpLog.i("Paintball", ["play_round_start ", g._state_summary()])
 
 	if not g._pending_enemy_shot:
-		print("[PLAYROUND] Blocked: opponent shot not ready (this should be gated by _on_fire_pressed).")
+		OpLog.w("Paintball", ["play_round blocked opponent_not_ready ", g._state_summary()])
 		return
 
-	print("[ROUND] play_round start. replay_playback=", g._is_replay_playback)
+	g.dbg(["play_round replayPlayback=", g._is_replay_playback])
 
 	# --- Cache player plane (authoritative for enemy shot) ---
 	var player_plane_z: float = 0.0
@@ -486,11 +446,12 @@ func play_round() -> void:
 		op.x = opp_x
 		g.opponent_sprite.global_position = op
 
-		print("[PLAYROUND] Opp pos enc=", g._opp_pos_enc,
-			" => lane=", int(opp_lane),
-			" set opp_x=", opp_x,
-			" opp_z=", g.opponent_sprite.global_position.z
-		)
+		OpLog.i("Paintball", [
+			"play_round_opp_position enc=", g._opp_pos_enc,
+			" lane=", int(opp_lane),
+			" x=", opp_x,
+			" z=", g.opponent_sprite.global_position.z
+		])
 
 	# --- Compute opponent target lane and world (Z MUST be player plane) ---
 	g._opp_target_world = Vector3.ZERO
@@ -508,12 +469,13 @@ func play_round() -> void:
 		# Y/Z: ALWAYS based on player plane so projectile plane reach matches visuals
 		g._opp_target_world = Vector3(tx, player_plane_y + 0.7, player_plane_z)
 
-		print("[PLAYROUND] Opp target enc(raw)=", g._opp_target_enc,
-			" enc(vis)=", g._opp_target_enc_vis,
-			" => lane=", int(g._opp_target_lane),
+		OpLog.i("Paintball", [
+			"play_round_opp_target raw=", g._opp_target_enc,
+			" vis=", g._opp_target_enc_vis,
+			" lane=", int(g._opp_target_lane),
 			" world=", g._opp_target_world,
-			" player_plane_z=", player_plane_z
-		)
+			" playerPlaneZ=", player_plane_z
+		])
 
 		update_opponent_sprite_pose_for_shot()
 
@@ -679,13 +641,14 @@ func play_round() -> void:
 
 		var biased_aim_point: Vector3 = aim_point + (cam_right * aim_bias)
 
-		print("[DBG][AIM_BIAS2] aim_x=", aim_point.x,
+		g.dbg([
+			"aim_bias aimX=", aim_point.x,
 			" mag=", mag,
-			" toward_center_world_sign=", toward_center_world_sign,
-			" cam_right=", cam_right,
-			" cam_right_world_x=", cam_right_world_x,
-			" aim_bias=", aim_bias
-		)
+			" towardCenter=", toward_center_world_sign,
+			" camRight=", cam_right,
+			" camRightWorldX=", cam_right_world_x,
+			" bias=", aim_bias
+		])
 
 		var look_xform: Transform3D = Transform3D().looking_at(biased_aim_point, Vector3.UP)
 		look_xform.origin = cam_pos

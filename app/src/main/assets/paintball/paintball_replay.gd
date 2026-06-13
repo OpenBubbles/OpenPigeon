@@ -195,13 +195,14 @@ func apply_loaded_replay_segment(seg_state: Dictionary) -> void:
 			g._selected_shoot = btn
 			g._require_new_shoot_selection = false
 
-	print("[DBG][REPLAY_APPLY] pnum=", g.playernum,
-		" pos_me=", pos_me,
-		" pos_opp=", pos_opp,
-		" tgt_opp=", target_opp,
-		" pending_enemy=", g._pending_enemy_shot,
-		" me_lane=", int(g._player_lane)
-	)
+	g.dbg([
+		"replay_apply player=", g.playernum,
+		" posMe=", pos_me,
+		" posOpp=", pos_opp,
+		" targetOpp=", target_opp,
+		" pendingEnemy=", g._pending_enemy_shot,
+		" myLane=", int(g._player_lane)
+	])
 
 func prime_autoplay_if_loaded_segment_ready() -> void:
 	if g._replay_segments.size() <= 0:
@@ -251,40 +252,46 @@ func autoplay_replay_round() -> void:
 
 	# This will run the full cinematic + shots
 	g.play_round()
-	
+
 func debug_dump_replay_queue(tag: String) -> void:
-	print("[DBG][REPLAY_QUEUE][", tag, "] segs=", g._replay_segments.size(),
-		" last_replay_len=", g._last_replay_str.length(),
-		" is_replay_playback=", g._is_replay_playback,
-		" auto_pending=", g._replay_auto_pending
-	)
+	if g == null:
+		return
+
+	g.dbg([
+		"replay_queue tag=", tag,
+		" segs=", g._replay_segments.size(),
+		" replayLen=", g._last_replay_str.length(),
+		" playback=", g._is_replay_playback,
+		" autoPending=", g._replay_auto_pending
+	])
 
 	if g._replay_segments.size() <= 0:
-		print("[DBG][REPLAY_QUEUE][", tag, "] (empty)")
+		g.dbg(["replay_queue tag=", tag, " empty=true"])
 		return
 
 	var head: String = String(g._replay_segments[0])
 	var head_state: Dictionary = parse_replay_state(head)
-	print("[DBG][REPLAY_QUEUE][", tag, "] head=", head)
-	print("[DBG][REPLAY_QUEUE][", tag, "] head_state=", head_state,
-		" head_full=", replay_is_full_round(head_state)
-	)
+	g.dbg([
+		"replay_queue tag=", tag,
+		" head=", head,
+		" headFull=", replay_is_full_round(head_state)
+	])
 
 	if g._replay_segments.size() > 1:
 		var nxt: String = String(g._replay_segments[1])
 		var nxt_state: Dictionary = parse_replay_state(nxt)
-		print("[DBG][REPLAY_QUEUE][", tag, "] next=", nxt)
-		print("[DBG][REPLAY_QUEUE][", tag, "] next_state=", nxt_state,
-			" next_full=", replay_is_full_round(nxt_state)
-		)
-
+		g.dbg([
+			"replay_queue tag=", tag,
+			" next=", nxt,
+			" nextFull=", replay_is_full_round(nxt_state)
+		])
 
 func on_round_finished_pop_autoplayed_head_and_chain() -> void:
-	print("[DBG][REPLAY_POPCHAIN] enter")
+	OpLog.i("Paintball", ["replay_popchain_start ", g._state_summary()])
 	debug_dump_replay_queue("POPCHAIN_ENTER")
 
 	if g._replay_segments.size() <= 0:
-		print("[DBG][REPLAY_POPCHAIN] no segs, exit")
+		OpLog.i("Paintball", "replay_popchain no_segments")
 		return
 
 	var head_state: Dictionary = get_head_state()
@@ -292,11 +299,11 @@ func on_round_finished_pop_autoplayed_head_and_chain() -> void:
 
 	# If we were in replay playback and head was full, consume it
 	if g._is_replay_playback and head_full:
-		print("[DBG][REPLAY_POPCHAIN] popping full head")
+		OpLog.i("Paintball", "replay_popchain popping_full_head")
 		pop_head_segment()
 		rebuild_last_replay_str_from_segments()
 	else:
-		print("[DBG][REPLAY_POPCHAIN] not popping (is_replay_playback=", g._is_replay_playback, " head_full=", head_full, ")")
+		g.dbg(["replay_popchain not_popping playback=", g._is_replay_playback, " headFull=", head_full])
 
 	# Clear playback flags
 	g._is_replay_playback = false
@@ -310,10 +317,10 @@ func on_round_finished_pop_autoplayed_head_and_chain() -> void:
 		new_state["hp1"] = int(hp_now.get("hp1", 3))
 		new_state["hp2"] = int(hp_now.get("hp2", 3))
 
-		print("[DBG][REPLAY_POPCHAIN] applying new head=", new_head, " with forced hp1/hp2=", new_state["hp1"], "/", new_state["hp2"])
+		OpLog.i("Paintball", ["replay_popchain applying_new_head=", new_head, " hp1=", new_state["hp1"], " hp2=", new_state["hp2"]])
 		g._apply_loaded_replay_segment(new_state)
 	else:
-		print("[DBG][REPLAY_POPCHAIN] queue empty after pop")
+		OpLog.i("Paintball", "replay_popchain queue_empty_after_pop")
 
 	debug_dump_replay_queue("POPCHAIN_AFTER_APPLY")
 
@@ -338,15 +345,13 @@ func rebuild_last_replay_str_from_segments() -> void:
 
 func queue_autoplay_if_head_full() -> void:
 	if g._replay_segments.size() <= 0:
-		print("[DBG][REPLAY_AUTO] no segs to autoplay")
+		g.dbg("replay_auto no_segments")
 		return
 
 	var head_seg: String = String(g._replay_segments[0])
 	var head_state: Dictionary = parse_replay_state(head_seg)
 
-	print("[DBG][REPLAY_AUTO] check head_full=", replay_is_full_round(head_state),
-		" head=", head_seg
-	)
+	OpLog.i("Paintball", ["replay_auto_check headFull=", replay_is_full_round(head_state), " head=", head_seg])
 
 	if replay_is_full_round(head_state):
 		# This sets flags and calls deferred autoplay round

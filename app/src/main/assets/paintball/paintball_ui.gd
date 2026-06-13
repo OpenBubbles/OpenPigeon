@@ -201,7 +201,7 @@ func hide_opponent_hit_splat() -> void:
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(g.sent_label):
-		print("Warning: sent_label is not valid for play_sent_animation.")
+		OpLog.w("Paintball", "play_sent_animation skipped: sent_label invalid")
 		return
 
 	if g.game_over or g.spectator_mode:
@@ -247,7 +247,7 @@ func pop_button(btn: Control) -> void:
 	await tween.finished
 
 func check_win() -> bool:
-	print("--- CHECKING WIN CONDITION ---")
+	g.dbg(["checking_win hpMe=", g._hp_me, " hpOpp=", g._hp_opp])
 
 	if g.game_over:
 		return true

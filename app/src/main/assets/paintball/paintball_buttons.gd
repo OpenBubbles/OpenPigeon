@@ -38,13 +38,13 @@ func collect_and_index_buttons() -> void:
 	index_buttons()
 
 func connect_button_signals() -> void:
-	print("[PB_BUTTONS] connect_button_signals count=", g._buttons.size())
+	g.dbg(["buttons_connect count=", g._buttons.size()])
 
 	for b in g._buttons:
 		if not is_instance_valid(b):
 			continue
 
-		print("[PB_BUTTONS] wiring:", b.name, " kind=", int(b.kind), " lane=", int(b.lane))
+		g.dbg(["button_wiring name=", b.name, " kind=", int(b.kind), " lane=", int(b.lane)])
 
 		if b.has_signal("clicked"):
 			if not b.clicked.is_connected(_on_button_clicked):
@@ -63,25 +63,16 @@ func connect_button_signals() -> void:
 				b.button_clicked.connect(_on_button_clicked)
 			continue
 
-		print("[PB_BUTTONS] WARNING no usable signal on:", b.name)
+		OpLog.w("Paintball", ["button_no_signal name=", b.name])
 
 func _on_button_clicked(b: ActionButton3D) -> void:
-	print("[PB_BUTTONS] CLICKED:", b.name,
-		" kind=", int(b.kind),
-		" lane=", int(b.lane),
-		" is_my_turn=", g.is_my_turn,
-		" shot_seq=", g._is_shot_sequence_running,
-		" round_seq=", g._round_sequence_running
-	)
+	OpLog.i("Paintball", ["button_pressed name=", b.name, " kind=", int(b.kind), " lane=", int(b.lane)])
 
 	# forward to PaintballGame
 	g._on_button_clicked(b)
 
 func _on_button_pressed(b: ActionButton3D) -> void:
-	print("[PB_BUTTONS] PRESSED:", b.name,
-		" kind=", int(b.kind),
-		" lane=", int(b.lane)
-	)
+	OpLog.i("Paintball", ["button_pressed name=", b.name, " kind=", int(b.kind), " lane=", int(b.lane)])
 	_on_button_clicked(b)
 
 func collect_buttons(n: Node) -> void:
@@ -136,7 +127,7 @@ func update_move_buttons() -> void:
 	if g == null:
 		return
 
-	print("Update move buttons: lane=", g._player_lane)
+	g.dbg(["update_move_buttons lane=", int(g._player_lane)])
 	for b in g._buttons:
 		if b.kind == ActionButton3D.ButtonKind.MOVE:
 			b.set_player_lane(g._player_lane)
@@ -212,24 +203,24 @@ func move_player_to_button(b: ActionButton3D) -> void:
 		return
 
 	if not g.is_my_turn or g._is_shot_sequence_running or g._round_sequence_running:
-		print("[INPUT] Ignored move (not my turn or sequence running).")
+		OpLog.w("Paintball", ["move_ignored turn_or_sequence ", g._state_summary()])
 		return
 
 	if not is_instance_valid(g.player):
-		print("[INPUT] Ignored move because player is invalid.")
+		OpLog.w("Paintball", "move_ignored player invalid")
 		return
 
 	if not is_instance_valid(b):
-		print("[INPUT] Ignored move because button is invalid.")
+		OpLog.w("Paintball", "move_ignored button invalid")
 		return
 
 	var start_lane: ActionButton3D.Lane = g._player_lane
 	var target_lane: ActionButton3D.Lane = b.lane
 
-	print("[MOVE] requested start=", int(start_lane), " target=", int(target_lane))
+	OpLog.i("Paintball", ["move_requested start=", int(start_lane), " target=", int(target_lane)])
 
 	if start_lane == target_lane:
-		print("[MOVE] ignored because already in target lane.")
+		g.dbg(["move_ignored already_target lane=", int(target_lane)])
 		return
 
 	var path: Array[ActionButton3D.Lane] = [start_lane]
@@ -286,7 +277,7 @@ func move_player_to_button(b: ActionButton3D) -> void:
 		g.player.global_position = Vector3(_get_lane_world_x(target_lane), base_y, base_z)
 		call_deferred("update_move_buttons")
 
-		print("[MOVE] finished lane=", int(g._player_lane), " pos=", g.player.global_position)
+		OpLog.i("Paintball", ["move_finished lane=", int(g._player_lane), " pos=", g.player.global_position])
 	)
 
 func update_shoot_selection_visuals(selected: ActionButton3D) -> void:

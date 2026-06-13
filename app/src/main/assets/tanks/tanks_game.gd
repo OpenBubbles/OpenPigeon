@@ -41,6 +41,52 @@ const HEALTH_TEX := {
 }
 
 const LOG_TAG := "Tanks"
+const DEBUG_TANKS := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_TANKS:
+		OpLog.d(LOG_TAG, parts)
+
+func _replay_summary(raw: String) -> String:
+	return "len=%d boards=%d shoots=%d" % [
+		raw.length(),
+		raw.count("board:"),
+		raw.count("shoot:")
+	]
+
+func _board_summary(board: Dictionary) -> String:
+	if board.is_empty():
+		return "empty"
+
+	return "height=%s wind=%s hp1=%s hp2=%s t1x=%s t2x=%s t1rot=%s t2rot=%s t1p=%s t2p=%s" % [
+		str(board.get("height", "")),
+		str(board.get("wind", "")),
+		str(board.get("tank1hp", "")),
+		str(board.get("tank2hp", "")),
+		str(board.get("tank1x", "")),
+		str(board.get("tank2x", "")),
+		str(board.get("tank1rot", "")),
+		str(board.get("tank2rot", "")),
+		str(board.get("tank1power", "")),
+		str(board.get("tank2power", ""))
+	]
+
+func _state_summary() -> String:
+	if core == null:
+		return "core=null gameOver=%s winner=%s" % [str(game_over), winner]
+
+	return "player=%d turn=%s spectator=%s replay=%s winner=%s playing=%s interact=%s gameOver=%s state=%s board={%s}" % [
+		core.player,
+		str(core.is_my_turn),
+		str(core.spectator_mode),
+		str(has_replay),
+		str(game_over),
+		str(_is_playing_round),
+		str(can_interact),
+		str(game_over),
+		win_loss_state,
+		_board_summary(core.current_board)
+	]
 
 const TANK1_COLOR := Color(0.25, 0.55, 1.0, 1.0) # Blue
 const TANK2_COLOR := Color(1.0, 0.25, 0.25, 1.0) # Red
@@ -162,12 +208,23 @@ func _on_game_ready() -> void:
 		tank_p2.set_power_visibility(false)
 
 	can_interact = false
+	
+	OpLog.i(LOG_TAG, [
+		"game_ready localMode=", appPlugin == null,
+		" fireButton=", is_instance_valid(fire_button),
+		" powerSlider=", is_instance_valid(power_slider),
+		" terrain=", is_instance_valid(terrain),
+		" tank1=", is_instance_valid(tank_p1),
+		" tank2=", is_instance_valid(tank_p2)
+	])
 
 func _set_game_data(raw_text: String) -> void:
+	OpLog.event(LOG_TAG, ["set_game_data_in raw=", raw_text])
+
 	var parsed: Variant = JSON.parse_string(raw_text)
 
 	if typeof(parsed) != TYPE_DICTIONARY:
-		print("[TANKS] Bad game data JSON")
+		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", raw_text])
 		return
 
 	var data: Dictionary = parsed
@@ -178,6 +235,15 @@ func _set_game_data(raw_text: String) -> void:
 	var winner_payload: String = str(data.get("winner", ""))
 	var p1_id: String = str(data.get("player1", ""))
 	var p2_id: String = str(data.get("player2", ""))
+	
+	OpLog.i(LOG_TAG, [
+		"set_game_data parsed_initial isYourTurn=", str(data.get("isYourTurn", "")),
+		" payloadPlayer=", str(data.get("player", "")),
+		" p1=", p1_id,
+		" p2=", p2_id,
+		" winner=", winner_payload,
+		" replay=", _replay_summary(str(data.get("replay", "")))
+	])
 
 	game_over = false
 	winner = ""
@@ -194,6 +260,7 @@ func _set_game_data(raw_text: String) -> void:
 		win_loss_label.modulate.a = 1.0
 
 	core.ingest_game_data(JSON.stringify(data))
+	OpLog.i(LOG_TAG, ["set_game_data core_ingested ", _state_summary()])
 	_apply_view_flip()
 
 	if is_instance_valid(spec_label):
@@ -214,6 +281,8 @@ func _set_game_data(raw_text: String) -> void:
 
 	if winner_payload != "":
 		_apply_winner_payload(winner_payload, p1_id, p2_id)
+	
+	OpLog.i(LOG_TAG, ["set_game_data_done ", _state_summary()])
 
 func _get_target_tank_width_screen_px() -> float:
 	return TANK_WIDTH_UNITS * _get_pixels_per_board_unit()
@@ -398,7 +467,7 @@ func _apply_health_from_board(board: Dictionary) -> void:
 	var my_hp: int = hp1 if core.player == 1 else hp2
 	var opp_hp: int = hp2 if core.player == 1 else hp1
 	
-	print("My HP: ", my_hp, " Opp HP: ", opp_hp)
+	OpLog.i(LOG_TAG, ["health_update myHp=", my_hp, " oppHp=", opp_hp])
 
 	_set_health_tex(player_health, my_hp)
 	_set_health_tex(opp_health, opp_hp)
@@ -406,7 +475,7 @@ func _apply_health_from_board(board: Dictionary) -> void:
 func _apply_tank_colors() -> void:
 	var hp1: int = int(core.current_board.get("tank1hp", 3)) if core != null else 3
 	var hp2: int = int(core.current_board.get("tank2hp", 3)) if core != null else 3
-	print ("HP 1: ", hp1, " HP2: ", hp2)
+	dbg(["tank_colors hp1=", hp1, " hp2=", hp2])
 	if is_instance_valid(tank_p1):
 		tank_p1.set_player_color(Color.BLACK if hp1 <= 0 else TANK1_COLOR)
 	if is_instance_valid(tank_p2):
@@ -417,7 +486,7 @@ func _on_board_loaded(board: Dictionary) -> void:
 
 	var h: float = float(board.get("height", 0.0))
 	var w: float = float(board.get("wind", 0.0))
-	print("Wind Speed: ", w)
+	OpLog.i(LOG_TAG, ["board_loaded wind=", w, " height=", h, " board={", _board_summary(board), "}"])
 	if is_instance_valid(terrain):
 		terrain.apply_board(h, false)
 		
@@ -428,7 +497,7 @@ func _on_board_loaded(board: Dictionary) -> void:
 		
 	if is_instance_valid(wind_indicator):
 		wind_indicator.set_wind(w_visual)
-		print("Setting Wind (visual): ", w_visual, " (raw: ", w, ")")
+		dbg(["wind_visual=", w_visual, " raw=", w, " flipped=", _view_flipped])
 
 	_apply_tank_colors()
 
@@ -445,13 +514,12 @@ func _on_board_loaded(board: Dictionary) -> void:
 func _debug_tank_sizes() -> void:
 	var ppu := _get_pixels_per_board_unit()
 	var tank_w := _get_target_tank_width_screen_px()
-	print("Pixels per board unit: ", ppu)
-	print("Target tank width screen px: ", tank_w)
-	
-	if is_instance_valid(tank_p1):
-		print("Tank P1 width px: ", tank_p1.get_body_width_px())
-	if is_instance_valid(tank_p2):
-		print("Tank P2 width px: ", tank_p2.get_body_width_px())
+	dbg([
+		"tank_sizes ppu=", ppu,
+		" targetWidth=", tank_w,
+		" p1Width=", tank_p1.get_body_width_px() if is_instance_valid(tank_p1) else -1.0,
+		" p2Width=", tank_p2.get_body_width_px() if is_instance_valid(tank_p2) else -1.0
+	])
 
 func _apply_tanks_from_board(board: Dictionary) -> void:
 	if not is_instance_valid(terrain):
@@ -674,8 +742,10 @@ func _handle_aim_click() -> void:
 	
 func _on_has_replay(r: bool) -> void:
 	has_replay = r
+	OpLog.i(LOG_TAG, ["has_replay=", r, " ", _state_summary()])
 	
 func _has_winner(w: bool) -> void:
+	OpLog.i(LOG_TAG, ["has_winner=", w, " ", _state_summary()])
 	game_over = w
 
 	if game_over:
@@ -686,6 +756,13 @@ func _has_winner(w: bool) -> void:
 			_aim_label.visible = false
 
 func _on_turn_changed(v: bool) -> void:
+	OpLog.i(LOG_TAG, [
+		"turn_changed turn=", v,
+		" blockedByReplay=", has_replay,
+		" playing=", _is_playing_round,
+		" spectator=", core.spectator_mode if core != null else false,
+		" boardEmpty=", core.current_board.is_empty() if core != null else true
+	])
 	if _is_playing_round or has_replay or core.current_board.is_empty() or core.spectator_mode:
 		can_interact = false
 		stop_waiting_animation()
@@ -706,8 +783,6 @@ func _on_turn_changed(v: bool) -> void:
 	_update_aim_label_visibility()
 
 func _send_payload(payload: Dictionary) -> bool:
-	print(">>> _send_payload CALLED")
-
 	if game_over and win_loss_state != "":
 		var sender_id := my_uuid
 
@@ -717,9 +792,17 @@ func _send_payload(payload: Dictionary) -> bool:
 		if sender_id != "" and not payload.has("winner"):
 			payload["winner"] = sender_id + "|" + win_loss_state
 
-	print(">>> PAYLOAD: ", payload)
-
 	var json := JSON.stringify(payload)
+
+	OpLog.event(LOG_TAG, [
+		"send_game_out replay=", _replay_summary(String(payload.get("replay", ""))),
+		" winner=", str(payload.get("winner", "")),
+		" avatar1=", payload.has("avatar1"),
+		" avatar2=", payload.has("avatar2"),
+		" ", _state_summary(),
+		" raw=", json
+	])
+
 	send_game_data(json)
 
 	return true
@@ -762,7 +845,7 @@ func _get_rules_text() -> String:
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
-		print("Warning: sent_label is not valid for play_sent_animation.")
+		OpLog.w(LOG_TAG, "play_sent_animation skipped: sent_label invalid")
 		return
 
 	if game_over or (core != null and core.spectator_mode):
@@ -1185,7 +1268,10 @@ var _is_playing_round: bool = false
 
 func _on_replay_action(_action: Dictionary) -> void:
 	if _is_playing_round:
+		OpLog.w(LOG_TAG, ["replay_action skipped already_playing action=", _action])
 		return
+
+	OpLog.i(LOG_TAG, ["replay_action_start action=", _action, " ", _state_summary()])
 	
 	_is_playing_round = true
 	can_interact = false
@@ -1199,15 +1285,27 @@ func _on_replay_action(_action: Dictionary) -> void:
 
 	var rot := float(b.get("tank%drot" % shooter_idx, 0.0))
 	var pwr := float(b.get("tank%dpower" % shooter_idx, 0.5))
-	print("Seeing Core Player: ", core.player)
+	dbg(["replay_core_player=", core.player, " isOwnReplay=", is_own_replay])
 	
 	if (core.player == 1 and not is_own_replay) or (core.player == 2 and is_own_replay):
-		print("Flipping Thing Called")
+		OpLog.i(LOG_TAG, [
+			"replay_flip_adjust player=", core.player,
+			" shooter=", shooter_idx,
+			" beforeRot=", rot
+		])
 		var replay_visual_deg := _visual_deg_from_protocol_rot(shooter_idx, rot)
 		replay_visual_deg = 180.0 - replay_visual_deg
 		rot = _protocol_rot_from_visual_deg(shooter_idx, replay_visual_deg)
 	
 	await _execute_shot(shooter_idx, rot, pwr, wind_val)
+	
+	OpLog.i(LOG_TAG, [
+		"replay_action_shot_done shooter=", shooter_idx,
+		" rot=", rot,
+		" power=", pwr,
+		" wind=", wind_val,
+		" postShot={", _board_summary(core._post_shot_board), "}"
+	])
 
 	var post_shot: Dictionary = core.consume_post_shot_board()
 	if not post_shot.is_empty():
@@ -1229,6 +1327,8 @@ func _on_replay_action(_action: Dictionary) -> void:
 
 	if _finish_round_or_show_result():
 		return
+		
+	OpLog.i(LOG_TAG, ["replay_action_done ", _state_summary()])
 	
 	_is_playing_round = false
 	has_replay = false
@@ -1236,6 +1336,7 @@ func _on_replay_action(_action: Dictionary) -> void:
 	_on_turn_changed(core.is_my_turn)
 
 func _play_round_sequence() -> void:
+	OpLog.i(LOG_TAG, ["round_sequence_start ", _state_summary()])
 	_is_playing_round = true
 	can_interact = false
 	
@@ -1268,6 +1369,8 @@ func _play_round_sequence() -> void:
 	await _execute_shot(p2_idx, t2_rot, t2_pow, wind_val)
 	if _check_win_condition():
 		return
+		
+	OpLog.i(LOG_TAG, ["round_sequence_done ", _state_summary()])
 	
 	_is_playing_round = false
 	can_interact = true
@@ -1303,6 +1406,16 @@ func _execute_shot(player_idx: int, rot_rad: float, power_01: float, wind_val: f
 	var tank: Tank = tank_p1 if player_idx == 1 else tank_p2
 
 	var target_visual := _visual_deg_from_protocol_rot(player_idx, rot_rad)
+	
+	var launch_speed := _get_launch_speed_units(power_01)
+	OpLog.i(LOG_TAG, [
+		"shot_start shooter=", player_idx,
+		" protocolRot=", rot_rad,
+		" visualDeg=", target_visual,
+		" power=", power_01,
+		" wind=", wind_val,
+		" speed=", launch_speed
+	])
 
 	var tw := create_tween()
 	tw.tween_method(tank.set_barrel_display_deg, tank.get_barrel_display_deg(), target_visual, 0.6).set_trans(Tween.TRANS_SINE)
@@ -1322,13 +1435,21 @@ func _execute_shot(player_idx: int, rot_rad: float, power_01: float, wind_val: f
 	bullet.origin_screen_position = muzzle_pos
 	bullet.global_position = bullet.origin_screen_position
 	bullet.position_units = Vector2.ZERO
-	bullet.velocity_units = Vector2(cos(launch_angle), sin(launch_angle)) * _get_launch_speed_units(power_01)
+	bullet.velocity_units = Vector2(cos(launch_angle), sin(launch_angle)) * launch_speed
 	bullet.gravity_units = SHOT_GRAVITY_UNITS
 	bullet.wind_accel_units = wind_val * SHOT_WIND_AX_PER_UNIT
 
 	add_child(bullet)
 
 	var target_hit: String = await bullet.impact
+	
+	OpLog.i(LOG_TAG, [
+		"shot_impact shooter=", player_idx,
+		" target=", target_hit,
+		" launchAngle=", launch_angle,
+		" muzzle=", muzzle_pos,
+		" ", _state_summary()
+	])
 
 	if target_hit == "tank1":
 		_damage_tank(1)
@@ -1344,7 +1465,7 @@ func _damage_tank(idx: int) -> void:
 	core.current_board[key] = current_hp
 	_apply_health_from_board(core.current_board)
 	_apply_tank_colors()
-	print("Tank ", idx, " hit! HP remaining: ", current_hp)
+	OpLog.i(LOG_TAG, ["tank_damage tank=", idx, " hp=", current_hp, " ", _state_summary()])
 	
 	if current_hp <= 0:
 		var tank_node: Tank = tank_p1 if idx == 1 else tank_p2
@@ -1369,10 +1490,19 @@ func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: St
 	var parts := winner_payload.split("|", false)
 
 	if parts.size() < 2:
+		OpLog.w(LOG_TAG, ["winner_payload malformed raw=", winner_payload])
 		return
 
 	var sender_uuid := String(parts[0])
 	var sender_state := String(parts[1])
+	
+	OpLog.i(LOG_TAG, [
+		"winner_payload raw=", winner_payload,
+		" sender=", sender_uuid,
+		" senderState=", sender_state,
+		" p1=", p1_id,
+		" p2=", p2_id
+	])
 
 	if sender_state == "0":
 		_show_result_from_state("0")
@@ -1402,6 +1532,11 @@ func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: St
 	_show_result_from_state(local_state, winning_player)
 	
 func _show_result_from_state(state: String, spectator_winner_player: int = 0) -> void:
+	OpLog.i(LOG_TAG, [
+		"show_result state=", state,
+		" spectatorWinner=", spectator_winner_player,
+		" ", _state_summary()
+	])
 	game_over = true
 	win_loss_state = state
 	can_interact = false
@@ -1489,19 +1624,28 @@ func _check_win_condition() -> bool:
 		return false
 
 	if hp1 <= 0 and hp2 <= 0:
+		OpLog.i(LOG_TAG, ["game_end draw hp1=", hp1, " hp2=", hp2])
 		_show_result_from_state("0")
 	elif hp2 <= 0:
+		OpLog.i(LOG_TAG, ["game_end player1_wins hp1=", hp1, " hp2=", hp2, " localPlayer=", core.player])
 		_show_result_from_state("1" if core.player == 1 else "-1", 1)
 	else:
+		OpLog.i(LOG_TAG, ["game_end player2_wins hp1=", hp1, " hp2=", hp2, " localPlayer=", core.player])
 		_show_result_from_state("1" if core.player == 2 else "-1", 2)
 
 	return true
 
 func _on_send_pressed() -> void:
 	if _is_playing_round:
+		OpLog.w(LOG_TAG, "send_pressed ignored: round already playing")
 		return
 
-	if core == null or core.spectator_mode or not core.is_my_turn:
+	if core == null:
+		OpLog.e(LOG_TAG, "send_pressed ignored: core is null")
+		return
+
+	if core.spectator_mode or not core.is_my_turn:
+		OpLog.w(LOG_TAG, ["send_pressed ignored spectator=", core.spectator_mode, " turn=", core.is_my_turn])
 		return
 
 	_is_playing_round = true
@@ -1516,6 +1660,17 @@ func _on_send_pressed() -> void:
 	var my_send_rot: float = _protocol_rot_from_visual_deg(core.player, my_send_deg)
 	var my_pwr: float = power_slider.value / 100.0
 	var wind_val: float = float(core.current_board.get("wind", 0.0))
+	
+	OpLog.i(LOG_TAG, [
+		"send_pressed player=", core.player,
+		" visualDeg=", my_visual_deg,
+		" playRot=", my_play_rot,
+		" sendDeg=", my_send_deg,
+		" sendRot=", my_send_rot,
+		" power=", my_pwr,
+		" wind=", wind_val,
+		" preBoard={", _board_summary(core.current_board), "}"
+	])
 
 	var pre_shot_board: Dictionary = core.current_board.duplicate(true)
 	pre_shot_board["tank%drot" % core.player] = my_send_rot
@@ -1546,8 +1701,17 @@ func _on_send_pressed() -> void:
 
 	if avatar_str != "":
 		payload[avatar_key] = avatar_str
+	
+	OpLog.event(LOG_TAG, [
+		"replay_built ", _replay_summary(replay_string),
+		" pre={", _board_summary(pre_shot_board), "}",
+		" post={", _board_summary(post_shot_board), "}",
+		" raw=", replay_string
+	])
 
 	var finished := _finish_round_or_show_result()
+	
+	OpLog.i(LOG_TAG, ["send_pressed shot_finished finished=", finished, " ", _state_summary()])
 
 	_send_payload(payload)
 

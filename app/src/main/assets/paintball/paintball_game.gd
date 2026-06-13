@@ -43,6 +43,64 @@ const PBState := preload("res://paintball/paintball_state.gd")
 const PBUI := preload("res://paintball/paintball_ui.gd")
 
 const LOG_TAG := "Paintball"
+const DEBUG_PAINTBALL := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_PAINTBALL:
+		OpLog.d(LOG_TAG, parts)
+
+func _replay_segment_is_full(seg: String) -> bool:
+	if seg.is_empty():
+		return false
+
+	var st: Dictionary = _parse_replay_state(seg)
+	return int(st.get("pos1", -1)) != -1 \
+		and int(st.get("pos2", -1)) != -1 \
+		and int(st.get("target1", -1)) != -1 \
+		and int(st.get("target2", -1)) != -1
+
+func _replay_summary(raw: String) -> String:
+	if raw.is_empty():
+		return "len=0 segs=0 full=0 pending=0"
+
+	var parts := raw.split("|", false)
+	var full := 0
+	for seg in parts:
+		if _replay_segment_is_full(String(seg)):
+			full += 1
+
+	return "len=%d segs=%d full=%d pending=%d" % [
+		raw.length(),
+		parts.size(),
+		full,
+		parts.size() - full
+	]
+
+func _selected_shoot_lane() -> int:
+	if _selected_shoot == null or not is_instance_valid(_selected_shoot):
+		return -1
+	return int(_selected_shoot.lane)
+
+func _state_summary() -> String:
+	return "player=%d turn=%s spectator=%s hpMe=%d hpOpp=%d pendingEnemy=%s oppPos=%d oppTarget=%d selected=%d segs=%d sendq=%d replayPlayback=%s autoPending=%s round=%s shot=%s gameOver=%s result=%s" % [
+		playernum,
+		str(is_my_turn),
+		str(spectator_mode),
+		_hp_me,
+		_hp_opp,
+		str(_pending_enemy_shot),
+		_opp_pos_enc,
+		_opp_target_enc,
+		_selected_shoot_lane(),
+		_replay_segments.size(),
+		_replay_send_segments.size(),
+		str(_is_replay_playback),
+		str(_replay_auto_pending),
+		str(_round_sequence_running),
+		str(_is_shot_sequence_running),
+		str(game_over),
+		win_loss_state
+	]
 
 var buttons
 var replay
@@ -245,10 +303,10 @@ func _on_game_ready() -> void:
 	buttons.collect_and_index_buttons()
 	buttons.cache_lane_x_from_move_buttons()
 
-	print("[GAME] buttons collected:", _buttons.size())
+	OpLog.i(LOG_TAG, ["game_ready buttons=", _buttons.size()])
 	for b in _buttons:
 		if is_instance_valid(b):
-			print("[GAME]  -", b.name, " kind=", int(b.kind), " lane=", int(b.lane))
+			dbg(["button name=", b.name, " kind=", int(b.kind), " lane=", int(b.lane)])
 
 	buttons.connect_button_signals()
 	buttons.update_move_buttons()
@@ -266,7 +324,7 @@ func _on_game_ready() -> void:
 	if is_instance_valid(opponent_sprite):
 		_opp_sprite_base_scale = opponent_sprite.scale
 		_opp_sprite_start_pos = opponent_sprite.global_position
-		print("[DBG][READY] cached _opp_sprite_start_pos=", _opp_sprite_start_pos)
+		dbg(["ready opponentStartPos=", _opp_sprite_start_pos])
 		
 	if is_instance_valid(fp_aim_sprite):
 		_fp_aim_base_scale = fp_aim_sprite.scale
@@ -292,6 +350,13 @@ func _on_game_ready() -> void:
 	ui.init_player_splat_overlay()
 	ui.init_opponent_splat()
 	ui.apply_hearts_from_hp()
+	
+	OpLog.i(LOG_TAG, [
+		"game_ready_done playerValid=", is_instance_valid(player),
+		" opponentValid=", is_instance_valid(opponent_sprite),
+		" fireButtonValid=", is_instance_valid(fire_button),
+		" ", _state_summary()
+	])
 
 func _process(delta: float) -> void:		
 	if shots != null:
@@ -299,7 +364,7 @@ func _process(delta: float) -> void:
 		
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_RESUMED:
-		print("[APP] Paintball resumed.")
+		OpLog.i(LOG_TAG, "app_resumed")
 
 # -------------------------------------------------------------------
 # Modules bootstrapping
@@ -322,6 +387,13 @@ func _on_button_pressed(b: ActionButton3D) -> void:
 # Set Game Data
 # -------------------------------------------------------------------
 func _set_game_data(raw_text: String) -> void:
+	OpLog.event(LOG_TAG, ["set_game_data_in raw=", raw_text])
+
+	var parsed : Variant = JSON.parse_string(raw_text)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", raw_text])
+		return
+
 	my_id = my_uuid
 
 	game_over = false
@@ -347,12 +419,24 @@ func _set_game_data(raw_text: String) -> void:
 
 	if winner != "":
 		_apply_winner_payload(winner)
+		
+	OpLog.i(LOG_TAG, [
+		"set_game_data_done winner=", winner,
+		" replay=", _replay_summary(_last_replay_str),
+		" ", _state_summary()
+	])
 
 # -------------------------------------------------------------------
 # Button clicked entry point
 # -------------------------------------------------------------------
 func _on_button_clicked(b: ActionButton3D) -> void:
 	if not is_my_turn or _is_shot_sequence_running or _round_sequence_running:
+		OpLog.w(LOG_TAG, [
+			"button_ignored name=", b.name if is_instance_valid(b) else "invalid",
+			" turn=", is_my_turn,
+			" shotSeq=", _is_shot_sequence_running,
+			" roundSeq=", _round_sequence_running
+		])
 		return
 
 	if b.kind == ActionButton3D.ButtonKind.MOVE:
@@ -365,6 +449,12 @@ func _on_button_clicked(b: ActionButton3D) -> void:
 		_aim_target_world = _selected_shoot.global_position + Vector3(0.0, 0.7, 0.0)
 
 		buttons.update_shoot_selection_visuals(_selected_shoot)
+		
+		OpLog.i(LOG_TAG, [
+			"shoot_selected lane=", int(_selected_shoot.lane),
+			" targetWorld=", _aim_target_world,
+			" ", _state_summary()
+		])
 
 		ui.show_fire_button(true)
 		return
@@ -374,24 +464,24 @@ func _on_button_clicked(b: ActionButton3D) -> void:
 # -------------------------------------------------------------------
 func _on_fire_pressed() -> void:
 	if not is_my_turn:
-		return
-	if _is_shot_sequence_running or _round_sequence_running:
-		return
-	if _require_new_shoot_selection or _selected_shoot == null or not is_instance_valid(_selected_shoot):
+		OpLog.w(LOG_TAG, ["fire_ignored turn=false ", _state_summary()])
 		return
 
-	print("[DBG][FIRE_PRESSED] is_my_turn=", is_my_turn,
-		" shot_seq=", _is_shot_sequence_running,
-		" round_seq=", _round_sequence_running,
-		" require_select=", _require_new_shoot_selection,
-		" selected=", (-1 if _selected_shoot == null else int(_selected_shoot.lane)),
-		" pending_enemy=", _pending_enemy_shot,
-		" replay_playback=", _is_replay_playback,
-		" replay_auto_pending=", _replay_auto_pending,
-		" segs=", _replay_segments.size(),
-		" sendq=", _replay_send_segments.size(),
-		" last_replay_len=", _last_replay_str.length()
-	)
+	if _is_shot_sequence_running or _round_sequence_running:
+		OpLog.w(LOG_TAG, ["fire_ignored sequence_running ", _state_summary()])
+		return
+
+	if _require_new_shoot_selection or _selected_shoot == null or not is_instance_valid(_selected_shoot):
+		OpLog.w(LOG_TAG, ["fire_ignored no_shoot_selection ", _state_summary()])
+		return
+
+	OpLog.i(LOG_TAG, [
+		"fire_pressed myLane=", int(_player_lane),
+		" selectedLane=", _selected_shoot_lane(),
+		" pendingEnemy=", _pending_enemy_shot,
+		" replay=", _replay_summary(_last_replay_str),
+		" ", _state_summary()
+	])
 
 	_replay_send_armed = true
 	_replay_is_autoplay_round = false
@@ -432,7 +522,7 @@ func _on_fire_pressed() -> void:
 
 				_apply_loaded_replay_segment(head_state)
 
-				print("[DBG][SENDQ] committed my selection into pending head=", String(_replay_send_segments[0]))
+				OpLog.i(LOG_TAG, ["fire_committed_pending_head head=", String(_replay_send_segments[0])])
 		else:
 			var st_pending: Dictionary = {
 				"hp1": _hp_me if playernum == 1 else _hp_opp,
@@ -458,14 +548,15 @@ func _on_fire_pressed() -> void:
 			_replay_segments.append(_replay_state_to_string(st_pending))
 			_apply_loaded_replay_segment(st_pending)
 
-			print("[DBG][SENDQ] built fallback pending head=", _replay_state_to_string(st_pending))
+			OpLog.i(LOG_TAG, ["fire_built_fallback_pending head=", _replay_state_to_string(st_pending)])
 
 		_replay_auto_pending = false
 		_is_replay_playback = true
+		OpLog.i(LOG_TAG, ["fire_play_round_from_pending_enemy ", _state_summary()])
 		round_mgr.play_round()
 		return
 
-	print("[DBG][FIRE_PRESSED] BRANCH: send_game (pending_enemy_shot=false)")
+	OpLog.i(LOG_TAG, ["fire_send_only_branch pendingEnemy=false ", _state_summary()])
 
 	var st: Dictionary = {
 		"hp1": 3,
@@ -489,9 +580,10 @@ func _on_fire_pressed() -> void:
 
 	_replay_send_segments.append(_replay_state_to_string(st))
 
-	print("[DBG][SENDQ] appended my-only seg=", _replay_state_to_string(st),
-		" sendq_size=", _replay_send_segments.size()
-	)
+	OpLog.i(LOG_TAG, [
+		"fire_appended_my_only seg=", _replay_state_to_string(st),
+		" sendq=", _replay_send_segments.size()
+	])
 
 	send_game()
 
@@ -532,6 +624,7 @@ func _replay_autoplay_round() -> void:
 # Compatibility wrappers PB_State / PB_Round expect on PaintballGame
 # -------------------------------------------------------------------
 func send_game(clear_targets_for_next_turn: bool = false) -> void:
+	OpLog.i(LOG_TAG, ["send_game_wrapper clearTargets=", clear_targets_for_next_turn, " ", _state_summary()])
 	if game_over or spectator_mode:
 		stop_waiting_animation()
 
@@ -609,11 +702,14 @@ func _update_move_buttons() -> void:
 func _apply_winner_payload(winner_payload: String) -> void:
 	var parts := winner_payload.split("|", false)
 	if parts.size() < 2:
+		OpLog.w(LOG_TAG, ["winner_payload malformed raw=", winner_payload])
 		return
 
 	var sender_uuid := String(parts[0])
 	var sender_state := String(parts[1])
-
+	
+	OpLog.i(LOG_TAG, ["winner_payload raw=", winner_payload, " sender=", sender_uuid, " senderState=", sender_state])
+	
 	if sender_state == "0":
 		_show_result_from_state("0")
 		return
@@ -626,6 +722,7 @@ func _apply_winner_payload(winner_payload: String) -> void:
 	_show_result_from_state(local_state)
 	
 func _show_result_from_state(state: String) -> void:
+	OpLog.i(LOG_TAG, ["show_result state=", state, " ", _state_summary()])
 	game_over = true
 	game_ended = true
 	win_loss_state = state

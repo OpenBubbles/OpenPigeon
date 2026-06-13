@@ -1,26 +1,34 @@
 extends RefCounted
 class_name PB_State
 
+const LOG_TAG := "Paintball"
+
 var g: PaintballGame
 
 func setup(owner: PaintballGame) -> void:
 	g = owner
 
 func dbg(tag: String) -> void:
-	print("[DBG][", tag, "] playernum=", g.playernum,
-		" is_my_turn=", g.is_my_turn,
-		" pending_enemy=", g._pending_enemy_shot,
-		" opp_pos_enc=", g._opp_pos_enc,
-		" opp_target_enc=", g._opp_target_enc,
-		" my_lane=", int(g._player_lane),
-		" my_selected=", (-1 if g._selected_shoot == null else int(g._selected_shoot.lane)),
+	if g == null:
+		return
+
+	g.dbg([
+		"state_dbg tag=", tag,
+		" playernum=", g.playernum,
+		" turn=", g.is_my_turn,
+		" pendingEnemy=", g._pending_enemy_shot,
+		" oppPos=", g._opp_pos_enc,
+		" oppTarget=", g._opp_target_enc,
+		" myLane=", int(g._player_lane),
+		" selected=", (-1 if g._selected_shoot == null else int(g._selected_shoot.lane)),
 		" segs=", g._replay_segments.size(),
-		" seg_i=", g._replay_seg_index,
-		" last_replay_len=", g._last_replay_str.length()
-	)
+		" segIndex=", g._replay_seg_index,
+		" replayLen=", g._last_replay_str.length()
+	])
+
 	if g._last_replay_str != "":
 		var parts: PackedStringArray = g._last_replay_str.split("|", false)
-		print("[DBG][", tag, "] last_replay_segs=", parts.size(), " last_seg=", parts[parts.size() - 1])
+		g.dbg(["state_dbg tag=", tag, " lastReplaySegs=", parts.size(), " lastSeg=", parts[parts.size() - 1]])
 
 func res_str(res: Dictionary, key: String, default_value: String = "") -> String:
 	var v: Variant = res.get(key, default_value)
@@ -91,11 +99,13 @@ func flip_enc_for_perspective(enc: int) -> int:
 	return enc
 
 func set_game_data(raw_text: String) -> void:
-	var res: Dictionary = JSON.parse_string(raw_text)
-	if typeof(res) != TYPE_DICTIONARY:
+	var parsed : Variant = JSON.parse_string(raw_text)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		OpLog.e(LOG_TAG, ["state_set_game_data invalid JSON raw=", raw_text])
 		return
 
-	print("RAW INCOMING DATA: ", res)
+	var res: Dictionary = parsed
+	g.dbg(["state_set_game_data keys=", res.keys()])
 
 	g.my_id = res_str(res, "myPlayerId", "")
 	g.p1_id = res_str(res, "player1", "")
@@ -185,7 +195,7 @@ func set_game_data(raw_text: String) -> void:
 			g.opp_avatar_display.update_avatar_from_data(opponent_data)
 
 	var replay_str: String = res_str(res, "replay", "")
-	print("[REPLAY] raw=", replay_str)
+	OpLog.i(LOG_TAG, ["state_replay_loaded ", g._replay_summary(replay_str), " raw=", replay_str])
 
 	g._pending_enemy_shot = false
 	g._opp_target_world = Vector3.ZERO
@@ -218,7 +228,7 @@ func set_game_data(raw_text: String) -> void:
 		g._replay_seg_index = 0
 		g._replay_base_state = {}
 		g._last_replay_str = ""
-		print("[REPLAY] no replay in payload yet (first move scenario)")
+		OpLog.i(LOG_TAG, "state_replay_empty first_move_scenario")
 
 	if replay_str == "":
 		if g.buttons != null and g.buttons.has_method("spawn_player_random_lane"):
@@ -226,14 +236,14 @@ func set_game_data(raw_text: String) -> void:
 
 	g._hp_me = clamp((hp1 if g.playernum == 1 else hp2), 0, 3)
 	g._hp_opp = clamp((hp2 if g.playernum == 1 else hp1), 0, 3)
-	print("ME HP: ", g._hp_me, " | OPP HP: ", g._hp_opp)
+	OpLog.i(LOG_TAG, ["hp_loaded me=", g._hp_me, " opp=", g._hp_opp, " player=", g.playernum])
 
 	g._apply_hearts_from_hp()
 	g._update_move_buttons()
 
 	g.game_ended = g.check_win()
 	if g.game_ended:
-		print("GAME ENDED")
+		OpLog.i(LOG_TAG, ["state_detected_game_end ", g._state_summary()])
 		g.stop_waiting_animation()
 		g.game_over = true
 		if is_instance_valid(g.fp_aim_sprite):
@@ -249,26 +259,30 @@ func set_game_data(raw_text: String) -> void:
 			b.visible = false
 			b.set_click_enabled(false)
 			g._set_button_enabled(b, false)
+			
+	OpLog.i(LOG_TAG, [
+		"state_set_game_data_done player=", g.playernum,
+		" turn=", g.is_my_turn,
+		" spectator=", g.spectator_mode,
+		" winner=", g.winner,
+		" ", g._state_summary()
+	])
 
 func send_game(clear_targets_for_next_turn: bool = false) -> void:
 	if g._is_replay_playback and (g._round_sequence_running or g._is_shot_sequence_running) and not g.game_over:
-		print("[Send] Blocked: replay playback running. Not sending.")
+		OpLog.w(LOG_TAG, ["send_game blocked replay playback running ", g._state_summary()])
 		return
 
-	# Safety: clear stuck playback flag if nothing is actually running
 	if g._is_replay_playback and not g._round_sequence_running and not g._is_shot_sequence_running:
-		print("[Send] NOTE: replay flag was true but no sequence running. Clearing.")
+		OpLog.w(LOG_TAG, "send_game clearing stuck replay playback flag")
 		g._is_replay_playback = false
 		g._replay_auto_pending = false
 
-
-	# If autoplay was queued but user is firing, cancel autoplay and send.
 	if g._replay_auto_pending:
-		print("[Send] NOTE: autoplay was pending, cancelling due to user send.")
+		OpLog.i(LOG_TAG, "send_game cancelling pending autoplay")
 		g._replay_auto_pending = false
 
-
-	print("[Send] send_game() called clear_targets_for_next_turn=", clear_targets_for_next_turn)
+	OpLog.i(LOG_TAG, ["send_game_start clearTargets=", clear_targets_for_next_turn, " ", g._state_summary()])
 	await g.get_tree().process_frame
 
 	var my_pos_int: int = lane_to_pos_enc(g._player_lane)
@@ -276,7 +290,6 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 	var my_target_int: int = -1
 	if g._selected_shoot != null and is_instance_valid(g._selected_shoot):
 		my_target_int = lane_to_target_enc(g._selected_shoot.lane)
-
 
 	var out_replay: String = "|".join(g._replay_send_segments)
 	g._last_replay_str = out_replay
@@ -286,11 +299,13 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 	}
 
 	var out_parts: PackedStringArray = out_replay.split("|", false)
-	print("[Send] REPLAY_OUT segs=", out_parts.size(), " last_seg=", out_parts[out_parts.size() - 1])
+	OpLog.i(LOG_TAG, [
+		"send_game_replay ", g._replay_summary(out_replay),
+		" lastSeg=", out_parts[out_parts.size() - 1] if out_parts.size() > 0 else ""
+	])
 
 	g.game_ended = g.check_win()
 	if g.game_ended:
-		print("GAME ENDED 1")
 		clear_targets_for_next_turn = true
 
 		var winner: String = ""
@@ -301,13 +316,15 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 				opp_id = g.p2_id
 			elif g.p2_id != "" and g.my_id == g.p2_id:
 				opp_id = g.p1_id
+
 		if g.win_loss_state == "":
 			if g._hp_opp < g._hp_me:
-				g.win_loss_state = "1" 
+				g.win_loss_state = "1"
 			elif g._hp_opp > g._hp_me:
 				g.win_loss_state = "-1"
 			else:
 				g.win_loss_state = "0"
+
 		if g.win_loss_state == "1":
 			winner = g.my_id
 			winner_player = g.playernum
@@ -319,20 +336,36 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 			winner_player = 0
 
 		payload["winner"] = g.my_id + "|" + g.win_loss_state
-		print("[Send] Game ended. my_id=", g.my_id, " winner=", winner, " winnerPlayer=", winner_player, " result=", g.win_loss_state)
+
+		OpLog.i(LOG_TAG, [
+			"send_game_winner myId=", g.my_id,
+			" winner=", winner,
+			" winnerPlayer=", winner_player,
+			" result=", g.win_loss_state
+		])
 
 	var avatar_key := ("avatar1" if g.playernum == 1 else "avatar2")
 	if is_instance_valid(g.player_avatar_display) and g.player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = g.player_avatar_display.get_avatar_data_string()
 
-	print("[Send] PAYLOAD: ", payload)
 	dbg("SEND_GAME_BEFORE")
 
-	var appPlugin := Engine.get_singleton("AppPlugin")
+	var out_json := JSON.stringify(payload)
+	OpLog.event(LOG_TAG, [
+		"send_game_out replay=", g._replay_summary(out_replay),
+		" pos=", my_pos_int,
+		" target=", my_target_int,
+		" winner=", str(payload.get("winner", "")),
+		" avatarKey=", avatar_key,
+		" ", g._state_summary(),
+		" raw=", out_json
+	])
+
+	var appPlugin := Engine.get_singleton("AppPlugin") if Engine.has_singleton("AppPlugin") else null
 	if appPlugin:
-		appPlugin.updateGameData(JSON.stringify(payload))
+		appPlugin.updateGameData(out_json)
 	else:
-		print("AppPlugin is null. Cannot send game data.")
+		OpLog.w(LOG_TAG, ["AppPlugin is null; payload not sent raw=", out_json])
 
 	g.is_my_turn = false
 
@@ -341,7 +374,6 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 		g.fire_button.visible = false
 
 	g._selected_shoot = null
-
 	g._set_all_buttons_clickable(false)
 
 	if not g.game_over:
