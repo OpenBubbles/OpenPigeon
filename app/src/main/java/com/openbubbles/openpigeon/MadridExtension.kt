@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.os.Binder
 import com.openbubbles.openpigeon.util.OpenPigeonLog
 import android.widget.RemoteViews
 import android.widget.Toast
@@ -91,6 +92,14 @@ import kotlin.math.roundToInt
 import androidx.core.content.edit
 import com.openbubbles.openpigeon.pool.NineBallGame
 
+private const val KEYBOARD_DEFAULT_HEIGHT_DP = 300
+private const val KEYBOARD_EXPANDED_HEIGHT_DP = 380
+private const val GAME_PICKER_HEADER_HEIGHT_DP = 44
+private const val GAME_PICKER_ROW_HEIGHT_DP = 100
+private const val GAME_PICKER_MIN_ROWS = 2
+private const val GAME_PICKER_MAX_ROWS = 3
+private const val EXPANDED_OPENBUBBLES_MAJOR = 2
+
 
 class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
@@ -163,6 +172,56 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
     var currentPage: Int = 0
     var showingTutorial: Boolean = false
     var tutorialStep: Int = 0
+    var keyboardHeightDp: Int = KEYBOARD_DEFAULT_HEIGHT_DP
+
+    private var lastHostPackageLog: String = ""
+
+    private fun updateKeyboardHeightForHost() {
+        val uid = Binder.getCallingUid()
+        val pm = context.packageManager
+        val packages = pm.getPackagesForUid(uid)?.toList().orEmpty()
+
+        keyboardHeightDp = KEYBOARD_DEFAULT_HEIGHT_DP
+
+        val details = packages.map { pkg ->
+            val label = runCatching {
+                val appInfo = pm.getApplicationInfo(pkg, 0)
+                pm.getApplicationLabel(appInfo).toString()
+            }.getOrDefault("")
+
+            val version = runCatching {
+                pm.getPackageInfo(pkg, 0).versionName ?: ""
+            }.getOrDefault("")
+
+            val hostName = "$pkg $label".lowercase()
+            val isOpenBubblesHost =
+                hostName.contains("openbubbles") || hostName.contains("bluebubbles")
+
+            val major = Regex("\\d+").find(version)?.value?.toIntOrNull() ?: 0
+            val expanded = isOpenBubblesHost && major >= EXPANDED_OPENBUBBLES_MAJOR
+
+            if (expanded) {
+                keyboardHeightDp = KEYBOARD_EXPANDED_HEIGHT_DP
+            }
+
+            "$pkg label=$label version=$version host=$isOpenBubblesHost expanded=$expanded"
+        }
+
+        val logLine = "uid=$uid height=$keyboardHeightDp rows=${gamePickerRowsPerPage()} packages=${details.joinToString("; ")}"
+        if (logLine != lastHostPackageLog) {
+            lastHostPackageLog = logLine
+            OpenPigeonLog.i("MadridExtension", "keyboard host: $logLine")
+        }
+    }
+
+    fun gamePickerRowsPerPage(): Int {
+        val availableForRows = keyboardHeightDp - GAME_PICKER_HEADER_HEIGHT_DP
+
+        return (availableForRows / GAME_PICKER_ROW_HEIGHT_DP).coerceIn(
+            GAME_PICKER_MIN_ROWS,
+            GAME_PICKER_MAX_ROWS
+        )
+    }
 
     @Composable
     fun MainKeyboard() {
@@ -183,7 +242,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         val dpWidth = displayMetrics.widthPixels / displayMetrics.density
 
         val result = runBlocking {
-            keyboardRemoteViews.compose(context, DpSize(dpWidth.dp, 300.dp)) {
+            keyboardRemoteViews.compose(context, DpSize(dpWidth.dp, keyboardHeightDp.dp)) {
                 MainKeyboard()
             }
         }
@@ -214,6 +273,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
         val displayMetrics = context.resources.displayMetrics
         val dpWidth = displayMetrics.widthPixels / displayMetrics.density
+        updateKeyboardHeightForHost()
 
         com.openbubbles.openpigeon.settings.GameStats.init(context)
         currentUserCount = userCount
@@ -221,7 +281,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         showingTutorial = !sharedPrefs.getBoolean("tutorial_seen", false)
         if (showingTutorial) tutorialStep = 0
         val result = runBlocking {
-            keyboardRemoteViews.compose(context, DpSize(dpWidth.dp, 300.dp)) {
+            keyboardRemoteViews.compose(context, DpSize(dpWidth.dp, keyboardHeightDp.dp)) {
                 MainKeyboard()
             }
         }
@@ -337,7 +397,10 @@ fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: Glance
         com.openbubbles.openpigeon.settings.GameStats.getWins(game.getName())
     } ?: 0
 
-    Column(modifier = modifier.wrapContentHeight().padding(1.dp), horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
+    Column(
+        modifier = modifier.height(GAME_PICKER_ROW_HEIGHT_DP.dp).padding(1.dp),
+        horizontalAlignment = Alignment.Horizontal.CenterHorizontally
+    ) {
         Box(
             modifier = GlanceModifier.wrapContentHeight(),
             contentAlignment = Alignment.TopEnd
@@ -349,7 +412,7 @@ fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: Glance
                     onClick = actionRunCallback<ChooseGameCallback>(actionParametersOf(
                         gameName to game.getName()
                     ))
-                ).height(80.dp).cornerRadius(5.dp),
+                ).height(74.dp).cornerRadius(5.dp),
                 contentScale = ContentScale.Crop,
             )
             if (wins > 0) {
@@ -383,7 +446,7 @@ fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: Glance
                 color = ColorProvider(Color.Gray),
                 textAlign = TextAlign.Center,
                 fontWeight = FontWeight.Bold,
-                fontSize = 11.sp
+                fontSize = 10.sp
             )
         )
     }
@@ -506,62 +569,96 @@ fun RenderKeyboardTutorial(extension: MadridExtension?) {
 @Composable
 fun RenderKeyboard(extension: MadridExtension?) {
     val itemsPerRow = 5
-    val rowsPerPage = 2
-    val p = extension?.currentPage ?: 0
+    val rowsPerPage = extension?.gamePickerRowsPerPage() ?: GAME_PICKER_MIN_ROWS
     val itemsPerPage = itemsPerRow * rowsPerPage
     val hiddenGameNames = setOf("hunt", "anagrams", "wordbites")
     val visibleGames = games.filter { it.getName() !in hiddenGameNames }
-    val totalPages = ceil(visibleGames.size / itemsPerPage.toDouble()).toInt()
+    val totalPages = ceil(visibleGames.size / itemsPerPage.toDouble()).toInt().coerceAtLeast(1)
+    val p = (extension?.currentPage ?: 0).coerceIn(0, totalPages - 1)
 
-    val pageGames = visibleGames.slice(
-        min(itemsPerPage * p, visibleGames.size)..<min(itemsPerPage * (p + 1), visibleGames.size)
-    )
+    val startIndex = min(itemsPerPage * p, visibleGames.size)
+    val endIndex = min(itemsPerPage * (p + 1), visibleGames.size)
+    val pageGames = visibleGames.subList(startIndex, endIndex)
     Column(modifier = GlanceModifier.fillMaxHeight().padding(1.dp)) {
-        Row(horizontalAlignment = Alignment.Horizontal.CenterHorizontally, verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
-            val arrowSlotWidth = 43.dp
-            if (p > 0) {
-                Image(
-                    ImageProvider(R.drawable.baseline_arrow_back_ios_24),
-                    "Back",
-                    modifier = GlanceModifier
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                        .clickable(
-                            actionRunCallback<ChangePageCallback>(
-                                actionParametersOf(page to (p - 1))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = GlanceModifier.fillMaxWidth().height(GAME_PICKER_HEADER_HEIGHT_DP.dp)
+        ) {
+            val arrowSlotWidth = 38.dp
+
+            Box(
+                modifier = GlanceModifier.width(arrowSlotWidth).height(GAME_PICKER_HEADER_HEIGHT_DP.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (p > 0) {
+                    Image(
+                        ImageProvider(R.drawable.baseline_arrow_back_ios_24),
+                        "Back",
+                        modifier = GlanceModifier
+                            .width(24.dp)
+                            .height(24.dp)
+                            .clickable(
+                                actionRunCallback<ChangePageCallback>(
+                                    actionParametersOf(page to (p - 1))
+                                )
                             )
-                        )
-                )
-            } else {
-                Spacer(modifier = GlanceModifier.width(arrowSlotWidth))
+                    )
+                }
             }
-            Spacer(modifier = GlanceModifier.defaultWeight())
-            Image(ImageProvider(R.drawable.madrid_icon), "OpenPigeon", modifier = GlanceModifier.width(50.dp).padding(8.dp).wrapContentHeight())
-            Text("Games", style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(end = 6.dp))
-            Text("|", style = TextStyle(fontSize = 30.sp, color = ColorProvider(Color.Gray)))
-            Text("Settings", style = TextStyle(fontSize = 15.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(start = 6.dp, end = 6.dp)
-                    .clickable(onClick = actionStartActivity<AvatarSettingsActivity>()))
-            Text("|", style = TextStyle(fontSize = 30.sp, color = ColorProvider(Color.Gray)))
-            Text("About", style = TextStyle(fontSize = 15.sp, color = ColorProvider(Color.Gray)), modifier = GlanceModifier.padding(start = 6.dp)
-                .clickable(onClick = androidx.glance.action.actionStartActivity<AboutActivity>()))
-            Spacer(modifier = GlanceModifier.defaultWeight())
-            if (p < (totalPages - 1)) {
+
+            Row(
+                horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = GlanceModifier.defaultWeight()
+            ) {
                 Image(
-                    ImageProvider(R.drawable.baseline_arrow_forward_ios_24),
-                    "Forward",
-                    modifier = GlanceModifier
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                        .clickable(
-                            actionRunCallback<ChangePageCallback>(
-                                actionParametersOf(page to (p + 1))
-                            )
-                        )
+                    ImageProvider(R.drawable.madrid_icon),
+                    "OpenPigeon",
+                    modifier = GlanceModifier.width(42.dp).padding(5.dp).wrapContentHeight()
                 )
-            } else {
-                Spacer(modifier = GlanceModifier.width(arrowSlotWidth))
+                Text(
+                    "Games",
+                    style = TextStyle(fontSize = 21.sp, color = ColorProvider(Color.Gray)),
+                    modifier = GlanceModifier.padding(end = 5.dp)
+                )
+                Text("|", style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray)))
+                Text(
+                    "Settings",
+                    style = TextStyle(fontSize = 13.sp, color = ColorProvider(Color.Gray)),
+                    modifier = GlanceModifier.padding(start = 5.dp, end = 5.dp)
+                        .clickable(onClick = actionStartActivity<AvatarSettingsActivity>())
+                )
+                Text("|", style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray)))
+                Text(
+                    "About",
+                    style = TextStyle(fontSize = 13.sp, color = ColorProvider(Color.Gray)),
+                    modifier = GlanceModifier.padding(start = 5.dp)
+                        .clickable(onClick = androidx.glance.action.actionStartActivity<AboutActivity>())
+                )
+            }
+
+            Box(
+                modifier = GlanceModifier.width(arrowSlotWidth).height(GAME_PICKER_HEADER_HEIGHT_DP.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (p < (totalPages - 1)) {
+                    Image(
+                        ImageProvider(R.drawable.baseline_arrow_forward_ios_24),
+                        "Forward",
+                        modifier = GlanceModifier
+                            .width(24.dp)
+                            .height(24.dp)
+                            .clickable(
+                                actionRunCallback<ChangePageCallback>(
+                                    actionParametersOf(page to (p + 1))
+                                )
+                            )
+                    )
+                }
             }
         }
         for (index in 0..<ceil(pageGames.size / itemsPerRow.toDouble()).toInt()) {
-            Row(modifier = GlanceModifier.padding(bottom = 3.dp)) {
+            Row(modifier = GlanceModifier.height(GAME_PICKER_ROW_HEIGHT_DP.dp).padding(bottom = 2.dp)) {
                 for (i in 0..<itemsPerRow) {
                     val game = pageGames.getOrNull(index * itemsPerRow + i)
                     if (game != null) {
