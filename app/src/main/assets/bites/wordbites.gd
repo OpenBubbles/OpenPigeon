@@ -916,6 +916,15 @@ func _update_active_word_popup_position() -> void:
 	var overlay := get_node_or_null("WordPopupOverlay") as Control
 	if is_instance_valid(overlay):
 		_position_word_popup(overlay, false)
+		
+func _show_word_popup_after_close(word: String, anchor_id: int) -> void:
+	await get_tree().process_frame
+
+	var anchor := instance_from_id(anchor_id) as Control
+	if not is_instance_valid(anchor) or not anchor.is_inside_tree():
+		return
+
+	_show_word_popup(word, anchor)
 
 func _handle_word_popup_click(overlay: Control, click_pos: Vector2) -> void:
 	if not is_instance_valid(overlay):
@@ -940,10 +949,14 @@ func _handle_word_popup_click(overlay: Control, click_pos: Vector2) -> void:
 			if clicked_panel:
 				break
 
+	var clicked_anchor_id: int = 0
+	if is_instance_valid(clicked_panel):
+		clicked_anchor_id = clicked_panel.get_instance_id()
+
 	_dismiss_word_popup(overlay)
 
-	if clicked_panel and clicked_word != "":
-		_show_word_popup(clicked_word, clicked_panel)
+	if clicked_anchor_id != 0 and clicked_word != "":
+		call_deferred("_show_word_popup_after_close", clicked_word, clicked_anchor_id)
 		
 func _on_word_popup_close_pressed(overlay_id: int) -> void:
 	var overlay := instance_from_id(overlay_id) as Control
@@ -1013,9 +1026,12 @@ func _on_word_popup_overlay_gui_input(event: InputEvent, overlay_id: int) -> voi
 		_word_popup_last_pos = drag.position
 
 func _show_word_popup(word: String, anchor: Control) -> void:
-	var old_overlay := get_node_or_null("WordPopupOverlay")
-	if old_overlay:
+	var old_overlay := get_node_or_null("WordPopupOverlay") as Control
+	if is_instance_valid(old_overlay):
+		old_overlay.name = "WordPopupOverlayClosing"
+		old_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		old_overlay.queue_free()
+		await get_tree().process_frame
 	
 	var overlay := Control.new()
 	overlay.name = "WordPopupOverlay"
@@ -1387,6 +1403,11 @@ func _dismiss_word_popup(overlay: Control) -> void:
 
 	_word_popup_pointer_down = false
 	_word_popup_dragging = false
+
+	if overlay.name == "WordPopupOverlay":
+		overlay.name = "WordPopupOverlayClosing"
+
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.queue_free()
 
 func _on_start_button_pressed() -> void:
