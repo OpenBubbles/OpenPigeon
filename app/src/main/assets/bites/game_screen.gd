@@ -11,7 +11,6 @@ const LOG_TAG := "WordBitesGameScreen"
 var DEBUG_WORDBITES_SCREEN := false
 
 @onready var sent_label: Label = %SentLabel
-@onready var waiting_label: Label = %WaitForOpponentLabel
 @onready var waiting_blur: Control = %WaitBlur
 @onready var dot_timer: Timer = %DotTimer
 @onready var background: TextureRect = %Background

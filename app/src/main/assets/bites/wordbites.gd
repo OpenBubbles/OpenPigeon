@@ -47,8 +47,12 @@ var p1_score_s = ""
 var p2_score_s = ""
 var player
 var possible_word_count: int = 0
+var possible_words_count_label: Label = null
 var _possible_words_cache: Array = []
 var _words_cache_ready := false
+var _words_computing := false
+var _cached_possible_level := ""
+var _words_compute_level := ""
 var _words_loading_overlay: Control = null
 var _words_loading_tween: Tween = null
 var my_has_data := false
@@ -57,6 +61,11 @@ var _words_scroll_container: ScrollContainer = null
 var _words_pointer_down := false
 var _words_is_dragging := false
 var _words_last_drag_pos := Vector2.ZERO
+
+var _word_popup_pointer_down := false
+var _word_popup_dragging := false
+var _word_popup_last_pos := Vector2.ZERO
+
 const WORDS_DRAG_THRESHOLD := 8.0
 
 func _get_music_stream() -> AudioStream:
@@ -123,12 +132,12 @@ func _on_game_ready() -> void:
 		if grandparent is ScrollContainer:
 			_words_scroll_container = grandparent as ScrollContainer
 
-			if not _words_scroll_container.gui_input.is_connected(_on_words_list_scroll_gui_input):
-				_words_scroll_container.gui_input.connect(_on_words_list_scroll_gui_input)
-
 	_apply_score_box_style(main_score_box)
 	_apply_score_box_style(player_score_box)
 	_apply_score_box_style(opp_score_box)
+
+	_ensure_possible_words_count_label()
+	_update_possible_words_count_label()
 
 func _set_game_data(raw_text: String) -> void:
 	OpLog.event(LOG_TAG, ["set_game_data_in raw=", raw_text])
@@ -179,13 +188,24 @@ func _set_game_data(raw_text: String) -> void:
 
 	if level_s != "":
 		if game_screen.has_method("load_level"):
+			var level_changed: bool = level_s != _cached_possible_level
+
 			game_screen.load_level(level_s)
-			OpLog.i(LOG_TAG, ["level_loaded len=", level_s.length()])
+
+			OpLog.i(LOG_TAG, [
+				"level_loaded len=", level_s.length(),
+				" changed=", level_changed
+			])
+
+			if level_changed:
+				_cached_possible_level = level_s
+				_words_cache_ready = false
+				_possible_words_cache.clear()
+
+				if not _words_computing:
+					call_deferred("_begin_background_word_precompute")
 		else:
 			OpLog.w(LOG_TAG, "game_screen_missing_load_level")
-
-	_words_cache_ready = false
-	_possible_words_cache.clear()
 
 	p1_score_s = _get_first(d, "score1", "")
 	var p1_words_s: String = _get_first(d, "words1", "")
@@ -500,6 +520,15 @@ func _can_form_with_orientation_dfs(
 
 	memo[key] = true
 	return false
+	
+func _input(event: InputEvent) -> void:
+	if current_screen != 3:
+		return
+
+	if not is_instance_valid(words_screen) or not words_screen.visible:
+		return
+
+	_on_words_list_scroll_gui_input(event)
 
 func _on_words_list_scroll_gui_input(event: InputEvent) -> void:
 	if _words_scroll_container == null:
@@ -525,12 +554,24 @@ func _on_words_list_scroll_gui_input(event: InputEvent) -> void:
 
 		if _words_is_dragging:
 			_words_scroll_container.scroll_vertical -= int(drag.relative.y)
+			_update_active_word_popup_position()
 
 		_words_last_drag_pos = drag.position
 		return
 
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
+
+		if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_words_scroll_container.scroll_vertical -= 48
+			_update_active_word_popup_position()
+			return
+
+		if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_words_scroll_container.scroll_vertical += 48
+			_update_active_word_popup_position()
+			return
+
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
 				_words_pointer_down = true
@@ -550,6 +591,7 @@ func _on_words_list_scroll_gui_input(event: InputEvent) -> void:
 
 		if _words_is_dragging:
 			_words_scroll_container.scroll_vertical -= int(mm.relative.y)
+			_update_active_word_popup_position()
 
 		_words_last_drag_pos = mm.position
 
@@ -643,6 +685,60 @@ func _word_entry_less(a: Dictionary, b: Dictionary) -> bool:
 	var wa: String = String(a.get("word", ""))
 	var wb: String = String(b.get("word", ""))
 	return wa < wb
+	
+func _ensure_possible_words_count_label() -> void:
+	if is_instance_valid(possible_words_count_label):
+		return
+
+	if not is_instance_valid(words_screen):
+		return
+
+	var title_label: Label = null
+	var labels := words_screen.find_children("*", "Label", true, false)
+
+	for node in labels:
+		var lbl := node as Label
+		if lbl != null and lbl.text.strip_edges().to_upper() == "POSSIBLE WORDS":
+			title_label = lbl
+			break
+
+	if title_label == null:
+		OpLog.w(LOG_TAG, "possible_words_title_label_not_found")
+		return
+
+	possible_words_count_label = Label.new()
+	possible_words_count_label.name = "PossibleWordsCountLabel"
+	possible_words_count_label.text = "Words: 0"
+	possible_words_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	possible_words_count_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	possible_words_count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	possible_words_count_label.add_theme_font_size_override("font_size", 18)
+
+	var parent := title_label.get_parent()
+
+	if parent is BoxContainer:
+		var title_index := title_label.get_index()
+		parent.add_child(possible_words_count_label)
+		parent.move_child(possible_words_count_label, title_index + 1)
+	else:
+		title_label.add_child(possible_words_count_label)
+		possible_words_count_label.anchor_left = 0.0
+		possible_words_count_label.anchor_right = 1.0
+		possible_words_count_label.anchor_top = 1.0
+		possible_words_count_label.anchor_bottom = 1.0
+		possible_words_count_label.offset_left = 0.0
+		possible_words_count_label.offset_right = 0.0
+		possible_words_count_label.offset_top = 2.0
+		possible_words_count_label.offset_bottom = 26.0
+
+
+func _update_possible_words_count_label() -> void:
+	_ensure_possible_words_count_label()
+
+	if not is_instance_valid(possible_words_count_label):
+		return
+
+	possible_words_count_label.text = "Words: %d" % possible_word_count
 
 func _populate_full_word_list_from_cache() -> void:
 	for child in full_word_list.get_children():
@@ -651,26 +747,34 @@ func _populate_full_word_list_from_cache() -> void:
 	if not _words_cache_ready:
 		_show_words_loading()
 		await _compute_words_async()
-		_hide_words_loading()
 
 	var found_words: Dictionary = {}
 	if is_instance_valid(game_screen) and game_screen.has_method("get_word_history"):
 		for entry in game_screen.get_word_history():
 			if entry is Dictionary and entry.has("word"):
-				var wstr := String(entry["word"]).to_upper()
+				var wstr: String = String(entry["word"]).strip_edges().to_upper()
 				found_words[wstr] = true
 
 	possible_word_count = _possible_words_cache.size()
+	_update_possible_words_count_label()
 
 	if is_instance_valid(view_words_button):
 		view_words_button.text = "VIEW ALL WORDS"
 
+	var added: int = 0
 	for entry in _possible_words_cache:
-		var word := String(entry["word"])
-		var points := int(entry["points"])
-		var was_found := found_words.has(word)
+		var word: String = String(entry["word"])
+		var points: int = int(entry["points"])
+		var was_found: bool = found_words.has(word)
+
 		_add_word_row_with_highlight(word, points, was_found)
-		
+
+		added += 1
+		if added % WORDS_LIST_ROW_BATCH_SIZE == 0:
+			await get_tree().process_frame
+
+	_hide_words_loading()
+
 func _add_word_row_with_highlight(word: String, points: int, was_found: bool) -> void:
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -722,10 +826,191 @@ func _add_word_row_with_highlight(word: String, points: int, was_found: bool) ->
 		if event is InputEventMouseButton:
 			var mb := event as InputEventMouseButton
 			if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
+				var old_overlay := get_node_or_null("WordPopupOverlay")
+				if old_overlay and old_overlay.has_meta("word") and String(old_overlay.get_meta("word")) == word:
+					return
+
 				_show_word_popup(word, word_panel)
 	)
 
 	full_word_list.add_child(row)
+	
+func _position_word_popup(overlay: Control, clamp_y: bool) -> Vector2:
+	if not is_instance_valid(overlay):
+		return Vector2.ZERO
+
+	var popup := overlay.get_node_or_null("WordPopup") as Control
+	var pointer := overlay.get_node_or_null("Pointer") as Control
+	var close_btn := overlay.get_node_or_null("CloseButton") as Control
+
+	if not is_instance_valid(popup) or not is_instance_valid(pointer) or not is_instance_valid(close_btn):
+		return Vector2.ZERO
+
+	var anchor: Control = null
+	if overlay.has_meta("anchor"):
+		var anchor_var: Variant = overlay.get_meta("anchor")
+		if anchor_var is Control:
+			anchor = anchor_var as Control
+
+	if not is_instance_valid(anchor) or not anchor.is_inside_tree():
+		overlay.queue_free()
+		return Vector2.ZERO
+
+	var anchor_rect: Rect2 = anchor.get_global_rect()
+	var viewport_rect: Rect2 = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	var margin: float = 12.0
+	var popup_rect: Rect2 = popup.get_global_rect()
+	var popup_size: Vector2 = popup_rect.size
+
+	var open_on_left: bool = false
+	var right_space: float = viewport_rect.size.x - (anchor_rect.end.x + margin)
+	if popup_size.x > right_space:
+		open_on_left = true
+
+	var target_x: float = (
+		anchor_rect.position.x - margin - popup_size.x
+		if open_on_left
+		else anchor_rect.end.x + margin
+	)
+
+	var target_y: float = anchor_rect.position.y + anchor_rect.size.y * 0.5 - popup_size.y * 0.5
+	var target_pos: Vector2 = Vector2(target_x, target_y)
+
+	target_pos.x = clamp(
+		target_pos.x,
+		float(viewport_rect.position.x + margin),
+		float(viewport_rect.position.x + viewport_rect.size.x - margin - popup_size.x)
+	)
+
+	if clamp_y:
+		target_pos.y = clamp(
+			target_pos.y,
+			float(viewport_rect.position.y + margin),
+			float(viewport_rect.position.y + viewport_rect.size.y - margin - popup_size.y)
+		)
+
+	popup.global_position = target_pos
+
+	var ptr_size: Vector2 = pointer.custom_minimum_size
+	var popup_is_right: bool = popup.global_position.x >= anchor_rect.position.x
+	var pointer_x: float
+
+	if popup_is_right:
+		pointer_x = popup.global_position.x - ptr_size.x * 0.5
+	else:
+		pointer_x = popup.global_position.x + popup_size.x - ptr_size.x * 0.5
+
+	pointer.global_position = Vector2(
+		pointer_x,
+		anchor_rect.position.y + anchor_rect.size.y * 0.5 - ptr_size.y * 0.5
+	)
+
+	close_btn.global_position = popup.global_position + Vector2(
+		popup_size.x - close_btn.custom_minimum_size.x * 0.5,
+		-close_btn.custom_minimum_size.y * 0.5
+	)
+
+	return target_pos
+
+func _update_active_word_popup_position() -> void:
+	var overlay := get_node_or_null("WordPopupOverlay") as Control
+	if is_instance_valid(overlay):
+		_position_word_popup(overlay, false)
+
+func _handle_word_popup_click(overlay: Control, click_pos: Vector2) -> void:
+	if not is_instance_valid(overlay):
+		return
+
+	var popup := overlay.get_node_or_null("WordPopup") as Control
+	if is_instance_valid(popup) and popup.get_global_rect().has_point(click_pos):
+		return
+
+	var clicked_word := ""
+	var clicked_panel: Control = null
+
+	for row in full_word_list.get_children():
+		if row is HBoxContainer:
+			for child in row.get_children():
+				if child is PanelContainer and child.has_meta("word"):
+					var r := (child as Control).get_global_rect()
+					if r.has_point(click_pos):
+						clicked_word = String(child.get_meta("word"))
+						clicked_panel = child
+						break
+			if clicked_panel:
+				break
+
+	_dismiss_word_popup(overlay)
+
+	if clicked_panel and clicked_word != "":
+		_show_word_popup(clicked_word, clicked_panel)
+		
+func _on_word_popup_close_pressed(overlay_id: int) -> void:
+	var overlay := instance_from_id(overlay_id) as Control
+	if is_instance_valid(overlay):
+		_dismiss_word_popup(overlay)
+
+
+func _on_word_popup_overlay_gui_input(event: InputEvent, overlay_id: int) -> void:
+	var overlay := instance_from_id(overlay_id) as Control
+	if not is_instance_valid(overlay):
+		return
+
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				_word_popup_pointer_down = true
+				_word_popup_dragging = false
+				_word_popup_last_pos = mb.position
+			else:
+				var was_dragging: bool = _word_popup_dragging
+
+				_word_popup_pointer_down = false
+				_word_popup_dragging = false
+
+				if not was_dragging:
+					_handle_word_popup_click(overlay, mb.position)
+
+		return
+
+	if event is InputEventMouseMotion and _word_popup_pointer_down:
+		var mm := event as InputEventMouseMotion
+
+		if not _word_popup_dragging:
+			if mm.position.distance_to(_word_popup_last_pos) >= WORDS_DRAG_THRESHOLD:
+				_word_popup_dragging = true
+
+		_word_popup_last_pos = mm.position
+		return
+
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+
+		if touch.pressed:
+			_word_popup_pointer_down = true
+			_word_popup_dragging = false
+			_word_popup_last_pos = touch.position
+		else:
+			var was_touch_dragging: bool = _word_popup_dragging
+
+			_word_popup_pointer_down = false
+			_word_popup_dragging = false
+
+			if not was_touch_dragging:
+				_handle_word_popup_click(overlay, touch.position)
+
+		return
+
+	if event is InputEventScreenDrag and _word_popup_pointer_down:
+		var drag := event as InputEventScreenDrag
+
+		if not _word_popup_dragging:
+			if drag.position.distance_to(_word_popup_last_pos) >= WORDS_DRAG_THRESHOLD:
+				_word_popup_dragging = true
+
+		_word_popup_last_pos = drag.position
 
 func _show_word_popup(word: String, anchor: Control) -> void:
 	var old_overlay := get_node_or_null("WordPopupOverlay")
@@ -740,6 +1025,8 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(overlay)
+	overlay.set_meta("anchor", anchor)
+	overlay.set_meta("word", word)
 
 	var popup := PanelContainer.new()
 	popup.name = "WordPopup"
@@ -952,6 +1239,7 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 	overlay.add_child(pointer)
 
 	var close_btn := Button.new()
+	close_btn.name = "CloseButton"
 	close_btn.text = "X"
 	close_btn.flat = false
 	close_btn.focus_mode = Control.FOCUS_NONE
@@ -974,111 +1262,36 @@ func _show_word_popup(word: String, anchor: Control) -> void:
 	close_btn.add_theme_stylebox_override("pressed", close_style)
 	overlay.add_child(close_btn)
 
-	close_btn.pressed.connect(func() -> void:
-		_dismiss_word_popup(overlay)
-	)
+	var overlay_id: int = overlay.get_instance_id()
+	close_btn.pressed.connect(_on_word_popup_close_pressed.bind(overlay_id))
 
-	overlay.gui_input.connect(func(event: InputEvent) -> void:
-		if event is InputEventMouseButton:
-			var mb := event as InputEventMouseButton
-			if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
-				var click_pos := mb.position
-				var clicked_popup_rect := popup.get_global_rect()
-
-				if clicked_popup_rect.has_point(click_pos):
-					return
-
-				var clicked_word := ""
-				var clicked_panel: Control = null
-
-				for row in full_word_list.get_children():
-					if row is HBoxContainer:
-						for child in row.get_children():
-							if child is PanelContainer and child.has_meta("word"):
-								var r := (child as Control).get_global_rect()
-								if r.has_point(click_pos):
-									clicked_word = String(child.get_meta("word"))
-									clicked_panel = child
-									break
-						if clicked_panel:
-							break
-
-				_dismiss_word_popup(overlay)
-
-				if clicked_panel and clicked_word != "":
-					_show_word_popup(clicked_word, clicked_panel)
-	)
+	overlay.gui_input.connect(_on_word_popup_overlay_gui_input.bind(overlay_id))
 
 	popup.modulate.a = 0.0
 
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	var anchor_rect: Rect2 = anchor.get_global_rect()
+	var popup_rect: Rect2 = popup.get_global_rect()
+
 	var viewport_rect: Rect2 = Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
 	var margin: float = 12.0
-	var popup_rect: Rect2 = popup.get_global_rect()
-	
-	# Scale down the content first if the popup is too large for the screen
 	var max_width: float = float(viewport_rect.size.x) - margin * 2.0
 	var max_height: float = float(viewport_rect.size.y) - margin * 2.0
+
 	if popup_rect.size.x > max_width or popup_rect.size.y > max_height:
 		var sx: float = max_width / popup_rect.size.x
 		var sy: float = max_height / popup_rect.size.y
 		var scale_factor: float = clamp(min(sx, sy), 0.5, 1.0)
 		letters_canvas.scale = Vector2(scale_factor, scale_factor)
 		await get_tree().process_frame
-		popup_rect = popup.get_global_rect()
 
-	# Decide left or right of anchor
-	var open_on_left: bool = false
-	var right_space: float = viewport_rect.size.x - (anchor_rect.end.x + margin)
-	if popup_rect.size.x > right_space:
-		open_on_left = true
-
-	var target_x: float = (
-		anchor_rect.position.x - margin - popup_rect.size.x
-		if open_on_left
-		else anchor_rect.end.x + margin
-	)
-	var target_y: float = (
-		anchor_rect.position.y + anchor_rect.size.y * 0.5 - popup_rect.size.y * 0.5
-	)
-
-	var target_pos: Vector2 = Vector2(target_x, target_y)
-	target_pos.x = clamp(
-		target_pos.x,
-		float(viewport_rect.position.x + margin),
-		float(viewport_rect.position.x + viewport_rect.size.x - margin - popup_rect.size.x)
-	)
-	target_pos.y = clamp(
-		target_pos.y,
-		float(viewport_rect.position.y + margin),
-		float(viewport_rect.position.y + viewport_rect.size.y - margin - popup_rect.size.y)
-	)
-	popup.global_position = target_pos
-
-	var ptr_size: Vector2 = pointer.custom_minimum_size
-	var popup_is_right: bool = popup.global_position.x >= anchor_rect.position.x
-	var pointer_x: float
-	if popup_is_right:
-		pointer_x = popup.global_position.x - ptr_size.x * 0.5
-	else:
-		pointer_x = popup.global_position.x + popup_rect.size.x - ptr_size.x * 0.5
-
-	pointer.global_position = Vector2(
-		pointer_x,
-		anchor_rect.position.y + anchor_rect.size.y * 0.5 - ptr_size.y * 0.5
-	)
-
-	close_btn.global_position = popup.global_position + Vector2(
-		popup_rect.size.x - close_btn.custom_minimum_size.x * 0.5,
-		-close_btn.custom_minimum_size.y * 0.5
-	)
+	var target_pos: Vector2 = _position_word_popup(overlay, true)
 
 	var tween := create_tween()
 	popup.modulate.a = 0.0
-	var start_pos: Vector2 = popup.global_position + Vector2(0, 8.0)
+
+	var start_pos: Vector2 = target_pos + Vector2(0, 8.0)
 	popup.global_position = start_pos
 
 	tween.tween_property(popup, "modulate:a", 1.0, 0.15)
@@ -1171,24 +1384,10 @@ func _hide_words_loading() -> void:
 func _dismiss_word_popup(overlay: Control) -> void:
 	if not is_instance_valid(overlay):
 		return
-	
-	var popup := overlay.get_node_or_null("WordPopup") as Control
-	if popup == null:
-		overlay.queue_free()
-		return
-	
-	var tween := create_tween()
-	var start_pos := popup.global_position
-	var end_pos := start_pos + Vector2(0, 8)
 
-	tween.tween_property(popup, "modulate:a", 0.0, 0.12)
-	tween.parallel().tween_property(popup, "global_position", end_pos, 0.12) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-
-	tween.tween_callback(func() -> void:
-		if is_instance_valid(overlay):
-			overlay.queue_free()
-	)
+	_word_popup_pointer_down = false
+	_word_popup_dragging = false
+	overlay.queue_free()
 
 func _on_start_button_pressed() -> void:
 	await _switch_to_screen(1)      # GameScreen
@@ -1257,7 +1456,7 @@ func _trie_dfs_letters(
 	results: Array[String],
 	max_len: int
 ) -> void:
-	if node.is_word and current_word.length() >= 3 and not results.has(current_word):
+	if node.is_word and current_word.length() >= 3:
 		results.append(current_word)
 
 	if current_word.length() >= max_len:
@@ -1280,15 +1479,100 @@ func _trie_dfs_letters(
 		letter_counts[key] = remaining - 1
 		_trie_dfs_letters(next_node, letter_counts, current_word + ch_str, results, max_len)
 		letter_counts[key] = remaining
+		
+const WORDS_COMPUTE_BUDGET_MS := 12
+const WORDS_COMPUTE_BATCH_SIZE := 250
+const WORDS_LIST_ROW_BATCH_SIZE := 40
+
+func _init_dictionary_trie_async() -> void:
+	if _dictionary_trie_root != null:
+		return
+
+	var root := TrieNode.new()
+	var f := FileAccess.open(DICT_PATH, FileAccess.READ)
+	if f == null:
+		OpLog.e(LOG_TAG, ["dictionary_trie_open_failed path=", DICT_PATH])
+		_dictionary_trie_root = root
+		return
+
+	var slice_start := Time.get_ticks_msec()
+	while not f.eof_reached():
+		var line := f.get_line().strip_edges().to_upper()
+		if line.length() >= 3:
+			var node := root
+			for i in line.length():
+				var char_str := line[i]
+				if not node.children.has(char_str):
+					node.children[char_str] = TrieNode.new()
+				node = node.children[char_str]
+			node.is_word = true
+
+		if Time.get_ticks_msec() - slice_start >= WORDS_COMPUTE_BUDGET_MS:
+			await get_tree().process_frame
+			slice_start = Time.get_ticks_msec()
+
+	_dictionary_trie_root = root
+
+func _can_form_with_orientation_fast(
+	word_upper: String,
+	runs_upper: Array[String],
+	orientations: Array,
+	want_horizontal: bool
+) -> bool:
+	var n: int = runs_upper.size()
+	if n == 0:
+		return false
+
+	var wlen := word_upper.length()
+	if want_horizontal and wlen > 8:
+		return false
+	if (not want_horizontal) and wlen > 9:
+		return false
+
+	var memo: Dictionary = {}
+	return _can_form_with_orientation_dfs(
+		word_upper, runs_upper, orientations, want_horizontal, 0, 0, memo
+	)
+
+func _begin_background_word_precompute() -> void:
+	if _cached_possible_level == "" or _words_cache_ready or _words_computing:
+		return
+
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	if _cached_possible_level == "" or _words_cache_ready or _words_computing:
+		return
+
+	await _compute_words_async()
 
 func _compute_words_async() -> void:
+	if _words_computing:
+		while _words_computing:
+			await get_tree().process_frame
+		return
+
+	if _words_cache_ready:
+		return
+
+	_words_computing = true
 	_words_cache_ready = false
+	_words_compute_level = _cached_possible_level
 	_possible_words_cache.clear()
-	
-	if game_screen and game_screen.word_dict.is_empty():
-		game_screen._load_dictionary()
-	
+
+	var started_at: int = Time.get_ticks_msec()
+
+	await _init_dictionary_trie_async()
+
+	if _words_compute_level != _cached_possible_level:
+		_words_computing = false
+		_words_cache_ready = false
+		_possible_words_cache.clear()
+		call_deferred("_begin_background_word_precompute")
+		return
+
 	await get_tree().process_frame
+
 	var piece_runs: Array[String] = []
 	if game_screen and game_screen.has_method("get_letter_pieces"):
 		piece_runs = game_screen.get_letter_pieces()
@@ -1299,29 +1583,78 @@ func _compute_words_async() -> void:
 
 	if piece_runs.is_empty():
 		_words_cache_ready = true
+		_words_computing = false
 		return
 
+	var orientations: Array = []
+	if game_screen and game_screen.has_method("get_letter_piece_orientations"):
+		orientations = game_screen.get_letter_piece_orientations()
+
+	var runs_upper: Array[String] = []
+	runs_upper.resize(piece_runs.size())
+
+	for i in range(piece_runs.size()):
+		runs_upper[i] = String(piece_runs[i]).strip_edges().to_upper()
+
+	var has_orientation_data: bool = orientations.size() == runs_upper.size()
 	var candidates: Array[String] = _find_candidates_via_trie(piece_runs)
+	var seen_possible: Dictionary = {}
+	var checked: int = 0
+
 	for w in candidates:
-		var w_str: String = String(w).to_upper()
+		var w_str: String = String(w).strip_edges().to_upper()
 		var wlen: int = w_str.length()
-		if wlen >= 3 and wlen <= 9:
-			if _word_respects_orientation(w_str, piece_runs):
+
+		if wlen >= 3 and wlen <= 9 and not seen_possible.has(w_str):
+			var fits: bool = true
+
+			if has_orientation_data:
+				fits = _can_form_with_orientation_fast(w_str, runs_upper, orientations, true) \
+					or _can_form_with_orientation_fast(w_str, runs_upper, orientations, false)
+
+			if fits:
 				var pts: int = _compute_word_score(wlen)
 				if pts > 0:
-					_possible_words_cache.append({"word": w_str, "points": pts})
+					seen_possible[w_str] = true
+					_possible_words_cache.append({
+						"word": w_str,
+						"points": pts
+					})
 
-		await get_tree().process_frame
+		checked += 1
+
+		if checked % WORDS_COMPUTE_BATCH_SIZE == 0:
+			if _words_compute_level != _cached_possible_level:
+				_words_computing = false
+				_words_cache_ready = false
+				_possible_words_cache.clear()
+				call_deferred("_begin_background_word_precompute")
+				return
+
+			await get_tree().process_frame
 
 	_possible_words_cache.sort_custom(
-	func(a: Dictionary, b: Dictionary) -> bool:
-		var pa: int = int(a["points"])
-		var pb: int = int(b["points"])
-		if pa == pb:
-			return String(a["word"]) < String(b["word"])
-		return pa > pb
+		func(a: Dictionary, b: Dictionary) -> bool:
+			var pa: int = int(a["points"])
+			var pb: int = int(b["points"])
+
+			if pa == pb:
+				return String(a["word"]) < String(b["word"])
+
+			return pa > pb
 	)
+
+	possible_word_count = _possible_words_cache.size()
+	_update_possible_words_count_label()
+
 	_words_cache_ready = true
+	_words_computing = false
+
+	OpLog.event(LOG_TAG, [
+		"possible_words_computed candidates=", candidates.size(),
+		" possible=", _possible_words_cache.size(),
+		" elapsed_ms=", Time.get_ticks_msec() - started_at
+	])
 
 func _add_word_row(word: String, points: int) -> void:
 	_add_word_row_with_highlight(word, points, false)
