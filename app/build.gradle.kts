@@ -224,11 +224,11 @@ val exportGodotRelease by tasks.registering(Exec::class) {
     commandLine(
         godotCmd,
         "--headless",
+        "--verbose",
         "--path",
         godotProjectDir.asFile.absolutePath,
-        "--export-pack",
-        "Android",
-        godotExportZip.get().asFile.absolutePath
+        "--import",
+        "--quit"
     )
 }
 

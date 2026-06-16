@@ -177,7 +177,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
     private var lastHostPackageLog: String = ""
 
     private fun updateKeyboardHeightForHost() {
-        val uid = Binder.getCallingUid()
+        val uid = getCallingUid()
         val pm = context.packageManager
         val packages = pm.getPackagesForUid(uid)?.toList().orEmpty()
 

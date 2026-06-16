@@ -15,10 +15,51 @@ const MUSIC_STREAM := preload("res://global/audio/darts.ogg")
 
 var main_dart: Dart
 
+const DART_IDLE_POSITION := Vector3(0.032, -0.816, 1.217)
+const DART_IDLE_BOUNCE_Z := 0.035
+const DART_IDLE_BOUNCE_TIME := 0.65
+
+const DART_ICON_TEX := preload("res://darts/dart2d.png")
+const DART_INDICATOR_POS := Vector2(10, 8)
+const DART_INDICATOR_SIZE := Vector2(60, 120)
+const DART_INDICATOR_SPACING := 35.0
+const DART_INDICATOR_MAX := 3
+
+const SCORE_POPUP_DIR := "res://darts/score/"
+const SCORE_POPUP_SIZE := Vector2(82, 50)
+const SCORE_POPUP_OFFSET := Vector2(0, -42)
+const SCORE_POPUP_RISE := 58.0
+const SCORE_POPUP_FINAL_SCALE := Vector2(0.75, 0.75)
+const SCORE_POPUP_GROW_TIME := 0.35
+const SCORE_POPUP_TIME := 1.35
+const SCORE_POPUP_FADE_DELAY := 0.45
+const SCORE_REPLAY_POPUP_WAIT := 1.15
+const SCORE_BUST_DELAY := 0.25
+const DART_REPLAY_HIT_WAIT := 0.65
+
+const DART_BOARD_CENTER := Vector2(0.0, 0.344)
+const DART_BOARD_RADIUS := 0.535
+const DART_SEGMENTS := [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5]
+
+const DART_WHITE_SEGMENTS := {
+	20: true,
+	18: true,
+	13: true,
+	10: true,
+	2: true,
+	3: true,
+	7: true,
+	8: true,
+	14: true,
+	12: true
+}
+
 var darts: Array[Dart] = []
 var current_dart: Dart
 var num_shots: int = 0
 var replay_played: bool = false
+var is_replaying: bool = false
+var last_replay_played: String = ""
 var sent_tween: Tween
 var is_my_turn: bool = false
 var player: int = -1
@@ -34,7 +75,12 @@ var p2_score: int = 0
 var redemption_active: bool = false
 var redemption_darts_allowed: int = 0
 var game_over: bool = false
-
+var dart_idle_tween: Tween
+var dart_indicator_root: Control
+var dart_indicator_slots: Array[Control] = []
+var score_popup_textures: Dictionary = {}
+var drag_start_pos: Vector2 = Vector2.ZERO
+var dragging: bool = false
 
 const RESULT_NONE := 0
 const RESULT_WIN := 1
@@ -61,10 +107,275 @@ func _get_settings_avatar_display() -> Control:
 
 func _get_rules_title() -> String:
 	return "Darts"
+	
+func _ensure_main_dart() -> bool:
+	if is_instance_valid(main_dart):
+		return true
+
+	main_dart = get_node_or_null("dart") as Dart
+
+	if not is_instance_valid(main_dart):
+		OpLog.e(LOG_TAG, "main_dart_missing")
+		return false
+
+	return true
+
+func _start_dart_idle(dart: Dart) -> void:
+	if dart_idle_tween and dart_idle_tween.is_running():
+		dart_idle_tween.kill()
+
+	if not is_instance_valid(dart):
+		return
+
+	dart.position = DART_IDLE_POSITION
+	dart_idle_tween = create_tween().set_loops()
+	dart_idle_tween.tween_property(dart, "position:z", DART_IDLE_POSITION.z - DART_IDLE_BOUNCE_Z, DART_IDLE_BOUNCE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	dart_idle_tween.tween_property(dart, "position:z", DART_IDLE_POSITION.z + DART_IDLE_BOUNCE_Z * 0.35, DART_IDLE_BOUNCE_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+func _stop_dart_idle() -> void:
+	if dart_idle_tween and dart_idle_tween.is_running():
+		dart_idle_tween.kill()
+
+	dart_idle_tween = null
+	
+func _setup_dart_indicator() -> void:
+	if is_instance_valid(dart_indicator_root):
+		return
+
+	if not is_instance_valid(main_overlay):
+		OpLog.w(LOG_TAG, "dart_indicator_missing_main_overlay")
+		return
+
+	dart_indicator_root = Control.new()
+	dart_indicator_root.position = DART_INDICATOR_POS
+	dart_indicator_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dart_indicator_root.z_index = 1000
+	main_overlay.add_child(dart_indicator_root)
+
+	for i in range(DART_INDICATOR_MAX):
+		var slot := Control.new()
+		slot.position = Vector2(i * DART_INDICATOR_SPACING, 0.0)
+		slot.size = DART_INDICATOR_SIZE
+		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		dart_indicator_root.add_child(slot)
+
+		var icon := TextureRect.new()
+		icon.texture = DART_ICON_TEX
+		icon.size = DART_ICON_TEX.get_size()
+		icon.custom_minimum_size = Vector2.ZERO
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_SCALE
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+		var tex_size: Vector2 = DART_ICON_TEX.get_size()
+		var scale_factor: float = minf(
+			DART_INDICATOR_SIZE.x / tex_size.x,
+			DART_INDICATOR_SIZE.y / tex_size.y
+		)
+
+		icon.scale = Vector2(scale_factor, scale_factor)
+		icon.position = (DART_INDICATOR_SIZE - tex_size * scale_factor) * 0.5
+
+		slot.add_child(icon)
+
+		dart_indicator_slots.append(slot)
+
+	_update_dart_indicator()
+
+func _get_darts_left_count() -> int:
+	var used := num_shots
+
+	if is_instance_valid(current_dart) and current_dart.is_mine:
+		used -= 1
+
+	var limit := _get_turn_dart_limit()
+	return clamp(limit - used, 0, limit)
+
+func _update_dart_indicator() -> void:
+	if not is_instance_valid(dart_indicator_root):
+		return
+
+	var limit := _get_turn_dart_limit()
+	var left := _get_darts_left_count()
+
+	dart_indicator_root.visible = is_my_turn and not spectator_mode and not game_over
+
+	for i in range(dart_indicator_slots.size()):
+		var slot := dart_indicator_slots[i]
+		slot.visible = i < limit
+		slot.modulate.a = 1.0 if i < left else 0.25
+
+func _score_popup_texture(path: String) -> Texture2D:
+	if score_popup_textures.has(path):
+		return score_popup_textures[path]
+
+	if not ResourceLoader.exists(path):
+		OpLog.w(LOG_TAG, ["score_popup_missing path=", path])
+		return null
+
+	var tex := load(path) as Texture2D
+	score_popup_textures[path] = tex
+	return tex
+
+func _hit_segment_from_world(world_pos: Vector3) -> int:
+	var p := Vector2(world_pos.x, world_pos.y) - DART_BOARD_CENTER
+
+	if p.length() <= 0.001:
+		return 0
+
+	var angle := rad_to_deg(atan2(p.x, p.y))
+	if angle < 0.0:
+		angle += 360.0
+
+	var idx := int(floor((angle + 9.0) / 18.0)) % DART_SEGMENTS.size()
+	return DART_SEGMENTS[idx]
+
+func _hit_multiplier_from_world(world_pos: Vector3, score: Array) -> int:
+	if score.is_empty():
+		return 0
+
+	var total := int(score[0])
+	if total <= 0:
+		return 0
+
+	if total == 25 or total == 50:
+		return 1
+
+	var p := Vector2(world_pos.x, world_pos.y) - DART_BOARD_CENTER
+	var r := p.length() / DART_BOARD_RADIUS
+
+	if r >= 0.582 and r <= 0.629:
+		return 3
+
+	if r >= 0.953 and r <= 1.03:
+		return 2
+
+	return 1
+
+func _score_color_code(score: Array, world_pos: Vector3) -> String:
+	if score.is_empty():
+		return "b"
+
+	var total := int(score[0])
+
+	if total <= 0:
+		return "b"
+
+	if total == 50:
+		return "r"
+
+	if total == 25:
+		return "g"
+
+	var segment := _hit_segment_from_world(world_pos)
+	var multiplier := _hit_multiplier_from_world(world_pos, score)
+	var base_is_white := DART_WHITE_SEGMENTS.has(segment)
+
+	if multiplier >= 2:
+		return "g" if base_is_white else "r"
+
+	return "w" if base_is_white else "b"
+
+func _score_popup_path(score: Array, world_pos: Vector3, bust: bool = false) -> String:
+	if bust:
+		return SCORE_POPUP_DIR + "darts_bust.png"
+
+	if score.is_empty() or int(score[0]) <= 0:
+		return SCORE_POPUP_DIR + "darts_miss.png"
+
+	var total := int(score[0])
+	var color_code := _score_color_code(score, world_pos)
+	var path := SCORE_POPUP_DIR + "darts_score_%s_%04d.png" % [color_code, total]
+
+	if ResourceLoader.exists(path):
+		return path
+
+	for fallback_code in ["w", "b", "g", "r"]:
+		var fallback_path := SCORE_POPUP_DIR + "darts_score_%s_%04d.png" % [fallback_code, total]
+		if ResourceLoader.exists(fallback_path):
+			OpLog.w(LOG_TAG, [
+				"score_popup_color_fallback wanted=", path,
+				" using=", fallback_path,
+				" score=", score,
+				" world_pos=", world_pos
+			])
+			return fallback_path
+
+	return path
+
+func _screen_pos_from_world(world_pos: Vector3) -> Vector2:
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return main_overlay.size * 0.5 if is_instance_valid(main_overlay) else Vector2.ZERO
+
+	return cam.unproject_position(world_pos)
+
+func _show_score_popup(world_pos: Vector3, score: Array = [], bust: bool = false, center_screen: bool = false) -> void:
+	if not is_instance_valid(main_overlay):
+		OpLog.w(LOG_TAG, "score_popup_missing_overlay")
+		return
+
+	var path := _score_popup_path(score, world_pos, bust)
+	var tex := _score_popup_texture(path)
+
+	if tex == null:
+		return
+		
+	OpLog.event(LOG_TAG, [
+		"score_popup_show path=", path,
+		" score=", score,
+		" bust=", bust,
+		" world_pos=", world_pos
+	])
+
+	var popup_size := SCORE_POPUP_SIZE
+	if center_screen:
+		popup_size = tex.get_size()
+
+	var popup := TextureRect.new()
+	popup.texture = tex
+	popup.size = popup_size
+	popup.pivot_offset = popup_size * 0.5
+	popup.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	popup.z_index = 2000
+	popup.scale = Vector2.ZERO
+	popup.modulate.a = 1.0
+
+	main_overlay.add_child(popup)
+
+	var overlay_pos: Vector2
+
+	if center_screen:
+		overlay_pos = main_overlay.size * 0.5
+	else:
+		var screen_pos: Vector2 = _screen_pos_from_world(world_pos)
+		overlay_pos = screen_pos - main_overlay.global_position
+
+	var popup_offset := Vector2.ZERO if center_screen else SCORE_POPUP_OFFSET
+
+	popup.position = Vector2(
+		overlay_pos.x + popup_offset.x - popup.pivot_offset.x,
+		overlay_pos.y + popup_offset.y - popup.pivot_offset.y
+	)
+
+	var start_pos: Vector2 = popup.position
+	var end_pos: Vector2 = Vector2(start_pos.x, start_pos.y - SCORE_POPUP_RISE)
+
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(popup, "scale", SCORE_POPUP_FINAL_SCALE, SCORE_POPUP_GROW_TIME).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(popup, "position", end_pos, SCORE_POPUP_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.tween_property(popup, "modulate:a", 0.0, SCORE_POPUP_TIME).set_delay(SCORE_POPUP_FADE_DELAY)
+
+	tw.finished.connect(func():
+		if is_instance_valid(popup):
+			popup.queue_free()
+	)
 
 func _on_game_ready():
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
-	main_dart = get_node("dart")
+	_ensure_main_dart()
+	_setup_dart_indicator()
 
 	OpLog.i(LOG_TAG, [
 		"game_ready main_dart_valid=", is_instance_valid(main_dart),
@@ -85,9 +396,17 @@ func _set_game_data(new_replay: String):
 
 	var parsed: Dictionary = parsed_v
 
+	var incoming_replay := String(parsed.get("replay", ""))
+
+	if is_replaying and incoming_replay != "" and incoming_replay == replay:
+		OpLog.w(LOG_TAG, [
+			"set_game_data_ignored_duplicate_while_replaying replay_len=", incoming_replay.length()
+		])
+		return
+
 	is_my_turn = bool(parsed.get("isYourTurn", false))
 	player = int(parsed.get("player", 1))
-	replay = String(parsed.get("replay", ""))
+	replay = incoming_replay
 	mode = int(parsed.get("mode", mode if mode > 0 else 101))
 
 	var opponent_avatar_key = ""
@@ -143,7 +462,7 @@ func _set_game_data(new_replay: String):
 	stop_waiting_animation()
 	redemption_active = false
 	redemption_darts_allowed = 0
-	replay_played = false
+	replay_played = replay != "" and replay == last_replay_played
 	game_over = false
 	match_result = RESULT_NONE
 	reset_game_board()
@@ -178,7 +497,8 @@ func _set_game_data(new_replay: String):
 		else:
 			OpLog.w(LOG_TAG, ["bad_winner_payload payload=", winner_payload])
 
-		if not replay.is_empty():
+		if not replay.is_empty() and not replay_played:
+			replay_played = true
 			await play_replay(replay)
 
 		_show_result(result_code)
@@ -253,6 +573,7 @@ func _process_game_state():
 		stop_waiting_animation()
 
 		if replay != null and not replay.is_empty() and not replay_played:
+			replay_played = true
 			await play_replay(replay)
 
 			var started_redemption := _maybe_start_redemption_from_replay()
@@ -270,7 +591,10 @@ func _process_game_state():
 		var turn_limit := _get_turn_dart_limit()
 
 		if num_shots < turn_limit:
-			var player_dart = spawn_dart(true)
+			var player_dart: Dart = spawn_dart(true)
+			if not is_instance_valid(player_dart):
+				OpLog.e(LOG_TAG, "spawn_turn_dart_failed")
+				return
 
 			OpLog.event(LOG_TAG, [
 				"spawn_turn_dart num_shots=", num_shots,
@@ -280,7 +604,9 @@ func _process_game_state():
 			])
 
 			player_dart.on_hit_board.connect(func(score):
-				var move_arr = [0, player_dart.position.x, player_dart.position.y]
+				var hit_pos: Vector3 = player_dart.global_position
+				var hit_score: Array = [int(score[0]), int(score[1]), int(score[2])]
+				var move_arr: Array = [0, player_dart.position.x, player_dart.position.y]
 				move_arr.append_array(score)
 				my_moves.append(move_arr)
 
@@ -291,7 +617,7 @@ func _process_game_state():
 					" before_score=", get_score(player)
 				])
 
-				dec_score(player, score[0])
+				dec_score(player, int(hit_score[0]))
 
 				if get_score(player) < 0:
 					OpLog.event(LOG_TAG, [
@@ -300,7 +626,10 @@ func _process_game_state():
 						" score_after=", get_score(player)
 					])
 
-					bust_label.visible = true
+					_show_score_popup(hit_pos, hit_score)
+
+					await get_tree().create_timer(SCORE_BUST_DELAY).timeout
+					_show_score_popup(Vector3.ZERO, [], true, true)
 
 					var old_score = mode
 					if replay != null and not replay.is_empty():
@@ -308,9 +637,10 @@ func _process_game_state():
 						old_score = parse_replay(replay)["post_state"][score_idx]
 
 					await get_tree().create_timer(1).timeout
-					bust_label.visible = false
 					set_score(player, old_score)
 					num_shots = _get_turn_dart_limit()
+				else:
+					_show_score_popup(hit_pos, hit_score)
 
 				if get_score(player) == 0:
 					OpLog.event(LOG_TAG, [
@@ -530,12 +860,18 @@ func send_replay():
 	send_game_data(game_data)
 
 func play_replay(replay_str: String):
+	if is_replaying:
+		OpLog.w(LOG_TAG, ["play_replay_skipped_already_running len=", replay_str.length()])
+		return
+
+	is_replaying = true
 	OpLog.event(LOG_TAG, ["play_replay_start len=", replay_str.length()])
 
 	var parsed = parse_replay(replay_str)
 
 	if not parsed.has("pre_state") or not parsed.has("post_state"):
 		OpLog.e(LOG_TAG, ["play_replay_missing_state parsed=", parsed])
+		is_replaying = false
 		return
 
 	var other_player = 1 if player == 2 else 2
@@ -555,21 +891,25 @@ func play_replay(replay_str: String):
 	for move in parsed["moves"]:
 		spawn_dart(false)
 
-		var dart_pos = Vector3(move[1], move[2], 0.067)
+		var dart_pos: Vector3 = Vector3(float(move[1]), float(move[2]), 0.067)
+		var replay_score: Array = [int(move[3]), int(move[4]), int(move[5])]
+		var replay_dart: Dart = current_dart
+		var replay_popup_pos: Vector3 = dart_pos
 
 		OpLog.event(LOG_TAG, [
 			"replay_move move=", move,
 			" dart_pos=", dart_pos,
+			" popup_pos=", replay_popup_pos,
 			" other_player=", other_player
 		])
 
-		if current_dart != null:
-			current_dart.throw(dart_pos)
-			current_dart.replay_hit = [int(move[3]), int(move[4]), int(move[5])]
+		if is_instance_valid(replay_dart):
+			replay_dart.throw(dart_pos)
+			await get_tree().create_timer(DART_REPLAY_HIT_WAIT).timeout
+		else:
+			await get_tree().create_timer(0.25).timeout
 
-		await get_tree().create_timer(1).timeout
-
-		dec_score(other_player, move[3])
+		dec_score(other_player, int(move[3]))
 
 		if get_score(other_player) < 0:
 			OpLog.event(LOG_TAG, [
@@ -578,9 +918,14 @@ func play_replay(replay_str: String):
 				" score_after=", get_score(other_player)
 			])
 
-			bust_label.visible = true
-			await get_tree().create_timer(1).timeout
-			bust_label.visible = false
+			_show_score_popup(replay_popup_pos, replay_score)
+
+			await get_tree().create_timer(SCORE_BUST_DELAY).timeout
+			_show_score_popup(Vector3.ZERO, [], true, true)
+		else:
+			_show_score_popup(replay_popup_pos, replay_score)
+
+		await get_tree().create_timer(SCORE_REPLAY_POPUP_WAIT).timeout
 
 	set_score(1, parsed["post_state"][0])
 	set_score(2, parsed["post_state"][1])
@@ -595,6 +940,9 @@ func play_replay(replay_str: String):
 		" p1_score=", p1_score,
 		" p2_score=", p2_score
 	])
+	
+	last_replay_played = replay_str
+	is_replaying = false
 
 func parse_replay(replay_str: String) -> Dictionary:
 	var result = {"moves": []}
@@ -645,6 +993,12 @@ func parse_replay(replay_str: String) -> Dictionary:
 	])
 
 	return result
+	
+func _format_score(score: int) -> String:
+	if score >= 0 and score < 1000:
+		return "%03d" % score
+
+	return str(score)
 
 func set_score(target_player: int, score: int) -> void:
 	if target_player == 1:
@@ -655,7 +1009,7 @@ func set_score(target_player: int, score: int) -> void:
 		OpLog.w(LOG_TAG, ["set_score_bad_target target_player=", target_player, " score=", score])
 		return
 
-	var score_text := str(score)
+	var score_text := _format_score(score)
 
 	if self.player == target_player:
 		if is_instance_valid(you_score_label):
@@ -684,6 +1038,8 @@ func get_score(target_player: int) -> int:
 	return -1
 
 func reset_game_board():
+	_stop_dart_idle()
+
 	if current_dart != null:
 		current_dart.queue_free()
 		current_dart = null
@@ -694,17 +1050,26 @@ func reset_game_board():
 	darts.clear()
 	my_moves.clear()
 	num_shots = 0
+	_update_dart_indicator()
 
 	OpLog.d(LOG_TAG, "reset_game_board")
 
 func spawn_dart(is_mine: bool) -> Dart:
+	if not _ensure_main_dart():
+		return null
+
 	var new_dart: Dart = main_dart.duplicate()
 	new_dart.is_mine = is_mine
-	new_dart.position = Vector3(0.032, -0.816, 1.217)
+	new_dart.position = DART_IDLE_POSITION
 	add_child(new_dart)
 	darts.append(new_dart)
 	current_dart = new_dart
 	num_shots += 1
+
+	if is_mine:
+		_start_dart_idle(new_dart)
+
+	_update_dart_indicator()
 
 	OpLog.event(LOG_TAG, [
 		"spawn_dart is_mine=", is_mine,
@@ -714,9 +1079,6 @@ func spawn_dart(is_mine: bool) -> Dart:
 	])
 
 	return new_dart
-
-var drag_start_pos: Vector2 = Vector2.ZERO
-var dragging: bool = false
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _settings_open or spectator_mode:
@@ -752,8 +1114,10 @@ func _unhandled_input(event: InputEvent) -> void:
 						" num_shots=", num_shots
 					])
 
+					_stop_dart_idle()
 					current_dart.throw(Vector3(shot_coords.x, shot_coords.y, 0.067))
 					current_dart = null
+					_update_dart_indicator()
 
 					dragging = false
 
