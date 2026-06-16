@@ -30,10 +30,6 @@ class WordbitesGame : Game {
         return R.drawable.wordbites
     }
 
-    /**
-     * Load the same dictionary file used by the Godot game: gp_en2.
-     * We keep words of length 3–9 (same as the Godot side scoring rules).
-     */
     private fun loadDictionary(context: Context): List<String> {
         val list = mutableListOf<String>()
         context.resources.openRawResource(R.raw.gp_en2).bufferedReader().useLines { lines ->
@@ -47,18 +43,6 @@ class WordbitesGame : Game {
         return list
     }
 
-    /**
-     * Build a "letter bank" from real words in the dictionary.
-     *
-     * We want exactly 18 letters so we can create:
-     * - 6 single-letter tiles
-     * - 6 multi-letter tiles (2 letters each)
-     *
-     * Strategy:
-     * - pick two 5-letter words
-     * - pick two 4-letter words
-     * Total = 5 + 5 + 4 + 4 = 18 letters
-     */
     private fun chooseLetterBank(dict: List<String>): String {
         val fives = dict.filter { it.length == 5 }
         val fours = dict.filter { it.length == 4 }
@@ -82,14 +66,6 @@ class WordbitesGame : Game {
         return String(randomChars)
     }
 
-    /**
-     * From the 18-letter bank, build 12 tiles:
-     * - 6 single letters
-     * - 6 multi-letter tiles (2 letters each)
-     *
-     * The multi-letter tiles don't know their orientation yet; that’s decided
-     * when we encode the level string (dir = 1 or 2).
-     */
     private fun generatePieces(letterBank: String): List<String> {
         val chars = letterBank.toMutableList()
 
@@ -120,91 +96,124 @@ class WordbitesGame : Game {
         return pieces.shuffled()
     }
 
-    /**
-     * Convert pieces into a non-overlapping level layout.
-     *
-     * Guarantees:
-     *  - Single tiles -> dir = 0
-     *  - Doubles never placed out of bounds
-     *  - Pieces never overlap
-     *  - Pieces do not touch (we keep a 1-cell buffer)
-     */
     private fun toLevelString(pieces: List<String>): String {
         val rand = Random(System.currentTimeMillis())
 
-        // Board: 9 rows (0–8), 8 cols (0–7)
-        val occupied = Array(9) { Array(8) { false } }
+        repeat(50) {
+            val used = Array(9) { BooleanArray(8) }
+            val blocked = Array(9) { BooleanArray(8) }
+            val result = StringBuilder()
+            var failed = false
 
-        // Mark a piece's area + 1-cell buffer as occupied
-        fun markArea(x: Int, y: Int, w: Int, h: Int) {
-            for (ry in (y - 1)..(y + h)) {
-                for (rx in (x - 1)..(x + w)) {
-                    if (ry in 0..8 && rx in 0..7) {
-                        occupied[ry][rx] = true
+            fun markPiece(x: Int, y: Int, w: Int, h: Int) {
+                // Actual occupied cells
+                for (ry in y until y + h) {
+                    for (rx in x until x + w) {
+                        used[ry][rx] = true
+                    }
+                }
+
+                // Actual cells + 1-cell buffer
+                for (ry in (y - 1)..(y + h)) {
+                    for (rx in (x - 1)..(x + w)) {
+                        if (ry in 0..8 && rx in 0..7) {
+                            blocked[ry][rx] = true
+                        }
                     }
                 }
             }
-        }
 
-        val result = StringBuilder()
+            for (run in pieces.shuffled(rand)) {
+                val dirs = when (run.length) {
+                    1 -> listOf(0)
+                    else -> if (rand.nextBoolean()) listOf(1, 2) else listOf(2, 1)
+                }
 
-        pieces.forEachIndexed { index, run ->
-            val length = run.length
+                var placed = false
 
-            // Pick orientation
-            val dir = when (length) {
-                1 -> 0     // single
-                else -> if (rand.nextBoolean()) 1 else 2
+                // First try with spacing/buffer. If that fails, allow touching but still no overlap.
+                for (requireBuffer in listOf(true, false)) {
+                    for (dir in dirs) {
+                        val w = if (dir == 1) 2 else 1
+                        val h = if (dir == 2) 2 else 1
+                        val pos = findValidPosition(w, h, used, if (requireBuffer) blocked else null, rand)
+
+                        if (pos != null) {
+                            val (x, y) = pos
+                            markPiece(x, y, w, h)
+
+                            if (result.isNotEmpty()) result.append("&")
+                            result.append("$dir|$x|$y|$run")
+
+                            placed = true
+                            break
+                        }
+                    }
+
+                    if (placed) break
+                }
+
+                if (!placed) {
+                    failed = true
+                    break
+                }
             }
 
-            // Dimensions based on orientation
-            val w = if (dir == 1) 2 else 1    // horizontal spans 2 columns
-            val h = if (dir == 2) 2 else 1    // vertical spans 2 rows
-
-            // Find a valid, non-touching, non-overlapping starting position
-            val (x, y) = findValidPosition(w, h, occupied, rand)
-
-            // Mark area as used (with buffer)
-            markArea(x, y, w - 1, h - 1)
-
-            if (result.isNotEmpty()) result.append("&")
-            result.append("$dir|$x|$y|$run")
+            if (!failed) {
+                return result.toString()
+            }
         }
 
-        return result.toString()
+        // Extremely defensive fallback: should not happen, but never return overlapping 0,0 data.
+        throw IllegalStateException("Unable to generate non-overlapping Word Bites board")
     }
 
-    /**
-     * Finds a valid position for a piece of size (w,h)
-     * ensuring:
-     *  - stays within board bounds
-     *  - does not overlap other pieces
-     *  - stays at least 1 cell away from all other pieces
-     */
     private fun findValidPosition(
         w: Int,
         h: Int,
-        occupied: Array<Array<Boolean>>,
+        used: Array<BooleanArray>,
+        blocked: Array<BooleanArray>?,
         rand: Random
-    ): Pair<Int, Int> {
+    ): Pair<Int, Int>? {
+        val maxX = 8 - w
+        val maxY = 9 - h
+        val candidates = mutableListOf<Pair<Int, Int>>()
 
-        for (attempt in 0 until 200) {
-            val x = rand.nextInt(0, 8 - (w - 1))
-            val y = rand.nextInt(0, 9 - (h - 1))
+        for (y in 0..maxY) {
+            for (x in 0..maxX) {
+                candidates.add(Pair(x, y))
+            }
+        }
 
+        candidates.shuffle(rand)
+
+        for ((x, y) in candidates) {
             var ok = true
 
-            // Check area + 1-cell buffer
-            for (ry in (y - 1)..(y + h)) {
-                for (rx in (x - 1)..(x + w)) {
-                    if (ry in 0..8 && rx in 0..7) {
-                        if (occupied[ry][rx]) {
+            // Check actual piece cells first. These can never overlap.
+            for (ry in y until y + h) {
+                for (rx in x until x + w) {
+                    if (used[ry][rx]) {
+                        ok = false
+                        break
+                    }
+                }
+                if (!ok) break
+            }
+
+            if (!ok) continue
+
+            // Optional spacing check.
+            if (blocked != null) {
+                for (ry in (y - 1)..(y + h)) {
+                    for (rx in (x - 1)..(x + w)) {
+                        if (ry in 0..8 && rx in 0..7 && blocked[ry][rx]) {
                             ok = false
                             break
                         }
                     }
+                    if (!ok) break
                 }
-                if (!ok) break
             }
 
             if (ok) {
@@ -212,8 +221,7 @@ class WordbitesGame : Game {
             }
         }
 
-        // Fallback: place anywhere (should almost never happen)
-        return Pair(0, 0)
+        return null
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
@@ -230,7 +238,7 @@ class WordbitesGame : Game {
             // 2) Build a strong letter bank from real words
             val bank = chooseLetterBank(dict)
 
-            // 3) Split into 6 single tiles + 6 multi-letter tiles
+            // 3) Split into 6 single tiles + 5 multi-letter tiles
             val pieces = generatePieces(bank)
 
             // 4) Encode into the level string for Godot

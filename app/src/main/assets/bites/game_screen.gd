@@ -319,13 +319,17 @@ func _get_word_score(wlen: int) -> int:
 	return 0
 
 func _score_board_word(word: String, start_pos: Vector2 = Vector2(-1, -1)) -> void:
-	var points: int = _get_word_score(word.length())
+	var word_key: String = word.strip_edges().to_upper()
+	if word_key == "":
+		return
+
+	var points: int = _get_word_score(word_key.length())
 	if points <= 0:
 		return
 
 	word_count += 1
 	word_history.append({
-		"word": word,
+		"word": word_key,
 		"points": points
 	})
 
@@ -343,7 +347,7 @@ func _score_board_word(word: String, start_pos: Vector2 = Vector2(-1, -1)) -> vo
 		0.4
 	).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
-	var popup_text := "%s +%d" % [word, points]
+	var popup_text := "%s +%d" % [word_key, points]
 	_show_word_feedback(popup_text, true, false, start_pos)
 
 func _scan_board_for_words() -> void:
@@ -393,17 +397,23 @@ func _reset_selection_back_to_source() -> void:
 	selected_indices.clear()
 
 func _process_found_word_with_fx(raw_word: String, row: int, col: int, horizontal: bool) -> void:
-	var word := raw_word.to_upper()
+	var word: String = raw_word.strip_edges().to_upper()
+	if word == "":
+		return
+
 	if not word_dict.has(word):
 		return
 
-	var orient := "H" if horizontal else "V"
-	var key := "%s_%s" % [orient, word]
-
-	if used_words.has(key):
+	if used_words.has(word):
+		OpLog.i(LOG_TAG, [
+			"duplicate_word_rejected_live word=", word,
+			" row=", row,
+			" col=", col,
+			" horizontal=", horizontal
+		])
 		return
 
-	used_words[key] = true
+	used_words[word] = true
 
 	var length := word.length()
 

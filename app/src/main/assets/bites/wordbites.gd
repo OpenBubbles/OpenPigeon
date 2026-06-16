@@ -34,7 +34,7 @@ class TrieNode:
 var _dictionary_trie_root: TrieNode = null
 
 var _tear_rng := RandomNumberGenerator.new()
-
+var found_word_keys: Dictionary = {}
 var screens: Array[Control] = []
 var current_screen: int = 0
 var sent_label_tween: Tween
@@ -211,18 +211,35 @@ func _set_game_data(raw_text: String) -> void:
 
 	var opponent_avatar_key := ""
 
-	if p1_id != "" and p2_id != "" and my_uuid != "":
-		if my_uuid == p1_id:
+	if my_uuid != "":
+		if p1_id != "" and my_uuid == p1_id:
 			player = 1
-			opponent_avatar_key = "avatar2"
 			spectator_mode = false
-		elif my_uuid == p2_id:
+			opponent_avatar_key = "avatar2" if p2_id != "" else ""
+
+		elif p2_id != "" and my_uuid == p2_id:
 			player = 2
-			opponent_avatar_key = "avatar1"
 			spectator_mode = false
-		else:
+			opponent_avatar_key = "avatar1" if p1_id != "" else ""
+
+		elif p1_id == "" and p2_id != "":
+			player = 1
+			spectator_mode = false
+			opponent_avatar_key = "avatar2"
+
+		elif p2_id == "" and p1_id != "":
+			player = 2
+			spectator_mode = false
+			opponent_avatar_key = "avatar1"
+
+		elif p1_id != "" and p2_id != "":
 			player = 0
 			spectator_mode = true
+
+		else:
+			player = 1 if sender_player == 2 else 2
+			spectator_mode = false
+			opponent_avatar_key = "avatar1" if player == 2 else "avatar2"
 	else:
 		player = 1 if sender_player == 2 else 2
 		spectator_mode = false
@@ -1631,19 +1648,26 @@ func _build_segments_dfs(
 
 func _build_word_entries_from_string(words_s: String) -> Array:
 	var result: Array = []
+	var seen_words: Dictionary = {}
+
 	if words_s == "":
 		return result
 
-	var parts := words_s.split("|", false)
+	var parts: PackedStringArray = words_s.split("|", false)
 	for w_raw in parts:
-		var w := String(w_raw).strip_edges()
-		if w == "":
+		var word_key: String = String(w_raw).strip_edges().to_upper()
+
+		if word_key == "" or seen_words.has(word_key):
 			continue
-		var pts := _compute_word_score(w.length())
+
+		seen_words[word_key] = true
+
+		var pts: int = _compute_word_score(word_key.length())
 		result.append({
-			"word": w,
+			"word": word_key,
 			"points": pts
 		})
+
 	return result
 
 func _on_game_time_up() -> void:
@@ -1665,16 +1689,35 @@ func send_game() -> void:
 		OpLog.w(LOG_TAG, "send_game_blocked spectator=true")
 		return
 
-	var final_score: int = game_screen.get_final_score()
-	var total_words: int = game_screen.get_word_count()
 	var history: Array = game_screen.get_word_history()
-
+	var seen_words: Dictionary = {}
 	var word_strings: Array[String] = []
-	for entry in history:
-		if entry is Dictionary and entry.has("word"):
-			word_strings.append(String(entry["word"]))
+	var final_score: int = 0
 
-	var words_joined := "|".join(word_strings)
+	for entry in history:
+		if not (entry is Dictionary):
+			continue
+
+		var e: Dictionary = entry
+		if not e.has("word"):
+			continue
+
+		var word_key: String = String(e["word"]).strip_edges().to_upper()
+
+		if word_key == "" or seen_words.has(word_key):
+			OpLog.i(LOG_TAG, ["duplicate_word_rejected_on_send word=", word_key])
+			continue
+
+		seen_words[word_key] = true
+		word_strings.append(word_key)
+
+		if e.has("points"):
+			final_score += int(e["points"])
+		else:
+			final_score += _compute_word_score(word_key.length())
+
+	var total_words: int = word_strings.size()
+	var words_joined: String = "|".join(word_strings)
 
 	var score_key := "score1" if player == 1 else "score2"
 	var words_key := "words1" if player == 1 else "words2"
@@ -1945,9 +1988,38 @@ func _populate_scoreboard(
 	var final_score: int
 
 	if is_player and word_entries.is_empty():
-		words = game_screen.get_word_history()
-		total_words = game_screen.get_word_count()
-		final_score = game_screen.get_final_score()
+		var raw_words: Array = game_screen.get_word_history()
+		var seen_words: Dictionary = {}
+		var deduped_words: Array = []
+		var deduped_score: int = 0
+
+		for entry in raw_words:
+			if not (entry is Dictionary):
+				continue
+
+			var e: Dictionary = entry
+			if not e.has("word"):
+				continue
+
+			var word_key: String = String(e["word"]).strip_edges().to_upper()
+
+			if word_key == "" or seen_words.has(word_key):
+				OpLog.i(LOG_TAG, ["duplicate_word_rejected_on_scoreboard word=", word_key])
+				continue
+
+			seen_words[word_key] = true
+
+			var points: int = int(e["points"]) if e.has("points") else _compute_word_score(word_key.length())
+			deduped_score += points
+
+			deduped_words.append({
+				"word": word_key,
+				"points": points
+			})
+
+		words = deduped_words
+		total_words = deduped_words.size()
+		final_score = deduped_score
 	else:
 		words = word_entries
 
@@ -1959,10 +2031,24 @@ func _populate_scoreboard(
 		if final_score_override >= 0:
 			final_score = final_score_override
 		else:
-			var sum := 0
+			var sum: int = 0
+			var seen_loaded_words: Dictionary = {}
+
 			for entry in words:
-				if entry is Dictionary and entry.has("points"):
-					sum += int(entry["points"])
+				if not (entry is Dictionary):
+					continue
+
+				var e2: Dictionary = entry
+				if not e2.has("word"):
+					continue
+
+				var word_key2: String = String(e2["word"]).strip_edges().to_upper()
+				if word_key2 == "" or seen_loaded_words.has(word_key2):
+					continue
+
+				seen_loaded_words[word_key2] = true
+				sum += int(e2["points"]) if e2.has("points") else _compute_word_score(word_key2.length())
+
 			final_score = sum
 
 	for entry in words:
