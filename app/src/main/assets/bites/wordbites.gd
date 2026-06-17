@@ -68,6 +68,15 @@ var _word_popup_last_pos := Vector2.ZERO
 
 const WORDS_DRAG_THRESHOLD := 8.0
 
+const SCORE_WORD_SCROLL_THRESHOLD := 15
+const SCORE_WORD_ROW_HEIGHT := 30.0
+const SCORE_WORD_ROW_GAP := 4.0
+
+var _score_scroll_pointer_down := false
+var _score_scroll_dragging := false
+var _score_scroll_last_pos := Vector2.ZERO
+var _active_score_scroll_id := 0
+
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
 	
@@ -326,12 +335,14 @@ func _set_game_data(raw_text: String) -> void:
 			opp_words = p1_words
 			opp_wordlist_s = p1_wordlist_s
 
-		if my_wordlist_s != "":
+		var my_score_available := my_wordlist_s != "" or my_words > 0 or my_score > 0 or my_has_data
+		if my_score_available:
 			var my_entries := _build_word_entries_from_string(my_wordlist_s)
 			_populate_scoreboard(true, my_entries, my_words, my_score)
 			OpLog.i(LOG_TAG, ["my_scoreboard_loaded entries=", my_entries.size(), " score=", my_score])
 
-		if opp_wordlist_s != "":
+		var opp_score_available := opp_wordlist_s != "" or opp_words > 0 or opp_score > 0 or game_over or winner_payload != ""
+		if opp_score_available:
 			var opp_entries := _build_word_entries_from_string(opp_wordlist_s)
 			_populate_scoreboard(false, opp_entries, opp_words, opp_score)
 			OpLog.i(LOG_TAG, ["opp_scoreboard_loaded entries=", opp_entries.size(), " score=", opp_score])
@@ -522,13 +533,15 @@ func _can_form_with_orientation_dfs(
 	return false
 	
 func _input(event: InputEvent) -> void:
-	if current_screen != 3:
+	if current_screen == 2:
+		if is_instance_valid(score_screen) and score_screen.visible:
+			_on_score_screen_scroll_input(event)
 		return
 
-	if not is_instance_valid(words_screen) or not words_screen.visible:
+	if current_screen == 3:
+		if is_instance_valid(words_screen) and words_screen.visible:
+			_on_words_list_scroll_gui_input(event)
 		return
-
-	_on_words_list_scroll_gui_input(event)
 
 func _on_words_list_scroll_gui_input(event: InputEvent) -> void:
 	if _words_scroll_container == null:
@@ -2324,6 +2337,266 @@ func play_sent_animation() -> void:
 			stop_waiting_animation()
 	)
 
+func _get_score_scroll_for_list(target_list: VBoxContainer) -> ScrollContainer:
+	if not is_instance_valid(target_list):
+		return null
+
+	var parent := target_list.get_parent()
+	if parent is ScrollContainer:
+		return parent as ScrollContainer
+
+	return null
+
+
+func _ensure_score_scroll_for_list(target_list: VBoxContainer) -> ScrollContainer:
+	if not is_instance_valid(target_list):
+		return null
+
+	var existing := _get_score_scroll_for_list(target_list)
+	if is_instance_valid(existing):
+		return existing
+
+	var old_parent := target_list.get_parent()
+	if old_parent == null:
+		return null
+
+	if old_parent is Control:
+		(old_parent as Control).mouse_filter = Control.MOUSE_FILTER_PASS
+
+	var old_index := target_list.get_index()
+
+	old_parent.remove_child(target_list)
+
+	var scroll := ScrollContainer.new()
+	scroll.name = "%sScroll" % target_list.name
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+	scroll.clip_contents = true
+
+	old_parent.add_child(scroll)
+	old_parent.move_child(scroll, old_index)
+
+	target_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	target_list.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	target_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	scroll.add_child(target_list)
+
+	if not scroll.has_meta("score_scroll_connected"):
+		scroll.gui_input.connect(_on_score_scroll_gui_input.bind(scroll.get_instance_id()))
+		scroll.set_meta("score_scroll_connected", true)
+
+	return scroll
+
+func _configure_score_word_scrolling(target_list: VBoxContainer, total_words: int) -> void:
+	if not is_instance_valid(target_list):
+		return
+
+	target_list.add_theme_constant_override("separation", int(SCORE_WORD_ROW_GAP))
+
+	var content_height := float(total_words) * SCORE_WORD_ROW_HEIGHT
+	content_height += float(max(total_words - 1, 0)) * SCORE_WORD_ROW_GAP
+	target_list.custom_minimum_size = Vector2(0, content_height)
+
+	if total_words <= SCORE_WORD_SCROLL_THRESHOLD:
+		var existing := _get_score_scroll_for_list(target_list)
+		if is_instance_valid(existing):
+			existing.scroll_vertical = 0
+			existing.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+			existing.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		return
+
+	var scroll := _ensure_score_scroll_for_list(target_list)
+	if not is_instance_valid(scroll):
+		return
+
+	var visible_rows := SCORE_WORD_SCROLL_THRESHOLD
+	var height := float(visible_rows) * SCORE_WORD_ROW_HEIGHT
+	height += float(max(visible_rows - 1, 0)) * SCORE_WORD_ROW_GAP
+
+	scroll.custom_minimum_size = Vector2(0, height)
+	scroll.scroll_vertical = 0
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
+func _on_score_scroll_gui_input(event: InputEvent, scroll_id: int) -> void:
+	var scroll := instance_from_id(scroll_id) as ScrollContainer
+	if not is_instance_valid(scroll):
+		return
+
+	if scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED:
+		return
+
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+
+		if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+			scroll.scroll_vertical -= 48
+			return
+
+		if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			scroll.scroll_vertical += 48
+			return
+
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				_active_score_scroll_id = scroll_id
+				_score_scroll_pointer_down = true
+				_score_scroll_dragging = false
+				_score_scroll_last_pos = mb.position
+			else:
+				_score_scroll_pointer_down = false
+				_score_scroll_dragging = false
+				_active_score_scroll_id = 0
+			return
+
+	if event is InputEventMouseMotion and _score_scroll_pointer_down and _active_score_scroll_id == scroll_id:
+		var mm := event as InputEventMouseMotion
+
+		if not _score_scroll_dragging:
+			if mm.position.distance_to(_score_scroll_last_pos) >= WORDS_DRAG_THRESHOLD:
+				_score_scroll_dragging = true
+
+		if _score_scroll_dragging:
+			scroll.scroll_vertical -= int(mm.relative.y)
+
+		_score_scroll_last_pos = mm.position
+		return
+
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+
+		if touch.pressed:
+			_active_score_scroll_id = scroll_id
+			_score_scroll_pointer_down = true
+			_score_scroll_dragging = false
+			_score_scroll_last_pos = touch.position
+		else:
+			_score_scroll_pointer_down = false
+			_score_scroll_dragging = false
+			_active_score_scroll_id = 0
+		return
+
+	if event is InputEventScreenDrag and _score_scroll_pointer_down and _active_score_scroll_id == scroll_id:
+		var drag := event as InputEventScreenDrag
+
+		if not _score_scroll_dragging:
+			if drag.position.distance_to(_score_scroll_last_pos) >= WORDS_DRAG_THRESHOLD:
+				_score_scroll_dragging = true
+
+		if _score_scroll_dragging:
+			scroll.scroll_vertical -= int(drag.relative.y)
+
+		_score_scroll_last_pos = drag.position
+
+func _get_score_scroll_at_position(pos: Vector2) -> ScrollContainer:
+	var lists: Array[VBoxContainer] = [player_word_list, opp_word_list]
+
+	for list in lists:
+		var scroll := _get_score_scroll_for_list(list)
+		if not is_instance_valid(scroll):
+			continue
+		if scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED:
+			continue
+		if not scroll.visible:
+			continue
+		if scroll.get_global_rect().has_point(pos):
+			return scroll
+
+	return null
+
+
+func _on_score_screen_scroll_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+
+		if mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			var wheel_scroll := _get_score_scroll_at_position(mb.position)
+			if is_instance_valid(wheel_scroll):
+				if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+					wheel_scroll.scroll_vertical -= 48
+				else:
+					wheel_scroll.scroll_vertical += 48
+				get_viewport().set_input_as_handled()
+			return
+
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				var scroll := _get_score_scroll_at_position(mb.position)
+				if is_instance_valid(scroll):
+					_active_score_scroll_id = scroll.get_instance_id()
+					_score_scroll_pointer_down = true
+					_score_scroll_dragging = false
+					_score_scroll_last_pos = mb.position
+					get_viewport().set_input_as_handled()
+			else:
+				_score_scroll_pointer_down = false
+				_score_scroll_dragging = false
+				_active_score_scroll_id = 0
+			return
+
+	if event is InputEventMouseMotion and _score_scroll_pointer_down and _active_score_scroll_id != 0:
+		var mm := event as InputEventMouseMotion
+		var scroll := instance_from_id(_active_score_scroll_id) as ScrollContainer
+
+		if not is_instance_valid(scroll):
+			_score_scroll_pointer_down = false
+			_score_scroll_dragging = false
+			_active_score_scroll_id = 0
+			return
+
+		if not _score_scroll_dragging:
+			if mm.position.distance_to(_score_scroll_last_pos) >= WORDS_DRAG_THRESHOLD:
+				_score_scroll_dragging = true
+
+		if _score_scroll_dragging:
+			scroll.scroll_vertical -= int(mm.relative.y)
+			get_viewport().set_input_as_handled()
+
+		_score_scroll_last_pos = mm.position
+		return
+
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+
+		if touch.pressed:
+			var scroll_touch := _get_score_scroll_at_position(touch.position)
+			if is_instance_valid(scroll_touch):
+				_active_score_scroll_id = scroll_touch.get_instance_id()
+				_score_scroll_pointer_down = true
+				_score_scroll_dragging = false
+				_score_scroll_last_pos = touch.position
+				get_viewport().set_input_as_handled()
+		else:
+			_score_scroll_pointer_down = false
+			_score_scroll_dragging = false
+			_active_score_scroll_id = 0
+		return
+
+	if event is InputEventScreenDrag and _score_scroll_pointer_down and _active_score_scroll_id != 0:
+		var drag := event as InputEventScreenDrag
+		var scroll_drag := instance_from_id(_active_score_scroll_id) as ScrollContainer
+
+		if not is_instance_valid(scroll_drag):
+			_score_scroll_pointer_down = false
+			_score_scroll_dragging = false
+			_active_score_scroll_id = 0
+			return
+
+		if not _score_scroll_dragging:
+			if drag.position.distance_to(_score_scroll_last_pos) >= WORDS_DRAG_THRESHOLD:
+				_score_scroll_dragging = true
+
+		if _score_scroll_dragging:
+			scroll_drag.scroll_vertical -= int(drag.relative.y)
+			get_viewport().set_input_as_handled()
+
+		_score_scroll_last_pos = drag.position
+		return
+
 func _populate_scoreboard(
 	is_player: bool = true,
 	word_entries: Array = [],
@@ -2404,6 +2677,8 @@ func _populate_scoreboard(
 				sum += int(e2["points"]) if e2.has("points") else _compute_word_score(word_key2.length())
 
 			final_score = sum
+			
+	_configure_score_word_scrolling(target_list, total_words)
 
 	for entry in words:
 		if not (entry is Dictionary) or not entry.has("word") or not entry.has("points"):
@@ -2413,9 +2688,12 @@ func _populate_scoreboard(
 		var points := int(entry["points"])
 
 		var row := HBoxContainer.new()
+		row.custom_minimum_size = Vector2(0, SCORE_WORD_ROW_HEIGHT)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 		var word_panel := PanelContainer.new()
 		word_panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		word_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 		var word_panel_style := StyleBoxFlat.new()
 		word_panel_style.bg_color = Color(0.97, 0.78, 0.54)
@@ -2445,6 +2723,7 @@ func _populate_scoreboard(
 		word_label.add_theme_font_size_override("font_size", 18)
 		word_label.add_theme_font_override("font", bold_var)
 		word_panel.add_child(word_label)
+		word_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(word_panel)
 
 		var spacer := Control.new()
@@ -2452,6 +2731,7 @@ func _populate_scoreboard(
 		row.add_child(spacer)
 
 		var points_label := Label.new()
+		points_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		points_label.text = str(points)
 		points_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		points_label.size_flags_horizontal = Control.SIZE_SHRINK_END

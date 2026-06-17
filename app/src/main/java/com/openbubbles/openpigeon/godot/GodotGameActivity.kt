@@ -23,6 +23,7 @@ class GodotGameActivity : GodotActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        OpenPigeonLog.installContext(applicationContext)
         enableEdgeToEdge()
         setContentView(R.layout.activity_godot)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.surfaceView)) { v, insets ->
@@ -70,6 +71,8 @@ class GodotGameActivity : GodotActivity() {
     }
 
     private fun initGameSession(intent: Intent) {
+        OpenPigeonLog.installContext(applicationContext)
+
         val sid = intent.getStringExtra("SESSION")
         val gname = intent.getStringExtra("GAME")
 

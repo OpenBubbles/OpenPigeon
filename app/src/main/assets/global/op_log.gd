@@ -4,6 +4,7 @@ var _logger = null
 var _last_title_key := ""
 var _last_title_ms := 0
 var _bridge_logged := false
+var _logger_name := ""
 
 func _ensure_logger() -> void:
 	if _logger != null:
@@ -11,10 +12,13 @@ func _ensure_logger() -> void:
 
 	if Engine.has_singleton("OpenPigeonLog"):
 		_logger = Engine.get_singleton("OpenPigeonLog")
+		_logger_name = "OpenPigeonLog"
 	elif Engine.has_singleton("OpenPigeonGodotLog"):
 		_logger = Engine.get_singleton("OpenPigeonGodotLog")
+		_logger_name = "OpenPigeonGodotLog"
 	elif Engine.has_singleton("AppPlugin"):
 		_logger = Engine.get_singleton("AppPlugin")
+		_logger_name = "AppPlugin"
 
 func _message(parts: Variant) -> String:
 	if parts is Array:
@@ -42,8 +46,10 @@ func _send(level: String, tag: String, parts: Variant) -> void:
 	var text := _message(parts)
 
 	if _logger:
-		# Preferred bridge: routes through OpenPigeonLog.godotLog(),
-		# which sanitizes, prefixes Godot tags, and adds to diagnostic entries.
+		if _logger_name == "AppPlugin":
+			_logger.call("log", level, tag, text)
+			return
+
 		if _logger.has_method("godotLog"):
 			_logger.call("godotLog", level, tag, text)
 			return
@@ -53,40 +59,25 @@ func _send(level: String, tag: String, parts: Variant) -> void:
 				if _logger.has_method("godotD"):
 					_logger.call("godotD", tag, text)
 					return
-				if _logger.has_method("d"):
-					_logger.call("d", tag, text)
-					return
 
 			"I", "INFO":
 				if _logger.has_method("godotI"):
 					_logger.call("godotI", tag, text)
-					return
-				if _logger.has_method("i"):
-					_logger.call("i", tag, text)
 					return
 
 			"W", "WARN", "WARNING":
 				if _logger.has_method("godotW"):
 					_logger.call("godotW", tag, text)
 					return
-				if _logger.has_method("w"):
-					_logger.call("w", tag, text)
-					return
 
 			"E", "ERROR":
 				if _logger.has_method("godotE"):
 					_logger.call("godotE", tag, text)
 					return
-				if _logger.has_method("e"):
-					_logger.call("e", tag, text)
-					return
 
 			"EVENT":
 				if _logger.has_method("godotEvent"):
 					_logger.call("godotEvent", tag, text)
-					return
-				if _logger.has_method("event"):
-					_logger.call("event", tag, text)
 					return
 
 	_fallback(level, tag, text)
@@ -136,12 +127,18 @@ func bridge_test() -> void:
 	for name in Engine.get_singleton_list():
 		singleton_names.append(str(name))
 
-	event("OpLog", [
-		"bridge_test loggerFound=", _logger != null,
-		" loggerMethods=",
-		" godotLog=", _logger != null and _logger.has_method("godotLog"),
-		" godotEvent=", _logger != null and _logger.has_method("godotEvent"),
-		" i=", _logger != null and _logger.has_method("i"),
-		" event=", _logger != null and _logger.has_method("event"),
-		" singletons=", ",".join(singleton_names)
+	var found := _logger != null
+
+	_fallback("EVENT", "OpLog", "bridge_test loggerFound=%s loggerName=%s singletons=%s" % [
+		found,
+		_logger_name,
+		",".join(singleton_names)
 	])
+
+	if found:
+		_send("EVENT", "DiagSelfTest", [
+			"GODOT_BRIDGE_CALL_TEST loggerName=", _logger_name,
+			" ticks=", Time.get_ticks_msec()
+		])
+	else:
+		_fallback("EVENT", "DiagSelfTest", "GODOT_BRIDGE_NO_LOGGER")

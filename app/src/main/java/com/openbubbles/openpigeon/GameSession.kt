@@ -8,6 +8,7 @@ import androidx.core.net.toUri
 import androidx.glance.appwidget.ExperimentalGlanceRemoteViewsApi
 import androidx.glance.appwidget.GlanceRemoteViews
 import com.bluebubbles.messaging.ITaskCompleteCallback
+import android.os.Process
 
 class GameSession(var handle: IMessageViewHandle) {
 
@@ -31,6 +32,11 @@ class GameSession(var handle: IMessageViewHandle) {
                 OpenPigeonLog.e("openpigeon-gamesession", "Exception parsing $key: $exc")
             }
         }
+
+        OpenPigeonLog.event(
+            "DiagSelfTest",
+            "ANDROID_HANDLE_NEW_MESSAGE pid=${Process.myPid()} keys=${newMessage.keys.sorted().joinToString(",")}"
+        )
 
         // Detect win transition: winner field newly appeared in this session.
         // First-message-with-winner means we're opening an already-finished game;

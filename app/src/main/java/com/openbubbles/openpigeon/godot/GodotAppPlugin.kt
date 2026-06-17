@@ -27,38 +27,82 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
         val SWITCH_GAME_SIGNAL = SignalInfo("switch_game", String::class.java)
     }
 
+    init {
+        installLogContext()
+    }
+
+    private fun installLogContext() {
+        OpenPigeonLog.installContext(gameActivity.applicationContext)
+    }
+
     override fun getPluginName() = "AppPlugin"
 
     override fun getPluginSignals() = setOf(SET_GAME_DATA_SIGNAL, SWITCH_GAME_SIGNAL)
 
     @UsedByGodot
-    fun log(level: String, tag: String, message: String) {
+    fun godotLog(level: String, tag: String, message: String) {
+        installLogContext()
         OpenPigeonLog.godotLog(level, tag, message)
     }
 
     @UsedByGodot
-    fun event(tag: String, message: String) {
+    fun godotEvent(tag: String, message: String) {
+        installLogContext()
         OpenPigeonLog.godotEvent(tag, message)
     }
 
     @UsedByGodot
-    fun d(tag: String, message: String) {
+    fun godotD(tag: String, message: String) {
+        installLogContext()
         OpenPigeonLog.godotD(tag, message)
     }
 
     @UsedByGodot
-    fun i(tag: String, message: String) {
+    fun godotI(tag: String, message: String) {
+        installLogContext()
         OpenPigeonLog.godotI(tag, message)
     }
 
     @UsedByGodot
-    fun w(tag: String, message: String) {
+    fun godotW(tag: String, message: String) {
+        installLogContext()
         OpenPigeonLog.godotW(tag, message)
     }
 
     @UsedByGodot
-    fun e(tag: String, message: String) {
+    fun godotE(tag: String, message: String) {
+        installLogContext()
         OpenPigeonLog.godotE(tag, message)
+    }
+
+    @UsedByGodot
+    fun log(level: String, tag: String, message: String) {
+        godotLog(level, tag, message)
+    }
+
+    @UsedByGodot
+    fun event(tag: String, message: String) {
+        godotEvent(tag, message)
+    }
+
+    @UsedByGodot
+    fun d(tag: String, message: String) {
+        godotD(tag, message)
+    }
+
+    @UsedByGodot
+    fun i(tag: String, message: String) {
+        godotI(tag, message)
+    }
+
+    @UsedByGodot
+    fun w(tag: String, message: String) {
+        godotW(tag, message)
+    }
+
+    @UsedByGodot
+    fun e(tag: String, message: String) {
+        godotE(tag, message)
     }
 
     override fun onGodotMainLoopStarted() {

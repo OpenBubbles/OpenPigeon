@@ -10,10 +10,55 @@ import java.text.SimpleDateFormat
 import java.util.ArrayDeque
 import java.util.Date
 import java.util.Locale
+import android.app.ActivityManager
+import android.os.Process
+import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 object OpenPigeonLog {
-    private const val MAX_AGE_MS = 3 * 60 * 1000L
-    private const val MAX_ENTRIES = 400
+    private const val MAX_AGE_MS = 5 * 60 * 1000L
+    private const val MAX_ENTRIES = 1000
+    private const val LOG_FILE_NAME = "openpigeon_diagnostic.log"
+    private const val MAX_FILE_BYTES = 512 * 1024
+    private val fileLogEnabled = AtomicBoolean(true)
+    private val crashHandlerInstalled = AtomicBoolean(false)
+
+    @Volatile
+    private var appContext: Context? = null
+
+    @JvmStatic
+    fun installContext(context: Context) {
+        appContext = context.applicationContext
+        fileLogEnabled.set(true)
+        installCrashHandler()
+    }
+
+    private fun installCrashHandler() {
+        if (!crashHandlerInstalled.compareAndSet(false, true)) {
+            return
+        }
+
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                e(
+                    "UncaughtException",
+                    "Uncaught exception on thread=${thread.name}",
+                    throwable
+                )
+            } catch (_: Throwable) {
+                // Never let diagnostic logging block the actual crash handler.
+            }
+
+            if (previousHandler != null) {
+                previousHandler.uncaughtException(thread, throwable)
+            } else {
+                Process.killProcess(Process.myPid())
+                System.exit(10)
+            }
+        }
+    }
 
     private val formatter = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
     private val entries = ArrayDeque<Entry>()
@@ -144,18 +189,23 @@ object OpenPigeonLog {
         val now = System.currentTimeMillis()
         trimOld(now)
 
+        val safeTag = sanitize(tag).take(48)
+        val safeMessage = sanitize(rawMessage).take(3000)
+
         entries.addLast(
             Entry(
                 timeMs = now,
                 level = level,
-                tag = sanitize(tag).take(48),
-                message = sanitize(rawMessage).take(3000)
+                tag = safeTag,
+                message = safeMessage
             )
         )
 
         while (entries.size > MAX_ENTRIES) {
             entries.removeFirst()
         }
+
+        appendToSharedFile(now, level, safeTag, safeMessage)
     }
 
     @Synchronized
@@ -167,6 +217,7 @@ object OpenPigeonLog {
 
     @Synchronized
     fun buildReport(context: Context): String {
+        installContext(context)
         val now = System.currentTimeMillis()
         trimOld(now)
 
@@ -174,8 +225,9 @@ object OpenPigeonLog {
             appendLine("OpenPigeon Diagnostic Report")
             appendLine("Generated: ${Date(now)}")
             appendLine("App version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-            appendLine("Android: ${Build.VERSION.RELEASE} API ${Build.VERSION.SDK_INT}")
-            appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine("Android: ${Build.VERSION.RELEASE} API ${Build.VERSION.SDK_INT}").appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine("Process: ${currentProcessName(context)} pid=${Process.myPid()}")
+            appendLine("Captured entries in this process: ${entries.size}")
             appendLine("Window: last ${MAX_AGE_MS / 1000} seconds")
             appendLine()
             appendLine("Privacy:")
@@ -188,6 +240,19 @@ object OpenPigeonLog {
             } else {
                 for (entry in entries) {
                     appendLine("${formatter.format(Date(entry.timeMs))} ${entry.level}/${entry.tag}: ${entry.message}")
+                }
+            }
+
+            val fileEntries = readSharedFile(context)
+
+            appendLine()
+            appendLine("Shared file entries:")
+
+            if (fileEntries.isEmpty()) {
+                appendLine("(No shared file logs)")
+            } else {
+                for (line in fileEntries) {
+                    appendLine(line)
                 }
             }
         }
@@ -205,6 +270,57 @@ object OpenPigeonLog {
         activity.startActivity(Intent.createChooser(intent, "Send diagnostic report"))
     }
 
+    private fun appendToSharedFile(timeMs: Long, level: String, tag: String, message: String) {
+        if (!fileLogEnabled.get()) return
+
+        try {
+            val context = appContext ?: return
+            val file = File(context.filesDir, LOG_FILE_NAME)
+
+            if (file.exists() && file.length() > MAX_FILE_BYTES) {
+                file.delete()
+            }
+
+            val oneLineMessage = message
+                .replace("\r", "\\r")
+                .replace("\n", "\\n")
+
+            file.appendText(
+                "$timeMs|${formatter.format(Date(timeMs))} $level/$tag: $oneLineMessage\n"
+            )
+        } catch (_: Throwable) {
+            fileLogEnabled.set(false)
+        }
+    }
+
+    private fun readSharedFile(context: Context): List<String> {
+        return try {
+            val file = File(context.filesDir, LOG_FILE_NAME)
+            if (!file.exists()) return emptyList()
+
+            val cutoff = System.currentTimeMillis() - MAX_AGE_MS
+
+            file.readLines()
+                .takeLast(MAX_ENTRIES * 3)
+                .mapNotNull { line ->
+                    val separator = line.indexOf('|')
+                    if (separator <= 0) return@mapNotNull null
+
+                    val timeMs = line.substring(0, separator).toLongOrNull()
+                        ?: return@mapNotNull null
+
+                    if (timeMs < cutoff) {
+                        return@mapNotNull null
+                    }
+
+                    line.substring(separator + 1)
+                }
+                .takeLast(MAX_ENTRIES)
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
     private fun messageWithThrowable(message: String, throwable: Throwable?): String {
         if (throwable == null) return message
 
@@ -220,6 +336,16 @@ object OpenPigeonLog {
                 append(stack)
             }
         }
+    }
+
+    private fun currentProcessName(context: Context): String {
+        val pid = Process.myPid()
+        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+
+        return manager?.runningAppProcesses
+            ?.firstOrNull { it.pid == pid }
+            ?.processName
+            ?: context.packageName
     }
 
     private fun sanitize(input: String): String {
