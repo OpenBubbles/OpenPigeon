@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/knockoutRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#68d4f6">
+
+    <SurfaceView
+        android:id="@+id/knockoutSurface"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <FrameLayout
+        android:id="@+id/knockoutAvatarHud"
+        android:layout_width="match_parent"
+        android:layout_height="94dp"
+        android:layout_gravity="top"
+        android:layout_marginTop="10dp"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <LinearLayout
+            android:id="@+id/knockoutMyAvatarGroup"
+            android:layout_width="128dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_marginStart="10dp"
+            android:gravity="start"
+            android:orientation="vertical"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <TextView
+                android:id="@+id/knockoutYouLabel"
+                android:layout_width="72dp"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="2dp"
+                android:gravity="center"
+                android:text="You"
+                android:textColor="#CCFFFFFF"
+                android:textSize="17sp" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="52dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+
+                <FrameLayout
+                    android:id="@+id/knockoutGameAvatarAnchor"
+                    android:layout_width="72dp"
+                    android:layout_height="52dp" />
+
+                <ImageView
+                    android:id="@+id/knockoutMyPreserver"
+                    android:layout_width="wrap_content"
+                    android:layout_height="52dp"
+                    android:layout_marginStart="4dp"
+                    android:adjustViewBounds="true"
+                    android:scaleType="fitCenter"
+                    android:visibility="visible" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/knockoutOpponentAvatarGroup"
+            android:layout_width="128dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_marginEnd="10dp"
+            android:gravity="end"
+            android:orientation="vertical"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+            <View
+                android:layout_width="72dp"
+                android:layout_height="22dp"
+                android:layout_marginBottom="2dp" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="52dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+
+                <ImageView
+                    android:id="@+id/knockoutOpponentPreserver"
+                    android:layout_width="wrap_content"
+                    android:layout_height="52dp"
+                    android:layout_marginEnd="4dp"
+                    android:adjustViewBounds="true"
+                    android:scaleType="fitCenter"
+                    android:visibility="visible" />
+
+                <FrameLayout
+                    android:id="@+id/knockoutOpponentAvatarAnchor"
+                    android:layout_width="72dp"
+                    android:layout_height="52dp" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/knockoutStateLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="#66000000"
+        android:paddingLeft="16dp"
+        android:paddingTop="8dp"
+        android:paddingRight="16dp"
+        android:paddingBottom="8dp"
+        android:text="Loading..."
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/knockoutPowerHintLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginLeft="24dp"
+        android:layout_marginRight="24dp"
+        android:layout_marginBottom="34dp"
+        android:background="@android:color/transparent"
+        android:gravity="center"
+        android:maxWidth="340dp"
+        android:paddingLeft="8dp"
+        android:paddingTop="4dp"
+        android:paddingRight="8dp"
+        android:paddingBottom="4dp"
+        android:text="Adjust power and direction for all your penguins."
+        android:textColor="#FFFFFF"
+        android:textSize="17sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
+    <ImageButton
+        android:id="@+id/knockoutSettingsButton"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="20dp"
+        android:background="@android:color/transparent"
+        android:alpha="0.8"
+        android:contentDescription="Settings"
+        android:scaleType="fitCenter"
+        android:padding="6dp"
+        android:visibility="visible" />
+
+    <Button
+        android:id="@+id/knockoutLaunchButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="34dp"
+        android:minWidth="160dp"
+        android:text="Launch"
+        android:visibility="gone" />
+
+    <FrameLayout
+        android:id="@+id/knockoutIntroOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#80000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/knockoutIntroCard"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingLeft="24dp"
+            android:paddingTop="24dp"
+            android:paddingRight="24dp"
+            android:paddingBottom="24dp"
+            android:elevation="8dp">
+
+            <TextView
+                android:id="@+id/knockoutIntroTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:text="Goal:"
+                android:textColor="#000000"
+                android:textSize="36sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/knockoutIntroBody"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:text="Push your opponent out into the water before they push you out."
+                android:textColor="#000000"
+                android:textSize="20sp" />
+
+            <Button
+                android:id="@+id/knockoutIntroButton"
+                android:layout_width="160dp"
+                android:layout_height="56dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="16dp"
+                android:text="Start"
+                android:textColor="#FFFFFF"
+                android:textSize="24sp" />
+        </LinearLayout>
+    </FrameLayout>
+</FrameLayout>

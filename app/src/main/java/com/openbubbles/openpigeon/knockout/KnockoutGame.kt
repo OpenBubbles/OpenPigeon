@@ -46,11 +46,11 @@ class KnockoutGame : Game {
     private val MUSHROOM_AVOID_RADIUS = (PIECE_RADIUS + MUSHROOM_TRIGGER_RADIUS + 4f)
 
     // ── Game metadata ─────────────────────────────────────────────────────────
-    override fun getVersion(): String = "5"
+    override fun getVersion(): String = "6"
     override fun getName(): String = "knock"
     override fun displayName(): String = "Knockout"
     override fun isConfigurable(): Boolean = true
-    override fun gameClass(): Class<*> = GodotGameActivity::class.java
+    override fun gameClass(): Class<*> = KnockoutActivity::class.java
 
     @Composable
     override fun Configuration(context: Context?) {
@@ -109,8 +109,8 @@ class KnockoutGame : Game {
     }
 
     override fun getDefaultReplay(): String {
-        // Godot accepts "board:" with our piece list; round number is optional
-        return "board:" + generateBoardString()
+        // Include explicit board index so the first piece is never mistaken for the board header.
+        return "board:0#" + generateBoardString()
     }
 
     // ──────────────────────── SPAWN HELPERS (safety checks) ────────────────────

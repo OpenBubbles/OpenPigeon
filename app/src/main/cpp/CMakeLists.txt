@@ -36,7 +36,19 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
     openbubblesextension.cpp
     PoolTable.cpp
     PoolBall.cpp
-    PoolContactListener.cpp)
+    PoolContactListener.cpp
+    knockout/KnockoutTable.cpp
+    knockout/KnockoutPiece.cpp
+    knockout/KnockoutContactListener.cpp
+    knockout/KnockoutJNI.cpp)
+
+set_source_files_properties(
+        knockout/KnockoutTable.cpp
+        knockout/KnockoutPiece.cpp
+        knockout/KnockoutContactListener.cpp
+        knockout/KnockoutJNI.cpp
+        PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=fast"
+)
 
 message(BOX2D_INCLUDE_DIRS="${BOX2D_INCLUDE_DIRS}")
 target_include_directories(${CMAKE_PROJECT_NAME}

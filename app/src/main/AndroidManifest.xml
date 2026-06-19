@@ -25,6 +25,10 @@
             android:exported="false"
             android:theme="@style/Theme.OpenBubblesSampleExtension" />
         <activity
+            android:name=".knockout.KnockoutActivity"
+            android:exported="false"
+            android:theme="@style/Theme.OpenBubblesSampleExtension" />
+        <activity
             android:name=".godot.GodotGameActivity"
             android:exported="false"
             android:process=":godot"
