@@ -3,7 +3,7 @@
     android:id="@+id/knockoutRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#68d4f6">
+    android:background="#aad9f7">
 
     <SurfaceView
         android:id="@+id/knockoutSurface"
@@ -130,14 +130,14 @@
         android:layout_marginBottom="34dp"
         android:background="@android:color/transparent"
         android:gravity="center"
-        android:maxWidth="340dp"
+        android:maxWidth="300dp"
         android:paddingLeft="8dp"
         android:paddingTop="4dp"
         android:paddingRight="8dp"
         android:paddingBottom="4dp"
         android:text="Adjust power and direction for all your penguins."
         android:textColor="#FFFFFF"
-        android:textSize="17sp"
+        android:textSize="15sp"
         android:textStyle="bold"
         android:visibility="gone" />
 

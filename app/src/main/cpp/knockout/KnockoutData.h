@@ -4,7 +4,9 @@
 struct KnockoutData {
     enum Type {
         Piece,
+        Shroom
     };
+
     Type type;
     void* data;
 };

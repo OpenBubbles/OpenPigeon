@@ -211,3 +211,27 @@ Java_com_openbubbles_openpigeon_knockout_KnockoutHarness_runIosSeedTrace(
 
     return env->NewStringUTF(out.str().c_str());
 }
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_openbubbles_openpigeon_knockout_KnockoutActivity_setKnockoutMap(
+        JNIEnv*,
+        jobject,
+        jlong tablePtr,
+        jint mapMode,
+        jfloat boardScale) {
+    if (auto* table = tableFrom(tablePtr)) {
+        table->setMap(static_cast<int>(mapMode), boardScale);
+    }
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_openbubbles_openpigeon_knockout_KnockoutActivity_consumeKnockoutMushroomHits(
+        JNIEnv*,
+        jobject,
+        jlong tablePtr) {
+    if (auto* table = tableFrom(tablePtr)) {
+        return table->consumeMushroomHits();
+    }
+
+    return 0;
+}

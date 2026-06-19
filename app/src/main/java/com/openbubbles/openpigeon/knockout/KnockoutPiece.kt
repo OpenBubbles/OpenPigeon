@@ -117,7 +117,7 @@ class KnockoutPiece(
         }
     }
 
-    fun drawHighlightRing(canvas: Canvas, paint: Paint, pulseScale: Float) {
+    fun drawHighlightRing(canvas: Canvas, paint: Paint, pulseScale: Float, mapMode: Int = 1) {
         if (!alive || dying) return
 
         val oldStyle = paint.style
@@ -125,10 +125,16 @@ class KnockoutPiece(
         val oldColor = paint.color
         val oldAlpha = paint.alpha
 
+        val ringOpacity = 0.8f
+
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 3.0f
-        paint.color = 0xff000000.toInt()
-        paint.alpha = 240
+        paint.strokeWidth = 1.5f
+        paint.color = if (player == 1 && (mapMode == 2 || mapMode == 3)) {
+            0xffffffff.toInt()
+        } else {
+            0xff000000.toInt()
+        }
+        paint.alpha = (ringOpacity * 255f).toInt().coerceIn(0, 255)
 
         val baseRadius = (KnockoutConstants.PIECE_VISUAL_SIZE * 0.5f) + 4.0f
         val radius = baseRadius * pulseScale
@@ -170,7 +176,7 @@ class KnockoutPiece(
         canvas.restore()
     }
 
-    fun drawArrow(canvas: Canvas, paint: Paint, alpha: Int = 255) {
+    fun drawArrow(canvas: Canvas, paint: Paint, alpha: Int = 255, mapMode: Int = 1) {
         if (!alive || dying || power <= 0.001f) return
 
         val oldStyle = paint.style
@@ -201,10 +207,10 @@ class KnockoutPiece(
         val baseX = ex - dirX * headLen
         val baseY = ey - dirY * headLen
 
-        paint.color = if (player == 1) {
-            0xff000000.toInt()
-        } else {
-            0xff61779e.toInt()
+        paint.color = when {
+            player == 1 && (mapMode == 2 || mapMode == 3) -> 0xffffffff.toInt()
+            player == 1 -> 0xff000000.toInt()
+            else -> 0xff61779e.toInt()
         }
         paint.alpha = alpha.coerceIn(0, 255)
 
