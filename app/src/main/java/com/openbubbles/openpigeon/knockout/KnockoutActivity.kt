@@ -66,6 +66,7 @@ class KnockoutActivity : AppCompatActivity() {
 
     val pieces = mutableListOf<KnockoutPiece>()
     lateinit var renderer: KnockoutRenderer
+    private var waterView: KnockoutWaterView? = null
 
     private var selectedPiece: KnockoutPiece? = null
     val selectedAimPiece: KnockoutPiece?
@@ -145,9 +146,22 @@ class KnockoutActivity : AppCompatActivity() {
         ensureIntroPopup()
 
         val surface = findViewById<SurfaceView>(R.id.knockoutSurface)
+        surface.setZOrderMediaOverlay(true)
+        surface.holder.setFormat(android.graphics.PixelFormat.TRANSLUCENT)
         renderer = KnockoutRenderer(surface.holder, this)
 
         val rootFrame = findViewById<FrameLayout>(R.id.knockoutRoot)
+        waterView = KnockoutWaterView(this).apply {
+            setWaterTexture("knockout/water.png")
+        }
+        rootFrame.addView(
+            waterView, 0,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+        waterView?.visibility = if (darkMode) View.GONE else View.VISIBLE
         settingsSheet = SettingsSheet(this, rootFrame)
         settingsSheet.attachGameAvatar(findViewById(R.id.knockoutGameAvatarAnchor))
         settingsSheet.attachOpponentAvatar(findViewById(R.id.knockoutOpponentAvatarAnchor))
@@ -161,6 +175,7 @@ class KnockoutActivity : AppCompatActivity() {
             getSharedPreferences("avatar_settings", Context.MODE_PRIVATE).edit()
                 .putBoolean("knockout/dark_mode", checked)
                 .apply()
+            waterView?.visibility = if (checked) View.GONE else View.VISIBLE
         }
         settingsSheet.addGameControl("Dark Mode", darkSwitch)
 
@@ -244,6 +259,7 @@ class KnockoutActivity : AppCompatActivity() {
         )
 
         mapMode = msg["map"]?.toIntOrNull() ?: msg["mode"]?.toIntOrNull() ?: mapMode
+        applyWaterTintForMap()
         applyMapButtonColors()
         syncNativeMap()
         player1Id = msg["player1"] ?: player1Id
@@ -296,6 +312,15 @@ class KnockoutActivity : AppCompatActivity() {
         localOutgoingTokens.clear()
         processPendingReplayQueue()
         markInitialGameDataApplied()
+    }
+
+    private fun applyWaterTintForMap() {
+        val wv = waterView ?: return
+        when (mapMode) {
+            2 -> wv.setTint(1.0f, 0.847f, 0.302f)   // #FFD84D  map-2 yellow
+            3 -> wv.setTint(0.435f, 0.839f, 0.545f)  // #6FD68B  map-3 green
+            else -> wv.setTint(0.667f, 0.851f, 0.969f) // #AAD9F7 map-1 blue
+        }
     }
 
     private fun logLong(prefix: String, value: String) {
@@ -420,6 +445,16 @@ class KnockoutActivity : AppCompatActivity() {
     private fun localUserId(msg: Map<String, String>): String {
         return gameSessionIPC?.getSenderUUID(sessionId)?.takeIf { it.isNotBlank() }
             ?: msg["myPlayerId"].orEmpty()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        waterView?.onResume()
+    }
+
+    override fun onPause() {
+        waterView?.onPause()
+        super.onPause()
     }
 
     private fun shouldShowIntroPopupFor(msg: Map<String, String>): Boolean {

@@ -99,7 +99,11 @@ class KnockoutRenderer(
 
     private fun drawFrame(canvas: Canvas) {
         synchronized(activity) {
-            canvas.drawColor(backgroundColorForMap())
+            if (activity.darkMode) {
+                canvas.drawColor(backgroundColorForMap())  // dark mode keeps its opaque fill, water hidden
+            } else {
+                canvas.drawColor(android.graphics.Color.TRANSPARENT, android.graphics.PorterDuff.Mode.CLEAR)
+            }
 
             computeTransforms(canvas.width, canvas.height)
             activity.updateLaunchButtonPlacement(canvas.width, canvas.height)
