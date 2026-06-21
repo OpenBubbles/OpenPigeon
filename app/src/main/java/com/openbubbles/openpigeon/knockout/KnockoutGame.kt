@@ -1,6 +1,7 @@
 package com.openbubbles.openpigeon.knockout
 
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
@@ -14,38 +15,33 @@ import androidx.glance.layout.Box
 import androidx.glance.layout.Row
 import androidx.glance.layout.padding
 import com.openbubbles.openpigeon.ConfigureCallback
+import com.openbubbles.openpigeon.DynamicPreviewGame
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 
-class KnockoutGame : Game {
+class KnockoutGame : Game, DynamicPreviewGame {
 
-    // ── Runtime map mode from configuration ────────────────────────────────────
-    // 1: plain ice, 2: center hole, 3: bouncy mushrooms
     var mode = 1
 
-    // ── Spawn + board sizing (mirror Godot scene) ─────────────────────────────
-    private val BOARD_HALF = 327.01f / 2f              // Godot LOGICAL_BOARD_SIZE / 2
-    private val POSITION_RANGE = 150f                  // random range
-    private val PIECE_RADIUS = 24f                     // matches CircleShape2D
+    private val BOARD_HALF = 327.01f / 2f
+    private val POSITION_RANGE = 150f
+    private val PIECE_RADIUS = 24f
     private val MIN_PIECE_SEPARATION = (PIECE_RADIUS * 2f + 6f)
     private val MAX_SPAWN_ATTEMPTS = 500
 
-    // Map 2: keep pieces fully out of the center hole (radius + safety pad)
     private val CENTER_HOLE_AVOID_RADIUS = 56f
 
-    // Map 3: mushrooms (exactly where Godot spawns them)
     private val MUSHROOM_INSET = 75f
     private val MUSHROOM_TRIGGER_RADIUS = 26f
-    // piece center must stay outside mushroom trigger + its own radius (+ small pad)
     private val MUSHROOM_AVOID_RADIUS = (PIECE_RADIUS + MUSHROOM_TRIGGER_RADIUS + 4f)
 
-    // ── Game metadata ─────────────────────────────────────────────────────────
     override fun getVersion(): String = "6"
     override fun getName(): String = "knock"
     override fun displayName(): String = "Knockout"
@@ -87,7 +83,6 @@ class KnockoutGame : Game {
     }
 
     override fun setConfigOption(name: String, value: String) {
-        // value is "Map 1" | "Map 2" | "Map 3"
         mode = value.takeLast(1).toInt()
     }
 
@@ -109,20 +104,36 @@ class KnockoutGame : Game {
     }
 
     override fun getDefaultReplay(): String {
-        // Include explicit board index so the first piece is never mistaken for the board header.
         return "board:0#" + generateBoardString()
     }
 
-    // ──────────────────────── SPAWN HELPERS (safety checks) ────────────────────
+    override fun gamePreviewBitmap(context: Context, message: Map<String, String>): Bitmap? {
+        return try {
+            val board = extractLatestBoard(message["replay"]) ?: return null
+            val mapMode = message["map"]?.toIntOrNull()
+                ?: message["mode"]?.toIntOrNull()
+                ?: 1
+            KnockoutPreviewRenderer.render(context, board, mapMode)
+        } catch (e: Exception) {
+            OpenPigeonLog.w("KnockoutGame", "Failed to build dynamic Knockout preview, falling back to static image", e)
+            null
+        }
+    }
+
+    private fun extractLatestBoard(replay: String?): KnockoutBoard? {
+        if (replay.isNullOrBlank()) return null
+        val parsed = KnockoutReplayParser.parse(replay)
+        return parsed.boards.lastOrNull()?.takeIf { it.pieces.isNotEmpty() }
+    }
 
     private fun mushroomPositions(): List<Pair<Float, Float>> {
         val h = BOARD_HALF
         val i = MUSHROOM_INSET
         return listOf(
-            Pair(-h + i, -h + i), // top-left
-            Pair(+h - i, -h + i), // top-right
-            Pair(-h + i, +h - i), // bottom-left
-            Pair(+h - i, +h - i)  // bottom-right
+            Pair(-h + i, -h + i),
+            Pair(+h - i, -h + i),
+            Pair(-h + i, +h - i),
+            Pair(+h - i, +h - i)
         )
     }
 
@@ -165,25 +176,21 @@ class KnockoutGame : Game {
             val x = Random.nextFloat() * 2f * POSITION_RANGE - POSITION_RANGE
             val y = Random.nextFloat() * 2f * POSITION_RANGE - POSITION_RANGE
 
-            // Mode-specific keep-out rules
             if (mode == 2 && isInsideCenterHole(x, y)) continue
             if (mode == 3 && isOnAnyMushroom(x, y)) continue
 
-            // Avoid stacking pieces
             if (tooCloseToExisting(x, y, existing)) continue
 
             return Pair(x, y)
         }
 
-        // Fallback: place around a ring (rarely used)
         val idx = existing.size.coerceAtLeast(1)
-        val n = 8 // total pieces
+        val n = 8
         val angle = (idx % n) / n.toFloat() * (2f * PI).toFloat()
         val baseR = (POSITION_RANGE - MIN_PIECE_SEPARATION).coerceAtLeast(60f)
         var x = cos(angle) * baseR
         var y = sin(angle) * baseR
 
-        // If the fallback still violates a mode rule, nudge outward along the same angle
         if (mode == 2 && isInsideCenterHole(x, y)) {
             val rr = CENTER_HOLE_AVOID_RADIUS + MIN_PIECE_SEPARATION * 0.5f
             x = cos(angle) * rr
@@ -197,10 +204,9 @@ class KnockoutGame : Game {
         return Pair(x, y)
     }
 
-    // ─────────────────────────── Piece list generator ──────────────────────────
     private fun generateBoardString(): String {
         val pieces = mutableListOf<String>()
-        val placed = mutableListOf<Pair<Float, Float>>() // keep centers to avoid overlaps
+        val placed = mutableListOf<Pair<Float, Float>>()
 
         fun addPiecesForPlayer(player: Int, count: Int) {
             repeat(count) {
