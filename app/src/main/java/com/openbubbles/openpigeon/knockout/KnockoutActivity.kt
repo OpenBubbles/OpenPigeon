@@ -43,6 +43,9 @@ import kotlin.math.PI
 import android.os.Build
 import android.view.ViewOutlineProvider
 import android.view.ViewGroup
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
 
 class KnockoutActivity : AppCompatActivity() {
     enum class Mode { Disabled, Aiming, Playing }
@@ -63,6 +66,10 @@ class KnockoutActivity : AppCompatActivity() {
     var boardIndex = 0
     @Volatile var visualBoardIndex = 0f
     var darkMode = false
+
+    private var musicEnabled = false
+    private var musicTrack: AudioTrack? = null
+    private var currentMusicTrackPath: String? = null
 
     val pieces = mutableListOf<KnockoutPiece>()
     lateinit var renderer: KnockoutRenderer
@@ -179,6 +186,21 @@ class KnockoutActivity : AppCompatActivity() {
         }
         settingsSheet.addGameControl("Dark Mode", darkSwitch)
 
+        val musicSwitch = SwitchCompat(this)
+        musicSwitch.isChecked = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+            .getBoolean("global/music_enabled", true)
+
+        musicEnabled = musicSwitch.isChecked
+        musicSwitch.setOnCheckedChangeListener { _, checked ->
+            applyMusicEnabled(checked)
+        }
+
+        settingsSheet.addGameControl("Music", musicSwitch)
+
+        if (musicEnabled) {
+            startMusic()
+        }
+
         applyMapButtonColors()
         stylePowerHint(findViewById(R.id.knockoutPowerHintLabel))
 
@@ -240,6 +262,217 @@ class KnockoutActivity : AppCompatActivity() {
                 }
             }
         }, 1200L)
+    }
+
+    private data class WavLoopData(
+        val pcm: ByteArray,
+        val sampleRate: Int,
+        val channelMask: Int,
+        val encoding: Int,
+        val frameCount: Int
+    )
+
+    private fun currentMusicTrack(): String {
+        return "knockout/knockout.wav"
+    }
+
+    private fun applyMusicEnabled(enabled: Boolean) {
+        musicEnabled = enabled
+
+        getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("global/music_enabled", enabled)
+            .apply()
+
+        if (enabled) {
+            startMusic()
+        } else {
+            stopMusic()
+        }
+    }
+
+    private fun startMusic() {
+        if (!musicEnabled || closing || musicTrack != null) return
+        playMusicTrack()
+    }
+
+    private fun playMusicTrack() {
+        releaseMusicPlayer()
+
+        if (!musicEnabled || closing) return
+
+        val trackPath = currentMusicTrack()
+        currentMusicTrackPath = trackPath
+
+        try {
+            val wav = loadPcm16Wav(trackPath)
+
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_GAME)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(wav.sampleRate)
+                        .setChannelMask(wav.channelMask)
+                        .setEncoding(wav.encoding)
+                        .build()
+                )
+                .setBufferSizeInBytes(wav.pcm.size)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+
+            track.write(wav.pcm, 0, wav.pcm.size)
+            track.setLoopPoints(0, wav.frameCount, -1)
+            track.setVolume(0.55f)
+
+            musicTrack = track
+            track.play()
+        } catch (e: Exception) {
+            OpenPigeonLog.e("Music", "Unable to play music track $trackPath", e)
+
+            musicEnabled = false
+            currentMusicTrackPath = null
+
+            getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("global/music_enabled", false)
+                .apply()
+        }
+    }
+
+    private fun pauseMusic() {
+        try {
+            musicTrack?.let { track ->
+                if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                    track.pause()
+                }
+            }
+        } catch (e: Exception) {
+            OpenPigeonLog.w("Music", "Unable to pause music", e)
+        }
+    }
+
+    private fun resumeMusic() {
+        if (!musicEnabled || closing) return
+
+        try {
+            val track = musicTrack
+
+            if (track == null) {
+                startMusic()
+            } else if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                track.play()
+            }
+        } catch (e: Exception) {
+            OpenPigeonLog.w("Music", "Unable to resume music, restarting", e)
+            releaseMusicPlayer()
+            startMusic()
+        }
+    }
+
+    private fun stopMusic() {
+        releaseMusicPlayer()
+    }
+
+    private fun releaseMusicPlayer() {
+        val track = musicTrack ?: return
+        musicTrack = null
+        currentMusicTrackPath = null
+
+        try {
+            track.pause()
+        } catch (_: Exception) {
+        }
+
+        track.release()
+    }
+
+    private fun loadPcm16Wav(path: String): WavLoopData {
+        val bytes = assets.open(path).use { it.readBytes() }
+
+        if (bytes.size < 44 || chunkName(bytes, 0) != "RIFF" || chunkName(bytes, 8) != "WAVE") {
+            throw IllegalArgumentException("Invalid WAV file: $path")
+        }
+
+        var offset = 12
+        var audioFormat = 0
+        var channelCount = 0
+        var sampleRate = 0
+        var bitsPerSample = 0
+        var dataStart = -1
+        var dataSize = 0
+
+        while (offset + 8 <= bytes.size) {
+            val name = chunkName(bytes, offset)
+            val size = readLeInt(bytes, offset + 4)
+            val start = offset + 8
+
+            if (start + size > bytes.size) break
+
+            when (name) {
+                "fmt " -> {
+                    audioFormat = readLeShort(bytes, start)
+                    channelCount = readLeShort(bytes, start + 2)
+                    sampleRate = readLeInt(bytes, start + 4)
+                    bitsPerSample = readLeShort(bytes, start + 14)
+                }
+
+                "data" -> {
+                    dataStart = start
+                    dataSize = size
+                }
+            }
+
+            offset = start + size + (size and 1)
+        }
+
+        if (audioFormat != 1 || bitsPerSample != 16 || channelCount !in 1..2 || dataStart < 0 || dataSize <= 0) {
+            throw IllegalArgumentException("WAV must be 16-bit PCM mono/stereo: $path")
+        }
+
+        val pcm = bytes.copyOfRange(dataStart, dataStart + dataSize)
+        val frameSize = channelCount * 2
+        val frameCount = pcm.size / frameSize
+        val channelMask = if (channelCount == 1) {
+            AudioFormat.CHANNEL_OUT_MONO
+        } else {
+            AudioFormat.CHANNEL_OUT_STEREO
+        }
+
+        return WavLoopData(
+            pcm = pcm,
+            sampleRate = sampleRate,
+            channelMask = channelMask,
+            encoding = AudioFormat.ENCODING_PCM_16BIT,
+            frameCount = frameCount
+        )
+    }
+
+    private fun readLeShort(bytes: ByteArray, offset: Int): Int {
+        return (bytes[offset].toInt() and 0xff) or
+                ((bytes[offset + 1].toInt() and 0xff) shl 8)
+    }
+
+    private fun readLeInt(bytes: ByteArray, offset: Int): Int {
+        return (bytes[offset].toInt() and 0xff) or
+                ((bytes[offset + 1].toInt() and 0xff) shl 8) or
+                ((bytes[offset + 2].toInt() and 0xff) shl 16) or
+                ((bytes[offset + 3].toInt() and 0xff) shl 24)
+    }
+
+    private fun chunkName(bytes: ByteArray, offset: Int): String {
+        return String(
+            byteArrayOf(
+                bytes[offset],
+                bytes[offset + 1],
+                bytes[offset + 2],
+                bytes[offset + 3]
+            )
+        )
     }
 
     private fun handleMessage(msg: Map<String, String>) {
@@ -316,10 +549,11 @@ class KnockoutActivity : AppCompatActivity() {
 
     private fun applyWaterTintForMap() {
         val wv = waterView ?: return
+
         when (mapMode) {
-            2 -> wv.setTint(1.0f, 0.847f, 0.302f)   // #FFD84D  map-2 yellow
-            3 -> wv.setTint(0.435f, 0.839f, 0.545f)  // #6FD68B  map-3 green
-            else -> wv.setTint(0.667f, 0.851f, 0.969f) // #AAD9F7 map-1 blue
+            2 -> wv.setTint(0.82f, 0.64f, 0.26f)  // slightly lighter map-2 yellow
+            3 -> wv.setTint(0.40f, 0.70f, 0.46f)  // slightly lighter map-3 green
+            else -> wv.clearTint()
         }
     }
 
@@ -450,9 +684,11 @@ class KnockoutActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         waterView?.onResume()
+        resumeMusic()
     }
 
     override fun onPause() {
+        pauseMusic()
         waterView?.onPause()
         super.onPause()
     }
@@ -2338,6 +2574,7 @@ class KnockoutActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         closing = true
+        stopMusic()
 
         runCatching {
             shrinkAnimator?.cancel()

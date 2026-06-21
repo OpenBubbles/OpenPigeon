@@ -6,6 +6,7 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
 import android.view.SurfaceHolder
+import kotlin.math.min
 
 class KnockoutRenderer(
     private val holder: SurfaceHolder,
@@ -49,7 +50,11 @@ class KnockoutRenderer(
                 val start = System.currentTimeMillis()
 
                 val canvas = try {
-                    holder.lockCanvas()
+                    if (holder.surface?.isValid == true) {
+                        holder.lockCanvas()
+                    } else {
+                        null
+                    }
                 } catch (_: Exception) {
                     null
                 }
@@ -335,25 +340,33 @@ class KnockoutRenderer(
     }
 
     private fun computeTransforms(width: Int, height: Int) {
-        val baseScale = width.toFloat() / KnockoutConstants.BOARD_SIZE
+        val safeWidth = width.coerceAtLeast(1)
+        val safeHeight = height.coerceAtLeast(1)
+
+        val baseScale = min(safeWidth, safeHeight).toFloat() / KnockoutConstants.BOARD_SIZE
         val boardScale = baseScale * boardVisualScale()
+
+        val centerX = safeWidth / 2f
+        val centerY = safeHeight / 2f
 
         // World transform: pieces, arrows, rings, touches, physics coordinates.
         transform.reset()
         transform.postScale(baseScale, baseScale)
-        transform.postTranslate(width / 2f, height / 2f)
+        transform.postTranslate(centerX, centerY)
 
         // Board transform: board image only.
         boardTransform.reset()
         boardTransform.postScale(boardScale, boardScale)
-        boardTransform.postTranslate(width / 2f, height / 2f)
+        boardTransform.postTranslate(centerX, centerY)
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
         startRenderThread()
     }
 
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = Unit
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        startRenderThread()
+    }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         stopRenderThread()

@@ -22,18 +22,35 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
         renderMode = RENDERMODE_CONTINUOUSLY
     }
 
-    fun setWaterTexture(assetPath: String) { renderer.assetPath = assetPath }
+    fun setWaterTexture(assetPath: String) {
+        renderer.assetPath = assetPath
+    }
 
     fun setTint(r: Float, g: Float, b: Float) {
-        queueEvent { renderer.tintR = r; renderer.tintG = g; renderer.tintB = b }
+        queueEvent {
+            renderer.useTint = true
+            renderer.tintR = r
+            renderer.tintG = g
+            renderer.tintB = b
+        }
+    }
+
+    fun clearTint() {
+        queueEvent {
+            renderer.useTint = false
+            renderer.tintR = 1.0f
+            renderer.tintG = 1.0f
+            renderer.tintB = 1.0f
+        }
     }
 
     private class WaterRenderer(private val context: Context) : Renderer {
         var assetPath = "knockout/water.png"
 
-        @Volatile var tintR = 0.667f
-        @Volatile var tintG = 0.851f
-        @Volatile var tintB = 0.969f
+        @Volatile var useTint = false
+        @Volatile var tintR = 1.0f
+        @Volatile var tintG = 1.0f
+        @Volatile var tintB = 1.0f
 
         private var program = 0
         private var aPos = 0; private var aTex = 0
@@ -42,6 +59,7 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
         private var textureId = 0
         private var startNs = 0L
         private var uTint = 0
+        private var uUseTint = 0
         private var aspect = 1f
 
         private val quad: FloatBuffer = run {
@@ -68,6 +86,7 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
             textureId = loadTexture(assetPath)
             startNs = System.nanoTime()
             uTint = GLES20.glGetUniformLocation(program, "u_tint")
+            uUseTint = GLES20.glGetUniformLocation(program, "u_use_tint")
         }
 
         override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -83,6 +102,7 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
             GLES20.glUniform1f(uTime, (System.nanoTime() - startNs) / 1_000_000_000f)
             GLES20.glUniform1f(uX, 0f)
             GLES20.glUniform3f(uTint, tintR, tintG, tintB)
+            GLES20.glUniform1f(uUseTint, if (useTint) 1.0f else 0.0f)
             GLES20.glUniform1f(uAspect, aspect)
 
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
@@ -158,6 +178,7 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
             uniform float u_time;
             uniform float u_x;
             uniform vec3 u_tint;
+            uniform float u_use_tint;
 
             vec3 rgb2hsv(vec3 c){
                 vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
@@ -172,7 +193,14 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
                 vec3 p = abs(fract(c.xxx + K.xyz)*6.0 - K.www);
                 return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
             }
-            vec2 mo(vec2 m){ return vec2(mod(m.x,1.0), mod(m.y,1.0)); }
+            float mirror_repeat(float v) {
+                float m = mod(v, 2.0);
+                return 1.0 - abs(m - 1.0);
+            }
+            
+            vec2 mo(vec2 m) {
+                return vec2(mirror_repeat(m.x), mirror_repeat(m.y));
+            }
 
             void main(void){
                 float amp = 1.2;
@@ -187,8 +215,9 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
                 col.z += 0.117;
                 vec3 col2 = hsv2rgb(vec3(col.x, col.y, col.z));
                 float lum = dot(col2, vec3(0.299, 0.587, 0.114));
-                vec3 tinted = u_tint * (0.85 + (lum - 0.55) * 1.6);
-                gl_FragColor = vec4(clamp(tinted, 0.0, 1.0), 1.0);
+                vec3 tinted = u_tint * (0.72 + (lum - 0.55) * 1.15);
+                vec3 finalColor = mix(col2, tinted, u_use_tint);
+                gl_FragColor = vec4(clamp(finalColor, 0.0, 1.0), 1.0);
             }
         """
     }

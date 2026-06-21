@@ -29,7 +29,8 @@ var replay_val
 var replay_symbol
 var replay: String = ""
 var replay_played: bool = false
-var my_moves: Array[Array]
+var my_moves: Array[Array] = []
+var turn_start_board_data: Array[int] = []
 var pre_board_data: Array[int] = []
 var post_board_data: Array[int] = []
 var win_loss_state = ""
@@ -484,7 +485,7 @@ func highlight_valid_moves():
 			var cell = board[y][x]
 			var highlight = cell.find_child("Highlight")
 			if highlight:
-				highlight.visible = replay_played and not game_over and is_valid_move(x, y, player_symbol)
+				highlight.visible = is_my_turn and not spectator_mode and not game_over and is_valid_move(x, y, player_symbol)
 	
 	if temp_piece_active and temp_piece_x != -1 and is_my_turn:
 		var cell = board[temp_piece_y][temp_piece_x]
@@ -518,6 +519,7 @@ func _set_game_data(new_game_data_json: String):
 	temp_piece_y = -1
 	preview_flips_active = false
 	my_moves.clear()
+	turn_start_board_data.clear()
 
 	stop_waiting_animation()
 	set_highlight_visibility(false)
@@ -895,6 +897,92 @@ func has_any_valid_moves(player_symbol_to_check: String) -> bool:
 			if get_piece(x, y) == "" and is_valid_move(x, y, player_symbol_to_check):
 				return true
 	return false
+	
+func _copy_board_array(source: Array[int]) -> Array[int]:
+	var copied: Array[int] = []
+	copied.append_array(source)
+	return copied
+
+
+func _board_to_csv(data: Array[int]) -> String:
+	var parts: Array[String] = []
+
+	for value in data:
+		parts.append(str(value))
+
+	return ",".join(parts)
+
+
+func _opponent_symbol_for(symbol: String) -> String:
+	return "⚫" if symbol == "⚪" else "⚪"
+
+
+func _ensure_turn_start_board_data() -> void:
+	if turn_start_board_data.is_empty():
+		turn_start_board_data = _copy_board_array(pre_board_data)
+
+
+func _moves_to_replay_tokens() -> Array[String]:
+	var tokens: Array[String] = []
+
+	for move in my_moves:
+		if move.size() < 3:
+			continue
+
+		tokens.append(
+			"move:" + str(int(move[0])) + "," + str(int(move[1])) + "," + str(int(move[2]))
+		)
+
+	return tokens
+
+
+func _finalize_local_move(final_x: int, final_y: int) -> void:
+	_ensure_turn_start_board_data()
+
+	var move_arr = [final_x, 7 - final_y, player]
+	my_moves.append(move_arr)
+
+	post_board_data = get_current_board_as_array()
+	update_piece_counts()
+
+	# If neither player can move after this move, the game is over and we should send
+	# the final replay with the winner payload.
+	if check_win():
+		send_game(final_x, final_y)
+		return
+
+	var opponent_symbol := _opponent_symbol_for(player_symbol)
+	var opponent_has_moves := has_any_valid_moves(opponent_symbol)
+	var current_player_has_moves := has_any_valid_moves(player_symbol)
+
+	if not opponent_has_moves and current_player_has_moves:
+		OpLog.event(LOG_TAG, [
+			"opponent_has_no_moves_keep_turn",
+			" move=", move_arr,
+			" staged_moves=", my_moves.size(),
+			" player=", player,
+			" symbol=", player_symbol
+		])
+
+		# Advance the local preview/reset board, but keep turn_start_board_data
+		# unchanged so the final outgoing replay starts from the original board.
+		pre_board_data = _copy_board_array(post_board_data)
+
+		temp_piece_active = false
+		temp_piece_x = -1
+		temp_piece_y = -1
+		preview_flips_active = false
+
+		is_my_turn = true
+		replay_played = true
+
+		stop_waiting_animation()
+		set_highlight_visibility(false)
+		highlight_valid_moves()
+		animate_button_slide_down()
+		return
+
+	send_game(final_x, final_y)
 
 func play_replay(replay_string: String):
 	print("Starting play_replay")
@@ -1174,7 +1262,7 @@ func on_cell_pressed(x: int, y: int) -> void:
 		
 func _internal_submit_move(final_x: int, final_y: int):
 	post_board_data = get_current_board_as_array()
-	send_game(final_x, final_y)
+	_finalize_local_move(final_x, final_y)
 	
 func on_send_button_pressed():
 	if not temp_piece_active or temp_piece_x == -1:
@@ -1206,7 +1294,7 @@ func on_send_button_pressed():
 	print("Pre board data: ", pre_board_data)
 	print("Post board data: ", post_board_data)
 
-	send_game(temp_piece_x, temp_piece_y)
+	_finalize_local_move(temp_piece_x, temp_piece_y)
 
 	temp_piece_x = -1
 	temp_piece_y = -1
@@ -1216,17 +1304,20 @@ func send_game(final_x: int, final_y: int) -> void:
 		OpLog.w(LOG_TAG, ["send_game_blocked spectator=true x=", final_x, " y=", final_y])
 		return
 
-	var move_arr = [final_x, 7 - final_y, player]
+	if my_moves.is_empty():
+		my_moves.append([final_x, 7 - final_y, player])
 
-	my_moves.clear()
-	my_moves.append(move_arr)
+	var replay_start_board := turn_start_board_data
+	if replay_start_board.is_empty():
+		replay_start_board = pre_board_data
 
-	var moves_str = ""
-	for move in my_moves:
-		moves_str += "move:" + str(move[0]) + "," + str(move[1]) + "," + str(move[2])
+	var replay_parts: Array[String] = []
+	replay_parts.append("board:" + _board_to_csv(replay_start_board))
+	replay_parts.append_array(_moves_to_replay_tokens())
+	replay_parts.append("board:" + _board_to_csv(post_board_data))
 
 	var result = {
-		"replay": "board:" + ",".join(pre_board_data) + "|" + moves_str + "|" + "board:" + ",".join(post_board_data)
+		"replay": "|".join(replay_parts)
 	}
 
 	avatar_key = "avatar" + str(player)
@@ -1250,7 +1341,7 @@ func send_game(final_x: int, final_y: int) -> void:
 	var game_data = JSON.stringify(result)
 
 	OpLog.event(LOG_TAG, [
-		"send_game_out move=", move_arr,
+		"send_game_out moves=", my_moves,
 		" player=", player,
 		" symbol=", player_symbol,
 		" pre_board_size=", pre_board_data.size(),
@@ -1261,6 +1352,7 @@ func send_game(final_x: int, final_y: int) -> void:
 	send_game_data(game_data)
 
 	my_moves.clear()
+	turn_start_board_data.clear()
 	animate_button_slide_down()
 	is_my_turn = false
 
