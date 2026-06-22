@@ -551,8 +551,8 @@ class KnockoutActivity : AppCompatActivity() {
         val wv = waterView ?: return
 
         when (mapMode) {
-            2 -> wv.setTint(0.82f, 0.64f, 0.26f)  // slightly lighter map-2 yellow
-            3 -> wv.setTint(0.40f, 0.70f, 0.46f)  // slightly lighter map-3 green
+            2 -> wv.setTint(0.82f, 0.74f, 0.26f)
+            3 -> wv.setTint(0.40f, 0.90f, 0.46f)
             else -> wv.clearTint()
         }
     }

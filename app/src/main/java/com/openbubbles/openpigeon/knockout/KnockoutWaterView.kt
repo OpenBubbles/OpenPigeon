@@ -169,8 +169,6 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
                 gl_Position = vec4(aPos, 0.0, 1.0);
             }
         """
-
-        // Verbatim water3.fsh + the three globals SpriteKit injects automatically.
         private const val FRAGMENT_SRC = """
             precision highp float;
             varying vec2 v_tex_coord;
