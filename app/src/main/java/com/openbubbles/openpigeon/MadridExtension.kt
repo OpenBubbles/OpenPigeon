@@ -90,6 +90,7 @@ import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
 import androidx.core.content.edit
+import com.openbubbles.openpigeon.golf.GolfGame
 import com.openbubbles.openpigeon.pool.NineBallGame
 
 private const val KEYBOARD_DEFAULT_HEIGHT_DP = 300
@@ -117,6 +118,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             WordGames(),
             DartsGame(),
             PongGame(),
+            GolfGame(),
             KnockoutGame(),
             Crazy8Game(),
             ConnectGame(),
