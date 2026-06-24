@@ -42,6 +42,7 @@ class GolfActivity : AppCompatActivity() {
     private lateinit var holeTitle: TextView
     private lateinit var nextButton: Button
     private lateinit var sendButton: Button
+    private lateinit var zoomButton: Button
 
     private val generator = GolfMapGenerator()
     private var gameSessionIPC: GameSessionIPC? = null
@@ -63,10 +64,13 @@ class GolfActivity : AppCompatActivity() {
 
     private var runtimeBallCourse: PointF? = null
     private val runtimeVelocityCourse = PointF(0f, 0f)
+    private var flagPulled = false
+    private var ballInHole = false
 
     private var isAiming = false
     private var aimMoveStartVisual = PointF(0f, 0f)
     private var activeAim: GolfShot.Aim = GolfShot.Aim.NONE
+    private var zoomOverviewEnabled = false
 
     private var physicsRunning = false
     private var lastPhysicsMs = 0L
@@ -110,6 +114,12 @@ class GolfActivity : AppCompatActivity() {
             sendButton.setOnClickListener {
                 OpenPigeonLog.i(TAG, "Send button clicked currentMapNum=$mapNum mode=$mode seed=$seed")
                 sendVisualStateOnly()
+            }
+
+            zoomButton.alpha = 0.72f
+
+            zoomButton.setOnClickListener {
+                setZoomOverviewEnabled(!zoomOverviewEnabled)
             }
 
             sessionId = intent.getStringExtra("SESSION") ?: ""
@@ -219,6 +229,23 @@ class GolfActivity : AppCompatActivity() {
             ).apply { topMargin = dp(20) }
         }
         root.addView(stateLabel)
+
+        zoomButton = Button(this).apply {
+            text = "Zoom"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            background = rounded(Color.argb(155, 0, 0, 0), dp(16).toFloat())
+            minWidth = dp(82)
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                dp(44),
+                Gravity.TOP or Gravity.END
+            ).apply {
+                topMargin = dp(20)
+                marginEnd = dp(14)
+            }
+        }
+        root.addView(zoomButton)
 
         val buttons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -342,6 +369,9 @@ class GolfActivity : AppCompatActivity() {
 
     private fun handleGolfTouch(event: MotionEvent): Boolean {
         val g = currentMap ?: return true
+        if (ballInHole) {
+            return true
+        }
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -365,7 +395,14 @@ class GolfActivity : AppCompatActivity() {
                 aimMoveStartVisual = visual
                 activeAim = GolfShot.Aim.NONE
 
+                /*
+                 * Entering aim mode exits manual overview and animates into the ball camera.
+                 */
+                setZoomOverviewEnabled(false)
                 stopBallPhysics(clearVelocity = true)
+
+                val ball = runtimeBallCourse ?: g.ballStart1
+                renderer.setAimingCamera(ball, GolfShot.Aim.NONE)
                 renderer.clearAimPreview()
 
                 return true
@@ -381,7 +418,7 @@ class GolfActivity : AppCompatActivity() {
                     moveStartVisual = aimMoveStartVisual,
                     currentTouchVisual = visual
                 )
-
+                renderer.setAimingCamera(ball, activeAim)
                 renderer.setAimPreview(ball, activeAim)
 
                 OpenPigeonLog.i(
@@ -406,6 +443,15 @@ class GolfActivity : AppCompatActivity() {
 
                 if (event.actionMasked == MotionEvent.ACTION_UP && activeAim.active) {
                     launchCurrentAim(activeAim)
+                } else {
+                    /*
+                     * Cancelled shot: stay near the ball.
+                     * Do not zoom out to full-board.
+                     */
+                    setZoomOverviewEnabled(false)
+
+                    val ball = runtimeBallCourse ?: g.ballStart1
+                    renderer.setAimingCamera(ball, GolfShot.Aim.NONE)
                 }
 
                 activeAim = GolfShot.Aim.NONE
@@ -444,6 +490,13 @@ class GolfActivity : AppCompatActivity() {
         runtimeBallCourse = PointF(ball.x, ball.y)
         renderer.setRuntimeBallCourse(runtimeBallCourse)
 
+        /*
+         * During aiming, aim.dist zooms the camera out.
+         * Once fired, animate back into the normal zoomed-in ball camera.
+         */
+        setZoomOverviewEnabled(false)
+        renderer.setShotCamera(runtimeBallCourse, 0f)
+
         OpenPigeonLog.i(
             TAG,
             "launch aimDist=${aim.dist} aimRot=${aim.rotation} " +
@@ -474,29 +527,79 @@ class GolfActivity : AppCompatActivity() {
     }
 
     private fun stepBallPhysics() {
+        val g = currentMap ?: return
         val ball = runtimeBallCourse ?: return
 
         val now = SystemClock.elapsedRealtime()
         val dt = ((now - lastPhysicsMs).coerceIn(1L, 34L)).toFloat() / 1000f
         lastPhysicsMs = now
 
-        ball.x += runtimeVelocityCourse.x * dt
-        ball.y += runtimeVelocityCourse.y * dt
+        val wasInHole = ballInHole
 
-        /*
-         * Temporary roll decay until we decode -[GolfScene update:].
-         * Initial shot velocity is decoded; this damping is intentionally isolated here.
-         */
-        val damping = GolfShot.temporaryDampingFactor(dt)
-        runtimeVelocityCourse.x *= damping
-        runtimeVelocityCourse.y *= damping
+        val stoppedByMotion = GolfPhysics.step(
+            map = g,
+            positionCourse = ball,
+            velocityCourse = runtimeVelocityCourse,
+            dtSeconds = dt
+        )
+
+        val holeStep = GolfPhysics.applyHoleCup(
+            map = g,
+            positionCourse = ball,
+            velocityCourse = runtimeVelocityCourse,
+            dtSeconds = dt,
+            alreadyCaptured = wasInHole
+        )
+
+        flagPulled = holeStep.flagPulled
+        ballInHole = holeStep.captured
 
         renderer.setRuntimeBallCourse(ball)
+        renderer.setHoleState(
+            flagPulled = flagPulled,
+            ballInHole = ballInHole
+        )
 
-        if (GolfShot.isTemporaryStopped(runtimeVelocityCourse.x, runtimeVelocityCourse.y)) {
+        if (holeStep.captured && !wasInHole) {
             OpenPigeonLog.i(
                 TAG,
-                "physics stop ball=(${ball.x},${ball.y}) velocity=(${runtimeVelocityCourse.x},${runtimeVelocityCourse.y})"
+                "hole entered ball=(${ball.x},${ball.y}) hole=(${g.hole.x},${g.hole.y}) " +
+                        "velocity=(${runtimeVelocityCourse.x},${runtimeVelocityCourse.y})"
+            )
+
+            stateLabel.text = "In the hole"
+        }
+
+        /*
+         * Do not stop immediately when the ball enters the hole.
+         * Let the cup trap pull/damp it so it visually falls in.
+         */
+        if (holeStep.settled) {
+            OpenPigeonLog.i(
+                TAG,
+                "hole settled ball=(${ball.x},${ball.y}) hole=(${g.hole.x},${g.hole.y})"
+            )
+
+            renderer.setRuntimeBallCourse(ball)
+            renderer.setHoleState(
+                flagPulled = true,
+                ballInHole = true
+            )
+
+            stopBallPhysics(clearVelocity = true)
+            return
+        }
+
+        /*
+         * Normal stop only applies before the ball has entered the hole.
+         * Once in the hole, the cup trap controls the final settling.
+         */
+        if (stoppedByMotion && !ballInHole) {
+            OpenPigeonLog.i(
+                TAG,
+                "physics stop ball=(${ball.x},${ball.y}) " +
+                        "velocity=(${runtimeVelocityCourse.x},${runtimeVelocityCourse.y}) " +
+                        "flagPulled=$flagPulled"
             )
 
             stopBallPhysics(clearVelocity = true)
@@ -520,10 +623,16 @@ class GolfActivity : AppCompatActivity() {
             stopBallPhysics(clearVelocity = true)
             activeAim = GolfShot.Aim.NONE
             isAiming = false
+            flagPulled = false
+            ballInHole = false
 
             renderer.setMap(generated)
             renderer.setRuntimeBallCourse(runtimeBallCourse)
+            renderer.setHoleState(flagPulled = false, ballInHole = false)
             renderer.clearAimPreview()
+
+            setZoomOverviewEnabled(false)
+            renderer.clearCameraFocus()
             stateLabel.text = "Hole ${generated.holeNumber}/${generated.holeCount}   seed=$seed   ${generated.xCells}x${generated.yCells}"
             nextButton.text = if (mapNum + 1 < holeCount) "Next Hole" else "Restart"
             if (showIntro) showHoleIntro(generated.holeNumber, generated.holeCount)
@@ -575,6 +684,17 @@ class GolfActivity : AppCompatActivity() {
                 holeOverlay.visibility = View.GONE
             }
             .start()
+    }
+
+    private fun setZoomOverviewEnabled(enabled: Boolean) {
+        zoomOverviewEnabled = enabled
+        renderer.setOverviewCameraHeld(enabled)
+
+        if (::zoomButton.isInitialized) {
+            zoomButton.alpha = if (enabled) 1f else 0.72f
+        }
+
+        OpenPigeonLog.i(TAG, "Zoom overview enabled=$enabled")
     }
 
     private fun sendVisualStateOnly() {

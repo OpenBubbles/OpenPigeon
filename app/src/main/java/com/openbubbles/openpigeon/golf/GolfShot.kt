@@ -29,6 +29,8 @@ object GolfShot {
     const val AIM_DEADZONE = 5f
     const val AIM_DOT_COUNT = 13
 
+    const val AIM_CANCEL_DIST = 12f
+
     const val LAUNCH_SPEED_MULTIPLIER = 1.55f
 
     /*
@@ -42,7 +44,7 @@ object GolfShot {
         val dist: Float,
         val rotation: Float
     ) {
-        val active: Boolean get() = dist > 0f
+        val active: Boolean get() = dist >= AIM_CANCEL_DIST
 
         companion object {
             val NONE = Aim(0f, 0f)
@@ -58,7 +60,7 @@ object GolfShot {
         var dist = (rawDistance * AIM_POWER_MULTIPLIER - AIM_POWER_OFFSET)
             .coerceIn(0f, AIM_MAX_DIST)
 
-        if (dist < AIM_DEADZONE) {
+        if (dist < AIM_CANCEL_DIST) {
             dist = 0f
         }
 
