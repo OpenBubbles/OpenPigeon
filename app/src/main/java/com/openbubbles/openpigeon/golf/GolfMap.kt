@@ -2,14 +2,6 @@ package com.openbubbles.openpigeon.golf
 
 import android.graphics.PointF
 
-/**
- * Output of the Mini Golf board generator.
- *
- * grid[x][y] follows the iOS grid dump orientation:
- *   0 = open playable tile / fairway
- *   1 = blocked / solid / wall candidate
- *   3 = special tile treated as open by iOS grid_get
- */
 data class GolfMap(
     val seed: Int,
     val mapNum: Int,
@@ -26,12 +18,6 @@ data class GolfMap(
     val ballStart2: PointF,
     val hole: PointF,
     val complete: Boolean,
-
-    /*
-     * Data-driven iOS object placement.
-     * Keep these at the end with defaults so existing GolfMap(...) constructor
-     * calls keep compiling until GolfMapGenerator fills them.
-     */
     val slopes: List<GolfSlope> = emptyList(),
     val obstacles: List<GolfObstacle> = emptyList()
 ) {
@@ -86,17 +72,6 @@ data class GolfMap(
 
 data class Cell(val x: Int, val y: Int)
 
-/**
- * iOS GolfSlope object.
- *
- * image:
- *   golf_slope_up
- *   golf_slope_down
- *
- * rotation:
- *   Float.NaN means renderer should infer from vx/vy.
- *   Use exact iOS zRotation when the generator has it.
- */
 data class GolfSlope(
     val x: Float,
     val y: Float,
@@ -106,27 +81,6 @@ data class GolfSlope(
     val rotation: Float = Float.NaN
 )
 
-/**
- * iOS obstacle/decor object.
- *
- * type:
- *   1 = square
- *   2 = bar
- *   3 = triangle
- *   4 = round / GolfBouncy
- *   5 = cross
- *
- * image distinguishes small/large variants:
- *   golf_obstacle_square
- *   golf_obstacle_square2
- *   golf_obstacle_round
- *   golf_obstacle_round2
- *   golf_obstacle_triangle
- *   golf_obstacle_triangle2
- *   golf_obstacle_bar
- *   golf_obstacle_bar2 / golf_obstacles_bar2
- *   golf_obstacle_cross
- */
 data class GolfObstacle(
     val type: Int,
     val x: Float,

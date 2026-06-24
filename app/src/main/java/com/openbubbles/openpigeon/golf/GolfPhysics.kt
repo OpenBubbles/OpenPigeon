@@ -10,12 +10,6 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/**
- * First native runtime physics layer for Mini Golf.
- *
- * This is intentionally isolated from GolfActivity so we can replace pieces
- * with exact iOS update: logic as we decode it.
- */
 object GolfPhysics {
     private const val BALL_RADIUS = 4f
     private const val WALL_HALF_THICKNESS = 3f
@@ -39,11 +33,6 @@ object GolfPhysics {
     private const val HOLE_TRAP_DAMPING_PER_60FPS_FRAME = 0.88f
     private const val HOLE_SETTLED_RADIUS = 0.75f
     private const val HOLE_SETTLED_SPEED = 2.0f
-
-    /*
-     * Temporary slope strength. This makes slopes affect the ball now.
-     * We can replace this with the decoded iOS value after update: is fully read.
-     */
     private const val SLOPE_ACCELERATION = 240f
     private const val SLOPE_INFLUENCE_RADIUS = 44f
 
@@ -111,10 +100,6 @@ object GolfPhysics {
             pos.y = oldY
         }
 
-        /*
-         * If the separated axis test still left us outside the playable path,
-         * hard-reset to the last known safe point and heavily damp the bounce.
-         */
         if (!isBallPlayable(map, pos.x, pos.y)) {
             pos.set(oldX, oldY)
             vel.x *= -0.35f
@@ -123,13 +108,6 @@ object GolfPhysics {
     }
 
     private fun isBallPlayable(map: GolfMap, x: Float, y: Float): Boolean {
-        /*
-         * Wall collision uses the ball radius plus wall half-thickness.
-         *
-         * Important: check diagonal probes too. Without these, the ball can overlap
-         * where two wall segments meet because the cardinal probes still pass while
-         * the diagonal edge of the ball is already inside the corner.
-         */
         val r = WALL_COLLISION_RADIUS
         val d = r * 0.70710677f
 
@@ -169,10 +147,6 @@ object GolfPhysics {
         posCourse: PointF,
         velCourse: PointF
     ) {
-        /*
-         * Renderer uses a Y-flipped visual board. Build the diagonal walls in the
-         * same visual coordinate space, collide there, then convert back to course.
-         */
         val posVisual = PointF(
             posCourse.x,
             map.mapSize - posCourse.y
@@ -204,9 +178,6 @@ object GolfPhysics {
         map: GolfMap,
         block: (DiagonalWall) -> Unit
     ) {
-        /*
-         * First: explicit value-3 diagonal cells.
-         */
         for (visualRow in 0 until visualRows(map)) {
             for (visualCol in 0 until visualCols(map)) {
                 if (visualCellValue(map, visualCol, visualRow) != 3) continue
@@ -289,10 +260,6 @@ object GolfPhysics {
 
         val t = (apx * abx + apy * aby) / ab2
 
-        /*
-         * Only collide with the actual diagonal span.
-         * Do not create circular endpoint collisions here.
-         */
         if (t <= 0.001f || t >= 0.999f) return
 
         val closestX = wall.ax + abx * t
@@ -302,10 +269,6 @@ object GolfPhysics {
             (pos.x - closestX) * wall.nx +
                     (pos.y - closestY) * wall.ny
 
-        /*
-         * Only resolve when the ball is actually overlapping the diagonal wall band.
-         * This prevents invisible long-distance corrections.
-         */
         if (signedDistance >= radius) return
         if (signedDistance <= -radius) return
 
@@ -661,15 +624,9 @@ object GolfPhysics {
         val nx = dx / d
         val ny = dy / d
 
-        /*
-         * Push the ball out of the obstacle.
-         */
         pos.x = cx + nx * radius
         pos.y = cy + ny * radius
 
-        /*
-         * Reflect only if moving into the obstacle.
-         */
         val vn = vel.x * nx + vel.y * ny
         if (vn < 0f) {
             vel.x -= (1f + restitution) * vn * nx
@@ -687,19 +644,9 @@ object GolfPhysics {
         rotationRadians: Float,
         restitution: Float
     ) {
-        /*
-         * The cross sprite is not a solid 95x95 square.
-         * Treat it as two thin bars sharing the same center.
-         *
-         * 95 x 95 sprite -> roughly 16 course-unit arm thickness.
-         */
         val minSide = if (width < height) width else height
         val armThickness = (minSide * 0.17f).coerceIn(12f, 18f)
 
-        /*
-         * Run twice so if the ball starts near the intersection of both bars,
-         * both parts get a chance to separate it.
-         */
         repeat(2) {
             // Horizontal arm.
             resolveRotatedRectCollision(
@@ -743,9 +690,6 @@ object GolfPhysics {
         val cosR = cos(rotationRadians)
         val sinR = sin(rotationRadians)
 
-        /*
-         * Transform ball center into the obstacle's local unrotated space.
-         */
         var localX = dx * cosR + dy * sinR
         var localY = -dx * sinR + dy * cosR
 
@@ -773,9 +717,6 @@ object GolfPhysics {
             normalLocalY = deltaY / d
             penetration = BALL_RADIUS - d
         } else {
-            /*
-             * Ball center is inside the rectangle. Push it out through the nearest side.
-             */
             val overlapX = halfW - abs(localX)
             val overlapY = halfH - abs(localY)
 
@@ -793,9 +734,6 @@ object GolfPhysics {
         localX += normalLocalX * penetration
         localY += normalLocalY * penetration
 
-        /*
-         * Transform corrected local point back to course/world space.
-         */
         pos.x = cx + localX * cosR - localY * sinR
         pos.y = cy + localX * sinR + localY * cosR
 
@@ -826,9 +764,6 @@ object GolfPhysics {
         val cosR = cos(rotationRadians)
         val sinR = sin(rotationRadians)
 
-        /*
-         * Transform ball into obstacle-local coordinates.
-         */
         val localPos = PointF(
             dx * cosR + dy * sinR,
             -dx * sinR + dy * cosR
@@ -842,12 +777,6 @@ object GolfPhysics {
         val halfW = width * 0.5f
         val halfH = height * 0.5f
 
-        /*
-         * Verified by Frida for triangle-style fixtures:
-         *   (-half,-half), (half,half), (half,-half)
-         *
-         * This gives the right-triangle collision instead of a full square.
-         */
         val ax = -halfW
         val ay = -halfH
         val bx = halfW
@@ -867,9 +796,6 @@ object GolfPhysics {
             restitution = restitution
         )
 
-        /*
-         * Transform corrected local position and velocity back to course/world.
-         */
         pos.x = cx + localPos.x * cosR - localPos.y * sinR
         pos.y = cy + localPos.x * sinR + localPos.y * cosR
 
@@ -896,17 +822,9 @@ object GolfPhysics {
         val s1 = signedDistanceToEdge(pos, bx, by, e1)
         val s2 = signedDistanceToEdge(pos, cx, cy, e2)
 
-        /*
-         * Edge normals point outward.
-         * Inside triangle means all signed distances are <= 0.
-         */
         val insideTriangle = s0 <= 0f && s1 <= 0f && s2 <= 0f
 
         if (insideTriangle) {
-            /*
-             * Push out through the nearest edge, not the deepest edge.
-             * This avoids teleporting through the triangle.
-             */
             var nx = e0.nx
             var ny = e0.ny
             var signed = s0
@@ -936,12 +854,6 @@ object GolfPhysics {
 
             return
         }
-
-        /*
-         * Outside the triangle: collide only against the closest point on the
-         * triangle perimeter. This makes the hypotenuse behave like a real diagonal
-         * instead of a square block.
-         */
         var bestX = 0f
         var bestY = 0f
         var bestD2 = Float.MAX_VALUE
@@ -1032,10 +944,6 @@ object GolfPhysics {
         val ey = by - ay
         val len = sqrt(ex * ex + ey * ey).coerceAtLeast(0.0001f)
 
-        /*
-         * Start with one perpendicular, then make sure it points outward,
-         * away from the known inside point.
-         */
         var nx = -ey / len
         var ny = ex / len
 
@@ -1065,11 +973,6 @@ object GolfPhysics {
         val dyToHole = map.hole.y - positionCourse.y
         val distanceToHole = sqrt(dxToHole * dxToHole + dyToHole * dyToHole)
         val speed = length(velocityCourse.x, velocityCourse.y)
-
-        /*
-         * Once the ball has entered the cup, keep it trapped there.
-         * Do not snap it invisible. Do not zero it immediately.
-         */
         val capturedNow =
             alreadyCaptured ||
                     (
@@ -1106,9 +1009,6 @@ object GolfPhysics {
             )
         }
 
-        /*
-         * Outside the flag ring, the hole has no effect at all.
-         */
         if (distanceToHole > FLAG_PULL_RADIUS) {
             return HoleStep(
                 flagPulled = false,
@@ -1116,10 +1016,6 @@ object GolfPhysics {
             )
         }
 
-        /*
-         * Important: the flag pull radius is visual only.
-         * Do not pull the ball from the entire flag ring.
-         */
         if (distanceToHole <= HOLE_CUP_PULL_RADIUS && distanceToHole > 0.001f) {
             val nx = dxToHole / distanceToHole
             val ny = dyToHole / distanceToHole
@@ -1128,9 +1024,6 @@ object GolfPhysics {
             velocityCourse.x += nx * HOLE_CUP_PULL_ACCELERATION * pullStrength * dtSeconds
             velocityCourse.y += ny * HOLE_CUP_PULL_ACCELERATION * pullStrength * dtSeconds
 
-            /*
-             * Soft damp only inside the physical cup radius.
-             */
             val damp = (1f - 0.24f * pullStrength).coerceIn(0.80f, 1f)
             velocityCourse.x *= damp
             velocityCourse.y *= damp
@@ -1152,11 +1045,6 @@ object GolfPhysics {
         val dyToHole = map.hole.y - positionCourse.y
         val distanceToHole = sqrt(dxToHole * dxToHole + dyToHole * dyToHole)
 
-        /*
-         * Pull the ball toward the cup center while it still has motion.
-         * This gives the visual effect of the ball falling into the cup instead of
-         * disappearing.
-         */
         if (distanceToHole > 0.001f) {
             val nx = dxToHole / distanceToHole
             val ny = dyToHole / distanceToHole
@@ -1167,17 +1055,10 @@ object GolfPhysics {
             velocityCourse.y += ny * HOLE_TRAP_PULL_ACCELERATION * pullStrength * dtSeconds
         }
 
-        /*
-         * Heavy damping inside the cup.
-         */
         val damping = HOLE_TRAP_DAMPING_PER_60FPS_FRAME.pow(dtSeconds * 60f)
         velocityCourse.x *= damping
         velocityCourse.y *= damping
 
-        /*
-         * Prevent escape. The ball may move inside the cup, but its center may not
-         * leave the trap radius.
-         */
         val outX = positionCourse.x - map.hole.x
         val outY = positionCourse.y - map.hole.y
         val outDistance = sqrt(outX * outX + outY * outY)
@@ -1189,9 +1070,6 @@ object GolfPhysics {
             positionCourse.x = map.hole.x + nx * HOLE_TRAP_RADIUS
             positionCourse.y = map.hole.y + ny * HOLE_TRAP_RADIUS
 
-            /*
-             * Remove outward velocity so the ball cannot climb back out.
-             */
             val outwardSpeed = velocityCourse.x * nx + velocityCourse.y * ny
             if (outwardSpeed > 0f) {
                 velocityCourse.x -= outwardSpeed * nx

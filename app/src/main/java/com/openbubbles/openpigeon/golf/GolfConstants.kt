@@ -1,16 +1,7 @@
 package com.openbubbles.openpigeon.golf
 
-/**
- * Mini Golf constants verified against the iOS GamePigeon Mini Golf runtime.
- *
- * iOS naming note:
- *   map_size  = xCells * 65
- *   map_size2 = yCells * 65
- */
 object GolfConstants {
     const val TILE_SIZE = 65f
-
-    // Replay separators used by iOS Mini Golf.
     const val SEG_SEP: Char = '|'
     const val BALL_SEP: Char = '&'
     const val FIELD_SEP: Char = ','
@@ -28,7 +19,6 @@ object GolfConstants {
         else -> mode.toIntOrNull()?.coerceAtLeast(1) ?: 3
     }
 
-    /** Non-race board dimensions from iOS createMap. Pair is xCells to yCells. */
     fun dimensionsFor(mode: String, mapNum: Int): Pair<Int, Int> {
         val hole = mapNum.coerceAtLeast(0)
         return when (mode) {

@@ -2,13 +2,6 @@ package com.openbubbles.openpigeon.golf
 
 import com.openbubbles.openpigeon.util.OpenPigeonLog
 
-/**
- * Normalized Mini Golf game-data parser.
- *
- * iOS/GamePigeon seeds are effectively 32-bit signed values. Some Android/opening
- * paths may surface the same seed as an unsigned decimal string, so parsing must
- * preserve the low 32 bits instead of failing and falling back to the default seed.
- */
 data class GolfGameData(
     val seed: Int,
     val seedText: String,
@@ -87,13 +80,6 @@ data class GolfGameData(
             val replay = msg["replay"].orEmpty()
             val replay2 = msg["replay2"].orEmpty()
 
-            /*
-             * iOS sets num=2 after player 1 finishes the first round, but that still
-             * refers to the first hole/round for replay/player-2 response purposes.
-             *
-             * If replay data exists, use the replay segment count to decide which board
-             * this data belongs to.
-             */
             val replaySegmentCount = maxOf(
                 replaySegmentCount(replay),
                 replaySegmentCount(replay2)

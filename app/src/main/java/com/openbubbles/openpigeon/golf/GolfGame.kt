@@ -12,7 +12,6 @@ class GolfGame : Game {
         private const val TAG = "GolfNative"
     }
 
-    /** The iOS game supports 3-hole and 5-hole matches. Board generation is the same sequence. */
     var holes: Int = 3
 
     override fun getVersion(): String = "41"
@@ -57,36 +56,16 @@ class GolfGame : Game {
             put("game_name", "Mini Golf")
             put("caption", "Let's play Mini Golf!")
             put("subcaption", "$holeText Holes")
-
-            /*
-             * Match iOS Mini Golf new-game metadata.
-             * iOS sends version=41 and v3=3 for current Mini Golf messages.
-             */
             put("version", "41")
             put("v3", "3")
-
             put("mode", holeText)
             put("seed", Random.nextInt().toString())
             put("num", "1")
-
-            /*
-             * Important:
-             * iOS new Mini Golf messages are created as player 2 with sender/player2/avatar2.
-             * Our previous player=1 conflicted with the player2/avatar2 fields from the base message.
-             */
             put("player", "2")
 
-            /*
-             * iOS new-game payload does not need empty replay fields.
-             * Do not send blank replay strings unless there is an actual replay.
-             */
             remove("replay")
             remove("replay2")
 
-            /*
-             * Your captured Android payload had a newline in id. iOS id has no newline.
-             * Trim any base-generated value so it cannot poison iOS parsing.
-             */
             get("id")?.trim()?.takeIf { it.isNotBlank() }?.let { put("id", it) }
 
             OpenPigeonLog.i(

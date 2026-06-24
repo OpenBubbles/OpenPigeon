@@ -3,7 +3,6 @@ package com.openbubbles.openpigeon.golf
 import com.openbubbles.openpigeon.util.OpenPigeonLog
 import java.util.Locale
 
-/** Parser/serializer for Mini Golf's non-race replay format. */
 object GolfReplay {
     private const val TAG = "GolfNative"
 
@@ -13,15 +12,6 @@ object GolfReplay {
         OpenPigeonLog.i(TAG, "GolfReplay.parseNonRace enter replayLen=${replay.length}")
         if (replay.isBlank()) return emptyList()
 
-        /*
-         * iOS format:
-         *   hole segments are separated by '|'
-         *   shots inside one hole are separated by '&'
-         *   each shot is "dist,rotation"
-         *
-         * Example:
-         *   102.1,0.95&86.19,0.32&132.75,1.75
-         */
         val parsed = replay
             .split(GolfConstants.SEG_SEP)
             .map { segment: String ->
@@ -83,9 +73,6 @@ object GolfReplay {
             segments[holeIndex] + GolfConstants.BALL_SEP + entry
         }
 
-        /*
-         * Avoid sending useless trailing empty hole segments.
-         */
         while (segments.isNotEmpty() && segments.last().isBlank()) {
             segments.removeAt(segments.lastIndex)
         }

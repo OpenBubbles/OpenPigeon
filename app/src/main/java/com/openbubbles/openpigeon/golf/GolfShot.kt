@@ -7,21 +7,6 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-/**
- * iOS Mini Golf shot/aim mechanics decoded from GolfScene/GolfScene2.
- *
- * Confirmed:
- *   touchMovedToPoint:
- *     dist = clamp(distance(move_start, touch) * 2 - 15, 0, 300)
- *     rotation = atan2(move_start.y - touch.y, move_start.x - touch.x)
- *
- *   GolfBall aim setter:
- *     if dist < 5, dist = 0
- *     13 preview dots at dist / 13 * index
- *
- *   ShootShoot:
- *     velocity = dist * 1.55 * direction(rotation)
- */
 object GolfShot {
     const val AIM_POWER_MULTIPLIER = 2f
     const val AIM_POWER_OFFSET = 15f
@@ -33,10 +18,6 @@ object GolfShot {
 
     const val LAUNCH_SPEED_MULTIPLIER = 1.55f
 
-    /*
-     * Temporary until we fully decode -[GolfScene update:].
-     * This only gives the ball a usable first-pass roll/stop.
-     */
     private const val TEMP_DAMPING_PER_60FPS_FRAME = 0.985f
     private const val TEMP_STOP_SPEED = 3.0f
 

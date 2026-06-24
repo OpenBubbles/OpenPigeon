@@ -1,6 +1,5 @@
 package com.openbubbles.openpigeon.golf
 
-/** Bit-exact POSIX srand48/drand48 used by the iOS game. */
 class GolfRandom {
     private var state: Long = (0x1234ABCDL shl 16) or 0x330EL
 
