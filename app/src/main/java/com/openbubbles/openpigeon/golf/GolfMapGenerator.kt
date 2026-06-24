@@ -6,31 +6,6 @@ import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 
-/**
- * Seed-driven Mini Golf board generator.
- *
- * Runtime goal:
- * - Generate every board from seed/mapNum/mode.
- * - Do not rely on hardcoded captured games.
- * - Preserve the iOS generation stages:
- *      1. srand48(seed)
- *      2. skip one drand48() per previous map_num
- *      3. compute map dimensions
- *      4. compute carve target
- *      5. carve blocked cells while check: still passes
- *      6. fill isolated cells
- *      7. fill large open areas with rng threshold
- *      8. getLongest on the base grid
- *      9. insert value-3 diagonal/special cells on the final grid
- *     10. reserve start/hole cells
- *     11. generate slope and obstacle object data
- *
- * Object generation note:
- * - Slopes follow the iOS corridor rules from the decompiled createMap block.
- * - Obstacles follow the two iOS passes found in createMap:
- *      a 2x2 scan pass for large objects, then a random candidate pass for
- *      single-cell objects.
- */
 class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
 
     companion object {
@@ -56,10 +31,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
 
         rng.srand48(seed)
 
-        /*
-         * iOS advances the RNG once per prior hole before generating the current map.
-         * This keeps later holes deterministic from the same original seed.
-         */
         repeat(hole) {
             val skipped = rng.drand48()
             OpenPigeonLog.i(TAG, "Generator.seedSkip mapIndex=$it skipped=$skipped")
@@ -68,11 +39,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         val carveTarget = computeCarveTarget(xCells, yCells)
         val baseGrid = generateIosCarveGrid(xCells, yCells, carveTarget)
 
-        /*
-         * iOS runs getLongest on the base grid before inserting raw value 3 cells.
-         * Do not run PathFinder on the final grid because PathFinder treats raw 3
-         * as blocked while grid_get treats 3 as open.
-         */
         val longestPath = pathFinderGetLongest(baseGrid).ifEmpty {
             buildVisualPath(baseGrid)
         }
@@ -88,12 +54,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         val start = longestPath.firstOrNull() ?: firstOpenCell(finalGrid) ?: Cell(0, 0)
         val end = longestPath.lastOrNull() ?: lastOpenCell(finalGrid) ?: start
 
-        /*
-         * obj_24 (objectGrid) starts as a copy of the final grid. iOS marks the ball,
-         * hole, slope and obstacle cells as 3 *inside* loop D and the obstacle passes,
-         * so we must NOT pre-reserve start/end here: loop D consumes RNG at those cells
-         * and marks them itself. Pre-reserving consumes no RNG and desyncs the stream.
-         */
         val objectGrid = copyGrid(finalGrid)
 
         val ball1: PointF
@@ -109,16 +69,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
             generatedSlopes = emptyList()
             generatedObstacles = emptyList()
         } else {
-            /*
-             * Loop D (iOS -[GolfScene createMap]): one pass over open cells in final-grid
-             * order (outer, then inner). Per open cell, in this exact order:
-             *   1. cell == path[0]    -> ball: mark grid2=3, 2x drand48 jitter (+/-10)
-             *   2. cell == path[last] -> hole: mark grid2=3, 2x drand48 jitter (+/-10)
-             *   3. slope gate 1 (drand48 ALWAYS) -> single-cell corridor slope (+flip)
-             *   4. slope gate 2 (drand48 ALWAYS) -> two-cell ramp pair (+flip)
-             * Endpoints are NOT skipped: their gate draws are still consumed so the
-             * obstacle passes that follow stay byte-aligned with the iOS RNG stream.
-             */
             val loopD = runPlacementLoopD(finalGrid, objectGrid, longestPath)
             ball1 = loopD.ball1
             ball2 = loopD.ball2
@@ -250,14 +200,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         return target
     }
 
-    /**
-     * Approximation/port of the iOS carve loop.
-     *
-     * Important fix:
-     * The iOS loop effectively accepts until integer counter is no longer < target.
-     * For targets like 8.12, that produces 9 accepted blocks. That matches the
-     * captured drand/check vectors, so use ceil(target), not floor(target).
-     */
     private fun generateIosCarveGrid(
         xCells: Int,
         yCells: Int,
@@ -356,11 +298,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         while (attempts < maxAttempts) {
             attempts += 1
 
-            /*
-             * iOS grid methods receive x,y as:
-             *   x = inner column index
-             *   y = outer row index
-             */
             val innerX = floor(rng.drand48() * yCells.toDouble())
                 .toInt()
                 .coerceIn(0, yCells - 1)
@@ -498,10 +435,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
                 if (gridGet(grid, innerX, outerY) != 0) continue
                 if (isPathEndpoint(longestPath, outerY, innerX)) continue
 
-                /*
-                 * iOS consumes this random check before testing the four corner cases.
-                 * Keep this order or later object/obstacle RNG will desync.
-                 */
                 rngChecks += 1
                 if (rng.drand48() >= 0.5) continue
 
@@ -564,19 +497,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         val hole: PointF
     )
 
-    /**
-     * Faithful port of the per-open-cell pass in iOS -[GolfScene createMap] ("loop D").
-     *
-     * Iterates final-grid cells in (outer, inner) order. For each open cell it places
-     * the ball (path[0]) and hole (path[last]) with the +/-10 jitter, then runs both
-     * slope gates, consuming drand48 in the exact iOS order. Endpoints are processed
-     * (not skipped) so their gate draws are consumed. Mutates objectGrid (obj_24) by
-     * marking 3 for ball/hole/slope cells. Returns slopes + jittered ball/hole points.
-     *
-     * Jitter formula (validated against seed=128780070 map_num=0): a placed object's
-     * world coordinate is  cell*65 + drand48()*20 - 10  per axis. Slopes are placed at
-     * the exact cell center (cell*65, no jitter). Ball/ball2 share one point.
-     */
     private fun runPlacementLoopD(
         grid: Array<IntArray>,
         objectGrid: Array<IntArray>,
@@ -699,18 +619,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         val cols = objectGrid.firstOrNull()?.size ?: 0
         if (cols <= 0) return obstacles
 
-        /*
-         * iOS has two separate obstacle passes:
-         *   1. A row/column scan for large 2x2 obstacles.
-         *   2. A random-candidate pass for small single-cell obstacles.
-         *
-         * Do not use longestPath directly here. iOS already represented protected
-         * cells by writing 3 into obj_24/objectGrid before obstacle generation.
-         */
-
-        // ─────────────────────────────────────────────
-        // Pass 1: large 2x2 obstacle pass
-        // ─────────────────────────────────────────────
         for (outerY in 0 until rows) {
             for (innerX in 0 until cols) {
                 if (!canPlaceLargeObstacleBlock(grid, objectGrid, innerX, outerY)) {
@@ -774,9 +682,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
             }
         }
 
-        // ─────────────────────────────────────────────
-        // Pass 2: small single-cell obstacle pass
-        // ─────────────────────────────────────────────
         val openCount = countRawOpenObjectCells(objectGrid)
         val base = floor(openCount.toDouble() * 2.0 / 3.0).toInt()
 
@@ -959,11 +864,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
                 (last != null && last.x == outerY && last.y == innerX)
     }
 
-    /**
-     * Mirrors iOS grid_set:
-     * - ignores OOB
-     * - does not overwrite a raw 3 cell
-     */
     private fun gridSet(grid: Array<IntArray>, innerX: Int, outerY: Int, value: Int): Boolean {
         if (outerY !in grid.indices) return false
         if (innerX !in grid[outerY].indices) return false
@@ -974,11 +874,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         return true
     }
 
-    /**
-     * Mirrors iOS grid_get:
-     * - OOB returns -1
-     * - raw 3 behaves as 0
-     */
     private fun gridGet(grid: Array<IntArray>, innerX: Int, outerY: Int): Int {
         if (outerY !in grid.indices) return -1
         if (innerX !in grid[outerY].indices) return -1
@@ -987,21 +882,12 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         return if (value == 3) 0 else value
     }
 
-    /**
-     * Raw grid read used by PathFinder and object reservation:
-     * - grid[y][x]
-     * - OOB returns -1
-     * - raw 3 does NOT remap to 0
-     */
     private fun rawCell(grid: Array<IntArray>, innerX: Int, outerY: Int): Int {
         if (outerY !in grid.indices) return -1
         if (innerX !in grid[outerY].indices) return -1
         return grid[outerY][innerX]
     }
 
-    /**
-     * Port of iOS -[GolfScene check:].
-     */
     private fun checkGrid(grid: Array<IntArray>): Boolean {
         val xCells = grid.size
         val yCells = grid.firstOrNull()?.size ?: return false
@@ -1060,12 +946,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         return null
     }
 
-    /**
-     * Port of iOS -[GolfScene getLongest:].
-     *
-     * Iterates every ordered start/end pair of raw-open cells in reverse index order,
-     * runs PathFinder between them, and keeps the longest returned path.
-     */
     private fun pathFinderGetLongest(grid: Array<IntArray>): List<Cell> {
         val xCells = grid.size
         val yCells = grid.firstOrNull()?.size ?: 0
@@ -1097,14 +977,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
                         } else if (candidate.size > current.size) {
                             best = candidate
                         }
-                        /*
-                         * No equal-length tie-break. iOS getLongest keeps the FIRST max-length
-                         * pair its scan reaches (start scanned bottom-row-first, finish reaching
-                         * the top row), giving finish on outer=0 / start on outer=xCells-1.
-                         * Replacing on ties (e.g. smaller finish.inner) flips the path
-                         * orientation, which swaps ball/hole and desyncs every downstream draw.
-                         * Validated bit-exact vs iOS for seed=128780070/map0 and seed=-1468205387/map2.
-                         */
                     }
                 }
             }
@@ -1120,9 +992,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         return result
     }
 
-    /**
-     * Port of +[PathFinder go:yIni:xFin:yFin:lvlData:].
-     */
     private fun pathFinderGo(
         grid: Array<IntArray>,
         xIni: Int,
@@ -1151,14 +1020,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         val parent: PathNode?
     )
 
-    /**
-     * Port of PathFinder SearchLevel / RetracePath.
-     *
-     * Note:
-     * iOS stores open nodes in NSMutableDictionary. Its tie enumeration may differ
-     * from LinkedHashMap insertion order. This is the main remaining tuning point
-     * if a Frida VEC base grid matches but getLongest path does not.
-     */
     private class PathSearch(
         private val grid: Array<IntArray>,
         private val finX: Int,

@@ -84,8 +84,30 @@ data class GolfGameData(
                 msg["holeIndex"]
             )?.toIntOrNull()
 
+            val replay = msg["replay"].orEmpty()
+            val replay2 = msg["replay2"].orEmpty()
+
+            /*
+             * iOS sets num=2 after player 1 finishes the first round, but that still
+             * refers to the first hole/round for replay/player-2 response purposes.
+             *
+             * If replay data exists, use the replay segment count to decide which board
+             * this data belongs to.
+             */
+            val replaySegmentCount = maxOf(
+                replaySegmentCount(replay),
+                replaySegmentCount(replay2)
+            )
+
+            val replayDrivenMapNum = if (replaySegmentCount > 0) {
+                replaySegmentCount - 1
+            } else {
+                null
+            }
+
             val mapNum = when {
                 mapNumRaw != null -> mapNumRaw
+                replayDrivenMapNum != null -> replayDrivenMapNum
                 rawNum != null -> rawNum - 1
                 previous != null -> previous.mapNum
                 else -> 0
@@ -103,9 +125,6 @@ data class GolfGameData(
             val player2Id = firstNonBlank(msg["player2"], msg["player_id2"], msg["player2_id"])
                 ?: previous?.player2Id
                 ?: ""
-
-            val replay = msg["replay"].orEmpty()
-            val replay2 = msg["replay2"].orEmpty()
 
             val renderKey = buildString {
                 append(seed)
@@ -177,6 +196,11 @@ data class GolfGameData(
                 fromText >= 5 -> 5
                 else -> 3
             }
+        }
+
+        private fun replaySegmentCount(replay: String): Int {
+            if (replay.isBlank()) return 0
+            return replay.split(GolfConstants.SEG_SEP).size
         }
 
         private fun firstNonBlank(vararg values: String?): String? =

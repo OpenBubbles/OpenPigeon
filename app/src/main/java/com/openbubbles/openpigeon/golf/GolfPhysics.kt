@@ -124,16 +124,28 @@ object GolfPhysics {
 
     private fun isBallPlayable(map: GolfMap, x: Float, y: Float): Boolean {
         /*
-         * Wall collision must use ball radius + wall half-thickness.
-         * Otherwise the visible ball overlaps the white wall before physics rejects it.
+         * Wall collision uses the ball radius plus wall half-thickness.
+         *
+         * Important: check diagonal probes too. Without these, the ball can overlap
+         * where two wall segments meet because the cardinal probes still pass while
+         * the diagonal edge of the ball is already inside the corner.
          */
         val r = WALL_COLLISION_RADIUS
+        val d = r * 0.70710677f
 
         return isPlayableCenter(map, x, y) &&
+
+                // Cardinal probes.
                 isPlayableCenter(map, x + r, y) &&
                 isPlayableCenter(map, x - r, y) &&
                 isPlayableCenter(map, x, y + r) &&
-                isPlayableCenter(map, x, y - r)
+                isPlayableCenter(map, x, y - r) &&
+
+                // Diagonal/corner probes.
+                isPlayableCenter(map, x + d, y + d) &&
+                isPlayableCenter(map, x + d, y - d) &&
+                isPlayableCenter(map, x - d, y + d) &&
+                isPlayableCenter(map, x - d, y - d)
     }
 
     private fun isPlayableCenter(map: GolfMap, x: Float, y: Float): Boolean {
@@ -464,7 +476,8 @@ object GolfPhysics {
     private enum class ObstacleCollisionShape {
         RECT,
         CIRCLE,
-        TRIANGLE
+        TRIANGLE,
+        CROSS
     }
 
     private data class ObstacleCollisionSpec(
@@ -502,6 +515,19 @@ object GolfPhysics {
 
                 ObstacleCollisionShape.TRIANGLE -> {
                     resolveRotatedRightTriangleCollision(
+                        pos = pos,
+                        vel = vel,
+                        cx = obstacle.x,
+                        cy = obstacle.y,
+                        width = width,
+                        height = height,
+                        rotationRadians = obstacle.rotation,
+                        restitution = restitution
+                    )
+                }
+
+                ObstacleCollisionShape.CROSS -> {
+                    resolveCrossCollision(
                         pos = pos,
                         vel = vel,
                         cx = obstacle.x,
@@ -599,14 +625,11 @@ object GolfPhysics {
                 shape = ObstacleCollisionShape.TRIANGLE
             )
 
-            /*
-             * Cross still needs the exact iOS multi-fixture layout later.
-             */
             "golf_obstacle_cross" -> ObstacleCollisionSpec(
                 image = image,
                 width = 95f,
                 height = 95f,
-                shape = ObstacleCollisionShape.RECT
+                shape = ObstacleCollisionShape.CROSS
             )
 
             else -> ObstacleCollisionSpec(
@@ -651,6 +674,56 @@ object GolfPhysics {
         if (vn < 0f) {
             vel.x -= (1f + restitution) * vn * nx
             vel.y -= (1f + restitution) * vn * ny
+        }
+    }
+
+    private fun resolveCrossCollision(
+        pos: PointF,
+        vel: PointF,
+        cx: Float,
+        cy: Float,
+        width: Float,
+        height: Float,
+        rotationRadians: Float,
+        restitution: Float
+    ) {
+        /*
+         * The cross sprite is not a solid 95x95 square.
+         * Treat it as two thin bars sharing the same center.
+         *
+         * 95 x 95 sprite -> roughly 16 course-unit arm thickness.
+         */
+        val minSide = if (width < height) width else height
+        val armThickness = (minSide * 0.17f).coerceIn(12f, 18f)
+
+        /*
+         * Run twice so if the ball starts near the intersection of both bars,
+         * both parts get a chance to separate it.
+         */
+        repeat(2) {
+            // Horizontal arm.
+            resolveRotatedRectCollision(
+                pos = pos,
+                vel = vel,
+                cx = cx,
+                cy = cy,
+                width = width,
+                height = armThickness,
+                rotationRadians = rotationRadians,
+                restitution = restitution
+            )
+
+            // Vertical arm.
+            resolveRotatedRectCollision(
+                pos = pos,
+                vel = vel,
+                cx = cx,
+                cy = cy,
+                width = armThickness,
+                height = height,
+                rotationRadians = rotationRadians,
+                restitution = restitution
+            )
         }
     }
 

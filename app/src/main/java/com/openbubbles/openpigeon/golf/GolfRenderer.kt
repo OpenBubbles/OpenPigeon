@@ -19,18 +19,8 @@ import kotlin.math.abs
 import android.os.SystemClock
 import kotlin.math.max
 import kotlin.math.pow
+import kotlin.math.cos
 
-/**
- * Canvas renderer for Mini Golf.
- *
- * This version renders the course closer to iOS:
- * - no visible dark blocked tiles
- * - no internal square grid lines
- * - no debug path preview
- * - one continuous filled course body
- * - white exterior outline
- * - diagonal 2x2 corner cuts based on the same kind of geometry seen in iOS fixture probes
- */
 class GolfRenderer @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
@@ -41,27 +31,9 @@ class GolfRenderer @JvmOverloads constructor(
         private const val SHOW_COLLISION_DEBUG = true
 
         private const val FLIP_BOARD_Y_ONLY = true
-
-        /*
-         * Keep this false for visual parity. Set true only while debugging.
-         */
         private const val SHOW_DEBUG_LABEL = false
-
-        /*
-         * Keep this false for visual parity. The old line made the Android version
-         * visibly different from the iOS board.
-         */
         private const val SHOW_PATH_PREVIEW = false
-
-        /*
- * Keep false for screenshots/parity. Turn on only when we want center dots.
- */
         private const val SHOW_OBJECT_DEBUG_DOTS = false
-
-        /*
-         * Logs transformed screen positions once on first draw.
-         * This is what we need for the next comparison.
-         */
         private const val LOG_RENDER_SCREEN_COORDS = true
         private const val IOS_TILE_DRAW_SIZE = 66f
         private const val IOS_WALL_PATH_TILE_SIZE = 65f
@@ -70,10 +42,10 @@ class GolfRenderer @JvmOverloads constructor(
         private const val IOS_SLOPE_HEIGHT = 52f
         private const val IOS_OBSTACLE_BASE_SIZE = 30f
         private const val IOS_SHADOW_COURSE_Y_OFFSET = -2f
-        private const val AIM_CAMERA_MAX_ZOOM_MULTIPLIER = 2.10f
-        private const val AIM_CAMERA_MIN_ZOOM_MULTIPLIER = 1.18f
-        private const val AIM_CAMERA_VERTICAL_MIN_SCREEN_FRACTION = 0.20f
-        private const val AIM_CAMERA_VERTICAL_MAX_SCREEN_FRACTION = 0.78f
+        private const val AIM_CAMERA_MAX_ZOOM_MULTIPLIER = 1.62f
+        private const val AIM_CAMERA_MIN_ZOOM_MULTIPLIER = 1.06f
+        private const val AIM_CAMERA_VERTICAL_MIN_SCREEN_FRACTION = 0.25f
+        private const val AIM_CAMERA_VERTICAL_MAX_SCREEN_FRACTION = 0.75f
         private const val CAMERA_ANIMATION_DAMPING_PER_60FPS_FRAME = 0.72f
         private const val CAMERA_ANIMATION_EPSILON = 0.35f
     }
@@ -87,7 +59,8 @@ class GolfRenderer @JvmOverloads constructor(
 
     private enum class CameraMode {
         FULL_BOARD,
-        AIM
+        AIM,
+        REPLAY
     }
 
     private var hasLoggedFirstDraw = false
@@ -116,7 +89,17 @@ class GolfRenderer @JvmOverloads constructor(
     private var cameraAnimLastMs = 0L
 
     private var runtimeBallCourse: PointF? = null
+    private var opponentBallCourse: PointF? = null
+    private var replayCameraBall1Course: PointF? = null
+    private var replayCameraBall2Course: PointF? = null
+
     private var aimDotsVisual: List<PointF> = emptyList()
+    private var opponentAimDotsVisual: List<PointF> = emptyList()
+    private var aimReadyBallCourse: PointF? = null
+    private var aimReadyRingStartMs = 0L
+    private var aimReadyRingFadeLastMs = 0L
+    private var aimReadyRingAlpha = 0f
+    private var aimReadyRingTargetAlpha = 0f
 
     private var flagPulled = false
     private var ballInHole = false
@@ -186,6 +169,13 @@ class GolfRenderer @JvmOverloads constructor(
         cameraTransformReady = false
         snapCameraOnNextDraw = true
         cameraAnimLastMs = 0L
+        replayCameraBall1Course = null
+        replayCameraBall2Course = null
+        aimReadyBallCourse = null
+        aimReadyRingStartMs = 0L
+        aimReadyRingFadeLastMs = 0L
+        aimReadyRingAlpha = 0f
+        aimReadyRingTargetAlpha = 0f
 
         invalidate()
     }
@@ -237,10 +227,6 @@ class GolfRenderer @JvmOverloads constructor(
         )
     }
 
-    /**
-     * Converts a course-space point into the same visual coordinate space used by touch aiming.
-     * This avoids hardcoding whether the current renderer is Y-flipped or rotated.
-     */
     fun courseToVisual(point: PointF): PointF {
         val g = map
         return if (g != null) {
@@ -261,10 +247,6 @@ class GolfRenderer @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Converts a velocity/delta expressed in visual board units into course-space units.
-     * Use this before adding velocity to ballStart/course positions.
-     */
     fun visualDeltaToCourseDelta(dxVisual: Float, dyVisual: Float): PointF {
         val c0 = screenToCourse(offsetX, offsetY)
         val c1 = screenToCourse(
@@ -296,6 +278,17 @@ class GolfRenderer @JvmOverloads constructor(
         invalidate()
     }
 
+    fun setOpponentBallCourse(point: PointF?) {
+        opponentBallCourse = point?.let { PointF(it.x, it.y) }
+        postInvalidateOnAnimation()
+    }
+
+    fun clearOpponentBallCourse() {
+        opponentBallCourse = null
+        opponentAimDotsVisual = emptyList()
+        postInvalidateOnAnimation()
+    }
+
     fun getPrimaryBallCourse(): PointF? {
         val g = map ?: return null
         return runtimeBallCourse ?: g.ballStart1
@@ -306,10 +299,6 @@ class GolfRenderer @JvmOverloads constructor(
 
         overviewCameraHeld = held
 
-        /*
-         * This is a toggle target, not a press/hold state.
-         * Do not snap. Let applyAnimatedTransform ease between overview and aim camera.
-         */
         postInvalidateOnAnimation()
     }
 
@@ -327,10 +316,20 @@ class GolfRenderer @JvmOverloads constructor(
         postInvalidateOnAnimation()
     }
 
+    fun setReplayCamera(ball1Course: PointF?, ball2Course: PointF?) {
+        cameraMode = CameraMode.REPLAY
+        replayCameraBall1Course = ball1Course?.let { PointF(it.x, it.y) }
+        replayCameraBall2Course = ball2Course?.let { PointF(it.x, it.y) }
+        overviewCameraHeld = false
+        postInvalidateOnAnimation()
+    }
+
     fun clearCameraFocus() {
         cameraMode = CameraMode.FULL_BOARD
         aimCameraBallCourse = null
         aimCameraDist = 0f
+        replayCameraBall1Course = null
+        replayCameraBall2Course = null
         overviewCameraHeld = false
         snapCameraOnNextDraw = true
 
@@ -341,10 +340,6 @@ class GolfRenderer @JvmOverloads constructor(
         val ball = getPrimaryBallCourse() ?: return false
         val p = courseToScreen(ball)
 
-        /*
-         * iOS GolfBall visual frame is much larger than the physical ball.
-         * Use a generous hit radius so dragging feels like iOS.
-         */
         val hitRadius = 28f * scale
         val dx = screenX - p.x
         val dy = screenY - p.y
@@ -364,11 +359,66 @@ class GolfRenderer @JvmOverloads constructor(
         invalidate()
     }
 
-    fun clearAimPreview() {
-        if (aimDotsVisual.isNotEmpty()) {
+    fun setReplayAimPreviews(
+        whiteBallCourse: PointF?,
+        whiteAim: GolfShot.Aim?,
+        grayBallCourse: PointF?,
+        grayAim: GolfShot.Aim?
+    ) {
+        aimDotsVisual = if (whiteBallCourse != null && whiteAim != null && whiteAim.active) {
+            GolfShot.previewDotsVisual(courseToVisual(whiteBallCourse), whiteAim)
+        } else {
+            emptyList()
+        }
+
+        opponentAimDotsVisual = if (grayBallCourse != null && grayAim != null && grayAim.active) {
+            GolfShot.previewDotsVisual(courseToVisual(grayBallCourse), grayAim)
+        } else {
+            emptyList()
+        }
+
+        postInvalidateOnAnimation()
+    }
+
+    fun clearReplayAimPreview() {
+        if (aimDotsVisual.isNotEmpty() || opponentAimDotsVisual.isNotEmpty()) {
             aimDotsVisual = emptyList()
+            opponentAimDotsVisual = emptyList()
+            postInvalidateOnAnimation()
+        }
+    }
+
+    fun clearAimPreview() {
+        if (aimDotsVisual.isNotEmpty() || opponentAimDotsVisual.isNotEmpty()) {
+            aimDotsVisual = emptyList()
+            opponentAimDotsVisual = emptyList()
             invalidate()
         }
+    }
+
+    fun setAimReadyIndicator(ballCourse: PointF?) {
+        val now = SystemClock.elapsedRealtime()
+        val next = ballCourse?.let { PointF(it.x, it.y) }
+
+        if (next == null) {
+            aimReadyRingTargetAlpha = 0f
+            aimReadyRingFadeLastMs = now
+            postInvalidateOnAnimation()
+            return
+        }
+
+        val old = aimReadyBallCourse
+        if (old == null || abs(old.x - next.x) > 0.001f || abs(old.y - next.y) > 0.001f) {
+            aimReadyRingStartMs = now
+        } else if (aimReadyRingStartMs == 0L) {
+            aimReadyRingStartMs = now
+        }
+
+        aimReadyBallCourse = next
+        aimReadyRingTargetAlpha = 1f
+        aimReadyRingFadeLastMs = now
+
+        postInvalidateOnAnimation()
     }
 
     private fun logRendererScreenCoordinates(g: GolfMap) {
@@ -490,18 +540,10 @@ class GolfRenderer @JvmOverloads constructor(
 
         drawSlopes(canvas, g)
 
-        /*
-         * iOS has a dark/shadow wall layer behind the real wall layer.
-         * Draw this before obstacle sprites.
-         */
         drawCourseOutlineShadow(canvas, wallPath)
 
         drawObjectShadows(canvas, g)
         drawObstacleSprites(canvas, g)
-
-        /*
-         * Real white barriers go on top of obstacles.
-         */
         drawCourseOutline(canvas, wallPath)
 
         if (SHOW_OBJECT_DEBUG_DOTS) {
@@ -512,6 +554,7 @@ class GolfRenderer @JvmOverloads constructor(
 
         drawAimPreview(canvas)
         drawBalls(canvas, g)
+        drawAimReadyRing(canvas)
 
         drawHoleFlag(canvas, g)
 
@@ -566,9 +609,6 @@ class GolfRenderer @JvmOverloads constructor(
     }
 
     private fun drawBackground(canvas: Canvas) {
-        /*
-         * iOS screenshot background is a warm gray, not the earlier blue-gray.
-         */
         canvas.drawColor(Color.rgb(174, 171, 162))
     }
 
@@ -581,10 +621,10 @@ class GolfRenderer @JvmOverloads constructor(
     private fun computeTransform(g: GolfMap) {
         val full = computeFullBoardTransform(g)
 
-        val target = if (overviewCameraHeld || cameraMode == CameraMode.FULL_BOARD) {
-            full
-        } else {
-            computeAimBoardTransform(g, full)
+        val target = when {
+            overviewCameraHeld || cameraMode == CameraMode.FULL_BOARD -> full
+            cameraMode == CameraMode.REPLAY -> computeReplayBoardTransform(g, full)
+            else -> computeAimBoardTransform(g, full)
         }
 
         applyAnimatedTransform(target)
@@ -632,10 +672,6 @@ class GolfRenderer @JvmOverloads constructor(
         val safeW = width.coerceAtLeast(1).toFloat()
         val safeH = height.coerceAtLeast(1).toFloat()
 
-        /*
-         * Leave room for the top avatars/header and bottom buttons.
-         * This keeps the playable board centered in the usable game area.
-         */
         val topUiPad = safeH * 0.06f
         val bottomUiPad = safeH * 0.18f
 
@@ -677,11 +713,6 @@ class GolfRenderer @JvmOverloads constructor(
 
         val ballVisual = courseToVisualRaw(g, ballCourse)
 
-        /*
-         * More power means zoom out more.
-         * dist=0   -> largest zoom
-         * dist=300 -> closest to full-board zoom
-         */
         val powerT = (aimCameraDist / GolfShot.AIM_MAX_DIST).coerceIn(0f, 1f)
 
         val zoomMultiplier =
@@ -690,20 +721,20 @@ class GolfRenderer @JvmOverloads constructor(
 
         val aimScale = max(full.scale, full.scale * zoomMultiplier)
 
-        /*
-         * iOS feel: snap horizontally to the ball.
-         */
         val aimOffsetX = safeW * 0.5f - ballVisual.x * aimScale
 
-        /*
-         * Do not force vertical centering. Preserve the ball's full-board vertical
-         * position where possible, then clamp only enough to avoid losing the board.
-         */
-        val fullBallScreenY = full.offsetY + ballVisual.y * full.scale
+        val safeTopY = safeH * AIM_CAMERA_VERTICAL_MIN_SCREEN_FRACTION
+        val safeBottomY = safeH * AIM_CAMERA_VERTICAL_MAX_SCREEN_FRACTION
 
-        val preferredBallScreenY = fullBallScreenY.coerceIn(
-            safeH * AIM_CAMERA_VERTICAL_MIN_SCREEN_FRACTION,
-            safeH * AIM_CAMERA_VERTICAL_MAX_SCREEN_FRACTION
+        val currentBallScreenY = if (cameraTransformReady) {
+            offsetY + ballVisual.y * scale
+        } else {
+            full.offsetY + ballVisual.y * full.scale
+        }
+
+        val preferredBallScreenY = currentBallScreenY.coerceIn(
+            safeTopY,
+            safeBottomY
         )
 
         val preferredOffsetY = preferredBallScreenY - ballVisual.y * aimScale
@@ -721,15 +752,66 @@ class GolfRenderer @JvmOverloads constructor(
         )
     }
 
+    private fun computeReplayBoardTransform(
+        g: GolfMap,
+        full: BoardTransform
+    ): BoardTransform {
+        val safeW = width.coerceAtLeast(1).toFloat()
+        val safeH = height.coerceAtLeast(1).toFloat()
+
+        val ball1Course =
+            replayCameraBall1Course
+                ?: runtimeBallCourse
+                ?: g.ballStart1
+
+        val ball2Course =
+            replayCameraBall2Course
+                ?: opponentBallCourse
+                ?: ball1Course
+
+        val b1 = courseToVisualRaw(g, ball1Course)
+        val b2 = courseToVisualRaw(g, ball2Course)
+
+        val minX = kotlin.math.min(b1.x, b2.x)
+        val maxX = kotlin.math.max(b1.x, b2.x)
+        val minY = kotlin.math.min(b1.y, b2.y)
+        val maxY = kotlin.math.max(b1.y, b2.y)
+
+        val centerX = (minX + maxX) * 0.5f
+        val centerY = (minY + maxY) * 0.5f
+
+        val contentW = (maxX - minX).coerceAtLeast(110f)
+        val contentH = (maxY - minY).coerceAtLeast(110f)
+
+        val availableW = safeW * 0.72f
+        val availableH = safeH * 0.52f
+
+        val replayScale = kotlin.math.min(
+            availableW / contentW,
+            availableH / contentH
+        ).coerceIn(
+            full.scale,
+            full.scale * 1.85f
+        )
+
+        val replayOffsetX = safeW * 0.5f - centerX * replayScale
+        val replayOffsetY = safeH * 0.48f - centerY * replayScale
+
+        return BoardTransform(
+            scale = replayScale,
+            offsetX = replayOffsetX,
+            offsetY = replayOffsetY
+        )
+    }
+
     private fun clampAimOffsetY(
         bounds: RenderBounds,
         scaleValue: Float,
         preferredOffsetY: Float
     ): Float {
         val safeH = height.coerceAtLeast(1).toFloat()
-
-        val topLimit = safeH * 0.06f
-        val bottomLimit = safeH * 0.82f
+        val topLimit = safeH * 0.25f
+        val bottomLimit = safeH * 0.75f
 
         val minOffsetY = bottomLimit - bounds.bottom * scaleValue
         val maxOffsetY = topLimit - bounds.top * scaleValue
@@ -737,10 +819,7 @@ class GolfRenderer @JvmOverloads constructor(
         return if (minOffsetY <= maxOffsetY) {
             preferredOffsetY.coerceIn(minOffsetY, maxOffsetY)
         } else {
-            /*
-             * Board is smaller than the usable vertical area at this zoom.
-             */
-            (minOffsetY + maxOffsetY) * 0.5f
+            preferredOffsetY
         }
     }
 
@@ -765,13 +844,6 @@ class GolfRenderer @JvmOverloads constructor(
     }
 
     private fun renderBounds(g: GolfMap): RenderBounds {
-        /*
-         * iOS tiles are centered at col*65,row*65 and drawn 66x66.
-         * So the visible board extends half a tile outside the logical centers.
-         *
-         * With FLIP_BOARD_Y_ONLY, visual row centers are:
-         *   65, 130, 195, ... mapSize
-         */
         val halfTile = IOS_TILE_DRAW_SIZE * 0.5f
 
         val left = -halfTile
@@ -807,10 +879,6 @@ class GolfRenderer @JvmOverloads constructor(
         canvas.translate(offsetX, offsetY)
         canvas.scale(scale, scale)
 
-        /*
-         * iOS shadow nodes are course y - 2.
-         * With our Y-flip, that becomes visual y + 2.
-         */
         canvas.translate(0f, -IOS_SHADOW_COURSE_Y_OFFSET)
         canvas.drawPath(coursePath, strokePaint)
 
@@ -884,10 +952,6 @@ class GolfRenderer @JvmOverloads constructor(
             bottomBlocked && leftBlocked -> CutCorner.BOTTOM_LEFT
             bottomBlocked && rightBlocked -> CutCorner.BOTTOM_RIGHT
 
-            /*
-             * For seed=128780070 map 0, the captured 3 cell is the upper-left
-             * diagonal transition in the right-side section after the 90° visual rotation.
-             */
             else -> {
                 CutCorner.BOTTOM_LEFT
             }
@@ -899,10 +963,6 @@ class GolfRenderer @JvmOverloads constructor(
 
         when (corner) {
             CutCorner.TOP_LEFT -> {
-                /*
-                 * Removes the upper-left half of the square.
-                 * Leaves a diagonal from bottom-left to top-right.
-                 */
                 cut.moveTo(rect.left, rect.top)
                 cut.lineTo(rect.right, rect.top)
                 cut.lineTo(rect.left, rect.bottom)
@@ -910,10 +970,6 @@ class GolfRenderer @JvmOverloads constructor(
             }
 
             CutCorner.TOP_RIGHT -> {
-                /*
-                 * Removes the upper-right half of the square.
-                 * Leaves a diagonal from top-left to bottom-right.
-                 */
                 cut.moveTo(rect.left, rect.top)
                 cut.lineTo(rect.right, rect.top)
                 cut.lineTo(rect.right, rect.bottom)
@@ -921,10 +977,6 @@ class GolfRenderer @JvmOverloads constructor(
             }
 
             CutCorner.BOTTOM_LEFT -> {
-                /*
-                 * Removes the lower-left half of the square.
-                 * Leaves a diagonal from top-left to bottom-right.
-                 */
                 cut.moveTo(rect.left, rect.top)
                 cut.lineTo(rect.left, rect.bottom)
                 cut.lineTo(rect.right, rect.bottom)
@@ -932,10 +984,6 @@ class GolfRenderer @JvmOverloads constructor(
             }
 
             CutCorner.BOTTOM_RIGHT -> {
-                /*
-                 * Removes the lower-right half of the square.
-                 * Leaves a diagonal from bottom-left to top-right.
-                 */
                 cut.moveTo(rect.right, rect.top)
                 cut.lineTo(rect.right, rect.bottom)
                 cut.lineTo(rect.left, rect.bottom)
@@ -946,25 +994,12 @@ class GolfRenderer @JvmOverloads constructor(
         coursePath.op(cut, Path.Op.DIFFERENCE)
     }
 
-    /**
-     * iOS creates diagonal wall fixtures for certain 2x2 patterns. The probe showed
-     * diagonal makeFixture geometry on this exact board. This approximates that rule
-     * from the visual grid:
-     *
-     * In a 2x2 block with exactly one blocked cell and three open cells, cut the
-     * shared interior corner diagonally.
-     */
     private fun applyDiagonalCornerCuts(g: GolfMap, coursePath: Path, tileDrawSize: Float) {
         val rows = visualRows(g)
         val cols = visualCols(g)
 
         for (row in 0 until rows - 1) {
             for (col in 0 until cols - 1) {
-                /*
-                 * Value 3 cells have their own exact-style diagonal handling.
-                 * Do not apply the generic 2x2 approximation to any 2x2 group
-                 * containing a value 3.
-                 */
                 if (
                     visualCellValue(g, col, row) == 3 ||
                     visualCellValue(g, col + 1, row) == 3 ||
@@ -986,12 +1021,6 @@ class GolfRenderer @JvmOverloads constructor(
                 val trCenter = visualCellCenter(col + 1, row, tileDrawSize)
                 val blCenter = visualCellCenter(col, row + 1, tileDrawSize)
                 val brCenter = visualCellCenter(col + 1, row + 1, tileDrawSize)
-
-                /*
-                 * visualCellRect() now uses iOS-style centered tiles.
-                 * The shared interior point must be derived from the current centers,
-                 * not from old top-left grid math.
-                 */
                 val sharedX = (tlCenter.x + trCenter.x + blCenter.x + brCenter.x) * 0.25f
                 val sharedY = (tlCenter.y + trCenter.y + blCenter.y + brCenter.y) * 0.25f
 
@@ -1057,11 +1086,6 @@ class GolfRenderer @JvmOverloads constructor(
         val innerCol: Int
 
         if (FLIP_BOARD_Y_ONLY) {
-            /*
-             * Board is flipped vertically only:
-             * visual row 0 maps to original bottom row.
-             * visual col stays the same.
-             */
             outerRow = g.xCells - 1 - visualRow
             innerCol = visualCol
         } else {
@@ -1081,13 +1105,6 @@ class GolfRenderer @JvmOverloads constructor(
         visualRow: Int,
         tileDrawSize: Float = IOS_TILE_DRAW_SIZE
     ): RectF {
-        /*
-         * Build board geometry in stable visual/course units.
-         * Do NOT include offsetX/offsetY/scale here.
-         *
-         * The canvas transform applies camera scale/offset later.
-         * This avoids Path.Op artifacts while zoom changes during aiming.
-         */
         val centerVisualX = visualCol * GolfConstants.TILE_SIZE
 
         val centerVisualY = if (FLIP_BOARD_Y_ONLY) {
@@ -1190,11 +1207,6 @@ class GolfRenderer @JvmOverloads constructor(
             return slope.rotation
         }
 
-        /*
-         * From the binary:
-         * - vertical slope corridors use rotation 0
-         * - horizontal slope corridors use rotation pi/2
-         */
         return when {
             abs(slope.vx) > 0.001f && abs(slope.vy) <= 0.001f -> (Math.PI / 2.0).toFloat()
             else -> 0f
@@ -1211,7 +1223,8 @@ class GolfRenderer @JvmOverloads constructor(
         val image: String,
         val width: Float,
         val height: Float,
-        val circular: Boolean
+        val circular: Boolean,
+        val cross: Boolean = false
     )
 
     private fun obstacleCollisionSpecForDebug(obstacle: GolfObstacle): ObstacleCollisionDrawSpec {
@@ -1234,7 +1247,13 @@ class GolfRenderer @JvmOverloads constructor(
             "golf_obstacle_triangle" -> ObstacleCollisionDrawSpec(image, 30f, 30f, circular = false)
             "golf_obstacle_triangle2" -> ObstacleCollisionDrawSpec(image, 70f, 70f, circular = false)
 
-            "golf_obstacle_cross" -> ObstacleCollisionDrawSpec(image, 95f, 95f, circular = false)
+            "golf_obstacle_cross" -> ObstacleCollisionDrawSpec(
+                image,
+                95f,
+                95f,
+                circular = false,
+                cross = true
+            )
 
             else -> ObstacleCollisionDrawSpec(image, 30f, 30f, circular = false)
         }
@@ -1243,10 +1262,6 @@ class GolfRenderer @JvmOverloads constructor(
     private fun drawCollisionDebug(canvas: Canvas, g: GolfMap) {
         if (!SHOW_COLLISION_DEBUG) return
 
-        /*
-         * Ball physics circle.
-         * Visual ball is 12 course units, so the physics radius should be 6.
-         */
         val ball = runtimeBallCourse ?: g.ballStart1
         val ballScreen = courseToScreen(ball)
 
@@ -1254,11 +1269,6 @@ class GolfRenderer @JvmOverloads constructor(
         collisionDebugPaint.strokeWidth = 2f * scale
         canvas.drawCircle(ballScreen.x, ballScreen.y, 4f * scale, collisionDebugPaint)
 
-        /*
-         * Obstacle physics shapes.
-         * These should line up with the visible sprites. If they do not,
-         * the collision shape is wrong, not the ball size.
-         */
         collisionDebugPaint.color = Color.argb(220, 255, 0, 255)
 
         for (obstacle in g.obstacles) {
@@ -1268,7 +1278,38 @@ class GolfRenderer @JvmOverloads constructor(
             val width = spec.width * obstacle.scale * scale
             val height = spec.height * obstacle.scale * scale
 
-            if (spec.circular) {
+            if (spec.cross) {
+                val armThickness = (kotlin.math.min(width, height) * 0.17f).coerceIn(
+                    12f * scale,
+                    18f * scale
+                )
+
+                canvas.save()
+
+                val rawDeg = Math.toDegrees(obstacle.rotation.toDouble()).toFloat()
+                val drawDeg = -rawDeg
+
+                canvas.rotate(drawDeg, center.x, center.y)
+
+                val horizontal = RectF(
+                    center.x - width / 2f,
+                    center.y - armThickness / 2f,
+                    center.x + width / 2f,
+                    center.y + armThickness / 2f
+                )
+
+                val vertical = RectF(
+                    center.x - armThickness / 2f,
+                    center.y - height / 2f,
+                    center.x + armThickness / 2f,
+                    center.y + height / 2f
+                )
+
+                canvas.drawRect(horizontal, collisionDebugPaint)
+                canvas.drawRect(vertical, collisionDebugPaint)
+
+                canvas.restore()
+            } else if (spec.circular) {
                 val radius = kotlin.math.min(width, height) * 0.5f
                 canvas.drawCircle(center.x, center.y, radius, collisionDebugPaint)
             } else {
@@ -1351,12 +1392,6 @@ class GolfRenderer @JvmOverloads constructor(
         val h = heightCourse * scale
 
         val baseRotationDegrees = Math.toDegrees(rotationRadians.toDouble()).toFloat()
-
-        /*
-         * SpriteKit and Android Canvas rotation have opposite handedness.
-         * Board orientation is handled by courseToScreen()/visualToOriginalCell(),
-         * so do not add 180 degrees here.
-         */
         val rotationDegrees = -baseRotationDegrees
 
         canvas.save()
@@ -1402,11 +1437,6 @@ class GolfRenderer @JvmOverloads constructor(
         flagAnimLastMs = now
 
         val target = if (flagPulled || ballInHole) 1f else 0f
-
-        /*
-         * Slower than before. This controls movement only.
-         * Opacity is derived from movement position in drawHole().
-         */
         val speed = if (target > flagPullProgress) 2.6f else 2.2f
         val delta = speed * dt
 
@@ -1445,9 +1475,6 @@ class GolfRenderer @JvmOverloads constructor(
         val flag = flagBitmap ?: return
         val progress = easedFlagProgress()
 
-        /*
-         * Higher lift. Alpha is based on movement distance.
-         */
         val maxFlagLiftCourse = 24f
         val flagLiftCourse = maxFlagLiftCourse * progress
 
@@ -1479,12 +1506,19 @@ class GolfRenderer @JvmOverloads constructor(
     }
 
     private fun drawBalls(canvas: Canvas, g: GolfMap) {
+        opponentBallCourse?.let { opponent ->
+            drawBall(
+                canvas = canvas,
+                coursePoint = opponent,
+                fallbackColor = Color.rgb(58, 58, 58),
+                sunk = false,
+                tintColor = Color.rgb(58, 58, 58),
+                alphaOverride = 204 // 80% opacity
+            )
+        }
+
         val primaryBall = runtimeBallCourse ?: g.ballStart1
 
-        /*
-         * Keep drawing the ball after it enters the cup.
-         * The sunk variant is smaller/fainter so the hole remains visible.
-         */
         drawBall(
             canvas = canvas,
             coursePoint = primaryBall,
@@ -1492,11 +1526,8 @@ class GolfRenderer @JvmOverloads constructor(
             sunk = ballInHole
         )
 
-        /*
-         * Avoid drawing a duplicate second ball when both starts are identical.
-         * Race/two-ball behavior can be wired separately after parseReplay/update.
-         */
         if (
+            opponentBallCourse == null &&
             !ballInHole &&
             (kotlin.math.abs(g.ballStart2.x - g.ballStart1.x) > 0.001f ||
                     kotlin.math.abs(g.ballStart2.y - g.ballStart1.y) > 0.001f)
@@ -1514,21 +1545,20 @@ class GolfRenderer @JvmOverloads constructor(
         canvas: Canvas,
         coursePoint: PointF,
         fallbackColor: Int,
-        sunk: Boolean = false
+        sunk: Boolean = false,
+        tintColor: Int? = null,
+        alphaOverride: Int? = null
     ) {
         val p = courseToScreen(coursePoint)
 
-        /*
-         * iOS visual ball is 10 x 10. Once inside the cup, draw it smaller and
-         * slightly faded so it reads as falling into the hole instead of sitting
-         * on top of it.
-         */
         val baseSize = if (sunk) 7f else 10f
         val size = baseSize * scale
-        val alpha = if (sunk) 210 else 255
+        val alpha = alphaOverride ?: if (sunk) 210 else 255
 
         paint.alpha = alpha
-        paint.colorFilter = null
+        paint.colorFilter = tintColor?.let {
+            PorterDuffColorFilter(it, PorterDuff.Mode.SRC_IN)
+        }
 
         if (ballBitmap != null) {
             drawBitmapCentered(canvas, ballBitmap, p.x, p.y, size, size)
@@ -1539,29 +1569,104 @@ class GolfRenderer @JvmOverloads constructor(
 
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 1.5f * scale
-            paint.color = Color.rgb(210, 210, 210)
+            paint.color = if (tintColor != null) {
+                Color.rgb(105, 105, 105)
+            } else {
+                Color.rgb(210, 210, 210)
+            }
             canvas.drawCircle(p.x, p.y, size * 0.5f, paint)
+        }
+
+        paint.alpha = 255
+        paint.colorFilter = null
+    }
+
+    private fun drawAimPreview(canvas: Canvas) {
+        val radius = 1.8f * scale
+
+        if (opponentAimDotsVisual.isNotEmpty()) {
+            paint.style = Paint.Style.FILL
+            paint.color = Color.argb(145, 185, 185, 185)
+            paint.alpha = 145
+            paint.colorFilter = null
+
+            for (dotVisual in opponentAimDotsVisual) {
+                val p = visualToScreen(dotVisual)
+                canvas.drawCircle(p.x, p.y, radius, paint)
+            }
+        }
+
+        if (aimDotsVisual.isNotEmpty()) {
+            paint.style = Paint.Style.FILL
+            paint.color = Color.argb(175, 255, 255, 255)
+            paint.alpha = 175
+            paint.colorFilter = null
+
+            for (dotVisual in aimDotsVisual) {
+                val p = visualToScreen(dotVisual)
+                canvas.drawCircle(p.x, p.y, radius, paint)
+            }
         }
 
         paint.alpha = 255
     }
 
-    private fun drawAimPreview(canvas: Canvas) {
-        if (aimDotsVisual.isEmpty()) return
+    private fun drawAimReadyRing(canvas: Canvas) {
+        val ball = aimReadyBallCourse ?: return
 
-        paint.style = Paint.Style.FILL
-        paint.color = Color.argb(175, 255, 255, 255)
-        paint.alpha = 175
-        paint.colorFilter = null
+        val now = SystemClock.elapsedRealtime()
 
-        val radius = 1.8f * scale
-
-        for (dotVisual in aimDotsVisual) {
-            val p = visualToScreen(dotVisual)
-            canvas.drawCircle(p.x, p.y, radius, paint)
+        if (aimReadyRingStartMs == 0L) {
+            aimReadyRingStartMs = now
         }
 
+        if (aimReadyRingFadeLastMs == 0L) {
+            aimReadyRingFadeLastMs = now
+        }
+
+        val dt = ((now - aimReadyRingFadeLastMs).coerceIn(0L, 34L)).toFloat() / 1000f
+        aimReadyRingFadeLastMs = now
+
+        val fadeSpeed = if (aimReadyRingTargetAlpha > aimReadyRingAlpha) 8.5f else 12.5f
+        val delta = fadeSpeed * dt
+
+        aimReadyRingAlpha = if (aimReadyRingTargetAlpha > aimReadyRingAlpha) {
+            (aimReadyRingAlpha + delta).coerceAtMost(aimReadyRingTargetAlpha)
+        } else {
+            (aimReadyRingAlpha - delta).coerceAtLeast(aimReadyRingTargetAlpha)
+        }
+
+        if (aimReadyRingAlpha <= 0.001f && aimReadyRingTargetAlpha <= 0f) {
+            aimReadyBallCourse = null
+            aimReadyRingStartMs = 0L
+            aimReadyRingFadeLastMs = 0L
+            return
+        }
+
+        val phase = ((now - aimReadyRingStartMs) % 1100L).toFloat() / 1100f
+        val wave = ((1f - cos((phase * Math.PI * 2.0)).toFloat()) * 0.5f)
+
+        val p = courseToScreen(ball)
+        val ballRadius = 5f * scale
+        val radius = ballRadius * (3f + wave)
+
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = (1.15f * scale).coerceAtLeast(1.2f)
+        paint.color = Color.WHITE
+        paint.alpha = (230f * aimReadyRingAlpha).toInt().coerceIn(0, 230)
+        paint.colorFilter = null
+
+        canvas.drawCircle(p.x, p.y, radius, paint)
+
         paint.alpha = 255
+        paint.style = Paint.Style.FILL
+
+        if (
+            aimReadyRingTargetAlpha > 0f ||
+            aimReadyRingAlpha > 0.001f
+        ) {
+            postInvalidateOnAnimation()
+        }
     }
 
     private fun drawDebugLabel(canvas: Canvas, g: GolfMap) {
