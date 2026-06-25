@@ -37,10 +37,15 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.view.HapticFeedbackConstants
 import android.widget.LinearLayout
-import android.widget.Toast
 import android.view.ViewGroup
 import androidx.core.view.WindowInsetsCompat
 import android.view.animation.OvershootInterpolator
+import com.openbubbles.openpigeon.ui.RulesPopup
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
+import androidx.appcompat.widget.SwitchCompat
 
 class GolfActivity : AppCompatActivity() {
 
@@ -73,6 +78,7 @@ class GolfActivity : AppCompatActivity() {
 
     private lateinit var gameAvatarAnchor: FrameLayout
     private lateinit var oppAvatarAnchor: FrameLayout
+    private lateinit var localAvatarYouLabel: TextView
 
     private lateinit var localStrokeCounterView: FrameLayout
     private lateinit var opponentStrokeCounterView: FrameLayout
@@ -90,6 +96,19 @@ class GolfActivity : AppCompatActivity() {
     private lateinit var aimInstructionLabel: TextView
     private lateinit var gameOverLabel: TextView
     private var gameOverShown = false
+    private var gameContentShown = false
+
+    private var musicEnabled = false
+    private var musicTrack: AudioTrack? = null
+    private var currentMusicTrackPath: String? = null
+
+    private data class WavLoopData(
+        val pcm: ByteArray,
+        val sampleRate: Int,
+        val channelMask: Int,
+        val encoding: Int,
+        val frameCount: Int
+    )
 
     private var topHudInsetPx = 0
 
@@ -200,11 +219,28 @@ class GolfActivity : AppCompatActivity() {
 
             settingsSheet = SettingsSheet(this, root)
 
+            val musicSwitch = SwitchCompat(this)
+            musicSwitch.isChecked = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+                .getBoolean("global/music_enabled", true)
+
+            musicEnabled = musicSwitch.isChecked
+
+            musicSwitch.setOnCheckedChangeListener { _, checked ->
+                applyMusicEnabled(checked)
+            }
+
+            settingsSheet.addGameControl("Music", musicSwitch)
+
+            if (musicEnabled) {
+                startMusic()
+            }
+
             settingsSheet.attachGameAvatar(gameAvatarAnchor)
             settingsSheet.attachOpponentAvatar(oppAvatarAnchor)
 
             gameAvatarAnchor.post {
                 normalizeAvatarAnchor(gameAvatarAnchor)
+                positionLocalAvatarYouLabel()
                 attachStrokeCountersToAvatarAnchors()
                 syncStrokeCounterTextSizing()
             }
@@ -224,6 +260,7 @@ class GolfActivity : AppCompatActivity() {
                 topHudInsetPx = bars.top
 
                 applyTopHudLayout()
+                positionLocalAvatarYouLabel()
                 attachStrokeCountersToAvatarAnchors()
                 syncStrokeCounterTextSizing()
 
@@ -320,6 +357,8 @@ class GolfActivity : AppCompatActivity() {
     private fun buildLayout() {
         root = FrameLayout(this).apply {
             setBackgroundColor(Color.rgb(182, 202, 209))
+            visibility = View.INVISIBLE
+            alpha = 0f
             clipChildren = false
             clipToPadding = false
             layoutParams = FrameLayout.LayoutParams(
@@ -329,6 +368,8 @@ class GolfActivity : AppCompatActivity() {
         }
 
         renderer = GolfRenderer(this).apply {
+            visibility = View.INVISIBLE
+
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
@@ -411,6 +452,8 @@ class GolfActivity : AppCompatActivity() {
             }
         }
         root.addView(oppAvatarAnchor)
+
+        buildLocalAvatarYouLabel()
         buildStrokeHud()
 
         zoomButton = ImageButton(this).apply {
@@ -456,12 +499,14 @@ class GolfActivity : AppCompatActivity() {
 
         root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             applyTopHudLayout()
+            positionLocalAvatarYouLabel()
             attachStrokeCountersToAvatarAnchors()
             syncStrokeCounterTextSizing()
         }
 
         root.post {
             applyTopHudLayout()
+            positionLocalAvatarYouLabel()
             attachStrokeCountersToAvatarAnchors()
             syncStrokeCounterTextSizing()
         }
@@ -515,6 +560,74 @@ class GolfActivity : AppCompatActivity() {
         }
 
         root.addView(menuLayer)
+    }
+
+    private fun positionLocalAvatarYouLabel() {
+        if (
+            !::root.isInitialized ||
+            !::gameAvatarAnchor.isInitialized ||
+            !::localAvatarYouLabel.isInitialized
+        ) {
+            return
+        }
+
+        val anchorParams = gameAvatarAnchor.layoutParams as? FrameLayout.LayoutParams ?: return
+
+        val anchorWidth = gameAvatarAnchor.width.takeIf { it > 0 }
+            ?: anchorParams.width.takeIf { it > 0 }
+            ?: dp(64)
+
+        val anchorHeight = gameAvatarAnchor.height.takeIf { it > 0 }
+            ?: anchorParams.height.takeIf { it > 0 }
+            ?: dp(48)
+
+        val labelWidth = localAvatarYouLabel.width.takeIf { it > 0 }
+            ?: localAvatarYouLabel.layoutParams?.width?.takeIf { it > 0 }
+            ?: dp(42)
+
+        val labelHeight = localAvatarYouLabel.height.takeIf { it > 0 }
+            ?: localAvatarYouLabel.layoutParams?.height?.takeIf { it > 0 }
+            ?: dp(20)
+
+        val params = FrameLayout.LayoutParams(
+            labelWidth,
+            labelHeight,
+            Gravity.TOP or Gravity.START
+        ).apply {
+            topMargin = anchorParams.topMargin + anchorHeight + dp(2)
+            marginStart = anchorParams.marginStart + ((anchorWidth - labelWidth) / 2)
+        }
+
+        localAvatarYouLabel.layoutParams = params
+        setUiLayer(localAvatarYouLabel, LAYER_HUD)
+        localAvatarYouLabel.bringToFront()
+
+        bringMenuPopupToFrontIfVisible()
+    }
+
+    private fun buildLocalAvatarYouLabel() {
+        localAvatarYouLabel = TextView(this).apply {
+            text = "You"
+            setTextColor(Color.WHITE)
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
+            background = null
+            setShadowLayer(3f, 0f, 1f, Color.argb(170, 0, 0, 0))
+            setUiLayer(this, LAYER_HUD)
+
+            layoutParams = FrameLayout.LayoutParams(
+                dp(42),
+                dp(20),
+                Gravity.TOP or Gravity.START
+            )
+        }
+
+        root.addView(localAvatarYouLabel)
+        positionLocalAvatarYouLabel()
     }
 
     private fun buildStrokeHud() {
@@ -676,6 +789,7 @@ class GolfActivity : AppCompatActivity() {
             }
         }
 
+        positionLocalAvatarYouLabel()
         attachStrokeCountersToAvatarAnchors()
         bringMenuPopupToFrontIfVisible()
     }
@@ -1229,6 +1343,50 @@ class GolfActivity : AppCompatActivity() {
         root.addView(waitingOverlay)
     }
 
+    private fun showGolfRulesPopup() {
+        RulesPopup.show(
+            context = this,
+            rootView = root,
+            title = "Mini Golf Rules",
+            sections = listOf(
+                RulesPopup.Section(
+                    "Objective",
+                    "Finish all holes in the fewest total strokes."
+                ),
+                RulesPopup.Section(
+                    "How to Play",
+                    "• Pull back from the ball to set power and direction.\n" +
+                            "• Release to hit the ball.\n" +
+                            "• The farther you pull, the harder the ball is hit.\n" +
+                            "• After the ball stops, you can take your next stroke."
+                ),
+                RulesPopup.Section(
+                    "The Hole",
+                    "• Get the ball into the cup to finish the hole.\n" +
+                            "• When enough of the ball overlaps the cup, the hole will pull it in.\n" +
+                            "• Once the ball is in the cup, your turn for that hole is complete."
+                ),
+                RulesPopup.Section(
+                    "Turns",
+                    "• Play through the current hole until your ball goes in.\n" +
+                            "• When you finish a hole, your result is sent to your opponent.\n" +
+                            "• If it is not your turn, wait for your opponent to finish."
+                ),
+                RulesPopup.Section(
+                    "Replays",
+                    "• When both players have completed a hole, both shots replay together.\n" +
+                            "• Stroke counters increase during the replay as each shot is taken.\n" +
+                            "• After the replay, the game advances to the next hole."
+                ),
+                RulesPopup.Section(
+                    "Winning",
+                    "After the final hole replay, the player with fewer total strokes wins.\n" +
+                            "If both players have the same number of strokes, the game is a draw."
+                )
+            )
+        )
+    }
+
     private fun buildMenuPopup() {
         menuPopup = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1262,10 +1420,10 @@ class GolfActivity : AppCompatActivity() {
             }
         }
 
-        val helpItem = buildMenuPopupItem("Help").apply {
+        val helpItem = buildMenuPopupItem("Rules").apply {
             setOnClickListener {
                 hideMenuPopup()
-                Toast.makeText(this@GolfActivity, "Help coming soon", Toast.LENGTH_SHORT).show()
+                showGolfRulesPopup()
             }
         }
 
@@ -2079,6 +2237,26 @@ class GolfActivity : AppCompatActivity() {
         }
     }
 
+    private fun showGameContentOnceBoardReady() {
+        if (
+            gameContentShown ||
+            !::root.isInitialized ||
+            !::renderer.isInitialized
+        ) {
+            return
+        }
+
+        gameContentShown = true
+
+        renderer.visibility = View.VISIBLE
+
+        root.animate().cancel()
+        root.visibility = View.VISIBLE
+        root.alpha = 1f
+
+        OpenPigeonLog.i(TAG, "Game content shown after board ready")
+    }
+
     private fun generateAndShowMap(showIntro: Boolean, source: String) {
         val startedAt = SystemClock.elapsedRealtime()
         OpenPigeonLog.i(TAG, "generateAndShowMap enter source=$source seed=$seed mode=$mode mapNum=$mapNum holeCount=$holeCount showIntro=$showIntro")
@@ -2106,6 +2284,8 @@ class GolfActivity : AppCompatActivity() {
             ballInHole = false
 
             renderer.setMap(generated)
+            showGameContentOnceBoardReady()
+
             renderer.setRuntimeBallCourse(runtimeBallCourse)
             renderer.setHoleState(flagPulled = false, ballInHole = false)
             renderer.clearAimPreview()
@@ -3088,6 +3268,223 @@ class GolfActivity : AppCompatActivity() {
         super.finish()
     }
 
+    private fun currentMusicTrack(): String {
+        return "golf/golf.wav"
+    }
+
+    private fun applyMusicEnabled(enabled: Boolean) {
+        musicEnabled = enabled
+
+        getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("global/music_enabled", enabled)
+            .apply()
+
+        if (enabled) {
+            startMusic()
+        } else {
+            stopMusic()
+        }
+    }
+
+    private fun startMusic() {
+        if (!musicEnabled || activityExiting || musicTrack != null) return
+
+        playMusicTrack()
+    }
+
+    private fun playMusicTrack() {
+        releaseMusicPlayer()
+
+        if (!musicEnabled || activityExiting) return
+
+        val trackPath = currentMusicTrack()
+        currentMusicTrackPath = trackPath
+
+        try {
+            val wav = loadPcm16Wav(trackPath)
+
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_GAME)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(wav.sampleRate)
+                        .setChannelMask(wav.channelMask)
+                        .setEncoding(wav.encoding)
+                        .build()
+                )
+                .setBufferSizeInBytes(wav.pcm.size)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+
+            track.write(wav.pcm, 0, wav.pcm.size)
+            track.setLoopPoints(0, wav.frameCount, -1)
+            track.setVolume(0.55f)
+
+            musicTrack = track
+            track.play()
+
+            OpenPigeonLog.i(TAG, "Mini Golf music started path=$trackPath sampleRate=${wav.sampleRate} frames=${wav.frameCount}")
+        } catch (t: Throwable) {
+            OpenPigeonLog.e(TAG, "Unable to play Mini Golf music track $trackPath", t)
+
+            musicEnabled = false
+            currentMusicTrackPath = null
+
+            getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("global/music_enabled", false)
+                .apply()
+        }
+    }
+
+    private fun pauseMusic() {
+        try {
+            musicTrack?.let { track ->
+                if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
+                    track.pause()
+                }
+            }
+        } catch (t: Throwable) {
+            OpenPigeonLog.w(TAG, "Unable to pause Mini Golf music", t)
+        }
+    }
+
+    private fun resumeMusic() {
+        if (!musicEnabled || activityExiting) return
+
+        try {
+            val track = musicTrack
+
+            if (track == null) {
+                startMusic()
+            } else if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                track.play()
+            }
+        } catch (t: Throwable) {
+            OpenPigeonLog.w(TAG, "Unable to resume Mini Golf music, restarting", t)
+            releaseMusicPlayer()
+            startMusic()
+        }
+    }
+
+    private fun stopMusic() {
+        releaseMusicPlayer()
+    }
+
+    private fun releaseMusicPlayer() {
+        val track = musicTrack ?: return
+
+        musicTrack = null
+        currentMusicTrackPath = null
+
+        try {
+            track.pause()
+        } catch (_: Throwable) {
+        }
+
+        try {
+            track.release()
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun loadPcm16Wav(path: String): WavLoopData {
+        val bytes = assets.open(path).use { it.readBytes() }
+
+        if (bytes.size < 44 || chunkName(bytes, 0) != "RIFF" || chunkName(bytes, 8) != "WAVE") {
+            throw IllegalArgumentException("Invalid WAV file: $path")
+        }
+
+        var offset = 12
+        var audioFormat = 0
+        var channelCount = 0
+        var sampleRate = 0
+        var bitsPerSample = 0
+        var dataStart = -1
+        var dataSize = 0
+
+        while (offset + 8 <= bytes.size) {
+            val name = chunkName(bytes, offset)
+            val size = readLeInt(bytes, offset + 4)
+            val start = offset + 8
+
+            if (start + size > bytes.size) break
+
+            when (name) {
+                "fmt " -> {
+                    audioFormat = readLeShort(bytes, start)
+                    channelCount = readLeShort(bytes, start + 2)
+                    sampleRate = readLeInt(bytes, start + 4)
+                    bitsPerSample = readLeShort(bytes, start + 14)
+                }
+
+                "data" -> {
+                    dataStart = start
+                    dataSize = size
+                }
+            }
+
+            offset = start + size + (size and 1)
+        }
+
+        if (
+            audioFormat != 1 ||
+            bitsPerSample != 16 ||
+            channelCount !in 1..2 ||
+            dataStart < 0 ||
+            dataSize <= 0
+        ) {
+            throw IllegalArgumentException("WAV must be 16-bit PCM mono/stereo: $path")
+        }
+
+        val pcm = bytes.copyOfRange(dataStart, dataStart + dataSize)
+        val frameSize = channelCount * 2
+        val frameCount = pcm.size / frameSize
+
+        val channelMask = if (channelCount == 1) {
+            AudioFormat.CHANNEL_OUT_MONO
+        } else {
+            AudioFormat.CHANNEL_OUT_STEREO
+        }
+
+        return WavLoopData(
+            pcm = pcm,
+            sampleRate = sampleRate,
+            channelMask = channelMask,
+            encoding = AudioFormat.ENCODING_PCM_16BIT,
+            frameCount = frameCount
+        )
+    }
+
+    private fun readLeShort(bytes: ByteArray, offset: Int): Int {
+        return (bytes[offset].toInt() and 0xff) or
+                ((bytes[offset + 1].toInt() and 0xff) shl 8)
+    }
+
+    private fun readLeInt(bytes: ByteArray, offset: Int): Int {
+        return (bytes[offset].toInt() and 0xff) or
+                ((bytes[offset + 1].toInt() and 0xff) shl 8) or
+                ((bytes[offset + 2].toInt() and 0xff) shl 16) or
+                ((bytes[offset + 3].toInt() and 0xff) shl 24)
+    }
+
+    private fun chunkName(bytes: ByteArray, offset: Int): String {
+        return String(
+            byteArrayOf(
+                bytes[offset],
+                bytes[offset + 1],
+                bytes[offset + 2],
+                bytes[offset + 3]
+            )
+        )
+    }
+
     override fun onStart() {
         super.onStart()
         OpenPigeonLog.i(TAG, "onStart")
@@ -3096,10 +3493,12 @@ class GolfActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         OpenPigeonLog.i(TAG, "onResume")
+        resumeMusic()
     }
 
     override fun onPause() {
         OpenPigeonLog.i(TAG, "onPause")
+        pauseMusic()
 
         if (::renderer.isInitialized) {
             hideMenuPopup()
@@ -3120,6 +3519,9 @@ class GolfActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         OpenPigeonLog.i(TAG, "onDestroy sessionBlank=${sessionId.isBlank()} ipcNull=${gameSessionIPC == null}")
+
+        activityExiting = true
+        stopMusic()
 
         if (::renderer.isInitialized) {
             hideMenuPopup()

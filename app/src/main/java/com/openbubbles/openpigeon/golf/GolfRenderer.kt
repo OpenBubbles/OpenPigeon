@@ -514,11 +514,7 @@ class GolfRenderer @JvmOverloads constructor(
 
         drawBackground(canvas)
 
-        val g = map
-        if (g == null) {
-            drawCenteredText(canvas, "Mini Golf", "Waiting for board...")
-            return
-        }
+        val g = map ?: return
 
         computeTransform(g)
 
@@ -1522,10 +1518,10 @@ class GolfRenderer @JvmOverloads constructor(
             drawBall(
                 canvas = canvas,
                 coursePoint = opponent,
-                fallbackColor = Color.rgb(58, 58, 58),
+                fallbackColor = Color.rgb(92, 92, 92),
                 sunk = false,
-                tintColor = Color.rgb(58, 58, 58),
-                alphaOverride = 204 // 80% opacity
+                tintColor = Color.rgb(92, 92, 92),
+                alphaOverride = 255
             )
         }
 

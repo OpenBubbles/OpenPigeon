@@ -16,6 +16,15 @@ object RulesPopup {
 
     data class Section(val header: String, val body: String)
 
+    private const val Z_RULES_DIM = 70000f
+    private const val Z_RULES_CARD = 70001f
+
+    private fun setPopupLayer(view: View, layer: Float) {
+        view.elevation = layer
+        view.translationZ = 0f
+        view.z = layer
+    }
+
     // ── dp helpers ────────────────────────────────────────────────────────────
     private fun dp(context: Context, v: Float) = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, v, context.resources.displayMetrics).toInt()
@@ -42,6 +51,7 @@ object RulesPopup {
             setBackgroundColor(Color.argb(180, 0, 0, 0))
             alpha = 0f
             isVisible = true
+            setPopupLayer(this, Z_RULES_DIM)
         }
 
         // ── Card ──────────────────────────────────────────────────────────────
@@ -53,7 +63,7 @@ object RulesPopup {
                 setColor(Color.parseColor("#2a2a3e"))
                 cornerRadius = dpf(context, 16f)
             }
-            elevation = dpf(context, 12f)
+            setPopupLayer(this, Z_RULES_CARD)
             clipToOutline = true
             outlineProvider = ViewOutlineProvider.BACKGROUND
             // Start scaled to 0 for pop-in
@@ -154,8 +164,31 @@ object RulesPopup {
         card.addView(scroll)
 
         // ── Add to root ───────────────────────────────────────────────────────
-        (rootView as? FrameLayout)?.addView(dim)
-        (rootView as? FrameLayout)?.addView(card)
+        (rootView as? FrameLayout)?.let { frame ->
+            frame.addView(dim)
+            frame.addView(card)
+
+            frame.bringChildToFront(dim)
+            frame.bringChildToFront(card)
+            dim.bringToFront()
+            card.bringToFront()
+
+            frame.post {
+                setPopupLayer(dim, Z_RULES_DIM)
+                setPopupLayer(card, Z_RULES_CARD)
+                frame.bringChildToFront(dim)
+                frame.bringChildToFront(card)
+                card.bringToFront()
+            }
+
+            frame.postDelayed({
+                setPopupLayer(dim, Z_RULES_DIM)
+                setPopupLayer(card, Z_RULES_CARD)
+                frame.bringChildToFront(dim)
+                frame.bringChildToFront(card)
+                card.bringToFront()
+            }, 100L)
+        }
 
         // After layout, clamp scroll height to 80% of screen
         card.post {
