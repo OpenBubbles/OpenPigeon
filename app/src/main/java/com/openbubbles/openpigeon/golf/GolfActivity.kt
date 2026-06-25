@@ -460,21 +460,11 @@ class GolfActivity : AppCompatActivity() {
             background = null
             setBackgroundColor(Color.TRANSPARENT)
             setUiLayer(this, LAYER_HUD)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(0, 0, 0, 0)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setPadding(dp(8), dp(8), dp(8), dp(8))
             contentDescription = "Zoom"
 
-            val bm = loadUiBitmap(
-                "golf/golf_zoom_normal@3x.png",
-                "golf/reference_original/golf_zoom_normal@3x.png",
-                "golf_zoom_normal@3x.png"
-            )
-
-            if (bm != null) {
-                setImageBitmap(bm)
-            } else {
-                setImageResource(android.R.drawable.ic_menu_search)
-            }
+            setImageResource(android.R.drawable.ic_menu_search)
 
             layoutParams = FrameLayout.LayoutParams(
                 dp(54),
