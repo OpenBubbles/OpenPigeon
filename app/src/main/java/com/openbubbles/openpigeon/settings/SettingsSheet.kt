@@ -19,6 +19,11 @@ class SettingsSheet(
 
 ) {
 
+    companion object {
+        private const val Z_SETTINGS_DIM = 50000f
+        private const val Z_SETTINGS_CARD = 50001f
+    }
+
     // ── dp helpers ────────────────────────────────────────────────────────────
     private fun dp(v: Float) = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, v, context.resources.displayMetrics).toInt()
@@ -190,9 +195,16 @@ class SettingsSheet(
     init {
         dimView = View(context).apply {
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+
             setBackgroundColor(Color.argb(160, 0, 0, 0))
-            alpha = 0f; isVisible = false
+            alpha = 0f
+            isVisible = false
+
+            setSheetLayer(this, Z_SETTINGS_DIM)
+
             setOnClickListener { close() }
         }
         card = LinearLayout(context).apply {
@@ -204,7 +216,7 @@ class SettingsSheet(
                 setColor(COL_CARD)
                 cornerRadii = floatArrayOf(dpf(22f), dpf(22f), dpf(22f), dpf(22f), 0f, 0f, 0f, 0f)
             }
-            elevation = dpf(16f)
+            setSheetLayer(this, Z_SETTINGS_CARD)
             clipToOutline = true
             outlineProvider = ViewOutlineProvider.BACKGROUND
 
@@ -773,28 +785,85 @@ class SettingsSheet(
         }
     }
 
+    private fun setSheetLayer(view: View, layer: Float) {
+        view.elevation = layer
+        view.translationZ = 0f
+        view.z = layer
+    }
+
+    private fun promoteSheet() {
+        if (dimView.parent === rootFrame) {
+            setSheetLayer(dimView, Z_SETTINGS_DIM)
+            rootFrame.bringChildToFront(dimView)
+            dimView.bringToFront()
+        }
+
+        if (card.parent === rootFrame) {
+            setSheetLayer(card, Z_SETTINGS_CARD)
+            rootFrame.bringChildToFront(card)
+            card.bringToFront()
+        }
+
+        rootFrame.invalidate()
+        dimView.invalidate()
+        card.invalidate()
+    }
+
     // ── Open / Close ──────────────────────────────────────────────────────────
     fun open() {
         if (isOpen) return
+
         isOpen = true
         hasNotifiedClosed = false
+
         rootFrame.addView(dimView)
         rootFrame.addView(card)
+
         dimView.isVisible = true
+
+        promoteSheet()
+
         card.post {
+            promoteSheet()
+
             card.translationY = card.height.toFloat()
             refreshMainPreview()
             selectTab(Tab.HAIR)
-            val slideUp = ObjectAnimator.ofFloat(card, "translationY", card.height.toFloat(), 0f)
-                .apply { duration = 320; interpolator = DecelerateInterpolator(1.8f) }
-            val fadeIn = ObjectAnimator.ofFloat(dimView, "alpha", 0f, 1f)
-                .apply { duration = 220 }
-            AnimatorSet().apply { playTogether(slideUp, fadeIn); start() }
+
+            val slideUp = ObjectAnimator.ofFloat(
+                card,
+                "translationY",
+                card.height.toFloat(),
+                0f
+            ).apply {
+                duration = 320
+                interpolator = DecelerateInterpolator(1.8f)
+            }
+
+            val fadeIn = ObjectAnimator.ofFloat(
+                dimView,
+                "alpha",
+                0f,
+                1f
+            ).apply {
+                duration = 220
+            }
+
+            AnimatorSet().apply {
+                playTogether(slideUp, fadeIn)
+                start()
+            }
+
+            rootFrame.post { promoteSheet() }
+            rootFrame.postDelayed({ if (isOpen) promoteSheet() }, 50L)
+            rootFrame.postDelayed({ if (isOpen) promoteSheet() }, 150L)
         }
     }
 
     fun close() {
         if (!isOpen) return
+
+        promoteSheet()
 
         if (::headerNameEdit.isInitialized) {
             headerNameEdit.clearFocus()

@@ -10,7 +10,6 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.Window
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -36,29 +35,63 @@ import android.graphics.Bitmap
 import android.widget.ImageView
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.view.HapticFeedbackConstants
+import android.widget.LinearLayout
+import android.widget.Toast
+import android.view.ViewGroup
+import androidx.core.view.WindowInsetsCompat
 
 class GolfActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "GolfNative"
+
+        private const val LAYER_HUD = 900f
+        private const val LAYER_HUD_TOP = 1000f
+        private const val LAYER_SKIP_REPLAY = 1100f
+        private const val LAYER_MENU_POPUP = 13000f
+        private const val LAYER_WAITING = 14000f
+        private const val LAYER_INTRO = 15000f
     }
 
     private lateinit var root: FrameLayout
     private lateinit var renderer: GolfRenderer
     private lateinit var stateLabel: TextView
     private lateinit var holeOverlay: FrameLayout
+    private lateinit var holeIntroContainer: LinearLayout
+    private lateinit var holePoleImage: ImageView
     private lateinit var holeTitle: TextView
-    private lateinit var zoomButton: Button
+    private lateinit var zoomButton: ImageButton
     private lateinit var settingsButton: ImageButton
     private lateinit var settingsSheet: SettingsSheet
+
+    private lateinit var menuLayer: FrameLayout
+    private lateinit var menuPopup: LinearLayout
+    private lateinit var debugMenuItem: TextView
+    private var debugUiEnabled = false
+
     private lateinit var gameAvatarAnchor: FrameLayout
     private lateinit var oppAvatarAnchor: FrameLayout
+
+    private lateinit var localStrokeCounterView: FrameLayout
+    private lateinit var opponentStrokeCounterView: FrameLayout
+
+    private lateinit var localStrokeCounterBg: ImageView
+    private lateinit var opponentStrokeCounterBg: ImageView
+
+    private lateinit var localStrokeLabel: TextView
+    private lateinit var opponentStrokeLabel: TextView
     private lateinit var waitingOverlay: FrameLayout
     private lateinit var waitingLabel: TextView
     private lateinit var skipReplayButton: ImageButton
     private var skipReplayNormalBitmap: Bitmap? = null
     private var skipReplayPressedBitmap: Bitmap? = null
     private lateinit var aimInstructionLabel: TextView
+
+    private var topHudInsetPx = 0
+
+    private val avatarBarTopPaddingDp = 6
+    private val avatarBarSidePaddingDp = 12
 
     private val generator = GolfMapGenerator()
     private var gameSessionIPC: GameSessionIPC? = null
@@ -68,6 +101,7 @@ class GolfActivity : AppCompatActivity() {
 
     private var currentMap: GolfMap? = null
     private var lastRenderedKey: String = ""
+    private var lastRenderedSender: String = ""
 
     private var seed: Int = GolfConstants.DEFAULT_SEED
     private var mode: String = GolfConstants.DEFAULT_MODE
@@ -89,11 +123,14 @@ class GolfActivity : AppCompatActivity() {
     private var zoomOverviewEnabled = false
     private var roundResultSent = false
     private var waitingForOpponent = false
+    private var activityExiting = false
 
     private val stateLabelHandler = Handler(Looper.getMainLooper())
     private var waitingDotsRunnable: Runnable? = null
     private var stateLabelAnimator: ValueAnimator? = null
     private var sentWaitingSequenceActive = false
+    private var lastAimHapticMs = 0L
+    private var lastAimHapticBucket = -1
 
     private var dualReplayRunning = false
     private var dualReplayWaitingToFire = false
@@ -155,11 +192,34 @@ class GolfActivity : AppCompatActivity() {
             settingsSheet.attachGameAvatar(gameAvatarAnchor)
             settingsSheet.attachOpponentAvatar(oppAvatarAnchor)
 
-            settingsButton.setOnClickListener {
-                settingsSheet.open()
+            gameAvatarAnchor.post {
+                normalizeAvatarAnchor(gameAvatarAnchor)
+                attachStrokeCountersToAvatarAnchors()
+                syncStrokeCounterTextSizing()
             }
 
-            ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets -> insets }
+            oppAvatarAnchor.post {
+                normalizeAvatarAnchor(oppAvatarAnchor)
+                attachStrokeCountersToAvatarAnchors()
+                syncStrokeCounterTextSizing()
+            }
+
+            settingsButton.setOnClickListener {
+                toggleMenuPopup()
+            }
+
+            ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                topHudInsetPx = bars.top
+
+                applyTopHudLayout()
+                attachStrokeCountersToAvatarAnchors()
+                syncStrokeCounterTextSizing()
+
+                insets
+            }
+
+            root.requestApplyInsets()
 
             renderer.setOnTouchListener { _, event ->
                 handleGolfTouch(event)
@@ -249,6 +309,8 @@ class GolfActivity : AppCompatActivity() {
     private fun buildLayout() {
         root = FrameLayout(this).apply {
             setBackgroundColor(Color.rgb(182, 202, 209))
+            clipChildren = false
+            clipToPadding = false
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
@@ -280,16 +342,18 @@ class GolfActivity : AppCompatActivity() {
         root.addView(stateLabel)
 
         settingsButton = ImageButton(this).apply {
-            background = rounded(Color.argb(155, 0, 0, 0), dp(16).toFloat())
-            scaleType = android.widget.ImageView.ScaleType.CENTER_INSIDE
-            setPadding(dp(9), dp(9), dp(9), dp(9))
+            background = null
+            setBackgroundColor(Color.TRANSPARENT)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setUiLayer(this, LAYER_HUD)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
 
             try {
-                val bm = assets.open("global/settings.png").use { BitmapFactory.decodeStream(it) }
+                val bm = assets.open("global/burger.png").use { BitmapFactory.decodeStream(it) }
                 setImageBitmap(bm)
             } catch (t: Throwable) {
-                OpenPigeonLog.e(TAG, "Unable to load settings icon", t)
-                setImageResource(android.R.drawable.ic_menu_manage)
+                OpenPigeonLog.e(TAG, "Unable to load burger menu icon", t)
+                setImageResource(android.R.drawable.ic_menu_sort_by_size)
             }
 
             layoutParams = FrameLayout.LayoutParams(
@@ -300,42 +364,66 @@ class GolfActivity : AppCompatActivity() {
                 bottomMargin = dp(28)
                 marginStart = dp(14)
             }
+
+            contentDescription = "Menu"
         }
         root.addView(settingsButton)
 
         gameAvatarAnchor = FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+            setUiLayer(this, LAYER_HUD)
+
             layoutParams = FrameLayout.LayoutParams(
-                dp(58),
-                dp(58),
+                dp(64),
+                dp(48),
                 Gravity.TOP or Gravity.START
             ).apply {
-                topMargin = dp(20)
-                marginStart = dp(14)
+                topMargin = dp(avatarBarTopPaddingDp)
+                marginStart = dp(avatarBarSidePaddingDp)
             }
         }
         root.addView(gameAvatarAnchor)
 
         oppAvatarAnchor = FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+            setUiLayer(this, LAYER_HUD)
+
             layoutParams = FrameLayout.LayoutParams(
-                dp(58),
-                dp(58),
+                dp(64),
+                dp(48),
                 Gravity.TOP or Gravity.END
             ).apply {
-                topMargin = dp(20)
-                marginEnd = dp(14)
+                topMargin = dp(avatarBarTopPaddingDp)
+                marginEnd = dp(avatarBarSidePaddingDp)
             }
         }
         root.addView(oppAvatarAnchor)
+        buildStrokeHud()
 
-        zoomButton = Button(this).apply {
-            text = "Zoom"
-            textSize = 14f
-            setTextColor(Color.WHITE)
-            background = rounded(Color.argb(155, 0, 0, 0), dp(16).toFloat())
-            minWidth = dp(92)
+        zoomButton = ImageButton(this).apply {
+            background = null
+            setBackgroundColor(Color.TRANSPARENT)
+            setUiLayer(this, LAYER_HUD)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setPadding(0, 0, 0, 0)
+            contentDescription = "Zoom"
+
+            val bm = loadUiBitmap(
+                "golf/golf_zoom_normal@3x.png",
+                "golf/reference_original/golf_zoom_normal@3x.png",
+                "golf_zoom_normal@3x.png"
+            )
+
+            if (bm != null) {
+                setImageBitmap(bm)
+            } else {
+                setImageResource(android.R.drawable.ic_menu_search)
+            }
 
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
+                dp(54),
                 dp(54),
                 Gravity.BOTTOM or Gravity.END
             ).apply {
@@ -347,9 +435,341 @@ class GolfActivity : AppCompatActivity() {
 
         buildAimInstructionLabel()
         buildSkipReplayButton()
+        buildMenuLayer()
+        buildMenuPopup()
+
         buildHoleOverlay()
         buildWaitingOverlay()
         setContentView(root)
+
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            applyTopHudLayout()
+            attachStrokeCountersToAvatarAnchors()
+            syncStrokeCounterTextSizing()
+        }
+
+        root.post {
+            applyTopHudLayout()
+            attachStrokeCountersToAvatarAnchors()
+            syncStrokeCounterTextSizing()
+        }
+
+        applyDebugUiState()
+    }
+
+    private fun buildMenuLayer() {
+        menuLayer = FrameLayout(this).apply {
+            visibility = View.GONE
+            alpha = 1f
+            clipChildren = false
+            clipToPadding = false
+            isClickable = false
+            isFocusable = false
+            setUiLayer(this, LAYER_MENU_POPUP)
+
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        }
+
+        root.addView(menuLayer)
+    }
+
+    private fun buildStrokeHud() {
+        val localCounter = createStrokeCounter(
+            assetFileName = "golf_count_w.png",
+            textColor = Color.rgb(45, 45, 45),
+            fallbackColor = Color.argb(220, 245, 245, 245)
+        )
+
+        localStrokeCounterView = localCounter.container
+        localStrokeCounterBg = localCounter.background
+        localStrokeLabel = localCounter.label
+
+        val opponentCounter = createStrokeCounter(
+            assetFileName = "golf_count_b.png",
+            textColor = Color.WHITE,
+            fallbackColor = Color.argb(210, 75, 75, 75)
+        )
+
+        opponentStrokeCounterView = opponentCounter.container
+        opponentStrokeCounterBg = opponentCounter.background
+        opponentStrokeLabel = opponentCounter.label
+
+        root.addView(localStrokeCounterView)
+        root.addView(opponentStrokeCounterView)
+
+        attachStrokeCountersToAvatarAnchors()
+        syncStrokeCounterTextSizing()
+    }
+
+    private fun attachStrokeCountersToAvatarAnchors() {
+        if (
+            !::root.isInitialized ||
+            !::gameAvatarAnchor.isInitialized ||
+            !::oppAvatarAnchor.isInitialized ||
+            !::localStrokeCounterView.isInitialized ||
+            !::opponentStrokeCounterView.isInitialized
+        ) {
+            return
+        }
+
+        positionStrokeCounterBesideAvatar(
+            anchor = gameAvatarAnchor,
+            counterView = localStrokeCounterView,
+            isLeftAvatar = true
+        )
+
+        positionStrokeCounterBesideAvatar(
+            anchor = oppAvatarAnchor,
+            counterView = opponentStrokeCounterView,
+            isLeftAvatar = false
+        )
+
+        syncStrokeCounterTextSizing()
+    }
+
+    private fun positionStrokeCounterBesideAvatar(
+        anchor: FrameLayout,
+        counterView: FrameLayout,
+        isLeftAvatar: Boolean
+    ) {
+        val currentParent = counterView.parent as? ViewGroup
+
+        if (currentParent !== root) {
+            currentParent?.removeView(counterView)
+            root.addView(counterView)
+        }
+
+        val anchorParams = anchor.layoutParams as? FrameLayout.LayoutParams ?: return
+
+        val anchorWidth = anchor.width.takeIf { it > 0 }
+            ?: anchorParams.width.takeIf { it > 0 }
+            ?: dp(64)
+
+        val anchorHeight = anchor.height.takeIf { it > 0 }
+            ?: anchorParams.height.takeIf { it > 0 }
+            ?: dp(48)
+
+        val counterSize = (anchorHeight * 0.74f)
+            .toInt()
+            .coerceIn(dp(32), dp(40))
+
+        val verticalTop = anchorParams.topMargin + ((anchorHeight - counterSize) / 2)
+        val horizontalInset = dp(-6)
+
+        val params = if (isLeftAvatar) {
+            FrameLayout.LayoutParams(
+                counterSize,
+                counterSize,
+                Gravity.TOP or Gravity.START
+            ).apply {
+                topMargin = verticalTop
+                marginStart = anchorParams.marginStart + anchorWidth + horizontalInset
+            }
+        } else {
+            FrameLayout.LayoutParams(
+                counterSize,
+                counterSize,
+                Gravity.TOP or Gravity.END
+            ).apply {
+                topMargin = verticalTop
+                marginEnd = anchorParams.marginEnd + anchorWidth + horizontalInset
+            }
+        }
+
+        counterView.layoutParams = params
+        counterView.bringToFront()
+        bringMenuPopupToFrontIfVisible()
+    }
+
+    private fun syncStrokeCounterTextSizing() {
+        if (
+            !::localStrokeCounterView.isInitialized ||
+            !::opponentStrokeCounterView.isInitialized ||
+            !::localStrokeLabel.isInitialized ||
+            !::opponentStrokeLabel.isInitialized
+        ) {
+            return
+        }
+
+        fun sync(label: TextView, counterView: FrameLayout) {
+            val sizePx = counterView.height.takeIf { it > 0 }
+                ?: counterView.layoutParams?.height?.takeIf { it > 0 }
+                ?: dp(36)
+
+            label.textSize = (sizePx * 0.36f) / resources.displayMetrics.scaledDensity
+        }
+
+        sync(localStrokeLabel, localStrokeCounterView)
+        sync(opponentStrokeLabel, opponentStrokeCounterView)
+    }
+
+    private fun applyTopHudLayout() {
+        val top = topHudInsetPx + dp(avatarBarTopPaddingDp)
+        val side = dp(avatarBarSidePaddingDp)
+
+        if (::gameAvatarAnchor.isInitialized) {
+            (gameAvatarAnchor.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+                params.gravity = Gravity.TOP or Gravity.START
+                params.topMargin = top
+                params.marginStart = side
+                gameAvatarAnchor.layoutParams = params
+            }
+        }
+
+        if (::oppAvatarAnchor.isInitialized) {
+            (oppAvatarAnchor.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+                params.gravity = Gravity.TOP or Gravity.END
+                params.topMargin = top
+                params.marginEnd = side
+                oppAvatarAnchor.layoutParams = params
+            }
+        }
+
+        if (::stateLabel.isInitialized) {
+            (stateLabel.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+                params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                params.topMargin = top + dp(4)
+                stateLabel.layoutParams = params
+            }
+        }
+
+        attachStrokeCountersToAvatarAnchors()
+        bringMenuPopupToFrontIfVisible()
+    }
+
+    private fun normalizeAvatarAnchor(anchor: FrameLayout) {
+        anchor.clipChildren = false
+        anchor.clipToPadding = false
+
+        for (i in 0 until anchor.childCount) {
+            val child = anchor.getChildAt(i)
+
+            child.layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                Gravity.CENTER
+            )
+
+            child.scaleX = 1f
+            child.scaleY = 1f
+            child.translationX = 0f
+            child.translationY = 0f
+        }
+
+        anchor.requestLayout()
+    }
+
+    private data class StrokeCounterViews(
+        val container: FrameLayout,
+        val background: ImageView,
+        val label: TextView
+    )
+
+    private fun createStrokeCounter(
+        assetFileName: String,
+        textColor: Int,
+        fallbackColor: Int
+    ): StrokeCounterViews {
+        val defaultSize = dp(36)
+
+        val container = FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+            setUiLayer(this, LAYER_HUD)
+            isClickable = false
+            isFocusable = false
+
+            layoutParams = FrameLayout.LayoutParams(
+                defaultSize,
+                defaultSize
+            )
+        }
+
+        val bg = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            adjustViewBounds = false
+            isClickable = false
+            isFocusable = false
+            setBackgroundColor(Color.TRANSPARENT)
+
+            val bm = loadGolfUiBitmap(assetFileName)
+
+            if (bm != null) {
+                setImageBitmap(bm)
+                background = null
+
+                OpenPigeonLog.i(
+                    TAG,
+                    "Stroke counter asset loaded file=$assetFileName size=${bm.width}x${bm.height}"
+                )
+            } else {
+                OpenPigeonLog.w(
+                    TAG,
+                    "Stroke counter asset missing file=$assetFileName; using fallback"
+                )
+
+                background = rounded(fallbackColor, defaultSize * 0.5f)
+            }
+
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                Gravity.CENTER
+            )
+        }
+
+        val label = TextView(this).apply {
+            text = "0"
+            setTextColor(textColor)
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            isClickable = false
+            isFocusable = false
+            background = null
+            translationY = 0f
+
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                Gravity.CENTER
+            )
+        }
+
+        container.addView(bg)
+        container.addView(label)
+
+        return StrokeCounterViews(
+            container = container,
+            background = bg,
+            label = label
+        )
+    }
+
+    private fun updateStrokeHud(data: GolfGameData? = gameData) {
+        if (!::localStrokeLabel.isInitialized || !::opponentStrokeLabel.isInitialized) return
+
+        attachStrokeCountersToAvatarAnchors()
+        syncStrokeCounterTextSizing()
+
+        val localPlayer = localPlayerNumberFor(data)
+
+        val localCount = GolfReplay.segmentAt(localReplay, mapNum).size
+
+        val opponentReplay = if (localPlayer == 1) {
+            data?.replay2.orEmpty()
+        } else {
+            data?.replay.orEmpty()
+        }
+
+        val opponentCount = GolfReplay.segmentAt(opponentReplay, mapNum).size
+
+        localStrokeLabel.text = localCount.toString()
+        opponentStrokeLabel.text = opponentCount.toString()
     }
 
     private fun buildHoleOverlay() {
@@ -358,11 +778,52 @@ class GolfActivity : AppCompatActivity() {
             alpha = 0f
             visibility = View.GONE
             isClickable = true
-            elevation = 1000f
+            setUiLayer(this, LAYER_INTRO)
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
+        }
+
+        holeIntroContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            alpha = 0f
+            scaleX = 1f
+            scaleY = 1f
+
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+        }
+
+        holePoleImage = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            adjustViewBounds = true
+
+            val bm = loadUiBitmap(
+                "golf/golf_pole_Normal@3x.png",
+                "golf/reference_original/golf_pole_Normal@3x.png",
+                "golf_pole_Normal@3x.png"
+            )
+
+            if (bm != null) {
+                setImageBitmap(bm)
+                visibility = View.VISIBLE
+            } else {
+                OpenPigeonLog.w(TAG, "Intro pole asset missing golf_pole_Normal@3x.png")
+                visibility = View.GONE
+            }
+
+            layoutParams = LinearLayout.LayoutParams(
+                dp(72),
+                dp(72)
+            ).apply {
+                bottomMargin = dp(10)
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
         }
 
         holeTitle = TextView(this).apply {
@@ -370,19 +831,25 @@ class GolfActivity : AppCompatActivity() {
             setTextColor(Color.WHITE)
             textSize = 46f
             gravity = Gravity.CENTER
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
             typeface = Typeface.DEFAULT_BOLD
             setShadowLayer(4f, 0f, 2f, Color.argb(100, 0, 0, 0))
-            alpha = 0f
+            alpha = 1f
             scaleX = 1f
             scaleY = 1f
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER
-            )
+
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
         }
 
-        holeOverlay.addView(holeTitle)
+        holeIntroContainer.addView(holePoleImage)
+        holeIntroContainer.addView(holeTitle)
+
+        holeOverlay.addView(holeIntroContainer)
         root.addView(holeOverlay)
     }
 
@@ -392,7 +859,7 @@ class GolfActivity : AppCompatActivity() {
             alpha = 0f
             isClickable = true
             isFocusable = true
-            elevation = 1200f
+            setUiLayer(this, LAYER_WAITING)
             background = rounded(Color.argb(135, 32, 32, 32), 0f)
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -422,6 +889,146 @@ class GolfActivity : AppCompatActivity() {
         root.addView(waitingOverlay)
     }
 
+    private fun buildMenuPopup() {
+        menuPopup = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            alpha = 0f
+            isClickable = true
+            isFocusable = true
+            setUiLayer(this, LAYER_MENU_POPUP)
+            background = rounded(Color.argb(244, 255, 255, 255), dp(8).toFloat())
+            setPadding(0, dp(4), 0, dp(4))
+
+            layoutParams = FrameLayout.LayoutParams(
+                dp(122),
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.START
+            ).apply {
+                bottomMargin = dp(78)
+                marginStart = dp(14)
+            }
+        }
+
+        val settingsItem = buildMenuPopupItem("Settings").apply {
+            setOnClickListener {
+                hideMenuPopup()
+
+                if (::settingsSheet.isInitialized) {
+                    settingsSheet.open()
+                } else {
+                    OpenPigeonLog.w(TAG, "Settings tapped before settingsSheet initialized")
+                }
+            }
+        }
+
+        val helpItem = buildMenuPopupItem("Help").apply {
+            setOnClickListener {
+                hideMenuPopup()
+                Toast.makeText(this@GolfActivity, "Help coming soon", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        debugMenuItem = buildMenuPopupItem("Debug: Off").apply {
+            setOnClickListener {
+                debugUiEnabled = !debugUiEnabled
+                applyDebugUiState()
+            }
+        }
+
+        menuPopup.addView(settingsItem)
+        menuPopup.addView(helpItem)
+        menuPopup.addView(debugMenuItem)
+
+        menuLayer.addView(menuPopup)
+    }
+
+    private fun buildMenuPopupItem(label: String): TextView {
+        return TextView(this).apply {
+            text = label
+            setTextColor(Color.rgb(18, 18, 18))
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(18), 0, dp(12), 0)
+            minHeight = dp(34)
+
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(34)
+            )
+        }
+    }
+
+    private fun toggleMenuPopup() {
+        if (!::menuPopup.isInitialized) return
+
+        if (menuPopup.visibility == View.VISIBLE) {
+            hideMenuPopup()
+        } else {
+            showMenuPopup()
+        }
+    }
+
+    private fun showMenuPopup() {
+        if (!::menuLayer.isInitialized || !::menuPopup.isInitialized) return
+
+        menuPopup.animate().cancel()
+
+        menuLayer.visibility = View.VISIBLE
+        menuLayer.alpha = 1f
+        setUiLayer(menuLayer, LAYER_MENU_POPUP)
+
+        menuPopup.alpha = 0f
+        menuPopup.visibility = View.VISIBLE
+        setUiLayer(menuPopup, LAYER_MENU_POPUP + 1f)
+
+        promoteMenuLayer()
+
+        root.post {
+            promoteMenuLayer()
+        }
+
+        root.postDelayed({
+            promoteMenuLayer()
+        }, 50L)
+
+        root.postDelayed({
+            promoteMenuLayer()
+        }, 150L)
+
+        menuPopup.animate()
+            .alpha(1f)
+            .setDuration(120L)
+            .start()
+    }
+
+    private fun hideMenuPopup() {
+        if (!::menuPopup.isInitialized) return
+
+        menuPopup.animate().cancel()
+        menuPopup.alpha = 0f
+        menuPopup.visibility = View.GONE
+
+        if (::menuLayer.isInitialized) {
+            menuLayer.visibility = View.GONE
+        }
+    }
+
+    private fun applyDebugUiState() {
+        if (::renderer.isInitialized) {
+            renderer.setDebugOverlayEnabled(debugUiEnabled)
+        }
+
+        if (::stateLabel.isInitialized) {
+            stateLabel.visibility = if (debugUiEnabled) View.VISIBLE else View.GONE
+        }
+
+        if (::debugMenuItem.isInitialized) {
+            debugMenuItem.text = if (debugUiEnabled) "Debug: On" else "Debug: Off"
+        }
+    }
+
     private fun buildAimInstructionLabel() {
         aimInstructionLabel = OutlineTextView(this).apply {
             text = "Pull back and release."
@@ -432,7 +1039,7 @@ class GolfActivity : AppCompatActivity() {
             typeface = Typeface.DEFAULT_BOLD
             visibility = View.GONE
             alpha = 1f
-            elevation = 950f
+            setUiLayer(this, LAYER_HUD)
             includeFontPadding = false
             setPadding(dp(12), dp(6), dp(12), dp(30))
 
@@ -447,10 +1054,9 @@ class GolfActivity : AppCompatActivity() {
     }
 
     private fun showAimReadyUi() {
-        val ball = runtimeBallCourse ?: currentMap?.let { primaryBallStartFor(it) } ?: return
+        val ball = runtimeBallCourse ?: currentMap?.ballStart1 ?: return
 
         if (::aimInstructionLabel.isInitialized) {
-
             aimInstructionLabel.animate().cancel()
 
             if (aimInstructionLabel.visibility != View.VISIBLE) {
@@ -465,6 +1071,7 @@ class GolfActivity : AppCompatActivity() {
                 .start()
 
             aimInstructionLabel.bringToFront()
+            bringMenuPopupToFrontIfVisible()
         }
 
         renderer.setAimReadyIndicator(ball)
@@ -507,6 +1114,27 @@ class GolfActivity : AppCompatActivity() {
                 !isAiming
     }
 
+    private fun resetAimHapticState() {
+        lastAimHapticMs = 0L
+        lastAimHapticBucket = -1
+    }
+
+    private fun maybePlayAimHaptic(aim: GolfShot.Aim) {
+        if (!aim.active) return
+        if (!::renderer.isInitialized) return
+
+        val now = SystemClock.elapsedRealtime()
+        val bucket = (aim.dist / 7.5f).toInt()
+        val bucketChanged = bucket != lastAimHapticBucket
+        val timeReady = now - lastAimHapticMs >= 55L
+
+        if (bucketChanged && timeReady) {
+            renderer.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            lastAimHapticMs = now
+            lastAimHapticBucket = bucket
+        }
+    }
+
     private fun updateAimReadyUi() {
         if (canAimNow()) {
             showAimReadyUi()
@@ -533,7 +1161,7 @@ class GolfActivity : AppCompatActivity() {
             setBackgroundColor(Color.TRANSPARENT)
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "Skip Replay"
-            elevation = 1100f
+            setUiLayer(this, LAYER_SKIP_REPLAY)
 
             if (skipReplayNormalBitmap != null) {
                 setImageBitmap(skipReplayNormalBitmap)
@@ -582,15 +1210,31 @@ class GolfActivity : AppCompatActivity() {
     }
 
     private fun loadUiBitmap(vararg paths: String): Bitmap? {
-        for (path in paths) {
+        for (path in paths.distinct()) {
             try {
-                return assets.open(path).use { BitmapFactory.decodeStream(it) }
+                val bitmap = assets.open(path).use { BitmapFactory.decodeStream(it) }
+
+                if (bitmap != null) {
+                    OpenPigeonLog.i(TAG, "UI asset loaded path=$path size=${bitmap.width}x${bitmap.height}")
+                    return bitmap
+                }
+
+                OpenPigeonLog.w(TAG, "UI asset decoded null path=$path")
             } catch (_: Throwable) {
+                OpenPigeonLog.w(TAG, "UI asset missing path=$path")
             }
         }
 
-        OpenPigeonLog.w(TAG, "Unable to load any UI bitmap paths=${paths.joinToString()}")
+        OpenPigeonLog.w(TAG, "Unable to load any UI bitmap paths=${paths.distinct().joinToString()}")
         return null
+    }
+
+    private fun loadGolfUiBitmap(fileName: String): Bitmap? {
+        return loadUiBitmap(
+            "golf/$fileName",
+            "golf/reference_original/$fileName",
+            fileName
+        )
     }
 
     private fun positionSkipReplayButton() {
@@ -689,18 +1333,23 @@ class GolfActivity : AppCompatActivity() {
                         "renderKey=${parsed.renderKey}"
             )
 
-            if (parsed.renderKey == lastRenderedKey) {
+            val renderSender = msg["sender"].orEmpty()
+
+            if (parsed.renderKey == lastRenderedKey && renderSender == lastRenderedSender) {
                 OpenPigeonLog.i(
                     TAG,
-                    "handleMessage duplicate skipped renderKey=${parsed.renderKey} " +
+                    "handleMessage duplicate skipped renderKey=${parsed.renderKey} sender=$renderSender " +
                             "elapsedMs=${SystemClock.elapsedRealtime() - startedAt}"
                 )
                 return
             }
+
             lastRenderedKey = parsed.renderKey
+            lastRenderedSender = renderSender
 
             val messageFromMe = isCurrentMessageFromMe(msg)
-            val shouldReplay = hasBothReplaysForCurrentHole(parsed)
+            val hasBothReplays = hasBothReplaysForCurrentHole(parsed)
+            val shouldReplay = hasBothReplays && !messageFromMe
 
             waitingForOpponent = messageFromMe && !shouldReplay
 
@@ -782,6 +1431,16 @@ class GolfActivity : AppCompatActivity() {
     }
 
     private fun handleGolfTouch(event: MotionEvent): Boolean {
+        if (
+            ::menuPopup.isInitialized &&
+            menuPopup.visibility == View.VISIBLE
+        ) {
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                hideMenuPopup()
+            }
+            return true
+        }
+
         val g = currentMap ?: return true
         if (dualReplayRunning) {
             return true
@@ -820,6 +1479,8 @@ class GolfActivity : AppCompatActivity() {
                 }
 
                 hideAimReadyUi()
+                resetAimHapticState()
+                renderer.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
 
                 isAiming = true
                 aimMoveStartVisual = visual
@@ -846,6 +1507,7 @@ class GolfActivity : AppCompatActivity() {
                 )
                 renderer.setAimingCamera(ball, activeAim)
                 renderer.setAimPreview(ball, activeAim)
+                maybePlayAimHaptic(activeAim)
 
                 OpenPigeonLog.i(
                     TAG,
@@ -875,6 +1537,7 @@ class GolfActivity : AppCompatActivity() {
                     updateAimReadyUi()
                 }
 
+                resetAimHapticState()
                 activeAim = GolfShot.Aim.NONE
                 return true
             }
@@ -895,6 +1558,8 @@ class GolfActivity : AppCompatActivity() {
                 rotation = aim.rotation
             )
         )
+
+        updateStrokeHud()
 
         val velocityVisual = GolfShot.launchVelocityVisual(aim)
         val velocityCourse = renderer.visualDeltaToCourseDelta(
@@ -1059,6 +1724,7 @@ class GolfActivity : AppCompatActivity() {
             stateLabel.text = "Hole ${generated.holeNumber}/${generated.holeCount}   seed=$seed   ${generated.xCells}x${generated.yCells}"
             if (showIntro) showHoleIntro(generated.holeNumber, generated.holeCount)
 
+            updateStrokeHud()
             updateAimReadyUi()
         } catch (t: Throwable) {
             OpenPigeonLog.e(TAG, "generateAndShowMap failed source=$source seed=$seed mode=$mode mapNum=$mapNum", t)
@@ -1068,22 +1734,33 @@ class GolfActivity : AppCompatActivity() {
 
     private fun showHoleIntro(hole: Int, total: Int) {
         OpenPigeonLog.i(TAG, "showHoleIntro hole=$hole total=$total")
+
+        hideMenuPopup()
+
         holeOverlay.animate().cancel()
+        holeIntroContainer.animate().cancel()
         holeTitle.animate().cancel()
+        holePoleImage.animate().cancel()
 
         holeTitle.text = "Hole $hole/$total"
+
+        setUiLayer(holeOverlay, LAYER_INTRO)
         holeOverlay.visibility = View.VISIBLE
         holeOverlay.alpha = 1f
-        holeTitle.alpha = 0f
-        holeTitle.scaleX = 1f
-        holeTitle.scaleY = 1f
+        holeOverlay.bringToFront()
+        applyOverlayOrdering()
 
-        holeTitle.animate()
+        holeIntroContainer.alpha = 0f
+        holeIntroContainer.scaleX = 1f
+        holeIntroContainer.scaleY = 1f
+
+        holeIntroContainer.animate()
             .alpha(1f)
             .setDuration(GolfConstants.INTRO_FADE_IN_MS)
             .withEndAction {
-                OpenPigeonLog.i(TAG, "showHoleIntro title fade-in complete hole=$hole")
-                holeTitle.animate()
+                OpenPigeonLog.i(TAG, "showHoleIntro container fade-in complete hole=$hole")
+
+                holeIntroContainer.animate()
                     .setStartDelay(GolfConstants.INTRO_HOLD_MS)
                     .scaleX(1.7f)
                     .scaleY(1.7f)
@@ -1105,6 +1782,7 @@ class GolfActivity : AppCompatActivity() {
     }
 
     private fun showWaitingOverlay() {
+        hideMenuPopup()
         hideAimReadyUi()
         if (!::waitingOverlay.isInitialized) return
 
@@ -1112,6 +1790,8 @@ class GolfActivity : AppCompatActivity() {
         waitingOverlay.alpha = 1f
         waitingOverlay.visibility = View.VISIBLE
         waitingOverlay.bringToFront()
+        setUiLayer(waitingOverlay, LAYER_WAITING)
+        applyOverlayOrdering()
     }
 
     private fun hideWaitingOverlay() {
@@ -1144,6 +1824,30 @@ class GolfActivity : AppCompatActivity() {
         return ceil(
             label.paint.measureText(text.toString()) + label.paddingLeft + label.paddingRight
         ).toInt()
+    }
+
+    private fun shouldKeepWaitingOverlayDuringExit(): Boolean {
+        return activityExiting &&
+                waitingForOpponent &&
+                ::waitingOverlay.isInitialized &&
+                waitingOverlay.visibility == View.VISIBLE
+    }
+
+    private fun stopWaitingTimersWithoutHidingOverlay() {
+        waitingDotsRunnable?.let { stateLabelHandler.removeCallbacks(it) }
+        waitingDotsRunnable = null
+
+        stateLabelAnimator?.cancel()
+        stateLabelAnimator = null
+
+        sentWaitingSequenceActive = false
+
+        if (::waitingOverlay.isInitialized) {
+            waitingOverlay.animate().cancel()
+            waitingOverlay.alpha = 1f
+            waitingOverlay.visibility = View.VISIBLE
+            waitingOverlay.bringToFront()
+        }
     }
 
     private fun stopStateLabelAnimation() {
@@ -1424,27 +2128,14 @@ class GolfActivity : AppCompatActivity() {
                         "replay2Len=${outgoing["replay2"].orEmpty().length} keys=${outgoing.keys.sorted()}"
             )
 
-            val hasOpponentReplayAlready = if (localPlayer == 1) {
-                existingReplay2.isNotBlank()
-            } else {
-                existingReplay.isNotBlank()
-            }
-
             ipc.updateSession(outgoing, sessionId) {
                 OpenPigeonLog.i(TAG, "sendCurrentGolfState updateSession callback")
 
                 runOnUiThread {
-                    if (hasOpponentReplayAlready) {
-                        waitingForOpponent = false
-                        hideAimReadyUi()
-                        stopStateLabelAnimation()
-                        stateLabel.text = "Replay"
-                    } else {
-                        waitingForOpponent = true
-                        hideAimReadyUi()
-                        focusCameraOnCurrentBall()
-                        playSentThenWaitingAnimation()
-                    }
+                    waitingForOpponent = true
+                    hideAimReadyUi()
+                    focusCameraOnCurrentBall()
+                    playSentThenWaitingAnimation()
                 }
             }
         } catch (t: Throwable) {
@@ -1588,9 +2279,11 @@ class GolfActivity : AppCompatActivity() {
         )
 
         stopStateLabelAnimation()
+        hideMenuPopup()
         showSkipReplayButton()
 
         stateLabel.text = "Replay"
+        updateStrokeHud(data)
 
         OpenPigeonLog.i(
             TAG,
@@ -1894,7 +2587,97 @@ class GolfActivity : AppCompatActivity() {
         cornerRadius = radius
     }
 
+    private fun setUiLayer(view: View, layer: Float) {
+        view.elevation = layer
+        view.translationZ = 0f
+        view.z = layer
+    }
+
+    private fun bringMenuPopupToFrontIfVisible() {
+        if (
+            ::root.isInitialized &&
+            ::menuLayer.isInitialized &&
+            ::menuPopup.isInitialized &&
+            menuPopup.visibility == View.VISIBLE
+        ) {
+            promoteMenuLayer()
+        }
+    }
+
+    private fun promoteMenuLayer() {
+        if (
+            !::root.isInitialized ||
+            !::menuLayer.isInitialized ||
+            !::menuPopup.isInitialized ||
+            menuPopup.visibility != View.VISIBLE
+        ) {
+            return
+        }
+
+        setUiLayer(menuLayer, LAYER_MENU_POPUP)
+        setUiLayer(menuPopup, LAYER_MENU_POPUP + 1f)
+
+        root.bringChildToFront(menuLayer)
+        menuLayer.bringToFront()
+
+        menuLayer.bringChildToFront(menuPopup)
+        menuPopup.bringToFront()
+
+        if (
+            ::waitingOverlay.isInitialized &&
+            waitingOverlay.visibility == View.VISIBLE
+        ) {
+            setUiLayer(waitingOverlay, LAYER_WAITING)
+            root.bringChildToFront(waitingOverlay)
+            waitingOverlay.bringToFront()
+        }
+
+        if (
+            ::holeOverlay.isInitialized &&
+            holeOverlay.visibility == View.VISIBLE
+        ) {
+            setUiLayer(holeOverlay, LAYER_INTRO)
+            root.bringChildToFront(holeOverlay)
+            holeOverlay.bringToFront()
+        }
+
+        menuLayer.invalidate()
+        root.invalidate()
+    }
+
+    private fun applyOverlayOrdering() {
+        if (
+            ::menuPopup.isInitialized &&
+            menuPopup.visibility == View.VISIBLE
+        ) {
+            promoteMenuLayer()
+        }
+
+        if (
+            ::waitingOverlay.isInitialized &&
+            waitingOverlay.visibility == View.VISIBLE
+        ) {
+            setUiLayer(waitingOverlay, LAYER_WAITING)
+            root.bringChildToFront(waitingOverlay)
+            waitingOverlay.bringToFront()
+        }
+
+        if (
+            ::holeOverlay.isInitialized &&
+            holeOverlay.visibility == View.VISIBLE
+        ) {
+            setUiLayer(holeOverlay, LAYER_INTRO)
+            root.bringChildToFront(holeOverlay)
+            holeOverlay.bringToFront()
+        }
+    }
+
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    override fun finish() {
+        activityExiting = true
+        super.finish()
+    }
 
     override fun onStart() {
         super.onStart()
@@ -1910,11 +2693,17 @@ class GolfActivity : AppCompatActivity() {
         OpenPigeonLog.i(TAG, "onPause")
 
         if (::renderer.isInitialized) {
+            hideMenuPopup()
             stopBallPhysics(clearVelocity = false)
             stopDualReplay()
             renderer.clearAimPreview()
-            stopStateLabelAnimation()
-            hideAimReadyUi()
+            hideAimReadyUi(immediate = true)
+
+            if (shouldKeepWaitingOverlayDuringExit()) {
+                stopWaitingTimersWithoutHidingOverlay()
+            } else {
+                stopStateLabelAnimation()
+            }
         }
 
         super.onPause()
@@ -1924,11 +2713,17 @@ class GolfActivity : AppCompatActivity() {
         OpenPigeonLog.i(TAG, "onDestroy sessionBlank=${sessionId.isBlank()} ipcNull=${gameSessionIPC == null}")
 
         if (::renderer.isInitialized) {
+            hideMenuPopup()
             stopBallPhysics(clearVelocity = true)
             stopDualReplay()
             renderer.clearAimPreview()
-            stopStateLabelAnimation()
-            hideAimReadyUi()
+            hideAimReadyUi(immediate = true)
+
+            if (shouldKeepWaitingOverlayDuringExit()) {
+                stopWaitingTimersWithoutHidingOverlay()
+            } else {
+                stopStateLabelAnimation()
+            }
         }
 
         runCatching {

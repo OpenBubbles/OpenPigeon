@@ -28,14 +28,17 @@ class GolfRenderer @JvmOverloads constructor(
 
     companion object {
         private const val TAG = "GolfNative"
-        private const val SHOW_COLLISION_DEBUG = true
+        private const val DEFAULT_SHOW_COLLISION_DEBUG = false
 
         private const val FLIP_BOARD_Y_ONLY = true
-        private const val SHOW_DEBUG_LABEL = false
+        private const val DEFAULT_SHOW_DEBUG_LABEL = false
         private const val SHOW_PATH_PREVIEW = false
         private const val SHOW_OBJECT_DEBUG_DOTS = false
         private const val LOG_RENDER_SCREEN_COORDS = true
         private const val IOS_TILE_DRAW_SIZE = 66f
+        private const val IOS_BALL_DRAW_SIZE = 10f
+        private const val IOS_BALL_SUNK_DRAW_SIZE = 7f
+        private const val BALL_SHADOW_ALPHA = 128
         private const val IOS_WALL_PATH_TILE_SIZE = 65f
         private const val IOS_WALL_DRAW_SIZE = 6f
         private const val IOS_SLOPE_WIDTH = 65f
@@ -67,6 +70,8 @@ class GolfRenderer @JvmOverloads constructor(
     private var lastSizeLog = ""
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var showCollisionDebug = DEFAULT_SHOW_COLLISION_DEBUG
+    private var showDebugLabel = DEFAULT_SHOW_DEBUG_LABEL
 
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -132,6 +137,12 @@ class GolfRenderer @JvmOverloads constructor(
     private val obstacleTriangleBitmap = loadAssetBitmap("golf_obstacle_triangle_Normal@3x.png")
     private val obstacleTriangle2Bitmap = loadAssetBitmap("golf_obstacle_triangle2_Normal@3x.png")
     private val obstacleCrossBitmap = loadAssetBitmap("golf_obstacle_cross_Normal@3x.png")
+
+    fun setDebugOverlayEnabled(enabled: Boolean) {
+        showCollisionDebug = enabled
+        showDebugLabel = enabled
+        postInvalidateOnAnimation()
+    }
 
     fun setMap(newMap: GolfMap) {
         OpenPigeonLog.i(
@@ -408,6 +419,7 @@ class GolfRenderer @JvmOverloads constructor(
         }
 
         val old = aimReadyBallCourse
+
         if (old == null || abs(old.x - next.x) > 0.001f || abs(old.y - next.y) > 0.001f) {
             aimReadyRingStartMs = now
         } else if (aimReadyRingStartMs == 0L) {
@@ -560,7 +572,7 @@ class GolfRenderer @JvmOverloads constructor(
 
         drawCollisionDebug(canvas, g)
 
-        if (SHOW_DEBUG_LABEL) {
+        if (showDebugLabel) {
             drawDebugLabel(canvas, g)
         }
     }
@@ -1260,7 +1272,7 @@ class GolfRenderer @JvmOverloads constructor(
     }
 
     private fun drawCollisionDebug(canvas: Canvas, g: GolfMap) {
-        if (!SHOW_COLLISION_DEBUG) return
+        if (!showCollisionDebug) return
 
         val ball = runtimeBallCourse ?: g.ballStart1
         val ballScreen = courseToScreen(ball)
@@ -1541,6 +1553,39 @@ class GolfRenderer @JvmOverloads constructor(
         }
     }
 
+    private fun drawBallShadow(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        alpha: Int,
+        sunk: Boolean
+    ) {
+        if (sunk) return
+        val shadowRadius = GolfConstants.BALL_RADIUS * scale
+
+        val shadowAlpha = ((BALL_SHADOW_ALPHA.toFloat() * (alpha / 255f)))
+            .toInt()
+            .coerceIn(0, BALL_SHADOW_ALPHA)
+
+        if (shadowAlpha <= 0) return
+
+        val shadowOffsetY = 1.4f * scale
+
+        paint.style = Paint.Style.FILL
+        paint.color = Color.BLACK
+        paint.alpha = shadowAlpha
+        paint.colorFilter = null
+
+        canvas.drawCircle(
+            cx,
+            cy + shadowOffsetY,
+            shadowRadius,
+            paint
+        )
+
+        paint.alpha = 255
+    }
+
     private fun drawBall(
         canvas: Canvas,
         coursePoint: PointF,
@@ -1551,9 +1596,17 @@ class GolfRenderer @JvmOverloads constructor(
     ) {
         val p = courseToScreen(coursePoint)
 
-        val baseSize = if (sunk) 7f else 10f
-        val size = baseSize * scale
+        val ballSizeCourse = if (sunk) IOS_BALL_SUNK_DRAW_SIZE else IOS_BALL_DRAW_SIZE
+        val size = ballSizeCourse * scale
         val alpha = alphaOverride ?: if (sunk) 210 else 255
+
+        drawBallShadow(
+            canvas = canvas,
+            cx = p.x,
+            cy = p.y,
+            alpha = alpha,
+            sunk = sunk
+        )
 
         paint.alpha = alpha
         paint.colorFilter = tintColor?.let {
@@ -1651,9 +1704,9 @@ class GolfRenderer @JvmOverloads constructor(
         val radius = ballRadius * (3f + wave)
 
         paint.style = Paint.Style.STROKE
-        paint.strokeWidth = (1.15f * scale).coerceAtLeast(1.2f)
+        paint.strokeWidth = (0.9f * scale).coerceAtLeast(1f)
         paint.color = Color.WHITE
-        paint.alpha = (230f * aimReadyRingAlpha).toInt().coerceIn(0, 230)
+        paint.alpha = (128f * aimReadyRingAlpha).toInt().coerceIn(0, 128)
         paint.colorFilter = null
 
         canvas.drawCircle(p.x, p.y, radius, paint)
