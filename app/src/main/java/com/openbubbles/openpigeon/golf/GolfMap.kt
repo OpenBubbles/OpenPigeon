@@ -29,7 +29,6 @@ data class GolfMap(
         return grid[x][y] == 0 || grid[x][y] == 3
     }
 
-    /** Stable text dump matching the Frida probe orientation. */
     fun dump(): String = buildString {
         appendLine("seed=$seed mode=$mode mapNum=$mapNum")
         appendLine("xCells=$xCells yCells=$yCells mapSize=$mapSize mapSize2=$mapSize2")

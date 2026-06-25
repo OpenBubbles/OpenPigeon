@@ -18,8 +18,8 @@ import com.openbubbles.openpigeon.godot.GameSessionIPC
 import com.openbubbles.openpigeon.settings.AvatarView
 import com.openbubbles.openpigeon.util.OpenPigeonLog
 import android.graphics.PointF
+import androidx.appcompat.widget.AppCompatImageButton
 import android.graphics.BitmapFactory
-import android.widget.ImageButton
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.SettingsSheet
 import android.animation.Animator
@@ -46,14 +46,18 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import androidx.appcompat.widget.SwitchCompat
+import android.util.TypedValue
+import androidx.core.content.edit
+import androidx.core.view.isInvisible
+import androidx.core.view.isVisible
 
+@SuppressLint("SetTextI18n")
 class GolfActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "GolfNative"
 
         private const val LAYER_HUD = 900f
-        private const val LAYER_HUD_TOP = 1000f
         private const val LAYER_SKIP_REPLAY = 1100f
         private const val LAYER_MENU_POPUP = 13000f
         private const val LAYER_WAITING = 14000f
@@ -67,8 +71,8 @@ class GolfActivity : AppCompatActivity() {
     private lateinit var holeIntroContainer: LinearLayout
     private lateinit var holePoleImage: ImageView
     private lateinit var holeTitle: TextView
-    private lateinit var zoomButton: ImageButton
-    private lateinit var settingsButton: ImageButton
+    private lateinit var zoomButton: AppCompatImageButton
+    private lateinit var settingsButton: AppCompatImageButton
     private lateinit var settingsSheet: SettingsSheet
 
     private lateinit var menuLayer: FrameLayout
@@ -90,7 +94,7 @@ class GolfActivity : AppCompatActivity() {
     private lateinit var opponentStrokeLabel: TextView
     private lateinit var waitingOverlay: FrameLayout
     private lateinit var waitingLabel: TextView
-    private lateinit var skipReplayButton: ImageButton
+    private lateinit var skipReplayButton: AppCompatImageButton
     private var skipReplayNormalBitmap: Bitmap? = null
     private var skipReplayPressedBitmap: Bitmap? = null
     private lateinit var aimInstructionLabel: TextView
@@ -102,7 +106,7 @@ class GolfActivity : AppCompatActivity() {
     private var musicTrack: AudioTrack? = null
     private var currentMusicTrackPath: String? = null
 
-    private data class WavLoopData(
+    private class WavLoopData(
         val pcm: ByteArray,
         val sampleRate: Int,
         val channelMask: Int,
@@ -220,7 +224,7 @@ class GolfActivity : AppCompatActivity() {
             settingsSheet = SettingsSheet(this, root)
 
             val musicSwitch = SwitchCompat(this)
-            musicSwitch.isChecked = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+            musicSwitch.isChecked = getSharedPreferences("avatar_settings", MODE_PRIVATE)
                 .getBoolean("global/music_enabled", true)
 
             musicEnabled = musicSwitch.isChecked
@@ -357,7 +361,7 @@ class GolfActivity : AppCompatActivity() {
     private fun buildLayout() {
         root = FrameLayout(this).apply {
             setBackgroundColor(Color.rgb(182, 202, 209))
-            visibility = View.INVISIBLE
+            isInvisible = true
             alpha = 0f
             clipChildren = false
             clipToPadding = false
@@ -368,7 +372,7 @@ class GolfActivity : AppCompatActivity() {
         }
 
         renderer = GolfRenderer(this).apply {
-            visibility = View.INVISIBLE
+            isInvisible = true
 
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -393,7 +397,7 @@ class GolfActivity : AppCompatActivity() {
         }
         root.addView(stateLabel)
 
-        settingsButton = ImageButton(this).apply {
+        settingsButton = AppCompatImageButton(this).apply {
             background = null
             setBackgroundColor(Color.TRANSPARENT)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
@@ -456,12 +460,13 @@ class GolfActivity : AppCompatActivity() {
         buildLocalAvatarYouLabel()
         buildStrokeHud()
 
-        zoomButton = ImageButton(this).apply {
+        zoomButton = AppCompatImageButton(this).apply {
             background = null
             setBackgroundColor(Color.TRANSPARENT)
             setUiLayer(this, LAYER_HUD)
-            scaleType = ImageView.ScaleType.CENTER_INSIDE
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            adjustViewBounds = false
+            setPadding(dp(2), dp(2), dp(2), dp(2))
             contentDescription = "Zoom"
 
             setImageResource(android.R.drawable.ic_menu_search)
@@ -471,8 +476,8 @@ class GolfActivity : AppCompatActivity() {
                 dp(54),
                 Gravity.BOTTOM or Gravity.END
             ).apply {
-                bottomMargin = dp(28)
-                marginEnd = dp(14)
+                bottomMargin = dp(22)
+                marginEnd = dp(8)
             }
         }
         root.addView(zoomButton)
@@ -742,7 +747,10 @@ class GolfActivity : AppCompatActivity() {
                 ?: counterView.layoutParams?.height?.takeIf { it > 0 }
                 ?: dp(36)
 
-            label.textSize = (sizePx * 0.28f) / resources.displayMetrics.scaledDensity
+            label.setTextSize(
+                TypedValue.COMPLEX_UNIT_PX,
+                sizePx * 0.28f
+            )
         }
 
         sync(localStrokeLabel, localStrokeCounterView)
@@ -983,11 +991,7 @@ class GolfActivity : AppCompatActivity() {
         gameOverLabel.scaleY = 0.65f
     }
 
-    private fun showGameOverLabel(
-        result: Int,
-        localStrokes: Int,
-        opponentStrokes: Int
-    ) {
+    private fun showGameOverLabel(result: Int) {
         if (!::gameOverLabel.isInitialized) return
 
         gameOverShown = true
@@ -1075,11 +1079,7 @@ class GolfActivity : AppCompatActivity() {
                     "opponentStrokes=$opponentStrokes result=$localResult shouldSendWinner=$shouldSendWinner"
         )
 
-        showGameOverLabel(
-            result = localResult,
-            localStrokes = localStrokes,
-            opponentStrokes = opponentStrokes
-        )
+        showGameOverLabel(result = localResult)
 
         if (shouldSendWinner) {
             sendWinnerResultIfNeeded(localResult)
@@ -1451,7 +1451,7 @@ class GolfActivity : AppCompatActivity() {
     private fun toggleMenuPopup() {
         if (!::menuPopup.isInitialized) return
 
-        if (menuPopup.visibility == View.VISIBLE) {
+        if (menuPopup.isVisible) {
             hideMenuPopup()
         } else {
             showMenuPopup()
@@ -1572,7 +1572,7 @@ class GolfActivity : AppCompatActivity() {
             if (immediate) {
                 aimInstructionLabel.alpha = 0f
                 aimInstructionLabel.visibility = View.GONE
-            } else if (aimInstructionLabel.visibility == View.VISIBLE) {
+            } else if (aimInstructionLabel.isVisible) {
                 aimInstructionLabel
                     .animate()
                     .alpha(0f)
@@ -1631,6 +1631,7 @@ class GolfActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun buildSkipReplayButton() {
         skipReplayNormalBitmap = loadUiBitmap(
             "global/skip_replay.png",
@@ -1642,8 +1643,13 @@ class GolfActivity : AppCompatActivity() {
             "global/next_pressed.png"
         ) ?: skipReplayNormalBitmap
 
-        skipReplayButton = ImageButton(this).apply {
-            visibility = View.GONE
+        skipReplayButton = object : AppCompatImageButton(this) {
+            override fun performClick(): Boolean {
+                super.performClick()
+                return true
+            }
+        }.apply {
+            isVisible = false
             alpha = 1f
             background = null
             setBackgroundColor(Color.TRANSPARENT)
@@ -1664,7 +1670,11 @@ class GolfActivity : AppCompatActivity() {
             )
         }
 
-        skipReplayButton.setOnTouchListener { _, event ->
+        skipReplayButton.setOnClickListener {
+            skipDualReplayToEnd()
+        }
+
+        skipReplayButton.setOnTouchListener { view, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     skipReplayPressedBitmap?.let { skipReplayButton.setImageBitmap(it) }
@@ -1673,7 +1683,7 @@ class GolfActivity : AppCompatActivity() {
 
                 MotionEvent.ACTION_UP -> {
                     skipReplayNormalBitmap?.let { skipReplayButton.setImageBitmap(it) }
-                    skipDualReplayToEnd()
+                    view.performClick()
                     true
                 }
 
@@ -1969,10 +1979,11 @@ class GolfActivity : AppCompatActivity() {
         }
     }
 
+    @Suppress("SameReturnValue")
     private fun handleGolfTouch(event: MotionEvent): Boolean {
         if (
             ::menuPopup.isInitialized &&
-            menuPopup.visibility == View.VISIBLE
+            menuPopup.isVisible
         ) {
             if (event.actionMasked == MotionEvent.ACTION_DOWN) {
                 hideMenuPopup()
@@ -2393,7 +2404,7 @@ class GolfActivity : AppCompatActivity() {
         return activityExiting &&
                 waitingForOpponent &&
                 ::waitingOverlay.isInitialized &&
-                waitingOverlay.visibility == View.VISIBLE
+                waitingOverlay.isVisible
     }
 
     private fun stopWaitingTimersWithoutHidingOverlay() {
@@ -2436,8 +2447,8 @@ class GolfActivity : AppCompatActivity() {
 
                 if (
                     ::waitingOverlay.isInitialized &&
-                    waitingOverlay.visibility == View.VISIBLE &&
-                    label.visibility == View.VISIBLE
+                    waitingOverlay.isVisible &&
+                    label.isVisible
                 ) {
                     label.text = "WAITING FOR OPPONENT" + ".".repeat(dots)
                     dots = if (dots >= 3) 1 else dots + 1
@@ -2578,12 +2589,8 @@ class GolfActivity : AppCompatActivity() {
         OpenPigeonLog.i(TAG, "Zoom overview enabled=$enabled")
     }
 
-    private fun sendVisualStateOnly() {
-        sendCurrentGolfState(roundComplete = false)
-    }
-
     private fun sendCompletedRoundState() {
-        sendCurrentGolfState(roundComplete = true)
+        sendCurrentGolfState()
     }
 
     private fun safeBuildAvatarString(fallback: String): String {
@@ -2595,7 +2602,7 @@ class GolfActivity : AppCompatActivity() {
         }
     }
 
-    private fun sendCurrentGolfState(roundComplete: Boolean) {
+    private fun sendCurrentGolfState() {
         val ipc = gameSessionIPC
         if (ipc == null || sessionId.isBlank()) {
             OpenPigeonLog.w(
@@ -2632,13 +2639,7 @@ class GolfActivity : AppCompatActivity() {
             outgoing["seed"] = current["seed"]?.takeIf { it.isNotBlank() } ?: seed.toString()
             outgoing["sender"] = myId
             outgoing["player"] = localPlayer.toString()
-
-            if (roundComplete) {
-                outgoing["v2"] = "2"
-                outgoing["num"] = (mapNum + 2).coerceAtMost(holeCount + 1).toString()
-            } else {
-                outgoing["num"] = current["num"] ?: (mapNum + 1).toString()
-            }
+            outgoing["num"] = (mapNum + 2).coerceAtMost(holeCount + 1).toString()
 
             if (localPlayer == 1) {
                 outgoing["player1"] = myId
@@ -2685,7 +2686,7 @@ class GolfActivity : AppCompatActivity() {
 
             OpenPigeonLog.i(
                 TAG,
-                "sendCurrentGolfState roundComplete=$roundComplete localPlayer=$localPlayer " +
+                "sendCurrentGolfState roundComplete=true localPlayer=$localPlayer " +
                         "myId=$myId p1=${outgoing["player1"].orEmpty()} p2=${outgoing["player2"].orEmpty()} " +
                         "num=${outgoing["num"]} replayLen=${outgoing["replay"].orEmpty().length} " +
                         "replay2Len=${outgoing["replay2"].orEmpty().length} keys=${outgoing.keys.sorted()}"
@@ -2702,7 +2703,7 @@ class GolfActivity : AppCompatActivity() {
                 }
             }
         } catch (t: Throwable) {
-            OpenPigeonLog.e(TAG, "sendCurrentGolfState failed roundComplete=$roundComplete", t)
+            OpenPigeonLog.e(TAG, "sendCurrentGolfState failed roundComplete=true", t)
             stateLabel.text = "Mini Golf send failed"
         }
     }
@@ -3138,7 +3139,7 @@ class GolfActivity : AppCompatActivity() {
         return "messageKeys=${msg.keys.sorted()} selected=${selected.joinToString(",")} replayLen=${msg["replay"].orEmpty().length} replay2Len=${msg["replay2"].orEmpty().length}"
     }
 
-    private class OutlineTextView(context: android.content.Context) : androidx.appcompat.widget.AppCompatTextView(context) {
+    private class OutlineTextView(context: Context) : androidx.appcompat.widget.AppCompatTextView(context) {
         override fun onDraw(canvas: Canvas) {
             val originalColor = currentTextColor
             val originalStyle = paint.style
@@ -3177,7 +3178,7 @@ class GolfActivity : AppCompatActivity() {
             ::root.isInitialized &&
             ::menuLayer.isInitialized &&
             ::menuPopup.isInitialized &&
-            menuPopup.visibility == View.VISIBLE
+            menuPopup.isVisible
         ) {
             promoteMenuLayer()
         }
@@ -3204,7 +3205,7 @@ class GolfActivity : AppCompatActivity() {
 
         if (
             ::waitingOverlay.isInitialized &&
-            waitingOverlay.visibility == View.VISIBLE
+            waitingOverlay.isVisible
         ) {
             setUiLayer(waitingOverlay, LAYER_WAITING)
             root.bringChildToFront(waitingOverlay)
@@ -3213,7 +3214,7 @@ class GolfActivity : AppCompatActivity() {
 
         if (
             ::holeOverlay.isInitialized &&
-            holeOverlay.visibility == View.VISIBLE
+            holeOverlay.isVisible
         ) {
             setUiLayer(holeOverlay, LAYER_INTRO)
             root.bringChildToFront(holeOverlay)
@@ -3227,14 +3228,14 @@ class GolfActivity : AppCompatActivity() {
     private fun applyOverlayOrdering() {
         if (
             ::menuPopup.isInitialized &&
-            menuPopup.visibility == View.VISIBLE
+            menuPopup.isVisible
         ) {
             promoteMenuLayer()
         }
 
         if (
             ::waitingOverlay.isInitialized &&
-            waitingOverlay.visibility == View.VISIBLE
+            waitingOverlay.isVisible
         ) {
             setUiLayer(waitingOverlay, LAYER_WAITING)
             root.bringChildToFront(waitingOverlay)
@@ -3243,7 +3244,7 @@ class GolfActivity : AppCompatActivity() {
 
         if (
             ::holeOverlay.isInitialized &&
-            holeOverlay.visibility == View.VISIBLE
+            holeOverlay.isVisible
         ) {
             setUiLayer(holeOverlay, LAYER_INTRO)
             root.bringChildToFront(holeOverlay)
@@ -3265,10 +3266,9 @@ class GolfActivity : AppCompatActivity() {
     private fun applyMusicEnabled(enabled: Boolean) {
         musicEnabled = enabled
 
-        getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean("global/music_enabled", enabled)
-            .apply()
+        getSharedPreferences("avatar_settings", MODE_PRIVATE).edit {
+            putBoolean("global/music_enabled", enabled)
+        }
 
         if (enabled) {
             startMusic()
@@ -3326,10 +3326,9 @@ class GolfActivity : AppCompatActivity() {
             musicEnabled = false
             currentMusicTrackPath = null
 
-            getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean("global/music_enabled", false)
-                .apply()
+            getSharedPreferences("avatar_settings", MODE_PRIVATE).edit {
+                putBoolean("global/music_enabled", false)
+            }
         }
     }
 

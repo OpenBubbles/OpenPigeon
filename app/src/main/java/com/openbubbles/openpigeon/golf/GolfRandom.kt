@@ -12,13 +12,6 @@ class GolfRandom {
         return state.toDouble() / TWO_POW_48
     }
 
-    fun nextInt(bound: Int): Int {
-        if (bound <= 0) return 0
-        return (drand48() * bound).toInt().coerceIn(0, bound - 1)
-    }
-
-    fun stateBits(): Long = state
-
     private companion object {
         const val MULT = 0x5DEECE66DL
         const val ADD = 0xBL

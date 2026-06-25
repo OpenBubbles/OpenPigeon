@@ -161,9 +161,7 @@ object GolfPhysics {
             resolveOneSidedSegmentCollision(
                 pos = posVisual,
                 vel = velVisual,
-                wall = wall,
-                radius = WALL_COLLISION_RADIUS,
-                restitution = WALL_RESTITUTION
+                wall = wall
             )
         }
 
@@ -245,9 +243,7 @@ object GolfPhysics {
     private fun resolveOneSidedSegmentCollision(
         pos: PointF,
         vel: PointF,
-        wall: DiagonalWall,
-        radius: Float,
-        restitution: Float
+        wall: DiagonalWall
     ) {
         val abx = wall.bx - wall.ax
         val aby = wall.by - wall.ay
@@ -269,17 +265,18 @@ object GolfPhysics {
             (pos.x - closestX) * wall.nx +
                     (pos.y - closestY) * wall.ny
 
-        if (signedDistance >= radius) return
-        if (signedDistance <= -radius) return
+        if (signedDistance >= WALL_COLLISION_RADIUS) return
+        if (signedDistance <= -WALL_COLLISION_RADIUS) return
 
-        val correction = radius - signedDistance
+        val correction = WALL_COLLISION_RADIUS - signedDistance
         pos.x += wall.nx * correction
         pos.y += wall.ny * correction
 
         val vn = vel.x * wall.nx + vel.y * wall.ny
+
         if (vn < 0f) {
-            vel.x -= (1f + restitution) * vn * wall.nx
-            vel.y -= (1f + restitution) * vn * wall.ny
+            vel.x -= (1f + WALL_RESTITUTION) * vn * wall.nx
+            vel.y -= (1f + WALL_RESTITUTION) * vn * wall.ny
         }
     }
 
@@ -345,17 +342,6 @@ object GolfPhysics {
         )
     }
 
-    private fun visualCellCenterCourseUnits(
-        visualCol: Int,
-        visualRow: Int
-    ): PointF {
-        val r = visualCellRectCourseUnits(visualCol, visualRow)
-        return PointF(
-            (r.left + r.right) * 0.5f,
-            (r.top + r.bottom) * 0.5f
-        )
-    }
-
     private fun specialValue3CutCornerPhysics(
         map: GolfMap,
         visualCol: Int,
@@ -407,13 +393,12 @@ object GolfPhysics {
         visualRow: Int
     ): Cell? {
         val outerRow = map.xCells - 1 - visualRow
-        val innerCol = visualCol
 
-        if (outerRow !in 0 until map.xCells || innerCol !in 0 until map.yCells) {
+        if (outerRow !in 0 until map.xCells || visualCol !in 0 until map.yCells) {
             return null
         }
 
-        return Cell(outerRow, innerCol)
+        return Cell(outerRow, visualCol)
     }
 
     private fun applySlopes(
@@ -699,8 +684,8 @@ object GolfPhysics {
         val closestX = localX.coerceIn(-halfW, halfW)
         val closestY = localY.coerceIn(-halfH, halfH)
 
-        var deltaX = localX - closestX
-        var deltaY = localY - closestY
+        val deltaX = localX - closestX
+        val deltaY = localY - closestY
         val d2 = deltaX * deltaX + deltaY * deltaY
 
         var normalLocalX: Float
@@ -779,9 +764,6 @@ object GolfPhysics {
 
         val ax = -halfW
         val ay = -halfH
-        val bx = halfW
-        val by = halfH
-        val cx2 = halfW
         val cy2 = -halfH
 
         resolveCircleVsTriangleLocal(
@@ -789,9 +771,9 @@ object GolfPhysics {
             vel = localVel,
             ax = ax,
             ay = ay,
-            bx = bx,
-            by = by,
-            cx = cx2,
+            bx = halfW,
+            by = halfH,
+            cx = halfW,
             cy = cy2,
             restitution = restitution
         )
@@ -854,8 +836,6 @@ object GolfPhysics {
 
             return
         }
-        var bestX = 0f
-        var bestY = 0f
         var bestD2 = Float.MAX_VALUE
         var bestNx = 0f
         var bestNy = 0f
@@ -885,8 +865,6 @@ object GolfPhysics {
 
             if (d2 < bestD2) {
                 bestD2 = d2
-                bestX = qx
-                bestY = qy
 
                 if (d2 > 0.0001f) {
                     val d = sqrt(d2)
@@ -1063,7 +1041,7 @@ object GolfPhysics {
         val outY = positionCourse.y - map.hole.y
         val outDistance = sqrt(outX * outX + outY * outY)
 
-        if (outDistance > HOLE_TRAP_RADIUS && outDistance > 0.001f) {
+        if (outDistance > HOLE_TRAP_RADIUS) {
             val nx = outX / outDistance
             val ny = outY / outDistance
 

@@ -7,7 +7,6 @@ object GolfConstants {
     const val FIELD_SEP: Char = ','
 
     const val BALL_RADIUS = 4f
-    const val POWER_TO_VELOCITY = 1.55f
 
     const val MODE_RACE = "race"
     const val DEFAULT_MODE = "3"

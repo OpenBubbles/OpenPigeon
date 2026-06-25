@@ -3,7 +3,6 @@ package com.openbubbles.openpigeon.golf
 import android.graphics.PointF
 import kotlin.math.atan2
 import kotlin.math.cos
-import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -11,15 +10,11 @@ object GolfShot {
     const val AIM_POWER_MULTIPLIER = 2f
     const val AIM_POWER_OFFSET = 15f
     const val AIM_MAX_DIST = 300f
-    const val AIM_DEADZONE = 5f
     const val AIM_DOT_COUNT = 13
 
     const val AIM_CANCEL_DIST = 12f
 
     const val LAUNCH_SPEED_MULTIPLIER = 1.55f
-
-    private const val TEMP_DAMPING_PER_60FPS_FRAME = 0.985f
-    private const val TEMP_STOP_SPEED = 3.0f
 
     data class Aim(
         val dist: Float,
@@ -81,14 +76,5 @@ object GolfShot {
         }
 
         return out
-    }
-
-    fun temporaryDampingFactor(dtSeconds: Float): Float {
-        val framesAt60 = dtSeconds * 60f
-        return TEMP_DAMPING_PER_60FPS_FRAME.pow(framesAt60)
-    }
-
-    fun isTemporaryStopped(vx: Float, vy: Float): Boolean {
-        return vx * vx + vy * vy <= TEMP_STOP_SPEED * TEMP_STOP_SPEED
     }
 }

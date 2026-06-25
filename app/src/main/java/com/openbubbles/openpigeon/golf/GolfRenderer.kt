@@ -20,6 +20,9 @@ import android.os.SystemClock
 import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.cos
+import android.util.TypedValue
+import androidx.core.graphics.withRotation
+import androidx.core.graphics.withTranslation
 
 class GolfRenderer @JvmOverloads constructor(
     context: Context,
@@ -194,7 +197,7 @@ class GolfRenderer @JvmOverloads constructor(
     fun courseToScreen(point: PointF): PointF {
         val g = map
 
-        val visual = if (g != null && FLIP_BOARD_Y_ONLY) {
+        val visual = if (g != null) {
             PointF(
                 point.x,
                 g.mapSize - point.y
@@ -214,7 +217,7 @@ class GolfRenderer @JvmOverloads constructor(
         val visualY = (y - offsetY) / scale
         val g = map
 
-        return if (g != null && FLIP_BOARD_Y_ONLY) {
+        return if (g != null) {
             PointF(
                 visualX,
                 g.mapSize - visualY
@@ -248,14 +251,10 @@ class GolfRenderer @JvmOverloads constructor(
     }
 
     private fun courseToVisualRaw(g: GolfMap, point: PointF): PointF {
-        return if (FLIP_BOARD_Y_ONLY) {
-            PointF(
-                point.x,
-                g.mapSize - point.y
-            )
-        } else {
-            PointF(point.x, point.y)
-        }
+        return PointF(
+            point.x,
+            g.mapSize - point.y
+        )
     }
 
     fun visualDeltaToCourseDelta(dxVisual: Float, dyVisual: Float): PointF {
@@ -435,14 +434,10 @@ class GolfRenderer @JvmOverloads constructor(
 
     private fun logRendererScreenCoordinates(g: GolfMap) {
         fun visualCoursePoint(point: PointF): PointF {
-            return if (FLIP_BOARD_Y_ONLY) {
-                PointF(
-                    point.x,
-                    g.mapSize - point.y
-                )
-            } else {
-                PointF(point.x, point.y)
-            }
+            return PointF(
+                point.x,
+                g.mapSize - point.y
+            )
         }
 
         fun logPoint(label: String, point: PointF) {
@@ -683,9 +678,8 @@ class GolfRenderer @JvmOverloads constructor(
         val topUiPad = safeH * 0.06f
         val bottomUiPad = safeH * 0.18f
 
-        val usableTop = topUiPad
         val usableBottom = safeH - bottomUiPad
-        val usableHeight = usableBottom - usableTop
+        val usableHeight = usableBottom - topUiPad
 
         val bounds = renderBounds(g)
 
@@ -696,7 +690,7 @@ class GolfRenderer @JvmOverloads constructor(
 
         val fullOffsetX = (safeW - bounds.width * fullScale) * 0.5f - bounds.left * fullScale
 
-        val centeredTop = usableTop + (usableHeight - bounds.height * fullScale) * 0.5f
+        val centeredTop = topUiPad + (usableHeight - bounds.height * fullScale) * 0.5f
         val fullOffsetY = centeredTop - bounds.top * fullScale
 
         return BoardTransform(
@@ -780,10 +774,10 @@ class GolfRenderer @JvmOverloads constructor(
         val b1 = courseToVisualRaw(g, ball1Course)
         val b2 = courseToVisualRaw(g, ball2Course)
 
-        val minX = kotlin.math.min(b1.x, b2.x)
-        val maxX = kotlin.math.max(b1.x, b2.x)
-        val minY = kotlin.math.min(b1.y, b2.y)
-        val maxY = kotlin.math.max(b1.y, b2.y)
+        val minX = min(b1.x, b2.x)
+        val maxX = max(b1.x, b2.x)
+        val minY = min(b1.y, b2.y)
+        val maxY = max(b1.y, b2.y)
 
         val centerX = (minX + maxX) * 0.5f
         val centerY = (minY + maxY) * 0.5f
@@ -794,7 +788,7 @@ class GolfRenderer @JvmOverloads constructor(
         val availableW = safeW * 0.72f
         val availableH = safeH * 0.52f
 
-        val replayScale = kotlin.math.min(
+        val replayScale = min(
             availableW / contentW,
             availableH / contentH
         ).coerceIn(
@@ -869,11 +863,10 @@ class GolfRenderer @JvmOverloads constructor(
         paint.alpha = 255
         paint.colorFilter = null
 
-        canvas.save()
-        canvas.translate(offsetX, offsetY)
-        canvas.scale(scale, scale)
-        canvas.drawPath(coursePath, paint)
-        canvas.restore()
+        canvas.withTranslation(offsetX, offsetY) {
+            scale(scale, scale)
+            drawPath(coursePath, paint)
+        }
     }
 
     private fun drawCourseOutlineShadow(canvas: Canvas, coursePath: Path) {
@@ -883,14 +876,11 @@ class GolfRenderer @JvmOverloads constructor(
         strokePaint.strokeCap = Paint.Cap.SQUARE
         strokePaint.strokeJoin = Paint.Join.MITER
 
-        canvas.save()
-        canvas.translate(offsetX, offsetY)
-        canvas.scale(scale, scale)
-
-        canvas.translate(0f, -IOS_SHADOW_COURSE_Y_OFFSET)
-        canvas.drawPath(coursePath, strokePaint)
-
-        canvas.restore()
+        canvas.withTranslation(offsetX, offsetY) {
+            scale(scale, scale)
+            translate(0f, -IOS_SHADOW_COURSE_Y_OFFSET)
+            drawPath(coursePath, strokePaint)
+        }
     }
 
     private fun drawCourseOutline(canvas: Canvas, coursePath: Path) {
@@ -900,11 +890,10 @@ class GolfRenderer @JvmOverloads constructor(
         strokePaint.strokeCap = Paint.Cap.SQUARE
         strokePaint.strokeJoin = Paint.Join.MITER
 
-        canvas.save()
-        canvas.translate(offsetX, offsetY)
-        canvas.scale(scale, scale)
-        canvas.drawPath(coursePath, strokePaint)
-        canvas.restore()
+        canvas.withTranslation(offsetX, offsetY) {
+            scale(scale, scale)
+            drawPath(coursePath, strokePaint)
+        }
     }
 
     private fun buildCoursePath(g: GolfMap, tileDrawSize: Float): Path {
@@ -1090,22 +1079,13 @@ class GolfRenderer @JvmOverloads constructor(
     }
 
     private fun visualToOriginalCell(g: GolfMap, visualCol: Int, visualRow: Int): Cell? {
-        val outerRow: Int
-        val innerCol: Int
+        val outerRow = g.xCells - 1 - visualRow
 
-        if (FLIP_BOARD_Y_ONLY) {
-            outerRow = g.xCells - 1 - visualRow
-            innerCol = visualCol
-        } else {
-            outerRow = visualRow
-            innerCol = visualCol
-        }
-
-        if (outerRow !in 0 until g.xCells || innerCol !in 0 until g.yCells) {
+        if (outerRow !in 0 until g.xCells || visualCol !in 0 until g.yCells) {
             return null
         }
 
-        return Cell(outerRow, innerCol)
+        return Cell(outerRow, visualCol)
     }
 
     private fun visualCellRect(
@@ -1114,12 +1094,7 @@ class GolfRenderer @JvmOverloads constructor(
         tileDrawSize: Float = IOS_TILE_DRAW_SIZE
     ): RectF {
         val centerVisualX = visualCol * GolfConstants.TILE_SIZE
-
-        val centerVisualY = if (FLIP_BOARD_Y_ONLY) {
-            (visualRow + 1) * GolfConstants.TILE_SIZE
-        } else {
-            visualRow * GolfConstants.TILE_SIZE
-        }
+        val centerVisualY = (visualRow + 1) * GolfConstants.TILE_SIZE
 
         val half = tileDrawSize * 0.5f
 
@@ -1287,56 +1262,49 @@ class GolfRenderer @JvmOverloads constructor(
             val height = spec.height * obstacle.scale * scale
 
             if (spec.cross) {
-                val armThickness = (kotlin.math.min(width, height) * 0.17f).coerceIn(
+                val armThickness = (min(width, height) * 0.17f).coerceIn(
                     12f * scale,
                     18f * scale
                 )
 
-                canvas.save()
-
                 val rawDeg = Math.toDegrees(obstacle.rotation.toDouble()).toFloat()
                 val drawDeg = -rawDeg
 
-                canvas.rotate(drawDeg, center.x, center.y)
+                canvas.withRotation(drawDeg, center.x, center.y) {
+                    val horizontal = RectF(
+                        center.x - width / 2f,
+                        center.y - armThickness / 2f,
+                        center.x + width / 2f,
+                        center.y + armThickness / 2f
+                    )
 
-                val horizontal = RectF(
-                    center.x - width / 2f,
-                    center.y - armThickness / 2f,
-                    center.x + width / 2f,
-                    center.y + armThickness / 2f
-                )
+                    val vertical = RectF(
+                        center.x - armThickness / 2f,
+                        center.y - height / 2f,
+                        center.x + armThickness / 2f,
+                        center.y + height / 2f
+                    )
 
-                val vertical = RectF(
-                    center.x - armThickness / 2f,
-                    center.y - height / 2f,
-                    center.x + armThickness / 2f,
-                    center.y + height / 2f
-                )
-
-                canvas.drawRect(horizontal, collisionDebugPaint)
-                canvas.drawRect(vertical, collisionDebugPaint)
-
-                canvas.restore()
+                    drawRect(horizontal, collisionDebugPaint)
+                    drawRect(vertical, collisionDebugPaint)
+                }
             } else if (spec.circular) {
-                val radius = kotlin.math.min(width, height) * 0.5f
+                val radius = min(width, height) * 0.5f
                 canvas.drawCircle(center.x, center.y, radius, collisionDebugPaint)
             } else {
-                canvas.save()
-
                 val rawDeg = Math.toDegrees(obstacle.rotation.toDouble()).toFloat()
                 val drawDeg = -rawDeg
 
-                canvas.rotate(drawDeg, center.x, center.y)
+                canvas.withRotation(drawDeg, center.x, center.y) {
+                    val r = RectF(
+                        center.x - width / 2f,
+                        center.y - height / 2f,
+                        center.x + width / 2f,
+                        center.y + height / 2f
+                    )
 
-                val r = RectF(
-                    center.x - width / 2f,
-                    center.y - height / 2f,
-                    center.x + width / 2f,
-                    center.y + height / 2f
-                )
-
-                canvas.drawRect(r, collisionDebugPaint)
-                canvas.restore()
+                    drawRect(r, collisionDebugPaint)
+                }
             }
         }
     }
@@ -1402,35 +1370,32 @@ class GolfRenderer @JvmOverloads constructor(
         val baseRotationDegrees = Math.toDegrees(rotationRadians.toDouble()).toFloat()
         val rotationDegrees = -baseRotationDegrees
 
-        canvas.save()
-        canvas.rotate(rotationDegrees, cx, cy)
+        canvas.withRotation(rotationDegrees, cx, cy) {
+            val dst = RectF(
+                cx - w / 2f,
+                cy - h / 2f,
+                cx + w / 2f,
+                cy + h / 2f
+            )
 
-        val dst = RectF(
-            cx - w / 2f,
-            cy - h / 2f,
-            cx + w / 2f,
-            cy + h / 2f
-        )
-
-        if (bitmap != null) {
-            if (drawShadow) {
-                paint.alpha = 64
-                paint.colorFilter = PorterDuffColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
-                canvas.drawBitmap(bitmap, null, dst, paint)
-                paint.colorFilter = null
-                paint.alpha = 255
+            if (bitmap != null) {
+                if (drawShadow) {
+                    paint.alpha = 64
+                    paint.colorFilter = PorterDuffColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
+                    drawBitmap(bitmap, null, dst, paint)
+                    paint.colorFilter = null
+                    paint.alpha = 255
+                } else {
+                    paint.alpha = 255
+                    paint.colorFilter = null
+                    drawBitmap(bitmap, null, dst, paint)
+                }
             } else {
-                paint.alpha = 255
-                paint.colorFilter = null
-                canvas.drawBitmap(bitmap, null, dst, paint)
+                paint.style = Paint.Style.FILL
+                paint.color = fallbackColor
+                drawRoundRect(dst, 3f * scale, 3f * scale, paint)
             }
-        } else {
-            paint.style = Paint.Style.FILL
-            paint.color = fallbackColor
-            canvas.drawRoundRect(dst, 3f * scale, 3f * scale, paint)
         }
-
-        canvas.restore()
     }
 
     private fun updateFlagAnimation() {
@@ -1454,7 +1419,7 @@ class GolfRenderer @JvmOverloads constructor(
             (flagPullProgress - delta).coerceAtLeast(target)
         }
 
-        if (kotlin.math.abs(flagPullProgress - target) > 0.001f) {
+        if (abs(flagPullProgress - target) > 0.001f) {
             postInvalidateOnAnimation()
         }
     }
@@ -1537,8 +1502,8 @@ class GolfRenderer @JvmOverloads constructor(
         if (
             opponentBallCourse == null &&
             !ballInHole &&
-            (kotlin.math.abs(g.ballStart2.x - g.ballStart1.x) > 0.001f ||
-                    kotlin.math.abs(g.ballStart2.y - g.ballStart1.y) > 0.001f)
+            (abs(g.ballStart2.x - g.ballStart1.x) > 0.001f ||
+                    abs(g.ballStart2.y - g.ballStart1.y) > 0.001f)
         ) {
             drawBall(
                 canvas = canvas,
@@ -1727,7 +1692,11 @@ class GolfRenderer @JvmOverloads constructor(
 
         paint.color = Color.WHITE
         paint.textAlign = Paint.Align.CENTER
-        paint.textSize = 14f * resources.displayMetrics.scaledDensity
+        paint.textSize = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_SP,
+            14f,
+            resources.displayMetrics
+        )
 
         val source = if (g.complete) {
             "captured parity grid"
@@ -1743,17 +1712,6 @@ class GolfRenderer @JvmOverloads constructor(
             height - 42f,
             paint
         )
-    }
-
-    private fun drawCenteredText(canvas: Canvas, title: String, subtitle: String) {
-        paint.textAlign = Paint.Align.CENTER
-        paint.style = Paint.Style.FILL
-        paint.color = Color.WHITE
-        paint.textSize = 34f * resources.displayMetrics.scaledDensity
-        canvas.drawText(title, width / 2f, height / 2f - 16f, paint)
-
-        paint.textSize = 17f * resources.displayMetrics.scaledDensity
-        canvas.drawText(subtitle, width / 2f, height / 2f + 20f, paint)
     }
 
     private fun drawBitmapCentered(canvas: Canvas, bitmap: Bitmap, cx: Float, cy: Float, w: Float, h: Float) {
