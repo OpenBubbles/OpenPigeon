@@ -40,6 +40,7 @@ import android.widget.LinearLayout
 import android.widget.Toast
 import android.view.ViewGroup
 import androidx.core.view.WindowInsetsCompat
+import android.view.animation.OvershootInterpolator
 
 class GolfActivity : AppCompatActivity() {
 
@@ -87,6 +88,8 @@ class GolfActivity : AppCompatActivity() {
     private var skipReplayNormalBitmap: Bitmap? = null
     private var skipReplayPressedBitmap: Bitmap? = null
     private lateinit var aimInstructionLabel: TextView
+    private lateinit var gameOverLabel: TextView
+    private var gameOverShown = false
 
     private var topHudInsetPx = 0
 
@@ -102,6 +105,10 @@ class GolfActivity : AppCompatActivity() {
     private var currentMap: GolfMap? = null
     private var lastRenderedKey: String = ""
     private var lastRenderedSender: String = ""
+    private var lastRenderedWinner: String = ""
+
+    private var pendingGameOverForcedResult: Int? = null
+    private var pendingGameOverShouldSendWinner = false
 
     private var seed: Int = GolfConstants.DEFAULT_SEED
     private var mode: String = GolfConstants.DEFAULT_MODE
@@ -140,6 +147,10 @@ class GolfActivity : AppCompatActivity() {
 
     private var dualReplayMineShots: List<GolfReplay.Shot> = emptyList()
     private var dualReplayOpponentShots: List<GolfReplay.Shot> = emptyList()
+    private var dualReplayMineDisplayedStrokes = 0
+    private var dualReplayOpponentDisplayedStrokes = 0
+    private var dualReplayMineBaseStrokes = 0
+    private var dualReplayOpponentBaseStrokes = 0
 
     private var dualReplayOpponentBallCourse: PointF? = null
     private val dualReplayMineVelocityCourse = PointF(0f, 0f)
@@ -440,6 +451,7 @@ class GolfActivity : AppCompatActivity() {
 
         buildHoleOverlay()
         buildWaitingOverlay()
+        buildGameOverLabel()
         setContentView(root)
 
         root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -455,6 +467,35 @@ class GolfActivity : AppCompatActivity() {
         }
 
         applyDebugUiState()
+    }
+
+    private fun buildGameOverLabel() {
+        gameOverLabel = TextView(this).apply {
+            visibility = View.GONE
+            alpha = 0f
+            scaleX = 0.65f
+            scaleY = 0.65f
+
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            gravity = Gravity.CENTER
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            background = rounded(Color.argb(205, 0, 0, 0), dp(8).toFloat())
+            setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
+
+            setUiLayer(this, LAYER_WAITING + 100f)
+
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+        }
+
+        root.addView(gameOverLabel)
     }
 
     private fun buildMenuLayer() {
@@ -552,12 +593,11 @@ class GolfActivity : AppCompatActivity() {
             ?: anchorParams.height.takeIf { it > 0 }
             ?: dp(48)
 
-        val counterSize = (anchorHeight * 0.74f)
+        val counterSize = (anchorHeight * 1.12f)
             .toInt()
-            .coerceIn(dp(32), dp(40))
+            .coerceIn(dp(50), dp(58))
 
         val verticalTop = anchorParams.topMargin + ((anchorHeight - counterSize) / 2)
-        val horizontalInset = dp(-6)
 
         val params = if (isLeftAvatar) {
             FrameLayout.LayoutParams(
@@ -566,7 +606,7 @@ class GolfActivity : AppCompatActivity() {
                 Gravity.TOP or Gravity.START
             ).apply {
                 topMargin = verticalTop
-                marginStart = anchorParams.marginStart + anchorWidth + horizontalInset
+                marginStart = anchorParams.marginStart + anchorWidth
             }
         } else {
             FrameLayout.LayoutParams(
@@ -575,7 +615,7 @@ class GolfActivity : AppCompatActivity() {
                 Gravity.TOP or Gravity.END
             ).apply {
                 topMargin = verticalTop
-                marginEnd = anchorParams.marginEnd + anchorWidth + horizontalInset
+                marginEnd = anchorParams.marginEnd + anchorWidth
             }
         }
 
@@ -599,7 +639,7 @@ class GolfActivity : AppCompatActivity() {
                 ?: counterView.layoutParams?.height?.takeIf { it > 0 }
                 ?: dp(36)
 
-            label.textSize = (sizePx * 0.36f) / resources.displayMetrics.scaledDensity
+            label.textSize = (sizePx * 0.28f) / resources.displayMetrics.scaledDensity
         }
 
         sync(localStrokeLabel, localStrokeCounterView)
@@ -673,7 +713,7 @@ class GolfActivity : AppCompatActivity() {
         textColor: Int,
         fallbackColor: Int
     ): StrokeCounterViews {
-        val defaultSize = dp(36)
+        val defaultSize = dp(54)
 
         val container = FrameLayout(this).apply {
             clipChildren = false
@@ -731,7 +771,8 @@ class GolfActivity : AppCompatActivity() {
             isClickable = false
             isFocusable = false
             background = null
-            translationY = 0f
+            translationX = dp(3).toFloat()
+            translationY = -dp(5).toFloat()
 
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -750,6 +791,296 @@ class GolfActivity : AppCompatActivity() {
         )
     }
 
+    private fun totalStrokesForReplay(replay: String): Int {
+        var total = 0
+
+        for (holeIndex in 0 until holeCount) {
+            total += GolfReplay.segmentAt(replay, holeIndex).size
+        }
+
+        return total
+    }
+
+    private fun totalStrokesBeforeHole(
+        replay: String,
+        holeIndex: Int
+    ): Int {
+        var total = 0
+        val endExclusive = holeIndex.coerceIn(0, holeCount)
+
+        for (i in 0 until endExclusive) {
+            total += GolfReplay.segmentAt(replay, i).size
+        }
+
+        return total
+    }
+
+    private fun totalStrokesThroughHole(
+        replay: String,
+        holeIndex: Int
+    ): Int {
+        var total = 0
+        val endInclusive = holeIndex.coerceIn(0, holeCount - 1)
+
+        for (i in 0..endInclusive) {
+            total += GolfReplay.segmentAt(replay, i).size
+        }
+
+        return total
+    }
+
+    private fun localResultFromWinnerValue(winner: String): Int? {
+        if (winner.isBlank()) return null
+
+        val parts = winner.split("|")
+        if (parts.size < 2) return null
+
+        val winnerSenderId = parts[0]
+        val senderResult = parts[1].toIntOrNull()?.coerceIn(-1, 1) ?: return null
+
+        val myId = runCatching {
+            gameSessionIPC?.getSenderUUID(sessionId)
+        }.getOrNull().orEmpty()
+
+        if (senderResult == 0) return 0
+
+        return if (myId.isNotBlank() && winnerSenderId != myId) {
+            -senderResult
+        } else {
+            senderResult
+        }
+    }
+
+    private fun resultTextFor(result: Int): String {
+        return when {
+            result > 0 -> "You Win!"
+            result < 0 -> "You Lose!"
+            else -> "Draw!"
+        }
+    }
+
+    private fun resultColorFor(result: Int): Int {
+        return when {
+            result > 0 -> Color.rgb(242, 202, 72)   // gold
+            result < 0 -> Color.rgb(235, 62, 72)    // red
+            else -> Color.WHITE
+        }
+    }
+
+    private fun hideGameOverLabel() {
+        gameOverShown = false
+
+        if (!::gameOverLabel.isInitialized) return
+
+        gameOverLabel.animate().cancel()
+        gameOverLabel.alpha = 0f
+        gameOverLabel.visibility = View.GONE
+        gameOverLabel.scaleX = 0.65f
+        gameOverLabel.scaleY = 0.65f
+    }
+
+    private fun showGameOverLabel(
+        result: Int,
+        localStrokes: Int,
+        opponentStrokes: Int
+    ) {
+        if (!::gameOverLabel.isInitialized) return
+
+        gameOverShown = true
+
+        hideAimReadyUi(immediate = true)
+        hideSkipReplayButton()
+        hideWaitingOverlay()
+        hideMenuPopup()
+
+        gameOverLabel.animate().cancel()
+        gameOverLabel.text = resultTextFor(result)
+        gameOverLabel.setTextColor(resultColorFor(result))
+
+        setUiLayer(gameOverLabel, LAYER_WAITING + 100f)
+
+        gameOverLabel.alpha = 0f
+        gameOverLabel.scaleX = 0.88f
+        gameOverLabel.scaleY = 0.88f
+        gameOverLabel.visibility = View.VISIBLE
+        gameOverLabel.bringToFront()
+
+        gameOverLabel.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(260L)
+            .setInterpolator(OvershootInterpolator(1.2f))
+            .start()
+    }
+
+    private fun showGameOverAfterReplay() {
+        val forcedResult = pendingGameOverForcedResult
+        val shouldSendWinner = pendingGameOverShouldSendWinner && forcedResult == null
+
+        pendingGameOverForcedResult = null
+        pendingGameOverShouldSendWinner = false
+
+        waitingForOpponent = false
+
+        showGameOverFromData(
+            data = gameData,
+            shouldSendWinner = shouldSendWinner,
+            forcedLocalResult = forcedResult
+        )
+    }
+
+    private fun showGameOverFromData(
+        data: GolfGameData?,
+        shouldSendWinner: Boolean,
+        forcedLocalResult: Int? = null
+    ) {
+        val d = data ?: gameData ?: return
+
+        waitingForOpponent = false
+        physicsRunning = false
+        dualReplayRunning = false
+        dualReplayWaitingToFire = false
+
+        val localPlayer = localPlayerNumberFor(d)
+
+        val myReplay = if (localPlayer == 1) {
+            d.replay
+        } else {
+            d.replay2
+        }
+
+        val opponentReplay = if (localPlayer == 1) {
+            d.replay2
+        } else {
+            d.replay
+        }
+
+        val localStrokes = totalStrokesForReplay(myReplay)
+        val opponentStrokes = totalStrokesForReplay(opponentReplay)
+
+        val localResult = forcedLocalResult ?: when {
+            localStrokes < opponentStrokes -> 1
+            localStrokes > opponentStrokes -> -1
+            else -> 0
+        }
+
+        OpenPigeonLog.i(
+            TAG,
+            "showGameOverFromData localPlayer=$localPlayer localStrokes=$localStrokes " +
+                    "opponentStrokes=$opponentStrokes result=$localResult shouldSendWinner=$shouldSendWinner"
+        )
+
+        showGameOverLabel(
+            result = localResult,
+            localStrokes = localStrokes,
+            opponentStrokes = opponentStrokes
+        )
+
+        if (shouldSendWinner) {
+            sendWinnerResultIfNeeded(localResult)
+        }
+    }
+
+    private fun sendWinnerResultIfNeeded(localResult: Int) {
+        val ipc = gameSessionIPC
+        if (ipc == null || sessionId.isBlank()) {
+            OpenPigeonLog.w(TAG, "sendWinnerResultIfNeeded skipped ipcNull=${ipc == null} sessionBlank=${sessionId.isBlank()}")
+            return
+        }
+
+        try {
+            val myId = ipc.getSenderUUID(sessionId).takeIf { it.isNotBlank() }.orEmpty()
+            if (myId.isBlank()) {
+                OpenPigeonLog.w(TAG, "sendWinnerResultIfNeeded skipped blank sender id")
+                return
+            }
+
+            val current = ipc.getCurrentMessage(sessionId).ifEmpty { lastMessage }
+
+            if (current["winner"].orEmpty().isNotBlank()) {
+                OpenPigeonLog.i(TAG, "sendWinnerResultIfNeeded skipped existing winner=${current["winner"]}")
+                return
+            }
+
+            val outgoing = current.toMutableMap()
+            outgoing["game"] = "golf"
+            outgoing["game_name"] = "Mini Golf"
+            outgoing["sender"] = myId
+            outgoing["winner"] = "$myId|${localResult.coerceIn(-1, 1)}"
+
+            OpenPigeonLog.i(
+                TAG,
+                "sendWinnerResultIfNeeded winner=${outgoing["winner"]} keys=${outgoing.keys.sorted()}"
+            )
+
+            ipc.updateSession(outgoing, sessionId) {
+                OpenPigeonLog.i(TAG, "sendWinnerResultIfNeeded updateSession callback")
+            }
+        } catch (t: Throwable) {
+            OpenPigeonLog.e(TAG, "sendWinnerResultIfNeeded failed result=$localResult", t)
+        }
+    }
+
+    private fun setStrokeHudCounts(
+        localCount: Int,
+        opponentCount: Int
+    ) {
+        if (!::localStrokeLabel.isInitialized || !::opponentStrokeLabel.isInitialized) return
+
+        attachStrokeCountersToAvatarAnchors()
+        syncStrokeCounterTextSizing()
+
+        localStrokeLabel.text = localCount.coerceAtLeast(0).toString()
+        opponentStrokeLabel.text = opponentCount.coerceAtLeast(0).toString()
+    }
+
+    private fun prepareDualReplayStrokeHud(
+        data: GolfGameData,
+        localPlayer: Int
+    ) {
+        val myReplay = if (localPlayer == 1) {
+            data.replay
+        } else {
+            data.replay2
+        }
+
+        val opponentReplay = if (localPlayer == 1) {
+            data.replay2
+        } else {
+            data.replay
+        }
+
+        dualReplayMineBaseStrokes = totalStrokesBeforeHole(myReplay, data.mapNum)
+        dualReplayOpponentBaseStrokes = totalStrokesBeforeHole(opponentReplay, data.mapNum)
+
+        dualReplayMineDisplayedStrokes = dualReplayMineBaseStrokes
+        dualReplayOpponentDisplayedStrokes = dualReplayOpponentBaseStrokes
+
+        setStrokeHudCounts(
+            localCount = dualReplayMineDisplayedStrokes,
+            opponentCount = dualReplayOpponentDisplayedStrokes
+        )
+    }
+
+    private fun markDualReplayStrokeFired(
+        mineFired: Boolean,
+        opponentFired: Boolean
+    ) {
+        if (mineFired) {
+            dualReplayMineDisplayedStrokes += 1
+        }
+
+        if (opponentFired) {
+            dualReplayOpponentDisplayedStrokes += 1
+        }
+
+        setStrokeHudCounts(
+            localCount = dualReplayMineDisplayedStrokes,
+            opponentCount = dualReplayOpponentDisplayedStrokes
+        )
+    }
+
     private fun updateStrokeHud(data: GolfGameData? = gameData) {
         if (!::localStrokeLabel.isInitialized || !::opponentStrokeLabel.isInitialized) return
 
@@ -758,7 +1089,13 @@ class GolfActivity : AppCompatActivity() {
 
         val localPlayer = localPlayerNumberFor(data)
 
-        val localCount = GolfReplay.segmentAt(localReplay, mapNum).size
+        val localReplayForHud = localReplay.ifBlank {
+            if (localPlayer == 1) {
+                data?.replay.orEmpty()
+            } else {
+                data?.replay2.orEmpty()
+            }
+        }
 
         val opponentReplay = if (localPlayer == 1) {
             data?.replay2.orEmpty()
@@ -766,10 +1103,13 @@ class GolfActivity : AppCompatActivity() {
             data?.replay.orEmpty()
         }
 
-        val opponentCount = GolfReplay.segmentAt(opponentReplay, mapNum).size
+        val localCount = totalStrokesThroughHole(localReplayForHud, mapNum)
+        val opponentCount = totalStrokesThroughHole(opponentReplay, mapNum)
 
-        localStrokeLabel.text = localCount.toString()
-        opponentStrokeLabel.text = opponentCount.toString()
+        setStrokeHudCounts(
+            localCount = localCount,
+            opponentCount = opponentCount
+        )
     }
 
     private fun buildHoleOverlay() {
@@ -870,7 +1210,7 @@ class GolfActivity : AppCompatActivity() {
         waitingLabel = TextView(this).apply {
             text = "WAITING FOR OPPONENT."
             setTextColor(Color.WHITE)
-            textSize = 17f
+            textSize = 18f
             gravity = Gravity.CENTER
             textAlignment = View.TEXT_ALIGNMENT_CENTER
             typeface = Typeface.DEFAULT_BOLD
@@ -1334,11 +1674,16 @@ class GolfActivity : AppCompatActivity() {
             )
 
             val renderSender = msg["sender"].orEmpty()
+            val renderWinner = msg["winner"].orEmpty()
 
-            if (parsed.renderKey == lastRenderedKey && renderSender == lastRenderedSender) {
+            if (
+                parsed.renderKey == lastRenderedKey &&
+                renderSender == lastRenderedSender &&
+                renderWinner == lastRenderedWinner
+            ) {
                 OpenPigeonLog.i(
                     TAG,
-                    "handleMessage duplicate skipped renderKey=${parsed.renderKey} sender=$renderSender " +
+                    "handleMessage duplicate skipped renderKey=${parsed.renderKey} sender=$renderSender winner=$renderWinner " +
                             "elapsedMs=${SystemClock.elapsedRealtime() - startedAt}"
                 )
                 return
@@ -1346,10 +1691,56 @@ class GolfActivity : AppCompatActivity() {
 
             lastRenderedKey = parsed.renderKey
             lastRenderedSender = renderSender
+            lastRenderedWinner = renderWinner
 
             val messageFromMe = isCurrentMessageFromMe(msg)
             val hasBothReplays = hasBothReplaysForCurrentHole(parsed)
-            val shouldReplay = hasBothReplays && !messageFromMe
+            val isFinalHole = parsed.mapNum + 1 >= parsed.holeCount
+            val incomingWinnerResult = localResultFromWinnerValue(renderWinner)
+
+            if (incomingWinnerResult != null && gameOverShown) {
+                OpenPigeonLog.i(
+                    TAG,
+                    "handleMessage winner ignored because gameOverShown winner=$renderWinner"
+                )
+                return
+            }
+
+            val shouldReplay = hasBothReplays && (!messageFromMe || isFinalHole)
+
+            if (incomingWinnerResult != null && !shouldReplay) {
+                OpenPigeonLog.i(
+                    TAG,
+                    "handleMessage winner present without replay winner=$renderWinner localResult=$incomingWinnerResult"
+                )
+
+                waitingForOpponent = false
+                stopStateLabelAnimation()
+
+                generateAndShowMap(
+                    showIntro = false,
+                    source = "handleMessage winner"
+                )
+
+                showGameOverFromData(
+                    data = parsed,
+                    shouldSendWinner = false,
+                    forcedLocalResult = incomingWinnerResult
+                )
+
+                return
+            }
+
+            pendingGameOverForcedResult = if (shouldReplay && isFinalHole) {
+                incomingWinnerResult
+            } else {
+                null
+            }
+
+            pendingGameOverShouldSendWinner =
+                shouldReplay &&
+                        isFinalHole &&
+                        incomingWinnerResult == null
 
             waitingForOpponent = messageFromMe && !shouldReplay
 
@@ -1653,6 +2044,7 @@ class GolfActivity : AppCompatActivity() {
 
         if (holeStep.settled) {
             hideAimReadyUi()
+
             OpenPigeonLog.i(
                 TAG,
                 "hole settled ball=(${ball.x},${ball.y}) hole=(${g.hole.x},${g.hole.y})"
@@ -1665,7 +2057,6 @@ class GolfActivity : AppCompatActivity() {
             )
 
             stopBallPhysics(clearVelocity = true)
-            hideAimReadyUi()
 
             if (!roundResultSent) {
                 roundResultSent = true
@@ -1691,6 +2082,8 @@ class GolfActivity : AppCompatActivity() {
     private fun generateAndShowMap(showIntro: Boolean, source: String) {
         val startedAt = SystemClock.elapsedRealtime()
         OpenPigeonLog.i(TAG, "generateAndShowMap enter source=$source seed=$seed mode=$mode mapNum=$mapNum holeCount=$holeCount showIntro=$showIntro")
+
+        hideGameOverLabel()
 
         try {
             val generated = generator.createMap(seed, mapNum, mode)
@@ -2283,7 +2676,10 @@ class GolfActivity : AppCompatActivity() {
         showSkipReplayButton()
 
         stateLabel.text = "Replay"
-        updateStrokeHud(data)
+        prepareDualReplayStrokeHud(
+            data = data,
+            localPlayer = localPlayer
+        )
 
         OpenPigeonLog.i(
             TAG,
@@ -2354,11 +2750,19 @@ class GolfActivity : AppCompatActivity() {
 
             renderer.clearReplayAimPreview()
 
-            dualReplayMineShots.getOrNull(dualReplayShotIndex)?.let { shot ->
+            val mineShotToFire = dualReplayMineShots.getOrNull(dualReplayShotIndex)
+            val opponentShotToFire = dualReplayOpponentShots.getOrNull(dualReplayShotIndex)
+
+            markDualReplayStrokeFired(
+                mineFired = mineShotToFire != null,
+                opponentFired = opponentShotToFire != null
+            )
+
+            mineShotToFire?.let { shot ->
                 dualReplayMineVelocityCourse.set(shotVelocityCourse(shot))
             }
 
-            dualReplayOpponentShots.getOrNull(dualReplayShotIndex)?.let { shot ->
+            opponentShotToFire?.let { shot ->
                 dualReplayOpponentVelocityCourse.set(shotVelocityCourse(shot))
             }
 
@@ -2462,6 +2866,13 @@ class GolfActivity : AppCompatActivity() {
         stopStateLabelAnimation()
         hideAimReadyUi()
 
+        if (dualReplayMineShots.isNotEmpty() || dualReplayOpponentShots.isNotEmpty()) {
+            setStrokeHudCounts(
+                localCount = dualReplayMineBaseStrokes + dualReplayMineShots.size,
+                opponentCount = dualReplayOpponentBaseStrokes + dualReplayOpponentShots.size
+            )
+        }
+
         if (mapNum + 1 < holeCount) {
             if (immediateAdvance) {
                 advanceAfterReplayToNextHole(source = "skipReplay next hole")
@@ -2474,15 +2885,13 @@ class GolfActivity : AppCompatActivity() {
                 }, 650L)
             }
         } else {
-            waitingForOpponent = false
-            stateLabel.text = "Game complete"
+            showGameOverAfterReplay()
         }
     }
 
     private fun advanceAfterReplayToNextHole(source: String) {
         if (mapNum + 1 >= holeCount) {
-            waitingForOpponent = false
-            stateLabel.text = "Game complete"
+            showGameOverAfterReplay()
             return
         }
 
