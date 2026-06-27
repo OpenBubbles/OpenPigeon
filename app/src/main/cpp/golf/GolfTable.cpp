@@ -1,4 +1,6 @@
 #include "GolfTable.h"
+#include "GolfBall.h"
+
 #include <algorithm>
 #include <android/log.h>
 #include <cmath>
@@ -6,19 +8,11 @@
 static constexpr float BALL_RADIUS = 4.0f;
 static constexpr float BALL_DENSITY = 1.0f;
 static constexpr float BALL_FRICTION = 0.0f;
-/*
- * Static iOS fixtures are 0.5, but effective collision response appears
- * higher. Box2D mixes restitution with max(a,b), so the ball fixture needs
- * to carry the higher restitution while walls/bars stay at 0.5.
- */
 static constexpr float BALL_RESTITUTION = 0.50f;
 
-// iOS b2BodyDef shows linearDamping = 1.0f.
 static constexpr float BALL_LINEAR_DAMPING = 1.0f;
 static constexpr float BALL_ANGULAR_DAMPING = 0.0f;
 
-// iOS makeFixture / makeFixture2 / makeFixture3:
-// friction = 0.0f, restitution = 0.5f, density = 1.0f.
 static constexpr float IOS_FIXTURE_DENSITY = 1.0f;
 static constexpr float IOS_FIXTURE_FRICTION = 0.0f;
 static constexpr float IOS_FIXTURE_RESTITUTION = 0.50f;
@@ -40,17 +34,16 @@ static constexpr float STEP_DT = 1.0f / 60.0f;
 static constexpr int VELOCITY_ITERATIONS = 60;
 static constexpr int POSITION_ITERATIONS = 60;
 
-/*
- * iOS slope behavior is not a force.
- * It is a direct velocity add after b2World::Step.
- */
+static constexpr float PI_F = 3.14159265358979323846f;
+
+static constexpr int CELL_OPEN = 0;
+static constexpr int CELL_BLOCKED = 1;
+static constexpr int CELL_SPECIAL_3 = 3;
+
 static constexpr float SLOPE_VELOCITY_DELTA_PER_STEP = 2.0f;
 static constexpr float SLOPE_RECT_WIDTH = 65.0f;
 static constexpr float SLOPE_RECT_HEIGHT = 52.0f;
 
-/*
- * iOS clears tiny motion after frame logic.
- */
 static constexpr float IOS_STOP_LINEAR_SPEED = 1.0f;
 static constexpr float IOS_STOP_ANGULAR_SPEED = 0.08f;
 
@@ -360,6 +353,43 @@ void GolfTable::clearStaticBodies() {
     staticBodies.clear();
 }
 
+static bool nativeCellIsOpenRaw(
+        const int* openMask,
+        int rows,
+        int cols,
+        int row,
+        int col
+) {
+    if (!openMask) {
+        return false;
+    }
+
+    if (row < 0 || row >= rows || col < 0 || col >= cols) {
+        return false;
+    }
+
+    const int value = openMask[row * cols + col];
+    return value == CELL_OPEN || value == CELL_SPECIAL_3;
+}
+
+static int nativeCellValueRaw(
+        const int* openMask,
+        int rows,
+        int cols,
+        int row,
+        int col
+) {
+    if (!openMask) {
+        return CELL_BLOCKED;
+    }
+
+    if (row < 0 || row >= rows || col < 0 || col >= cols) {
+        return CELL_BLOCKED;
+    }
+
+    return openMask[row * cols + col];
+}
+
 void GolfTable::configureMap(
         float newTileSize,
         float newMapSize,
@@ -382,9 +412,24 @@ void GolfTable::configureMap(
     if (openMask && rows > 0 && cols > 0) {
         for (int row = 0; row < rows; ++row) {
             for (int col = 0; col < cols; ++col) {
-                const int open = openMask[row * cols + col];
-                if (open == 0) {
-                    createBlockedCellWall(row, col);
+                const int cellValue = nativeCellValueRaw(openMask, rows, cols, row, col);
+
+                switch (cellValue) {
+                    case CELL_BLOCKED:
+                        createBlockedCellWall(row, col);
+                        break;
+
+                    case CELL_SPECIAL_3:
+                        /*
+                         * Temporary: value 3 is visually open-with-cut.
+                         * Do not create guessed collision geometry until we verify
+                         * the exact iOS b2PolygonShape vertices from the binary.
+                         */
+                        break;
+
+                    case CELL_OPEN:
+                    default:
+                        break;
                 }
             }
         }
@@ -510,7 +555,8 @@ void GolfTable::createStaticCircle(
         float radius,
         int kind,
         float restitution,
-        float friction
+        float friction,
+        bool bouncy
 ) {
     b2BodyDef bodyDef;
     applyIosBodyDefaults(bodyDef);
@@ -557,11 +603,240 @@ void GolfTable::createStaticCircle(
     auto* data = new GolfData{
             kind < 0 ? GolfData::Type::Wall : GolfData::Type::Obstacle,
             kind,
-            body
+            body,
+            bouncy
     };
 
     body->SetUserData(data);
     staticBodies.push_back({body, data});
+}
+
+void GolfTable::createWallTriangle(
+        const char* source,
+        int row,
+        int col,
+        int cellValue,
+        const b2Vec2& a,
+        const b2Vec2& b,
+        const b2Vec2& c
+) {
+    b2Vec2 vertices[3] = {a, b, c};
+
+    b2BodyDef bodyDef;
+    applyIosBodyDefaults(bodyDef);
+    bodyDef.type = b2_staticBody;
+    bodyDef.position.Set(0.0f, 0.0f);
+
+    b2Body* body = world.CreateBody(&bodyDef);
+
+    b2PolygonShape shape;
+    shape.Set(vertices, 3);
+
+    b2FixtureDef fixtureDef;
+    fixtureDef.shape = &shape;
+    applyIosFixtureDefaults(fixtureDef);
+    fixtureDef.restitution = WALL_RESTITUTION;
+    fixtureDef.friction = WALL_FRICTION;
+    fixtureDef.density = IOS_FIXTURE_DENSITY;
+
+    __android_log_print(
+            ANDROID_LOG_INFO,
+            "GolfNative",
+            "GOLF_ANDROID_DIAGONAL_WALL={"
+            "\"runId\":\"%s\","
+            "\"shotIndex\":%d,"
+            "\"frame\":%d,"
+            "\"phase\":\"%s\","
+            "\"source\":\"%s\","
+            "\"row\":%d,"
+            "\"col\":%d,"
+            "\"cellValue\":%d,"
+            "\"shape\":\"triangle\","
+            "\"vertices\":["
+            "{\"x\":%.6f,\"y\":%.6f},"
+            "{\"x\":%.6f,\"y\":%.6f},"
+            "{\"x\":%.6f,\"y\":%.6f}"
+            "]"
+            "}",
+            traceRunId.c_str(),
+            traceShotIndex,
+            traceFrame,
+            tracePhase.c_str(),
+            source ? source : "",
+            row,
+            col,
+            cellValue,
+            vertices[0].x,
+            vertices[0].y,
+            vertices[1].x,
+            vertices[1].y,
+            vertices[2].x,
+            vertices[2].y
+    );
+
+    logFixtureMaterial(
+            traceRunId.c_str(),
+            traceShotIndex,
+            traceFrame,
+            tracePhase.c_str(),
+            source ? source : "createWallTriangle",
+            -2,
+            fixtureDef
+    );
+
+    body->CreateFixture(&fixtureDef);
+
+    auto* data = new GolfData(
+            GolfData::Type::Wall,
+            -2,
+            body,
+            false
+    );
+
+    body->SetUserData(data);
+    staticBodies.push_back({body, data});
+}
+
+void GolfTable::createSpecialValue3Cut(const int* openMask, int row, int col) {
+    const float x = static_cast<float>(col) * tileSize;
+    const float y = static_cast<float>(row) * tileSize;
+    const float h = tileSize * 0.5f;
+
+    const b2Vec2 topLeft(x - h, y - h);
+    const b2Vec2 topRight(x + h, y - h);
+    const b2Vec2 bottomRight(x + h, y + h);
+    const b2Vec2 bottomLeft(x - h, y + h);
+
+    const bool topBlocked = !nativeCellIsOpenRaw(openMask, rows, cols, row - 1, col);
+    const bool bottomBlocked = !nativeCellIsOpenRaw(openMask, rows, cols, row + 1, col);
+    const bool leftBlocked = !nativeCellIsOpenRaw(openMask, rows, cols, row, col - 1);
+    const bool rightBlocked = !nativeCellIsOpenRaw(openMask, rows, cols, row, col + 1);
+
+    if (topBlocked && leftBlocked) {
+        createWallTriangle(
+                "specialValue3Cut_TOP_LEFT",
+                row,
+                col,
+                CELL_SPECIAL_3,
+                topLeft,
+                topRight,
+                bottomLeft
+        );
+    } else if (topBlocked && rightBlocked) {
+        createWallTriangle(
+                "specialValue3Cut_TOP_RIGHT",
+                row,
+                col,
+                CELL_SPECIAL_3,
+                topLeft,
+                topRight,
+                bottomRight
+        );
+    } else if (bottomBlocked && leftBlocked) {
+        createWallTriangle(
+                "specialValue3Cut_BOTTOM_LEFT",
+                row,
+                col,
+                CELL_SPECIAL_3,
+                topLeft,
+                bottomLeft,
+                bottomRight
+        );
+    } else if (bottomBlocked && rightBlocked) {
+        createWallTriangle(
+                "specialValue3Cut_BOTTOM_RIGHT",
+                row,
+                col,
+                CELL_SPECIAL_3,
+                topRight,
+                bottomRight,
+                bottomLeft
+        );
+    } else {
+        createWallTriangle(
+                "specialValue3Cut_FALLBACK_BOTTOM_LEFT",
+                row,
+                col,
+                CELL_SPECIAL_3,
+                topLeft,
+                bottomLeft,
+                bottomRight
+        );
+    }
+}
+
+void GolfTable::createImplicitDiagonalCornerCut(const int* openMask, int row, int col) {
+    const bool tl = nativeCellIsOpenRaw(openMask, rows, cols, row, col);
+    const bool tr = nativeCellIsOpenRaw(openMask, rows, cols, row, col + 1);
+    const bool bl = nativeCellIsOpenRaw(openMask, rows, cols, row + 1, col);
+    const bool br = nativeCellIsOpenRaw(openMask, rows, cols, row + 1, col + 1);
+
+    const b2Vec2 tlCenter(
+            static_cast<float>(col) * tileSize,
+            static_cast<float>(row) * tileSize
+    );
+
+    const b2Vec2 trCenter(
+            static_cast<float>(col + 1) * tileSize,
+            static_cast<float>(row) * tileSize
+    );
+
+    const b2Vec2 blCenter(
+            static_cast<float>(col) * tileSize,
+            static_cast<float>(row + 1) * tileSize
+    );
+
+    const b2Vec2 brCenter(
+            static_cast<float>(col + 1) * tileSize,
+            static_cast<float>(row + 1) * tileSize
+    );
+
+    const b2Vec2 shared(
+            (tlCenter.x + trCenter.x + blCenter.x + brCenter.x) * 0.25f,
+            (tlCenter.y + trCenter.y + blCenter.y + brCenter.y) * 0.25f
+    );
+
+    if (!tl) {
+        createWallTriangle(
+                "implicitDiagonalCut_missing_TL",
+                row,
+                col,
+                -3,
+                trCenter,
+                shared,
+                blCenter
+        );
+    } else if (!tr) {
+        createWallTriangle(
+                "implicitDiagonalCut_missing_TR",
+                row,
+                col,
+                -3,
+                tlCenter,
+                shared,
+                brCenter
+        );
+    } else if (!bl) {
+        createWallTriangle(
+                "implicitDiagonalCut_missing_BL",
+                row,
+                col,
+                -3,
+                tlCenter,
+                shared,
+                brCenter
+        );
+    } else if (!br) {
+        createWallTriangle(
+                "implicitDiagonalCut_missing_BR",
+                row,
+                col,
+                -3,
+                trCenter,
+                shared,
+                blCenter
+        );
+    }
 }
 
 void GolfTable::createStaticBox(
@@ -572,7 +847,8 @@ void GolfTable::createStaticBox(
         float angle,
         int kind,
         float restitution,
-        float friction
+        float friction,
+        bool bouncy
 ) {
     b2BodyDef bodyDef;
     applyIosBodyDefaults(bodyDef);
@@ -621,7 +897,8 @@ void GolfTable::createStaticBox(
     auto* data = new GolfData{
             kind < 0 ? GolfData::Type::Wall : GolfData::Type::Obstacle,
             kind,
-            body
+            body,
+            bouncy
     };
 
     body->SetUserData(data);
@@ -636,7 +913,8 @@ void GolfTable::createStaticTriangle(
         float angle,
         int kind,
         float restitution,
-        float friction
+        float friction,
+        bool bouncy
 ) {
     const float halfW = width * 0.5f;
     const float halfH = height * 0.5f;
@@ -705,35 +983,53 @@ void GolfTable::createStaticTriangle(
 
     body->CreateFixture(&fixtureDef);
 
-    auto* data = new GolfData{GolfData::Type::Obstacle, kind, body};
+    auto* data = new GolfData{
+            GolfData::Type::Obstacle,
+            kind,
+            body,
+            bouncy
+    };
+
     body->SetUserData(data);
     staticBodies.push_back({body, data});
 }
 
-void GolfTable::createCross(float x, float y, float width, float height, float angle, int kind, float restitution, float friction) {
-    const float minSide = std::min(width, height);
-    const float armThickness = std::max(12.0f, std::min(18.0f, minSide * 0.17f));
+void GolfTable::createCross(
+        float x,
+        float y,
+        float width,
+        float height,
+        float angle,
+        int kind,
+        float restitution,
+        float friction,
+        bool bouncy
+) {
+    const float armLength = width;
+    const float armThickness = height * 0.25f;
 
     createStaticBox(
             x,
             y,
-            width * 0.5f,
+            armLength * 0.5f,
             armThickness * 0.5f,
             angle,
             kind,
             restitution,
-            friction
+            friction,
+            bouncy
     );
 
     createStaticBox(
             x,
             y,
+            armLength * 0.5f,
             armThickness * 0.5f,
-            height * 0.5f,
-            angle,
+            angle + PI_F * 0.5f,
             kind,
             restitution,
-            friction
+            friction,
+            bouncy
     );
 }
 
@@ -796,7 +1092,10 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
     width *= obstacle.scale;
     height *= obstacle.scale;
 
-    float restitution = obstacle.bouncy ? BOUNCY_RESTITUTION : OBSTACLE_RESTITUTION;
+    float restitution = obstacle.bouncy
+                        ? BOUNCY_RESTITUTION
+                        : OBSTACLE_RESTITUTION;
+
     float friction = OBSTACLE_FRICTION;
 
     switch (obstacle.kind) {
@@ -855,51 +1154,24 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
                     std::min(width, height) * 0.5f,
                     obstacle.kind,
                     restitution,
-                    friction
+                    friction,
+                    obstacle.bouncy
             );
             break;
 
-        case Round2: {
-            const float halfW =
-                    width * 0.5f * ROUND2_PHYSICS_HALF_WIDTH_SCALE;
-
-            const float halfH =
-                    height * 0.5f * ROUND2_PHYSICS_HALF_HEIGHT_SCALE;
-
+        case Round2:
             createStaticBox(
                     obstacle.x,
                     obstacle.y,
-                    halfW,
-                    halfH,
+                    width * 0.5f * ROUND2_PHYSICS_HALF_WIDTH_SCALE,
+                    height * 0.5f * ROUND2_PHYSICS_HALF_HEIGHT_SCALE,
                     obstacle.rotation,
                     obstacle.kind,
                     restitution,
-                    friction
+                    friction,
+                    obstacle.bouncy
             );
-
-            __android_log_print(
-                    ANDROID_LOG_INFO,
-                    "GolfNative",
-                    "GOLF_NATIVE_ROUND2_FIXTURE={"
-                    "\"x\":%f,"
-                    "\"y\":%f,"
-                    "\"visualRotation\":%f,"
-                    "\"halfW\":%f,"
-                    "\"halfH\":%f,"
-                    "\"restitution\":%f,"
-                    "\"friction\":%f"
-                    "}",
-                    obstacle.x,
-                    obstacle.y,
-                    obstacle.rotation,
-                    halfW,
-                    halfH,
-                    restitution,
-                    friction
-            );
-
             break;
-        }
 
         case Triangle:
         case Triangle2:
@@ -911,7 +1183,8 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
                     obstacle.rotation,
                     obstacle.kind,
                     restitution,
-                    friction
+                    friction,
+                    obstacle.bouncy
             );
             break;
 
@@ -924,7 +1197,8 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
                     obstacle.rotation,
                     obstacle.kind,
                     restitution,
-                    friction
+                    friction,
+                    obstacle.bouncy
             );
             break;
 
@@ -937,7 +1211,8 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
                     obstacle.rotation,
                     obstacle.kind,
                     restitution,
-                    friction
+                    friction,
+                    obstacle.bouncy
             );
             break;
     }
@@ -1023,10 +1298,12 @@ void GolfTable::fireBall(float directionRadians, float power) {
     ball->fire(directionRadians, power);
 }
 
-void GolfTable::applySlopesPostStep(const b2Vec2& slopeSamplePos) {
+bool GolfTable::applySlopesPostStep(const b2Vec2& slopeSamplePos) {
     if (!ball || !ball->body) {
-        return;
+        return false;
     }
+
+    bool onSlope = false;
 
     for (const SlopeRecord& slope : slopes) {
         const float dx = slopeSamplePos.x - slope.x;
@@ -1044,6 +1321,8 @@ void GolfTable::applySlopesPostStep(const b2Vec2& slopeSamplePos) {
         if (std::fabs(localX) > halfW || std::fabs(localY) > halfH) {
             continue;
         }
+
+        onSlope = true;
 
         const b2Vec2 oldVel = ball->body->GetLinearVelocity();
 
@@ -1099,10 +1378,17 @@ void GolfTable::applySlopesPostStep(const b2Vec2& slopeSamplePos) {
         ball->body->SetAwake(true);
         ball->body->SetLinearVelocity(newVel);
     }
+
+    return onSlope;
 }
 
-void GolfTable::stopSmallMotion() {
+void GolfTable::stopSmallMotion(bool onSlope) {
     if (!ball || !ball->body) {
+        return;
+    }
+
+    if (onSlope) {
+        ball->body->SetAwake(true);
         return;
     }
 
@@ -1178,8 +1464,8 @@ bool GolfTable::update(float dtSeconds) {
             afterWorldVel.Length()
     );
 
-    applySlopesPostStep(beforePos);
-    stopSmallMotion();
+    const bool onSlope = applySlopesPostStep(beforePos);
+    stopSmallMotion(onSlope);
 
     const b2Vec2 afterPos = ball->body->GetPosition();
     const b2Vec2 afterVel = ball->body->GetLinearVelocity();
@@ -1194,7 +1480,8 @@ bool GolfTable::update(float dtSeconds) {
             "\"phase\":\"afterNativeStep\","
             "\"pos\":{\"x\":%.6f,\"y\":%.6f},"
             "\"vel\":{\"x\":%.6f,\"y\":%.6f},"
-            "\"speed\":%.6f"
+            "\"speed\":%.6f,"
+            "\"onSlope\":%s"
             "}",
             traceRunId.c_str(),
             traceShotIndex,
@@ -1203,11 +1490,15 @@ bool GolfTable::update(float dtSeconds) {
             afterPos.y,
             afterVel.x,
             afterVel.y,
-            afterVel.Length()
+            afterVel.Length(),
+            onSlope ? "true" : "false"
     );
 
-    return ball->step();
+    const bool moving = ball->step();
+
+    return moving || onSlope;
 }
+
 
 void GolfTable::refreshOutputs() {
     if (ball) {

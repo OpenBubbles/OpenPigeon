@@ -223,14 +223,24 @@ object GolfNativePhysics {
         val cols = map.grid.maxOfOrNull { it.size } ?: 0
 
         val openMask = IntArray(rows * cols)
+        var openCells = 0
+        var blockedCells = 0
+        var special3Cells = 0
+
         for (row in 0 until rows) {
             for (col in 0 until cols) {
-                openMask[row * cols + col] =
-                    if (map.isOpen(row, col)) {
-                        1
-                    } else {
-                        0
-                    }
+                val rawCellValue = map.grid
+                    .getOrNull(row)
+                    ?.getOrNull(col)
+                    ?: 1
+
+                openMask[row * cols + col] = rawCellValue
+
+                when (rawCellValue) {
+                    0 -> openCells += 1
+                    1 -> blockedCells += 1
+                    3 -> special3Cells += 1
+                }
             }
         }
 

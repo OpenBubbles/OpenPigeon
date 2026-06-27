@@ -127,6 +127,44 @@ void GolfContactListener::clearTraceContext() {
     tracePhase.clear();
 }
 
+static constexpr float IOS_BOUNCY_VELOCITY_DELTA = 750.0f;
+
+static bool isBouncyObstacle(const GolfData* data) {
+    return data &&
+           data->type == GolfData::Type::Obstacle &&
+           data->bouncy;
+}
+
+static bool isBouncyContact(const GolfData* dataA, const GolfData* dataB) {
+    return isBouncyObstacle(dataA) || isBouncyObstacle(dataB);
+}
+
+static b2Vec2 negateVec(const b2Vec2& v) {
+    return b2Vec2(-v.x, -v.y);
+}
+
+static b2Vec2 normalAwayFromOtherBody(
+        bool ballIsA,
+        const b2Vec2& worldNormal
+) {
+    /*
+     * Box2D world manifold normal points from fixture A toward fixture B.
+     * For a ball in fixture A, away from fixture B is -normal.
+     * For a ball in fixture B, away from fixture A is +normal.
+     */
+    return ballIsA ? negateVec(worldNormal) : worldNormal;
+}
+
+static b2Vec2 iosBouncyVelocity(
+        const b2Vec2& velocity,
+        const b2Vec2& normalAwayFromBumper
+) {
+    return b2Vec2(
+            velocity.x + normalAwayFromBumper.x * IOS_BOUNCY_VELOCITY_DELTA,
+            velocity.y + normalAwayFromBumper.y * IOS_BOUNCY_VELOCITY_DELTA
+    );
+}
+
 void GolfContactListener::BeginContact(b2Contact* contact) {
     if (!contact) {
         return;
@@ -179,25 +217,57 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
 
     bool rewroteA = false;
     bool rewroteB = false;
+    bool usedBouncyRewrite = false;
+    bool usedNormalRewrite = false;
 
-    /*
-     * iOS skips normal reflection for ball-ball contacts.
-     * Current GolfData has only Ball / Wall / Obstacle, so hole contacts are
-     * still handled on the Kotlin/game side, not through this native enum.
-     */
-    if (!isBallBallContact(dataA, dataB) && contact->IsTouching()) {
+    if (contact->IsTouching()) {
         const b2Vec2 normal = worldManifold.normal;
 
-        if (isBall(dataA) && bodyA && bodyA->GetType() == b2_dynamicBody) {
-            rewrittenVelA = iosReflectVelocity(velA, normal);
-            setBodyVelocityLikeIos(bodyA, rewrittenVelA);
-            rewroteA = true;
+        /*
+         * iOS GolfBouncy path:
+         *   newVelocity = oldVelocity + normal * 750
+         *
+         * This must run before the ordinary obstacle reflection path.
+         */
+        if (isBouncyContact(dataA, dataB)) {
+            usedBouncyRewrite = true;
+
+            if (isBall(dataA) && bodyA && bodyA->GetType() == b2_dynamicBody) {
+                const b2Vec2 away = normalAwayFromOtherBody(true, normal);
+                rewrittenVelA = iosBouncyVelocity(velA, away);
+                setBodyVelocityLikeIos(bodyA, rewrittenVelA);
+                rewroteA = true;
+            }
+
+            if (isBall(dataB) && bodyB && bodyB->GetType() == b2_dynamicBody) {
+                const b2Vec2 away = normalAwayFromOtherBody(false, normal);
+                rewrittenVelB = iosBouncyVelocity(velB, away);
+                setBodyVelocityLikeIos(bodyB, rewrittenVelB);
+                rewroteB = true;
+            }
         }
 
-        if (isBall(dataB) && bodyB && bodyB->GetType() == b2_dynamicBody) {
-            rewrittenVelB = iosReflectVelocity(velB, normal);
-            setBodyVelocityLikeIos(bodyB, rewrittenVelB);
-            rewroteB = true;
+        /*
+         * Regular iOS obstacle/wall contact:
+         *   reflected = velocity - 2 * dot(velocity, normal) * normal
+         *   final     = reflected * 0.95
+         */
+        if (!usedBouncyRewrite && !isBallBallContact(dataA, dataB)) {
+            usedNormalRewrite = true;
+
+            if (isBall(dataA) && bodyA && bodyA->GetType() == b2_dynamicBody) {
+                const b2Vec2 away = normalAwayFromOtherBody(true, normal);
+                rewrittenVelA = iosReflectVelocity(velA, away);
+                setBodyVelocityLikeIos(bodyA, rewrittenVelA);
+                rewroteA = true;
+            }
+
+            if (isBall(dataB) && bodyB && bodyB->GetType() == b2_dynamicBody) {
+                const b2Vec2 away = normalAwayFromOtherBody(false, normal);
+                rewrittenVelB = iosReflectVelocity(velB, away);
+                setBodyVelocityLikeIos(bodyB, rewrittenVelB);
+                rewroteB = true;
+            }
         }
     }
 
@@ -212,9 +282,11 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
             "\"aType\":%d,"
             "\"aTypeName\":\"%s\","
             "\"aKind\":%d,"
+            "\"aBouncy\":%s,"
             "\"bType\":%d,"
             "\"bTypeName\":\"%s\","
             "\"bKind\":%d,"
+            "\"bBouncy\":%s,"
             "\"aRestitution\":%.6f,"
             "\"bRestitution\":%.6f,"
             "\"contactRestitution\":%.6f,"
@@ -233,7 +305,10 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
             "\"bVelAfter\":{\"x\":%.6f,\"y\":%.6f},"
             "\"rewroteA\":%s,"
             "\"rewroteB\":%s,"
-            "\"iosContactRewrite\":true"
+            "\"iosContactRewrite\":true,"
+            "\"usedNormalRewrite\":%s,"
+            "\"usedBouncyRewrite\":%s,"
+            "\"bouncyDelta\":%.6f"
             "}",
             traceRunId.c_str(),
             traceShotIndex,
@@ -242,9 +317,11 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
             static_cast<int>(dataA->type),
             golfDataTypeName(dataA),
             dataA->kind,
+            dataA->bouncy ? "true" : "false",
             static_cast<int>(dataB->type),
             golfDataTypeName(dataB),
             dataB->kind,
+            dataB->bouncy ? "true" : "false",
             restitutionA,
             restitutionB,
             contactRestitution,
@@ -270,7 +347,10 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
             rewrittenVelB.x,
             rewrittenVelB.y,
             rewroteA ? "true" : "false",
-            rewroteB ? "true" : "false"
+            rewroteB ? "true" : "false",
+            usedNormalRewrite ? "true" : "false",
+            usedBouncyRewrite ? "true" : "false",
+            IOS_BOUNCY_VELOCITY_DELTA
     );
 }
 

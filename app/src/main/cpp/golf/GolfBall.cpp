@@ -1,5 +1,7 @@
 #include "GolfBall.h"
 #include "GolfTable.h"
+
+#include <Box2D/Box2D.h>
 #include <cmath>
 
 static constexpr float POWER_TO_VELOCITY = 1.0f;
@@ -11,8 +13,10 @@ GolfBall::GolfBall(GolfTable* table, b2Body* body, float* outputs)
         : body(body),
           table(table),
           outputs(outputs),
-          data({GolfData::Type::Ball, 0, this}) {
-    body->SetUserData(&data);
+          data(GolfData::Type::Ball, 0, body, false) {
+    if (body) {
+        body->SetUserData(&data);
+    }
 }
 
 GolfBall::~GolfBall() {
@@ -23,24 +27,16 @@ GolfBall::~GolfBall() {
 }
 
 bool GolfBall::step() {
-    if (!body || !outputs) return false;
+    if (!body || !outputs) {
+        return false;
+    }
 
-    b2Vec2 vel = body->GetLinearVelocity();
-    float ang = body->GetAngularVelocity();
+    const b2Vec2 vel = body->GetLinearVelocity();
+    const float ang = body->GetAngularVelocity();
 
     const float speed = vel.Length();
     const bool linMoving = speed > STOP_LINEAR_SPEED;
     const bool angMoving = std::fabs(ang) > STOP_ANGULAR_SPEED;
-
-    if (!linMoving) {
-        body->SetLinearVelocity(b2Vec2_zero);
-        vel.SetZero();
-    }
-
-    if (!angMoving) {
-        body->SetAngularVelocity(0.0f);
-        ang = 0.0f;
-    }
 
     const b2Vec2 pos = body->GetPosition();
 
@@ -57,7 +53,9 @@ bool GolfBall::step() {
 }
 
 void GolfBall::setState(float x, float y, float vx, float vy) {
-    if (!body) return;
+    if (!body) {
+        return;
+    }
 
     body->SetTransform(b2Vec2(x, y), body->GetAngle());
     body->SetAwake(true);
@@ -66,7 +64,9 @@ void GolfBall::setState(float x, float y, float vx, float vy) {
 }
 
 void GolfBall::fire(float directionRadians, float power) {
-    if (!body || power <= READY_POWER_EPS) return;
+    if (!body || power <= READY_POWER_EPS) {
+        return;
+    }
 
     const b2Vec2 vel(
             std::cos(directionRadians) * power * POWER_TO_VELOCITY,

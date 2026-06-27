@@ -12,14 +12,15 @@ public:
     ~GolfBall();
 
     bool step();
+
     void setState(float x, float y, float vx, float vy);
     void fire(float directionRadians, float power);
 
-    b2Body* body;
-    GolfTable* table;
+    b2Body* body = nullptr;
 
 private:
-    float* outputs;
+    GolfTable* table = nullptr;
+    float* outputs = nullptr;
     GolfData data;
 };
 

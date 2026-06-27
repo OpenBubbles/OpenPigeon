@@ -4,9 +4,11 @@
 #include <Box2D/Box2D.h>
 #include <string>
 #include <vector>
-#include "GolfBall.h"
+
 #include "GolfContactListener.h"
 #include "GolfData.h"
+
+class GolfBall;
 
 struct GolfObstacleInput {
     float x;
@@ -90,14 +92,70 @@ private:
 
     void createBlockedCellWall(int row, int col);
     void createBoundaryWalls();
-    void createStaticCircle(float x, float y, float radius, int kind, float restitution, float friction);
-    void createStaticBox(float x, float y, float halfW, float halfH, float angle, int kind, float restitution, float friction);
-    void createStaticTriangle(float x, float y, float width, float height, float angle, int kind, float restitution, float friction);
-    void createCross(float x, float y, float width, float height, float angle, int kind, float restitution, float friction);
+
+    void createSpecialValue3Cut(const int* openMask, int row, int col);
+    void createImplicitDiagonalCornerCut(const int* openMask, int row, int col);
+
+    void createWallTriangle(
+            const char* source,
+            int row,
+            int col,
+            int cellValue,
+            const b2Vec2& a,
+            const b2Vec2& b,
+            const b2Vec2& c
+    );
+
+    void createStaticCircle(
+            float x,
+            float y,
+            float radius,
+            int kind,
+            float restitution,
+            float friction,
+            bool bouncy = false
+    );
+
+    void createStaticBox(
+            float x,
+            float y,
+            float halfW,
+            float halfH,
+            float angle,
+            int kind,
+            float restitution,
+            float friction,
+            bool bouncy = false
+    );
+
+    void createStaticTriangle(
+            float x,
+            float y,
+            float width,
+            float height,
+            float angle,
+            int kind,
+            float restitution,
+            float friction,
+            bool bouncy = false
+    );
+
+    void createCross(
+            float x,
+            float y,
+            float width,
+            float height,
+            float angle,
+            int kind,
+            float restitution,
+            float friction,
+            bool bouncy = false
+    );
+
     void createObstacle(const GolfObstacleInput& obstacle);
 
-    void applySlopesPostStep(const b2Vec2& slopeSamplePos);
-    void stopSmallMotion();
+    bool applySlopesPostStep(const b2Vec2& slopeSamplePos);
+    void stopSmallMotion(bool onSlope);
 
     b2World world;
     GolfContactListener contactListener;
