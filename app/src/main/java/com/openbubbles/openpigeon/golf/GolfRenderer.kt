@@ -31,7 +31,7 @@ class GolfRenderer @JvmOverloads constructor(
 
     companion object {
         private const val TAG = "GolfNative"
-        private const val DEFAULT_SHOW_COLLISION_DEBUG = false
+        private const val DEFAULT_SHOW_COLLISION_DEBUG = true
 
         private const val FLIP_BOARD_Y_ONLY = true
         private const val DEFAULT_SHOW_DEBUG_LABEL = false
@@ -43,7 +43,11 @@ class GolfRenderer @JvmOverloads constructor(
         private const val IOS_BALL_SUNK_DRAW_SIZE = 7f
         private const val BALL_SHADOW_ALPHA = 128
         private const val IOS_WALL_PATH_TILE_SIZE = 65f
-        private const val IOS_WALL_DRAW_SIZE = 6f
+        private const val IOS_WALL_DRAW_SIZE = 2f
+        private const val TRACE_PHYSICS_BALL_RADIUS_COURSE = 4f
+        private const val TRACE_WALL_HALF_THICKNESS_COURSE = 1f
+        private const val TRACE_WALL_COLLISION_RADIUS_COURSE =
+            TRACE_PHYSICS_BALL_RADIUS_COURSE
         private const val IOS_SLOPE_WIDTH = 65f
         private const val IOS_SLOPE_HEIGHT = 52f
         private const val IOS_OBSTACLE_BASE_SIZE = 30f
@@ -75,6 +79,8 @@ class GolfRenderer @JvmOverloads constructor(
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var showCollisionDebug = DEFAULT_SHOW_COLLISION_DEBUG
     private var showDebugLabel = DEFAULT_SHOW_DEBUG_LABEL
+    private val LOG_VISUAL_ALIGNMENT = true
+    private val TRACE_BALL_RADIUS_COURSE = 5f
 
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -145,6 +151,311 @@ class GolfRenderer @JvmOverloads constructor(
         showCollisionDebug = enabled
         showDebugLabel = enabled
         postInvalidateOnAnimation()
+    }
+
+    private data class VisualRectCourse(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float
+    ) {
+        val width: Float get() = right - left
+        val height: Float get() = bottom - top
+    }
+
+    private data class WallSegmentCourse(
+        val ax: Float,
+        val ay: Float,
+        val bx: Float,
+        val by: Float,
+        val label: String
+    )
+
+    private fun isCourseOpenForTrace(
+        g: GolfMap,
+        outerY: Int,
+        innerX: Int
+    ): Boolean {
+        if (outerY !in g.grid.indices) return false
+        if (innerX !in g.grid[outerY].indices) return false
+
+        val value = g.grid[outerY][innerX]
+        return value == 0 || value == 3
+    }
+
+    private fun courseWallSegmentsForTrace(g: GolfMap): List<WallSegmentCourse> {
+        val tile = GolfConstants.TILE_SIZE
+        val segments = ArrayList<WallSegmentCourse>()
+
+        for (outerY in g.grid.indices) {
+            for (innerX in g.grid[outerY].indices) {
+                if (!isCourseOpenForTrace(g, outerY, innerX)) continue
+
+                val x0 = innerX * tile
+                val y0 = outerY * tile
+                val x1 = x0 + tile
+                val y1 = y0 + tile
+
+                if (!isCourseOpenForTrace(g, outerY, innerX - 1)) {
+                    segments += WallSegmentCourse(x0, y0, x0, y1, "left cell=($outerY,$innerX)")
+                }
+
+                if (!isCourseOpenForTrace(g, outerY, innerX + 1)) {
+                    segments += WallSegmentCourse(x1, y0, x1, y1, "right cell=($outerY,$innerX)")
+                }
+
+                if (!isCourseOpenForTrace(g, outerY - 1, innerX)) {
+                    segments += WallSegmentCourse(x0, y0, x1, y0, "top cell=($outerY,$innerX)")
+                }
+
+                if (!isCourseOpenForTrace(g, outerY + 1, innerX)) {
+                    segments += WallSegmentCourse(x0, y1, x1, y1, "bottom cell=($outerY,$innerX)")
+                }
+            }
+        }
+
+        return segments
+    }
+
+    private fun pointToSegmentDistanceCourse(
+        px: Float,
+        py: Float,
+        segment: WallSegmentCourse
+    ): Float {
+        val vx = segment.bx - segment.ax
+        val vy = segment.by - segment.ay
+        val wx = px - segment.ax
+        val wy = py - segment.ay
+
+        val len2 = vx * vx + vy * vy
+        if (len2 <= 0.0001f) {
+            val dx = px - segment.ax
+            val dy = py - segment.ay
+            return kotlin.math.sqrt(dx * dx + dy * dy)
+        }
+
+        val t = ((wx * vx + wy * vy) / len2).coerceIn(0f, 1f)
+        val cx = segment.ax + t * vx
+        val cy = segment.ay + t * vy
+
+        val dx = px - cx
+        val dy = py - cy
+
+        return kotlin.math.sqrt(dx * dx + dy * dy)
+    }
+
+    private fun rotatedAabbCourse(
+        cx: Float,
+        cy: Float,
+        width: Float,
+        height: Float,
+        rotationRadians: Float
+    ): VisualRectCourse {
+        val halfW = width / 2f
+        val halfH = height / 2f
+
+        val cos = kotlin.math.cos(rotationRadians)
+        val sin = kotlin.math.sin(rotationRadians)
+
+        val corners = arrayOf(
+            -halfW to -halfH,
+            halfW to -halfH,
+            halfW to halfH,
+            -halfW to halfH
+        )
+
+        var minX = Float.POSITIVE_INFINITY
+        var minY = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY
+        var maxY = Float.NEGATIVE_INFINITY
+
+        for ((x, y) in corners) {
+            val rx = cx + x * cos - y * sin
+            val ry = cy + x * sin + y * cos
+
+            minX = kotlin.math.min(minX, rx)
+            minY = kotlin.math.min(minY, ry)
+            maxX = kotlin.math.max(maxX, rx)
+            maxY = kotlin.math.max(maxY, ry)
+        }
+
+        return VisualRectCourse(
+            left = minX,
+            top = minY,
+            right = maxX,
+            bottom = maxY
+        )
+    }
+
+    private fun obstacleTraceImageName(obstacle: GolfObstacle): String {
+        return obstacle.image.ifBlank {
+            obstacleImageForType(obstacle.type, obstacle.bouncy)
+        }
+    }
+
+    private fun jsonPoint(x: Float, y: Float): String {
+        return "{\"x\":$x,\"y\":$y}"
+    }
+
+    private fun jsonRect(r: VisualRectCourse): String {
+        return "{" +
+                "\"left\":${r.left}," +
+                "\"top\":${r.top}," +
+                "\"right\":${r.right}," +
+                "\"bottom\":${r.bottom}," +
+                "\"width\":${r.width}," +
+                "\"height\":${r.height}" +
+                "}"
+    }
+
+    private fun jsonWallSegment(s: WallSegmentCourse): String {
+        return "{" +
+                "\"ax\":${s.ax}," +
+                "\"ay\":${s.ay}," +
+                "\"bx\":${s.bx}," +
+                "\"by\":${s.by}," +
+                "\"label\":\"${s.label.replace("\"", "\\\"")}\"" +
+                "}"
+    }
+
+    private fun logVisualAlignment(g: GolfMap) {
+        if (!LOG_VISUAL_ALIGNMENT) return
+
+        val wallSegments = courseWallSegmentsForTrace(g)
+
+        OpenPigeonLog.i(
+            TAG,
+            "GOLF_ANDROID_VISUAL=" +
+                    "{" +
+                    "\"kind\":\"mapVisualTransform\"," +
+                    "\"seed\":${g.seed}," +
+                    "\"mode\":\"${g.mode}\"," +
+                    "\"mapNum\":${g.mapNum}," +
+                    "\"xCells\":${g.xCells}," +
+                    "\"yCells\":${g.yCells}," +
+                    "\"mapSize\":${g.mapSize}," +
+                    "\"mapSize2\":${g.mapSize2}," +
+                    "\"scale\":$scale," +
+                    "\"offsetX\":$offsetX," +
+                    "\"offsetY\":$offsetY," +
+                    "\"flipY\":$FLIP_BOARD_Y_ONLY," +
+                    "\"wallSegments\":${wallSegments.size}," +
+                    "\"ballRadiusCourse\":$TRACE_BALL_RADIUS_COURSE," +
+                    "\"physicsBallRadiusCourse\":$TRACE_PHYSICS_BALL_RADIUS_COURSE," +
+                    "\"wallDrawSizeCourse\":$IOS_WALL_DRAW_SIZE," +
+                    "\"wallDrawSizeScreen\":${IOS_WALL_DRAW_SIZE * scale}," +
+                    "\"wallVisibleHalfCourse\":${IOS_WALL_DRAW_SIZE * 0.5f}," +
+                    "\"wallCollisionRadiusCourse\":$TRACE_WALL_COLLISION_RADIUS_COURSE," +
+                    "\"wallCollisionDiameterScreen\":${TRACE_WALL_COLLISION_RADIUS_COURSE * 2f * scale}" +
+                    "}"
+        )
+
+        g.obstacles.forEachIndexed { index, obstacle ->
+            val spec = obstacleSpec(obstacle)
+            val image = obstacleTraceImageName(obstacle)
+
+            val drawWidthCourse = spec.width * obstacle.scale
+            val drawHeightCourse = spec.height * obstacle.scale
+
+            val unrotated = VisualRectCourse(
+                left = obstacle.x - drawWidthCourse / 2f,
+                top = obstacle.y - drawHeightCourse / 2f,
+                right = obstacle.x + drawWidthCourse / 2f,
+                bottom = obstacle.y + drawHeightCourse / 2f
+            )
+
+            val rotated = rotatedAabbCourse(
+                cx = obstacle.x,
+                cy = obstacle.y,
+                width = drawWidthCourse,
+                height = drawHeightCourse,
+                rotationRadians = obstacle.rotation
+            )
+
+            val centerScreen = courseToScreen(PointF(obstacle.x, obstacle.y))
+            val shadowScreen = courseToScreen(
+                PointF(
+                    obstacle.x,
+                    obstacle.y + IOS_SHADOW_COURSE_Y_OFFSET
+                )
+            )
+
+            val obstacleRadiusApprox = kotlin.math.min(
+                drawWidthCourse,
+                drawHeightCourse
+            ) / 2f
+
+            var nearestWallDistance = Float.POSITIVE_INFINITY
+            var nearestWall: WallSegmentCourse? = null
+
+            for (segment in wallSegments) {
+                val distance = pointToSegmentDistanceCourse(
+                    px = obstacle.x,
+                    py = obstacle.y,
+                    segment = segment
+                )
+
+                if (distance < nearestWallDistance) {
+                    nearestWallDistance = distance
+                    nearestWall = segment
+                }
+            }
+
+            /*
+             * visibleWallGapCourse:
+             *   approximate empty space between obstacle visible edge and nearest wall line.
+             *
+             * ballCenterPassageGapCourse:
+             *   approximate amount of room left for a 10px iOS ball to pass between
+             *   the wall collision and obstacle collision.
+             *
+             * If this is negative on Android but not on iOS, we found the blocker.
+             */
+            val wallVisibleHalfCourse = IOS_WALL_DRAW_SIZE * 0.5f
+
+            val visibleWallGapCourse =
+                nearestWallDistance - obstacleRadiusApprox - wallVisibleHalfCourse
+
+            val visualBallPassageGapCourse =
+                visibleWallGapCourse - IOS_BALL_DRAW_SIZE
+
+            val physicsBallCenterPassageGapCourse =
+                nearestWallDistance -
+                        obstacleRadiusApprox -
+                        TRACE_PHYSICS_BALL_RADIUS_COURSE -
+                        TRACE_WALL_COLLISION_RADIUS_COURSE
+
+            OpenPigeonLog.i(
+                TAG,
+                "GOLF_ANDROID_VISUAL=" +
+                        "{" +
+                        "\"kind\":\"obstacleVisual\"," +
+                        "\"index\":$index," +
+                        "\"image\":\"$image\"," +
+                        "\"type\":${obstacle.type}," +
+                        "\"bouncy\":${obstacle.bouncy}," +
+                        "\"courseCenter\":${jsonPoint(obstacle.x, obstacle.y)}," +
+                        "\"screenCenter\":${jsonPoint(centerScreen.x, centerScreen.y)}," +
+                        "\"shadowScreenCenter\":${jsonPoint(shadowScreen.x, shadowScreen.y)}," +
+                        "\"rotationRadians\":${obstacle.rotation}," +
+                        "\"rotationDegrees\":${Math.toDegrees(obstacle.rotation.toDouble()).toFloat()}," +
+                        "\"scaleValue\":${obstacle.scale}," +
+                        "\"baseSizeCourse\":${jsonPoint(spec.width, spec.height)}," +
+                        "\"drawSizeCourse\":${jsonPoint(drawWidthCourse, drawHeightCourse)}," +
+                        "\"drawSizeScreen\":${jsonPoint(drawWidthCourse * scale, drawHeightCourse * scale)}," +
+                        "\"unrotatedRectCourse\":${jsonRect(unrotated)}," +
+                        "\"rotatedAabbCourse\":${jsonRect(rotated)}," +
+                        "\"nearestWallDistanceCourse\":$nearestWallDistance," +
+                        "\"wallVisibleHalfCourse\":$wallVisibleHalfCourse," +
+                        "\"wallCollisionRadiusCourse\":$TRACE_WALL_COLLISION_RADIUS_COURSE," +
+                        "\"visibleWallGapCourse\":$visibleWallGapCourse," +
+                        "\"visualBallPassageGapCourse\":$visualBallPassageGapCourse," +
+                        "\"physicsBallCenterPassageGapCourse\":$physicsBallCenterPassageGapCourse," +
+                        "\"ballCenterPassageGapCourse\":$physicsBallCenterPassageGapCourse," +
+                        "\"nearestWall\":${nearestWall?.let { jsonWallSegment(it) } ?: "null"}" +
+                        "}"
+            )
+        }
     }
 
     fun setMap(newMap: GolfMap) {
@@ -530,6 +841,8 @@ class GolfRenderer @JvmOverloads constructor(
             if (LOG_RENDER_SCREEN_COORDS) {
                 logRendererScreenCoordinates(g)
             }
+
+            logVisualAlignment(g)
         }
 
         val fillPath = buildCoursePath(g, IOS_TILE_DRAW_SIZE)
@@ -1222,7 +1535,7 @@ class GolfRenderer @JvmOverloads constructor(
             "golf_obstacle_bar" -> ObstacleCollisionDrawSpec(image, 46f, 8f, circular = false)
 
             "golf_obstacle_bar2",
-            "golf_obstacles_bar2" -> ObstacleCollisionDrawSpec(image, 95f, 16f, circular = false)
+            "golf_obstacles_bar2" -> ObstacleCollisionDrawSpec(image, 95f, 6f, circular = false)
 
             "golf_obstacle_round" -> ObstacleCollisionDrawSpec(image, 37f, 37f, circular = true)
             "golf_obstacle_round2" -> ObstacleCollisionDrawSpec(image, 72f, 72f, circular = true)
@@ -1244,6 +1557,25 @@ class GolfRenderer @JvmOverloads constructor(
 
     private fun drawCollisionDebug(canvas: Canvas, g: GolfMap) {
         if (!showCollisionDebug) return
+        val wallPath = buildCoursePath(g, IOS_WALL_PATH_TILE_SIZE)
+
+        collisionDebugPaint.color = Color.argb(80, 255, 255, 0)
+        collisionDebugPaint.strokeWidth = TRACE_WALL_COLLISION_RADIUS_COURSE * 2f
+        collisionDebugPaint.strokeCap = Paint.Cap.SQUARE
+        collisionDebugPaint.strokeJoin = Paint.Join.MITER
+
+        canvas.withTranslation(offsetX, offsetY) {
+            scale(scale, scale)
+            drawPath(wallPath, collisionDebugPaint)
+        }
+
+        collisionDebugPaint.color = Color.argb(220, 255, 255, 255)
+        collisionDebugPaint.strokeWidth = IOS_WALL_DRAW_SIZE
+
+        canvas.withTranslation(offsetX, offsetY) {
+            scale(scale, scale)
+            drawPath(wallPath, collisionDebugPaint)
+        }
 
         val ball = runtimeBallCourse ?: g.ballStart1
         val ballScreen = courseToScreen(ball)
@@ -1324,7 +1656,7 @@ class GolfRenderer @JvmOverloads constructor(
 
             "golf_obstacle_bar" -> ObstacleDrawSpec(obstacleBarBitmap, 46f, 8f)
             "golf_obstacle_bar2",
-            "golf_obstacles_bar2" -> ObstacleDrawSpec(obstacleBar2Bitmap, 95f, 16f)
+            "golf_obstacles_bar2" -> ObstacleDrawSpec(obstacleBar2Bitmap, 95f, 6f)
 
             "golf_obstacle_round" -> ObstacleDrawSpec(obstacleRoundBitmap, 37f, 37f)
             "golf_obstacle_round2" -> ObstacleDrawSpec(obstacleRound2Bitmap, 72f, 72f)

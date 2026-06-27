@@ -951,33 +951,49 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         val yCells = grid.firstOrNull()?.size ?: 0
         if (xCells == 0 || yCells == 0) return emptyList()
 
+        /*
+         * iOS getLongest is not an all-open-cell diameter search.
+         *
+         * The map generator's checkGrid proves the iOS constraint is top/bottom-row
+         * connectivity. For normal Mini Golf maps, the selected course path runs
+         * between outer row 0 and outer row xCells - 1.
+         *
+         * The previous Android version searched every open cell pair, so on seed
+         * 680056098 it incorrectly chose Cell(x=2,y=3) -> Cell(x=5,y=3), because
+         * that has the same length as the real top/bottom path. That made the ball
+         * spawn, hole jitter, slope RNG, and object placement drift from iOS.
+         */
+        val finishOuterY = 0
+        val startOuterY = xCells - 1
+
         var best: List<Cell>? = null
 
-        for (i1 in xCells downTo 1) {
-            val yIni = i1 - 1
+        /*
+         * Scan right-to-left to match the existing iOS-style endpoint preference.
+         *
+         * Returned path is finish -> start because the rest of the generator expects:
+         *   path.first() = ball cell
+         *   path.last()  = hole cell
+         */
+        for (startInnerX in yCells - 1 downTo 0) {
+            if (!isPathOpenCell(grid, startInnerX, startOuterY)) continue
 
-            for (col1 in yCells downTo 1) {
-                val xIni = col1 - 1
-                if (rawCell(grid, xIni, yIni) != 0) continue
+            for (finishInnerX in yCells - 1 downTo 0) {
+                if (!isPathOpenCell(grid, finishInnerX, finishOuterY)) continue
 
-                for (toRow in xCells downTo 1) {
-                    val yFin = toRow - 1
+                val candidate = shortestPathBfs(
+                    grid = grid,
+                    startInnerX = startInnerX,
+                    startOuterY = startOuterY,
+                    finishInnerX = finishInnerX,
+                    finishOuterY = finishOuterY
+                )
 
-                    for (toCol in yCells downTo 1) {
-                        val xFin = toCol - 1
-                        if (rawCell(grid, xFin, yFin) != 0) continue
-                        if (yIni == yFin && xIni == xFin) continue
+                if (candidate.isEmpty()) continue
 
-                        val candidate = pathFinderGo(grid, xIni, yIni, xFin, yFin)
-                        if (candidate.isEmpty()) continue
-
-                        val current = best
-                        if (current == null) {
-                            best = candidate
-                        } else if (candidate.size > current.size) {
-                            best = candidate
-                        }
-                    }
+                val current = best
+                if (current == null || candidate.size > current.size) {
+                    best = candidate
                 }
             }
         }
@@ -986,10 +1002,105 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
 
         OpenPigeonLog.i(
             TAG,
-            "Generator.getLongest pathSize=${result.size} finish=${result.firstOrNull()} start=${result.lastOrNull()}"
+            "Generator.getLongest boundaryOnly=true pathSize=${result.size} " +
+                    "finish=${result.firstOrNull()} start=${result.lastOrNull()} " +
+                    "path=${result.joinToString(prefix = "[", postfix = "]")}"
         )
 
         return result
+    }
+
+    private fun shortestPathBfs(
+        grid: Array<IntArray>,
+        startInnerX: Int,
+        startOuterY: Int,
+        finishInnerX: Int,
+        finishOuterY: Int
+    ): List<Cell> {
+        val height = grid.size
+        val width = grid.firstOrNull()?.size ?: 0
+
+        if (height == 0 || width == 0) return emptyList()
+
+        if (!isPathOpenCell(grid, startInnerX, startOuterY)) return emptyList()
+        if (!isPathOpenCell(grid, finishInnerX, finishOuterY)) return emptyList()
+
+        fun index(innerX: Int, outerY: Int): Int {
+            return outerY * width + innerX
+        }
+
+        val startIndex = index(startInnerX, startOuterY)
+        val finishIndex = index(finishInnerX, finishOuterY)
+
+        val parent = IntArray(width * height) { -1 }
+        val queue = java.util.ArrayDeque<Int>()
+
+        parent[startIndex] = startIndex
+        queue.add(startIndex)
+
+        val directions = arrayOf(
+            0 to -1,   // up
+            -1 to 0,   // left
+            1 to 0,    // right
+            0 to 1     // down
+        )
+
+        while (!queue.isEmpty()) {
+            val current = queue.removeFirst()
+
+            if (current == finishIndex) {
+                break
+            }
+
+            val currentOuterY = current / width
+            val currentInnerX = current % width
+
+            for ((dx, dy) in directions) {
+                val nextInnerX = currentInnerX + dx
+                val nextOuterY = currentOuterY + dy
+
+                if (!isPathOpenCell(grid, nextInnerX, nextOuterY)) continue
+
+                val nextIndex = index(nextInnerX, nextOuterY)
+                if (parent[nextIndex] != -1) continue
+
+                parent[nextIndex] = current
+                queue.add(nextIndex)
+            }
+        }
+
+        if (parent[finishIndex] == -1) {
+            return emptyList()
+        }
+
+        val result = ArrayList<Cell>()
+        var cursor = finishIndex
+
+        while (true) {
+            val outerY = cursor / width
+            val innerX = cursor % width
+
+            result += Cell(
+                x = outerY,
+                y = innerX
+            )
+
+            if (cursor == startIndex) {
+                break
+            }
+
+            cursor = parent[cursor]
+        }
+
+        return result
+    }
+
+    private fun isPathOpenCell(
+        grid: Array<IntArray>,
+        innerX: Int,
+        outerY: Int
+    ): Boolean {
+        return gridGet(grid, innerX, outerY) == 0
     }
 
     private fun pathFinderGo(

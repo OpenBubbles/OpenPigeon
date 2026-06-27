@@ -62,6 +62,12 @@ class GolfActivity : AppCompatActivity() {
         private const val LAYER_MENU_POPUP = 13000f
         private const val LAYER_WAITING = 14000f
         private const val LAYER_INTRO = 15000f
+        private const val DEBUG_GOLF_REPLAY_TRACE_AUTO = true
+        private const val DEBUG_GOLF_REPLAY_TRACE_FULL = true
+        private const val DEBUG_GOLF_REPLAY_TRACE_IOS_ANCHORS = true
+
+        private const val DEBUG_VISUAL_TRACE_FRAME_DELAY_MS = 16L
+        private const val DEBUG_VISUAL_TRACE_MAX_FRAMES_PER_SHOT = 1200
     }
 
     private lateinit var root: FrameLayout
@@ -95,6 +101,7 @@ class GolfActivity : AppCompatActivity() {
     private lateinit var waitingOverlay: FrameLayout
     private lateinit var waitingLabel: TextView
     private lateinit var skipReplayButton: AppCompatImageButton
+    private var lastReplayTraceKey = ""
     private var skipReplayNormalBitmap: Bitmap? = null
     private var skipReplayPressedBitmap: Bitmap? = null
     private lateinit var aimInstructionLabel: TextView
@@ -183,6 +190,46 @@ class GolfActivity : AppCompatActivity() {
     private var dualReplayOpponentInHole = false
     private var physicsRunning = false
     private var lastPhysicsMs = 0L
+
+    private data class DebugVisualTraceShot(
+        val label: String,
+        val runIdSuffix: String,
+        val shotIndex: Int,
+        val dist: Float,
+        val rotation: Float,
+        val explicitStart: PointF? = null,
+        val resetNativeBeforeShot: Boolean = false
+    )
+
+    private var debugVisualTraceRunning = false
+    private var debugVisualTraceShots: List<DebugVisualTraceShot> = emptyList()
+    private var debugVisualTraceShotListIndex = 0
+    private var debugVisualTraceFrame = 0
+    private var debugVisualTraceCaptured = false
+    private var debugVisualTraceCurrent: DebugVisualTraceShot? = null
+    private var debugVisualTraceSource = ""
+    private var debugVisualTraceRunId = ""
+
+    private var debugVisualTraceSavedBall: PointF? = null
+    private val debugVisualTraceSavedVelocity = PointF(0f, 0f)
+    private var debugVisualTraceSavedBallInHole = false
+    private var debugVisualTraceSavedFlagPulled = false
+    private var debugVisualTraceSavedWaitingForOpponent = false
+    private var debugVisualTraceSavedRoundResultSent = false
+    private var debugVisualTraceSavedZoomOverviewEnabled = false
+
+    private var debugVisualTraceBall = PointF(0f, 0f)
+    private val debugVisualTraceVelocity = PointF(0f, 0f)
+
+    private val debugVisualTraceTick = object : Runnable {
+        override fun run() {
+            stepDebugVisualTrace()
+
+            if (debugVisualTraceRunning) {
+                renderer.postDelayed(this, DEBUG_VISUAL_TRACE_FRAME_DELAY_MS)
+            }
+        }
+    }
 
     private val physicsTick = object : Runnable {
         override fun run() {
@@ -1424,11 +1471,569 @@ class GolfActivity : AppCompatActivity() {
             }
         }
 
+        val runTraceItem = buildMenuPopupItem("Run Trace").apply {
+            setOnClickListener {
+                hideMenuPopup()
+                debugRunReplayTraceNow(source = "debugMenuRunTrace")
+            }
+        }
+
+        val watchTraceItem = buildMenuPopupItem("Watch Trace").apply {
+            setOnClickListener {
+                hideMenuPopup()
+                debugWatchReplayTraceOnBoard(source = "debugMenuWatchTrace")
+            }
+        }
+
+        val replayAgainItem = buildMenuPopupItem("Replay Again").apply {
+            setOnClickListener {
+                hideMenuPopup()
+                debugReplayCurrentHoleAgain()
+            }
+        }
+
         menuPopup.addView(settingsItem)
         menuPopup.addView(helpItem)
         menuPopup.addView(debugMenuItem)
+        menuPopup.addView(runTraceItem)
+        menuPopup.addView(watchTraceItem)
+        menuPopup.addView(replayAgainItem)
 
         menuLayer.addView(menuPopup)
+    }
+
+    private fun debugWatchReplayTraceOnBoard(source: String) {
+        val data = gameData
+
+        if (data == null) {
+            OpenPigeonLog.w(
+                TAG,
+                "GOLF_ANDROID_TRACE={\"kind\":\"debugVisualTraceSkip\",\"reason\":\"gameData null\"}"
+            )
+            return
+        }
+
+        val mapForCurrentData = currentMap?.takeIf {
+            it.seed == data.seed &&
+                    it.mode == data.mode &&
+                    it.mapNum == data.mapNum
+        } ?: run {
+            try {
+                generator.createMap(
+                    seed = data.seed,
+                    mapNum = data.mapNum,
+                    mode = data.mode
+                )
+            } catch (t: Throwable) {
+                OpenPigeonLog.e(TAG, "debugWatchReplayTraceOnBoard createMap failed", t)
+                return
+            }
+        }
+
+        val shots = buildDebugVisualTraceShots(
+            data = data,
+            map = mapForCurrentData
+        )
+
+        if (shots.isEmpty()) {
+            OpenPigeonLog.w(
+                TAG,
+                "GOLF_ANDROID_TRACE={\"kind\":\"debugVisualTraceSkip\",\"reason\":\"no visual shots\",\"seed\":${data.seed},\"mode\":\"${data.mode}\",\"mapNum\":${data.mapNum}}"
+            )
+
+            stateLabel.visibility = View.VISIBLE
+            stateLabel.text = "No trace shots"
+            return
+        }
+
+        startDebugVisualTrace(
+            source = source,
+            map = mapForCurrentData,
+            shots = shots
+        )
+    }
+
+    private fun buildDebugVisualTraceShots(
+        data: GolfGameData,
+        map: GolfMap
+    ): List<DebugVisualTraceShot> {
+        val result = mutableListOf<DebugVisualTraceShot>()
+
+        val p1Shots = GolfReplay.segmentAt(data.replay, data.mapNum)
+
+        p1Shots.forEachIndexed { index, shot ->
+            result += DebugVisualTraceShot(
+                label = "P1 full shot $index",
+                runIdSuffix = "p1_full_visual_shot$index",
+                shotIndex = index,
+                dist = shot.dist,
+                rotation = shot.rotation,
+                explicitStart = null,
+                resetNativeBeforeShot = index == 0
+            )
+        }
+
+        /*
+         * These are only valid for the known iOS reference case.
+         * They let us visually compare Android's chained shot 3 against
+         * the same shot started from the exact iOS position.
+         */
+        if (
+            DEBUG_GOLF_REPLAY_TRACE_IOS_ANCHORS &&
+            data.seed == 1853352027 &&
+            data.mode == "3" &&
+            data.mapNum == 0
+        ) {
+            result += DebugVisualTraceShot(
+                label = "iOS anchor shot 3",
+                runIdSuffix = "ios_anchor_visual_shot3",
+                shotIndex = 3,
+                dist = 188.931305f,
+                rotation = 1.708533f,
+                explicitStart = PointF(46.567112f, 60.493404f),
+                resetNativeBeforeShot = true
+            )
+
+            result += DebugVisualTraceShot(
+                label = "iOS anchor shot 4",
+                runIdSuffix = "ios_anchor_visual_shot4",
+                shotIndex = 4,
+                dist = 60.073299f,
+                rotation = -2.299651f,
+                explicitStart = PointF(-4.903124f, 304.277740f),
+                resetNativeBeforeShot = true
+            )
+        }
+
+        return result
+    }
+
+    private fun startDebugVisualTrace(
+        source: String,
+        map: GolfMap,
+        shots: List<DebugVisualTraceShot>
+    ) {
+        if (debugVisualTraceRunning) {
+            stopDebugVisualTrace(restoreBoard = true)
+        }
+
+        OpenPigeonLog.i(
+            TAG,
+            "GOLF_ANDROID_TRACE=" +
+                    "{" +
+                    "\"kind\":\"debugVisualTraceStart\"," +
+                    "\"source\":\"$source\"," +
+                    "\"seed\":${map.seed}," +
+                    "\"mode\":\"${map.mode}\"," +
+                    "\"mapNum\":${map.mapNum}," +
+                    "\"shotCount\":${shots.size}" +
+                    "}"
+        )
+
+        debugVisualTraceSavedBall = runtimeBallCourse?.let {
+            PointF(it.x, it.y)
+        }
+
+        debugVisualTraceSavedVelocity.set(
+            runtimeVelocityCourse.x,
+            runtimeVelocityCourse.y
+        )
+
+        debugVisualTraceSavedBallInHole = ballInHole
+        debugVisualTraceSavedFlagPulled = flagPulled
+        debugVisualTraceSavedWaitingForOpponent = waitingForOpponent
+        debugVisualTraceSavedRoundResultSent = roundResultSent
+        debugVisualTraceSavedZoomOverviewEnabled = zoomOverviewEnabled
+
+        stopBallPhysics(clearVelocity = true)
+        stopDualReplay()
+        hideAimReadyUi()
+        hideSkipReplayButton()
+        hideWaitingOverlay()
+
+        currentMap = map
+        renderer.setMap(map)
+
+        debugVisualTraceRunning = true
+        debugVisualTraceShots = shots
+        debugVisualTraceShotListIndex = 0
+        debugVisualTraceFrame = 0
+        debugVisualTraceCaptured = false
+        debugVisualTraceCurrent = null
+        debugVisualTraceSource = source
+
+        stateLabel.visibility = View.VISIBLE
+        stateLabel.text = "Watching trace"
+
+        setZoomOverviewEnabled(false)
+
+        startNextDebugVisualTraceShot()
+    }
+
+    private fun startNextDebugVisualTraceShot() {
+        if (!debugVisualTraceRunning) return
+
+        val map = currentMap ?: run {
+            stopDebugVisualTrace(restoreBoard = true)
+            return
+        }
+
+        val shot = debugVisualTraceShots.getOrNull(debugVisualTraceShotListIndex)
+
+        if (shot == null) {
+            stopDebugVisualTrace(restoreBoard = true)
+
+            OpenPigeonLog.i(
+                TAG,
+                "GOLF_ANDROID_TRACE=" +
+                        "{" +
+                        "\"kind\":\"debugVisualTraceComplete\"," +
+                        "\"source\":\"$debugVisualTraceSource\"," +
+                        "\"seed\":${map.seed}," +
+                        "\"mode\":\"${map.mode}\"," +
+                        "\"mapNum\":${map.mapNum}" +
+                        "}"
+            )
+
+            stateLabel.visibility = View.VISIBLE
+            stateLabel.text = "Trace complete"
+            return
+        }
+
+        if (shot.resetNativeBeforeShot) {
+            GolfNativePhysics.reset()
+        }
+
+        val start = shot.explicitStart ?: if (debugVisualTraceShotListIndex == 0) {
+            map.ballStart1
+        } else {
+            debugVisualTraceBall
+        }
+
+        debugVisualTraceBall = PointF(start.x, start.y)
+
+        val velocity = GolfShot.launchVelocityVisual(
+            GolfShot.Aim(
+                dist = shot.dist,
+                rotation = shot.rotation
+            )
+        )
+
+        debugVisualTraceVelocity.set(
+            velocity.x,
+            velocity.y
+        )
+
+        debugVisualTraceCurrent = shot
+        debugVisualTraceFrame = 0
+        debugVisualTraceCaptured = false
+
+        debugVisualTraceRunId =
+            "${debugVisualTraceSource}_${map.seed}_${map.mapNum}_${shot.runIdSuffix}"
+
+        runtimeBallCourse = PointF(
+            debugVisualTraceBall.x,
+            debugVisualTraceBall.y
+        )
+
+        renderer.setRuntimeBallCourse(runtimeBallCourse)
+        renderer.setHoleState(
+            flagPulled = false,
+            ballInHole = false
+        )
+        renderer.setShotCamera(runtimeBallCourse, 0f)
+
+        stateLabel.visibility = View.VISIBLE
+        stateLabel.text = shot.label
+
+        OpenPigeonLog.i(
+            TAG,
+            "GOLF_ANDROID_TRACE=" +
+                    "{" +
+                    "\"kind\":\"debugVisualShotStart\"," +
+                    "\"runId\":\"$debugVisualTraceRunId\"," +
+                    "\"source\":\"$debugVisualTraceSource\"," +
+                    "\"seed\":${map.seed}," +
+                    "\"mode\":\"${map.mode}\"," +
+                    "\"mapNum\":${map.mapNum}," +
+                    "\"shotIndex\":${shot.shotIndex}," +
+                    "\"label\":\"${jsonEscape(shot.label)}\"," +
+                    "\"dist\":${shot.dist}," +
+                    "\"rotation\":${shot.rotation}," +
+                    "\"startPos\":{\"x\":${debugVisualTraceBall.x},\"y\":${debugVisualTraceBall.y}}," +
+                    "\"velocity\":{\"x\":${debugVisualTraceVelocity.x},\"y\":${debugVisualTraceVelocity.y}}" +
+                    "}"
+        )
+
+        renderer.removeCallbacks(debugVisualTraceTick)
+        renderer.postDelayed(debugVisualTraceTick, DEBUG_VISUAL_TRACE_FRAME_DELAY_MS)
+    }
+
+    private fun stepDebugVisualTrace() {
+        if (!debugVisualTraceRunning) return
+
+        val map = currentMap ?: run {
+            stopDebugVisualTrace(restoreBoard = true)
+            return
+        }
+
+        val shot = debugVisualTraceCurrent ?: run {
+            startNextDebugVisualTraceShot()
+            return
+        }
+
+        val stoppedByMotion = try {
+            GolfNativePhysics.setTraceContext(
+                map = map,
+                runId = debugVisualTraceRunId,
+                shotIndex = shot.shotIndex,
+                frame = debugVisualTraceFrame,
+                phase = "visualNativeStep"
+            )
+
+            GolfPhysics.step(
+                map = map,
+                positionCourse = debugVisualTraceBall,
+                velocityCourse = debugVisualTraceVelocity,
+                dtSeconds = 1f / 60f
+            )
+        } finally {
+            GolfNativePhysics.clearTraceContext()
+        }
+
+        val holeStep = GolfPhysics.applyHoleCup(
+            map = map,
+            positionCourse = debugVisualTraceBall,
+            velocityCourse = debugVisualTraceVelocity,
+            dtSeconds = 1f / 60f,
+            alreadyCaptured = debugVisualTraceCaptured
+        )
+
+        debugVisualTraceCaptured = holeStep.captured
+
+        runtimeBallCourse = PointF(
+            debugVisualTraceBall.x,
+            debugVisualTraceBall.y
+        )
+
+        renderer.setRuntimeBallCourse(runtimeBallCourse)
+        renderer.setHoleState(
+            flagPulled = holeStep.flagPulled,
+            ballInHole = holeStep.captured
+        )
+        renderer.setShotCamera(runtimeBallCourse, 0f)
+
+        val done =
+            holeStep.settled ||
+                    (stoppedByMotion && !holeStep.captured) ||
+                    debugVisualTraceFrame >= DEBUG_VISUAL_TRACE_MAX_FRAMES_PER_SHOT
+
+        debugVisualTraceFrame += 1
+
+        if (!done) return
+
+        OpenPigeonLog.i(
+            TAG,
+            "GOLF_ANDROID_TRACE=" +
+                    "{" +
+                    "\"kind\":\"debugVisualShotStop\"," +
+                    "\"runId\":\"$debugVisualTraceRunId\"," +
+                    "\"source\":\"$debugVisualTraceSource\"," +
+                    "\"seed\":${map.seed}," +
+                    "\"mode\":\"${map.mode}\"," +
+                    "\"mapNum\":${map.mapNum}," +
+                    "\"shotIndex\":${shot.shotIndex}," +
+                    "\"label\":\"${jsonEscape(shot.label)}\"," +
+                    "\"frameCount\":$debugVisualTraceFrame," +
+                    "\"finalPos\":{\"x\":${debugVisualTraceBall.x},\"y\":${debugVisualTraceBall.y}}," +
+                    "\"finalVel\":{\"x\":${debugVisualTraceVelocity.x},\"y\":${debugVisualTraceVelocity.y}}," +
+                    "\"captured\":${holeStep.captured}," +
+                    "\"settled\":${holeStep.settled}," +
+                    "\"stoppedByMotion\":$stoppedByMotion" +
+                    "}"
+        )
+
+        debugVisualTraceShotListIndex += 1
+        debugVisualTraceCurrent = null
+
+        renderer.removeCallbacks(debugVisualTraceTick)
+
+        if (debugVisualTraceRunning) {
+            renderer.postDelayed({
+                startNextDebugVisualTraceShot()
+            }, 450L)
+        }
+    }
+
+    private fun stopDebugVisualTrace(restoreBoard: Boolean) {
+        if (!debugVisualTraceRunning && !restoreBoard) return
+
+        debugVisualTraceRunning = false
+        renderer.removeCallbacks(debugVisualTraceTick)
+
+        GolfNativePhysics.clearTraceContext()
+        GolfNativePhysics.reset()
+
+        debugVisualTraceShots = emptyList()
+        debugVisualTraceShotListIndex = 0
+        debugVisualTraceFrame = 0
+        debugVisualTraceCaptured = false
+        debugVisualTraceCurrent = null
+        debugVisualTraceRunId = ""
+
+        if (!restoreBoard) return
+
+        val savedBall = debugVisualTraceSavedBall
+
+        runtimeBallCourse = savedBall?.let {
+            PointF(it.x, it.y)
+        } ?: currentMap?.let {
+            PointF(it.ballStart1.x, it.ballStart1.y)
+        }
+
+        runtimeVelocityCourse.set(
+            debugVisualTraceSavedVelocity.x,
+            debugVisualTraceSavedVelocity.y
+        )
+
+        ballInHole = debugVisualTraceSavedBallInHole
+        flagPulled = debugVisualTraceSavedFlagPulled
+        waitingForOpponent = debugVisualTraceSavedWaitingForOpponent
+        roundResultSent = debugVisualTraceSavedRoundResultSent
+
+        renderer.setRuntimeBallCourse(runtimeBallCourse)
+        renderer.setHoleState(
+            flagPulled = flagPulled,
+            ballInHole = ballInHole
+        )
+        renderer.clearAimPreview()
+        renderer.clearReplayAimPreview()
+        renderer.clearOpponentBallCourse()
+
+        setZoomOverviewEnabled(debugVisualTraceSavedZoomOverviewEnabled)
+
+        if (waitingForOpponent) {
+            showWaitingLabelAnimated()
+        } else {
+            hideWaitingOverlay()
+            updateAimReadyUi()
+        }
+    }
+
+    private fun debugRunReplayTraceNow(source: String) {
+        val data = gameData
+        if (data == null) {
+            OpenPigeonLog.w(
+                TAG,
+                "GOLF_ANDROID_TRACE={\"kind\":\"debugTraceSkip\",\"reason\":\"gameData null\"}"
+            )
+            return
+        }
+
+        val mapForCurrentData = currentMap?.takeIf {
+            it.seed == data.seed &&
+                    it.mode == data.mode &&
+                    it.mapNum == data.mapNum
+        } ?: run {
+            try {
+                generator.createMap(
+                    seed = data.seed,
+                    mapNum = data.mapNum,
+                    mode = data.mode
+                )
+            } catch (t: Throwable) {
+                OpenPigeonLog.e(TAG, "debugRunReplayTraceNow createMap failed", t)
+                return
+            }
+        }
+
+        /*
+         * Force rerun even if this exact replay payload was already traced.
+         * This is the whole point of the debug button.
+         */
+        lastReplayTraceKey = ""
+
+        OpenPigeonLog.i(
+            TAG,
+            "GOLF_ANDROID_TRACE=" +
+                    "{" +
+                    "\"kind\":\"debugTraceStart\"," +
+                    "\"source\":\"$source\"," +
+                    "\"seed\":${data.seed}," +
+                    "\"mode\":\"${data.mode}\"," +
+                    "\"dataMapNum\":${data.mapNum}," +
+                    "\"currentMapNum\":${currentMap?.mapNum}," +
+                    "\"replayLen\":${data.replay.length}," +
+                    "\"replay2Len\":${data.replay2.length}" +
+                    "}"
+        )
+
+        GolfTrace.mapTruth(
+            reason = "$source:traceMap",
+            map = mapForCurrentData
+        )
+
+        maybeRunReplayTraceLab(
+            source = source,
+            data = data,
+            map = mapForCurrentData
+        )
+    }
+
+    private fun debugReplayCurrentHoleAgain() {
+        val data = gameData
+        if (data == null) {
+            OpenPigeonLog.w(TAG, "debugReplayCurrentHoleAgain skipped gameData null")
+            return
+        }
+
+        val hasP1 = GolfReplay.hasSegment(data.replay, data.mapNum)
+        val hasP2 = GolfReplay.hasSegment(data.replay2, data.mapNum)
+
+        OpenPigeonLog.i(
+            TAG,
+            "GOLF_ANDROID_TRACE=" +
+                    "{" +
+                    "\"kind\":\"debugReplayAgainStart\"," +
+                    "\"seed\":${data.seed}," +
+                    "\"mode\":\"${data.mode}\"," +
+                    "\"mapNum\":${data.mapNum}," +
+                    "\"hasP1\":$hasP1," +
+                    "\"hasP2\":$hasP2," +
+                    "\"replayLen\":${data.replay.length}," +
+                    "\"replay2Len\":${data.replay2.length}" +
+                    "}"
+        )
+
+        if (!hasP1 || !hasP2) {
+            stateLabel.text = "Replay needs both players"
+            return
+        }
+
+        stopBallPhysics(clearVelocity = true)
+        stopDualReplay()
+        stopStateLabelAnimation()
+
+        waitingForOpponent = false
+        roundResultSent = false
+        ballInHole = false
+        flagPulled = false
+        dualReplayRunning = false
+        dualReplayWaitingToFire = false
+
+        seed = data.seed
+        mode = data.mode
+        holeCount = data.holeCount
+        mapNum = data.mapNum
+
+        generateAndShowMap(
+            showIntro = false,
+            source = "debugReplayCurrentHoleAgain"
+        )
+
+        renderer.post {
+            startDualReplayFromData(data)
+        }
     }
 
     private fun buildMenuPopupItem(label: String): TextView {
@@ -1809,6 +2414,12 @@ class GolfActivity : AppCompatActivity() {
                 parsed.replay2
             }
 
+            traceParsedReplayVectors(
+                data = parsed,
+                localPlayer = localPlayer,
+                reason = "handleMessage parsed"
+            )
+
             val opponentAvatar = if (localPlayer == 1) {
                 msg["avatar2"].orEmpty()
             } else {
@@ -2098,23 +2709,39 @@ class GolfActivity : AppCompatActivity() {
 
     private fun launchCurrentAim(aim: GolfShot.Aim) {
         hideAimReadyUi()
+
         val ball = runtimeBallCourse ?: currentMap?.ballStart1 ?: return
+        val replayRotationCourse = -aim.rotation
+
+        val velocityVisual = GolfShot.launchVelocityVisual(aim)
+        val velocityCourse = renderer.visualDeltaToCourseDelta(
+            dxVisual = velocityVisual.x,
+            dyVisual = velocityVisual.y
+        )
 
         localReplay = GolfReplay.appendShot(
             replay = localReplay,
             holeIndex = mapNum,
             shot = GolfReplay.Shot(
                 dist = aim.dist,
-                rotation = aim.rotation
+                rotation = replayRotationCourse
             )
         )
 
         updateStrokeHud()
 
-        val velocityVisual = GolfShot.launchVelocityVisual(aim)
-        val velocityCourse = renderer.visualDeltaToCourseDelta(
-            dxVisual = velocityVisual.x,
-            dyVisual = velocityVisual.y
+        GolfTrace.localLaunch(
+            map = currentMap,
+            localPlayer = localPlayerNumberFor(gameData),
+            mapNum = mapNum,
+            shotIndex = GolfReplay.segmentAt(localReplay, mapNum).size,
+            ballCourse = ball,
+            ballVisual = renderer.courseToVisual(ball),
+            dist = aim.dist,
+            rotation = replayRotationCourse,
+            velocityVisual = velocityVisual,
+            velocityCourse = velocityCourse,
+            replay = localReplay
         )
 
         runtimeVelocityCourse.set(
@@ -2128,7 +2755,9 @@ class GolfActivity : AppCompatActivity() {
 
         OpenPigeonLog.i(
             TAG,
-            "launch aimDist=${aim.dist} aimRot=${aim.rotation} " +
+            "launch aimDist=${aim.dist} " +
+                    "aimRotVisual=${aim.rotation} " +
+                    "replayRotCourse=$replayRotationCourse " +
                     "velVisual=(${velocityVisual.x},${velocityVisual.y}) " +
                     "velCourse=(${runtimeVelocityCourse.x},${runtimeVelocityCourse.y}) " +
                     "localReplayLen=${localReplay.length}"
@@ -2181,6 +2810,15 @@ class GolfActivity : AppCompatActivity() {
             alreadyCaptured = wasInHole
         )
 
+        GolfTrace.holeCup(
+            phase = "localAfterApplyHoleCup",
+            map = g,
+            pos = ball,
+            vel = runtimeVelocityCourse,
+            holeStep = holeStep,
+            alreadyCaptured = wasInHole
+        )
+
         flagPulled = holeStep.flagPulled
         ballInHole = holeStep.captured
 
@@ -2188,6 +2826,18 @@ class GolfActivity : AppCompatActivity() {
         renderer.setHoleState(
             flagPulled = flagPulled,
             ballInHole = ballInHole
+        )
+
+        GolfTrace.frame(
+            kind = "localFrame",
+            map = currentMap,
+            localPlayer = localPlayerNumberFor(gameData),
+            mapNum = mapNum,
+            shotIndex = GolfReplay.segmentAt(localReplay, mapNum).size,
+            mineBallCourse = ball,
+            opponentBallCourse = null,
+            mineVelocityCourse = runtimeVelocityCourse,
+            opponentVelocityCourse = null
         )
 
         if (holeStep.captured && !wasInHole) {
@@ -2285,6 +2935,20 @@ class GolfActivity : AppCompatActivity() {
             ballInHole = false
 
             renderer.setMap(generated)
+
+            GolfTrace.mapTruth(
+                reason = source,
+                map = generated
+            )
+
+            gameData?.let { data ->
+                maybeRunReplayTraceLab(
+                    source = "generateAndShowMap:$source",
+                    data = data,
+                    map = generated
+                )
+            }
+
             showGameContentOnceBoardReady()
 
             renderer.setRuntimeBallCourse(runtimeBallCourse)
@@ -2791,6 +3455,120 @@ class GolfActivity : AppCompatActivity() {
                 GolfReplay.hasSegment(data.replay2, data.mapNum)
     }
 
+    private fun maybeRunReplayTraceLab(
+        source: String,
+        data: GolfGameData,
+        map: GolfMap
+    ) {
+        if (!DEBUG_GOLF_REPLAY_TRACE_AUTO) return
+        if (!GolfTrace.ENABLED) return
+
+        val hasP1 = GolfReplay.hasSegment(data.replay, data.mapNum)
+        val hasP2 = GolfReplay.hasSegment(data.replay2, data.mapNum)
+
+        if (!hasP1 && !hasP2) {
+            OpenPigeonLog.i(
+                TAG,
+                "GOLF_ANDROID_TRACE={\"kind\":\"traceLabSkip\",\"source\":\"$source\",\"reason\":\"no replay segments\",\"mapNum\":${data.mapNum}}"
+            )
+            return
+        }
+
+        val traceKey =
+            "${data.seed}|${data.mode}|${data.mapNum}|${data.replay}|${data.replay2}"
+
+        if (traceKey == lastReplayTraceKey) {
+            OpenPigeonLog.i(
+                TAG,
+                "GOLF_ANDROID_TRACE={\"kind\":\"traceLabSkip\",\"source\":\"$source\",\"reason\":\"duplicate trace key\",\"mapNum\":${data.mapNum}}"
+            )
+            return
+        }
+
+        lastReplayTraceKey = traceKey
+
+        GolfTrace.replaySummary(
+            source = source,
+            seed = data.seed,
+            mode = data.mode,
+            mapNum = data.mapNum,
+            p1Replay = data.replay,
+            p2Replay = data.replay2
+        )
+
+        /*
+         * The iOS anchors are hardcoded for this exact reference case only:
+         *   seed   = 1853352027
+         *   mode   = 3
+         *   mapNum = 0
+         *
+         * Also only run them from the manual debug menu trace, not from every
+         * automatic generateAndShowMap trace.
+         */
+        val shouldRunIosAnchorTrace =
+            DEBUG_GOLF_REPLAY_TRACE_IOS_ANCHORS &&
+                    source == "debugMenuRunTrace" &&
+                    data.seed == 1853352027 &&
+                    data.mode == "3" &&
+                    data.mapNum == 0
+
+        Thread {
+            try {
+                GolfReplayTraceRunner.runReplay(
+                    source = "${source}_p1_firstShot",
+                    map = map,
+                    holeIndex = data.mapNum,
+                    slot = "p1",
+                    replay = data.replay,
+                    maxShots = 1
+                )
+
+                GolfReplayTraceRunner.runReplay(
+                    source = "${source}_p2_firstShot",
+                    map = map,
+                    holeIndex = data.mapNum,
+                    slot = "p2",
+                    replay = data.replay2,
+                    maxShots = 1
+                )
+
+                if (DEBUG_GOLF_REPLAY_TRACE_FULL) {
+                    GolfReplayTraceRunner.runReplay(
+                        source = "${source}_p1_full",
+                        map = map,
+                        holeIndex = data.mapNum,
+                        slot = "p1",
+                        replay = data.replay,
+                        maxShots = null
+                    )
+
+                    GolfReplayTraceRunner.runReplay(
+                        source = "${source}_p2_full",
+                        map = map,
+                        holeIndex = data.mapNum,
+                        slot = "p2",
+                        replay = data.replay2,
+                        maxShots = null
+                    )
+                }
+
+                if (shouldRunIosAnchorTrace) {
+                    GolfReplayTraceRunner.runIosAnchorShots(
+                        source = "${source}_ios_anchor",
+                        map = map,
+                        holeIndex = data.mapNum
+                    )
+                }
+            } catch (t: Throwable) {
+                OpenPigeonLog.e(
+                    TAG,
+                    "GOLF_ANDROID_TRACE traceLabError source=$source error=${t.message}",
+                    t
+                )
+            }
+        }.start()
+    }
+
     private fun startDualReplayFromData(data: GolfGameData) {
         val g = currentMap ?: return
 
@@ -2804,6 +3582,12 @@ class GolfActivity : AppCompatActivity() {
             )
             return
         }
+
+        maybeRunReplayTraceLab(
+            source = "startDualReplayFromData",
+            data = data,
+            map = g
+        )
 
         val localPlayer = localPlayerNumberFor(data)
 
@@ -2937,6 +3721,19 @@ class GolfActivity : AppCompatActivity() {
                 dualReplayOpponentVelocityCourse.set(shotVelocityCourse(shot))
             }
 
+            GolfTrace.replayFire(
+                map = currentMap,
+                localPlayer = localPlayerNumberFor(gameData),
+                mapNum = mapNum,
+                shotIndex = dualReplayShotIndex,
+                mineShot = mineShotToFire,
+                opponentShot = opponentShotToFire,
+                mineBallCourse = mineBall,
+                opponentBallCourse = opponentBall,
+                mineVelocityCourse = dualReplayMineVelocityCourse,
+                opponentVelocityCourse = dualReplayOpponentVelocityCourse
+            )
+
             dualReplayWaitingToFire = false
             dualReplayLastMs = now
 
@@ -2964,12 +3761,23 @@ class GolfActivity : AppCompatActivity() {
                 dtSeconds = dt
             )
 
+            val wasMineInHole = dualReplayMineInHole
+
             val holeStep = GolfPhysics.applyHoleCup(
                 map = g,
                 positionCourse = mineBall,
                 velocityCourse = dualReplayMineVelocityCourse,
                 dtSeconds = dt,
-                alreadyCaptured = dualReplayMineInHole
+                alreadyCaptured = wasMineInHole
+            )
+
+            GolfTrace.holeCup(
+                phase = "dualReplayMineAfterApplyHoleCup",
+                map = g,
+                pos = mineBall,
+                vel = dualReplayMineVelocityCourse,
+                holeStep = holeStep,
+                alreadyCaptured = wasMineInHole
             )
 
             dualReplayMineInHole = holeStep.captured
@@ -2984,12 +3792,23 @@ class GolfActivity : AppCompatActivity() {
                 dtSeconds = dt
             )
 
+            val wasOpponentInHole = dualReplayOpponentInHole
+
             val holeStep = GolfPhysics.applyHoleCup(
                 map = g,
                 positionCourse = opponentBall,
                 velocityCourse = dualReplayOpponentVelocityCourse,
                 dtSeconds = dt,
-                alreadyCaptured = dualReplayOpponentInHole
+                alreadyCaptured = wasOpponentInHole
+            )
+
+            GolfTrace.holeCup(
+                phase = "dualReplayOpponentAfterApplyHoleCup",
+                map = g,
+                pos = opponentBall,
+                vel = dualReplayOpponentVelocityCourse,
+                holeStep = holeStep,
+                alreadyCaptured = wasOpponentInHole
             )
 
             dualReplayOpponentInHole = holeStep.captured
@@ -3000,23 +3819,160 @@ class GolfActivity : AppCompatActivity() {
         renderer.setOpponentBallCourse(opponentBall)
         renderer.setReplayCamera(mineBall, opponentBall)
 
+        GolfTrace.frame(
+            kind = "replayFrame",
+            map = currentMap,
+            localPlayer = localPlayerNumberFor(gameData),
+            mapNum = mapNum,
+            shotIndex = dualReplayShotIndex,
+            mineBallCourse = mineBall,
+            opponentBallCourse = opponentBall,
+            mineVelocityCourse = dualReplayMineVelocityCourse,
+            opponentVelocityCourse = dualReplayOpponentVelocityCourse
+        )
+
         if (mineDone && opponentDone) {
             dualReplayShotIndex += 1
             scheduleNextDualReplayShot()
         }
     }
 
+    private fun traceParsedReplayVectors(
+        data: GolfGameData,
+        localPlayer: Int,
+        reason: String
+    ) {
+        if (!GolfTrace.ENABLED) return
+        if (!::renderer.isInitialized) return
+
+        fun esc(value: String): String {
+            return value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+        }
+
+        fun pointJson(point: PointF): String {
+            return "{\"x\":${point.x},\"y\":${point.y}}"
+        }
+
+        fun logShot(
+            slot: String,
+            shotIndex: Int,
+            shot: GolfReplay.Shot
+        ) {
+            val velocityVisual = GolfShot.launchVelocityVisual(
+                GolfShot.Aim(
+                    dist = shot.dist,
+                    rotation = shot.rotation
+                )
+            )
+
+            val velocityIfIncorrectlyFlipped = renderer.visualDeltaToCourseDelta(
+                dxVisual = velocityVisual.x,
+                dyVisual = velocityVisual.y
+            )
+
+            val velocityCourseUsed = PointF(
+                velocityVisual.x,
+                velocityVisual.y
+            )
+
+            OpenPigeonLog.i(
+                TAG,
+                "GOLF_ANDROID=" +
+                        "{" +
+                        "\"kind\":\"parsedReplayShot\"," +
+                        "\"reason\":\"${esc(reason)}\"," +
+                        "\"mapNum\":${data.mapNum}," +
+                        "\"holeNumber\":${data.mapNum + 1}," +
+                        "\"holeCount\":${data.holeCount}," +
+                        "\"localPlayer\":$localPlayer," +
+                        "\"slot\":\"${esc(slot)}\"," +
+                        "\"shotIndex\":$shotIndex," +
+                        "\"dist\":${shot.dist}," +
+                        "\"rotation\":${shot.rotation}," +
+                        "\"velocityVisual\":${pointJson(velocityVisual)}," +
+                        "\"velocityIfIncorrectlyFlipped\":${pointJson(velocityIfIncorrectlyFlipped)}," +
+                        "\"velocityCourseUsed\":${pointJson(velocityCourseUsed)}" +
+                        "}"
+            )
+        }
+
+        val p1Shots = GolfReplay.segmentAt(data.replay, data.mapNum)
+        val p2Shots = GolfReplay.segmentAt(data.replay2, data.mapNum)
+
+        OpenPigeonLog.i(
+            TAG,
+            "GOLF_ANDROID=" +
+                    "{" +
+                    "\"kind\":\"parsedReplaySummary\"," +
+                    "\"reason\":\"${esc(reason)}\"," +
+                    "\"mapNum\":${data.mapNum}," +
+                    "\"holeNumber\":${data.mapNum + 1}," +
+                    "\"holeCount\":${data.holeCount}," +
+                    "\"localPlayer\":$localPlayer," +
+                    "\"p1ReplayLen\":${data.replay.length}," +
+                    "\"p2ReplayLen\":${data.replay2.length}," +
+                    "\"p1Shots\":${p1Shots.size}," +
+                    "\"p2Shots\":${p2Shots.size}," +
+                    "\"p1Replay\":\"${esc(data.replay)}\"," +
+                    "\"p2Replay\":\"${esc(data.replay2)}\"" +
+                    "}"
+        )
+
+        p1Shots.forEachIndexed { index, shot ->
+            logShot(
+                slot = if (localPlayer == 1) "mine_p1" else "opponent_p1",
+                shotIndex = index,
+                shot = shot
+            )
+        }
+
+        p2Shots.forEachIndexed { index, shot ->
+            logShot(
+                slot = if (localPlayer == 2) "mine_p2" else "opponent_p2",
+                shotIndex = index,
+                shot = shot
+            )
+        }
+    }
+
     private fun shotVelocityCourse(shot: GolfReplay.Shot): PointF {
-        val velocityVisual = GolfShot.launchVelocityVisual(
+        /*
+         * Replay rotation is already course/SpriteKit-space.
+         *
+         * Local live shot:
+         *   visual aim rotation -> local course velocity by visualDeltaToCourseDelta(...)
+         *   stored replay rotation = -visualRotation
+         *
+         * Replay shot:
+         *   stored rotation is already flipped into course space.
+         *   So do NOT call renderer.visualDeltaToCourseDelta(...) again here.
+         */
+        val velocityCourse = GolfShot.launchVelocityVisual(
             GolfShot.Aim(
                 dist = shot.dist,
                 rotation = shot.rotation
             )
         )
 
-        return renderer.visualDeltaToCourseDelta(
-            dxVisual = velocityVisual.x,
-            dyVisual = velocityVisual.y
+        OpenPigeonLog.i(
+            TAG,
+            "GOLF_ANDROID_TRACE=" +
+                    "{" +
+                    "\"kind\":\"shotVelocityCourse\"," +
+                    "\"mapNum\":$mapNum," +
+                    "\"shotDist\":${shot.dist}," +
+                    "\"shotRotationCourse\":${shot.rotation}," +
+                    "\"velocityCourse\":{\"x\":${velocityCourse.x},\"y\":${velocityCourse.y}}" +
+                    "}"
+        )
+
+        return PointF(
+            velocityCourse.x,
+            velocityCourse.y
         )
     }
 
@@ -3132,11 +4088,54 @@ class GolfActivity : AppCompatActivity() {
         "replay2" to ""
     )
 
+    private fun jsonEscape(value: String): String {
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+    }
+
     private fun messageSummary(msg: Map<String, String>): String {
         if (msg.isEmpty()) return "messageKeys=[]"
-        val selected = listOf("game", "mode", "game_mode", "holes", "seed", "game_seed", "random_seed", "num", "map_num", "mapNum", "hole", "hole_index", "player", "isYourTurn", "turn", "subcaption")
-            .mapNotNull { key -> msg[key]?.let { value -> "$key=$value" } }
-        return "messageKeys=${msg.keys.sorted()} selected=${selected.joinToString(",")} replayLen=${msg["replay"].orEmpty().length} replay2Len=${msg["replay2"].orEmpty().length}"
+
+        val selected = listOf(
+            "game",
+            "mode",
+            "game_mode",
+            "holes",
+            "seed",
+            "game_seed",
+            "random_seed",
+            "num",
+            "number",
+            "map_num",
+            "mapNum",
+            "hole",
+            "hole_index",
+            "player",
+            "isYourTurn",
+            "turn",
+            "subcaption",
+            "replay",
+            "replay2",
+            "replay_send",
+            "replay_send2",
+            "replay_string",
+            "replay_string2"
+        ).mapNotNull { key ->
+            msg[key]?.let { value ->
+                val safeValue = if (value.length > 90) value.take(90) + "...(${value.length})" else value
+                "$key=$safeValue"
+            }
+        }
+
+        return "messageKeys=${msg.keys.sorted()} selected=${selected.joinToString(",")} " +
+                "replayLen=${msg["replay"].orEmpty().length} " +
+                "replay2Len=${msg["replay2"].orEmpty().length} " +
+                "replaySendLen=${msg["replay_send"].orEmpty().length} " +
+                "replayStringLen=${msg["replay_string"].orEmpty().length} " +
+                "replayString2Len=${msg["replay_string2"].orEmpty().length}"
     }
 
     private class OutlineTextView(context: Context) : androidx.appcompat.widget.AppCompatTextView(context) {
@@ -3490,6 +4489,7 @@ class GolfActivity : AppCompatActivity() {
         pauseMusic()
 
         if (::renderer.isInitialized) {
+            stopDebugVisualTrace(restoreBoard = false)
             hideMenuPopup()
             stopBallPhysics(clearVelocity = false)
             stopDualReplay()
@@ -3513,6 +4513,7 @@ class GolfActivity : AppCompatActivity() {
         stopMusic()
 
         if (::renderer.isInitialized) {
+            stopDebugVisualTrace(restoreBoard = false)
             hideMenuPopup()
             stopBallPhysics(clearVelocity = true)
             stopDualReplay()

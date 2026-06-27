@@ -6,6 +6,7 @@ import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.util.OpenPigeonLog
 import kotlin.random.Random
+import com.openbubbles.openpigeon.R
 
 class GolfGame : Game {
     companion object {
@@ -39,7 +40,7 @@ class GolfGame : Game {
 
     override fun gamePoster(config: Map<String, String>?): Int {
         OpenPigeonLog.i(TAG, "GolfGame.gamePoster configKeys=${config?.keys?.sorted().orEmpty()}")
-        return android.R.drawable.ic_menu_compass
+        return R.drawable.golf
     }
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {

@@ -14,7 +14,7 @@ object GolfShot {
 
     const val AIM_CANCEL_DIST = 12f
 
-    const val LAUNCH_SPEED_MULTIPLIER = 1.55f
+    const val LAUNCH_SPEED_MULTIPLIER = 2.0f
 
     data class Aim(
         val dist: Float,

@@ -1,4 +1,3 @@
-
 # For more information about using CMake with Android Studio, read the
 # documentation: https://d.android.com/studio/projects/add-native-code.html.
 # For more examples on how to use CMake, see https://github.com/android/ndk-samples.
@@ -32,21 +31,29 @@ add_compile_options("-fno-fast-math")
 # for GameActivity/NativeActivity derived applications, the same library name must be
 # used in the AndroidManifest.xml file.
 add_library(${CMAKE_PROJECT_NAME} SHARED
-    # List C/C++ source files with relative paths to this CMakeLists.txt.
-    openbubblesextension.cpp
-    PoolTable.cpp
-    PoolBall.cpp
-    PoolContactListener.cpp
-    knockout/KnockoutTable.cpp
-    knockout/KnockoutPiece.cpp
-    knockout/KnockoutContactListener.cpp
-    knockout/KnockoutJNI.cpp)
+        # List C/C++ source files with relative paths to this CMakeLists.txt.
+        openbubblesextension.cpp
+        PoolTable.cpp
+        PoolBall.cpp
+        PoolContactListener.cpp
+        knockout/KnockoutTable.cpp
+        knockout/KnockoutPiece.cpp
+        knockout/KnockoutContactListener.cpp
+        knockout/KnockoutJNI.cpp
+        golf/GolfTable.cpp
+        golf/GolfBall.cpp
+        golf/GolfContactListener.cpp
+        golf/GolfJNI.cpp)
 
 set_source_files_properties(
         knockout/KnockoutTable.cpp
         knockout/KnockoutPiece.cpp
         knockout/KnockoutContactListener.cpp
         knockout/KnockoutJNI.cpp
+        golf/GolfTable.cpp
+        golf/GolfBall.cpp
+        golf/GolfContactListener.cpp
+        golf/GolfJNI.cpp
         PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=fast"
 )
 
@@ -59,8 +66,8 @@ target_include_directories(${CMAKE_PROJECT_NAME}
 # can link libraries from various origins, such as libraries defined in this
 # build script, prebuilt third-party libraries, or Android system libraries.
 target_link_libraries(${CMAKE_PROJECT_NAME}
-    # List libraries link to the target library
-    android
-    log
-    Box2D
-    C++)
+        # List libraries link to the target library
+        android
+        log
+        Box2D
+        C++)
