@@ -92,6 +92,7 @@ private:
 
     void createBlockedCellWall(int row, int col);
     void createBoundaryWalls();
+    void createDiagonalCellWall(int row, int col, int cellValue);
 
     void createSpecialValue3Cut(const int* openMask, int row, int col);
     void createImplicitDiagonalCornerCut(const int* openMask, int row, int col);

@@ -35,6 +35,7 @@ static constexpr int VELOCITY_ITERATIONS = 60;
 static constexpr int POSITION_ITERATIONS = 60;
 
 static constexpr float PI_F = 3.14159265358979323846f;
+static constexpr float DIAGONAL_WALL_THICKNESS = 6.0f;
 
 static constexpr int CELL_OPEN = 0;
 static constexpr int CELL_BLOCKED = 1;
@@ -420,11 +421,7 @@ void GolfTable::configureMap(
                         break;
 
                     case CELL_SPECIAL_3:
-                        /*
-                         * Temporary: value 3 is visually open-with-cut.
-                         * Do not create guessed collision geometry until we verify
-                         * the exact iOS b2PolygonShape vertices from the binary.
-                         */
+                        createDiagonalCellWall(row, col, cellValue);
                         break;
 
                     case CELL_OPEN:
@@ -478,6 +475,66 @@ void GolfTable::createBlockedCellWall(int row, int col) {
             -1,
             WALL_RESTITUTION,
             WALL_FRICTION
+    );
+}
+
+void GolfTable::createDiagonalCellWall(int row, int col, int cellValue) {
+    const float x = static_cast<float>(col) * tileSize;
+    const float y = static_cast<float>(row) * tileSize;
+
+    /*
+     * iOS diagonal/shuffle wall is a polygon fixture, not an edge.
+     * The old Android version that worked used a thin rotated box.
+     *
+     * Raw cell value 3 maps to the old CELL_DIAGONAL_B direction,
+     * which used -45 degrees.
+     */
+    const float halfLength = tileSize * 0.5f * std::sqrt(2.0f);
+    const float halfThickness = DIAGONAL_WALL_THICKNESS * 0.5f;
+    const float angle = -PI_F * 0.25f;
+
+    createStaticBox(
+            x,
+            y,
+            halfLength,
+            halfThickness,
+            angle,
+            -2,
+            WALL_RESTITUTION,
+            WALL_FRICTION,
+            false
+    );
+
+    __android_log_print(
+            ANDROID_LOG_INFO,
+            "GolfNative",
+            "GOLF_ANDROID_DIAGONAL_WALL={"
+            "\"runId\":\"%s\","
+            "\"shotIndex\":%d,"
+            "\"frame\":%d,"
+            "\"phase\":\"%s\","
+            "\"source\":\"createDiagonalCellWall_iOSPolygonStrip\","
+            "\"row\":%d,"
+            "\"col\":%d,"
+            "\"cellValue\":%d,"
+            "\"shape\":\"rotatedBox\","
+            "\"center\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"halfLength\":%.6f,"
+            "\"halfThickness\":%.6f,"
+            "\"angle\":%.6f"
+            "}",
+            traceRunId.c_str(),
+            traceShotIndex,
+            traceFrame,
+            tracePhase.c_str(),
+            row,
+            col,
+            cellValue,
+            x,
+            y,
+            halfLength,
+            halfThickness,
+            angle
     );
 }
 
