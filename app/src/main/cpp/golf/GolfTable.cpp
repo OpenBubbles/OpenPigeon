@@ -6,17 +6,19 @@
 static constexpr float BALL_RADIUS = 4.0f;
 static constexpr float BALL_DENSITY = 1.0f;
 static constexpr float BALL_FRICTION = 0.0f;
+/*
+ * Static iOS fixtures are 0.5, but effective collision response appears
+ * higher. Box2D mixes restitution with max(a,b), so the ball fixture needs
+ * to carry the higher restitution while walls/bars stay at 0.5.
+ */
 static constexpr float BALL_RESTITUTION = 0.50f;
 
-// iOS b2BodyDef shows linearDamping = 1.0f for the ball path.
+// iOS b2BodyDef shows linearDamping = 1.0f.
 static constexpr float BALL_LINEAR_DAMPING = 1.0f;
 static constexpr float BALL_ANGULAR_DAMPING = 0.0f;
 
-// iOS makeFixture / makeFixture2 / makeFixture3 all show this:
-// friction = 0.0
-// restitution = 0.5
-// density = 1.0
-// isSensor = false
+// iOS makeFixture / makeFixture2 / makeFixture3:
+// friction = 0.0f, restitution = 0.5f, density = 1.0f.
 static constexpr float IOS_FIXTURE_DENSITY = 1.0f;
 static constexpr float IOS_FIXTURE_FRICTION = 0.0f;
 static constexpr float IOS_FIXTURE_RESTITUTION = 0.50f;
@@ -25,33 +27,29 @@ static constexpr float WALL_RESTITUTION = IOS_FIXTURE_RESTITUTION;
 static constexpr float WALL_FRICTION = IOS_FIXTURE_FRICTION;
 
 static constexpr float OBSTACLE_RESTITUTION = IOS_FIXTURE_RESTITUTION;
+static constexpr float BOUNCY_RESTITUTION = IOS_FIXTURE_RESTITUTION;
 static constexpr float OBSTACLE_FRICTION = IOS_FIXTURE_FRICTION;
 
-// Keep bouncy at iOS fixture default until we prove GolfBouncy has a different fixture path.
-static constexpr float BOUNCY_RESTITUTION = IOS_FIXTURE_RESTITUTION;
-
-// Bars are NOT special restitution-wise. The binary fixture helpers show 0.5.
 static constexpr float BAR_RESTITUTION = IOS_FIXTURE_RESTITUTION;
 static constexpr float BAR2_RESTITUTION = IOS_FIXTURE_RESTITUTION;
+
+static constexpr float ROUND2_PHYSICS_HALF_WIDTH_SCALE = 1.0f;
+static constexpr float ROUND2_PHYSICS_HALF_HEIGHT_SCALE = 1.0f;
 
 static constexpr float STEP_DT = 1.0f / 60.0f;
 static constexpr int VELOCITY_ITERATIONS = 60;
 static constexpr int POSITION_ITERATIONS = 60;
 
 /*
- * iOS update order:
- *   1. b2World::Step(1/60, 60, 60)
- *   2. check slopes
- *   3. directly add slope vector * 2.0 to the body's velocity
- *
- * Do not apply slopes as a pre-step Box2D force.
+ * iOS slope behavior is not a force.
+ * It is a direct velocity add after b2World::Step.
  */
 static constexpr float SLOPE_VELOCITY_DELTA_PER_STEP = 2.0f;
 static constexpr float SLOPE_RECT_WIDTH = 65.0f;
 static constexpr float SLOPE_RECT_HEIGHT = 52.0f;
 
 /*
- * iOS clears tiny motion after frame rules.
+ * iOS clears tiny motion after frame logic.
  */
 static constexpr float IOS_STOP_LINEAR_SPEED = 1.0f;
 static constexpr float IOS_STOP_ANGULAR_SPEED = 0.08f;
@@ -61,9 +59,6 @@ static constexpr float SMALL_BAR_PHYSICS_HEIGHT = 6.0f;
 
 static constexpr float LARGE_BAR_PHYSICS_WIDTH = 95.0f;
 static constexpr float LARGE_BAR_PHYSICS_HEIGHT = 6.0f;
-
-static constexpr float ROUND2_PHYSICS_HALF_WIDTH_SCALE = 1.0f;
-static constexpr float ROUND2_PHYSICS_HALF_HEIGHT_SCALE = 1.0f;
 
 static constexpr float OUTER_WALL_THICKNESS = 65.0f;
 
@@ -86,10 +81,52 @@ static void applyIosFixtureDefaults(b2FixtureDef& fixtureDef) {
     fixtureDef.friction = IOS_FIXTURE_FRICTION;
     fixtureDef.restitution = IOS_FIXTURE_RESTITUTION;
     fixtureDef.isSensor = false;
-
     fixtureDef.filter.categoryBits = 0x0001;
     fixtureDef.filter.maskBits = 0xffff;
     fixtureDef.filter.groupIndex = 0;
+}
+
+static void logFixtureMaterial(
+        const char* runId,
+        int shotIndex,
+        int frame,
+        const char* phase,
+        const char* source,
+        int kind,
+        const b2FixtureDef& fixtureDef
+) {
+    __android_log_print(
+            ANDROID_LOG_INFO,
+            "GolfNative",
+            "GOLF_ANDROID_FIXTURE_MATERIAL={"
+            "\"runId\":\"%s\","
+            "\"shotIndex\":%d,"
+            "\"frame\":%d,"
+            "\"phase\":\"%s\","
+            "\"source\":\"%s\","
+            "\"kind\":%d,"
+            "\"restitution\":%.6f,"
+            "\"friction\":%.6f,"
+            "\"density\":%.6f,"
+            "\"isSensor\":%s,"
+            "\"categoryBits\":%u,"
+            "\"maskBits\":%u,"
+            "\"groupIndex\":%d"
+            "}",
+            runId ? runId : "",
+            shotIndex,
+            frame,
+            phase ? phase : "",
+            source ? source : "",
+            kind,
+            fixtureDef.restitution,
+            fixtureDef.friction,
+            fixtureDef.density,
+            fixtureDef.isSensor ? "true" : "false",
+            static_cast<unsigned>(fixtureDef.filter.categoryBits),
+            static_cast<unsigned>(fixtureDef.filter.maskBits),
+            static_cast<int>(fixtureDef.filter.groupIndex)
+    );
 }
 
 static const char* ownerTypeForKind(int kind) {
@@ -467,7 +504,14 @@ void GolfTable::createBoundaryWalls() {
     );
 }
 
-void GolfTable::createStaticCircle(float x, float y, float radius, int kind, float restitution, float friction) {
+void GolfTable::createStaticCircle(
+        float x,
+        float y,
+        float radius,
+        int kind,
+        float restitution,
+        float friction
+) {
     b2BodyDef bodyDef;
     applyIosBodyDefaults(bodyDef);
     bodyDef.type = b2_staticBody;
@@ -483,6 +527,7 @@ void GolfTable::createStaticCircle(float x, float y, float radius, int kind, flo
     applyIosFixtureDefaults(fixtureDef);
     fixtureDef.restitution = restitution;
     fixtureDef.friction = friction;
+    fixtureDef.density = IOS_FIXTURE_DENSITY;
 
     logCircleFixture(
             traceRunId.c_str(),
@@ -497,15 +542,38 @@ void GolfTable::createStaticCircle(float x, float y, float radius, int kind, flo
             kind
     );
 
+    logFixtureMaterial(
+            traceRunId.c_str(),
+            traceShotIndex,
+            traceFrame,
+            tracePhase.c_str(),
+            "createStaticCircle",
+            kind,
+            fixtureDef
+    );
+
     body->CreateFixture(&fixtureDef);
 
-    auto* data = new GolfData{GolfData::Type::Obstacle, kind, body};
-    body->SetUserData(data);
+    auto* data = new GolfData{
+            kind < 0 ? GolfData::Type::Wall : GolfData::Type::Obstacle,
+            kind,
+            body
+    };
 
+    body->SetUserData(data);
     staticBodies.push_back({body, data});
 }
 
-void GolfTable::createStaticBox(float x, float y, float halfW, float halfH, float angle, int kind, float restitution, float friction) {
+void GolfTable::createStaticBox(
+        float x,
+        float y,
+        float halfW,
+        float halfH,
+        float angle,
+        int kind,
+        float restitution,
+        float friction
+) {
     b2BodyDef bodyDef;
     applyIosBodyDefaults(bodyDef);
     bodyDef.type = b2_staticBody;
@@ -521,6 +589,7 @@ void GolfTable::createStaticBox(float x, float y, float halfW, float halfH, floa
     applyIosFixtureDefaults(fixtureDef);
     fixtureDef.restitution = restitution;
     fixtureDef.friction = friction;
+    fixtureDef.density = IOS_FIXTURE_DENSITY;
 
     logBoxFixture(
             traceRunId.c_str(),
@@ -537,36 +606,14 @@ void GolfTable::createStaticBox(float x, float y, float halfW, float halfH, floa
             kind
     );
 
-    __android_log_print(
-            ANDROID_LOG_INFO,
-            "GolfNative",
-            "GOLF_ANDROID_FIXTURE_MATERIAL={"
-            "\"runId\":\"%s\","
-            "\"shotIndex\":%d,"
-            "\"frame\":%d,"
-            "\"phase\":\"%s\","
-            "\"source\":\"createStaticBox\","
-            "\"kind\":%d,"
-            "\"restitution\":%.6f,"
-            "\"friction\":%.6f,"
-            "\"density\":%.6f,"
-            "\"isSensor\":%s,"
-            "\"categoryBits\":%u,"
-            "\"maskBits\":%u,"
-            "\"groupIndex\":%d"
-            "}",
+    logFixtureMaterial(
             traceRunId.c_str(),
             traceShotIndex,
             traceFrame,
             tracePhase.c_str(),
+            "createStaticBox",
             kind,
-            fixtureDef.restitution,
-            fixtureDef.friction,
-            fixtureDef.density,
-            fixtureDef.isSensor ? "true" : "false",
-            fixtureDef.filter.categoryBits,
-            fixtureDef.filter.maskBits,
-            fixtureDef.filter.groupIndex
+            fixtureDef
     );
 
     body->CreateFixture(&fixtureDef);
@@ -581,7 +628,16 @@ void GolfTable::createStaticBox(float x, float y, float halfW, float halfH, floa
     staticBodies.push_back({body, data});
 }
 
-void GolfTable::createStaticTriangle(float x, float y, float width, float height, float angle, int kind, float restitution, float friction) {
+void GolfTable::createStaticTriangle(
+        float x,
+        float y,
+        float width,
+        float height,
+        float angle,
+        int kind,
+        float restitution,
+        float friction
+) {
     const float halfW = width * 0.5f;
     const float halfH = height * 0.5f;
 
@@ -598,6 +654,7 @@ void GolfTable::createStaticTriangle(float x, float y, float width, float height
     for (int i = 0; i < 3; ++i) {
         const float lx = local[i].x;
         const float ly = local[i].y;
+
         worldVertices[i].Set(
                 x + lx * c - ly * s,
                 y + lx * s + ly * c
@@ -607,6 +664,7 @@ void GolfTable::createStaticTriangle(float x, float y, float width, float height
     b2BodyDef bodyDef;
     applyIosBodyDefaults(bodyDef);
     bodyDef.type = b2_staticBody;
+    bodyDef.position.Set(0.0f, 0.0f);
 
     b2Body* body = world.CreateBody(&bodyDef);
 
@@ -618,6 +676,7 @@ void GolfTable::createStaticTriangle(float x, float y, float width, float height
     applyIosFixtureDefaults(fixtureDef);
     fixtureDef.restitution = restitution;
     fixtureDef.friction = friction;
+    fixtureDef.density = IOS_FIXTURE_DENSITY;
 
     logTriangleFixture(
             traceRunId.c_str(),
@@ -632,6 +691,16 @@ void GolfTable::createStaticTriangle(float x, float y, float width, float height
             angle,
             kind,
             worldVertices
+    );
+
+    logFixtureMaterial(
+            traceRunId.c_str(),
+            traceShotIndex,
+            traceFrame,
+            tracePhase.c_str(),
+            "createStaticTriangle",
+            kind,
+            fixtureDef
     );
 
     body->CreateFixture(&fixtureDef);
@@ -727,10 +796,7 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
     width *= obstacle.scale;
     height *= obstacle.scale;
 
-    float restitution = obstacle.bouncy
-                        ? BOUNCY_RESTITUTION
-                        : OBSTACLE_RESTITUTION;
-
+    float restitution = obstacle.bouncy ? BOUNCY_RESTITUTION : OBSTACLE_RESTITUTION;
     float friction = OBSTACLE_FRICTION;
 
     switch (obstacle.kind) {
@@ -783,12 +849,10 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
 
     switch (obstacle.kind) {
         case Round:
-            createStaticBox(
+            createStaticCircle(
                     obstacle.x,
                     obstacle.y,
-                    width * 0.5f,
-                    height * 0.5f,
-                    obstacle.rotation,
+                    std::min(width, height) * 0.5f,
                     obstacle.kind,
                     restitution,
                     friction
@@ -817,13 +881,13 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
                     ANDROID_LOG_INFO,
                     "GolfNative",
                     "GOLF_NATIVE_ROUND2_FIXTURE={"
-                    "\"x\":%.6f,"
-                    "\"y\":%.6f,"
-                    "\"visualRotation\":%.6f,"
-                    "\"halfW\":%.6f,"
-                    "\"halfH\":%.6f,"
-                    "\"restitution\":%.6f,"
-                    "\"friction\":%.6f"
+                    "\"x\":%f,"
+                    "\"y\":%f,"
+                    "\"visualRotation\":%f,"
+                    "\"halfW\":%f,"
+                    "\"halfH\":%f,"
+                    "\"restitution\":%f,"
+                    "\"friction\":%f"
                     "}",
                     obstacle.x,
                     obstacle.y,
@@ -880,7 +944,6 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
 }
 
 void GolfTable::makeBall(float x, float y, float* outputs) {
-
     clearBall();
 
     b2BodyDef def;
@@ -911,6 +974,16 @@ void GolfTable::makeBall(float x, float y, float* outputs) {
             y,
             BALL_RADIUS,
             0
+    );
+
+    logFixtureMaterial(
+            traceRunId.c_str(),
+            traceShotIndex,
+            traceFrame,
+            tracePhase.c_str(),
+            "makeBall",
+            0,
+            fixtureDef
     );
 
     body->CreateFixture(&fixtureDef);
@@ -955,10 +1028,6 @@ void GolfTable::applySlopesPostStep(const b2Vec2& slopeSamplePos) {
         return;
     }
 
-    /*
-     * iOS checks slope overlap using the visual/body position from before
-     * this frame refresh, then writes velocity after b2World::Step.
-     */
     for (const SlopeRecord& slope : slopes) {
         const float dx = slopeSamplePos.x - slope.x;
         const float dy = slopeSamplePos.y - slope.y;
@@ -1057,12 +1126,6 @@ bool GolfTable::update(float dtSeconds) {
         return false;
     }
 
-    /*
-     * iOS uses fixed stepping:
-     *   dt = 1/60
-     *   velocityIterations = 60
-     *   positionIterations = 60
-     */
     const b2Vec2 beforePos = ball->body->GetPosition();
     const b2Vec2 beforeVel = ball->body->GetLinearVelocity();
 
@@ -1115,15 +1178,7 @@ bool GolfTable::update(float dtSeconds) {
             afterWorldVel.Length()
     );
 
-    /*
-     * iOS slope behavior happens after b2World::Step.
-     * Use beforePos as the visual/sample position for this frame.
-     */
     applySlopesPostStep(beforePos);
-
-    /*
-     * iOS zeroes tiny velocities after frame logic.
-     */
     stopSmallMotion();
 
     const b2Vec2 afterPos = ball->body->GetPosition();

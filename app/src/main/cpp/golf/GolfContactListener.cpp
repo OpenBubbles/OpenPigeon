@@ -17,6 +17,72 @@ namespace {
         return static_cast<GolfData*>(body->GetUserData());
     }
 
+    static const char* golfDataTypeName(const GolfData* data) {
+        if (!data) {
+            return "null";
+        }
+
+        switch (data->type) {
+            case GolfData::Type::Ball:
+                return "ball";
+
+            case GolfData::Type::Wall:
+                return "wall";
+
+            case GolfData::Type::Obstacle:
+                return "obstacle";
+
+            default:
+                return "unknown";
+        }
+    }
+
+    static bool isBall(const GolfData* data) {
+        return data && data->type == GolfData::Type::Ball;
+    }
+
+    static bool isBallBallContact(const GolfData* dataA, const GolfData* dataB) {
+        return isBall(dataA) && isBall(dataB);
+    }
+
+    static float lengthSquared(const b2Vec2& v) {
+        return v.x * v.x + v.y * v.y;
+    }
+
+/*
+ * iOS regular contact behavior:
+ *
+ *   reflected = oldVelocity - 2 * dot(oldVelocity, normal) * normal
+ *   final     = reflected * 0.95
+ *
+ * The binary constant is 0x3f733333, which is approximately 0.95f.
+ */
+    static b2Vec2 iosReflectVelocity(const b2Vec2& velocity, const b2Vec2& normal) {
+        const float dot = velocity.x * normal.x + velocity.y * normal.y;
+
+        b2Vec2 reflected(
+                velocity.x - 2.0f * dot * normal.x,
+                velocity.y - 2.0f * dot * normal.y
+        );
+
+        reflected *= 0.95f;
+        return reflected;
+    }
+
+    static void setBodyVelocityLikeIos(b2Body* body, const b2Vec2& velocity) {
+        if (!body) {
+            return;
+        }
+
+        if (lengthSquared(velocity) <= 0.0f) {
+            body->SetLinearVelocity(velocity);
+            return;
+        }
+
+        body->SetAwake(true);
+        body->SetLinearVelocity(velocity);
+    }
+
     static const char* typeName(const GolfData* data) {
         if (!data) return "null";
 
@@ -72,26 +138,68 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
     GolfData* dataA = dataForFixture(fixtureA);
     GolfData* dataB = dataForFixture(fixtureB);
 
-    if (!isBallInvolved(dataA, dataB)) {
+    if (!dataA || !dataB) {
         return;
     }
 
-    b2WorldManifold manifold;
-    contact->GetWorldManifold(&manifold);
-
-    const b2Manifold* localManifold = contact->GetManifold();
-    const int pointCount = localManifold ? localManifold->pointCount : 0;
+    const bool ballInvolved = isBall(dataA) || isBall(dataB);
+    if (!ballInvolved) {
+        return;
+    }
 
     b2Body* bodyA = fixtureA ? fixtureA->GetBody() : nullptr;
     b2Body* bodyB = fixtureB ? fixtureB->GetBody() : nullptr;
 
-    const b2Vec2 posA = bodyA ? bodyA->GetPosition() : b2Vec2_zero;
-    const b2Vec2 posB = bodyB ? bodyB->GetPosition() : b2Vec2_zero;
-    const b2Vec2 velA = bodyA ? bodyA->GetLinearVelocity() : b2Vec2_zero;
-    const b2Vec2 velB = bodyB ? bodyB->GetLinearVelocity() : b2Vec2_zero;
+    const b2Vec2 posA = bodyA ? bodyA->GetPosition() : b2Vec2(0.0f, 0.0f);
+    const b2Vec2 posB = bodyB ? bodyB->GetPosition() : b2Vec2(0.0f, 0.0f);
+    const b2Vec2 velA = bodyA ? bodyA->GetLinearVelocity() : b2Vec2(0.0f, 0.0f);
+    const b2Vec2 velB = bodyB ? bodyB->GetLinearVelocity() : b2Vec2(0.0f, 0.0f);
 
-    const b2Vec2 point =
-            pointCount > 0 ? manifold.points[0] : b2Vec2_zero;
+    b2WorldManifold worldManifold;
+    contact->GetWorldManifold(&worldManifold);
+
+    const b2Manifold* localManifold = contact->GetManifold();
+    const int pointCount = localManifold ? localManifold->pointCount : 0;
+
+    const b2Vec2 contactPoint =
+            pointCount > 0
+            ? worldManifold.points[0]
+            : b2Vec2(0.0f, 0.0f);
+
+    const float restitutionA = fixtureA ? fixtureA->GetRestitution() : 0.0f;
+    const float restitutionB = fixtureB ? fixtureB->GetRestitution() : 0.0f;
+    const float contactRestitution = contact->GetRestitution();
+
+    const float frictionA = fixtureA ? fixtureA->GetFriction() : 0.0f;
+    const float frictionB = fixtureB ? fixtureB->GetFriction() : 0.0f;
+    const float contactFriction = contact->GetFriction();
+
+    b2Vec2 rewrittenVelA = velA;
+    b2Vec2 rewrittenVelB = velB;
+
+    bool rewroteA = false;
+    bool rewroteB = false;
+
+    /*
+     * iOS skips normal reflection for ball-ball contacts.
+     * Current GolfData has only Ball / Wall / Obstacle, so hole contacts are
+     * still handled on the Kotlin/game side, not through this native enum.
+     */
+    if (!isBallBallContact(dataA, dataB) && contact->IsTouching()) {
+        const b2Vec2 normal = worldManifold.normal;
+
+        if (isBall(dataA) && bodyA && bodyA->GetType() == b2_dynamicBody) {
+            rewrittenVelA = iosReflectVelocity(velA, normal);
+            setBodyVelocityLikeIos(bodyA, rewrittenVelA);
+            rewroteA = true;
+        }
+
+        if (isBall(dataB) && bodyB && bodyB->GetType() == b2_dynamicBody) {
+            rewrittenVelB = iosReflectVelocity(velB, normal);
+            setBodyVelocityLikeIos(bodyB, rewrittenVelB);
+            rewroteB = true;
+        }
+    }
 
     __android_log_print(
             ANDROID_LOG_INFO,
@@ -107,29 +215,48 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
             "\"bType\":%d,"
             "\"bTypeName\":\"%s\","
             "\"bKind\":%d,"
+            "\"aRestitution\":%.6f,"
+            "\"bRestitution\":%.6f,"
+            "\"contactRestitution\":%.6f,"
+            "\"aFriction\":%.6f,"
+            "\"bFriction\":%.6f,"
+            "\"contactFriction\":%.6f,"
             "\"pointCount\":%d,"
+            "\"touching\":%s,"
             "\"normal\":{\"x\":%.6f,\"y\":%.6f},"
             "\"point\":{\"x\":%.6f,\"y\":%.6f},"
             "\"aPos\":{\"x\":%.6f,\"y\":%.6f},"
             "\"bPos\":{\"x\":%.6f,\"y\":%.6f},"
-            "\"aVel\":{\"x\":%.6f,\"y\":%.6f},"
-            "\"bVel\":{\"x\":%.6f,\"y\":%.6f}"
+            "\"aVelBefore\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"bVelBefore\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"aVelAfter\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"bVelAfter\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"rewroteA\":%s,"
+            "\"rewroteB\":%s,"
+            "\"iosContactRewrite\":true"
             "}",
             traceRunId.c_str(),
             traceShotIndex,
             traceFrame,
             tracePhase.c_str(),
             static_cast<int>(dataA->type),
-            typeName(dataA),
+            golfDataTypeName(dataA),
             dataA->kind,
             static_cast<int>(dataB->type),
-            typeName(dataB),
+            golfDataTypeName(dataB),
             dataB->kind,
+            restitutionA,
+            restitutionB,
+            contactRestitution,
+            frictionA,
+            frictionB,
+            contactFriction,
             pointCount,
-            manifold.normal.x,
-            manifold.normal.y,
-            point.x,
-            point.y,
+            contact->IsTouching() ? "true" : "false",
+            worldManifold.normal.x,
+            worldManifold.normal.y,
+            contactPoint.x,
+            contactPoint.y,
             posA.x,
             posA.y,
             posB.x,
@@ -137,7 +264,13 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
             velA.x,
             velA.y,
             velB.x,
-            velB.y
+            velB.y,
+            rewrittenVelA.x,
+            rewrittenVelA.y,
+            rewrittenVelB.x,
+            rewrittenVelB.y,
+            rewroteA ? "true" : "false",
+            rewroteB ? "true" : "false"
     );
 }
 
@@ -210,6 +343,13 @@ void GolfContactListener::PostSolve(
     const b2Vec2 posB = bodyB ? bodyB->GetPosition() : b2Vec2_zero;
     const b2Vec2 velA = bodyA ? bodyA->GetLinearVelocity() : b2Vec2_zero;
     const b2Vec2 velB = bodyB ? bodyB->GetLinearVelocity() : b2Vec2_zero;
+    const float restitutionA = fixtureA ? fixtureA->GetRestitution() : 0.0f;
+    const float restitutionB = fixtureB ? fixtureB->GetRestitution() : 0.0f;
+    const float contactRestitution = contact->GetRestitution();
+
+    const float frictionA = fixtureA ? fixtureA->GetFriction() : 0.0f;
+    const float frictionB = fixtureB ? fixtureB->GetFriction() : 0.0f;
+    const float contactFriction = contact->GetFriction();
 
     const b2Vec2 point =
             pointCount > 0 ? manifold.points[0] : b2Vec2_zero;
@@ -228,6 +368,12 @@ void GolfContactListener::PostSolve(
             "\"bType\":%d,"
             "\"bTypeName\":\"%s\","
             "\"bKind\":%d,"
+            "\"aRestitution\":%.6f,"
+            "\"bRestitution\":%.6f,"
+            "\"contactRestitution\":%.6f,"
+            "\"aFriction\":%.6f,"
+            "\"bFriction\":%.6f,"
+            "\"contactFriction\":%.6f,"
             "\"pointCount\":%d,"
             "\"normal\":{\"x\":%.6f,\"y\":%.6f},"
             "\"point\":{\"x\":%.6f,\"y\":%.6f},"
@@ -250,6 +396,12 @@ void GolfContactListener::PostSolve(
             static_cast<int>(dataB->type),
             typeName(dataB),
             dataB->kind,
+            restitutionA,
+            restitutionB,
+            contactRestitution,
+            frictionA,
+            frictionB,
+            contactFriction,
             pointCount,
             manifold.normal.x,
             manifold.normal.y,
