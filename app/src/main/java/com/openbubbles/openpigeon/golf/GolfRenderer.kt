@@ -35,9 +35,9 @@ class GolfRenderer @JvmOverloads constructor(
 
         private const val FLIP_BOARD_Y_ONLY = true
         private const val DEFAULT_SHOW_DEBUG_LABEL = false
-        private const val SHOW_PATH_PREVIEW = false
-        private const val SHOW_OBJECT_DEBUG_DOTS = false
-        private const val LOG_RENDER_SCREEN_COORDS = true
+        private var showPathPreview = false
+        private var showObjectDebugDots = false
+        private var logRenderScreenCoords = false
         private const val IOS_TILE_DRAW_SIZE = 66f
         private const val IOS_BALL_DRAW_SIZE = 8f
         private const val IOS_BALL_SUNK_DRAW_SIZE = 6f
@@ -101,7 +101,7 @@ class GolfRenderer @JvmOverloads constructor(
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var showCollisionDebug = DEFAULT_SHOW_COLLISION_DEBUG
     private var showDebugLabel = DEFAULT_SHOW_DEBUG_LABEL
-    private val logVisualAlignmentEnabled = true
+    private var logVisualAlignmentEnabled = true
     private val traceBallRadiusCourse = IOS_BALL_DRAW_SIZE * 0.5f
     private val bumperPulses = HashMap<String, BumperPulse>()
 
@@ -361,7 +361,7 @@ class GolfRenderer @JvmOverloads constructor(
     }
 
     private fun logVisualAlignment(g: GolfMap) {
-        if (!logVisualAlignmentEnabled) return
+        if (!logVisualAlignmentEnabled && !GolfConstants.debugToolsEnabled) return
 
         val wallSegments = courseWallSegmentsForTrace(g)
 
@@ -978,7 +978,7 @@ class GolfRenderer @JvmOverloads constructor(
                         "slopes=${g.slopes.size} obstacles=${g.obstacles.size}"
             )
 
-            if (LOG_RENDER_SCREEN_COORDS) {
+            if (logRenderScreenCoords || GolfConstants.debugToolsEnabled) {
                 logRendererScreenCoordinates(g)
             }
 
@@ -993,7 +993,7 @@ class GolfRenderer @JvmOverloads constructor(
 
         drawCourseFill(canvas, fillPath)
 
-        if (SHOW_PATH_PREVIEW) {
+        if (showPathPreview) {
             drawPathPreview(canvas, g)
         }
 
@@ -1003,7 +1003,7 @@ class GolfRenderer @JvmOverloads constructor(
         drawObstacleSprites(canvas, g)
         drawCourseOutline(canvas, wallPath)
 
-        if (SHOW_OBJECT_DEBUG_DOTS) {
+        if (showObjectDebugDots) {
             drawObjectDebugDots(canvas, g)
         }
 

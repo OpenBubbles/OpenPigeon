@@ -29,42 +29,6 @@ data class GolfMap(
         return grid[x][y] == 0 || grid[x][y] == 3
     }
 
-    fun dump(): String = buildString {
-        appendLine("seed=$seed mode=$mode mapNum=$mapNum")
-        appendLine("xCells=$xCells yCells=$yCells mapSize=$mapSize mapSize2=$mapSize2")
-        appendLine("carveTarget=$carveTarget complete=$complete")
-        appendLine("ball1=(${ballStart1.x},${ballStart1.y}) ball2=(${ballStart2.x},${ballStart2.y}) hole=(${hole.x},${hole.y})")
-        appendLine("slopes=${slopes.size} obstacles=${obstacles.size}")
-
-        if (slopes.isNotEmpty()) {
-            appendLine("slopes:")
-            slopes.forEachIndexed { index, slope ->
-                appendLine(
-                    "  $index image=${slope.image} pos=(${slope.x},${slope.y}) " +
-                            "v=(${slope.vx},${slope.vy}) rotation=${slope.rotation}"
-                )
-            }
-        }
-
-        if (obstacles.isNotEmpty()) {
-            appendLine("obstacles:")
-            obstacles.forEachIndexed { index, obstacle ->
-                appendLine(
-                    "  $index image=${obstacle.image} type=${obstacle.type} " +
-                            "pos=(${obstacle.x},${obstacle.y}) rotation=${obstacle.rotation} " +
-                            "scale=${obstacle.scale} bouncy=${obstacle.bouncy}"
-                )
-            }
-        }
-
-        appendLine("grid:")
-        for (x in 0 until xCells) {
-            val line = StringBuilder()
-            for (y in 0 until yCells) line.append(grid[x][y])
-            appendLine(("000$x").takeLast(3) + ": " + line)
-        }
-    }
-
     override fun equals(other: Any?): Boolean = this === other
     override fun hashCode(): Int = System.identityHashCode(this)
 }

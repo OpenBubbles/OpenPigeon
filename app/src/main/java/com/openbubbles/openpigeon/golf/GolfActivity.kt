@@ -1622,45 +1622,49 @@ class GolfActivity : AppCompatActivity() {
             }
         }
 
-        debugMenuItem = buildMenuPopupItem("Debug: Off").apply {
-            setOnClickListener {
-                debugUiEnabled = !debugUiEnabled
-                applyDebugUiState()
-            }
-        }
-
-        val runTraceItem = buildMenuPopupItem("Run Trace").apply {
-            setOnClickListener {
-                hideMenuPopup()
-                debugRunReplayTraceNow()
-            }
-        }
-
-        val watchTraceItem = buildMenuPopupItem("Watch Trace").apply {
-            setOnClickListener {
-                hideMenuPopup()
-                debugWatchReplayTraceOnBoard()
-            }
-        }
-
-        val replayAgainItem = buildMenuPopupItem("Replay Again").apply {
-            setOnClickListener {
-                hideMenuPopup()
-                debugReplayCurrentHoleAgain()
-            }
-        }
-
         menuPopup.addView(settingsItem)
         menuPopup.addView(helpItem)
-        menuPopup.addView(debugMenuItem)
-        menuPopup.addView(runTraceItem)
-        menuPopup.addView(watchTraceItem)
-        menuPopup.addView(replayAgainItem)
+
+        if (GolfConstants.debugToolsEnabled) {
+            debugMenuItem = buildMenuPopupItem("Debug: Off").apply {
+                setOnClickListener {
+                    debugUiEnabled = !debugUiEnabled
+                    applyDebugUiState()
+                }
+            }
+
+            val runTraceItem = buildMenuPopupItem("Run Trace").apply {
+                setOnClickListener {
+                    hideMenuPopup()
+                    debugRunReplayTraceNow()
+                }
+            }
+
+            val watchTraceItem = buildMenuPopupItem("Watch Trace").apply {
+                setOnClickListener {
+                    hideMenuPopup()
+                    debugWatchReplayTraceOnBoard()
+                }
+            }
+
+            val replayAgainItem = buildMenuPopupItem("Replay Again").apply {
+                setOnClickListener {
+                    hideMenuPopup()
+                    debugReplayCurrentHoleAgain()
+                }
+            }
+
+            menuPopup.addView(debugMenuItem)
+            menuPopup.addView(runTraceItem)
+            menuPopup.addView(watchTraceItem)
+            menuPopup.addView(replayAgainItem)
+        }
 
         menuLayer.addView(menuPopup)
     }
 
     private fun debugWatchReplayTraceOnBoard() {
+        if (!GolfConstants.debugToolsEnabled) return
         val data = gameData
 
         if (data == null) {
@@ -2071,6 +2075,7 @@ class GolfActivity : AppCompatActivity() {
     }
 
     private fun debugRunReplayTraceNow() {
+        if (!GolfConstants.debugToolsEnabled) return
         val source = "debugMenuRunTrace"
 
         val data = gameData
@@ -2129,6 +2134,7 @@ class GolfActivity : AppCompatActivity() {
     }
 
     private fun debugReplayCurrentHoleAgain() {
+        if (!GolfConstants.debugToolsEnabled) return
         val data = gameData
         if (data == null) {
             OpenPigeonLog.w(TAG, "debugReplayCurrentHoleAgain skipped gameData null")
@@ -2257,16 +2263,27 @@ class GolfActivity : AppCompatActivity() {
     }
 
     private fun applyDebugUiState() {
+        val effectiveDebugUiEnabled =
+            GolfConstants.debugToolsEnabled && debugUiEnabled
+
         if (::renderer.isInitialized) {
-            renderer.setDebugOverlayEnabled(debugUiEnabled)
+            renderer.setDebugOverlayEnabled(effectiveDebugUiEnabled)
         }
 
         if (::stateLabel.isInitialized) {
-            stateLabel.visibility = if (debugUiEnabled) View.VISIBLE else View.GONE
+            stateLabel.visibility = if (effectiveDebugUiEnabled) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
         }
 
         if (::debugMenuItem.isInitialized) {
-            debugMenuItem.text = if (debugUiEnabled) "Debug: On" else "Debug: Off"
+            debugMenuItem.text = if (effectiveDebugUiEnabled) {
+                "Debug: On"
+            } else {
+                "Debug: Off"
+            }
         }
     }
 
@@ -3888,6 +3905,7 @@ class GolfActivity : AppCompatActivity() {
         data: GolfGameData,
         map: GolfMap
     ) {
+        if (!GolfConstants.debugToolsEnabled) return
         val manualTraceRequest = source == "debugMenuRunTrace"
 
         val blockedDuringLiveGameplay =
@@ -4397,6 +4415,7 @@ class GolfActivity : AppCompatActivity() {
         data: GolfGameData,
         localPlayer: Int
     ) {
+        if (!GolfConstants.debugToolsEnabled) return
         val reason = "handleMessage parsed"
         if (!::renderer.isInitialized) return
 

@@ -545,25 +545,68 @@ fun RenderKeyboardTutorial(extension: MadridExtension?) {
 
         Row(modifier = GlanceModifier.padding(bottom = 12.dp)) {
             for (i in tutorialSteps.indices) {
-                Box(modifier = GlanceModifier.width(8.dp).height(8.dp).cornerRadius(4.dp)
-                    .background(if (i == step) Color.DarkGray else Color.LightGray)) { }
-                if (i < tutorialSteps.size - 1) Spacer(modifier = GlanceModifier.width(6.dp))
+                Box(
+                    modifier = GlanceModifier
+                        .width(8.dp)
+                        .height(8.dp)
+                        .cornerRadius(4.dp)
+                        .background(if (i == step) Color.DarkGray else Color.LightGray)
+                ) { }
+
+                if (i < tutorialSteps.size - 1) {
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+                }
             }
         }
 
-        Text(
-            if (isLastStep) "Got it" else "Next",
-            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold,
-                color = ColorProvider(Color.White), textAlign = TextAlign.Center),
-            modifier = GlanceModifier
-                .padding(horizontal = 24.dp, vertical = 10.dp)
-                .background(Color.DarkGray)
-                .cornerRadius(8.dp)
-                .clickable(onClick =
-                    if (isLastStep) actionRunCallback<DismissTutorialCallback>()
-                    else actionRunCallback<NextTutorialStepCallback>()
+        Row(
+            modifier = GlanceModifier.padding(top = 2.dp),
+            horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+            verticalAlignment = Alignment.Vertical.CenterVertically
+        ) {
+            if (!isLastStep) {
+                Text(
+                    "Skip",
+                    style = TextStyle(
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ColorProvider(Color.White),
+                        textAlign = TextAlign.Center
+                    ),
+                    modifier = GlanceModifier
+                        .padding(horizontal = 8.dp, vertical = 10.dp)
+                        .background(Color.Gray)
+                        .cornerRadius(8.dp)
+                        .clickable(
+                            onClick = actionRunCallback<DismissTutorialCallback>()
+                        )
                 )
-        )
+
+                Spacer(modifier = GlanceModifier.width(10.dp))
+            }
+
+            Text(
+                if (isLastStep) "Got it" else "Next",
+                style = TextStyle(
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ColorProvider(Color.White),
+                    textAlign = TextAlign.Center
+                ),
+                modifier = GlanceModifier
+                    .padding(horizontal = 24.dp, vertical = 10.dp)
+                    .background(Color.DarkGray)
+                    .cornerRadius(8.dp)
+                    .clickable(
+                        onClick =
+                            if (isLastStep) {
+                                actionRunCallback<DismissTutorialCallback>()
+                            } else {
+                                actionRunCallback<NextTutorialStepCallback>()
+                            }
+                    )
+            )
+        }
     }
 }
 

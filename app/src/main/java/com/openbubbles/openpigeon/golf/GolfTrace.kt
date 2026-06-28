@@ -5,7 +5,8 @@ import com.openbubbles.openpigeon.util.OpenPigeonLog
 import kotlin.math.sqrt
 
 object GolfTrace {
-    const val ENABLED = true
+    val ENABLED: Boolean
+        get() = GolfConstants.debugToolsEnabled
 
     private const val TAG = "GolfNative"
     private const val PREFIX = "GOLF_ANDROID_TRACE="

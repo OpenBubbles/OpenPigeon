@@ -19,10 +19,12 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         val normalizedMode = normalizeMode(mode)
         val hole = mapNum.coerceAtLeast(0)
 
-        OpenPigeonLog.i(
-            TAG,
-            "Generator.createMap enter seed=$seed mode=$mode normalizedMode=$normalizedMode mapNum=$mapNum hole=$hole"
-        )
+        if (GolfConstants.debugToolsEnabled) {
+            OpenPigeonLog.i(
+                TAG,
+                "Generator.createMap enter seed=$seed mode=$mode normalizedMode=$normalizedMode mapNum=$mapNum hole=$hole"
+            )
+        }
 
         val (xCells, yCells) = GolfConstants.dimensionsFor(normalizedMode, hole)
 
@@ -33,7 +35,10 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
 
         repeat(hole) {
             val skipped = rng.drand48()
-            OpenPigeonLog.i(TAG, "Generator.seedSkip mapIndex=$it skipped=$skipped")
+
+            if (GolfConstants.debugToolsEnabled) {
+                OpenPigeonLog.i(TAG, "Generator.seedSkip mapIndex=$it skipped=$skipped")
+            }
         }
 
         val carveTarget = computeCarveTarget(xCells, yCells)
@@ -101,32 +106,25 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
             obstacles = generatedObstacles
         )
 
-        OpenPigeonLog.i(
-            TAG,
-            "GOLF_ANDROID=" + androidLikeTruthJson(map)
-        )
+        if (GolfConstants.debugToolsEnabled) {
+            OpenPigeonLog.i(
+                TAG,
+                "GOLF_ANDROID=" + androidLikeTruthJson(map)
+            )
+        }
 
-        OpenPigeonLog.i(
-            TAG,
-            "Generator.createMap complete source=fromSeed elapsedMs=${android.os.SystemClock.elapsedRealtime() - startedAt} " +
-                    "seed=$seed mode=$normalizedMode mapNum=$hole cells=${xCells}x${yCells} mapSize=$mapSize mapSize2=$mapSize2 " +
-                    "carveTarget=$carveTarget openCells=${countOpen(finalGrid)} blockedCells=${countBlocked(finalGrid)} path=${longestPath.size} " +
-                    "slopes=${generatedSlopes.size} obstacles=${generatedObstacles.size} " +
-                    "start=$start end=$end baseGrid=${gridSummary(baseGrid)} finalGrid=${gridSummary(finalGrid)} objectGrid=${gridSummary(objectGrid)}"
-        )
+        if (GolfConstants.debugToolsEnabled) {
+            OpenPigeonLog.i(
+                TAG,
+                "Generator.createMap complete source=fromSeed elapsedMs=${android.os.SystemClock.elapsedRealtime() - startedAt} " +
+                        "seed=$seed mode=$normalizedMode mapNum=$hole cells=${xCells}x${yCells} mapSize=$mapSize mapSize2=$mapSize2 " +
+                        "carveTarget=$carveTarget openCells=${countOpen(finalGrid)} blockedCells=${countBlocked(finalGrid)} path=${longestPath.size} " +
+                        "slopes=${generatedSlopes.size} obstacles=${generatedObstacles.size} " +
+                        "start=$start end=$end baseGrid=${gridSummary(baseGrid)} finalGrid=${gridSummary(finalGrid)} objectGrid=${gridSummary(objectGrid)}"
+            )
+        }
 
         return map
-    }
-
-    fun dumpMatch(seed: Int, mode: String): String = buildString {
-        OpenPigeonLog.i(TAG, "Generator.dumpMatch seed=$seed mode=$mode")
-        val normalizedMode = normalizeMode(mode)
-        val holes = GolfConstants.holeCountFor(normalizedMode)
-
-        for (h in 0 until holes) {
-            append(createMap(seed, h, normalizedMode).dump())
-            appendLine("----")
-        }
     }
 
     private fun androidLikeTruthJson(map: GolfMap): String {
