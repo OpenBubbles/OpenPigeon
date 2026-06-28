@@ -97,6 +97,9 @@
                 android:name="madrid_icon"
                 android:resource="@drawable/madrid_icon_small" />
             <meta-data
+                android:name="color"
+                android:value="0xFFD4A72C" />
+            <meta-data
                 android:name="madrid_id"
                 android:value="1124197642" />
             <meta-data
