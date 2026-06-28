@@ -7,7 +7,6 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import kotlin.math.abs
 import kotlin.math.atan2
-import kotlin.math.max
 
 object GolfNativePhysics {
     private const val TAG = "GolfNative"
@@ -90,6 +89,7 @@ object GolfNativePhysics {
 
     external fun refreshGolfOutputs(table: Long)
 
+    @Synchronized
     fun reset() {
         val old = table
         table = 0L
@@ -101,6 +101,7 @@ object GolfNativePhysics {
         }
     }
 
+    @Synchronized
     fun setTraceContext(
         map: GolfMap,
         runId: String,
@@ -126,6 +127,7 @@ object GolfNativePhysics {
         }
     }
 
+    @Synchronized
     fun clearTraceContext() {
         val nativeTable = table
         if (nativeTable != 0L) {
@@ -133,6 +135,7 @@ object GolfNativePhysics {
         }
     }
 
+    @Synchronized
     fun step(
         map: GolfMap,
         positionCourse: PointF,
@@ -184,6 +187,7 @@ object GolfNativePhysics {
         return !moving
     }
 
+    @Synchronized
     fun fire(
         map: GolfMap,
         positionCourse: PointF,

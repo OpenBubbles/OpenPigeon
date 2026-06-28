@@ -6,8 +6,6 @@ object GolfConstants {
     const val BALL_SEP: Char = '&'
     const val FIELD_SEP: Char = ','
 
-    const val BALL_RADIUS = 4f
-
     const val MODE_RACE = "race"
     const val DEFAULT_MODE = "3"
     const val DEFAULT_SEED = 1931763971
@@ -37,4 +35,5 @@ object GolfConstants {
     const val INTRO_SCALE_MS = 400L
     const val INTRO_FADE_OUT_DELAY_MS = 900L
     const val INTRO_FADE_OUT_MS = 250L
+    const val MAP_OVERVIEW_HOLD_AFTER_INTRO_MS = 500L
 }

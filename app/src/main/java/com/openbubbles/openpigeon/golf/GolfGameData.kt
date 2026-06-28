@@ -102,9 +102,27 @@ data class GolfGameData(
                 ?: previous?.player2Id
                 ?: ""
 
+            val canMergePreviousReplay =
+                previous != null &&
+                        previous.seed == seed &&
+                        previous.mode == mode &&
+                        previous.holeCount == holeCount &&
+                        (
+                                previous.player1Id.isBlank() ||
+                                        player1Id.isBlank() ||
+                                        previous.player1Id == player1Id
+                                ) &&
+                        (
+                                previous.player2Id.isBlank() ||
+                                        player2Id.isBlank() ||
+                                        previous.player2Id == player2Id
+                                )
+
             val replayInfo = parseReplayFields(
                 msg = msg,
-                player = player
+                player = player,
+                previousReplay = if (canMergePreviousReplay) previous.replay else "",
+                previousReplay2 = if (canMergePreviousReplay) previous.replay2 else ""
             )
 
             val replay = replayInfo.replay
@@ -123,15 +141,8 @@ data class GolfGameData(
 
             val mapNum = when {
                 mapNumRaw != null -> mapNumRaw
-
-                /*
-                 * iOS sometimes sends num/number as a game-progress value that does not
-                 * directly match our zero-based map index. If replay data exists, the
-                 * segment count is the safer source for the current replay hole.
-                 */
-                replayDrivenMapNum != null -> replayDrivenMapNum
-
                 rawNum != null -> rawNum - 1
+                replayDrivenMapNum != null -> replayDrivenMapNum
                 previous != null -> previous.mapNum
                 else -> 0
             }.coerceIn(0, (holeCount - 1).coerceAtLeast(0))
@@ -142,11 +153,6 @@ data class GolfGameData(
                 append('|').append(holeCount)
                 append('|').append(mapNum)
                 append('|').append(player)
-
-                /*
-                 * Use content hashes, not only lengths.
-                 * Different replay strings can have identical lengths.
-                 */
                 append('|').append(replay.hashCode())
                 append('|').append(replay2.hashCode())
                 append('|').append(replay.length)
@@ -201,19 +207,11 @@ data class GolfGameData(
 
         private fun parseReplayFields(
             msg: Map<String, String>,
-            player: Int
+            player: Int,
+            previousReplay: String,
+            previousReplay2: String
         ): ReplayParseResult {
-            /*
-             * Canonical fields from real iOS Mini Golf messages.
-             *
-             * The raw iOS payload has shown that completed shots arrive in "replay":
-             *
-             *   replay=125.459976,1.129438&136.476028,2.182604&20.355270,-2.072401
-             *
-             * Therefore replay/replay2 must win over replay_send.
-             */
-            val explicitReplay1 = firstNonBlank(
-                msg["replay"],
+            val explicitP1Replay = firstNonBlank(
                 msg["replay1"],
                 msg["p1Replay"],
                 msg["p1_replay"],
@@ -222,7 +220,7 @@ data class GolfGameData(
                 msg["replayString"]
             )
 
-            val explicitReplay2 = firstNonBlank(
+            val explicitP2Replay = firstNonBlank(
                 msg["replay2"],
                 msg["replay_2"],
                 msg["p2Replay"],
@@ -232,11 +230,10 @@ data class GolfGameData(
                 msg["replayString2"]
             )
 
-            /*
-             * replay_send is an iOS internal/live-send field.
-             * It is useful only as a fallback if the canonical replay field is absent.
-             * Do not let replay_send overwrite a real replay/replay2 payload.
-             */
+            val genericReplay = firstNonBlank(
+                msg["replay"]
+            )
+
             val replaySend = firstNonBlank(
                 msg["replay_send"],
                 msg["replaySend"],
@@ -251,44 +248,57 @@ data class GolfGameData(
                 msg["send_replay2"]
             )
 
-            var replay1 = explicitReplay1.orEmpty()
-            var replay2 = explicitReplay2.orEmpty()
+            var replay1 = previousReplay
+            var replay2 = previousReplay2
 
-            var replay1Source = if (explicitReplay1 != null) {
-                "replay/replay_string"
-            } else {
-                "blank"
+            var replay1Source =
+                if (previousReplay.isNotBlank()) "previous/replay" else "blank"
+
+            var replay2Source =
+                if (previousReplay2.isNotBlank()) "previous/replay2" else "blank"
+
+            if (!explicitP1Replay.isNullOrBlank()) {
+                replay1 = explicitP1Replay
+                replay1Source = "explicit/player1"
             }
 
-            var replay2Source = if (explicitReplay2 != null) {
-                "replay2/replay_string2"
-            } else {
-                "blank"
+            if (!explicitP2Replay.isNullOrBlank()) {
+                replay2 = explicitP2Replay
+                replay2Source = "explicit/player2"
             }
 
-            /*
-             * Fallback only.
-             *
-             * If iOS sends only replay_send and no replay/replay2, apply it to the
-             * sending player slot. But never override canonical replay fields.
-             */
+            if (!genericReplay.isNullOrBlank()) {
+                val hasCanonicalP2Replay =
+                    !explicitP2Replay.isNullOrBlank() ||
+                            !msg["replay2"].isNullOrBlank() ||
+                            !msg["replay_2"].isNullOrBlank()
+
+                if (hasCanonicalP2Replay || player == 1) {
+                    replay1 = genericReplay
+                    replay1Source = "generic/replay/canonicalPlayer1"
+                } else {
+                    replay2 = genericReplay
+                    replay2Source = "generic/replay/player2Legacy"
+                }
+            }
+
             if (!replaySend.isNullOrBlank()) {
                 if (player == 2) {
                     if (replay2.isBlank()) {
                         replay2 = replaySend
-                        replay2Source = "replay_send/player2 fallback"
+                        replay2Source = "replay_send/player2"
                     }
                 } else {
                     if (replay1.isBlank()) {
                         replay1 = replaySend
-                        replay1Source = "replay_send/player1 fallback"
+                        replay1Source = "replay_send/player1"
                     }
                 }
             }
 
-            if (!replaySend2.isNullOrBlank() && replay2.isBlank()) {
+            if (!replaySend2.isNullOrBlank()) {
                 replay2 = replaySend2
-                replay2Source = "replay_send2 fallback"
+                replay2Source = "replay_send2"
             }
 
             return ReplayParseResult(

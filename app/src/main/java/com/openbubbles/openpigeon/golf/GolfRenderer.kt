@@ -31,7 +31,7 @@ class GolfRenderer @JvmOverloads constructor(
 
     companion object {
         private const val TAG = "GolfNative"
-        private const val DEFAULT_SHOW_COLLISION_DEBUG = true
+        private const val DEFAULT_SHOW_COLLISION_DEBUG = false
 
         private const val FLIP_BOARD_Y_ONLY = true
         private const val DEFAULT_SHOW_DEBUG_LABEL = false
@@ -39,13 +39,14 @@ class GolfRenderer @JvmOverloads constructor(
         private const val SHOW_OBJECT_DEBUG_DOTS = false
         private const val LOG_RENDER_SCREEN_COORDS = true
         private const val IOS_TILE_DRAW_SIZE = 66f
-        private const val IOS_BALL_DRAW_SIZE = 10f
-        private const val IOS_BALL_SUNK_DRAW_SIZE = 7f
-        private const val BALL_SHADOW_ALPHA = 128
+        private const val IOS_BALL_DRAW_SIZE = 8f
+        private const val IOS_BALL_SUNK_DRAW_SIZE = 6f
+        private const val BALL_SHADOW_ALPHA = 96
         private const val IOS_WALL_PATH_TILE_SIZE = 65f
-        private const val IOS_WALL_DRAW_SIZE = 2f
+        private const val IOS_WALL_DRAW_SIZE = 1.25f
+        private const val IOS_WALL_VISUAL_BAND_DRAW_SIZE = 12f
+        private const val IOS_WALL_VISUAL_BAND_SHADOW_SIZE = 14f
         private const val TRACE_PHYSICS_BALL_RADIUS_COURSE = 4f
-        private const val TRACE_WALL_HALF_THICKNESS_COURSE = 1f
         private const val TRACE_WALL_COLLISION_RADIUS_COURSE =
             TRACE_PHYSICS_BALL_RADIUS_COURSE
         private const val IOS_SLOPE_WIDTH = 65f
@@ -56,8 +57,28 @@ class GolfRenderer @JvmOverloads constructor(
         private const val AIM_CAMERA_MIN_ZOOM_MULTIPLIER = 1.06f
         private const val AIM_CAMERA_VERTICAL_MIN_SCREEN_FRACTION = 0.25f
         private const val AIM_CAMERA_VERTICAL_MAX_SCREEN_FRACTION = 0.75f
-        private const val CAMERA_ANIMATION_DAMPING_PER_60FPS_FRAME = 0.72f
+        private const val CAMERA_ANIMATION_DAMPING_PER_60FPS_FRAME = 0.80f
         private const val CAMERA_ANIMATION_EPSILON = 0.35f
+
+        private const val DEBUG_NATIVE_BALL_RADIUS_COURSE = 4f
+
+        private const val DEBUG_NATIVE_DIAGONAL_WALL_THICKNESS_COURSE = 3f
+        private const val DEBUG_NATIVE_OUTER_WALL_THICKNESS_COURSE = 65f
+
+        private const val DEBUG_NATIVE_SMALL_BAR_WIDTH_COURSE = 46f
+        private const val DEBUG_NATIVE_SMALL_BAR_HEIGHT_COURSE = 6f
+
+        private const val DEBUG_NATIVE_LARGE_BAR_WIDTH_COURSE = 95f
+        private const val DEBUG_NATIVE_LARGE_BAR_HEIGHT_COURSE = 6f
+
+        private const val DEBUG_NATIVE_CROSS_BASE_SIZE_COURSE = 95f
+        private const val DEBUG_NATIVE_CROSS_ARM_THICKNESS_COURSE = 10f
+
+        private const val DEBUG_NATIVE_SLOPE_WIDTH_COURSE = 65f
+        private const val DEBUG_NATIVE_SLOPE_HEIGHT_COURSE = 52f
+
+        private const val BUMPER_PULSE_DURATION_MS = 220L
+        private const val BUMPER_PULSE_MAX_SCALE = 1.5f
     }
 
     private enum class CutCorner {
@@ -75,12 +96,14 @@ class GolfRenderer @JvmOverloads constructor(
 
     private var hasLoggedFirstDraw = false
     private var lastSizeLog = ""
+    private var loggedCollisionDebugTruthForKey: String? = null
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private var showCollisionDebug = DEFAULT_SHOW_COLLISION_DEBUG
     private var showDebugLabel = DEFAULT_SHOW_DEBUG_LABEL
-    private val LOG_VISUAL_ALIGNMENT = true
-    private val TRACE_BALL_RADIUS_COURSE = 5f
+    private val logVisualAlignmentEnabled = true
+    private val traceBallRadiusCourse = IOS_BALL_DRAW_SIZE * 0.5f
+    private val bumperPulses = HashMap<String, BumperPulse>()
 
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -117,6 +140,9 @@ class GolfRenderer @JvmOverloads constructor(
 
     private var flagPulled = false
     private var ballInHole = false
+    private var replayBallHoleStateActive = false
+    private var replayPrimaryBallInHole = false
+    private var replayOpponentBallInHole = false
     private var flagPullProgress = 0f
     private var flagAnimLastMs = 0L
 
@@ -162,6 +188,22 @@ class GolfRenderer @JvmOverloads constructor(
         val width: Float get() = right - left
         val height: Float get() = bottom - top
     }
+
+    private data class BumperPulse(
+        val x: Float,
+        val y: Float,
+        val startMs: Long
+    )
+
+    private data class BallRenderSpec(
+        val coursePoint: PointF,
+        val fallbackColor: Int,
+        val sunk: Boolean,
+        val tintColor: Int? = null,
+        val alpha: Int,
+        val screenOffsetX: Float = 0f,
+        val screenOffsetY: Float = 0f
+    )
 
     private data class WallSegmentCourse(
         val ax: Float,
@@ -254,7 +296,7 @@ class GolfRenderer @JvmOverloads constructor(
         val halfW = width / 2f
         val halfH = height / 2f
 
-        val cos = kotlin.math.cos(rotationRadians)
+        val cos = cos(rotationRadians)
         val sin = kotlin.math.sin(rotationRadians)
 
         val corners = arrayOf(
@@ -273,10 +315,10 @@ class GolfRenderer @JvmOverloads constructor(
             val rx = cx + x * cos - y * sin
             val ry = cy + x * sin + y * cos
 
-            minX = kotlin.math.min(minX, rx)
-            minY = kotlin.math.min(minY, ry)
-            maxX = kotlin.math.max(maxX, rx)
-            maxY = kotlin.math.max(maxY, ry)
+            minX = min(minX, rx)
+            minY = min(minY, ry)
+            maxX = max(maxX, rx)
+            maxY = max(maxY, ry)
         }
 
         return VisualRectCourse(
@@ -319,7 +361,7 @@ class GolfRenderer @JvmOverloads constructor(
     }
 
     private fun logVisualAlignment(g: GolfMap) {
-        if (!LOG_VISUAL_ALIGNMENT) return
+        if (!logVisualAlignmentEnabled) return
 
         val wallSegments = courseWallSegmentsForTrace(g)
 
@@ -340,7 +382,7 @@ class GolfRenderer @JvmOverloads constructor(
                     "\"offsetY\":$offsetY," +
                     "\"flipY\":$FLIP_BOARD_Y_ONLY," +
                     "\"wallSegments\":${wallSegments.size}," +
-                    "\"ballRadiusCourse\":$TRACE_BALL_RADIUS_COURSE," +
+                    "\"ballRadiusCourse\":$traceBallRadiusCourse," +
                     "\"physicsBallRadiusCourse\":$TRACE_PHYSICS_BALL_RADIUS_COURSE," +
                     "\"wallDrawSizeCourse\":$IOS_WALL_DRAW_SIZE," +
                     "\"wallDrawSizeScreen\":${IOS_WALL_DRAW_SIZE * scale}," +
@@ -380,7 +422,7 @@ class GolfRenderer @JvmOverloads constructor(
                 )
             )
 
-            val obstacleRadiusApprox = kotlin.math.min(
+            val obstacleRadiusApprox = min(
                 drawWidthCourse,
                 drawHeightCourse
             ) / 2f
@@ -401,16 +443,6 @@ class GolfRenderer @JvmOverloads constructor(
                 }
             }
 
-            /*
-             * visibleWallGapCourse:
-             *   approximate empty space between obstacle visible edge and nearest wall line.
-             *
-             * ballCenterPassageGapCourse:
-             *   approximate amount of room left for a 10px iOS ball to pass between
-             *   the wall collision and obstacle collision.
-             *
-             * If this is negative on Android but not on iOS, we found the blocker.
-             */
             val wallVisibleHalfCourse = IOS_WALL_DRAW_SIZE * 0.5f
 
             val visibleWallGapCourse =
@@ -489,6 +521,9 @@ class GolfRenderer @JvmOverloads constructor(
 
         flagPulled = false
         ballInHole = false
+        replayBallHoleStateActive = false
+        replayPrimaryBallInHole = false
+        replayOpponentBallInHole = false
         flagPullProgress = 0f
         flagAnimLastMs = 0L
         cameraTransformReady = false
@@ -501,6 +536,7 @@ class GolfRenderer @JvmOverloads constructor(
         aimReadyRingFadeLastMs = 0L
         aimReadyRingAlpha = 0f
         aimReadyRingTargetAlpha = 0f
+        bumperPulses.clear()
 
         invalidate()
     }
@@ -581,6 +617,31 @@ class GolfRenderer @JvmOverloads constructor(
         )
     }
 
+    fun setReplayBallHoleStates(
+        primaryInHole: Boolean,
+        opponentInHole: Boolean
+    ) {
+        replayBallHoleStateActive = true
+        replayPrimaryBallInHole = primaryInHole
+        replayOpponentBallInHole = opponentInHole
+        postInvalidateOnAnimation()
+    }
+
+    fun clearReplayBallHoleStates() {
+        if (
+            !replayBallHoleStateActive &&
+            !replayPrimaryBallInHole &&
+            !replayOpponentBallInHole
+        ) {
+            return
+        }
+
+        replayBallHoleStateActive = false
+        replayPrimaryBallInHole = false
+        replayOpponentBallInHole = false
+        postInvalidateOnAnimation()
+    }
+
     fun setHoleState(flagPulled: Boolean, ballInHole: Boolean) {
         if (this.flagPulled == flagPulled && this.ballInHole == ballInHole) return
 
@@ -613,6 +674,85 @@ class GolfRenderer @JvmOverloads constructor(
     fun getPrimaryBallCourse(): PointF? {
         val g = map ?: return null
         return runtimeBallCourse ?: g.ballStart1
+    }
+
+    private fun bumperKey(obstacle: GolfObstacle): String {
+        return "${obstacle.x}|${obstacle.y}|${obstacle.rotation}|${obstacle.scale}|${obstacle.image}|${obstacle.type}|${obstacle.bouncy}"
+    }
+
+    fun pulseBumperAtCourse(x: Float, y: Float) {
+        val g = map ?: return
+
+        var bestObstacle: GolfObstacle? = null
+        var bestDist2 = Float.POSITIVE_INFINITY
+
+        for (obstacle in g.obstacles) {
+            if (!obstacle.bouncy) continue
+
+            val dx = obstacle.x - x
+            val dy = obstacle.y - y
+            val d2 = dx * dx + dy * dy
+
+            if (d2 < bestDist2) {
+                bestDist2 = d2
+                bestObstacle = obstacle
+            }
+        }
+
+        val obstacle = bestObstacle ?: return
+
+        if (bestDist2 > 40f * 40f) return
+
+        val key = bumperKey(obstacle)
+        val now = SystemClock.elapsedRealtime()
+        val existing = bumperPulses[key]
+
+        if (existing != null && now - existing.startMs < 90L) {
+            return
+        }
+
+        bumperPulses[key] = BumperPulse(
+            x = obstacle.x,
+            y = obstacle.y,
+            startMs = now
+        )
+
+        OpenPigeonLog.i(
+            TAG,
+            "GOLF_ANDROID_BUMPER_VISUAL_PULSE x=${obstacle.x} y=${obstacle.y} key=$key"
+        )
+
+        postInvalidateOnAnimation()
+    }
+
+    private fun bumperPulseScale(obstacle: GolfObstacle): Float {
+        if (!obstacle.bouncy) return 1f
+
+        val key = bumperKey(obstacle)
+        val pulse = bumperPulses[key] ?: return 1f
+
+        val elapsed = SystemClock.elapsedRealtime() - pulse.startMs
+
+        if (elapsed >= BUMPER_PULSE_DURATION_MS) {
+            bumperPulses.remove(key)
+            return 1f
+        }
+
+        val t = (elapsed.toFloat() / BUMPER_PULSE_DURATION_MS.toFloat())
+            .coerceIn(0f, 1f)
+
+        val growProgress =
+            if (t <= 0.5f) {
+                t / 0.5f
+            } else {
+                1f - ((t - 0.5f) / 0.5f)
+            }.coerceIn(0f, 1f)
+
+        val eased = growProgress * growProgress * (3f - 2f * growProgress)
+
+        postInvalidateOnAnimation()
+
+        return 1f + (BUMPER_PULSE_MAX_SCALE - 1f) * eased
     }
 
     fun setOverviewCameraHeld(held: Boolean) {
@@ -848,6 +988,9 @@ class GolfRenderer @JvmOverloads constructor(
         val fillPath = buildCoursePath(g, IOS_TILE_DRAW_SIZE)
         val wallPath = buildCoursePath(g, IOS_WALL_PATH_TILE_SIZE)
 
+        drawCourseVisualWallBandShadowBehindFill(canvas, wallPath)
+        drawCourseVisualWallBandBehindFill(canvas, wallPath)
+
         drawCourseFill(canvas, fillPath)
 
         if (SHOW_PATH_PREVIEW) {
@@ -855,10 +998,8 @@ class GolfRenderer @JvmOverloads constructor(
         }
 
         drawSlopes(canvas, g)
-
-        drawCourseOutlineShadow(canvas, wallPath)
-
         drawObjectShadows(canvas, g)
+        drawBallShadows(canvas, g)
         drawObstacleSprites(canvas, g)
         drawCourseOutline(canvas, wallPath)
 
@@ -884,6 +1025,8 @@ class GolfRenderer @JvmOverloads constructor(
     private fun drawObjectShadows(canvas: Canvas, g: GolfMap) {
         for (obstacle in g.obstacles) {
             val spec = obstacleSpec(obstacle)
+            val pulseScale = bumperPulseScale(obstacle)
+
             val shadow = courseToScreen(
                 PointF(
                     obstacle.x,
@@ -896,11 +1039,12 @@ class GolfRenderer @JvmOverloads constructor(
                 bitmap = spec.bitmap,
                 cx = shadow.x,
                 cy = shadow.y,
-                widthCourse = spec.width * obstacle.scale,
-                heightCourse = spec.height * obstacle.scale,
+                widthCourse = spec.width * obstacle.scale * pulseScale,
+                heightCourse = spec.height * obstacle.scale * pulseScale,
                 rotationRadians = obstacle.rotation,
                 fallbackColor = Color.argb(80, 0, 0, 0),
-                drawShadow = true
+                drawShadow = true,
+                fallbackShape = spec.fallbackShape
             )
         }
     }
@@ -908,6 +1052,7 @@ class GolfRenderer @JvmOverloads constructor(
     private fun drawObstacleSprites(canvas: Canvas, g: GolfMap) {
         for (obstacle in g.obstacles) {
             val spec = obstacleSpec(obstacle)
+            val pulseScale = bumperPulseScale(obstacle)
             val p = courseToScreen(PointF(obstacle.x, obstacle.y))
 
             drawCourseBitmap(
@@ -915,12 +1060,41 @@ class GolfRenderer @JvmOverloads constructor(
                 bitmap = spec.bitmap,
                 cx = p.x,
                 cy = p.y,
-                widthCourse = spec.width * obstacle.scale,
-                heightCourse = spec.height * obstacle.scale,
+                widthCourse = spec.width * obstacle.scale * pulseScale,
+                heightCourse = spec.height * obstacle.scale * pulseScale,
                 rotationRadians = obstacle.rotation,
                 fallbackColor = Color.WHITE,
-                drawShadow = false
+                drawShadow = false,
+                fallbackShape = spec.fallbackShape
             )
+        }
+    }
+
+    private fun drawCourseVisualWallBandShadowBehindFill(canvas: Canvas, coursePath: Path) {
+        strokePaint.style = Paint.Style.STROKE
+        strokePaint.color = Color.argb(58, 0, 0, 0)
+        strokePaint.strokeWidth = IOS_WALL_VISUAL_BAND_SHADOW_SIZE
+        strokePaint.strokeCap = Paint.Cap.SQUARE
+        strokePaint.strokeJoin = Paint.Join.MITER
+
+        canvas.withTranslation(offsetX, offsetY) {
+            scale(scale, scale)
+
+            translate(0f, -IOS_SHADOW_COURSE_Y_OFFSET)
+            drawPath(coursePath, strokePaint)
+        }
+    }
+
+    private fun drawCourseVisualWallBandBehindFill(canvas: Canvas, coursePath: Path) {
+        strokePaint.style = Paint.Style.STROKE
+        strokePaint.color = Color.rgb(232, 232, 226)
+        strokePaint.strokeWidth = IOS_WALL_VISUAL_BAND_DRAW_SIZE
+        strokePaint.strokeCap = Paint.Cap.SQUARE
+        strokePaint.strokeJoin = Paint.Join.MITER
+
+        canvas.withTranslation(offsetX, offsetY) {
+            scale(scale, scale)
+            drawPath(coursePath, strokePaint)
         }
     }
 
@@ -964,7 +1138,7 @@ class GolfRenderer @JvmOverloads constructor(
         cameraAnimLastMs = now
 
         val t = (1f - CAMERA_ANIMATION_DAMPING_PER_60FPS_FRAME.pow(dt * 60f))
-            .coerceIn(0.08f, 0.55f)
+            .coerceIn(0.06f, 0.38f)
 
         scale += (target.scale - scale) * t
         offsetX += (target.offsetX - offsetX) * t
@@ -1179,20 +1353,6 @@ class GolfRenderer @JvmOverloads constructor(
         canvas.withTranslation(offsetX, offsetY) {
             scale(scale, scale)
             drawPath(coursePath, paint)
-        }
-    }
-
-    private fun drawCourseOutlineShadow(canvas: Canvas, coursePath: Path) {
-        strokePaint.style = Paint.Style.STROKE
-        strokePaint.color = Color.argb(64, 0, 0, 0)
-        strokePaint.strokeWidth = IOS_WALL_DRAW_SIZE
-        strokePaint.strokeCap = Paint.Cap.SQUARE
-        strokePaint.strokeJoin = Paint.Join.MITER
-
-        canvas.withTranslation(offsetX, offsetY) {
-            scale(scale, scale)
-            translate(0f, -IOS_SHADOW_COURSE_Y_OFFSET)
-            drawPath(coursePath, strokePaint)
         }
     }
 
@@ -1509,18 +1669,32 @@ class GolfRenderer @JvmOverloads constructor(
         }
     }
 
+    private enum class ObstacleVisualFallbackShape {
+        RECT,
+        CIRCLE,
+        TRIANGLE,
+        CROSS
+    }
+
     private data class ObstacleDrawSpec(
         val bitmap: Bitmap?,
         val width: Float,
-        val height: Float
+        val height: Float,
+        val fallbackShape: ObstacleVisualFallbackShape = ObstacleVisualFallbackShape.RECT
     )
+
+    private enum class CollisionDebugShape {
+        BOX,
+        CIRCLE,
+        TRIANGLE,
+        CROSS
+    }
 
     private data class ObstacleCollisionDrawSpec(
         val image: String,
         val width: Float,
         val height: Float,
-        val circular: Boolean,
-        val cross: Boolean = false
+        val shape: CollisionDebugShape
     )
 
     private fun obstacleCollisionSpecForDebug(obstacle: GolfObstacle): ObstacleCollisionDrawSpec {
@@ -1529,116 +1703,509 @@ class GolfRenderer @JvmOverloads constructor(
         }
 
         return when (image) {
-            "golf_obstacle_square" -> ObstacleCollisionDrawSpec(image, 30f, 30f, circular = false)
-            "golf_obstacle_square2" -> ObstacleCollisionDrawSpec(image, 70f, 70f, circular = false)
+            "golf_obstacle_square" -> ObstacleCollisionDrawSpec(
+                image,
+                30f,
+                30f,
+                CollisionDebugShape.BOX
+            )
 
-            "golf_obstacle_bar" -> ObstacleCollisionDrawSpec(image, 46f, 8f, circular = false)
+            "golf_obstacle_square2" -> ObstacleCollisionDrawSpec(
+                image,
+                70f,
+                70f,
+                CollisionDebugShape.BOX
+            )
+
+            "golf_obstacle_bar" -> ObstacleCollisionDrawSpec(
+                image,
+                DEBUG_NATIVE_SMALL_BAR_WIDTH_COURSE,
+                DEBUG_NATIVE_SMALL_BAR_HEIGHT_COURSE,
+                CollisionDebugShape.BOX
+            )
 
             "golf_obstacle_bar2",
-            "golf_obstacles_bar2" -> ObstacleCollisionDrawSpec(image, 95f, 6f, circular = false)
+            "golf_obstacles_bar2" -> ObstacleCollisionDrawSpec(
+                image,
+                DEBUG_NATIVE_LARGE_BAR_WIDTH_COURSE,
+                DEBUG_NATIVE_LARGE_BAR_HEIGHT_COURSE,
+                CollisionDebugShape.BOX
+            )
 
-            "golf_obstacle_round" -> ObstacleCollisionDrawSpec(image, 37f, 37f, circular = true)
-            "golf_obstacle_round2" -> ObstacleCollisionDrawSpec(image, 72f, 72f, circular = true)
+            "golf_obstacle_round" -> ObstacleCollisionDrawSpec(
+                image,
+                37f,
+                37f,
+                CollisionDebugShape.CIRCLE
+            )
 
-            "golf_obstacle_triangle" -> ObstacleCollisionDrawSpec(image, 30f, 30f, circular = false)
-            "golf_obstacle_triangle2" -> ObstacleCollisionDrawSpec(image, 70f, 70f, circular = false)
+            "golf_obstacle_round2",
+            "golf_obstacles_round2" -> ObstacleCollisionDrawSpec(
+                image,
+                72f,
+                72f,
+                CollisionDebugShape.CIRCLE
+            )
+
+            "golf_obstacle_triangle" -> ObstacleCollisionDrawSpec(
+                image,
+                30f,
+                30f,
+                CollisionDebugShape.TRIANGLE
+            )
+
+            "golf_obstacle_triangle2" -> ObstacleCollisionDrawSpec(
+                image,
+                70f,
+                70f,
+                CollisionDebugShape.TRIANGLE
+            )
 
             "golf_obstacle_cross" -> ObstacleCollisionDrawSpec(
                 image,
                 95f,
                 95f,
-                circular = false,
-                cross = true
+                CollisionDebugShape.CROSS
             )
 
-            else -> ObstacleCollisionDrawSpec(image, 30f, 30f, circular = false)
+            else -> ObstacleCollisionDrawSpec(
+                image,
+                30f,
+                30f,
+                CollisionDebugShape.BOX
+            )
         }
+    }
+
+    private fun collisionDebugCellValue(
+        g: GolfMap,
+        row: Int,
+        col: Int
+    ): Int {
+        if (row !in g.grid.indices) return 1
+        if (col !in g.grid[row].indices) return 1
+        return g.grid[row][col]
+    }
+
+    private fun collisionDebugCellOpen(
+        g: GolfMap,
+        row: Int,
+        col: Int
+    ): Boolean {
+        val value = collisionDebugCellValue(g, row, col)
+        return value == 0 || value == 3
+    }
+
+    private fun drawDebugPath(
+        canvas: Canvas,
+        path: Path,
+        fillColor: Int,
+        strokeColor: Int = Color.argb(230, 255, 255, 255)
+    ) {
+        collisionDebugPaint.style = Paint.Style.FILL
+        collisionDebugPaint.color = fillColor
+        canvas.drawPath(path, collisionDebugPaint)
+
+        collisionDebugPaint.style = Paint.Style.STROKE
+        collisionDebugPaint.strokeWidth = 1.5f * scale
+        collisionDebugPaint.color = strokeColor
+        canvas.drawPath(path, collisionDebugPaint)
+    }
+
+    private fun rotatedBoxPathScreen(
+        cx: Float,
+        cy: Float,
+        halfW: Float,
+        halfH: Float,
+        rotationRadians: Float
+    ): Path {
+        val c = cos(rotationRadians)
+        val s = kotlin.math.sin(rotationRadians)
+
+        val local = arrayOf(
+            -halfW to -halfH,
+            halfW to -halfH,
+            halfW to halfH,
+            -halfW to halfH
+        )
+
+        val path = Path()
+
+        local.forEachIndexed { index, pair ->
+            val lx = pair.first
+            val ly = pair.second
+
+            val courseX = cx + lx * c - ly * s
+            val courseY = cy + lx * s + ly * c
+            val screen = courseToScreen(PointF(courseX, courseY))
+
+            if (index == 0) {
+                path.moveTo(screen.x, screen.y)
+            } else {
+                path.lineTo(screen.x, screen.y)
+            }
+        }
+
+        path.close()
+        return path
+    }
+
+    private fun trianglePathScreen(
+        cx: Float,
+        cy: Float,
+        width: Float,
+        height: Float,
+        rotationRadians: Float
+    ): Path {
+        val halfW = width * 0.5f
+        val halfH = height * 0.5f
+
+        val local = arrayOf(
+            -halfW to -halfH,
+            halfW to halfH,
+            halfW to -halfH
+        )
+
+        val c = cos(rotationRadians)
+        val s = kotlin.math.sin(rotationRadians)
+
+        val path = Path()
+
+        local.forEachIndexed { index, pair ->
+            val lx = pair.first
+            val ly = pair.second
+
+            val courseX = cx + lx * c - ly * s
+            val courseY = cy + lx * s + ly * c
+            val screen = courseToScreen(PointF(courseX, courseY))
+
+            if (index == 0) {
+                path.moveTo(screen.x, screen.y)
+            } else {
+                path.lineTo(screen.x, screen.y)
+            }
+        }
+
+        path.close()
+        return path
+    }
+
+    private fun drawCollisionBoxCourse(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        width: Float,
+        height: Float,
+        rotationRadians: Float,
+        fillColor: Int
+    ) {
+        val path = rotatedBoxPathScreen(
+            cx = cx,
+            cy = cy,
+            halfW = width * 0.5f,
+            halfH = height * 0.5f,
+            rotationRadians = rotationRadians
+        )
+
+        drawDebugPath(canvas, path, fillColor)
+    }
+
+    private fun drawCollisionCircleCourse(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        radius: Float,
+        fillColor: Int
+    ) {
+        val center = courseToScreen(PointF(cx, cy))
+        val screenRadius = radius * scale
+
+        collisionDebugPaint.style = Paint.Style.FILL
+        collisionDebugPaint.color = fillColor
+        canvas.drawCircle(center.x, center.y, screenRadius, collisionDebugPaint)
+
+        collisionDebugPaint.style = Paint.Style.STROKE
+        collisionDebugPaint.strokeWidth = 1.5f * scale
+        collisionDebugPaint.color = Color.argb(230, 255, 255, 255)
+        canvas.drawCircle(center.x, center.y, screenRadius, collisionDebugPaint)
+    }
+
+    private fun diagonalCollisionAngleForDebug(
+        g: GolfMap,
+        row: Int,
+        col: Int
+    ): Float {
+        val topBlocked = !collisionDebugCellOpen(g, row - 1, col)
+        val bottomBlocked = !collisionDebugCellOpen(g, row + 1, col)
+        val leftBlocked = !collisionDebugCellOpen(g, row, col - 1)
+        val rightBlocked = !collisionDebugCellOpen(g, row, col + 1)
+
+        return when {
+            topBlocked && rightBlocked -> (Math.PI / 4.0).toFloat()
+            bottomBlocked && leftBlocked -> (Math.PI / 4.0).toFloat()
+            topBlocked && leftBlocked -> (-Math.PI / 4.0).toFloat()
+            bottomBlocked && rightBlocked -> (-Math.PI / 4.0).toFloat()
+            else -> (-Math.PI / 4.0).toFloat()
+        }
+    }
+
+    private fun drawNativeWallCollisionDebug(canvas: Canvas, g: GolfMap) {
+        val tile = GolfConstants.TILE_SIZE
+        val wallFill = Color.argb(70, 255, 0, 0)
+        val diagonalFill = Color.argb(120, 255, 180, 0)
+
+        for (row in g.grid.indices) {
+            for (col in g.grid[row].indices) {
+                val value = g.grid[row][col]
+                val cx = col * tile
+                val cy = row * tile
+
+                when (value) {
+                    1 -> {
+                        drawCollisionBoxCourse(
+                            canvas = canvas,
+                            cx = cx,
+                            cy = cy,
+                            width = tile,
+                            height = tile,
+                            rotationRadians = 0f,
+                            fillColor = wallFill
+                        )
+                    }
+
+                    3 -> {
+                        val halfLength = tile * 0.5f * kotlin.math.sqrt(2f)
+                        val angle = diagonalCollisionAngleForDebug(g, row, col)
+
+                        drawCollisionBoxCourse(
+                            canvas = canvas,
+                            cx = cx,
+                            cy = cy,
+                            width = halfLength * 2f,
+                            height = DEBUG_NATIVE_DIAGONAL_WALL_THICKNESS_COURSE,
+                            rotationRadians = angle,
+                            fillColor = diagonalFill
+                        )
+                    }
+                }
+            }
+        }
+
+        val halfTile = tile * 0.5f
+
+        val minX = -halfTile
+        val maxX =
+            if (g.yCells > 0) {
+                ((g.yCells - 1).toFloat() * tile) + halfTile
+            } else {
+                g.mapSize + halfTile
+            }
+
+        val minY = -halfTile
+        val maxY =
+            if (g.xCells > 0) {
+                ((g.xCells - 1).toFloat() * tile) + halfTile
+            } else {
+                g.mapSize + halfTile
+            }
+
+        val centerX = (minX + maxX) * 0.5f
+        val centerY = (minY + maxY) * 0.5f
+
+        val halfW = (maxX - minX) * 0.5f
+        val halfH = (maxY - minY) * 0.5f
+        val t = DEBUG_NATIVE_OUTER_WALL_THICKNESS_COURSE
+
+        drawCollisionBoxCourse(
+            canvas = canvas,
+            cx = centerX,
+            cy = minY - t,
+            width = (halfW + t * 2f) * 2f,
+            height = t * 2f,
+            rotationRadians = 0f,
+            fillColor = Color.argb(45, 255, 0, 0)
+        )
+
+        drawCollisionBoxCourse(
+            canvas = canvas,
+            cx = centerX,
+            cy = maxY + t,
+            width = (halfW + t * 2f) * 2f,
+            height = t * 2f,
+            rotationRadians = 0f,
+            fillColor = Color.argb(45, 255, 0, 0)
+        )
+
+        drawCollisionBoxCourse(
+            canvas = canvas,
+            cx = minX - t,
+            cy = centerY,
+            width = t * 2f,
+            height = (halfH + t * 2f) * 2f,
+            rotationRadians = 0f,
+            fillColor = Color.argb(45, 255, 0, 0)
+        )
+
+        drawCollisionBoxCourse(
+            canvas = canvas,
+            cx = maxX + t,
+            cy = centerY,
+            width = t * 2f,
+            height = (halfH + t * 2f) * 2f,
+            rotationRadians = 0f,
+            fillColor = Color.argb(45, 255, 0, 0)
+        )
+    }
+
+    private fun drawNativeObstacleCollisionDebug(canvas: Canvas, g: GolfMap) {
+        val obstacleFill = Color.argb(95, 255, 0, 255)
+
+        for (obstacle in g.obstacles) {
+            val spec = obstacleCollisionSpecForDebug(obstacle)
+
+            val widthCourse = spec.width * obstacle.scale
+            val heightCourse = spec.height * obstacle.scale
+
+            when (spec.shape) {
+                CollisionDebugShape.CIRCLE -> {
+                    drawCollisionCircleCourse(
+                        canvas = canvas,
+                        cx = obstacle.x,
+                        cy = obstacle.y,
+                        radius = min(widthCourse, heightCourse) * 0.5f,
+                        fillColor = obstacleFill
+                    )
+                }
+
+                CollisionDebugShape.TRIANGLE -> {
+                    val path = trianglePathScreen(
+                        cx = obstacle.x,
+                        cy = obstacle.y,
+                        width = widthCourse,
+                        height = heightCourse,
+                        rotationRadians = obstacle.rotation
+                    )
+
+                    drawDebugPath(canvas, path, obstacleFill)
+                }
+
+                CollisionDebugShape.CROSS -> {
+                    val minSide = min(widthCourse, heightCourse)
+                    val scaleValue =
+                        if (minSide > 0f) {
+                            minSide / DEBUG_NATIVE_CROSS_BASE_SIZE_COURSE
+                        } else {
+                            1f
+                        }
+
+                    val armThickness =
+                        DEBUG_NATIVE_CROSS_ARM_THICKNESS_COURSE * scaleValue
+
+                    drawCollisionBoxCourse(
+                        canvas = canvas,
+                        cx = obstacle.x,
+                        cy = obstacle.y,
+                        width = widthCourse,
+                        height = armThickness,
+                        rotationRadians = obstacle.rotation,
+                        fillColor = obstacleFill
+                    )
+
+                    drawCollisionBoxCourse(
+                        canvas = canvas,
+                        cx = obstacle.x,
+                        cy = obstacle.y,
+                        width = armThickness,
+                        height = heightCourse,
+                        rotationRadians = obstacle.rotation,
+                        fillColor = obstacleFill
+                    )
+                }
+
+                CollisionDebugShape.BOX -> {
+                    drawCollisionBoxCourse(
+                        canvas = canvas,
+                        cx = obstacle.x,
+                        cy = obstacle.y,
+                        width = widthCourse,
+                        height = heightCourse,
+                        rotationRadians = obstacle.rotation,
+                        fillColor = obstacleFill
+                    )
+                }
+            }
+        }
+    }
+
+    private fun drawSlopeCollisionDebug(canvas: Canvas, g: GolfMap) {
+        val slopeFill = Color.argb(75, 0, 255, 80)
+
+        for (slope in g.slopes) {
+            drawCollisionBoxCourse(
+                canvas = canvas,
+                cx = slope.x,
+                cy = slope.y,
+                width = DEBUG_NATIVE_SLOPE_WIDTH_COURSE,
+                height = DEBUG_NATIVE_SLOPE_HEIGHT_COURSE,
+                rotationRadians = slopeRotationForRenderer(slope),
+                fillColor = slopeFill
+            )
+        }
+    }
+
+    private fun drawBallCollisionDebug(canvas: Canvas, g: GolfMap) {
+        val ball = runtimeBallCourse ?: g.ballStart1
+
+        drawCollisionCircleCourse(
+            canvas = canvas,
+            cx = ball.x,
+            cy = ball.y,
+            radius = DEBUG_NATIVE_BALL_RADIUS_COURSE,
+            fillColor = Color.argb(140, 255, 255, 0)
+        )
+    }
+
+    private fun logCollisionDebugTruthOnce(g: GolfMap) {
+        if (!showCollisionDebug) return
+
+        val key =
+            "${g.seed}|${g.mode}|${g.mapNum}|" +
+                    "$DEBUG_NATIVE_DIAGONAL_WALL_THICKNESS_COURSE|" +
+                    "$DEBUG_NATIVE_CROSS_ARM_THICKNESS_COURSE"
+
+        if (loggedCollisionDebugTruthForKey == key) return
+        loggedCollisionDebugTruthForKey = key
+
+        OpenPigeonLog.i(
+            TAG,
+            "GOLF_ANDROID_VISUAL_COLLISION_DEBUG=" +
+                    "{" +
+                    "\"seed\":${g.seed}," +
+                    "\"mode\":\"${g.mode}\"," +
+                    "\"mapNum\":${g.mapNum}," +
+                    "\"ballRadius\":$DEBUG_NATIVE_BALL_RADIUS_COURSE," +
+                    "\"diagonalThickness\":$DEBUG_NATIVE_DIAGONAL_WALL_THICKNESS_COURSE," +
+                    "\"outerWallThickness\":$DEBUG_NATIVE_OUTER_WALL_THICKNESS_COURSE," +
+                    "\"crossBaseSize\":$DEBUG_NATIVE_CROSS_BASE_SIZE_COURSE," +
+                    "\"crossArmThickness\":$DEBUG_NATIVE_CROSS_ARM_THICKNESS_COURSE," +
+                    "\"smallBar\":{\"width\":$DEBUG_NATIVE_SMALL_BAR_WIDTH_COURSE,\"height\":$DEBUG_NATIVE_SMALL_BAR_HEIGHT_COURSE}," +
+                    "\"largeBar\":{\"width\":$DEBUG_NATIVE_LARGE_BAR_WIDTH_COURSE,\"height\":$DEBUG_NATIVE_LARGE_BAR_HEIGHT_COURSE}," +
+                    "\"slope\":{\"width\":$DEBUG_NATIVE_SLOPE_WIDTH_COURSE,\"height\":$DEBUG_NATIVE_SLOPE_HEIGHT_COURSE}" +
+                    "}"
+        )
     }
 
     private fun drawCollisionDebug(canvas: Canvas, g: GolfMap) {
         if (!showCollisionDebug) return
-        val wallPath = buildCoursePath(g, IOS_WALL_PATH_TILE_SIZE)
 
-        collisionDebugPaint.color = Color.argb(80, 255, 255, 0)
-        collisionDebugPaint.strokeWidth = TRACE_WALL_COLLISION_RADIUS_COURSE * 2f
-        collisionDebugPaint.strokeCap = Paint.Cap.SQUARE
-        collisionDebugPaint.strokeJoin = Paint.Join.MITER
+        logCollisionDebugTruthOnce(g)
 
-        canvas.withTranslation(offsetX, offsetY) {
-            scale(scale, scale)
-            drawPath(wallPath, collisionDebugPaint)
-        }
+        drawNativeWallCollisionDebug(canvas, g)
+        drawSlopeCollisionDebug(canvas, g)
+        drawNativeObstacleCollisionDebug(canvas, g)
+        drawBallCollisionDebug(canvas, g)
 
-        collisionDebugPaint.color = Color.argb(220, 255, 255, 255)
-        collisionDebugPaint.strokeWidth = IOS_WALL_DRAW_SIZE
-
-        canvas.withTranslation(offsetX, offsetY) {
-            scale(scale, scale)
-            drawPath(wallPath, collisionDebugPaint)
-        }
-
-        val ball = runtimeBallCourse ?: g.ballStart1
-        val ballScreen = courseToScreen(ball)
-
-        collisionDebugPaint.color = Color.argb(220, 255, 255, 0)
-        collisionDebugPaint.strokeWidth = 2f * scale
-        canvas.drawCircle(ballScreen.x, ballScreen.y, 4f * scale, collisionDebugPaint)
-
-        collisionDebugPaint.color = Color.argb(220, 255, 0, 255)
-
-        for (obstacle in g.obstacles) {
-            val spec = obstacleCollisionSpecForDebug(obstacle)
-            val center = courseToScreen(PointF(obstacle.x, obstacle.y))
-
-            val width = spec.width * obstacle.scale * scale
-            val height = spec.height * obstacle.scale * scale
-
-            if (spec.cross) {
-                val armThickness = (min(width, height) * 0.17f).coerceIn(
-                    12f * scale,
-                    18f * scale
-                )
-
-                val rawDeg = Math.toDegrees(obstacle.rotation.toDouble()).toFloat()
-                val drawDeg = -rawDeg
-
-                canvas.withRotation(drawDeg, center.x, center.y) {
-                    val horizontal = RectF(
-                        center.x - width / 2f,
-                        center.y - armThickness / 2f,
-                        center.x + width / 2f,
-                        center.y + armThickness / 2f
-                    )
-
-                    val vertical = RectF(
-                        center.x - armThickness / 2f,
-                        center.y - height / 2f,
-                        center.x + armThickness / 2f,
-                        center.y + height / 2f
-                    )
-
-                    drawRect(horizontal, collisionDebugPaint)
-                    drawRect(vertical, collisionDebugPaint)
-                }
-            } else if (spec.circular) {
-                val radius = min(width, height) * 0.5f
-                canvas.drawCircle(center.x, center.y, radius, collisionDebugPaint)
-            } else {
-                val rawDeg = Math.toDegrees(obstacle.rotation.toDouble()).toFloat()
-                val drawDeg = -rawDeg
-
-                canvas.withRotation(drawDeg, center.x, center.y) {
-                    val r = RectF(
-                        center.x - width / 2f,
-                        center.y - height / 2f,
-                        center.x + width / 2f,
-                        center.y + height / 2f
-                    )
-
-                    drawRect(r, collisionDebugPaint)
-                }
-            }
-        }
+        collisionDebugPaint.style = Paint.Style.STROKE
     }
 
     private fun obstacleSpec(obstacle: GolfObstacle): ObstacleDrawSpec {
@@ -1650,27 +2217,74 @@ class GolfRenderer @JvmOverloads constructor(
             "golf_obstacle_square" -> ObstacleDrawSpec(
                 obstacleSquareBitmap,
                 IOS_OBSTACLE_BASE_SIZE,
-                IOS_OBSTACLE_BASE_SIZE
+                IOS_OBSTACLE_BASE_SIZE,
+                ObstacleVisualFallbackShape.RECT
             )
-            "golf_obstacle_square2" -> ObstacleDrawSpec(obstacleSquare2Bitmap, 70f, 70f)
 
-            "golf_obstacle_bar" -> ObstacleDrawSpec(obstacleBarBitmap, 46f, 8f)
+            "golf_obstacle_square2" -> ObstacleDrawSpec(
+                obstacleSquare2Bitmap,
+                70f,
+                70f,
+                ObstacleVisualFallbackShape.RECT
+            )
+
+            "golf_obstacle_bar" -> ObstacleDrawSpec(
+                obstacleBarBitmap,
+                46f,
+                8f,
+                ObstacleVisualFallbackShape.RECT
+            )
+
             "golf_obstacle_bar2",
-            "golf_obstacles_bar2" -> ObstacleDrawSpec(obstacleBar2Bitmap, 95f, 6f)
+            "golf_obstacles_bar2" -> ObstacleDrawSpec(
+                obstacleBar2Bitmap,
+                95f,
+                6f,
+                ObstacleVisualFallbackShape.RECT
+            )
 
-            "golf_obstacle_round" -> ObstacleDrawSpec(obstacleRoundBitmap, 37f, 37f)
-            "golf_obstacle_round2" -> ObstacleDrawSpec(obstacleRound2Bitmap, 72f, 72f)
+            "golf_obstacle_round" -> ObstacleDrawSpec(
+                obstacleRoundBitmap,
+                37f,
+                37f,
+                ObstacleVisualFallbackShape.CIRCLE
+            )
+
+            "golf_obstacle_round2",
+            "golf_obstacles_round2" -> ObstacleDrawSpec(
+                obstacleRound2Bitmap,
+                72f,
+                72f,
+                ObstacleVisualFallbackShape.CIRCLE
+            )
 
             "golf_obstacle_triangle" -> ObstacleDrawSpec(
                 obstacleTriangleBitmap,
                 IOS_OBSTACLE_BASE_SIZE,
-                IOS_OBSTACLE_BASE_SIZE
+                IOS_OBSTACLE_BASE_SIZE,
+                ObstacleVisualFallbackShape.TRIANGLE
             )
-            "golf_obstacle_triangle2" -> ObstacleDrawSpec(obstacleTriangle2Bitmap, 70f, 70f)
 
-            "golf_obstacle_cross" -> ObstacleDrawSpec(obstacleCrossBitmap, 95f, 95f)
+            "golf_obstacle_triangle2" -> ObstacleDrawSpec(
+                obstacleTriangle2Bitmap,
+                70f,
+                70f,
+                ObstacleVisualFallbackShape.TRIANGLE
+            )
 
-            else -> ObstacleDrawSpec(obstacleSquareBitmap, 30f, 30f)
+            "golf_obstacle_cross" -> ObstacleDrawSpec(
+                obstacleCrossBitmap,
+                95f,
+                95f,
+                ObstacleVisualFallbackShape.CROSS
+            )
+
+            else -> ObstacleDrawSpec(
+                obstacleSquareBitmap,
+                30f,
+                30f,
+                ObstacleVisualFallbackShape.RECT
+            )
         }
     }
 
@@ -1694,7 +2308,8 @@ class GolfRenderer @JvmOverloads constructor(
         heightCourse: Float,
         rotationRadians: Float,
         fallbackColor: Int,
-        drawShadow: Boolean
+        drawShadow: Boolean,
+        fallbackShape: ObstacleVisualFallbackShape = ObstacleVisualFallbackShape.RECT
     ) {
         val w = widthCourse * scale
         val h = heightCourse * scale
@@ -1725,7 +2340,43 @@ class GolfRenderer @JvmOverloads constructor(
             } else {
                 paint.style = Paint.Style.FILL
                 paint.color = fallbackColor
-                drawRoundRect(dst, 3f * scale, 3f * scale, paint)
+
+                when (fallbackShape) {
+                    ObstacleVisualFallbackShape.CIRCLE -> {
+                        drawOval(dst, paint)
+                    }
+
+                    ObstacleVisualFallbackShape.TRIANGLE -> {
+                        val path = Path()
+                        path.moveTo(dst.centerX(), dst.top)
+                        path.lineTo(dst.right, dst.bottom)
+                        path.lineTo(dst.left, dst.bottom)
+                        path.close()
+                        drawPath(path, paint)
+                    }
+
+                    ObstacleVisualFallbackShape.CROSS -> {
+                        val arm = min(dst.width(), dst.height()) * 0.26f
+                        val hRect = RectF(
+                            dst.left,
+                            dst.centerY() - arm * 0.5f,
+                            dst.right,
+                            dst.centerY() + arm * 0.5f
+                        )
+                        val vRect = RectF(
+                            dst.centerX() - arm * 0.5f,
+                            dst.top,
+                            dst.centerX() + arm * 0.5f,
+                            dst.bottom
+                        )
+                        drawRoundRect(hRect, 2f * scale, 2f * scale, paint)
+                        drawRoundRect(vRect, 2f * scale, 2f * scale, paint)
+                    }
+
+                    ObstacleVisualFallbackShape.RECT -> {
+                        drawRoundRect(dst, 3f * scale, 3f * scale, paint)
+                    }
+                }
             }
         }
     }
@@ -1810,51 +2461,109 @@ class GolfRenderer @JvmOverloads constructor(
         canvas.drawBitmap(flag, null, dst, flagPaint)
     }
 
-    private fun drawBalls(canvas: Canvas, g: GolfMap) {
-        opponentBallCourse?.let { opponent ->
-            drawBall(
-                canvas = canvas,
+    private fun ballRenderSpecs(g: GolfMap): List<BallRenderSpec> {
+        val specs = ArrayList<BallRenderSpec>()
+
+        val primaryBall = runtimeBallCourse ?: g.ballStart1
+        val opponentBall = opponentBallCourse
+
+        val primarySunk =
+            if (replayBallHoleStateActive) {
+                replayPrimaryBallInHole
+            } else {
+                ballInHole
+            }
+
+        val opponentSunk =
+            replayBallHoleStateActive && replayOpponentBallInHole
+
+        opponentBall?.let { opponent ->
+            specs += BallRenderSpec(
                 coursePoint = opponent,
                 fallbackColor = Color.rgb(92, 92, 92),
-                sunk = false,
+                sunk = opponentSunk,
                 tintColor = Color.rgb(92, 92, 92),
-                alphaOverride = 255
+                alpha = if (opponentSunk) 210 else 255,
+                screenOffsetX = 0f,
+                screenOffsetY = 0f
             )
         }
 
-        val primaryBall = runtimeBallCourse ?: g.ballStart1
-
-        drawBall(
-            canvas = canvas,
+        specs += BallRenderSpec(
             coursePoint = primaryBall,
             fallbackColor = Color.WHITE,
-            sunk = ballInHole
+            sunk = primarySunk,
+            tintColor = null,
+            alpha = if (primarySunk) 210 else 255,
+            screenOffsetX = 0f,
+            screenOffsetY = 0f
         )
 
         if (
-            opponentBallCourse == null &&
-            !ballInHole &&
+            opponentBall == null &&
+            !primarySunk &&
             (abs(g.ballStart2.x - g.ballStart1.x) > 0.001f ||
                     abs(g.ballStart2.y - g.ballStart1.y) > 0.001f)
         ) {
-            drawBall(
-                canvas = canvas,
+            specs += BallRenderSpec(
                 coursePoint = g.ballStart2,
                 fallbackColor = Color.rgb(230, 230, 230),
-                sunk = false
+                sunk = false,
+                tintColor = null,
+                alpha = 255
+            )
+        }
+
+        return specs
+    }
+
+    private fun drawBallShadows(canvas: Canvas, g: GolfMap) {
+        for (spec in ballRenderSpecs(g)) {
+            val ballSizeCourse =
+                if (spec.sunk) IOS_BALL_SUNK_DRAW_SIZE else IOS_BALL_DRAW_SIZE
+
+            drawBallShadow(
+                canvas = canvas,
+                coursePoint = spec.coursePoint,
+                alpha = spec.alpha,
+                sunk = spec.sunk,
+                ballSizeScreen = ballSizeCourse * scale,
+                screenOffsetX = spec.screenOffsetX,
+                screenOffsetY = spec.screenOffsetY
+            )
+        }
+    }
+
+    private fun drawBalls(canvas: Canvas, g: GolfMap) {
+        for (spec in ballRenderSpecs(g)) {
+            drawBall(
+                canvas = canvas,
+                coursePoint = spec.coursePoint,
+                fallbackColor = spec.fallbackColor,
+                sunk = spec.sunk,
+                tintColor = spec.tintColor,
+                alphaOverride = spec.alpha,
+                screenOffsetX = spec.screenOffsetX,
+                screenOffsetY = spec.screenOffsetY
             )
         }
     }
 
     private fun drawBallShadow(
         canvas: Canvas,
-        cx: Float,
-        cy: Float,
+        coursePoint: PointF,
         alpha: Int,
-        sunk: Boolean
+        sunk: Boolean,
+        ballSizeScreen: Float,
+        screenOffsetX: Float = 0f,
+        screenOffsetY: Float = 0f
     ) {
         if (sunk) return
-        val shadowRadius = GolfConstants.BALL_RADIUS * scale
+
+        val p = courseToScreen(coursePoint)
+
+        val drawX = p.x + screenOffsetX
+        val drawY = p.y + screenOffsetY
 
         val shadowAlpha = ((BALL_SHADOW_ALPHA.toFloat() * (alpha / 255f)))
             .toInt()
@@ -1862,21 +2571,34 @@ class GolfRenderer @JvmOverloads constructor(
 
         if (shadowAlpha <= 0) return
 
-        val shadowOffsetY = 1.4f * scale
+        val shadowOffsetY = 1.5f * scale
 
-        paint.style = Paint.Style.FILL
-        paint.color = Color.BLACK
         paint.alpha = shadowAlpha
-        paint.colorFilter = null
+        paint.colorFilter = PorterDuffColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN)
 
-        canvas.drawCircle(
-            cx,
-            cy + shadowOffsetY,
-            shadowRadius,
-            paint
-        )
+        if (ballBitmap != null) {
+            drawBitmapCentered(
+                canvas = canvas,
+                bitmap = ballBitmap,
+                cx = drawX,
+                cy = drawY + shadowOffsetY,
+                w = ballSizeScreen,
+                h = ballSizeScreen
+            )
+        } else {
+            paint.style = Paint.Style.FILL
+            paint.color = Color.BLACK
+
+            canvas.drawCircle(
+                drawX,
+                drawY + shadowOffsetY,
+                ballSizeScreen * 0.5f,
+                paint
+            )
+        }
 
         paint.alpha = 255
+        paint.colorFilter = null
     }
 
     private fun drawBall(
@@ -1885,21 +2607,18 @@ class GolfRenderer @JvmOverloads constructor(
         fallbackColor: Int,
         sunk: Boolean = false,
         tintColor: Int? = null,
-        alphaOverride: Int? = null
+        alphaOverride: Int? = null,
+        screenOffsetX: Float = 0f,
+        screenOffsetY: Float = 0f
     ) {
         val p = courseToScreen(coursePoint)
+
+        val drawX = p.x + screenOffsetX
+        val drawY = p.y + screenOffsetY
 
         val ballSizeCourse = if (sunk) IOS_BALL_SUNK_DRAW_SIZE else IOS_BALL_DRAW_SIZE
         val size = ballSizeCourse * scale
         val alpha = alphaOverride ?: if (sunk) 210 else 255
-
-        drawBallShadow(
-            canvas = canvas,
-            cx = p.x,
-            cy = p.y,
-            alpha = alpha,
-            sunk = sunk
-        )
 
         paint.alpha = alpha
         paint.colorFilter = tintColor?.let {
@@ -1907,11 +2626,11 @@ class GolfRenderer @JvmOverloads constructor(
         }
 
         if (ballBitmap != null) {
-            drawBitmapCentered(canvas, ballBitmap, p.x, p.y, size, size)
+            drawBitmapCentered(canvas, ballBitmap, drawX, drawY, size, size)
         } else {
             paint.style = Paint.Style.FILL
             paint.color = fallbackColor
-            canvas.drawCircle(p.x, p.y, size * 0.5f, paint)
+            canvas.drawCircle(drawX, drawY, size * 0.5f, paint)
 
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = 1.5f * scale
@@ -1920,7 +2639,7 @@ class GolfRenderer @JvmOverloads constructor(
             } else {
                 Color.rgb(210, 210, 210)
             }
-            canvas.drawCircle(p.x, p.y, size * 0.5f, paint)
+            canvas.drawCircle(drawX, drawY, size * 0.5f, paint)
         }
 
         paint.alpha = 255

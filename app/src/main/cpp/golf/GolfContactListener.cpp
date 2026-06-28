@@ -4,7 +4,7 @@
 #include <android/log.h>
 
 namespace {
-    static GolfData* dataForFixture(b2Fixture* fixture) {
+    GolfData* dataForFixture(b2Fixture* fixture) {
         if (!fixture) {
             return nullptr;
         }
@@ -17,7 +17,7 @@ namespace {
         return static_cast<GolfData*>(body->GetUserData());
     }
 
-    static const char* golfDataTypeName(const GolfData* data) {
+    const char* golfDataTypeName(const GolfData* data) {
         if (!data) {
             return "null";
         }
@@ -37,27 +37,19 @@ namespace {
         }
     }
 
-    static bool isBall(const GolfData* data) {
+    bool isBall(const GolfData* data) {
         return data && data->type == GolfData::Type::Ball;
     }
 
-    static bool isBallBallContact(const GolfData* dataA, const GolfData* dataB) {
+    bool isBallBallContact(const GolfData* dataA, const GolfData* dataB) {
         return isBall(dataA) && isBall(dataB);
     }
 
-    static float lengthSquared(const b2Vec2& v) {
+    float lengthSquared(const b2Vec2& v) {
         return v.x * v.x + v.y * v.y;
     }
 
-/*
- * iOS regular contact behavior:
- *
- *   reflected = oldVelocity - 2 * dot(oldVelocity, normal) * normal
- *   final     = reflected * 0.95
- *
- * The binary constant is 0x3f733333, which is approximately 0.95f.
- */
-    static b2Vec2 iosReflectVelocity(const b2Vec2& velocity, const b2Vec2& normal) {
+    b2Vec2 iosReflectVelocity(const b2Vec2& velocity, const b2Vec2& normal) {
         const float dot = velocity.x * normal.x + velocity.y * normal.y;
 
         b2Vec2 reflected(
@@ -69,7 +61,7 @@ namespace {
         return reflected;
     }
 
-    static void setBodyVelocityLikeIos(b2Body* body, const b2Vec2& velocity) {
+    void setBodyVelocityLikeIos(b2Body* body, const b2Vec2& velocity) {
         if (!body) {
             return;
         }
@@ -83,7 +75,7 @@ namespace {
         body->SetLinearVelocity(velocity);
     }
 
-    static const char* typeName(const GolfData* data) {
+    const char* typeName(const GolfData* data) {
         if (!data) return "null";
 
         switch (data->type) {
@@ -98,7 +90,7 @@ namespace {
         }
     }
 
-    static bool isBallInvolved(const GolfData* dataA, const GolfData* dataB) {
+    bool isBallInvolved(const GolfData* dataA, const GolfData* dataB) {
         if (!dataA || !dataB) {
             return false;
         }
@@ -140,18 +132,13 @@ static bool isBouncyContact(const GolfData* dataA, const GolfData* dataB) {
 }
 
 static b2Vec2 negateVec(const b2Vec2& v) {
-    return b2Vec2(-v.x, -v.y);
+    return {-v.x, -v.y};
 }
 
 static b2Vec2 normalAwayFromOtherBody(
         bool ballIsA,
         const b2Vec2& worldNormal
 ) {
-    /*
-     * Box2D world manifold normal points from fixture A toward fixture B.
-     * For a ball in fixture A, away from fixture B is -normal.
-     * For a ball in fixture B, away from fixture A is +normal.
-     */
     return ballIsA ? negateVec(worldNormal) : worldNormal;
 }
 
@@ -159,9 +146,59 @@ static b2Vec2 iosBouncyVelocity(
         const b2Vec2& velocity,
         const b2Vec2& normalAwayFromBumper
 ) {
-    return b2Vec2(
+    return {
             velocity.x + normalAwayFromBumper.x * IOS_BOUNCY_VELOCITY_DELTA,
             velocity.y + normalAwayFromBumper.y * IOS_BOUNCY_VELOCITY_DELTA
+    };
+}
+
+static void logBouncyValidation(
+        const std::string& traceRunId,
+        int traceShotIndex,
+        int traceFrame,
+        const std::string& tracePhase,
+        const char* ballSlot,
+        const b2Vec2& beforeVelocity,
+        const b2Vec2& normalAway,
+        const b2Vec2& afterVelocity
+) {
+    const b2Vec2 expected = iosBouncyVelocity(beforeVelocity, normalAway);
+
+    const float errorX = afterVelocity.x - expected.x;
+    const float errorY = afterVelocity.y - expected.y;
+
+    __android_log_print(
+            ANDROID_LOG_INFO,
+            "GolfNative",
+            "GOLF_ANDROID_BUMPER_VALIDATE={"
+            "\"runId\":\"%s\","
+            "\"shotIndex\":%d,"
+            "\"frame\":%d,"
+            "\"phase\":\"%s\","
+            "\"ballSlot\":\"%s\","
+            "\"bouncyDelta\":%.6f,"
+            "\"before\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"normalAway\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"expectedAfter\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"actualAfter\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"error\":{\"x\":%.6f,\"y\":%.6f}"
+            "}",
+            traceRunId.c_str(),
+            traceShotIndex,
+            traceFrame,
+            tracePhase.c_str(),
+            ballSlot,
+            IOS_BOUNCY_VELOCITY_DELTA,
+            beforeVelocity.x,
+            beforeVelocity.y,
+            normalAway.x,
+            normalAway.y,
+            expected.x,
+            expected.y,
+            afterVelocity.x,
+            afterVelocity.y,
+            errorX,
+            errorY
     );
 }
 
@@ -223,12 +260,6 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
     if (contact->IsTouching()) {
         const b2Vec2 normal = worldManifold.normal;
 
-        /*
-         * iOS GolfBouncy path:
-         *   newVelocity = oldVelocity + normal * 750
-         *
-         * This must run before the ordinary obstacle reflection path.
-         */
         if (isBouncyContact(dataA, dataB)) {
             usedBouncyRewrite = true;
 
@@ -237,6 +268,17 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
                 rewrittenVelA = iosBouncyVelocity(velA, away);
                 setBodyVelocityLikeIos(bodyA, rewrittenVelA);
                 rewroteA = true;
+
+                logBouncyValidation(
+                        traceRunId,
+                        traceShotIndex,
+                        traceFrame,
+                        tracePhase,
+                        "A",
+                        velA,
+                        away,
+                        rewrittenVelA
+                );
             }
 
             if (isBall(dataB) && bodyB && bodyB->GetType() == b2_dynamicBody) {
@@ -244,14 +286,20 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
                 rewrittenVelB = iosBouncyVelocity(velB, away);
                 setBodyVelocityLikeIos(bodyB, rewrittenVelB);
                 rewroteB = true;
+
+                logBouncyValidation(
+                        traceRunId,
+                        traceShotIndex,
+                        traceFrame,
+                        tracePhase,
+                        "B",
+                        velB,
+                        away,
+                        rewrittenVelB
+                );
             }
         }
 
-        /*
-         * Regular iOS obstacle/wall contact:
-         *   reflected = velocity - 2 * dot(velocity, normal) * normal
-         *   final     = reflected * 0.95
-         */
         if (!usedBouncyRewrite && !isBallBallContact(dataA, dataB)) {
             usedNormalRewrite = true;
 

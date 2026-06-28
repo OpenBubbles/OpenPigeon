@@ -92,20 +92,7 @@ private:
 
     void createBlockedCellWall(int row, int col);
     void createBoundaryWalls();
-    void createDiagonalCellWall(int row, int col, int cellValue);
-
-    void createSpecialValue3Cut(const int* openMask, int row, int col);
-    void createImplicitDiagonalCornerCut(const int* openMask, int row, int col);
-
-    void createWallTriangle(
-            const char* source,
-            int row,
-            int col,
-            int cellValue,
-            const b2Vec2& a,
-            const b2Vec2& b,
-            const b2Vec2& c
-    );
+    void createDiagonalCellWall(const int* openMask, int row, int col, int cellValue);
 
     void createStaticCircle(
             float x,
