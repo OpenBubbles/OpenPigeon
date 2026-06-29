@@ -2561,7 +2561,7 @@ class GolfActivity : AppCompatActivity() {
             val previousMapNum = mapNum
             val previousData = gameData
 
-            val parsed = GolfGameData.fromMessage(msg, previous = previousData)
+            var parsed = GolfGameData.fromMessage(msg, previous = previousData)
             gameData = parsed
 
             seed = parsed.seed
@@ -2573,6 +2573,31 @@ class GolfActivity : AppCompatActivity() {
             player2Id = parsed.player2Id
 
             val localPlayer = localPlayerNumberFor(parsed)
+            val messageFromMe = isCurrentMessageFromMe(msg)
+
+            val incomingLocalPlayableMapNum = firstLocalPlayableHoleForIncomingData(
+                data = parsed,
+                localPlayer = localPlayer,
+                messageFromMe = messageFromMe
+            )
+
+            if (
+                incomingLocalPlayableMapNum != null &&
+                incomingLocalPlayableMapNum != parsed.mapNum
+            ) {
+                OpenPigeonLog.i(
+                    TAG,
+                    "handleMessage correcting incoming playable map " +
+                            "from parsedMapNum=${parsed.mapNum} to localPlayableMapNum=$incomingLocalPlayableMapNum " +
+                            "messageFromMe=$messageFromMe localPlayer=$localPlayer " +
+                            "replayLen=${parsed.replay.length} replay2Len=${parsed.replay2.length}"
+                )
+
+                parsed = parsed.copy(mapNum = incomingLocalPlayableMapNum)
+                gameData = parsed
+                mapNum = parsed.mapNum
+            }
+
             localReplay = if (localPlayer == 1) {
                 parsed.replay
             } else {
@@ -2626,7 +2651,6 @@ class GolfActivity : AppCompatActivity() {
             lastRenderedSender = renderSender
             lastRenderedWinner = renderWinner
 
-            val messageFromMe = isCurrentMessageFromMe(msg)
             val currentHoleHasBothReplays = hasBothReplaysForHole(parsed, parsed.mapNum)
             val previousCompletedReplayMapNum = latestCompletedReplayHoleBeforeCurrent(parsed)
             val incomingWinnerResult = localResultFromWinnerValue(renderWinner)
@@ -2639,7 +2663,7 @@ class GolfActivity : AppCompatActivity() {
                 return
             }
 
-            val replayMapNumCandidate = when {
+            val completedReplayMapNumCandidate = when {
                 currentHoleHasBothReplays -> {
                     parsed.mapNum
                 }
@@ -2652,6 +2676,20 @@ class GolfActivity : AppCompatActivity() {
                     null
                 }
             }
+
+            val completedReplayIsFinalHole =
+                completedReplayMapNumCandidate != null &&
+                        completedReplayMapNumCandidate + 1 >= parsed.holeCount
+
+            val replayAllowedByTurn =
+                !messageFromMe || completedReplayIsFinalHole
+
+            val replayMapNumCandidate =
+                if (completedReplayMapNumCandidate != null && replayAllowedByTurn) {
+                    completedReplayMapNumCandidate
+                } else {
+                    null
+                }
 
             val replayKey = replayMapNumCandidate?.let { replayAutoKey(parsed, it) }
 
@@ -2676,6 +2714,9 @@ class GolfActivity : AppCompatActivity() {
                         "\"messageFromMe\":$messageFromMe," +
                         "\"currentHoleHasBothReplays\":$currentHoleHasBothReplays," +
                         "\"previousCompletedReplayMapNum\":${previousCompletedReplayMapNum ?: -1}," +
+                        "\"completedReplayMapNumCandidate\":${completedReplayMapNumCandidate ?: -1}," +
+                        "\"completedReplayIsFinalHole\":$completedReplayIsFinalHole," +
+                        "\"replayAllowedByTurn\":$replayAllowedByTurn," +
                         "\"shouldReplay\":$shouldReplay," +
                         "\"lastAutoReplayKeyMatches\":${replayKey != null && replayKey == lastAutoReplayKey}," +
                         "\"lastAutoReplayKeyBlank\":${lastAutoReplayKey.isBlank()}," +
@@ -2726,6 +2767,36 @@ class GolfActivity : AppCompatActivity() {
                         incomingWinnerResult == null
 
             waitingForOpponent = messageFromMe && !shouldReplay
+
+            if (waitingForOpponent) {
+                val waitingDisplayMapNum = waitingDisplayHoleForSentMessage(
+                    data = parsed,
+                    localPlayer = localPlayer
+                )
+
+                if (
+                    waitingDisplayMapNum != null &&
+                    waitingDisplayMapNum != parsed.mapNum
+                ) {
+                    OpenPigeonLog.i(
+                        TAG,
+                        "handleMessage correcting waiting display map " +
+                                "from parsedMapNum=${parsed.mapNum} to waitingDisplayMapNum=$waitingDisplayMapNum " +
+                                "messageFromMe=$messageFromMe localPlayer=$localPlayer " +
+                                "rawNum=${parsed.rawNum} replayLen=${parsed.replay.length} replay2Len=${parsed.replay2.length}"
+                    )
+
+                    parsed = parsed.copy(mapNum = waitingDisplayMapNum)
+                    gameData = parsed
+                    mapNum = parsed.mapNum
+
+                    localReplay = if (localPlayer == 1) {
+                        parsed.replay
+                    } else {
+                        parsed.replay2
+                    }
+                }
+            }
 
             val shouldPreserveSettledHoleWhileWaiting =
                 waitingForOpponent &&
@@ -3872,6 +3943,70 @@ class GolfActivity : AppCompatActivity() {
         return holeIndex >= 0 &&
                 GolfReplay.hasSegment(data.replay, holeIndex) &&
                 GolfReplay.hasSegment(data.replay2, holeIndex)
+    }
+
+    private fun waitingDisplayHoleForSentMessage(
+        data: GolfGameData,
+        localPlayer: Int
+    ): Int? {
+        val localReplayForTurn = if (localPlayer == 1) {
+            data.replay
+        } else {
+            data.replay2
+        }
+
+        val segments = GolfReplay.parseNonRace(localReplayForTurn)
+
+        for (holeIndex in segments.indices.reversed()) {
+            if (segments[holeIndex].isNotEmpty()) {
+                return holeIndex.coerceIn(
+                    0,
+                    (data.holeCount - 1).coerceAtLeast(0)
+                )
+            }
+        }
+
+        return null
+    }
+
+    private fun firstLocalPlayableHoleForIncomingData(
+        data: GolfGameData,
+        localPlayer: Int,
+        messageFromMe: Boolean
+    ): Int? {
+        if (messageFromMe) return null
+
+        val localReplayForTurn = if (localPlayer == 1) {
+            data.replay
+        } else {
+            data.replay2
+        }
+
+        for (holeIndex in 0 until data.holeCount) {
+            val localHasHole =
+                GolfReplay.hasSegment(localReplayForTurn, holeIndex)
+
+            if (localHasHole) {
+                continue
+            }
+
+            var previousHolesComplete = true
+
+            for (previousHole in 0 until holeIndex) {
+                if (!hasBothReplaysForHole(data, previousHole)) {
+                    previousHolesComplete = false
+                    break
+                }
+            }
+
+            return if (previousHolesComplete) {
+                holeIndex
+            } else {
+                null
+            }
+        }
+
+        return null
     }
 
     private fun latestCompletedReplayHoleBeforeCurrent(data: GolfGameData): Int? {

@@ -9,7 +9,10 @@ object GolfReplay {
     data class Shot(val dist: Float, val rotation: Float)
 
     fun parseNonRace(replay: String): List<List<Shot>> {
-        OpenPigeonLog.i(TAG, "GolfReplay.parseNonRace enter replayLen=${replay.length}")
+        if (GolfConstants.debugToolsEnabled) {
+            OpenPigeonLog.i(TAG, "GolfReplay.parseNonRace enter replayLen=${replay.length}")
+        }
+
         if (replay.isBlank()) return emptyList()
 
         val parsed = replay
@@ -29,10 +32,12 @@ object GolfReplay {
                     }
             }
 
-        OpenPigeonLog.i(
-            TAG,
-            "GolfReplay.parseNonRace complete segments=${parsed.size} shots=${parsed.sumOf { it.size }}"
-        )
+        if (GolfConstants.debugToolsEnabled) {
+            OpenPigeonLog.i(
+                TAG,
+                "GolfReplay.parseNonRace complete segments=${parsed.size} shots=${parsed.sumOf { it.size }}"
+            )
+        }
 
         return parsed
     }
@@ -79,11 +84,13 @@ object GolfReplay {
 
         val out = segments.joinToString(GolfConstants.SEG_SEP.toString())
 
-        OpenPigeonLog.i(
-            TAG,
-            "GolfReplay.appendShot holeIndex=$holeIndex oldLen=${replay.length} " +
-                    "newLen=${out.length} dist=${shot.dist} rotation=${shot.rotation}"
-        )
+        if (GolfConstants.debugToolsEnabled) {
+            OpenPigeonLog.i(
+                TAG,
+                "GolfReplay.appendShot holeIndex=$holeIndex oldLen=${replay.length} " +
+                        "newLen=${out.length} dist=${shot.dist} rotation=${shot.rotation}"
+            )
+        }
 
         return out
     }

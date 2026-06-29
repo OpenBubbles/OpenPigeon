@@ -5,6 +5,8 @@ import com.openbubbles.openpigeon.util.OpenPigeonLog
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
+import org.json.JSONArray
+import org.json.JSONObject
 
 class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
 
@@ -122,6 +124,21 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
                         "slopes=${generatedSlopes.size} obstacles=${generatedObstacles.size} " +
                         "start=$start end=$end baseGrid=${gridSummary(baseGrid)} finalGrid=${gridSummary(finalGrid)} objectGrid=${gridSummary(objectGrid)}"
             )
+        }
+
+        if (GolfConstants.debugToolsEnabled) {
+            try {
+                logAndroidFinalMapForIosCompare(
+                    map = map,
+                    longestPath = longestPath
+                )
+            } catch (t: Throwable) {
+                OpenPigeonLog.e(
+                    TAG,
+                    "GOLF_ANDROID_FINAL_MAP failed seed=${map.seed} mode=${map.mode} mapNum=${map.mapNum}",
+                    t
+                )
+            }
         }
 
         return map
@@ -521,7 +538,7 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
                     val bx = innerX * tile - 10f + rng.drand48().toFloat() * 20f
                     val by = outerY * tile - 10f + rng.drand48().toFloat() * 20f
                     ball1 = PointF(bx, by)
-                    ball2 = PointF(bx, by)   // iOS sets golf_ball1 and golf_ball2 identically
+                    ball2 = PointF(bx, by)
                 }
 
                 // 2. Hole at path[last]: mark grid2=3, then 2x drand48 jitter (+/-10).
@@ -644,8 +661,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
                     }
 
                     typeRand < 0.4 -> {
-                        // iOS string is golf_obstacle_bar2. Renderer falls back to
-                        // golf_obstacles_bar2_Normal@3x.png if that exact asset is absent.
                         image = "golf_obstacle_bar2"
                         type = 2
                     }
@@ -682,8 +697,6 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
 
         val openCount = countRawOpenObjectCells(objectGrid)
         val base = floor(openCount.toDouble() * 2.0 / 3.0).toInt()
-
-        // iOS consumes this RNG here even if the final count becomes zero.
         val smallCount = floor(base.toDouble() / 3.0).toInt() +
                 floor(rng.drand48() * base.toDouble() * 2.0 / 3.0).toInt()
 
@@ -947,50 +960,43 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
     private fun pathFinderGetLongest(grid: Array<IntArray>): List<Cell> {
         val xCells = grid.size
         val yCells = grid.firstOrNull()?.size ?: 0
-        if (xCells == 0 || yCells == 0) return emptyList()
 
-        /*
-         * iOS getLongest is not an all-open-cell diameter search.
-         *
-         * The map generator's checkGrid proves the iOS constraint is top/bottom-row
-         * connectivity. For normal Mini Golf maps, the selected course path runs
-         * between outer row 0 and outer row xCells - 1.
-         *
-         * The previous Android version searched every open cell pair, so on seed
-         * 680056098 it incorrectly chose Cell(x=2,y=3) -> Cell(x=5,y=3), because
-         * that has the same length as the real top/bottom path. That made the ball
-         * spawn, hole jitter, slope RNG, and object placement drift from iOS.
-         */
-        val finishOuterY = 0
-        val startOuterY = xCells - 1
+        if (xCells == 0 || yCells == 0) {
+            return emptyList()
+        }
+
+        val candidateCells = iosOpenCellsForLongest(grid)
 
         var best: List<Cell>? = null
 
-        /*
-         * Scan right-to-left to match the existing iOS-style endpoint preference.
-         *
-         * Returned path is finish -> start because the rest of the generator expects:
-         *   path.first() = ball cell
-         *   path.last()  = hole cell
-         */
-        for (startInnerX in yCells - 1 downTo 0) {
-            if (!isPathOpenCell(grid, startInnerX, startOuterY)) continue
+        for (start in candidateCells) {
+            for (finish in candidateCells) {
+                if (start.x == finish.x && start.y == finish.y) {
+                    continue
+                }
 
-            for (finishInnerX in yCells - 1 downTo 0) {
-                if (!isPathOpenCell(grid, finishInnerX, finishOuterY)) continue
-
-                val candidate = shortestPathBfs(
+                val candidate = pathFinderGo(
                     grid = grid,
-                    startInnerX = startInnerX,
-                    startOuterY = startOuterY,
-                    finishInnerX = finishInnerX,
-                    finishOuterY = finishOuterY
+                    xIni = start.y,
+                    yIni = start.x,
+                    xFin = finish.y,
+                    yFin = finish.x
                 )
 
-                if (candidate.isEmpty()) continue
+                if (candidate.isEmpty()) {
+                    continue
+                }
 
                 val current = best
-                if (current == null || candidate.size > current.size) {
+
+                if (
+                    current == null ||
+                    candidate.size > current.size ||
+                    (
+                            candidate.size == current.size &&
+                                    iosLongestPathTieBreak(candidate, current) < 0
+                            )
+                ) {
                     best = candidate
                 }
             }
@@ -998,99 +1004,66 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
 
         val result = best ?: emptyList()
 
-        OpenPigeonLog.i(
-            TAG,
-            "Generator.getLongest boundaryOnly=true pathSize=${result.size} " +
-                    "finish=${result.firstOrNull()} start=${result.lastOrNull()} " +
-                    "path=${result.joinToString(prefix = "[", postfix = "]")}"
-        )
+        if (GolfConstants.debugToolsEnabled) {
+            val iosPointPath = result.joinToString(
+                prefix = "[",
+                postfix = "]"
+            ) { cell ->
+                "{${cell.y},${cell.x}}"
+            }
+
+            OpenPigeonLog.i(
+                TAG,
+                "Generator.getLongest iosAllOpenTie pathSize=${result.size} " +
+                        "finish=${result.firstOrNull()} start=${result.lastOrNull()} " +
+                        "cellPath=${result.joinToString(prefix = "[", postfix = "]")} " +
+                        "iosPointPath=$iosPointPath"
+            )
+        }
 
         return result
     }
 
-    private fun shortestPathBfs(
-        grid: Array<IntArray>,
-        startInnerX: Int,
-        startOuterY: Int,
-        finishInnerX: Int,
-        finishOuterY: Int
-    ): List<Cell> {
-        val height = grid.size
-        val width = grid.firstOrNull()?.size ?: 0
+    private fun iosLongestPathTieBreak(
+        candidate: List<Cell>,
+        current: List<Cell>
+    ): Int {
+        val candidateFirst = candidate.firstOrNull()
+        val currentFirst = current.firstOrNull()
 
-        if (height == 0 || width == 0) return emptyList()
-
-        if (!isPathOpenCell(grid, startInnerX, startOuterY)) return emptyList()
-        if (!isPathOpenCell(grid, finishInnerX, finishOuterY)) return emptyList()
-
-        fun index(innerX: Int, outerY: Int): Int {
-            return outerY * width + innerX
+        if (candidateFirst == null || currentFirst == null) {
+            return 0
         }
 
-        val startIndex = index(startInnerX, startOuterY)
-        val finishIndex = index(finishInnerX, finishOuterY)
-
-        val parent = IntArray(width * height) { -1 }
-        val queue = java.util.ArrayDeque<Int>()
-
-        parent[startIndex] = startIndex
-        queue.add(startIndex)
-
-        val directions = arrayOf(
-            0 to -1,   // up
-            -1 to 0,   // left
-            1 to 0,    // right
-            0 to 1     // down
-        )
-
-        while (!queue.isEmpty()) {
-            val current = queue.removeFirst()
-
-            if (current == finishIndex) {
-                break
-            }
-
-            val currentOuterY = current / width
-            val currentInnerX = current % width
-
-            for ((dx, dy) in directions) {
-                val nextInnerX = currentInnerX + dx
-                val nextOuterY = currentOuterY + dy
-
-                if (!isPathOpenCell(grid, nextInnerX, nextOuterY)) continue
-
-                val nextIndex = index(nextInnerX, nextOuterY)
-                if (parent[nextIndex] != -1) continue
-
-                parent[nextIndex] = current
-                queue.add(nextIndex)
-            }
+        if (candidateFirst.x != currentFirst.x) {
+            return candidateFirst.x - currentFirst.x
         }
 
-        if (parent[finishIndex] == -1) {
+        return 0
+    }
+
+    private fun iosOpenCellsForLongest(grid: Array<IntArray>): List<Cell> {
+        val xCells = grid.size
+        val yCells = grid.firstOrNull()?.size ?: 0
+
+        if (xCells == 0 || yCells == 0) {
             return emptyList()
         }
 
-        val result = ArrayList<Cell>()
-        var cursor = finishIndex
+        val cells = ArrayList<Cell>()
 
-        while (true) {
-            val outerY = cursor / width
-            val innerX = cursor % width
-
-            result += Cell(
-                x = outerY,
-                y = innerX
-            )
-
-            if (cursor == startIndex) {
-                break
+        for (outerY in 0 until xCells) {
+            for (innerX in 0 until yCells) {
+                if (gridGet(grid, innerX, outerY) == 0) {
+                    cells += Cell(
+                        x = outerY,
+                        y = innerX
+                    )
+                }
             }
-
-            cursor = parent[cursor]
         }
 
-        return result
+        return cells.asReversed().toList()
     }
 
     private fun isPathOpenCell(
@@ -1293,5 +1266,139 @@ class GolfMapGenerator(private val rng: GolfRandom = GolfRandom()) {
         }
 
         append("]")
+    }
+
+    private fun logAndroidFinalMapForIosCompare(
+        map: GolfMap,
+        longestPath: List<Cell>
+    ) {
+        if (!GolfConstants.debugToolsEnabled) return
+
+        fun safeNumber(value: Float): Any {
+            return if (value.isFinite()) {
+                value.toDouble()
+            } else {
+                JSONObject.NULL
+            }
+        }
+
+        fun safeNumber(value: Double): Any {
+            return if (value.isFinite()) {
+                value
+            } else {
+                JSONObject.NULL
+            }
+        }
+
+        fun slopeRotationForCompare(slope: GolfSlope): Float {
+            if (slope.rotation.isFinite()) {
+                return slope.rotation
+            }
+
+            return when {
+                kotlin.math.abs(slope.vx) > 0.001f &&
+                        kotlin.math.abs(slope.vy) <= 0.001f -> (Math.PI / 2.0).toFloat()
+
+                else -> 0f
+            }
+        }
+
+        fun pointJson(x: Float, y: Float): JSONObject {
+            return JSONObject()
+                .put("x", safeNumber(x))
+                .put("y", safeNumber(y))
+        }
+
+        fun gridJson(): JSONArray {
+            val rows = JSONArray()
+
+            map.grid.forEach { row ->
+                val out = JSONArray()
+                row.forEach { cell -> out.put(cell) }
+                rows.put(out)
+            }
+
+            return rows
+        }
+
+        fun pathJson(): JSONArray {
+            val out = JSONArray()
+
+            longestPath.forEach { cell ->
+                out.put(
+                    JSONObject()
+                        .put("x", cell.x)
+                        .put("y", cell.y)
+                        .put("outerY", cell.x)
+                        .put("innerX", cell.y)
+                )
+            }
+
+            return out
+        }
+
+        fun slopesJson(): JSONArray {
+            val out = JSONArray()
+
+            map.slopes.forEachIndexed { index, slope ->
+                val displayRotation = slopeRotationForCompare(slope)
+
+                out.put(
+                    JSONObject()
+                        .put("index", index)
+                        .put("image", slope.image)
+                        .put("x", safeNumber(slope.x))
+                        .put("y", safeNumber(slope.y))
+                        .put("vx", safeNumber(slope.vx))
+                        .put("vy", safeNumber(slope.vy))
+                        .put("rotation", safeNumber(displayRotation))
+                        .put("rawRotation", safeNumber(slope.rotation))
+                )
+            }
+
+            return out
+        }
+
+        fun obstaclesJson(): JSONArray {
+            val out = JSONArray()
+
+            map.obstacles.forEachIndexed { index, obstacle ->
+                out.put(
+                    JSONObject()
+                        .put("index", index)
+                        .put("image", obstacle.image)
+                        .put("type", obstacle.type)
+                        .put("x", safeNumber(obstacle.x))
+                        .put("y", safeNumber(obstacle.y))
+                        .put("rotation", safeNumber(obstacle.rotation))
+                        .put("scale", safeNumber(obstacle.scale))
+                        .put("bouncy", obstacle.bouncy)
+                )
+            }
+
+            return out
+        }
+
+        val payload = JSONObject()
+            .put("seed", map.seed)
+            .put("mode", map.mode)
+            .put("mapNum", map.mapNum)
+            .put("xCells", map.xCells)
+            .put("yCells", map.yCells)
+            .put("mapSize", safeNumber(map.mapSize))
+            .put("mapSize2", safeNumber(map.mapSize2))
+            .put("grid", gridJson())
+            .put("longestPath", pathJson())
+            .put("ballStart1", pointJson(map.ballStart1.x, map.ballStart1.y))
+            .put("ballStart2", pointJson(map.ballStart2.x, map.ballStart2.y))
+            .put("hole", pointJson(map.hole.x, map.hole.y))
+            .put("flag", pointJson(map.hole.x, map.hole.y + 18f))
+            .put("slopes", slopesJson())
+            .put("obstacles", obstaclesJson())
+
+        OpenPigeonLog.i(
+            TAG,
+            "GOLF_ANDROID_FINAL_MAP=" + payload.toString()
+        )
     }
 }

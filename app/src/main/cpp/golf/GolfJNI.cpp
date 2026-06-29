@@ -7,6 +7,17 @@ static GolfTable* tableFrom(jlong ptr) {
     return reinterpret_cast<GolfTable*>(ptr);
 }
 
+bool gGolfDebugLoggingEnabled = false;
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_openbubbles_openpigeon_golf_GolfNativePhysics_setGolfDebugLogging(
+        JNIEnv*,
+        jobject,
+        jboolean enabled
+) {
+    gGolfDebugLoggingEnabled = enabled == JNI_TRUE;
+}
+
 extern "C" JNIEXPORT jlong JNICALL
 Java_com_openbubbles_openpigeon_golf_GolfNativePhysics_createGolfTable(JNIEnv*, jobject) {
     return reinterpret_cast<jlong>(new GolfTable());

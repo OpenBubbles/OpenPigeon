@@ -786,11 +786,55 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
                     modifier = GlanceModifier.fillMaxSize().padding(32.dp))
             }
         }
-        Text((session?.getGame()?.getDisplaySubtitle(extension!!.context, session.currentMessage) ?: message?.caption ?: "Game Name").uppercase(),
-            style = TextStyle(fontSize = 16.sp, color = ColorProvider(Color.Gray),
-                textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
-            modifier = GlanceModifier.fillMaxWidth().padding(vertical = 10.dp)
-        )
+        val displaySubtitle =
+            if (extension != null && session?.getGame() != null) {
+                session.getGame()!!.getDisplaySubtitle(extension.context, session.currentMessage)
+            } else {
+                message?.caption ?: "Game Name"
+            }
+
+        val previewSubcaption = session
+            ?.currentMessage
+            ?.get("subcaption")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
+        val shouldShowSubcaption =
+            displaySubtitle.startsWith("Let's", ignoreCase = true) &&
+                    previewSubcaption != null
+
+        Column(
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .padding(vertical = if (shouldShowSubcaption) 6.dp else 10.dp),
+            horizontalAlignment = Alignment.Horizontal.CenterHorizontally
+        ) {
+            Text(
+                displaySubtitle.uppercase(),
+                style = TextStyle(
+                    fontSize = 16.sp,
+                    color = ColorProvider(Color.Gray),
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold
+                ),
+                modifier = GlanceModifier.fillMaxWidth()
+            )
+
+            if (shouldShowSubcaption) {
+                Spacer(modifier = GlanceModifier.height(1.dp))
+
+                Text(
+                    previewSubcaption!!.uppercase(),
+                    style = TextStyle(
+                        fontSize = 13.sp,
+                        color = ColorProvider(Color.Gray),
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    modifier = GlanceModifier.fillMaxWidth()
+                )
+            }
+        }
     }
 }
 

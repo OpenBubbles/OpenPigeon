@@ -65,14 +65,15 @@ class GolfRenderer @JvmOverloads constructor(
         private const val DEBUG_NATIVE_DIAGONAL_WALL_THICKNESS_COURSE = 3f
         private const val DEBUG_NATIVE_OUTER_WALL_THICKNESS_COURSE = 65f
 
-        private const val DEBUG_NATIVE_SMALL_BAR_WIDTH_COURSE = 46f
+        private const val DEBUG_NATIVE_SMALL_BAR_WIDTH_COURSE = 44f
         private const val DEBUG_NATIVE_SMALL_BAR_HEIGHT_COURSE = 6f
 
         private const val DEBUG_NATIVE_LARGE_BAR_WIDTH_COURSE = 95f
         private const val DEBUG_NATIVE_LARGE_BAR_HEIGHT_COURSE = 6f
 
         private const val DEBUG_NATIVE_CROSS_BASE_SIZE_COURSE = 95f
-        private const val DEBUG_NATIVE_CROSS_ARM_THICKNESS_COURSE = 10f
+        private const val DEBUG_NATIVE_CROSS_ARM_THICKNESS_COURSE = 6f
+        private const val DEBUG_NATIVE_CROSS_CENTER_RADIUS_COURSE = 9.5f
 
         private const val DEBUG_NATIVE_SLOPE_WIDTH_COURSE = 65f
         private const val DEBUG_NATIVE_SLOPE_HEIGHT_COURSE = 52f
@@ -781,7 +782,6 @@ class GolfRenderer @JvmOverloads constructor(
         cameraMode = CameraMode.REPLAY
         replayCameraBall1Course = ball1Course?.let { PointF(it.x, it.y) }
         replayCameraBall2Course = ball2Course?.let { PointF(it.x, it.y) }
-        overviewCameraHeld = false
         postInvalidateOnAnimation()
     }
 
@@ -1313,12 +1313,10 @@ class GolfRenderer @JvmOverloads constructor(
     }
 
     private fun visualMapWidth(g: GolfMap): Float {
-        // Raw iOS course width = inner columns * TILE_SIZE
         return g.mapSize2
     }
 
     private fun visualMapHeight(g: GolfMap): Float {
-        // Raw iOS course height = outer rows * TILE_SIZE
         return g.mapSize
     }
 
@@ -1532,12 +1530,10 @@ class GolfRenderer @JvmOverloads constructor(
     }
 
     private fun visualCols(g: GolfMap): Int {
-        // Screen columns are inner columns.
         return g.yCells
     }
 
     private fun visualRows(g: GolfMap): Int {
-        // Screen rows are outer rows.
         return g.xCells
     }
 
@@ -2101,6 +2097,9 @@ class GolfRenderer @JvmOverloads constructor(
                     val armThickness =
                         DEBUG_NATIVE_CROSS_ARM_THICKNESS_COURSE * scaleValue
 
+                    val centerRadius =
+                        DEBUG_NATIVE_CROSS_CENTER_RADIUS_COURSE * scaleValue
+
                     drawCollisionBoxCourse(
                         canvas = canvas,
                         cx = obstacle.x,
@@ -2118,6 +2117,14 @@ class GolfRenderer @JvmOverloads constructor(
                         width = armThickness,
                         height = heightCourse,
                         rotationRadians = obstacle.rotation,
+                        fillColor = obstacleFill
+                    )
+
+                    drawCollisionCircleCourse(
+                        canvas = canvas,
+                        cx = obstacle.x,
+                        cy = obstacle.y,
+                        radius = centerRadius,
                         fillColor = obstacleFill
                     )
                 }
@@ -2171,7 +2178,8 @@ class GolfRenderer @JvmOverloads constructor(
         val key =
             "${g.seed}|${g.mode}|${g.mapNum}|" +
                     "$DEBUG_NATIVE_DIAGONAL_WALL_THICKNESS_COURSE|" +
-                    "$DEBUG_NATIVE_CROSS_ARM_THICKNESS_COURSE"
+                    "$DEBUG_NATIVE_CROSS_ARM_THICKNESS_COURSE|" +
+                    "$DEBUG_NATIVE_CROSS_CENTER_RADIUS_COURSE"
 
         if (loggedCollisionDebugTruthForKey == key) return
         loggedCollisionDebugTruthForKey = key
@@ -2188,6 +2196,7 @@ class GolfRenderer @JvmOverloads constructor(
                     "\"outerWallThickness\":$DEBUG_NATIVE_OUTER_WALL_THICKNESS_COURSE," +
                     "\"crossBaseSize\":$DEBUG_NATIVE_CROSS_BASE_SIZE_COURSE," +
                     "\"crossArmThickness\":$DEBUG_NATIVE_CROSS_ARM_THICKNESS_COURSE," +
+                    "\"crossCenterRadius\":$DEBUG_NATIVE_CROSS_CENTER_RADIUS_COURSE," +
                     "\"smallBar\":{\"width\":$DEBUG_NATIVE_SMALL_BAR_WIDTH_COURSE,\"height\":$DEBUG_NATIVE_SMALL_BAR_HEIGHT_COURSE}," +
                     "\"largeBar\":{\"width\":$DEBUG_NATIVE_LARGE_BAR_WIDTH_COURSE,\"height\":$DEBUG_NATIVE_LARGE_BAR_HEIGHT_COURSE}," +
                     "\"slope\":{\"width\":$DEBUG_NATIVE_SLOPE_WIDTH_COURSE,\"height\":$DEBUG_NATIVE_SLOPE_HEIGHT_COURSE}" +

@@ -10,7 +10,7 @@ object GolfConstants {
     const val DEFAULT_MODE = "3"
     const val DEFAULT_SEED = 1931763971
 
-    var debugToolsEnabled = false
+    var debugToolsEnabled = true
 
     fun holeCountFor(mode: String): Int = when (mode) {
         "5" -> 5

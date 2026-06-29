@@ -26,6 +26,7 @@ object GolfNativePhysics {
     private var table: Long = 0L
     private var configuredKey: String? = null
     private var ballCreated = false
+    private var nativeDebugLoggingSynced: Boolean? = null
 
     private val outputs: FloatBuffer = ByteBuffer.allocateDirect(8 * 4)
         .order(ByteOrder.nativeOrder())
@@ -37,6 +38,8 @@ object GolfNativePhysics {
 
     external fun createGolfTable(): Long
     external fun destroyGolfTable(table: Long)
+
+    external fun setGolfDebugLogging(enabled: Boolean)
 
     external fun configureGolfTable(
         table: Long,
@@ -95,6 +98,8 @@ object GolfNativePhysics {
         table = 0L
         configuredKey = null
         ballCreated = false
+        nativeDebugLoggingSynced = null
+        syncNativeDebugLogging()
 
         if (old != 0L) {
             destroyGolfTable(old)
@@ -109,6 +114,7 @@ object GolfNativePhysics {
         frame: Int,
         phase: String
     ) {
+        if (!GolfConstants.debugToolsEnabled) return
         val nativeTable = ensureTable()
 
         setGolfTraceContext(
@@ -214,7 +220,20 @@ object GolfNativePhysics {
         refreshGolfOutputs(nativeTable)
     }
 
+    private fun syncNativeDebugLogging() {
+        val enabled = GolfConstants.debugToolsEnabled
+
+        if (nativeDebugLoggingSynced == enabled) {
+            return
+        }
+
+        setGolfDebugLogging(enabled)
+        nativeDebugLoggingSynced = enabled
+    }
+
     private fun ensureTable(): Long {
+        syncNativeDebugLogging()
+
         if (table == 0L) {
             table = createGolfTable()
         }

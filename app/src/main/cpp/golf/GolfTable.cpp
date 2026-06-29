@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <android/log.h>
 #include <cmath>
+#include <cstdarg>
 
 static constexpr float BALL_RADIUS = 4.0f;
 static constexpr float BALL_DENSITY = 1.0f;
@@ -34,7 +35,8 @@ static constexpr int POSITION_ITERATIONS = 60;
 static constexpr float PI_F = 3.14159265358979323846f;
 static constexpr float DIAGONAL_WALL_THICKNESS = 3.0f;
 static constexpr float CROSS_BASE_SIZE = 95.0f;
-static constexpr float CROSS_ARM_BASE_THICKNESS = 10.0f;
+static constexpr float CROSS_ARM_BASE_THICKNESS = 6.0f;
+static constexpr float CROSS_CENTER_BASE_RADIUS = 9.5f;
 
 static constexpr int CELL_OPEN = 0;
 static constexpr int CELL_BLOCKED = 1;
@@ -47,13 +49,31 @@ static constexpr float SLOPE_RECT_HEIGHT = 52.0f;
 static constexpr float IOS_STOP_LINEAR_SPEED = 1.0f;
 static constexpr float IOS_STOP_ANGULAR_SPEED = 0.08f;
 
-static constexpr float SMALL_BAR_PHYSICS_WIDTH = 46.0f;
+static constexpr float SMALL_BAR_PHYSICS_WIDTH = 44.0f;
 static constexpr float SMALL_BAR_PHYSICS_HEIGHT = 6.0f;
 
 static constexpr float LARGE_BAR_PHYSICS_WIDTH = 95.0f;
 static constexpr float LARGE_BAR_PHYSICS_HEIGHT = 6.0f;
 
 static constexpr float OUTER_WALL_THICKNESS = 65.0f;
+
+extern bool gGolfDebugLoggingEnabled;
+
+static void golfNativeLogPrint(
+        int priority,
+        const char* tag,
+        const char* format,
+        ...
+) {
+    if (!gGolfDebugLoggingEnabled) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, format);
+    __android_log_vprint(priority, tag, format, args);
+    va_end(args);
+}
 
 static void applyIosBodyDefaults(b2BodyDef& def) {
     def.position.Set(0.0f, 0.0f);
@@ -88,7 +108,7 @@ static void logFixtureMaterial(
         int kind,
         const b2FixtureDef& fixtureDef
 ) {
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "GOLF_ANDROID_FIXTURE_MATERIAL={"
@@ -154,7 +174,7 @@ static void logBoxFixture(
         vy[i] = y + localX[i] * s + localY[i] * c;
     }
 
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "GOLF_ANDROID_FIXTURE={"
@@ -212,7 +232,7 @@ static void logCircleFixture(
         float radius,
         int kind
 ) {
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "GOLF_ANDROID_FIXTURE={"
@@ -254,7 +274,7 @@ static void logTriangleFixture(
         int kind,
         const b2Vec2* vertices
 ) {
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "GOLF_ANDROID_FIXTURE={"
@@ -457,7 +477,7 @@ void GolfTable::configureMap(
                                  rotation
                          });
 
-        __android_log_print(
+        golfNativeLogPrint(
                 ANDROID_LOG_INFO,
                 "GolfNative",
                 "GOLF_ANDROID_SLOPE_INPUT={"
@@ -481,7 +501,7 @@ void GolfTable::configureMap(
         );
     }
 
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "configureMap rows=%d cols=%d obstacles=%d slopes=%d tile=%f mapSize=%f",
@@ -522,16 +542,6 @@ void GolfTable::createDiagonalCellWall(const int* openMask, int row, int col, in
     const bool leftBlocked = !nativeCellIsOpenRaw(openMask, rows, cols, row, col - 1);
     const bool rightBlocked = !nativeCellIsOpenRaw(openMask, rows, cols, row, col + 1);
 
-    /*
-     * The previous version always used -45 degrees.
-     * That is wrong for top-right and bottom-left value-3 cells.
-     *
-     * Current failing map:
-     *   row=0 col=3 is top-right
-     *   row=5 col=0 is bottom-left
-     *
-     * Both need +45 degrees.
-     */
     float angle = -PI_F * 0.25f;
     const char* corner = "fallback_NEG_45";
 
@@ -561,7 +571,7 @@ void GolfTable::createDiagonalCellWall(const int* openMask, int row, int col, in
             false
     );
 
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "GOLF_ANDROID_DIAGONAL_WALL_ORIENTATION={"
@@ -902,13 +912,8 @@ void GolfTable::createCross(
     const float minSide = std::min(width, height);
     const float scale = minSide > 0.0f ? minSide / CROSS_BASE_SIZE : 1.0f;
 
-    /*
-     * Current trace used 16.15px cross arms:
-     *   width=95, height=16.15
-     *
-     * That is still too thick visually/physically. Test 10px at base scale.
-     */
     const float armThickness = CROSS_ARM_BASE_THICKNESS * scale;
+    const float centerRadius = CROSS_CENTER_BASE_RADIUS * scale;
 
     createStaticBox(
             x,
@@ -934,6 +939,16 @@ void GolfTable::createCross(
             bouncy
     );
 
+    createStaticCircle(
+            x,
+            y,
+            centerRadius,
+            kind,
+            restitution,
+            friction,
+            bouncy
+    );
+
     __android_log_print(
             ANDROID_LOG_INFO,
             "GolfNative",
@@ -950,6 +965,7 @@ void GolfTable::createCross(
             "\"height\":%.6f,"
             "\"scale\":%.6f,"
             "\"armThickness\":%.6f,"
+            "\"centerRadius\":%.6f,"
             "\"angle\":%.6f"
             "}",
             traceRunId.c_str(),
@@ -964,6 +980,7 @@ void GolfTable::createCross(
             height,
             scale,
             armThickness,
+            centerRadius,
             angle
     );
 }
@@ -1046,7 +1063,7 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
             break;
     }
 
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "GOLF_ANDROID_OBSTACLE_FIXTURE_INPUT={"
@@ -1093,7 +1110,7 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
                     obstacle.bouncy
             );
 
-            __android_log_print(
+            golfNativeLogPrint(
                     ANDROID_LOG_INFO,
                     "GolfNative",
                     "GOLF_NATIVE_ROUND_FIXTURE={"
@@ -1127,7 +1144,7 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
                     obstacle.bouncy
             );
 
-            __android_log_print(
+            golfNativeLogPrint(
                     ANDROID_LOG_INFO,
                     "GolfNative",
                     "GOLF_NATIVE_ROUND2_FIXTURE={"
@@ -1245,7 +1262,7 @@ void GolfTable::makeBall(float x, float y, float* outputs) {
     body->SetAwake(true);
     ball->step();
 
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "makeBall x=%f y=%f radius=%f mass=%f inertia=%f",
@@ -1310,7 +1327,7 @@ bool GolfTable::applySlopesPostStep(const b2Vec2& slopeSamplePos) {
 
         const b2Vec2 newVel = oldVel + delta;
 
-        __android_log_print(
+        golfNativeLogPrint(
                 ANDROID_LOG_INFO,
                 "GolfNative",
                 "GOLF_ANDROID_SLOPE={"
@@ -1392,7 +1409,7 @@ bool GolfTable::update(float dtSeconds) {
     const b2Vec2 beforePos = ball->body->GetPosition();
     const b2Vec2 beforeVel = ball->body->GetLinearVelocity();
 
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "GOLF_NATIVE_STEP={"
@@ -1419,7 +1436,7 @@ bool GolfTable::update(float dtSeconds) {
     const b2Vec2 afterWorldPos = ball->body->GetPosition();
     const b2Vec2 afterWorldVel = ball->body->GetLinearVelocity();
 
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "GOLF_NATIVE_STEP={"
@@ -1447,7 +1464,7 @@ bool GolfTable::update(float dtSeconds) {
     const b2Vec2 afterPos = ball->body->GetPosition();
     const b2Vec2 afterVel = ball->body->GetLinearVelocity();
 
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "GOLF_NATIVE_STEP={"

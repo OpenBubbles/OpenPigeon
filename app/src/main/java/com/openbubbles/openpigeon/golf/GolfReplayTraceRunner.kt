@@ -9,17 +9,6 @@ object GolfReplayTraceRunner {
 
     private const val TRACE_DT_SECONDS = 1f / 60f
     private const val MAX_FRAMES_PER_SHOT = 1200
-
-    /*
-     * These anchors are for the known iOS reference case:
-     *
-     * seed   = 1853352027
-     * mapNum = 0
-     * mode   = 3
-     *
-     * The purpose is to test native Box2D from exact iOS positions,
-     * without carrying Android's small accumulated drift from shots 0-2.
-     */
     private val IOS_ANCHOR_SHOTS = listOf(
         GolfAnchorShot(
             name = "ios_anchor_shot3",
@@ -110,11 +99,6 @@ object GolfReplayTraceRunner {
         val limit = min(maxShots ?: shots.size, shots.size).coerceAtLeast(0)
         if (limit <= 0) return
 
-        /*
-         * Important:
-         * Every replay trace run must be isolated. Otherwise p1_firstShot,
-         * p2_firstShot, p1_full, and p2_full can share native table state.
-         */
         GolfNativePhysics.reset()
 
         val ball = startBallForSlot(map, slot)
@@ -149,16 +133,6 @@ object GolfReplayTraceRunner {
         }
     }
 
-    /*
-     * Call this from the same debug/menu path that currently runs p1_full.
-     *
-     * It runs isolated native shots from exact iOS start positions:
-     *   - ios_anchor_shot3
-     *   - ios_anchor_shot4
-     *
-     * Unlike runReplay(), these shots do NOT chain from Android's previous
-     * final position. Each anchor shot resets the native table first.
-     */
     fun runIosAnchorShots(
         source: String,
         map: GolfMap,
@@ -182,9 +156,6 @@ object GolfReplayTraceRunner {
         )
 
         for (anchor in IOS_ANCHOR_SHOTS) {
-            /*
-             * Reset before each anchor shot so shot3 and shot4 are truly isolated.
-             */
             GolfNativePhysics.reset()
 
             val ball = PointF(anchor.startX, anchor.startY)
@@ -250,10 +221,6 @@ object GolfReplayTraceRunner {
         while (frame < MAX_FRAMES_PER_SHOT && !done) {
             GolfTrace.setFrame(frame)
 
-            /*
-             * This first context call also configures the native map if needed.
-             * Therefore fixture logs are tied to this runId.
-             */
             GolfNativePhysics.setTraceContext(
                 map = map,
                 runId = runId,
@@ -365,10 +332,6 @@ object GolfReplayTraceRunner {
         dist: Float,
         rotation: Float
     ): PointF {
-        /*
-         * Replay rotation is already in course/SpriteKit space.
-         * Do NOT call renderer.visualDeltaToCourseDelta here.
-         */
         val velocityCourse = GolfShot.launchVelocityVisual(
             GolfShot.Aim(
                 dist = dist,

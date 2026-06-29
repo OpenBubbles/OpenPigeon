@@ -2,6 +2,7 @@
 #include "GolfData.h"
 
 #include <android/log.h>
+#include <cstdarg>
 
 namespace {
     GolfData* dataForFixture(b2Fixture* fixture) {
@@ -100,6 +101,24 @@ namespace {
     }
 }
 
+extern bool gGolfDebugLoggingEnabled;
+
+static void golfNativeLogPrint(
+        int priority,
+        const char* tag,
+        const char* format,
+        ...
+) {
+    if (!gGolfDebugLoggingEnabled) {
+        return;
+    }
+
+    va_list args;
+    va_start(args, format);
+    __android_log_vprint(priority, tag, format, args);
+    va_end(args);
+}
+
 void GolfContactListener::setTraceContext(
         const char* runId,
         int shotIndex,
@@ -167,7 +186,7 @@ static void logBouncyValidation(
     const float errorX = afterVelocity.x - expected.x;
     const float errorY = afterVelocity.y - expected.y;
 
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "GOLF_ANDROID_BUMPER_VALIDATE={"
@@ -319,7 +338,7 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
         }
     }
 
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "GOLF_NATIVE_CONTACT={"
@@ -482,7 +501,7 @@ void GolfContactListener::PostSolve(
     const b2Vec2 point =
             pointCount > 0 ? manifold.points[0] : b2Vec2_zero;
 
-    __android_log_print(
+    golfNativeLogPrint(
             ANDROID_LOG_INFO,
             "GolfNative",
             "GOLF_NATIVE_IMPULSE={"
