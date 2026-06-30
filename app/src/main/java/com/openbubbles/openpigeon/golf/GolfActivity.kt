@@ -63,7 +63,7 @@ class GolfActivity : AppCompatActivity() {
         private const val LAYER_WAITING = 14000f
         private const val LAYER_INTRO = 15000f
         private var debugGolfReplayTraceAuto = false
-        private var debugGolfReplayTraceFull = false
+        private var debugGolfReplayTraceFull = true
         private var debugGolfReplayTraceIosAnchors = false
 
         private const val DEBUG_VISUAL_TRACE_FRAME_DELAY_MS = 16L
@@ -4162,7 +4162,10 @@ class GolfActivity : AppCompatActivity() {
                     maxShots = 1
                 )
 
-                if (debugGolfReplayTraceFull) {
+                val shouldRunFullTrace =
+                    source == "debugMenuRunTrace" || debugGolfReplayTraceFull
+
+                if (shouldRunFullTrace) {
                     GolfReplayTraceRunner.runReplay(
                         source = "${source}_p1_full",
                         map = map,

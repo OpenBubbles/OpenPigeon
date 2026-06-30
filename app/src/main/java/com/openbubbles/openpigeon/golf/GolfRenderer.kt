@@ -62,7 +62,8 @@ class GolfRenderer @JvmOverloads constructor(
 
         private const val DEBUG_NATIVE_BALL_RADIUS_COURSE = 4f
 
-        private const val DEBUG_NATIVE_DIAGONAL_WALL_THICKNESS_COURSE = 3f
+        private const val DEBUG_NATIVE_DIAGONAL_WALL_THICKNESS_COURSE = 1f
+        private const val DEBUG_NATIVE_DIAGONAL_WALL_HALF_THICKNESS_COURSE = 0.5f
         private const val DEBUG_NATIVE_OUTER_WALL_THICKNESS_COURSE = 65f
 
         private const val DEBUG_NATIVE_SMALL_BAR_WIDTH_COURSE = 44f
@@ -211,7 +212,9 @@ class GolfRenderer @JvmOverloads constructor(
         val ay: Float,
         val bx: Float,
         val by: Float,
-        val label: String
+        val label: String,
+        val kind: String = "axis",
+        val thicknessCourse: Float = IOS_WALL_DRAW_SIZE
     )
 
     private fun isCourseOpenForTrace(
@@ -224,6 +227,25 @@ class GolfRenderer @JvmOverloads constructor(
 
         val value = g.grid[outerY][innerX]
         return value == 0 || value == 3
+    }
+
+    private fun diagonalCollisionAngleForTrace(
+        g: GolfMap,
+        row: Int,
+        col: Int
+    ): Float {
+        val topBlocked = !isCourseOpenForTrace(g, row - 1, col)
+        val bottomBlocked = !isCourseOpenForTrace(g, row + 1, col)
+        val leftBlocked = !isCourseOpenForTrace(g, row, col - 1)
+        val rightBlocked = !isCourseOpenForTrace(g, row, col + 1)
+
+        return when {
+            topBlocked && rightBlocked -> (Math.PI / 4.0).toFloat()
+            bottomBlocked && leftBlocked -> (Math.PI / 4.0).toFloat()
+            topBlocked && leftBlocked -> (-Math.PI / 4.0).toFloat()
+            bottomBlocked && rightBlocked -> (-Math.PI / 4.0).toFloat()
+            else -> (-Math.PI / 4.0).toFloat()
+        }
     }
 
     private fun courseWallSegmentsForTrace(g: GolfMap): List<WallSegmentCourse> {
@@ -239,20 +261,63 @@ class GolfRenderer @JvmOverloads constructor(
                 val x1 = x0 + tile
                 val y1 = y0 + tile
 
+                if (g.grid[outerY][innerX] == 3) {
+                    val cx = innerX * tile
+                    val cy = outerY * tile
+                    val halfLength = tile * 0.5f * kotlin.math.sqrt(2f)
+                    val angle = diagonalCollisionAngleForTrace(g, outerY, innerX)
+                    val c = kotlin.math.cos(angle)
+                    val s = kotlin.math.sin(angle)
+
+                    segments += WallSegmentCourse(
+                        ax = cx - halfLength * c,
+                        ay = cy - halfLength * s,
+                        bx = cx + halfLength * c,
+                        by = cy + halfLength * s,
+                        label = "diagonal cell=($outerY,$innerX)",
+                        kind = "diagonal",
+                        thicknessCourse = DEBUG_NATIVE_DIAGONAL_WALL_THICKNESS_COURSE
+                    )
+                }
+
                 if (!isCourseOpenForTrace(g, outerY, innerX - 1)) {
-                    segments += WallSegmentCourse(x0, y0, x0, y1, "left cell=($outerY,$innerX)")
+                    segments += WallSegmentCourse(
+                        x0,
+                        y0,
+                        x0,
+                        y1,
+                        "left cell=($outerY,$innerX)"
+                    )
                 }
 
                 if (!isCourseOpenForTrace(g, outerY, innerX + 1)) {
-                    segments += WallSegmentCourse(x1, y0, x1, y1, "right cell=($outerY,$innerX)")
+                    segments += WallSegmentCourse(
+                        x1,
+                        y0,
+                        x1,
+                        y1,
+                        "right cell=($outerY,$innerX)"
+                    )
                 }
 
                 if (!isCourseOpenForTrace(g, outerY - 1, innerX)) {
-                    segments += WallSegmentCourse(x0, y0, x1, y0, "top cell=($outerY,$innerX)")
+                    segments += WallSegmentCourse(
+                        x0,
+                        y0,
+                        x1,
+                        y0,
+                        "top cell=($outerY,$innerX)"
+                    )
                 }
 
                 if (!isCourseOpenForTrace(g, outerY + 1, innerX)) {
-                    segments += WallSegmentCourse(x0, y1, x1, y1, "bottom cell=($outerY,$innerX)")
+                    segments += WallSegmentCourse(
+                        x0,
+                        y1,
+                        x1,
+                        y1,
+                        "bottom cell=($outerY,$innerX)"
+                    )
                 }
             }
         }
@@ -357,7 +422,9 @@ class GolfRenderer @JvmOverloads constructor(
                 "\"ay\":${s.ay}," +
                 "\"bx\":${s.bx}," +
                 "\"by\":${s.by}," +
-                "\"label\":\"${s.label.replace("\"", "\\\"")}\"" +
+                "\"label\":\"${s.label.replace("\"", "\\\"")}\"," +
+                "\"kind\":\"${s.kind}\"," +
+                "\"thicknessCourse\":${s.thicknessCourse}" +
                 "}"
     }
 
@@ -365,6 +432,7 @@ class GolfRenderer @JvmOverloads constructor(
         if (!logVisualAlignmentEnabled && !GolfConstants.debugToolsEnabled) return
 
         val wallSegments = courseWallSegmentsForTrace(g)
+        val diagonalWallSegments = wallSegments.count { it.kind == "diagonal" }
 
         OpenPigeonLog.i(
             TAG,
@@ -383,6 +451,9 @@ class GolfRenderer @JvmOverloads constructor(
                     "\"offsetY\":$offsetY," +
                     "\"flipY\":$FLIP_BOARD_Y_ONLY," +
                     "\"wallSegments\":${wallSegments.size}," +
+                    "\"diagonalWallSegments\":$diagonalWallSegments," +
+                    "\"diagonalWallThicknessCourse\":$DEBUG_NATIVE_DIAGONAL_WALL_THICKNESS_COURSE," +
+                    "\"diagonalWallHalfThicknessCourse\":$DEBUG_NATIVE_DIAGONAL_WALL_HALF_THICKNESS_COURSE," +
                     "\"ballRadiusCourse\":$traceBallRadiusCourse," +
                     "\"physicsBallRadiusCourse\":$TRACE_PHYSICS_BALL_RADIUS_COURSE," +
                     "\"wallDrawSizeCourse\":$IOS_WALL_DRAW_SIZE," +
@@ -2193,6 +2264,7 @@ class GolfRenderer @JvmOverloads constructor(
                     "\"mapNum\":${g.mapNum}," +
                     "\"ballRadius\":$DEBUG_NATIVE_BALL_RADIUS_COURSE," +
                     "\"diagonalThickness\":$DEBUG_NATIVE_DIAGONAL_WALL_THICKNESS_COURSE," +
+                    "\"diagonalHalfThickness\":$DEBUG_NATIVE_DIAGONAL_WALL_HALF_THICKNESS_COURSE," +
                     "\"outerWallThickness\":$DEBUG_NATIVE_OUTER_WALL_THICKNESS_COURSE," +
                     "\"crossBaseSize\":$DEBUG_NATIVE_CROSS_BASE_SIZE_COURSE," +
                     "\"crossArmThickness\":$DEBUG_NATIVE_CROSS_ARM_THICKNESS_COURSE," +

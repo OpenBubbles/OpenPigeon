@@ -33,7 +33,7 @@ static constexpr int VELOCITY_ITERATIONS = 60;
 static constexpr int POSITION_ITERATIONS = 60;
 
 static constexpr float PI_F = 3.14159265358979323846f;
-static constexpr float DIAGONAL_WALL_THICKNESS = 3.0f;
+static constexpr float DIAGONAL_WALL_THICKNESS = 1.0f;
 static constexpr float CROSS_BASE_SIZE = 95.0f;
 static constexpr float CROSS_ARM_BASE_THICKNESS = 6.0f;
 static constexpr float CROSS_CENTER_BASE_RADIUS = 9.5f;
@@ -144,6 +144,12 @@ static void logFixtureMaterial(
 
 static const char* ownerTypeForKind(int kind) {
     return kind < 0 ? "wall" : "obstacle";
+}
+
+static float effectiveCircleRadiusForBouncy(float radius, bool bouncy) {
+    return bouncy
+           ? std::max(0.0f, radius - 0.5f)
+           : radius;
 }
 
 static void logBoxFixture(
@@ -697,8 +703,10 @@ void GolfTable::createStaticCircle(
 
     b2Body* body = world.CreateBody(&bodyDef);
 
+    const float effectiveRadius = effectiveCircleRadiusForBouncy(radius, bouncy);
+
     b2CircleShape shape;
-    shape.m_radius = radius;
+    shape.m_radius = effectiveRadius;
 
     b2FixtureDef fixtureDef;
     fixtureDef.shape = &shape;
@@ -716,7 +724,7 @@ void GolfTable::createStaticCircle(
             ownerTypeForKind(kind),
             x,
             y,
-            radius,
+            effectiveRadius,
             kind
     );
 
@@ -1099,11 +1107,17 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
     );
 
     switch (obstacle.kind) {
-        case Round:
+        case Round: {
+            const float nominalRadius = std::min(width, height) * 0.5f;
+            const float effectiveRadius = effectiveCircleRadiusForBouncy(
+                    nominalRadius,
+                    obstacle.bouncy
+            );
+
             createStaticCircle(
                     obstacle.x,
                     obstacle.y,
-                    std::min(width, height) * 0.5f,
+                    nominalRadius,
                     obstacle.kind,
                     restitution,
                     friction,
@@ -1116,6 +1130,7 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
                     "GOLF_NATIVE_ROUND_FIXTURE={"
                     "\"x\":%f,"
                     "\"y\":%f,"
+                    "\"nominalRadius\":%f,"
                     "\"radius\":%f,"
                     "\"scale\":%f,"
                     "\"bouncy\":%s,"
@@ -1124,7 +1139,8 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
                     "}",
                     obstacle.x,
                     obstacle.y,
-                    std::min(width, height) * 0.5f,
+                    nominalRadius,
+                    effectiveRadius,
                     obstacle.scale,
                     obstacle.bouncy ? "true" : "false",
                     restitution,
@@ -1132,12 +1148,19 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
             );
 
             break;
+        }
 
-        case Round2:
+        case Round2: {
+            const float nominalRadius = std::min(width, height) * 0.5f;
+            const float effectiveRadius = effectiveCircleRadiusForBouncy(
+                    nominalRadius,
+                    obstacle.bouncy
+            );
+
             createStaticCircle(
                     obstacle.x,
                     obstacle.y,
-                    std::min(width, height) * 0.5f,
+                    nominalRadius,
                     obstacle.kind,
                     restitution,
                     friction,
@@ -1150,6 +1173,7 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
                     "GOLF_NATIVE_ROUND2_FIXTURE={"
                     "\"x\":%f,"
                     "\"y\":%f,"
+                    "\"nominalRadius\":%f,"
                     "\"radius\":%f,"
                     "\"scale\":%f,"
                     "\"bouncy\":%s,"
@@ -1158,7 +1182,8 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
                     "}",
                     obstacle.x,
                     obstacle.y,
-                    std::min(width, height) * 0.5f,
+                    nominalRadius,
+                    effectiveRadius,
                     obstacle.scale,
                     obstacle.bouncy ? "true" : "false",
                     restitution,
@@ -1166,6 +1191,7 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
             );
 
             break;
+        }
 
         case Triangle:
         case Triangle2:

@@ -138,7 +138,7 @@ void GolfContactListener::clearTraceContext() {
     tracePhase.clear();
 }
 
-static constexpr float IOS_BOUNCY_VELOCITY_DELTA = 750.0f;
+static constexpr float IOS_BOUNCY_IMPULSE_MAGNITUDE = 750.0f;
 
 static bool isBouncyObstacle(const GolfData* data) {
     return data &&
@@ -151,24 +151,41 @@ static bool isBouncyContact(const GolfData* dataA, const GolfData* dataB) {
 }
 
 static b2Vec2 negateVec(const b2Vec2& v) {
-    return {-v.x, -v.y};
+    return b2Vec2(-v.x, -v.y);
 }
 
-static b2Vec2 normalAwayFromOtherBody(
-        bool ballIsA,
-        const b2Vec2& worldNormal
-) {
+static b2Vec2 normalAwayFromOtherBody(bool ballIsA, const b2Vec2& worldNormal) {
     return ballIsA ? negateVec(worldNormal) : worldNormal;
 }
 
+static b2Vec2 normalTowardOtherBody(bool ballIsA, const b2Vec2& worldNormal) {
+    return ballIsA ? worldNormal : negateVec(worldNormal);
+}
+
+static float safeBodyMass(const b2Body* body) {
+    if (!body) {
+        return 1.0f;
+    }
+
+    const float mass = body->GetMass();
+    return mass > 0.000001f ? mass : 1.0f;
+}
+
+static float iosBouncyDeltaVelocityMagnitude(const b2Body* body) {
+    return IOS_BOUNCY_IMPULSE_MAGNITUDE / safeBodyMass(body);
+}
+
 static b2Vec2 iosBouncyVelocity(
+        const b2Body* body,
         const b2Vec2& velocity,
-        const b2Vec2& normalAwayFromBumper
+        const b2Vec2& normalTowardBouncy
 ) {
-    return {
-            velocity.x + normalAwayFromBumper.x * IOS_BOUNCY_VELOCITY_DELTA,
-            velocity.y + normalAwayFromBumper.y * IOS_BOUNCY_VELOCITY_DELTA
-    };
+    const float deltaVelocity = iosBouncyDeltaVelocityMagnitude(body);
+
+    return b2Vec2(
+            velocity.x + normalTowardBouncy.x * deltaVelocity,
+            velocity.y + normalTowardBouncy.y * deltaVelocity
+    );
 }
 
 static void logBouncyValidation(
@@ -177,11 +194,14 @@ static void logBouncyValidation(
         int traceFrame,
         const std::string& tracePhase,
         const char* ballSlot,
+        const b2Body* body,
         const b2Vec2& beforeVelocity,
-        const b2Vec2& normalAway,
+        const b2Vec2& normalTowardBouncy,
         const b2Vec2& afterVelocity
 ) {
-    const b2Vec2 expected = iosBouncyVelocity(beforeVelocity, normalAway);
+    const float bodyMass = safeBodyMass(body);
+    const float deltaVelocity = iosBouncyDeltaVelocityMagnitude(body);
+    const b2Vec2 expected = iosBouncyVelocity(body, beforeVelocity, normalTowardBouncy);
 
     const float errorX = afterVelocity.x - expected.x;
     const float errorY = afterVelocity.y - expected.y;
@@ -195,11 +215,13 @@ static void logBouncyValidation(
             "\"frame\":%d,"
             "\"phase\":\"%s\","
             "\"ballSlot\":\"%s\","
+            "\"bouncyImpulse\":%.6f,"
+            "\"bodyMass\":%.6f,"
             "\"bouncyDelta\":%.6f,"
             "\"before\":{\"x\":%.6f,\"y\":%.6f},"
-            "\"normalAway\":{\"x\":%.6f,\"y\":%.6f},"
-            "\"expectedAfter\":{\"x\":%.6f,\"y\":%.6f},"
-            "\"actualAfter\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"normalTowardBouncy\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"expectedAfterBeginContact\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"actualAfterBeginContact\":{\"x\":%.6f,\"y\":%.6f},"
             "\"error\":{\"x\":%.6f,\"y\":%.6f}"
             "}",
             traceRunId.c_str(),
@@ -207,11 +229,13 @@ static void logBouncyValidation(
             traceFrame,
             tracePhase.c_str(),
             ballSlot,
-            IOS_BOUNCY_VELOCITY_DELTA,
+            IOS_BOUNCY_IMPULSE_MAGNITUDE,
+            bodyMass,
+            deltaVelocity,
             beforeVelocity.x,
             beforeVelocity.y,
-            normalAway.x,
-            normalAway.y,
+            normalTowardBouncy.x,
+            normalTowardBouncy.y,
             expected.x,
             expected.y,
             afterVelocity.x,
@@ -283,8 +307,9 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
             usedBouncyRewrite = true;
 
             if (isBall(dataA) && bodyA && bodyA->GetType() == b2_dynamicBody) {
-                const b2Vec2 away = normalAwayFromOtherBody(true, normal);
-                rewrittenVelA = iosBouncyVelocity(velA, away);
+                const b2Vec2 towardBouncy = normalTowardOtherBody(true, normal);
+
+                rewrittenVelA = iosBouncyVelocity(bodyA, velA, towardBouncy);
                 setBodyVelocityLikeIos(bodyA, rewrittenVelA);
                 rewroteA = true;
 
@@ -294,15 +319,17 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
                         traceFrame,
                         tracePhase,
                         "A",
+                        bodyA,
                         velA,
-                        away,
+                        towardBouncy,
                         rewrittenVelA
                 );
             }
 
             if (isBall(dataB) && bodyB && bodyB->GetType() == b2_dynamicBody) {
-                const b2Vec2 away = normalAwayFromOtherBody(false, normal);
-                rewrittenVelB = iosBouncyVelocity(velB, away);
+                const b2Vec2 towardBouncy = normalTowardOtherBody(false, normal);
+
+                rewrittenVelB = iosBouncyVelocity(bodyB, velB, towardBouncy);
                 setBodyVelocityLikeIos(bodyB, rewrittenVelB);
                 rewroteB = true;
 
@@ -312,8 +339,9 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
                         traceFrame,
                         tracePhase,
                         "B",
+                        bodyB,
                         velB,
-                        away,
+                        towardBouncy,
                         rewrittenVelB
                 );
             }
@@ -417,7 +445,9 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
             rewroteB ? "true" : "false",
             usedNormalRewrite ? "true" : "false",
             usedBouncyRewrite ? "true" : "false",
-            IOS_BOUNCY_VELOCITY_DELTA
+            isBouncyContact(dataA, dataB)
+            ? iosBouncyDeltaVelocityMagnitude(isBall(dataA) ? bodyA : bodyB)
+            : 0.0f
     );
 }
 
@@ -498,73 +528,123 @@ void GolfContactListener::PostSolve(
     const float frictionB = fixtureB ? fixtureB->GetFriction() : 0.0f;
     const float contactFriction = contact->GetFriction();
 
+    const bool hasNonZeroImpulse =
+            normalImpulse0 != 0.0f ||
+            normalImpulse1 != 0.0f ||
+            tangentImpulse0 != 0.0f ||
+            tangentImpulse1 != 0.0f;
+
+    if (isBouncyContact(dataA, dataB) && hasNonZeroImpulse) {
+        golfNativeLogPrint(
+                ANDROID_LOG_INFO,
+                "GolfNative",
+                "GOLF_ANDROID_BUMPER_POSTSOLVE={"
+                "\"runId\":\"%s\","
+                "\"shotIndex\":%d,"
+                "\"frame\":%d,"
+                "\"phase\":\"%s\","
+                "\"aTypeName\":\"%s\","
+                "\"aKind\":%d,"
+                "\"aBouncy\":%s,"
+                "\"bTypeName\":\"%s\","
+                "\"bKind\":%d,"
+                "\"bBouncy\":%s,"
+                "\"normal\":{\"x\":%.6f,\"y\":%.6f},"
+                "\"normalImpulse0\":%.6f,"
+                "\"tangentImpulse0\":%.6f,"
+                "\"aVelPostSolve\":{\"x\":%.6f,\"y\":%.6f},"
+                "\"bVelPostSolve\":{\"x\":%.6f,\"y\":%.6f}"
+                "}",
+                traceRunId.c_str(),
+                traceShotIndex,
+                traceFrame,
+                tracePhase.c_str(),
+                typeName(dataA),
+                dataA->kind,
+                dataA->bouncy ? "true" : "false",
+                typeName(dataB),
+                dataB->kind,
+                dataB->bouncy ? "true" : "false",
+                manifold.normal.x,
+                manifold.normal.y,
+                normalImpulse0,
+                tangentImpulse0,
+                velA.x,
+                velA.y,
+                velB.x,
+                velB.y
+        );
+    }
+
     const b2Vec2 point =
             pointCount > 0 ? manifold.points[0] : b2Vec2_zero;
 
-    golfNativeLogPrint(
-            ANDROID_LOG_INFO,
-            "GolfNative",
-            "GOLF_NATIVE_IMPULSE={"
-            "\"runId\":\"%s\","
-            "\"shotIndex\":%d,"
-            "\"frame\":%d,"
-            "\"phase\":\"%s\","
-            "\"aType\":%d,"
-            "\"aTypeName\":\"%s\","
-            "\"aKind\":%d,"
-            "\"bType\":%d,"
-            "\"bTypeName\":\"%s\","
-            "\"bKind\":%d,"
-            "\"aRestitution\":%.6f,"
-            "\"bRestitution\":%.6f,"
-            "\"contactRestitution\":%.6f,"
-            "\"aFriction\":%.6f,"
-            "\"bFriction\":%.6f,"
-            "\"contactFriction\":%.6f,"
-            "\"pointCount\":%d,"
-            "\"normal\":{\"x\":%.6f,\"y\":%.6f},"
-            "\"point\":{\"x\":%.6f,\"y\":%.6f},"
-            "\"normalImpulse0\":%.6f,"
-            "\"normalImpulse1\":%.6f,"
-            "\"tangentImpulse0\":%.6f,"
-            "\"tangentImpulse1\":%.6f,"
-            "\"aPos\":{\"x\":%.6f,\"y\":%.6f},"
-            "\"bPos\":{\"x\":%.6f,\"y\":%.6f},"
-            "\"aVel\":{\"x\":%.6f,\"y\":%.6f},"
-            "\"bVel\":{\"x\":%.6f,\"y\":%.6f}"
-            "}",
-            traceRunId.c_str(),
-            traceShotIndex,
-            traceFrame,
-            tracePhase.c_str(),
-            static_cast<int>(dataA->type),
-            typeName(dataA),
-            dataA->kind,
-            static_cast<int>(dataB->type),
-            typeName(dataB),
-            dataB->kind,
-            restitutionA,
-            restitutionB,
-            contactRestitution,
-            frictionA,
-            frictionB,
-            contactFriction,
-            pointCount,
-            manifold.normal.x,
-            manifold.normal.y,
-            point.x,
-            point.y,
-            normalImpulse0,
-            normalImpulse1,
-            tangentImpulse0,
-            tangentImpulse1,
-            posA.x,
-            posA.y,
-            posB.x,
-            posB.y,
-            velA.x,
-            velA.y,
-            velB.x,
-            velB.y
-    );
+    if (hasNonZeroImpulse) {
+        golfNativeLogPrint(
+                ANDROID_LOG_INFO,
+                "GolfNative",
+                "GOLF_NATIVE_IMPULSE={"
+                "\"runId\":\"%s\","
+                "\"shotIndex\":%d,"
+                "\"frame\":%d,"
+                "\"phase\":\"%s\","
+                "\"aType\":%d,"
+                "\"aTypeName\":\"%s\","
+                "\"aKind\":%d,"
+                "\"bType\":%d,"
+                "\"bTypeName\":\"%s\","
+                "\"bKind\":%d,"
+                "\"aRestitution\":%.6f,"
+                "\"bRestitution\":%.6f,"
+                "\"contactRestitution\":%.6f,"
+                "\"aFriction\":%.6f,"
+                "\"bFriction\":%.6f,"
+                "\"contactFriction\":%.6f,"
+                "\"pointCount\":%d,"
+                "\"normal\":{\"x\":%.6f,\"y\":%.6f},"
+                "\"point\":{\"x\":%.6f,\"y\":%.6f},"
+                "\"normalImpulse0\":%.6f,"
+                "\"normalImpulse1\":%.6f,"
+                "\"tangentImpulse0\":%.6f,"
+                "\"tangentImpulse1\":%.6f,"
+                "\"aPos\":{\"x\":%.6f,\"y\":%.6f},"
+                "\"bPos\":{\"x\":%.6f,\"y\":%.6f},"
+                "\"aVel\":{\"x\":%.6f,\"y\":%.6f},"
+                "\"bVel\":{\"x\":%.6f,\"y\":%.6f}"
+                "}",
+                traceRunId.c_str(),
+                traceShotIndex,
+                traceFrame,
+                tracePhase.c_str(),
+                static_cast<int>(dataA->type),
+                typeName(dataA),
+                dataA->kind,
+                static_cast<int>(dataB->type),
+                typeName(dataB),
+                dataB->kind,
+                restitutionA,
+                restitutionB,
+                contactRestitution,
+                frictionA,
+                frictionB,
+                contactFriction,
+                pointCount,
+                manifold.normal.x,
+                manifold.normal.y,
+                point.x,
+                point.y,
+                normalImpulse0,
+                normalImpulse1,
+                tangentImpulse0,
+                tangentImpulse1,
+                posA.x,
+                posA.y,
+                posB.x,
+                posB.y,
+                velA.x,
+                velA.y,
+                velB.x,
+                velB.y
+        );
+    }
 }
