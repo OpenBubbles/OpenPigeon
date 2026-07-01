@@ -36,7 +36,7 @@ static constexpr float PI_F = 3.14159265358979323846f;
 static constexpr float DIAGONAL_WALL_THICKNESS = 1.0f;
 static constexpr float CROSS_BASE_SIZE = 95.0f;
 static constexpr float CROSS_ARM_BASE_THICKNESS = 6.0f;
-static constexpr float CROSS_CENTER_BASE_RADIUS = 9.5f;
+static constexpr float CROSS_CENTER_BASE_RADIUS = 10.0f;
 
 static constexpr int CELL_OPEN = 0;
 static constexpr int CELL_BLOCKED = 1;
@@ -54,6 +54,8 @@ static constexpr float SMALL_BAR_PHYSICS_HEIGHT = 6.0f;
 
 static constexpr float LARGE_BAR_PHYSICS_WIDTH = 95.0f;
 static constexpr float LARGE_BAR_PHYSICS_HEIGHT = 6.0f;
+
+static constexpr float ROUND2_PHYSICS_RADIUS = 35.0f;
 
 static constexpr float OUTER_WALL_THICKNESS = 65.0f;
 
@@ -1151,7 +1153,16 @@ void GolfTable::createObstacle(const GolfObstacleInput& obstacle) {
         }
 
         case Round2: {
-            const float nominalRadius = std::min(width, height) * 0.5f;
+            /*
+             * iOS Round2 uses the 72x72 visual, but the collision circle behaves
+             * like radius 35 * scale, not 36 * scale.
+             *
+             * Example trace:
+             * scale 0.7263944
+             * old Android radius = 36 * scale = 26.150200
+             * iOS-matching radius = 35 * scale = 25.423805
+             */
+            const float nominalRadius = ROUND2_PHYSICS_RADIUS * obstacle.scale;
             const float effectiveRadius = effectiveCircleRadiusForBouncy(
                     nominalRadius,
                     obstacle.bouncy

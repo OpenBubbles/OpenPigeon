@@ -3,6 +3,7 @@
 
 #include <android/log.h>
 #include <cstdarg>
+#include <string>
 
 namespace {
     GolfData* dataForFixture(b2Fixture* fixture) {
@@ -138,7 +139,7 @@ void GolfContactListener::clearTraceContext() {
     tracePhase.clear();
 }
 
-static constexpr float IOS_BOUNCY_IMPULSE_MAGNITUDE = 750.0f;
+static constexpr float IOS_BOUNCY_VELOCITY_DELTA = 750.0f;
 
 static bool isBouncyObstacle(const GolfData* data) {
     return data &&
@@ -171,20 +172,13 @@ static float safeBodyMass(const b2Body* body) {
     return mass > 0.000001f ? mass : 1.0f;
 }
 
-static float iosBouncyDeltaVelocityMagnitude(const b2Body* body) {
-    return IOS_BOUNCY_IMPULSE_MAGNITUDE / safeBodyMass(body);
-}
-
 static b2Vec2 iosBouncyVelocity(
-        const b2Body* body,
         const b2Vec2& velocity,
         const b2Vec2& normalTowardBouncy
 ) {
-    const float deltaVelocity = iosBouncyDeltaVelocityMagnitude(body);
-
     return b2Vec2(
-            velocity.x + normalTowardBouncy.x * deltaVelocity,
-            velocity.y + normalTowardBouncy.y * deltaVelocity
+            velocity.x + normalTowardBouncy.x * IOS_BOUNCY_VELOCITY_DELTA,
+            velocity.y + normalTowardBouncy.y * IOS_BOUNCY_VELOCITY_DELTA
     );
 }
 
@@ -200,8 +194,12 @@ static void logBouncyValidation(
         const b2Vec2& afterVelocity
 ) {
     const float bodyMass = safeBodyMass(body);
-    const float deltaVelocity = iosBouncyDeltaVelocityMagnitude(body);
-    const b2Vec2 expected = iosBouncyVelocity(body, beforeVelocity, normalTowardBouncy);
+    const float deltaVelocity = IOS_BOUNCY_VELOCITY_DELTA;
+
+    const b2Vec2 expected = iosBouncyVelocity(
+            beforeVelocity,
+            normalTowardBouncy
+    );
 
     const float errorX = afterVelocity.x - expected.x;
     const float errorY = afterVelocity.y - expected.y;
@@ -215,8 +213,8 @@ static void logBouncyValidation(
             "\"frame\":%d,"
             "\"phase\":\"%s\","
             "\"ballSlot\":\"%s\","
-            "\"bouncyImpulse\":%.6f,"
-            "\"bodyMass\":%.6f,"
+            "\"bouncyVelocityDelta\":%.6f,"
+            "\"bodyMassDiagnostic\":%.6f,"
             "\"bouncyDelta\":%.6f,"
             "\"before\":{\"x\":%.6f,\"y\":%.6f},"
             "\"normalTowardBouncy\":{\"x\":%.6f,\"y\":%.6f},"
@@ -229,7 +227,7 @@ static void logBouncyValidation(
             traceFrame,
             tracePhase.c_str(),
             ballSlot,
-            IOS_BOUNCY_IMPULSE_MAGNITUDE,
+            IOS_BOUNCY_VELOCITY_DELTA,
             bodyMass,
             deltaVelocity,
             beforeVelocity.x,
@@ -309,7 +307,7 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
             if (isBall(dataA) && bodyA && bodyA->GetType() == b2_dynamicBody) {
                 const b2Vec2 towardBouncy = normalTowardOtherBody(true, normal);
 
-                rewrittenVelA = iosBouncyVelocity(bodyA, velA, towardBouncy);
+                rewrittenVelA = iosBouncyVelocity(velA, towardBouncy);
                 setBodyVelocityLikeIos(bodyA, rewrittenVelA);
                 rewroteA = true;
 
@@ -329,7 +327,7 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
             if (isBall(dataB) && bodyB && bodyB->GetType() == b2_dynamicBody) {
                 const b2Vec2 towardBouncy = normalTowardOtherBody(false, normal);
 
-                rewrittenVelB = iosBouncyVelocity(bodyB, velB, towardBouncy);
+                rewrittenVelB = iosBouncyVelocity(velB, towardBouncy);
                 setBodyVelocityLikeIos(bodyB, rewrittenVelB);
                 rewroteB = true;
 
@@ -446,7 +444,7 @@ void GolfContactListener::BeginContact(b2Contact* contact) {
             usedNormalRewrite ? "true" : "false",
             usedBouncyRewrite ? "true" : "false",
             isBouncyContact(dataA, dataB)
-            ? iosBouncyDeltaVelocityMagnitude(isBall(dataA) ? bodyA : bodyB)
+            ? IOS_BOUNCY_VELOCITY_DELTA
             : 0.0f
     );
 }

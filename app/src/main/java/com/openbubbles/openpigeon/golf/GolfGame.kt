@@ -39,7 +39,7 @@ class GolfGame : Game {
         private const val MODE_3_HOLES = "3 Holes"
         private const val MODE_5_HOLES = "5 Holes"
 
-        private val forcedNewGameSeedForTesting: Int? = 1712439597
+        private val forcedNewGameSeedForTesting: Int? = 1849131108
     }
 
     var holes: Int = 3
