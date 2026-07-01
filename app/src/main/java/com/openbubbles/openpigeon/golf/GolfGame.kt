@@ -74,7 +74,7 @@ class GolfGame : Game {
 
         val golfPoleImageProvider = try {
             context?.assets
-                ?.open("golf/golf_pole_Normal@3x.png")
+                ?.open("golf/golf_pole.png")
                 ?.use { stream ->
                     BitmapFactory.decodeStream(stream)
                 }
@@ -175,7 +175,33 @@ class GolfGame : Game {
     }
 
     override fun gamePoster(config: Map<String, String>?): Int {
-        OpenPigeonLog.i(TAG, "GolfGame.gamePoster configKeys=${config?.keys?.sorted().orEmpty()}")
+        val keys = config?.keys?.sorted().orEmpty()
+
+        OpenPigeonLog.i(
+            TAG,
+            "GolfGame.gamePoster configKeys=$keys"
+        )
+
+        OpenPigeonLog.i(
+            "PreviewDebug",
+            "GolfGame.gamePoster ENTER " +
+                    "configNull=${config == null} " +
+                    "game=${config?.get("game").orEmpty()} " +
+                    "id=${config?.get("id").orEmpty()} " +
+                    "player=${config?.get("player").orEmpty()} " +
+                    "player1=${config?.get("player1").orEmpty()} " +
+                    "player2=${config?.get("player2").orEmpty()} " +
+                    "caption=${config?.get("caption").orEmpty()} " +
+                    "subcaption=${config?.get("subcaption").orEmpty()} " +
+                    "gameName=${config?.get("game_name").orEmpty()} " +
+                    "seed=${config?.get("seed").orEmpty()} " +
+                    "mode=${config?.get("mode").orEmpty()} " +
+                    "num=${config?.get("num").orEmpty()} " +
+                    "hasReplay=${!config?.get("replay").isNullOrBlank()} " +
+                    "hasReplay2=${!config?.get("replay2").isNullOrBlank()} " +
+                    "keys=$keys"
+        )
+
         return R.drawable.golf
     }
 

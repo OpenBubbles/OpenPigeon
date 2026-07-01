@@ -81,6 +81,7 @@ class GolfRenderer @JvmOverloads constructor(
 
         private const val BUMPER_PULSE_DURATION_MS = 220L
         private const val BUMPER_PULSE_MAX_SCALE = 1.5f
+        private const val AIM_START_TOUCH_RADIUS_COURSE = 40f
     }
 
     private enum class CutCorner {
@@ -156,24 +157,24 @@ class GolfRenderer @JvmOverloads constructor(
         strokeWidth = 2f
     }
 
-    private val ballBitmap = loadAssetBitmap("golf_ball_Normal@3x.png")
-    private val holeBitmap = loadAssetBitmap("golf_hole_Normal@3x.png")
-    private val flagBitmap = loadAssetBitmap("golf_flag_Normal@3x.png")
+    private val ballBitmap = loadAssetBitmap("golf_ball.png")
+    private val holeBitmap = loadAssetBitmap("golf_hole.png")
+    private val flagBitmap = loadAssetBitmap("golf_flag.png")
 
-    private val slopeUpBitmap = loadAssetBitmap("golf_slope_up_Normal@3x.png")
-    private val slopeDownBitmap = loadAssetBitmap("golf_slope_down_Normal@3x.png")
+    private val slopeUpBitmap = loadAssetBitmap("golf_slope_up.png")
+    private val slopeDownBitmap = loadAssetBitmap("golf_slope_down.png")
 
-    private val obstacleSquareBitmap = loadAssetBitmap("golf_obstacle_square_Normal@3x.png")
-    private val obstacleSquare2Bitmap = loadAssetBitmap("golf_obstacle_square2_Normal@3x.png")
-    private val obstacleBarBitmap = loadAssetBitmap("golf_obstacle_bar_Normal@3x.png")
+    private val obstacleSquareBitmap = loadAssetBitmap("golf_obstacle_square.png")
+    private val obstacleSquare2Bitmap = loadAssetBitmap("golf_obstacle_square2.png")
+    private val obstacleBarBitmap = loadAssetBitmap("golf_obstacle_bar.png")
     private val obstacleBar2Bitmap =
-        loadAssetBitmap("golf_obstacle_bar2_Normal@3x.png")
-            ?: loadAssetBitmap("golf_obstacles_bar2_Normal@3x.png")
-    private val obstacleRoundBitmap = loadAssetBitmap("golf_obstacle_round_Normal@3x.png")
-    private val obstacleRound2Bitmap = loadAssetBitmap("golf_obstacle_round2_Normal@3x.png")
-    private val obstacleTriangleBitmap = loadAssetBitmap("golf_obstacle_triangle_Normal@3x.png")
-    private val obstacleTriangle2Bitmap = loadAssetBitmap("golf_obstacle_triangle2_Normal@3x.png")
-    private val obstacleCrossBitmap = loadAssetBitmap("golf_obstacle_cross_Normal@3x.png")
+        loadAssetBitmap("golf_obstacle_bar2.png")
+            ?: loadAssetBitmap("golf_obstacles_bar2.png")
+    private val obstacleRoundBitmap = loadAssetBitmap("golf_obstacle_round.png")
+    private val obstacleRound2Bitmap = loadAssetBitmap("golf_obstacle_round2.png")
+    private val obstacleTriangleBitmap = loadAssetBitmap("golf_obstacle_triangle.png")
+    private val obstacleTriangle2Bitmap = loadAssetBitmap("golf_obstacle_triangle2.png")
+    private val obstacleCrossBitmap = loadAssetBitmap("golf_obstacle_cross.png")
 
     fun setDebugOverlayEnabled(enabled: Boolean) {
         showCollisionDebug = enabled
@@ -872,7 +873,7 @@ class GolfRenderer @JvmOverloads constructor(
         val ball = getPrimaryBallCourse() ?: return false
         val p = courseToScreen(ball)
 
-        val hitRadius = 28f * scale
+        val hitRadius = AIM_START_TOUCH_RADIUS_COURSE * scale
         val dx = screenX - p.x
         val dy = screenY - p.y
 

@@ -1453,16 +1453,16 @@ class GolfActivity : AppCompatActivity() {
             adjustViewBounds = true
 
             val bm = loadUiBitmap(
-                "golf/golf_pole_Normal@3x.png",
-                "golf/reference_original/golf_pole_Normal@3x.png",
-                "golf_pole_Normal@3x.png"
+                "golf/golf_pole.png",
+                "golf/reference_original/golf_pole.png",
+                "golf_pole.png"
             )
 
             if (bm != null) {
                 setImageBitmap(bm)
                 visibility = View.VISIBLE
             } else {
-                OpenPigeonLog.w(TAG, "Intro pole asset missing golf_pole_Normal@3x.png")
+                OpenPigeonLog.w(TAG, "Intro pole asset missing golf_pole.png")
                 visibility = View.GONE
             }
 

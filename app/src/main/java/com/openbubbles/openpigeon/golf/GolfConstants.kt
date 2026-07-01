@@ -10,7 +10,7 @@ object GolfConstants {
     const val DEFAULT_MODE = "3"
     const val DEFAULT_SEED = 1931763971
 
-    var debugToolsEnabled = true
+    var debugToolsEnabled = false
 
     const val DEBUG_FORCE_NEW_GAME_SEED = false
     const val DEBUG_FORCED_NEW_GAME_SEED = 1849131108
