@@ -39,7 +39,16 @@ class GolfGame : Game {
         private const val MODE_3_HOLES = "3 Holes"
         private const val MODE_5_HOLES = "5 Holes"
 
-        private val forcedNewGameSeedForTesting: Int? = 1849131108
+        private fun forcedNewGameSeedForTesting(): Int? {
+            return if (
+                GolfConstants.debugToolsEnabled &&
+                GolfConstants.DEBUG_FORCE_NEW_GAME_SEED
+            ) {
+                GolfConstants.DEBUG_FORCED_NEW_GAME_SEED
+            } else {
+                null
+            }
+        }
     }
 
     var holes: Int = 3
@@ -188,7 +197,8 @@ class GolfGame : Game {
             put("v3", "3")
             put("mode", holeText)
 
-            val seedForNewGame = forcedNewGameSeedForTesting ?: Random.nextInt()
+            val forcedSeed = forcedNewGameSeedForTesting()
+            val seedForNewGame = forcedSeed ?: Random.nextInt()
 
             put("seed", seedForNewGame.toString())
             put("num", "1")
@@ -204,7 +214,9 @@ class GolfGame : Game {
                 "GolfGame.getNewGameData output keys=${keys.sorted()} " +
                         "version=${get("version")} v3=${get("v3")} " +
                         "player=${get("player")} player2Blank=${get("player2").isNullOrBlank()} " +
-                        "mode=${get("mode")} seed=${get("seed")} num=${get("num")} " +
+                        "mode=${get("mode")} seed=${get("seed")} " +
+                        "seedMode=${if (forcedSeed != null) "forced_debug" else "random"} " +
+                        "num=${get("num")} " +
                         "id='${get("id").orEmpty()}'"
             )
         }

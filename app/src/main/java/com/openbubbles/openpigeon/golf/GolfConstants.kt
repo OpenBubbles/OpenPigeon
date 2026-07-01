@@ -12,6 +12,9 @@ object GolfConstants {
 
     var debugToolsEnabled = true
 
+    const val DEBUG_FORCE_NEW_GAME_SEED = false
+    const val DEBUG_FORCED_NEW_GAME_SEED = 1849131108
+
     fun holeCountFor(mode: String): Int = when (mode) {
         "5" -> 5
         "3" -> 3
