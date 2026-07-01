@@ -119,7 +119,7 @@ import com.playerio.PlayerIO
 import com.playerio.PlayerIOError
 import kotlin.math.min
 import androidx.core.graphics.drawable.toDrawable
-import com.google.android.vending.licensing.util.Base64
+import android.util.Base64
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -1369,7 +1369,10 @@ class Crazy8Activity : ComponentActivity() {
 
                         val bytes = message.getByteArray(1)
                         if (CRAZY8_VERBOSE_LOGS) {
-                            OpenPigeonLog.w("bytes", Base64.encode(bytes))
+                            OpenPigeonLog.w(
+                                "bytes",
+                                Base64.encodeToString(bytes, Base64.NO_WRAP)
+                            )
                         }
                         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
                         // Vitalii Zlotskii is very good at cryptography, as showed off here...
