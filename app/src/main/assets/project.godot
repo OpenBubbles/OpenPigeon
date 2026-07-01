@@ -16,7 +16,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 config/name="OpenPigeon Games"
 run/main_scene="uid://cj7d2jqu5r5ym"
-config/features=PackedStringArray("4.6", "Mobile")
+config/features=PackedStringArray("4.7", "Mobile")
 boot_splash/image="uid://b2iwsnhjqswss"
 config/icon="res://icon.svg"
 
