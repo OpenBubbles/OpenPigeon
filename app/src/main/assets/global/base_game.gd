@@ -27,12 +27,15 @@ var game_settings_category: String = ""
 func _ready() -> void:
 	if Engine.has_singleton("OpenPigeonMedia"):
 		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
+
 	GameUtils.start_music(self, _get_music_stream(), mediaPlugin)
 
 	if is_instance_valid(settings_button) and not settings_button.pressed.is_connected(_on_settings_button_pressed):
 		settings_button.pressed.connect(_on_settings_button_pressed)
+
 	if is_instance_valid(rules_button) and not rules_button.pressed.is_connected(_on_rules_button_pressed):
 		rules_button.pressed.connect(_on_rules_button_pressed)
+
 	if is_instance_valid(dot_timer) and not dot_timer.timeout.is_connected(_on_dot_timer_timeout):
 		dot_timer.timeout.connect(_on_dot_timer_timeout)
 
@@ -40,18 +43,25 @@ func _ready() -> void:
 		appPlugin = Engine.get_singleton("AppPlugin")
 	else:
 		appPlugin = null
-		
+
 	if appPlugin:
-		appPlugin.connect("set_game_data", _set_game_data)
+		var set_game_data_callable := Callable(self, "_set_game_data")
+
+		if not appPlugin.is_connected("set_game_data", set_game_data_callable):
+			appPlugin.connect("set_game_data", set_game_data_callable)
+
 		my_uuid = appPlugin.getSenderUUID()
-		appPlugin.onReady()
 	else:
 		my_uuid = DEV_UUID
+		
+	_on_game_ready()
+
+	if appPlugin:
+		appPlugin.onReady()
+	else:
 		var dev := _get_dev_data()
 		if dev != "":
 			_set_game_data(dev)
-
-	_on_game_ready()
 
 func _exit_tree() -> void:
 	GameUtils.stop_music(self)

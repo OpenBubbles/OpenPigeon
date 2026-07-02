@@ -54,9 +54,13 @@ var sent_tween: Tween
 var send_button_target_y_position = -1
 const BUTTON_OFFSCREEN_OFFSET = 100
 const STAR_POINT_SCENE = preload("res://reversi/StarPoint.tscn")
+const CELL_SCENE = preload("res://reversi/Cell.tscn")
 const PIECE_TEX := preload("res://reversi/reversi_tile.png")
 const MUSIC_STREAM := preload("res://global/audio/reversi.ogg")
 const PIECE_PADDING := 6
+
+var piece_material_cache: ShaderMaterial = null
+var highlight_texture_cache: Texture2D = null
 
 func _make_piece_material() -> ShaderMaterial:
 	var sh := Shader.new()
@@ -64,7 +68,7 @@ func _make_piece_material() -> ShaderMaterial:
 shader_type canvas_item;
 
 // Keeps highlights when modulating to black.
-uniform float preserve_highlight := 0.65;
+uniform float preserve_highlight = 0.15;
 
 void fragment() {
 	vec4 base = texture(TEXTURE, UV);
@@ -86,6 +90,17 @@ void fragment() {
 	var mat := ShaderMaterial.new()
 	mat.shader = sh
 	return mat
+	
+func _get_piece_material() -> ShaderMaterial:
+	if piece_material_cache == null:
+		piece_material_cache = _make_piece_material()
+	return piece_material_cache
+
+
+func _get_highlight_texture() -> Texture2D:
+	if highlight_texture_cache == null:
+		highlight_texture_cache = create_radial_gradient_texture(64)
+	return highlight_texture_cache
 	
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
@@ -126,15 +141,23 @@ func _apply_bg_for_dark(is_dark: bool) -> void:
 func setup_board_structure():
 	if not grid:
 		return
+
+	for child in grid.get_children():
+		grid.remove_child(child)
+		child.queue_free()
+
 	board.clear()
+
 	for y in range(BOARD_SIZE):
 		board.append([])
+
 		for x in range(BOARD_SIZE):
-			var cell_scene = preload("res://reversi/Cell.tscn")
-			var cell = cell_scene.instantiate()
+			var cell = CELL_SCENE.instantiate()
+
 			if cell:
 				grid.add_child(cell)
 				board[y].append(cell)
+
 				cell.set_meta("pos", Vector2i(x, y))
 				cell.pressed.connect(on_cell_pressed.bind(x, y))
 
@@ -142,7 +165,7 @@ func setup_board_structure():
 
 				var highlight = cell.find_child("Highlight")
 				if highlight and highlight is TextureRect:
-					highlight.texture = create_radial_gradient_texture(64)
+					highlight.texture = _get_highlight_texture()
 					(highlight as TextureRect).mouse_filter = Control.MOUSE_FILTER_IGNORE
 					(highlight as TextureRect).z_index = 2
 					highlight.visible = false
@@ -152,7 +175,6 @@ func setup_board_structure():
 					temp_label.visible = false
 			else:
 				board[y].append(null)
-	dot_timer.timeout.connect(_on_dot_timer_timeout)
 
 func calculate_button_target_position():
 	var grid_global_bottom_y = grid.get_global_position().y + grid.size.y
@@ -263,7 +285,7 @@ func _ensure_piece_nodes(cell: Control) -> void:
 		piece.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		piece.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		piece.z_index = 0
-		piece.material = _make_piece_material()
+		piece.material = _get_piece_material()
 
 		piece.ignore_texture_size = true
 		piece.custom_minimum_size = Vector2.ZERO
@@ -288,7 +310,7 @@ func _ensure_piece_nodes(cell: Control) -> void:
 		tpiece.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		tpiece.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		tpiece.z_index = 1
-		tpiece.material = _make_piece_material()
+		tpiece.material = _get_piece_material()
 
 		tpiece.ignore_texture_size = true
 		tpiece.custom_minimum_size = Vector2.ZERO
