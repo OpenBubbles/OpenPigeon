@@ -22,6 +22,9 @@ var board_size := GRID_SQUARES + 1
 @export var TILE_TEXTURE_PATH := "res://gomoku/gomoku_tile.png"
 const TILE_PX := 40
 const SNAP_PX := 10.0
+const BOARD_TILE_Z := 75
+const LIFTED_TILE_Z := 90
+const DUST_Z := 65
 var _is_dragging := false
 var _press_global := Vector2.ZERO
 const DRAG_THRESHOLD := 6.0
@@ -240,6 +243,9 @@ func _set_game_data(raw_text: String) -> void:
 			" stones=", placed_from_map
 		])
 
+	var pending_incoming_move := Vector2i(-1, -1)
+	var pending_incoming_stone := 0
+
 	if move_str != "":
 		var parts: PackedStringArray = move_str.split(",", false)
 		if parts.size() >= 3:
@@ -249,17 +255,28 @@ func _set_game_data(raw_text: String) -> void:
 			var mp: int = int(parts[2])
 
 			if _grid_in_bounds(gg) and board_state[gg.y][gg.x] == 0:
-				_place_stone_direct(gg, mp)
-				board_state[gg.y][gg.x] = mp
-				moves.append({"x": gg.x, "y": gg.y, "p": mp})
-				_current_move = gg
+				if _is_opponent_stone_value(mp):
+					pending_incoming_move = gg
+					pending_incoming_stone = mp
+					_ui_gesture_block = true
 
-				OpLog.event(LOG_TAG, [
-					"incoming_move_applied proto_row=", row,
-					" proto_col=", col,
-					" grid=", gg,
-					" p=", mp
-				])
+					OpLog.event(LOG_TAG, [
+						"incoming_move_pending_animation proto_row=", row,
+						" proto_col=", col,
+						" grid=", gg,
+						" p=", mp
+					])
+				else:
+					_place_stone_direct(gg, mp)
+					moves.append({"x": gg.x, "y": gg.y, "p": mp})
+					_current_move = gg
+
+					OpLog.event(LOG_TAG, [
+						"incoming_move_applied_direct proto_row=", row,
+						" proto_col=", col,
+						" grid=", gg,
+						" p=", mp
+					])
 			else:
 				OpLog.w(LOG_TAG, [
 					"incoming_move_rejected move=", move_str,
@@ -270,12 +287,21 @@ func _set_game_data(raw_text: String) -> void:
 		else:
 			OpLog.w(LOG_TAG, ["bad_incoming_move move=", move_str])
 
+	if pending_incoming_stone != 0:
+		await _animate_incoming_move_from_opp_bowl(
+			pending_incoming_move,
+			pending_incoming_stone
+		)
+
 	if winner_payload != "":
 		OpLog.event(LOG_TAG, ["winner_payload_received payload=", winner_payload])
 		_apply_winner_payload(winner_payload, p1_id, p2_id)
 		return
 
 	game_ended = check_win()
+
+	if not game_ended:
+		_current_move = Vector2i(-1, -1)
 
 	if game_ended:
 		stop_waiting_animation()
@@ -343,6 +369,19 @@ func _nearest_grid_center(local: Vector2) -> Dictionary:
 	var gy := clampi(roundi((local.y - area.position.y) / s.y), 0, board_size-1)
 	var c := Vector2(area.position.x + gx*s.x, area.position.y + gy*s.y)
 	return {"g": Vector2i(gx,gy), "pos": c, "dist": c.distance_to(local)}
+
+func _has_active_local_move() -> bool:
+	return _has_uncommitted_move and _current_move.x >= 0 and _current_move.y >= 0
+	
+func _stone_value_for_player(player_num: int) -> int:
+	return 2 if player_num == 1 else 1
+
+
+func _is_opponent_stone_value(stone_value: int) -> bool:
+	if spectator_mode:
+		return false
+
+	return stone_value != _stone_value_for_player(player)
 
 func _grid_in_bounds(g: Vector2i) -> bool:
 	return g.x >= 0 and g.x < board_size and g.y >= 0 and g.y < board_size
@@ -498,7 +537,10 @@ func _drop_active_tile_to(final_pos: Vector2) -> void:
 		if is_instance_valid(_active_tile):
 			_set_tile_offsets(_active_tile, final_pos.x, final_pos.y)
 			_active_tile.scale = Vector2.ONE
-			_active_tile.z_index = 75
+			_active_tile.z_index = BOARD_TILE_Z
+
+			var center := final_pos + Vector2(TILE_PX * 0.5, TILE_PX * 0.5)
+			_spawn_drop_dust(center)
 
 		_active_tile_lifted = false
 		_haptic_explosion(0.25, 18)
@@ -533,7 +575,10 @@ func _animate_active_tile_to(final_pos: Vector2, lift_move: bool) -> void:
 		if is_instance_valid(_active_tile):
 			_set_tile_offsets(_active_tile, final_pos.x, final_pos.y)
 			_active_tile.scale = Vector2.ONE
-			_active_tile.z_index = 75
+			_active_tile.z_index = BOARD_TILE_Z
+
+			var center := final_pos + Vector2(TILE_PX * 0.5, TILE_PX * 0.5)
+			_spawn_drop_dust(center)
 
 		if lift_move:
 			_haptic_explosion(0.32, 22)
@@ -545,11 +590,187 @@ func _set_tile_offsets(t: TextureRect, left: float, top: float) -> void:
 	t.offset_left = left; t.offset_top = top; t.offset_right = left + TILE_PX; t.offset_bottom = top + TILE_PX
 
 func _prepare_tile_for_board(tile: TextureRect, is_black: bool) -> TextureRect:
-	if tile == null: 
+	if tile == null:
 		tile = _make_tile(is_black)
+
 	tile.texture = _tile_tex
-	tile = tile
+	tile.expand_mode = TextureRect.EXPAND_KEEP_SIZE
+	tile.ignore_texture_size = true
+	tile.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tile.custom_minimum_size = Vector2(TILE_PX, TILE_PX)
+	tile.size = Vector2(TILE_PX, TILE_PX)
+	tile.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
+	tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tile.z_as_relative = false
+	tile.z_index = BOARD_TILE_Z
+	tile.scale = Vector2.ONE
+	tile.modulate = Color(0.139, 0.139, 0.139, 1.0) if is_black else Color.WHITE
+
 	return tile
+	
+func _take_tile_from_bowl_for_board(bowl: Control, is_black: bool) -> Dictionary:
+	if is_instance_valid(bowl):
+		for c in bowl.get_children():
+			if c is TextureRect:
+				var tile := c as TextureRect
+				var start_pos := _root_local_from_global(tile.get_global_rect().position)
+
+				bowl.remove_child(tile)
+
+				return {
+					"tile": tile,
+					"start": start_pos
+				}
+
+	var fallback_tile := _make_tile(is_black)
+	var fallback_start := Vector2.ZERO
+
+	if is_instance_valid(bowl):
+		var bowl_rect := bowl.get_global_rect()
+		var bowl_center_global := bowl_rect.position + bowl_rect.size * 0.5
+		fallback_start = _root_local_from_global(bowl_center_global) - Vector2(TILE_PX * 0.5, TILE_PX * 0.5)
+
+	return {
+		"tile": fallback_tile,
+		"start": fallback_start
+	}
+
+
+func _animate_incoming_move_from_opp_bowl(g: Vector2i, p: int) -> void:
+	if not _grid_in_bounds(g):
+		OpLog.w(LOG_TAG, ["incoming_animation_blocked out_of_bounds grid=", g, " p=", p])
+		_ui_gesture_block = false
+		return
+
+	if board_state[g.y][g.x] != 0:
+		OpLog.w(LOG_TAG, [
+			"incoming_animation_blocked occupied grid=", g,
+			" p=", p,
+			" cell=", board_state[g.y][g.x]
+		])
+		_ui_gesture_block = false
+		return
+
+	var is_black := p == 2
+	var taken := _take_tile_from_bowl_for_board(OppBowl, is_black)
+
+	var tile := taken["tile"] as TextureRect
+	var start_pos := taken["start"] as Vector2
+
+	tile = _prepare_tile_for_board(tile, is_black)
+
+	if tile.get_parent() != null:
+		tile.get_parent().remove_child(tile)
+
+	_board_tiles_root.add_child(tile)
+
+	_set_tile_offsets(tile, start_pos.x, start_pos.y)
+	tile.z_index = LIFTED_TILE_Z
+	tile.scale = Vector2(0.92, 0.92)
+
+	var center := _grid_to_pos(g)
+	var final_pos := Vector2(center.x - TILE_PX * 0.5, center.y - TILE_PX * 0.5)
+
+	var tw := create_tween().set_parallel(false)
+
+	tw.tween_property(
+		tile,
+		"position",
+		final_pos + Vector2(0, -18.0),
+		0.26
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	tw.tween_property(
+		tile,
+		"position",
+		final_pos,
+		0.12
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+
+	tw.parallel().tween_property(
+		tile,
+		"scale",
+		Vector2.ONE,
+		0.12
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+
+	await tw.finished
+
+	if is_instance_valid(tile):
+		_set_tile_offsets(tile, final_pos.x, final_pos.y)
+		tile.scale = Vector2.ONE
+		tile.z_index = BOARD_TILE_Z
+
+	board_state[g.y][g.x] = p
+	moves.append({"x": g.x, "y": g.y, "p": p})
+	_current_move = g
+
+	_spawn_drop_dust(center)
+	_haptic_explosion(0.25, 18)
+	_top_up_bowl(OppBowl)
+
+	_ui_gesture_block = false
+
+	OpLog.event(LOG_TAG, [
+		"incoming_move_animation_finished grid=", g,
+		" p=", p
+	])
+	
+func _spawn_drop_dust(center: Vector2) -> void:
+	if not is_instance_valid(_board_tiles_root):
+		return
+
+	var dust := DropDust.new()
+	dust.setup()
+
+	_board_tiles_root.add_child(dust)
+
+	dust.z_as_relative = false
+	dust.z_index = DUST_Z
+	dust.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dust.position = center - dust.size * 0.5 + Vector2(0, TILE_PX * 0.32)
+	dust.scale = Vector2(0.65, 0.50)
+	dust.modulate.a = 0.0
+
+	var start_pos := dust.position
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+
+	tw.tween_property(
+		dust,
+		"modulate:a",
+		1.0,
+		0.05
+	)
+
+	tw.tween_property(
+		dust,
+		"scale",
+		Vector2(1.25, 0.90),
+		0.20
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+	tw.tween_property(
+		dust,
+		"position",
+		start_pos + Vector2(0, 4.0),
+		0.20
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+	tw.set_parallel(false)
+
+	tw.tween_property(
+		dust,
+		"modulate:a",
+		0.0,
+		0.16
+	)
+
+	tw.tween_callback(func():
+		if is_instance_valid(dust):
+			dust.queue_free()
+	)
 
 func _place_random_in_bowl(bowl: Control, t: TextureRect) -> void:
 	var sz := (bowl.size if bowl.size != Vector2.ZERO else bowl.get_rect().size)
@@ -620,7 +841,7 @@ func _place_or_move_active_to(g: Vector2i, from_drag: bool = false) -> void:
 	if not _grid_in_bounds(g):
 		return
 
-	if _current_move == g:
+	if _has_active_local_move() and _current_move == g:
 		_has_uncommitted_move = true
 		_show_send_button()
 		_update_place_hint_visibility()
@@ -638,7 +859,7 @@ func _place_or_move_active_to(g: Vector2i, from_drag: bool = false) -> void:
 
 	var lift_move := _current_move.x >= 0 and _current_move.y >= 0 and is_instance_valid(_active_tile) and not from_drag
 
-	if _current_move.x >= 0 and _current_move.y >= 0:
+	if _has_active_local_move():
 		board_state[_current_move.y][_current_move.x] = 0
 
 	_ensure_active_tile()
@@ -990,13 +1211,16 @@ func _compose_current_map_string() -> String:
 
 func _compose_lagged_map_string() -> String:
 	var s := ""
+
 	for row in range(0, board_size):
 		for col in range(0, board_size):
 			var g := _proto_to_grid(row, col, board_size)
-			if g == _current_move:
+
+			if _has_active_local_move() and g == _current_move:
 				s += "0"
 			else:
 				s += str(board_state[g.y][g.x])
+
 	return s
 	
 func _find_five_or_more(p: int) -> Array:
@@ -1220,7 +1444,7 @@ func send_game() -> void:
 	var proto := _grid_to_proto(_current_move, board_size)
 	var send_row := proto.x
 	var send_col := proto.y
-	var p := 1 if player == 1 else 2
+	var p := 2 if player == 1 else 1
 
 	var payload := {
 		"map": _compose_lagged_map_string(),
@@ -1232,6 +1456,9 @@ func send_game() -> void:
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
 
 	game_ended = check_win()
+	
+	if not game_ended:
+		_current_move = Vector2i(-1, -1)
 
 	if game_ended and win_loss_state != "":
 		payload["winner"] = my_uuid + "|" + win_loss_state
@@ -1447,6 +1674,39 @@ func _update_win_preview_for_current_move() -> void:
 	if is_instance_valid(_win_preview_node):
 		_win_preview_node.coords = _preview_win_line
 		_win_preview_node.queue_redraw()
+		
+class DropDust:
+	extends Control
+
+	var spots: Array = []
+
+	func setup() -> void:
+		size = Vector2(78, 34)
+		pivot_offset = size * 0.5
+
+		spots = [
+			{"p": Vector2(15, 19), "r": 5.5, "a": 0.22},
+			{"p": Vector2(25, 15), "r": 7.0, "a": 0.28},
+			{"p": Vector2(37, 18), "r": 8.0, "a": 0.26},
+			{"p": Vector2(50, 15), "r": 6.5, "a": 0.22},
+			{"p": Vector2(62, 20), "r": 5.0, "a": 0.18},
+			{"p": Vector2(32, 24), "r": 5.0, "a": 0.14},
+			{"p": Vector2(48, 25), "r": 4.5, "a": 0.13}
+		]
+
+		queue_redraw()
+
+	func _draw() -> void:
+		for spot in spots:
+			var p: Vector2 = spot["p"]
+			var r: float = float(spot["r"])
+			var a: float = float(spot["a"])
+
+			draw_circle(
+				p,
+				r,
+				Color(0.48, 0.39, 0.32, a)
+			)
 
 class WinLinePreview:
 	extends Control
