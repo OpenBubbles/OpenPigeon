@@ -14,9 +14,14 @@ var N: int = 5
 @export var hover_width: float = 8.0
 @export var p_colors: Array[Color] = [Color(0.20,0.55,0.81,0.8), Color(0.92,0.13,0.43,0.8)] # P1 blue, P2 magenta
 @export var padding_pct: float = 0.12
-@export var animation_duration: float = 0.15
-@export var box_animation_duration: float = 0.18
+@export var animation_duration: float = 0.16
+@export var box_animation_duration: float = 0.20
+
+var animating_lines := {}
+var line_animation_tweens := {}
+
 var animating_boxes := {}
+var box_animation_tweens := {}
 
 var h_edges: Array = []
 var v_edges: Array = []
@@ -35,6 +40,7 @@ var step: Vector2 = Vector2()
 var hover_edge: Dictionary = {"type":"", "r":-1, "c":-1} # {type:"h"/"v", r, c}
 var temp_mode: bool = false
 var temp_edge: Dictionary = {"type":"", "r":-1, "c":-1}
+var temp_line_draw_progress: float = 0.0
 
 const LOG_TAG := "DotsGrid"
 var DEBUG_DOTS_GRID := false
@@ -81,9 +87,22 @@ func _reset(n: int) -> void:
 	edges_claimed = 0
 	total_edges = N * (N - 1) * 2
 	hover_edge = {"type":"", "r":-1, "c":-1}
+	for tw in line_animation_tweens.values():
+		if tw is Tween and (tw as Tween).is_running():
+			(tw as Tween).kill()
+
+	for tw in box_animation_tweens.values():
+		if tw is Tween and (tw as Tween).is_running():
+			(tw as Tween).kill()
+
+	animating_lines.clear()
+	line_animation_tweens.clear()
 	animating_boxes.clear()
+	box_animation_tweens.clear()
+
 	temp_mode = false
-	temp_edge = {"kind":"", "r":-1, "c":-1}
+	temp_edge = {"type":"", "r":-1, "c":-1, "owner": player}
+	temp_line_draw_progress = 0.0
 	emit_signal("temp_line_changed", false)
 
 	_on_resized()
@@ -100,6 +119,20 @@ func _reset(n: int) -> void:
 func _is_box_animating(br: int, bc: int) -> bool:
 	return animating_boxes.has(Vector2i(bc, br))
 
+
+func _edge_anim_key(kind: String, r: int, c: int) -> String:
+	return "%s:%d:%d" % [kind, r, c]
+
+
+func _edge_anim_progress(kind: String, r: int, c: int) -> float:
+	var key := _edge_anim_key(kind, r, c)
+	return float(animating_lines.get(key, 1.0))
+
+
+func _box_anim_progress(br: int, bc: int) -> float:
+	var key := Vector2i(bc, br)
+	return float(animating_boxes.get(key, 1.0))
+
 func _on_resized() -> void:
 	var r: Rect2 = get_rect()
 	var side: float = min(r.size.x, r.size.y)
@@ -112,7 +145,7 @@ func _on_resized() -> void:
 	queue_redraw()
 	
 func has_temp_line() -> bool:
-	return String(temp_edge["type"]) != ""
+	return String(temp_edge.get("type", "")) != ""
 	
 func _box_topdown_to_bl(br: int, bc: int) -> Array[int]:
 	return [bc, (N - 2) - br]
@@ -129,12 +162,16 @@ func get_temp_line() -> Array:
 func clear_temp_line() -> void:
 	if has_temp_line():
 		OpLog.d(LOG_TAG, ["clear_temp_line previous=", temp_edge])
+
 	if is_instance_valid($AnimationLine):
 		$AnimationLine.visible = false
+
 	_stop_temp_pulse()
 
 	temp_mode = false
-	temp_edge = {"kind":"", "r":-1, "c":-1}
+	temp_edge = {"type":"", "r":-1, "c":-1, "owner": player}
+	temp_line_draw_progress = 0.0
+
 	emit_signal("temp_line_changed", false)
 	queue_redraw()
 
@@ -423,45 +460,66 @@ func _make_temp_line2d(col: Color, width: float) -> Line2D:
 	add_child(ln)
 	return ln
 
-
 func _play_box_x_animation(br: int, bc: int, box_owner: int) -> void:
-	var ends := _x_endpoints_for_box(br, bc)
-	var col := p_colors[box_owner - 1]
-	col.a = 0.8
-	var w := line_width * 0.75
-
 	var key := Vector2i(bc, br)
-	animating_boxes[key] = true
 
-	var l1 := _make_temp_line2d(col, w)
-	l1.points = [ends["a0"], ends["a0"]]
+	if box_animation_tweens.has(key):
+		var old_tw: Variant = box_animation_tweens[key]
+		if old_tw is Tween and (old_tw as Tween).is_running():
+			(old_tw as Tween).kill()
 
-	var l2 := _make_temp_line2d(col, w)
-	l2.points = [ends["b0"], ends["b0"]]
+	animating_boxes[key] = 0.0
+	queue_redraw()
 
-	var t := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	t.tween_method(
-		func(p):
-			if is_instance_valid(l1):
-				l1.points[1] = p,
-		ends["a0"], ends["a1"], box_animation_duration
+	var tw := create_tween()
+	box_animation_tweens[key] = tw
+
+	tw.tween_method(
+		func(v: float):
+			animating_boxes[key] = v
+			queue_redraw(),
+		0.0,
+		1.0,
+		box_animation_duration
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+	tw.tween_callback(func():
+		animating_boxes.erase(key)
+		box_animation_tweens.erase(key)
+		queue_redraw()
 	)
+	
+func _play_committed_edge_animation(
+	kind: String,
+	r: int,
+	c: int
+) -> void:
+	var key := _edge_anim_key(kind, r, c)
 
-	t.tween_callback(func():
-		if is_instance_valid(l2):
-			var t2 := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-			t2.tween_method(
-				func(p):
-					if is_instance_valid(l2):
-						l2.points[1] = p,
-				ends["b0"], ends["b1"], box_animation_duration
-			)
-			t2.tween_callback(func():
-				if is_instance_valid(l1): l1.queue_free()
-				if is_instance_valid(l2): l2.queue_free()
-				animating_boxes.erase(key)
-				queue_redraw()
-			)
+	if line_animation_tweens.has(key):
+		var old_tw: Variant = line_animation_tweens[key]
+		if old_tw is Tween and (old_tw as Tween).is_running():
+			(old_tw as Tween).kill()
+
+	animating_lines[key] = 0.0
+	queue_redraw()
+
+	var tw := create_tween()
+	line_animation_tweens[key] = tw
+
+	tw.tween_method(
+		func(v: float):
+			animating_lines[key] = v
+			queue_redraw(),
+		0.0,
+		1.0,
+		animation_duration
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+	tw.tween_callback(func():
+		animating_lines.erase(key)
+		line_animation_tweens.erase(key)
+		queue_redraw()
 	)
 
 func _is_box_complete(br: int, bc: int) -> bool:
@@ -494,8 +552,6 @@ func commit_temp_line_now() -> bool:
 		" c=", c,
 		" player=", player
 	])
-
-	_play_line_animation(k, r, c, player, false)
 
 	if k == "h":
 		h_edges[r][c] = player
@@ -555,17 +611,41 @@ func _draw() -> void:
 		for c2: int in range(N - 1):
 			var o: int = h_edges[r2][c2]
 			if o != -1:
-				_draw_edge("h", r2, c2, p_colors[o - 1], line_width)
+				_draw_edge(
+					"h",
+					r2,
+					c2,
+					p_colors[o - 1],
+					line_width,
+					_edge_anim_progress("h", r2, c2)
+				)
+
 	for r3: int in range(N - 1):
 		for c3: int in range(N):
 			var o2: int = v_edges[r3][c3]
 			if o2 != -1:
-				_draw_edge("v", r3, c3, p_colors[o2 - 1], line_width)
+				_draw_edge(
+					"v",
+					r3,
+					c3,
+					p_colors[o2 - 1],
+					line_width,
+					_edge_anim_progress("v", r3, c3)
+				)
+
+	_draw_temp_edge()
+
 	for r4: int in range(N - 1):
 		for c4: int in range(N - 1):
 			var box_owner: int = boxes[r4][c4]
-			if box_owner != -1 and not _is_box_animating(r4, c4):
-				_draw_box_x(r4, c4, p_colors[box_owner - 1])
+			if box_owner != -1:
+				_draw_box_x(
+					r4,
+					c4,
+					p_colors[box_owner - 1],
+					_box_anim_progress(r4, c4)
+				)
+
 	for r: int in range(N):
 		for c: int in range(N):
 			var p: Vector2 = _dot_pos(c, r)
@@ -584,13 +664,67 @@ func _edge_endpoints(kind: String, r: int, c: int) -> Array[Vector2]:
 		var p1v: Vector2 = _dot_pos(c, r+1)
 		return [p0v, p1v]
 
-func _draw_edge(kind: String, r: int, c: int, col: Color, width: float) -> void:
+func _draw_edge(
+	kind: String,
+	r: int,
+	c: int,
+	col: Color,
+	width: float,
+	progress: float = 1.0
+) -> void:
 	var pts: Array = _edge_endpoints(kind, r, c)
 	var a: Vector2 = pts[0]
 	var b: Vector2 = pts[1]
 	var dir: Vector2 = (b - a).normalized()
 	var inset: Vector2 = dir * dot_radius * 0.9
-	draw_line(a + inset, b - inset, col, width, true)
+
+	var start_pos := a + inset
+	var end_pos := b - inset
+	var p := clampf(progress, 0.0, 1.0)
+	var shown_end := start_pos.lerp(end_pos, p)
+
+	draw_line(start_pos, shown_end, col, width, true)
+	
+func _draw_temp_edge() -> void:
+	if not has_temp_line():
+		return
+
+	var kind := String(temp_edge.get("type", ""))
+	var r := int(temp_edge.get("r", -1))
+	var c := int(temp_edge.get("c", -1))
+	var owner := clampi(int(temp_edge.get("owner", player)), 1, 2)
+
+	if kind != "h" and kind != "v":
+		return
+
+	if kind == "h":
+		if r < 0 or r >= N or c < 0 or c >= N - 1:
+			return
+	elif kind == "v":
+		if r < 0 or r >= N - 1 or c < 0 or c >= N:
+			return
+
+	var pts: Array[Vector2] = _edge_endpoints(kind, r, c)
+	var a: Vector2 = pts[0]
+	var b: Vector2 = pts[1]
+
+	var dir: Vector2 = (b - a).normalized()
+	var inset: Vector2 = dir * dot_radius * 0.9
+
+	var start_pos := a + inset
+	var end_pos := b - inset
+	var shown_end := start_pos.lerp(end_pos, clampf(temp_line_draw_progress, 0.0, 1.0))
+
+	var col: Color = p_colors[owner - 1]
+	col.a = 0.95
+
+	draw_line(
+		start_pos,
+		shown_end,
+		col,
+		line_width,
+		true
+	)
 
 func _shrink_toward(center: Vector2, p: Vector2, shrink: float) -> Vector2:
 	var v: Vector2 = p - center
@@ -599,21 +733,47 @@ func _shrink_toward(center: Vector2, p: Vector2, shrink: float) -> Vector2:
 		return p
 	return center + v.normalized() * max(0.0, vec_len - shrink)
 
-func _draw_box_x(br: int, bc: int, col: Color) -> void:
-	var tl: Vector2 = _dot_pos(bc,    br)
-	var top_right: Vector2 = _dot_pos(bc+1, br)
-	var bl: Vector2 = _dot_pos(bc,    br+1)
-	var brp: Vector2 = _dot_pos(bc+1, br+1)
+func _draw_box_x(
+	br: int,
+	bc: int,
+	col: Color,
+	progress: float = 1.0
+) -> void:
+	var tl: Vector2 = _dot_pos(bc, br)
+	var top_right: Vector2 = _dot_pos(bc + 1, br)
+	var bl: Vector2 = _dot_pos(bc, br + 1)
+	var brp: Vector2 = _dot_pos(bc + 1, br + 1)
 	var shrink: float = min(step.x, step.y) * 0.22
 	var center: Vector2 = (tl + brp) * 0.5
 
-	var a0: Vector2 = _shrink_toward(center, tl,  shrink)
+	var a0: Vector2 = _shrink_toward(center, tl, shrink)
 	var a1: Vector2 = _shrink_toward(center, brp, shrink)
-	var b0: Vector2 = _shrink_toward(center, top_right,  shrink)
-	var b1: Vector2 = _shrink_toward(center, bl,  shrink)
+	var b0: Vector2 = _shrink_toward(center, top_right, shrink)
+	var b1: Vector2 = _shrink_toward(center, bl, shrink)
 
-	draw_line(a0, a1, col, line_width * 0.75, true)
-	draw_line(b0, b1, col, line_width * 0.75, true)
+	var p := clampf(progress, 0.0, 1.0)
+
+	# Draw first slash, then second slash with a slight overlap.
+	var p1 := clampf(p / 0.58, 0.0, 1.0)
+	var p2 := clampf((p - 0.35) / 0.65, 0.0, 1.0)
+
+	if p1 > 0.0:
+		draw_line(
+			a0,
+			a0.lerp(a1, p1),
+			col,
+			line_width * 0.75,
+			true
+		)
+
+	if p2 > 0.0:
+		draw_line(
+			b0,
+			b0.lerp(b1, p2),
+			col,
+			line_width * 0.75,
+			true
+		)
 
 func load_lines_and_squares_state(lines: Array, squares: Array) -> void:
 	OpLog.i(LOG_TAG, [
@@ -717,14 +877,24 @@ func replay_line_move(move: Array) -> void:
 		])
 		_apply_committed_line(p_owner12, x1, y1, x2, y2)
 		return
-		
-	_play_line_animation(String(m["kind"]), int(m["r"]), int(m["c"]), p_owner12, false)
-	
+
+	var kind := String(m["kind"])
+	var r := int(m["r"])
+	var c := int(m["c"])
+	var completes_box := _would_complete_box(kind, r, c)
+
+	_play_line_animation(kind, r, c, p_owner12, false)
 	_apply_committed_line(p_owner12, x1, y1, x2, y2)
 
 	emit_signal("score_changed", score[0], score[1])
 	emit_signal("turn_changed")
 	queue_redraw()
+
+	var wait_time := animation_duration + 0.02
+	if completes_box:
+		wait_time += box_animation_duration
+
+	await get_tree().create_timer(wait_time).timeout
 	
 func _square_bl_to_topdown(br_bl_x: int, br_bl_y: int) -> Array[int]:
 	return [(N - 2) - br_bl_y, br_bl_x]
@@ -739,46 +909,52 @@ func get_all_claimed_squares() -> Array:
 				out.append([o, int(bl[0]), int(bl[1])])
 	return out
 
-func _play_line_animation(kind: String, r: int, c: int, line_owner: int, is_temp: bool) -> void:
-	var endpoints: Array[Vector2] = _edge_endpoints(kind, r, c)
-	var start_pos: Vector2 = endpoints[0]
-	var end_pos: Vector2 = endpoints[1]
+func _play_line_animation(
+	kind: String,
+	r: int,
+	c: int,
+	line_owner: int,
+	is_temp: bool
+) -> void:
 	var anim_line: Line2D = $AnimationLine
 
-	if anim_line.has_meta("tween"):
-		var old_tween: Tween = anim_line.get_meta("tween")
-		if is_instance_valid(old_tween):
-			old_tween.kill()
+	if is_instance_valid(anim_line):
+		if anim_line.has_meta("tween"):
+			var old_tween: Variant = anim_line.get_meta("tween")
+			if old_tween is Tween and (old_tween as Tween).is_running():
+				(old_tween as Tween).kill()
+
+		anim_line.visible = false
+
 	_stop_temp_pulse()
 
-	anim_line.points = [start_pos, start_pos]
-	var base_col := p_colors[line_owner - 1]
-	anim_line.default_color = base_col
-	anim_line.width = line_width
-	anim_line.visible = true
-
-	_temp_line_base_color = base_col
-
-	var tween := create_tween()
-	tween.tween_method(
-		func(p):
-			if is_instance_valid(anim_line): anim_line.points[1] = p,
-		start_pos, end_pos, animation_duration
-	).set_ease(Tween.EASE_OUT)
-
-	anim_line.set_meta("tween", tween)
-
 	if is_temp:
-		tween.tween_callback(func():
-			if is_instance_valid(anim_line):
-				_start_temp_pulse(anim_line)
+		temp_line_draw_progress = 0.0
+		queue_redraw()
+
+		var temp_tw := create_tween()
+
+		if is_instance_valid(anim_line):
+			anim_line.set_meta("tween", temp_tw)
+
+		temp_tw.tween_method(
+			func(v: float):
+				temp_line_draw_progress = v
+				queue_redraw(),
+			0.0,
+			1.0,
+			animation_duration
+		).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+		temp_tw.tween_callback(func():
+			temp_line_draw_progress = 1.0
+			queue_redraw()
 		)
-	else:
-		tween.tween_callback(func():
-			if is_instance_valid(anim_line):
-				anim_line.visible = false
-		)
-		
+
+		return
+
+	_play_committed_edge_animation(kind, r, c)
+
 func _to_topdown_row(y_bottom_left: int) -> int:
 	return (N - 1) - y_bottom_left
 func _segment_to_edge(x1: int, y1: int, x2: int, y2: int) -> Dictionary:

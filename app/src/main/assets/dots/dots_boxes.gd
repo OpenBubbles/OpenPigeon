@@ -301,7 +301,7 @@ func _load_pre_state_and_replay(replay_str: String) -> void:
 		for move in moves:
 			OpLog.event(LOG_TAG, ["replay_line_move move=", move])
 			await grid.call("replay_line_move", move)
-			await get_tree().create_timer(0.7).timeout
+			await get_tree().create_timer(0.05).timeout
 
 	prev_lines_cache = _get_committed_lines()
 
