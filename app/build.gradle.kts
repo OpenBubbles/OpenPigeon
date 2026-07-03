@@ -36,6 +36,8 @@ val debugGodotAssetsDir = generatedGodotRoot.map { it.dir("debug") }
 val releaseGodotAssetsDir = generatedGodotRoot.map { it.dir("release") }
 val godotExportZip = layout.buildDirectory.file("intermediates/godot/release/godot_export.zip")
 
+val godotAndroidExportPreset = "Android"
+
 fun releaseDateCode(): Int {
     val datePart = SimpleDateFormat("yyMMdd", Locale.US).format(Date())
     val dailyRelease = (project.findProperty("dailyRelease") as String?) ?: "01"
@@ -212,7 +214,7 @@ val prepareGodotDebugAssets by tasks.registering(Sync::class) {
  * import -> export pack -> unzip -> overlay extra files
  */
 val exportGodotRelease by tasks.registering(Exec::class) {
-    description = "Exports the Godot project pack for release."
+    description = "Exports the Godot project pack ZIP for the release build."
     group = "godot"
 
     dependsOn(importGodotAssets)
@@ -221,7 +223,17 @@ val exportGodotRelease by tasks.registering(Exec::class) {
     outputs.file(godotExportZip)
 
     doFirst {
-        godotExportZip.get().asFile.parentFile.mkdirs()
+        val zipFile = godotExportZip.get().asFile
+        zipFile.parentFile.mkdirs()
+
+        if (zipFile.exists()) {
+            zipFile.delete()
+        }
+
+        println("Godot executable: $godotCmd")
+        println("Godot project dir: ${godotProjectDir.asFile.absolutePath}")
+        println("Godot export preset: $godotAndroidExportPreset")
+        println("Godot export zip: ${zipFile.absolutePath}")
     }
 
     commandLine(
@@ -230,9 +242,22 @@ val exportGodotRelease by tasks.registering(Exec::class) {
         "--verbose",
         "--path",
         godotProjectDir.asFile.absolutePath,
-        "--import",
-        "--quit"
+        "--export-pack",
+        godotAndroidExportPreset,
+        godotExportZip.get().asFile.absolutePath
     )
+
+    doLast {
+        val zipFile = godotExportZip.get().asFile
+
+        if (!zipFile.exists()) {
+            throw GradleException(
+                "Godot export did not create ${zipFile.absolutePath}. " +
+                        "Check that export templates are installed and that " +
+                        "src/main/assets/export_presets.cfg has a preset named '$godotAndroidExportPreset'."
+            )
+        }
+    }
 }
 
 val prepareGodotReleaseAssets by tasks.registering(Sync::class) {
