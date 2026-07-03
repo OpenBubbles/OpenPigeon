@@ -43,7 +43,11 @@ add_library(${CMAKE_PROJECT_NAME} SHARED
         golf/GolfTable.cpp
         golf/GolfBall.cpp
         golf/GolfContactListener.cpp
-        golf/GolfJNI.cpp)
+        golf/GolfJNI.cpp
+        shuffle/ShuffleTable.cpp
+        shuffle/ShufflePuck.cpp
+        shuffle/ShuffleContactListener.cpp
+        shuffle/ShuffleJNI.cpp)
 
 set_source_files_properties(
         knockout/KnockoutTable.cpp
@@ -54,6 +58,10 @@ set_source_files_properties(
         golf/GolfBall.cpp
         golf/GolfContactListener.cpp
         golf/GolfJNI.cpp
+        shuffle/ShuffleTable.cpp
+        shuffle/ShufflePuck.cpp
+        shuffle/ShuffleContactListener.cpp
+        shuffle/ShuffleJNI.cpp
         PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=fast"
 )
 

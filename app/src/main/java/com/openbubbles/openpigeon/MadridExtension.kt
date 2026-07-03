@@ -92,6 +92,7 @@ import kotlin.math.roundToInt
 import androidx.core.content.edit
 import com.openbubbles.openpigeon.golf.GolfGame
 import com.openbubbles.openpigeon.pool.NineBallGame
+import com.openbubbles.openpigeon.shuffle.ShuffleGame
 
 private const val KEYBOARD_DEFAULT_HEIGHT_DP = 300
 private const val KEYBOARD_EXPANDED_HEIGHT_DP = 380
@@ -123,6 +124,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             Crazy8Game(),
             ConnectGame(),
             PaintGame(),
+            ShuffleGame(),
             TanksGame(),
             FillerGame(),
             CheckersGame(),
