@@ -57,7 +57,7 @@ android {
 
         androidResources {
             ignoreAssetsPattern =
-                "!.svn:!.git:!.gitignore:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"
+                "!.svn:!.git:!.gitignore:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~:!~*"
         }
 
         buildConfigField("String", "PIO_SHARED_SECRET", "\"${props["PIO_SHARED_SECRET"]}\"")
@@ -178,9 +178,20 @@ val importGodotAssets by tasks.registering(Exec::class) {
 
     inputs.files(fileTree(godotProjectDir) {
         exclude(".godot/**")
+        exclude("addons/**/bin/~*")
     }).withPathSensitivity(PathSensitivity.RELATIVE)
 
     outputs.dir(godotHiddenFolder)
+
+    doFirst {
+        fileTree(godotProjectDir) {
+            include("addons/**/bin/~*")
+        }.forEach { file ->
+            if (file.exists() && !file.delete()) {
+                logger.warn("Unable to delete temporary Godot file: ${file.absolutePath}. It may be in use.")
+            }
+        }
+    }
 
     commandLine(
         godotCmd,
@@ -201,12 +212,21 @@ val prepareGodotDebugAssets by tasks.registering(Sync::class) {
 
     dependsOn(importGodotAssets)
 
-    from(godotProjectDir)
+    from(godotProjectDir) {
+        exclude("addons/**/bin/~*")
+        exclude("addons/**/bin/*.dll")
+        exclude("addons/**/bin/*.dylib")
+        exclude("addons/**/bin/*.exe")
+        exclude("addons/**/bin/*.pdb")
+        exclude("addons/**/bin/*windows*")
+        exclude("addons/**/bin/*macos*")
+        exclude("addons/**/bin/*linux*")
+    }
+
     into(debugGodotAssetsDir)
 
     includeEmptyDirs = false
 }
-
 /**
  * Release pipeline:
  * import -> export pack -> unzip -> overlay extra files
@@ -217,7 +237,9 @@ val exportGodotRelease by tasks.registering(Exec::class) {
 
     dependsOn(importGodotAssets)
 
-    inputs.dir(godotProjectDir).withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(fileTree(godotProjectDir) {
+        exclude("addons/**/bin/~*")
+    }).withPathSensitivity(PathSensitivity.RELATIVE)
     outputs.file(godotExportZip)
 
     doFirst {
@@ -230,7 +252,9 @@ val exportGodotRelease by tasks.registering(Exec::class) {
         "--verbose",
         "--path",
         godotProjectDir.asFile.absolutePath,
-        "--import",
+        "--export-pack",
+        "Android",              // <-- must match a preset NAME in export_presets.cfg
+        godotExportZip.get().asFile.absolutePath,
         "--quit"
     )
 }

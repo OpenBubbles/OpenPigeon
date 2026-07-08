@@ -429,22 +429,34 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
             canvas.save()
             canvas.concat(transform)
 
-            if (!update(activity.table) && activity.mode == PoolActivity.PoolMode.Playing) {
-                activity.handleFinishPlay()
-            }
+            val nativeMoving = update(activity.table)
 
-            for (ball in activity.poolBalls) {
-                if (!ball.sunk) continue
-                ball.draw(canvas)
+            if (activity.mode == PoolActivity.PoolMode.Playing) {
+                if (!nativeMoving) {
+                    activity.handleFinishPlay()
+                } else {
+                    activity.handleNativeStillMoving()
+                }
             }
 
             drawPockets(canvas)
+
+            for (ball in activity.poolBalls) {
+                if (!ball.inPocket) continue
+                ball.draw(canvas)
+            }
+
             canvas.drawBitmap(bitmap, null, RectF(-0.057f, -0.189f, WORLD_WIDTH, WORLD_HEIGHT), null)
+
+            for (ball in activity.poolBalls) {
+                if (ball.sunk || ball.inPocket) continue
+                ball.drawShadow(canvas)
+            }
 
             drawNineBallTargetRing(canvas)
 
             for (ball in activity.poolBalls) {
-                if (ball.sunk) continue
+                if (ball.sunk || ball.inPocket) continue
                 ball.draw(canvas)
             }
 

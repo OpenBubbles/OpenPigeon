@@ -30,6 +30,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.animation.doOnEnd
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import android.graphics.Paint
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.SettingsSheet
 import com.openbubbles.openpigeon.ui.RulesPopup
@@ -61,6 +62,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Looper
 import android.view.Gravity
 import kotlin.random.Random
+import android.os.SystemClock
 
 class PoolActivity : AppCompatActivity() {
     lateinit var sessionId: String
@@ -181,6 +183,9 @@ class PoolActivity : AppCompatActivity() {
 
         playMusicTrack()
     }
+
+    external fun dumpPoolTable(table: Long): String
+    external fun setPoolDebugTrace(table: Long, enabled: Boolean, everyFrames: Int)
 
     private fun playMusicTrack() {
         releaseMusicPlayer()
@@ -736,18 +741,35 @@ class PoolActivity : AppCompatActivity() {
             }
         }
     }
-    private fun closeCuePopup() {
+    private fun closeCuePopup(force: Boolean = false) {
         runOnUiThread {
-            if (!cuePopupOpen || cuePopupAnimating) return@runOnUiThread
-
             val cueView = findViewById<FrameLayout>(R.id.cueView)
             val cueOverlay = findViewById<FrameLayout>(R.id.cueOverlay)
             val cuePopup = findViewById<FrameLayout>(R.id.cuePopup)
+
+            if (force) {
+                cueOverlay.animate().cancel()
+                cuePopup.animate().cancel()
+
+                cueOverlay.alpha = 0f
+                cueOverlay.visibility = View.GONE
+
+                cuePopup.visibility = View.INVISIBLE
+                cuePopup.scaleX = 1f
+                cuePopup.scaleY = 1f
+
+                cuePopupAnimating = false
+                cuePopupOpen = false
+                return@runOnUiThread
+            }
+
+            if (!cuePopupOpen || cuePopupAnimating) return@runOnUiThread
 
             cuePopupAnimating = true
 
             val sourceLoc = IntArray(2)
             val overlayLoc = IntArray(2)
+
             cueView.getLocationOnScreen(sourceLoc)
             cueOverlay.getLocationOnScreen(overlayLoc)
 
@@ -878,7 +900,7 @@ class PoolActivity : AppCompatActivity() {
                         }
                         .start()
                 }
-                closeCuePopup()
+                closeCuePopup(force = true)
             }
 
             updateNineBallBar()
@@ -1444,11 +1466,22 @@ class PoolActivity : AppCompatActivity() {
                 activity.startNineBallBarRefresh()
             }
 
-            OpenPigeonLog.i("Hitting ball", "Direction: $direction power: $power spinX: $spinX spinY: $spinY scratch: $wasStripes first ${activity.isFirst}")
+            OpenPigeonLog.i(
+                "PoolShot",
+                "shot_start replaying=${activity.replaying} direction=$direction power=$power " +
+                        "spinX=$spinX spinY=$spinY wasStripes=$wasStripes first=${activity.isFirst} " +
+                        "tableBefore=${activity.dumpPoolTable(activity.table)}"
+            )
             if (activity.isNineBall) {
                 activity.nineBallTargetAtShot = activity.lowestNineBallNumber() ?: 9
             }
+
+            activity.markNativeShotStarted(this)
             activity.hitBall(activity.table, 0 /*white*/, direction, power, spinX, spinY, activity.isFirst)
+            OpenPigeonLog.i(
+                "PoolShot",
+                "shot_after_hit tableAfter=${activity.dumpPoolTable(activity.table)}"
+            )
             activity.wasFirst = activity.isFirst
             activity.isFirst = false
         }
@@ -1467,6 +1500,73 @@ class PoolActivity : AppCompatActivity() {
     var skipReplayRequested = false
     var replayWasSkipped = false
     var skipReplayFadeStarted = false
+
+    private val POOL_REPLAY_SHOT_TIMEOUT_MS = 12_000L
+    private var nativeShotStartedAtMs = 0L
+    private var nativeShotSeq = 0
+    private var currentNativeShotDebug = ""
+
+    var poolTraceEnabled = false
+
+    private fun showSkipReplayButton(reason: String) {
+        runOnUiThread {
+            val controls = findViewById<LinearLayout>(R.id.controls)
+            val skipBtn = findViewById<ImageButton>(R.id.skip_replay)
+
+            controls.visibility = View.VISIBLE
+            controls.bringToFront()
+            controls.requestLayout()
+
+            skipBtn.animate().cancel()
+            skipBtn.clearAnimation()
+            skipBtn.alpha = 1f
+            skipBtn.visibility = View.VISIBLE
+            skipBtn.isEnabled = true
+            skipBtn.isClickable = true
+            skipBtn.bringToFront()
+            skipBtn.requestLayout()
+
+            fun logWhenMeasured(attempt: Int) {
+                skipBtn.bringToFront()
+
+                val loc = IntArray(2)
+                skipBtn.getLocationOnScreen(loc)
+
+                OpenPigeonLog.i(
+                    "PoolReplayUi",
+                    "skip_show reason=$reason attempt=$attempt replaying=$replaying requested=$skipReplayRequested " +
+                            "visibility=${skipBtn.visibility} alpha=${skipBtn.alpha} " +
+                            "x=${loc[0]} y=${loc[1]} w=${skipBtn.width} h=${skipBtn.height} " +
+                            "parent=${skipBtn.parent?.javaClass?.simpleName}"
+                )
+
+                if ((skipBtn.width == 0 || skipBtn.height == 0) && attempt < 6) {
+                    controls.requestLayout()
+                    skipBtn.requestLayout()
+                    skipBtn.postDelayed({ logWhenMeasured(attempt + 1) }, 16L)
+                }
+            }
+
+            skipBtn.post {
+                logWhenMeasured(0)
+            }
+        }
+    }
+
+    private fun hideSkipReplayButton(reason: String) {
+        runOnUiThread {
+            val skipBtn = findViewById<ImageButton>(R.id.skip_replay)
+
+            skipBtn.animate().cancel()
+            skipBtn.visibility = View.GONE
+            skipBtn.alpha = 1f
+
+            OpenPigeonLog.i(
+                "PoolReplayUi",
+                "skip_hide reason=$reason replaying=$replaying requested=$skipReplayRequested"
+            )
+        }
+    }
 
     fun animateShoot(power: Float, hit: BallHit) {
         var cancelled = false
@@ -1512,27 +1612,7 @@ class PoolActivity : AppCompatActivity() {
         mode = PoolMode.ReplayAiming
         if (!skipReplayFadeStarted) {
             skipReplayFadeStarted = true
-
-            val controls = findViewById<LinearLayout>(R.id.controls)
-            val skipBtn = findViewById<ImageButton>(R.id.skip_replay)
-
-            runOnUiThread {
-                controls.visibility = View.VISIBLE
-
-                skipBtn.animate().cancel()
-                skipBtn.alpha = 0f
-                skipBtn.visibility = View.VISIBLE
-                skipBtn.bringToFront()
-
-                skipBtn.postDelayed({
-                    if (replaying && !skipReplayRequested) {
-                        skipBtn.animate()
-                            .alpha(1f)
-                            .setDuration(300L)
-                            .start()
-                    }
-                }, 1000L)
-            }
+            showSkipReplayButton("playNextReplay_start")
         }
         renderer.cueRot = replayHits[0].direction
         runOnUiThread { renderer.setCueVisible(true) }
@@ -1555,6 +1635,42 @@ class PoolActivity : AppCompatActivity() {
         cancelAllShots = {
             handler.removeCallbacksAndMessages(null)
         }
+    }
+
+    fun markNativeShotStarted(hit: BallHit) {
+        nativeShotStartedAtMs = SystemClock.uptimeMillis()
+        nativeShotSeq += 1
+
+        currentNativeShotDebug =
+            "seq=$nativeShotSeq replaying=$replaying d=${hit.direction} p=${hit.power} spinX=${hit.spinX} spinY=${hit.spinY} finalBallsLen=${finalBalls.length}"
+
+        OpenPigeonLog.i(
+            "PoolReplay",
+            "native_shot_started $currentNativeShotDebug replayHitsLeft=${replayHits.size}"
+        )
+    }
+
+    fun clearNativeShotWatchdog() {
+        nativeShotStartedAtMs = 0L
+        currentNativeShotDebug = ""
+    }
+
+    fun handleNativeStillMoving() {
+        if (mode != PoolMode.Playing) return
+        if (!replaying) return
+
+        val startedAt = nativeShotStartedAtMs
+        if (startedAt <= 0L) return
+
+        val elapsed = SystemClock.uptimeMillis() - startedAt
+        if (elapsed < POOL_REPLAY_SHOT_TIMEOUT_MS) return
+
+        OpenPigeonLog.e(
+            "PoolReplay",
+            "watchdog_finishing_replay elapsedMs=$elapsed $currentNativeShotDebug finalBallsLen=${finalBalls.length}"
+        )
+
+        finishReplay()
     }
     var scratch = false
 
@@ -1627,29 +1743,45 @@ class PoolActivity : AppCompatActivity() {
         runOnUiThread {
             val controls = findViewById<LinearLayout>(R.id.controls)
             controls.visibility = View.VISIBLE
-            val skipBtn = findViewById<ImageButton>(R.id.skip_replay)
-            skipBtn.visibility = View.GONE
-            skipBtn.alpha = 1f
         }
+        hideSkipReplayButton("finishReplay")
         replaying = false
         skipReplayRequested = false
         skipReplayFadeStarted = false
 
         OpenPigeonLog.i("Pool", "Scratch $scratch")
 
+        clearNativeShotWatchdog()
+
+        if (finalBalls.isBlank()) {
+            OpenPigeonLog.e("PoolReplay", "finishReplay_missing_finalBalls; falling back to current exported state")
+            finalBalls = exportBalls(scratch)
+        }
+
+        OpenPigeonLog.i(
+            "PoolReplay",
+            "finishReplay_native_before_snap table=${dumpPoolTable(table)}"
+        )
+
+        OpenPigeonLog.i(
+            "PoolReplay",
+            "finishReplay_android_buffers_before_snap balls=${dumpPoolBallBuffers()}"
+        )
+
         clearBalls(table)
-        val oldBalls = poolBalls
         poolBalls = arrayListOf()
+        cueBall = null
+
+        OpenPigeonLog.i(
+            "PoolReplay",
+            "finishReplay_authoritative_final finalBallsLen=${finalBalls.length} finalBalls=$finalBalls"
+        )
 
         buildBalls(finalBalls, null)
-        for (ball in poolBalls) {
-            val old = oldBalls.find { it.number == ball.number } ?: continue
 
-            if (isNineBall && old.sunk) {
-                continue
-            }
-
-            ball.data.put(old.data)
+        poolTraceEnabled = false
+        if (table != 0L) {
+            setPoolDebugTrace(table, false, 0)
         }
 
         updateNineBallBar()
@@ -1706,6 +1838,7 @@ class PoolActivity : AppCompatActivity() {
 
     fun handleFinishPlay() {
         if (disableSend || skipReplayRequested) return
+        clearNativeShotWatchdog()
         cancelAllShots()
         cancelAllShots = {}
         if (replayHits.isNotEmpty()) {
@@ -1813,7 +1946,11 @@ class PoolActivity : AppCompatActivity() {
             }
 
             // send replay
-            OpenPigeonLog.i("sending replay", "here")
+            OpenPigeonLog.i(
+                "PoolReplay",
+                "send_replay_start outgoingHits=${outgoingReplayHits.size} finalBallsLen=${finalBalls.length}"
+            )
+
             var replays = outgoingReplayHits.mapIndexed { index, hit ->
                 val wasStripes = if (hit.wasStripes == null) 0 else if (hit.wasStripes!!) player else if (player == 1) 2 else 1
                 val replay = "&d:${hit.direction}&x:${hit.spinX}&y:${hit.spinY}&p:${hit.power}&s:$wasStripes"
@@ -1844,23 +1981,33 @@ class PoolActivity : AppCompatActivity() {
                 }
             }
 
-            val currentMessage = gameSessionIPC!!.getCurrentMessage(sessionId)
-            val myId      = gameSessionIPC!!.getSenderUUID(sessionId)
+            OpenPigeonLog.i(
+                "PoolReplay",
+                "send_replay replayLen=${replays.length} replay=$replays"
+            )
+
+            val ipc = gameSessionIPC ?: return
+            val currentMessage = ipc.getCurrentMessage(sessionId)
+            val myId = ipc.getSenderUUID(sessionId)
             val myAvatarKey = if (player == 1) "avatar1" else "avatar2"
 
+            val currentNum = currentMessage["num"]?.toIntOrNull()
+                ?: finalBalls.takeIf { it.isNotBlank() }?.let { 1 }
+                ?: 1
+
             val msgUpdates = mapOf(
-                "player"      to if (currentMessage["player"] == "2") "1" else "2",
-                "num"         to (currentMessage["num"]?.toInt()!! + 1).toString(),
-                "sender"      to myId,
-                "replay"      to replays,
-                myAvatarKey   to AvatarView.buildAvatarString(),
+                "player" to if (currentMessage["player"] == "2") "1" else "2",
+                "num" to (currentNum + 1).toString(),
+                "sender" to myId,
+                "replay" to replays,
+                myAvatarKey to AvatarView.buildAvatarString(),
             ).toMutableMap()
 
             if (winState != null) {
-                msgUpdates["winner"] = "${gameSessionIPC!!.getSenderUUID(sessionId)}|${if (winState) "1" else "-1"}"
+                msgUpdates["winner"] = "$myId|${if (winState) "1" else "-1"}"
             }
 
-            gameSessionIPC!!.updateSession(msgUpdates, sessionId) {
+            ipc.updateSession(msgUpdates, sessionId) {
                 OpenPigeonLog.i("openpigeon-${baseGame.getName()}", "Game session updated")
 
                 if (winState == null) {
@@ -1874,7 +2021,12 @@ class PoolActivity : AppCompatActivity() {
     }
     var iAmStripes: Boolean? = null
 
-    data class PoolBall(val number: Int, val data: FloatBuffer, val resources: Resources, val density: Float) {
+    data class PoolBall(
+        val number: Int,
+        val data: FloatBuffer,
+        val resources: Resources,
+        val density: Float
+    ) {
         companion object {
             val ballOrder = listOf(
                 R.drawable.ball_16,
@@ -1894,19 +2046,44 @@ class PoolActivity : AppCompatActivity() {
                 R.drawable.ball_14,
                 R.drawable.ball_15,
             )
+
+            private const val BALL_RADIUS = 10f
+            private const val IOS_BALL_CANCEL_TABLE_ROTATION_DEGREES = -90f
+            private const val IOS_SHADOW_OFFSET_X = -4.5f
+            private const val IOS_SHADOW_OFFSET_Y = 0.0f
+            private const val IOS_SHADOW_RADIUS = BALL_RADIUS
+            private const val ROLL_VISUAL_SCALE = 0.85f
+            private const val MAX_ROLL_STEP = 60f
+
+            private val ballPaint = Paint(
+                Paint.ANTI_ALIAS_FLAG or
+                        Paint.FILTER_BITMAP_FLAG or
+                        Paint.DITHER_FLAG
+            )
+
+            private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0x80000000.toInt()
+            }
         }
 
         val bitmap: Bitmap = BitmapFactory.decodeResource(resources, ballOrder[number])
 
+        private var lastDrawX = Float.NaN
+        private var lastDrawY = Float.NaN
+        private var visualRollRadians = 0f
+
         val x: Float
             get() = data.get(0)
+
         val y: Float
             get() = data.get(1)
+
         val rot: Float
             get() = data.get(2)
 
         val sunk: Boolean
             get() = data.get(3) != -1f
+
         val sunkOrder: Int
             get() = data.get(3).toInt()
 
@@ -1924,14 +2101,78 @@ class PoolActivity : AppCompatActivity() {
 
         val holeX: Float
             get() = data.get(5)
+
         val holeY: Float
             get() = data.get(6)
 
+        val inPocket: Boolean
+            get() = holeX != -1f && holeY != -1f && !sunk
+
+        private fun updateVisualRoll() {
+            if (lastDrawX.isNaN() || lastDrawY.isNaN()) {
+                lastDrawX = x
+                lastDrawY = y
+                return
+            }
+
+            val dx = x - lastDrawX
+            val dy = y - lastDrawY
+            val dist = sqrt(dx * dx + dy * dy)
+
+            lastDrawX = x
+            lastDrawY = y
+
+            if (dist <= 0.001f || dist > MAX_ROLL_STEP) {
+                return
+            }
+
+            val sign = if (abs(dx) >= abs(dy)) {
+                if (dx >= 0f) 1f else -1f
+            } else {
+                if (dy >= 0f) -1f else 1f
+            }
+
+            visualRollRadians += sign * (dist / BALL_RADIUS) * ROLL_VISUAL_SCALE
+        }
+
+        fun drawShadow(canvas: Canvas) {
+            if (sunk || inPocket) {
+                return
+            }
+
+            val sx = x + IOS_SHADOW_OFFSET_X
+            val sy = y + IOS_SHADOW_OFFSET_Y
+
+            canvas.drawOval(
+                RectF(
+                    sx - IOS_SHADOW_RADIUS,
+                    sy - IOS_SHADOW_RADIUS,
+                    sx + IOS_SHADOW_RADIUS,
+                    sy + IOS_SHADOW_RADIUS
+                ),
+                shadowPaint
+            )
+        }
+
         fun draw(canvas: Canvas) {
+            updateVisualRoll()
+
             canvas.save()
             canvas.translate(x, y)
-            canvas.rotate(Math.toDegrees(rot.toDouble()).toFloat())
-            canvas.drawBitmap(bitmap, null, RectF(-10.0f, -10.0f, 10.0f, 10.0f), null)
+
+            val drawRotationDegrees =
+                IOS_BALL_CANCEL_TABLE_ROTATION_DEGREES +
+                        Math.toDegrees((rot + visualRollRadians).toDouble()).toFloat()
+
+            canvas.rotate(drawRotationDegrees)
+
+            canvas.drawBitmap(
+                bitmap,
+                null,
+                RectF(-10.0f, -10.0f, 10.0f, 10.0f),
+                ballPaint
+            )
+
             canvas.restore()
         }
     }
@@ -2009,8 +2250,9 @@ class PoolActivity : AppCompatActivity() {
         }.joinToString("")
     }
 
-    private fun generateRandomRack(seed: Int): String {
+    private fun generateRandomRack(seed: Long): String {
         val rng = Drand48()
+        rng.srand48(seed)
 
         data class Slot(val x: Float, val y: Float)
 
@@ -2061,8 +2303,6 @@ class PoolActivity : AppCompatActivity() {
         val builder = StringBuilder()
 
         for (i in 0 until slots.size) {
-            rng.srand48(seed.toLong())
-
             val x = slots[i].x
             val y = slots[i].y
 
@@ -2096,6 +2336,18 @@ class PoolActivity : AppCompatActivity() {
         }
 
         return builder.toString()
+    }
+
+    private fun dumpPoolBallBuffers(): String {
+        return poolBalls.joinToString("|") { ball ->
+            "b:${ball.number}" +
+                    ",x:${ball.x}" +
+                    ",y:${ball.y}" +
+                    ",r:${ball.rot}" +
+                    ",sunk:${ball.sunkOrder}" +
+                    ",hit:${ball.ballHit}" +
+                    ",hole:${ball.holeX},${ball.holeY}"
+        }
     }
 
     private fun buildBalls(balls: String, skew: String?) {
@@ -2142,6 +2394,14 @@ class PoolActivity : AppCompatActivity() {
             buffer.order(ByteOrder.nativeOrder())
 
             val floatBuffer = buffer.asFloatBuffer()
+
+            floatBuffer.put(0, x)
+            floatBuffer.put(1, y)
+            floatBuffer.put(2, rot)
+            floatBuffer.put(3, -1f) // sunkOrder
+            floatBuffer.put(4, -1f) // numberHit
+            floatBuffer.put(5, -1f) // holeX
+            floatBuffer.put(6, -1f) // holeY
 
             val shouldGoInMode = if (finalBalls == null) {
                 0
@@ -2190,9 +2450,6 @@ class PoolActivity : AppCompatActivity() {
                 floatBuffer
             )
 
-            floatBuffer.put(3, -1f)
-            floatBuffer.put(4, -1f)
-
             val poolBall = PoolBall(number, floatBuffer, resources, density)
             poolBalls.add(poolBall)
 
@@ -2234,6 +2491,15 @@ class PoolActivity : AppCompatActivity() {
 
     fun handleMessage(msg: Map<String, String>) {
         if (table == 0L) return; // we are dead
+
+        poolTraceEnabled =
+            msg["pool_trace"] == "1" ||
+                    msg["debug_pool"] == "1" ||
+                    msg["trace"] == "pool" ||
+                    msg["replay"]?.isNotBlank() == true
+
+        setPoolDebugTrace(table, poolTraceEnabled, if (poolTraceEnabled) 1 else 0)
+
         disableSend = false
         skipReplayRequested = false
         replaying = false
@@ -2246,6 +2512,7 @@ class PoolActivity : AppCompatActivity() {
         poolBalls.clear()
         cueBall = null
         replayHits.clear()
+        finalBalls = ""
         val gameName = msg["game"] ?: msg["name"] ?: msg["gameName"] ?: baseGame.getName()
         isNineBall = gameName == "pool2"
         isEightBallPlus = gameName == "pool3"
@@ -2257,21 +2524,12 @@ class PoolActivity : AppCompatActivity() {
         restartMusicForCurrentMode()
 
         OpenPigeonLog.i("PoolMode", "gameName=$gameName isNineBall=$isNineBall isEightBallPlus=$isEightBallPlus")
-        isHard = msg["mode"]!! != "n"
 
-        renderer.bitmap = BitmapFactory.decodeResource(
-            resources,
-            when {
-                isNineBall && isHard -> R.drawable.pool_transparent_9ball_hard
-                isNineBall -> R.drawable.pool_transparent_9ball
-                isEightBallPlus && isHard -> R.drawable.pool_transparent_plus_hard
-                isEightBallPlus -> R.drawable.pool_transparent_plus
-                isHard -> R.drawable.pool_transparent_hard
-                else -> R.drawable.pool_transparent
-            }
-        )
+        val ipc = gameSessionIPC ?: return
 
-        val num = msg["num"]!!
+        isHard = (msg["mode"] ?: "n") != "n"
+        val num = msg["num"] ?: "1"
+
         uuid1 = msg["player1"]
         uuid2 = msg["player2"]
 
@@ -2282,7 +2540,9 @@ class PoolActivity : AppCompatActivity() {
             runOnUiThread { settingsSheet.applyOpponentAvatarString(avatarStr) }
         }
 
-        OpenPigeonLog.i("number", "$num")
+        OpenPigeonLog.i("number", num)
+
+        isFirst = false
         if (num == "2") {
             isFirst = true // for replay
         }
@@ -2294,18 +2554,37 @@ class PoolActivity : AppCompatActivity() {
             label.visibility = View.VISIBLE
         }
 
-        val isYourTurn = msg["sender"]!! != gameSessionIPC!!.getSenderUUID(sessionId)
+        val sender = msg["sender"].orEmpty()
+        val isYourTurn = sender != ipc.getSenderUUID(sessionId)
+
+        OpenPigeonLog.i(
+            "PoolMsg",
+            "handleMessage num=$num game=$gameName isYourTurn=$isYourTurn " +
+                    "sender=$sender player=$player replayLen=${msg["replay"]?.length ?: 0}"
+        )
         var stagingBalls: String? = null
         if (msg.containsKey("replay")) {
             val replay = msg["replay"]!!
             for ((index, value) in replay.split("|").withIndex()) {
                 val output = mutableMapOf<String, String>()
                 for (element in value.split("&")) {
-                    val parts = element.split(":")
-                    if (parts[0] == "")
+                    val parts = element.split(":", limit = 2)
+                    if (parts.isEmpty() || parts[0].isEmpty()) {
                         continue // JSON will BLOW Vitalii Zlotskii's MIND
+                    }
+                    if (parts.size < 2) {
+                        OpenPigeonLog.w("PoolReplay", "malformed_replay_element index=$index element=$element")
+                        continue
+                    }
+
                     output[parts[0]] = parts[1]
                 }
+
+                OpenPigeonLog.i(
+                    "PoolReplay",
+                    "segment index=$index keys=${output.keys} ballsLen=${output["balls"]?.length ?: 0} " +
+                            "d=${output["d"]} p=${output["p"]} x=${output["x"]} y=${output["y"]} s=${output["s"]}"
+                )
 
                 output["balls"]?.let { balls ->
                     if (isYourTurn) {
@@ -2320,8 +2599,14 @@ class PoolActivity : AppCompatActivity() {
                 }
 
                 if (!isNineBall && output["stripes"] != null) {
-                    val stripes = output["stripes"]!!.toInt()
-                    iAmStripes = if(stripes == 0) null else player == stripes
+                    val stripes = output["stripes"]?.toIntOrNull()
+                    if (stripes != null) {
+                        iAmStripes = if (stripes == 0) null else player == stripes
+                        updateBallTypeUi()
+                        OpenPigeonLog.i("Me", "$iAmStripes")
+                    } else {
+                        OpenPigeonLog.w("PoolReplay", "bad_stripes_value index=$index value=${output["stripes"]}")
+                    }
                     updateBallTypeUi()
                     OpenPigeonLog.i("Me", "$iAmStripes")
                 }
@@ -2331,24 +2616,51 @@ class PoolActivity : AppCompatActivity() {
                 }
 
                 if (output["win"] != null) {
-                    val win = output["win"]!!.toInt()
-                    didIWin = if (!isYourTurn) win == 1 else win != 1
+                    val win = output["win"]?.toIntOrNull()
+                    if (win != null) {
+                        didIWin = if (!isYourTurn) win == 1 else win != 1
+                    } else {
+                        OpenPigeonLog.w("PoolReplay", "bad_win_value index=$index value=${output["win"]}")
+                    }
                 }
 
                 if (output["d"] != null) {
-                    replayHits.add(
-                        BallHit(
-                            output["d"]!!.toFloat(),
-                            output["p"]!!.toFloat(),
-                            output["x"]!!.toFloat(),
-                            output["y"]!!.toFloat(),
+                    val direction = output["d"]?.toFloatOrNull()
+                    val power = output["p"]?.toFloatOrNull()
+                    val spinX = output["x"]?.toFloatOrNull()
+                    val spinY = output["y"]?.toFloatOrNull()
+
+                    if (direction == null || power == null || spinX == null || spinY == null) {
+                        OpenPigeonLog.e(
+                            "PoolReplay",
+                            "bad_hit_segment index=$index d=${output["d"]} p=${output["p"]} x=${output["x"]} y=${output["y"]}"
+                        )
+                    } else {
+                        val hit = BallHit(
+                            direction,
+                            power,
+                            spinX,
+                            spinY,
                             output["s"]?.toIntOrNull()?.let { stripes ->
                                 if (stripes == 0) null else player == stripes
                             }
                         )
-                    )
+
+                        replayHits.add(hit)
+
+                        OpenPigeonLog.i(
+                            "PoolReplay",
+                            "queued_hit index=$index d=${hit.direction} p=${hit.power} " +
+                                    "spinX=${hit.spinX} spinY=${hit.spinY} s=${output["s"]}"
+                        )
+                    }
                 }
             }
+            OpenPigeonLog.i(
+                "PoolReplay",
+                "replay_parse_done isYourTurn=$isYourTurn hits=${replayHits.size} " +
+                        "stagingLen=${stagingBalls?.length ?: 0} finalLen=${finalBalls.length}"
+            )
             stagingBalls?.let {
                 buildBalls(it, finalBalls)
             }
@@ -2361,7 +2673,7 @@ class PoolActivity : AppCompatActivity() {
                 }
 
                 runOnUiThread {
-                    findViewById<ImageButton>(R.id.skip_replay).visibility = View.GONE
+                    hideSkipReplayButton("not_replaying")
                     setCueUiVisible(false)
 
                     showWaitingLabelAnimated()
@@ -2380,7 +2692,7 @@ class PoolActivity : AppCompatActivity() {
                 finalBalls = buildDefaultNineBallRack()
             } else if (isEightBallPlus) {
                 val seedStr = msg["seed"]
-                val seed = seedStr?.toIntOrNull()
+                val seed = seedStr?.toLongOrNull()
                 if (seed == null) {
                     OpenPigeonLog.e("PoolPlus", "pool3 game without valid seed (got '$seedStr'); falling back to normal rack")
                     finalBalls = "#632.746155,178.000000,0.000000,0.801981,9,5.632916,7.415801,5.384167#632.746155,199.000000,0.000000,0.050000,10,-1.479509,5.981912,-0.639594#632.746155,220.000000,0.000000,0.145560,7,-4.857441,-3.796834,-5.439248#632.746155,241.000000,0.000000,0.050000,6,3.548234,-7.060621,-3.771457#632.746155,262.000000,0.000000,0.964504,1,7.809305,-4.673173,7.553514#614.559570,188.500000,0.000000,0.868768,12,6.889496,7.963203,-4.292648#614.559570,209.500000,0.000000,0.759525,13,4.140916,-0.562560,-5.371364#614.559570,230.500000,0.000000,0.839745,15,-7.863293,-3.022674,-7.419384#614.559570,251.500000,0.000000,1.153367,11,-5.802108,7.468212,-7.951379#596.373047,199.000000,0.000000,1.053345,4,1.589040,2.324956,0.526632#596.373047,220.000000,0.000000,1.437710,8,3.826384,-4.029884,3.487882#596.373047,241.000000,0.000000,1.085851,3,4.912686,3.917787,5.660569#578.186523,209.500000,0.000000,1.100000,2,-5.776122,-4.926837,0.760138#578.186523,230.500000,0.000000,0.900000,5,-1.848043,-0.386153,6.410922#560.000000,220.000000,0.000000,1.000000,14,2.079596,7.069168,-7.283604#205.000000,220.000000,0.000000,0.990000,0,4.519086,0.074793,-2.054408"
@@ -2409,7 +2721,7 @@ class PoolActivity : AppCompatActivity() {
 
                 val label = findViewById<TextView>(R.id.state_label)
                 label.visibility = View.GONE
-                findViewById<ImageButton>(R.id.skip_replay).visibility = View.GONE
+                hideSkipReplayButton("not_replaying")
             }
 
             if (!renderer.isAlive) {
@@ -2425,7 +2737,7 @@ class PoolActivity : AppCompatActivity() {
 
         if (!isYourTurn) {
             runOnUiThread {
-                findViewById<ImageButton>(R.id.skip_replay).visibility = View.GONE
+                hideSkipReplayButton("not_replaying")
                 setCueUiVisible(false)
 
                 if (didIWin != null) {
@@ -2437,18 +2749,14 @@ class PoolActivity : AppCompatActivity() {
             mode = PoolMode.Disabled
             closeCuePopup()
         } else {
+            replaying = true
+
             runOnUiThread {
                 setCueUiVisible(false)
                 setStateLabelText("", false)
-                val controls = findViewById<LinearLayout>(R.id.controls)
-                controls.visibility = View.VISIBLE
-                val skipBtn = findViewById<ImageButton>(R.id.skip_replay)
-                skipBtn.animate().cancel()
-                skipBtn.visibility = View.INVISIBLE
-                skipBtn.alpha = 0f
             }
 
-            replaying = true
+            showSkipReplayButton("handleMessage_before_playNextReplay")
             playNextReplay()
         }
     }

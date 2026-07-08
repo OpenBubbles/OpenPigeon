@@ -30,38 +30,54 @@ add_compile_options("-fno-fast-math")
 # System.loadLibrary() and pass the name of the library defined here;
 # for GameActivity/NativeActivity derived applications, the same library name must be
 # used in the AndroidManifest.xml file.
+
 add_library(${CMAKE_PROJECT_NAME} SHARED
-        # List C/C++ source files with relative paths to this CMakeLists.txt.
-        openbubblesextension.cpp
-        PoolTable.cpp
-        PoolBall.cpp
-        PoolContactListener.cpp
+        # Pool
+        pool/PoolJNI.cpp
+        pool/PoolTable.cpp
+        pool/PoolBall.cpp
+        pool/PoolContactListener.cpp
+
+        # Knockout
+        knockout/KnockoutJNI.cpp
         knockout/KnockoutTable.cpp
         knockout/KnockoutPiece.cpp
         knockout/KnockoutContactListener.cpp
-        knockout/KnockoutJNI.cpp
+
+        # Golf
+        golf/GolfJNI.cpp
         golf/GolfTable.cpp
         golf/GolfBall.cpp
         golf/GolfContactListener.cpp
-        golf/GolfJNI.cpp
+
+        # Shuffle
+        shuffle/ShuffleJNI.cpp
         shuffle/ShuffleTable.cpp
         shuffle/ShufflePuck.cpp
         shuffle/ShuffleContactListener.cpp
-        shuffle/ShuffleJNI.cpp)
+)
 
 set_source_files_properties(
+        pool/PoolJNI.cpp
+        pool/PoolTable.cpp
+        pool/PoolBall.cpp
+        pool/PoolContactListener.cpp
+
+        knockout/KnockoutJNI.cpp
         knockout/KnockoutTable.cpp
         knockout/KnockoutPiece.cpp
         knockout/KnockoutContactListener.cpp
-        knockout/KnockoutJNI.cpp
+
+        golf/GolfJNI.cpp
         golf/GolfTable.cpp
         golf/GolfBall.cpp
         golf/GolfContactListener.cpp
-        golf/GolfJNI.cpp
+
+        shuffle/ShuffleJNI.cpp
         shuffle/ShuffleTable.cpp
         shuffle/ShufflePuck.cpp
         shuffle/ShuffleContactListener.cpp
-        shuffle/ShuffleJNI.cpp
+
         PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=fast"
 )
 

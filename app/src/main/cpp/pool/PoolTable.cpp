@@ -9,6 +9,10 @@
 #include <iostream>
 #include <android/log.h>
 #include <cinttypes>
+#include <sstream>
+#include <iomanip>
+#include <optional>
+#include <algorithm>
 
 PoolTable::PoolTable()
         : world(b2Vec2_zero),
@@ -96,6 +100,10 @@ PoolTable::PoolTable()
     }
 }
 
+PoolTable::~PoolTable() {
+    clearBalls();
+}
+
 void PoolTable::makeBall(b2Vec2 pos, float rot, float density, int number, int shouldGoIn, float* outputs) {
     b2BodyDef def;
     def.type = b2BodyType::b2_dynamicBody;
@@ -119,11 +127,23 @@ void PoolTable::makeBall(b2Vec2 pos, float rot, float density, int number, int s
 
     auto* ball = new PoolBall(this, body, number, shouldGoIn, outputs);
     balls.push_back(ball);
+    __android_log_print(
+            ANDROID_LOG_VERBOSE,
+            "PoolTable",
+            "make_ball number=%d x=%.6f y=%.6f rot=%.6f density=%.6f shouldGoIn=%d",
+            number,
+            pos.x,
+            pos.y,
+            rot,
+            density,
+            shouldGoIn
+    );
 }
 
 void PoolTable::hitBall(int number, float dir, float power, float spinX, float spinY, bool first) {
+    frame = 0;
     // clean up old balls
-    balls.erase(remove_if(balls.begin(), balls.end(), [](PoolBall* n){
+    balls.erase(std::remove_if(balls.begin(), balls.end(), [](PoolBall* n){
         if (n->sunkOrder != -1) {
             delete n;
             return true;
@@ -142,9 +162,19 @@ void PoolTable::hitBall(int number, float dir, float power, float spinX, float s
 
 void PoolTable::moveBall(int number, b2Vec2 position, float rot) {
     for (auto ball : balls) {
-        if (ball->number != number)
+        if (ball == nullptr || ball->number != number || ball->body == nullptr) {
             continue;
+        }
+
         ball->body->SetTransform(position, rot);
+        ball->body->SetLinearVelocity(b2Vec2_zero);
+        ball->body->SetAngularVelocity(0.0f);
+        ball->body->SetAwake(false);
+
+        ball->hole = b2Vec2(-1.0f, -1.0f);
+        ball->hitHole = b2Vec2(-1.0f, -1.0f);
+
+        ball->writeOutputs();
         break;
     }
 }
@@ -164,6 +194,7 @@ bool PoolTable::update() {
     }
 
     startFrame += 1;
+    frame += 1;
     if (startFrame == 60) {
         __android_log_print(ANDROID_LOG_VERBOSE, "Me", "Frames %" PRIu64, timeSinceEpochMillisec() - startTime);
     }
@@ -181,6 +212,11 @@ bool PoolTable::update() {
             moving = true;
     }
 
+    if (debugTraceEnabled && debugTraceEveryFrames > 0 && frame % (uint32_t)debugTraceEveryFrames == 0) {
+        std::string state = dumpState();
+        __android_log_print(ANDROID_LOG_VERBOSE, "PoolTrace", "%s", state.c_str());
+    }
+
     return moving;
 }
 
@@ -188,5 +224,74 @@ void PoolTable::clearBalls() {
     for (auto ball : balls) {
         delete ball;
     }
+
     balls.clear();
+
+    cueDelay = -1;
+    pocketNumber = 0;
+    frame = 0;
+    isFirst = false;
+}
+
+void PoolTable::setDebugTrace(bool enabled, int everyFrames) {
+    debugTraceEnabled = enabled;
+    debugTraceEveryFrames = everyFrames <= 0 ? 1 : everyFrames;
+}
+
+std::string PoolTable::dumpState() const {
+    std::ostringstream out;
+    out.setf(std::ios::fixed);
+    out << std::setprecision(6);
+
+    out << "frame=" << frame;
+
+    auto appendBall = [&](PoolBall* ball) {
+        if (ball == nullptr || ball->body == nullptr) {
+            return;
+        }
+
+        b2Vec2 pos = ball->body->GetPosition();
+        b2Vec2 vel = ball->body->GetLinearVelocity();
+
+        out
+                << "|b:"
+                << ball->number
+                << ",x:" << pos.x
+                << ",y:" << pos.y
+                << ",r:" << ball->body->GetAngle()
+                << ",vx:" << vel.x
+                << ",vy:" << vel.y
+                << ",av:" << ball->body->GetAngularVelocity()
+                << ",sunk:" << ball->sunkOrder
+                << ",hit:" << ball->numberHit
+                << ",hole:" << ball->hole.x << "," << ball->hole.y
+                << ",should:" << ball->shouldGoIn;
+    };
+
+    for (auto ball : balls) {
+        if (ball != nullptr && ball->number == 0) {
+            appendBall(ball);
+        }
+    }
+
+    for (auto ball : balls) {
+        if (ball == nullptr || ball->number == 0 || ball->body == nullptr) {
+            continue;
+        }
+
+        b2Vec2 vel = ball->body->GetLinearVelocity();
+        bool interesting =
+                vel.LengthSquared() > 0.01f ||
+                std::abs(ball->body->GetAngularVelocity()) > 0.01f ||
+                ball->hole.x != -1.0f ||
+                ball->hitHole.x != -1.0f ||
+                ball->sunkOrder != -1 ||
+                ball->numberHit != -1;
+
+        if (interesting) {
+            appendBall(ball);
+        }
+    }
+
+    return out.str();
 }

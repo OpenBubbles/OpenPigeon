@@ -15,13 +15,33 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
 import com.openbubbles.openpigeon.settings.SettingsSheet
 import com.openbubbles.openpigeon.util.OpenPigeonLog
+import android.animation.ValueAnimator
+import android.graphics.drawable.GradientDrawable
+import android.os.Handler
+import android.os.Looper
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.util.TypedValue
+import android.view.View
+import android.widget.TextView
 
 class ShuffleActivity : AppCompatActivity() {
     private var sessionId: String = ""
     private var gameSessionIPC: GameSessionIPC? = null
     private var lastMessage: Map<String, String> = emptyMap()
+
+    private var localPlayer: Int = 1
+    private var lastOutgoingReplay: String? = null
+    private var ignoreNextOutgoingReplayEcho = false
+    private val stateLabelHandler = Handler(Looper.getMainLooper())
+    private var waitingDotsRunnable: Runnable? = null
+    private var stateLabelAnimator: ValueAnimator? = null
+    private var sentWaitingSequenceActive = false
+    private lateinit var stateLabel: TextView
 
     private lateinit var rootFrame: FrameLayout
     private lateinit var renderer: ShuffleRenderer
@@ -47,7 +67,12 @@ class ShuffleActivity : AppCompatActivity() {
             insets
         }
 
-        renderer = ShuffleRenderer(this)
+        renderer = ShuffleRenderer(this).apply {
+            onLaunchReplayReady = { stagedReplay ->
+                handleLocalLaunchReplay(stagedReplay)
+            }
+        }
+
         rootFrame.addView(
             renderer,
             FrameLayout.LayoutParams(
@@ -60,6 +85,9 @@ class ShuffleActivity : AppCompatActivity() {
 
         createAvatarHud()
         createSettingsButton()
+
+        createStateLabel()
+        hideStateLabelNow()
 
         settingsSheet.attachGameAvatar(myAvatarAnchor)
         settingsSheet.attachOpponentAvatar(opponentAvatarAnchor)
@@ -196,6 +224,28 @@ class ShuffleActivity : AppCompatActivity() {
             return
         }
 
+        val incomingReplay = message["replay"].orEmpty()
+
+        if (ignoreNextOutgoingReplayEcho && incomingReplay == lastOutgoingReplay) {
+            ignoreNextOutgoingReplayEcho = false
+
+            OpenPigeonLog.i(
+                "ShuffleActivity",
+                "Ignoring own outgoing replay echo"
+            )
+
+            return
+        }
+
+        if (renderer.isPlayingRound()) {
+            OpenPigeonLog.i(
+                "ShuffleActivity",
+                "Ignoring message update while shuffle replay is playing"
+            )
+
+            return
+        }
+
         lastMessage = message
 
         OpenPigeonLog.i(
@@ -209,15 +259,238 @@ class ShuffleActivity : AppCompatActivity() {
     private fun applyGameData(data: Map<String, String>) {
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "applyGameData mode=${data["mode"]} map=${data["map"]} replay=${data["replay"]?.take(80)}"
+            "applyGameData mode=${data["mode"]} map=${data["map"]} replay=${data["replay"]?.take(120)}"
         )
 
+        localPlayer = resolveLocalPlayer(data)
+
+        renderer.setLocalPlayer(localPlayer)
         renderer.setGameData(data)
+
         applyOpponentAvatarFromMessage(data)
 
         myAvatarAnchor.bringToFront()
         opponentAvatarAnchor.bringToFront()
         settingsButton.bringToFront()
+
+        applyTurnFlow(data)
+    }
+
+    private fun applyTurnFlow(data: Map<String, String>) {
+        val yourTurn = isYourTurn(data)
+
+        OpenPigeonLog.i(
+            "ShuffleActivity",
+            "applyTurnFlow localPlayer=$localPlayer yourTurn=$yourTurn " +
+                    "p1Shot=${renderer.hasShotForPlayer(1)} p2Shot=${renderer.hasShotForPlayer(2)}"
+        )
+
+        if (!yourTurn) {
+            renderer.showWaitingForOpponent()
+            showWaitingLabelAnimated()
+            return
+        }
+
+        if (renderer.hasBothPlayerShots()) {
+            hideStateLabelNow()
+            renderer.showPlaying()
+
+            renderer.playRoundFromReplay(
+                roundReplay = data["replay"] ?: DEFAULT_REPLAY
+            ) {
+                enableNextLocalAimAfterPlayback()
+            }
+
+            return
+        }
+
+        if (renderer.hasShotForPlayer(localPlayer)) {
+            renderer.showWaitingForOpponent()
+            showWaitingLabelAnimated()
+            return
+        }
+
+        hideStateLabelNow()
+        renderer.showAiming()
+    }
+
+    private fun handleLocalLaunchReplay(stagedReplay: String) {
+        if (!isYourTurn(lastMessage)) {
+            OpenPigeonLog.w(
+                "ShuffleActivity",
+                "Ignoring local launch because it is not our turn"
+            )
+
+            renderer.showWaitingForOpponent()
+            showWaitingLabelAnimated()
+            return
+        }
+
+        val opponentPlayer = 3 - localPlayer
+        val opponentAlreadyHasShot = renderer.hasShotForPlayer(opponentPlayer)
+
+        OpenPigeonLog.i(
+            "ShuffleActivity",
+            "handleLocalLaunchReplay localPlayer=$localPlayer opponent=$opponentPlayer " +
+                    "opponentAlreadyHasShot=$opponentAlreadyHasShot replay=${stagedReplay.take(220)}"
+        )
+
+        if (opponentAlreadyHasShot) {
+            hideStateLabelNow()
+            renderer.showPlaying()
+
+            renderer.playRoundFromReplay(
+                roundReplay = stagedReplay
+            ) {
+                enableNextLocalAimAfterPlayback()
+            }
+
+            return
+        }
+
+        sendReplayToOpponent(stagedReplay)
+    }
+
+    private fun enableNextLocalAimAfterPlayback() {
+        val zeroReplay = renderer.currentZeroShotReplay()
+
+        lastMessage = lastMessage
+            .toMutableMap()
+            .apply {
+                put("replay", zeroReplay)
+            }
+
+        renderer.setLocalPlayer(localPlayer)
+        renderer.setGameData(lastMessage)
+        hideStateLabelNow()
+        renderer.showAiming()
+
+        myAvatarAnchor.bringToFront()
+        opponentAvatarAnchor.bringToFront()
+        settingsButton.bringToFront()
+
+        OpenPigeonLog.i(
+            "ShuffleActivity",
+            "Playback finished; enabling next local aim replay=${zeroReplay.take(220)}"
+        )
+    }
+
+    private fun sendReplayToOpponent(stagedReplay: String) {
+        val currentMessage = try {
+            if (sessionId.isNotBlank()) {
+                gameSessionIPC?.getCurrentMessage(sessionId).orEmpty()
+            } else {
+                emptyMap()
+            }
+        } catch (t: Throwable) {
+            OpenPigeonLog.e("ShuffleActivity", "getCurrentMessage before send failed", t)
+            emptyMap()
+        }
+
+        val sourceMessage = currentMessage.ifEmpty { lastMessage }
+        val myId = localUserId(sourceMessage)
+        val myAvatarKey = if (localPlayer == 1) "avatar1" else "avatar2"
+        val nextNum = ((sourceMessage["num"] ?: lastMessage["num"])?.toIntOrNull() ?: 0) + 1
+
+        val p1 = (sourceMessage["player1"] ?: lastMessage["player1"]).orEmpty()
+        val p2 = (sourceMessage["player2"] ?: lastMessage["player2"]).orEmpty()
+
+        val msg = mutableMapOf(
+            "game" to "shuffle",
+            "mode" to (sourceMessage["mode"] ?: lastMessage["mode"] ?: "1"),
+            "map" to (sourceMessage["map"] ?: lastMessage["map"] ?: defaultMapForMode(1)),
+            "player" to localPlayer.toString(),
+            "num" to nextNum.toString(),
+            "sender" to myId,
+            "replay" to stagedReplay,
+            myAvatarKey to AvatarView.buildAvatarString()
+        )
+
+        if (localPlayer == 1) {
+            msg["player1"] = myId
+            if (p2.isNotBlank()) msg["player2"] = p2
+        } else {
+            if (p1.isNotBlank()) msg["player1"] = p1
+            msg["player2"] = myId
+        }
+
+        lastOutgoingReplay = stagedReplay
+        ignoreNextOutgoingReplayEcho = true
+        lastMessage = msg
+
+        renderer.showSentThenWaiting()
+        showSendingLabelImmediately()
+
+        OpenPigeonLog.i(
+            "ShuffleActivity",
+            "sendReplayToOpponent localPlayer=$localPlayer replay=${stagedReplay.take(260)}"
+        )
+
+        val ipc = gameSessionIPC
+
+        if (ipc == null || sessionId.isBlank()) {
+            OpenPigeonLog.w(
+                "ShuffleActivity",
+                "No IPC/session available; showing sent/waiting locally"
+            )
+
+            showSentCheckThenWaitingAnimation()
+            return
+        }
+
+        ipc.updateSession(msg, sessionId) {
+            OpenPigeonLog.i(
+                "ShuffleActivity",
+                "Shuffle session updated"
+            )
+
+            runOnUiThread {
+                showSentCheckThenWaitingAnimation()
+            }
+        }
+    }
+
+    private fun isYourTurn(data: Map<String, String>): Boolean {
+        val raw = data["isYourTurn"]
+
+        if (!raw.isNullOrBlank()) {
+            return parseBoolean(raw)
+        }
+
+        val messagePlayer = data["player"]?.toIntOrNull()?.coerceIn(1, 2)
+
+        return messagePlayer != null && messagePlayer != localPlayer
+    }
+
+    private fun localUserId(msg: Map<String, String>): String {
+        return gameSessionIPC
+            ?.getSenderUUID(sessionId)
+            ?.takeIf { it.isNotBlank() }
+            ?: msg["myPlayerId"].orEmpty()
+    }
+
+    private fun resolveLocalPlayer(data: Map<String, String>): Int {
+        val myId = localUserId(data)
+        val p1 = data["player1"].orEmpty()
+        val p2 = data["player2"].orEmpty()
+        val sender = data["sender"].orEmpty()
+        val dataPlayer = data["player"]?.toIntOrNull()?.coerceIn(1, 2) ?: 1
+
+        if (myId.isNotBlank()) {
+            if (myId == p1) return 1
+            if (myId == p2) return 2
+        }
+
+        if (p1.isBlank() && p2.isNotBlank()) return 1
+        if (p2.isBlank() && p1.isNotBlank()) return 2
+        if (p1.isBlank() && p2.isBlank()) return dataPlayer
+
+        if (sender.isNotBlank()) {
+            if (sender == p1) return 2
+            if (sender == p2) return 1
+        }
+
+        return dataPlayer
     }
 
     private fun createAvatarHud() {
@@ -292,7 +565,6 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun applyOpponentAvatarFromMessage(data: Map<String, String>) {
-        val localPlayer = resolveLocalPlayer(data)
         val opponentAvatarKey = if (localPlayer == 1) {
             "avatar2"
         } else {
@@ -303,21 +575,6 @@ class ShuffleActivity : AppCompatActivity() {
 
         if (!avatar.isNullOrBlank()) {
             settingsSheet.applyOpponentAvatarString(avatar)
-        }
-    }
-
-    private fun resolveLocalPlayer(data: Map<String, String>): Int {
-        val messagePlayer = data["player"]
-            ?.toIntOrNull()
-            ?.coerceIn(1, 2)
-            ?: 1
-
-        val isYourTurn = parseBoolean(data["isYourTurn"])
-
-        return if (isYourTurn) {
-            messagePlayer
-        } else {
-            3 - messagePlayer
         }
     }
 
@@ -420,6 +677,8 @@ class ShuffleActivity : AppCompatActivity() {
                 "map=$map " +
                 "player=${message["player"]} " +
                 "num=${message["num"]} " +
+                "isYourTurn=${message["isYourTurn"]} " +
+                "sender=${message["sender"]} " +
                 "replayLen=${message["replay"]?.length ?: 0}"
     }
 
@@ -427,12 +686,20 @@ class ShuffleActivity : AppCompatActivity() {
         return mapOf(
             "game" to "shuffle",
             "mode" to "1",
-            "map" to "5,10,5,2,3,10,6,3,2,5,3,6",
+            "map" to defaultMapForMode(1),
             "player" to "1",
             "num" to "1",
             "isYourTurn" to "true",
             "replay" to DEFAULT_REPLAY
         )
+    }
+
+    private fun defaultMapForMode(mode: Int): String {
+        return when (mode) {
+            2 -> "6,5,8,10,10,8,5,6,6,5,6,2,5,2,7,3"
+            3 -> "3,2,5,10,7,7,6,5,6,4,7,8,6,10,4,4,4,8,5,3,5"
+            else -> "5,10,5,2,3,10,6,3,2,5,3,6"
+        }
     }
 
     override fun onResume() {
@@ -456,7 +723,264 @@ class ShuffleActivity : AppCompatActivity() {
             }
         }
 
+        stopStateLabelAnimation()
         super.onPause()
+    }
+
+    private fun createStateLabel() {
+        stateLabel = TextView(this).apply {
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTextColor(0xFFFFFFFF.toInt())
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+            setPadding(
+                stateLabelDp(14f),
+                stateLabelDp(8f),
+                stateLabelDp(14f),
+                stateLabelDp(8f)
+            )
+            applyStateLabelBackground(this)
+            visibility = View.GONE
+        }
+
+        rootFrame.addView(
+            stateLabel,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                stateLabelDp(38f),
+                Gravity.CENTER
+            )
+        )
+    }
+
+    private fun stateLabelDp(value: Float): Int {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            value,
+            resources.displayMetrics
+        ).toInt()
+    }
+
+    private fun applyStateLabelBackground(label: TextView) {
+        label.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = stateLabelDp(14f).toFloat()
+            setColor(0xBE000000.toInt())
+        }
+    }
+
+    private fun resetStateLabelLayout(label: TextView) {
+        label.alpha = 1f
+        label.translationX = 0f
+        label.translationY = 0f
+        label.scaleX = 1f
+        label.scaleY = 1f
+        label.setTextColor(0xFFFFFFFF.toInt())
+        applyStateLabelBackground(label)
+    }
+
+    private fun measureStateLabelWidth(
+        label: TextView,
+        text: CharSequence
+    ): Int {
+        return (
+                label.paint.measureText(text.toString()) +
+                        label.paddingLeft +
+                        label.paddingRight
+                ).toInt()
+    }
+
+    private fun stopStateLabelAnimation() {
+        waitingDotsRunnable?.let { stateLabelHandler.removeCallbacks(it) }
+        stateLabelHandler.removeCallbacksAndMessages(null)
+        waitingDotsRunnable = null
+        stateLabelAnimator?.cancel()
+        stateLabelAnimator = null
+        sentWaitingSequenceActive = false
+    }
+
+    private fun hideStateLabelNow() {
+        stopStateLabelAnimation()
+
+        if (::stateLabel.isInitialized) {
+            resetStateLabelLayout(stateLabel)
+            stateLabel.text = ""
+            stateLabel.visibility = View.GONE
+        }
+    }
+
+    private fun startWaitingDots(label: TextView) {
+        var dots = 1
+
+        waitingDotsRunnable?.let { stateLabelHandler.removeCallbacks(it) }
+
+        val runnable = object : Runnable {
+            override fun run() {
+                if (waitingDotsRunnable !== this) return
+
+                if (label.visibility == View.VISIBLE) {
+                    label.text = "WAITING FOR OPPONENT" + ".".repeat(dots)
+                    dots = if (dots >= 3) 1 else dots + 1
+                }
+
+                stateLabelHandler.postDelayed(this, 900L)
+            }
+        }
+
+        waitingDotsRunnable = runnable
+        stateLabelHandler.post(runnable)
+    }
+
+    private fun showWaitingLabelAnimated() {
+        runOnUiThread {
+            stopStateLabelAnimation()
+
+            resetStateLabelLayout(stateLabel)
+            stateLabel.bringToFront()
+
+            val waitingWidth = measureStateLabelWidth(
+                stateLabel,
+                "WAITING FOR OPPONENT..."
+            )
+
+            val params = stateLabel.layoutParams
+            params.width = waitingWidth
+            stateLabel.layoutParams = params
+
+            stateLabel.visibility = View.VISIBLE
+            startWaitingDots(stateLabel)
+
+            myAvatarAnchor.bringToFront()
+            opponentAvatarAnchor.bringToFront()
+            settingsButton.bringToFront()
+            stateLabel.bringToFront()
+        }
+    }
+
+    private fun showSendingLabelImmediately() {
+        runOnUiThread {
+            stopStateLabelAnimation()
+            sentWaitingSequenceActive = true
+
+            resetStateLabelLayout(stateLabel)
+
+            val sentWidth = measureStateLabelWidth(stateLabel, "Sent ✔")
+
+            val params = stateLabel.layoutParams
+            params.width = sentWidth
+            stateLabel.layoutParams = params
+
+            stateLabel.text = "Sent"
+            stateLabel.alpha = 1f
+            stateLabel.setTextColor(0xFFFFFFFF.toInt())
+            stateLabel.visibility = View.VISIBLE
+            stateLabel.bringToFront()
+        }
+    }
+
+    private fun showSentCheckThenWaitingAnimation() {
+        runOnUiThread {
+            sentWaitingSequenceActive = true
+
+            waitingDotsRunnable?.let { stateLabelHandler.removeCallbacks(it) }
+            waitingDotsRunnable = null
+
+            stateLabelAnimator?.cancel()
+            stateLabelAnimator = null
+
+            resetStateLabelLayout(stateLabel)
+
+            val sentWidth = measureStateLabelWidth(stateLabel, "Sent ✔")
+            val waitingWidth = measureStateLabelWidth(stateLabel, "WAITING FOR OPPONENT...")
+
+            val params = stateLabel.layoutParams
+            params.width = sentWidth
+            stateLabel.layoutParams = params
+
+            val sentCheck = SpannableString("Sent ✔")
+            sentCheck.setSpan(
+                ForegroundColorSpan(0xFF7257D8.toInt()),
+                5,
+                6,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+
+            stateLabel.text = sentCheck
+            stateLabel.alpha = 1f
+            stateLabel.setTextColor(0xFFFFFFFF.toInt())
+            stateLabel.visibility = View.VISIBLE
+            stateLabel.bringToFront()
+
+            stateLabelHandler.postDelayed({
+                if (!sentWaitingSequenceActive) return@postDelayed
+
+                stateLabel.bringToFront()
+
+                val oldWidth = stateLabel.width.takeIf { it > 0 } ?: sentWidth
+
+                val widthParams = stateLabel.layoutParams
+                widthParams.width = oldWidth
+                stateLabel.layoutParams = widthParams
+
+                stateLabel.animate().cancel()
+                stateLabel.alpha = 1f
+                stateLabel.text = "WAITING FOR OPPONENT."
+                stateLabel.setTextColor(0x00FFFFFF)
+                stateLabel.visibility = View.VISIBLE
+                stateLabel.bringToFront()
+
+                stateLabelAnimator = ValueAnimator.ofInt(oldWidth, waitingWidth).apply {
+                    duration = 420L
+
+                    addUpdateListener { animation ->
+                        val animatedParams = stateLabel.layoutParams
+                        animatedParams.width = animation.animatedValue as Int
+                        stateLabel.layoutParams = animatedParams
+                    }
+
+                    addListener(
+                        object : android.animation.AnimatorListenerAdapter() {
+                            override fun onAnimationEnd(animation: android.animation.Animator) {
+                                if (!sentWaitingSequenceActive) return
+
+                                stateLabelAnimator = null
+
+                                val finalParams = stateLabel.layoutParams
+                                finalParams.width = waitingWidth
+                                stateLabel.layoutParams = finalParams
+
+                                ValueAnimator.ofInt(0, 255).apply {
+                                    duration = 180L
+
+                                    addUpdateListener { textAnimation ->
+                                        val alpha = textAnimation.animatedValue as Int
+                                        stateLabel.setTextColor((alpha shl 24) or 0x00FFFFFF)
+                                    }
+
+                                    addListener(
+                                        object : android.animation.AnimatorListenerAdapter() {
+                                            override fun onAnimationEnd(animation: android.animation.Animator) {
+                                                if (sentWaitingSequenceActive) {
+                                                    stateLabel.setTextColor(0xFFFFFFFF.toInt())
+                                                    stateLabel.visibility = View.VISIBLE
+                                                    stateLabel.bringToFront()
+                                                    startWaitingDots(stateLabel)
+                                                }
+                                            }
+                                        }
+                                    )
+
+                                    start()
+                                }
+                            }
+                        }
+                    )
+
+                    start()
+                }
+            }, 1000L)
+        }
     }
 
     private fun loadAssetBitmap(path: String): Bitmap? {
@@ -464,7 +988,7 @@ class ShuffleActivity : AppCompatActivity() {
             assets.open(path).use { stream ->
                 BitmapFactory.decodeStream(stream)
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }

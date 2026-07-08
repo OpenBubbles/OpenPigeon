@@ -11,15 +11,28 @@
 #include "PoolBall.h"
 #include "PoolData.h"
 #include "PoolContactListener.h"
+#include <string>
+#include <cstdint>
+#include <optional>
 
 class PoolTable {
 public:
     PoolTable();
+    ~PoolTable();
+
     void makeBall(b2Vec2 position, float rot, float density, int number, int shouldGoIn, float* outputs);
     void clearBalls();
     bool update();
     void hitBall(int number, float dir, float power, float spinX, float spinY, bool first);
     void moveBall(int number, b2Vec2 position, float rot);
+
+    std::string dumpState() const;
+    void setDebugTrace(bool enabled, int everyFrames);
+
+    uint32_t frame = 0;
+    bool debugTraceEnabled = false;
+    int debugTraceEveryFrames = 1;
+
     int cueDelay = -1;
     int pocketNumber = 0;
 
