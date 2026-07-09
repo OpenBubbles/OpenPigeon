@@ -31,6 +31,7 @@ import androidx.core.animation.doOnEnd
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import android.graphics.Paint
+import android.graphics.Color
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.SettingsSheet
 import com.openbubbles.openpigeon.ui.RulesPopup
@@ -63,6 +64,9 @@ import android.os.Looper
 import android.view.Gravity
 import kotlin.random.Random
 import android.os.SystemClock
+import android.graphics.RadialGradient
+import android.graphics.Shader
+
 
 class PoolActivity : AppCompatActivity() {
     lateinit var sessionId: String
@@ -132,6 +136,14 @@ class PoolActivity : AppCompatActivity() {
     private var waitingDotsRunnable: Runnable? = null
     private var stateLabelAnimator: ValueAnimator? = null
     private var sentWaitingSequenceActive = false
+    private var statusDimView: View? = null
+    @Volatile private var statusDimVisible = false
+
+    @Volatile private var gameEnded = false
+    @Volatile private var winLossState = ""
+    @Volatile private var pendingWinLossState = ""
+    private enum class StateLabelVisual { Hidden, Waiting, SentWaiting, GameOver }
+    private var stateLabelVisual = StateLabelVisual.Hidden
 
     fun isPoolDarkModeEnabled(): Boolean {
         return darkMode
@@ -520,9 +532,23 @@ class PoolActivity : AppCompatActivity() {
         label.setTextColor(0xFFFFFFFF.toInt())
         applyStateLabelBackground(label)
 
-        val params = label.layoutParams
-        params.width = FrameLayout.LayoutParams.WRAP_CONTENT
-        label.layoutParams = params
+        val params = label.layoutParams as? FrameLayout.LayoutParams
+        if (params != null) {
+            params.width = FrameLayout.LayoutParams.WRAP_CONTENT
+            params.height = FrameLayout.LayoutParams.WRAP_CONTENT
+            params.gravity = Gravity.CENTER
+            params.topMargin = 0
+            params.bottomMargin = 0
+            params.leftMargin = 0
+            params.rightMargin = 0
+            label.layoutParams = params
+        } else {
+            val fallbackParams = label.layoutParams
+            fallbackParams.width = FrameLayout.LayoutParams.WRAP_CONTENT
+            label.layoutParams = fallbackParams
+        }
+
+        label.bringToFront()
     }
 
     private fun measureStateLabelWidth(label: TextView, text: CharSequence): Int {
@@ -538,6 +564,180 @@ class PoolActivity : AppCompatActivity() {
         stateLabelAnimator?.cancel()
         stateLabelAnimator = null
         sentWaitingSequenceActive = false
+        stateLabelVisual = StateLabelVisual.Hidden
+    }
+
+    private fun ensureStatusDimView(): View? {
+        statusDimView?.let { return it }
+
+        val root = findViewById<FrameLayout>(R.id.poolRoot) ?: return null
+
+        root.clipChildren = false
+        root.clipToPadding = false
+
+        val dim = View(this).apply {
+            setBackgroundColor(Color.argb(115, 0, 0, 0))
+            alpha = 0f
+            visibility = View.GONE
+            isClickable = false
+            isFocusable = false
+        }
+
+        root.addView(
+            dim,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        statusDimView = dim
+        return dim
+    }
+
+    private fun setStatusDimVisible(visible: Boolean) {
+        runOnUiThread {
+            val dim = ensureStatusDimView() ?: return@runOnUiThread
+
+            dim.animate().cancel()
+
+            if (visible) {
+                statusDimVisible = true
+
+                if (dim.visibility != View.VISIBLE) {
+                    dim.alpha = 0f
+                    dim.visibility = View.VISIBLE
+                }
+
+                dim.bringToFront()
+
+                dim.animate()
+                    .alpha(1f)
+                    .setDuration(180L)
+                    .start()
+            } else {
+                statusDimVisible = false
+
+                dim.animate()
+                    .alpha(0f)
+                    .setDuration(160L)
+                    .withEndAction {
+                        if (!statusDimVisible) {
+                            dim.visibility = View.GONE
+                        }
+                    }
+                    .start()
+            }
+        }
+    }
+
+    private fun isGameOver(): Boolean {
+        return gameEnded && winLossState.isNotBlank()
+    }
+
+    private fun gameOverText(): String {
+        return when (winLossState) {
+            "1" -> "You Win!"
+            "-1" -> "You Lose!"
+            "0" -> "Draw!"
+            else -> ""
+        }
+    }
+
+    private fun gameOverTextColor(): Int {
+        return when (winLossState) {
+            "1" -> Color.rgb(255, 214, 0)
+            "-1" -> Color.rgb(255, 51, 51)
+            "0" -> Color.WHITE
+            else -> Color.WHITE
+        }
+    }
+
+    private fun localWinLossStateFromWinner(rawWinner: String?): String {
+        val winner = rawWinner.orEmpty()
+        if (winner.isBlank()) return ""
+
+        val parts = winner.split("|", limit = 2)
+        if (parts.size != 2) return ""
+
+        val senderWinnerId = parts[0]
+        val senderState = parts[1].toIntOrNull()?.coerceIn(-1, 1) ?: return ""
+        val myId = gameSessionIPC?.getSenderUUID(sessionId).orEmpty()
+
+        val localState = when {
+            senderState == 0 -> 0
+            myId.isNotBlank() && senderWinnerId == myId -> senderState
+            else -> -senderState
+        }
+
+        return localState.toString()
+    }
+
+    private fun setPendingWinLossState(state: String) {
+        if (state.isBlank()) return
+
+        pendingWinLossState = state
+    }
+
+    private fun markGameOver(state: String) {
+        if (state.isBlank()) return
+
+        gameEnded = true
+        winLossState = state
+        mode = PoolMode.Disabled
+
+        setCueUiVisible(false)
+        renderer.setCueVisible(false)
+        showGameOverLabel()
+    }
+
+    private fun showGameOverLabel() {
+        runOnUiThread {
+            if (!isGameOver()) return@runOnUiThread
+
+            stopStateLabelAnimation()
+            stateLabelVisual = StateLabelVisual.GameOver
+
+            val label = findViewById<TextView>(R.id.state_label)
+            resetStateLabelLayout(label)
+
+            val text = gameOverText()
+            val labelWidth = measureStateLabelWidth(label, text)
+
+            val params = label.layoutParams
+            params.width = labelWidth
+            label.layoutParams = params
+
+            label.text = text
+            label.setTextColor(gameOverTextColor())
+            label.visibility = View.VISIBLE
+
+            setStatusDimVisible(true)
+            label.bringToFront()
+        }
+    }
+
+    private fun showSendingLabelImmediately() {
+        runOnUiThread {
+            stopStateLabelAnimation()
+            sentWaitingSequenceActive = true
+            stateLabelVisual = StateLabelVisual.SentWaiting
+
+            val label = findViewById<TextView>(R.id.state_label)
+            resetStateLabelLayout(label)
+
+            val sentWidth = measureStateLabelWidth(label, "Sent ✔")
+
+            val params = label.layoutParams
+            params.width = sentWidth
+            label.layoutParams = params
+
+            label.text = "Sent"
+            label.alpha = 1f
+            label.setTextColor(0xFFFFFFFF.toInt())
+            label.visibility = View.VISIBLE
+            label.bringToFront()
+        }
     }
 
     private fun setStateLabelText(text: CharSequence, visible: Boolean = true) {
@@ -547,6 +747,9 @@ class PoolActivity : AppCompatActivity() {
         resetStateLabelLayout(label)
         label.text = text
         label.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) {
+            setStatusDimVisible(false)
+        }
     }
 
     private fun startWaitingDots(label: TextView) {
@@ -573,10 +776,18 @@ class PoolActivity : AppCompatActivity() {
 
     private fun showWaitingLabelAnimated() {
         runOnUiThread {
+            if (isGameOver()) {
+                showGameOverLabel()
+                return@runOnUiThread
+            }
+
+            if (stateLabelVisual == StateLabelVisual.Waiting) return@runOnUiThread
             stopStateLabelAnimation()
+            stateLabelVisual = StateLabelVisual.Waiting
 
             val label = findViewById<TextView>(R.id.state_label)
             resetStateLabelLayout(label)
+            label.bringToFront()
 
             val waitingWidth = measureStateLabelWidth(label, "WAITING FOR OPPONENT...")
             val params = label.layoutParams
@@ -590,8 +801,13 @@ class PoolActivity : AppCompatActivity() {
 
     private fun playSentThenWaitingAnimation() {
         runOnUiThread {
-            stopStateLabelAnimation()
             sentWaitingSequenceActive = true
+            stateLabelVisual = StateLabelVisual.SentWaiting
+
+            waitingDotsRunnable?.let { stateLabelHandler.removeCallbacks(it) }
+            waitingDotsRunnable = null
+            stateLabelAnimator?.cancel()
+            stateLabelAnimator = null
 
             val label = findViewById<TextView>(R.id.state_label)
             resetStateLabelLayout(label)
@@ -603,31 +819,30 @@ class PoolActivity : AppCompatActivity() {
             params.width = sentWidth
             label.layoutParams = params
 
-            label.text = "Sent"
-            label.alpha = 0f
+            val sentCheck = SpannableString("Sent ✔")
+            sentCheck.setSpan(
+                ForegroundColorSpan(0xFF7257D8.toInt()),
+                5,
+                6,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+
+            label.text = sentCheck
+            label.alpha = 1f
             label.setTextColor(0xFFFFFFFF.toInt())
             label.visibility = View.VISIBLE
-
-            label.animate()
-                .alpha(1f)
-                .setDuration(250L)
-                .start()
+            label.bringToFront()
 
             stateLabelHandler.postDelayed({
-                if (!sentWaitingSequenceActive) return@postDelayed
+                if (!sentWaitingSequenceActive || poolActivityClosing) return@postDelayed
 
-                val sentCheck = SpannableString("Sent ✔")
-                sentCheck.setSpan(
-                    ForegroundColorSpan(0xFF7257D8.toInt()),
-                    5,
-                    6,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-                label.text = sentCheck
-            }, 1000L)
+                if (isGameOver()) {
+                    showGameOverLabel()
+                    return@postDelayed
+                }
 
-            stateLabelHandler.postDelayed({
-                if (!sentWaitingSequenceActive) return@postDelayed
+                setStatusDimVisible(true)
+                label.bringToFront()
 
                 val oldWidth = label.width.takeIf { it > 0 } ?: sentWidth
 
@@ -639,16 +854,20 @@ class PoolActivity : AppCompatActivity() {
                 label.alpha = 1f
                 label.text = "WAITING FOR OPPONENT."
                 label.setTextColor(0x00FFFFFF)
+                label.visibility = View.VISIBLE
+                label.bringToFront()
 
                 stateLabelAnimator = ValueAnimator.ofInt(oldWidth, waitingWidth).apply {
                     duration = 420L
+
                     addUpdateListener { animation ->
                         val animatedParams = label.layoutParams
                         animatedParams.width = animation.animatedValue as Int
                         label.layoutParams = animatedParams
                     }
+
                     doOnEnd {
-                        if (!sentWaitingSequenceActive) return@doOnEnd
+                        if (!sentWaitingSequenceActive || poolActivityClosing) return@doOnEnd
 
                         stateLabelAnimator = null
 
@@ -658,22 +877,28 @@ class PoolActivity : AppCompatActivity() {
 
                         ValueAnimator.ofInt(0, 255).apply {
                             duration = 180L
+
                             addUpdateListener { textAnimation ->
                                 val alpha = textAnimation.animatedValue as Int
                                 label.setTextColor((alpha shl 24) or 0x00FFFFFF)
                             }
+
                             doOnEnd {
-                                if (sentWaitingSequenceActive) {
+                                if (sentWaitingSequenceActive && !poolActivityClosing) {
                                     label.setTextColor(0xFFFFFFFF.toInt())
+                                    label.visibility = View.VISIBLE
+                                    label.bringToFront()
                                     startWaitingDots(label)
                                 }
                             }
+
                             start()
                         }
                     }
+
                     start()
                 }
-            }, 2000L)
+            }, 1000L)
         }
     }
 
@@ -1720,7 +1945,6 @@ class PoolActivity : AppCompatActivity() {
 
         return scratch
     }
-    var didIWin: Boolean? = null
     var disableSend = false
 
     fun finishReplay() {
@@ -1786,17 +2010,8 @@ class PoolActivity : AppCompatActivity() {
 
         updateNineBallBar()
 
-        if (didIWin != null) {
-            runOnUiThread {
-                val label = findViewById<TextView>(R.id.state_label)
-                label.visibility = View.VISIBLE
-                stopStateLabelAnimation()
-                if (didIWin!!) {
-                    label.text = "You won!"
-                } else {
-                    label.text = "They won!"
-                }
-            }
+        if (pendingWinLossState.isNotBlank()) {
+            markGameOver(pendingWinLossState)
             return
         }
 
@@ -1970,15 +2185,7 @@ class PoolActivity : AppCompatActivity() {
 
             if (winState != null) {
                 replays += "&win:${if (winState) 1 else -1}"
-                runOnUiThread {
-                    val label = findViewById<TextView>(R.id.state_label)
-                    label.visibility = View.VISIBLE
-                    if (winState) {
-                        label.text = "You won!"
-                    } else {
-                        label.text = "They won!"
-                    }
-                }
+                markGameOver(if (winState) "1" else "-1")
             }
 
             OpenPigeonLog.i(
@@ -2007,14 +2214,20 @@ class PoolActivity : AppCompatActivity() {
                 msgUpdates["winner"] = "$myId|${if (winState) "1" else "-1"}"
             }
 
+            if (winState == null) {
+                setCueUiVisible(false)
+                showSendingLabelImmediately()
+            } else {
+                showGameOverLabel()
+            }
+
             ipc.updateSession(msgUpdates, sessionId) {
                 OpenPigeonLog.i("openpigeon-${baseGame.getName()}", "Game session updated")
 
                 if (winState == null) {
-                    runOnUiThread {
-                        setCueUiVisible(false)
-                        playSentThenWaitingAnimation()
-                    }
+                    playSentThenWaitingAnimation()
+                } else {
+                    showGameOverLabel()
                 }
             }
         }
@@ -2025,7 +2238,10 @@ class PoolActivity : AppCompatActivity() {
         val number: Int,
         val data: FloatBuffer,
         val resources: Resources,
-        val density: Float
+        val density: Float,
+        var visualRotationX: Float = 0f,
+        var visualRotationY: Float = 0f,
+        var visualRotationZ: Float = 0f
     ) {
         companion object {
             val ballOrder = listOf(
@@ -2049,11 +2265,19 @@ class PoolActivity : AppCompatActivity() {
 
             private const val BALL_RADIUS = 10f
             private const val IOS_BALL_CANCEL_TABLE_ROTATION_DEGREES = -90f
+
             private const val IOS_SHADOW_OFFSET_X = -4.5f
             private const val IOS_SHADOW_OFFSET_Y = 0.0f
             private const val IOS_SHADOW_RADIUS = BALL_RADIUS
-            private const val ROLL_VISUAL_SCALE = 0.85f
+
+            // iOS trace: cue ball dx=11.811432 produced drx=-52.805118.
+            // 52.805118 / 11.811432 = 4.47 degrees per table unit.
+            private const val IOS_ROLL_DEGREES_PER_WORLD_UNIT = 4.47f
             private const val MAX_ROLL_STEP = 60f
+
+            private const val SPHERE_RENDER_SIZE = 72
+            private const val SPHERE_CENTER = (SPHERE_RENDER_SIZE - 1) * 0.5f
+            private const val SPHERE_RADIUS = (SPHERE_RENDER_SIZE - 2) * 0.5f
 
             private val ballPaint = Paint(
                 Paint.ANTI_ALIAS_FLAG or
@@ -2064,13 +2288,63 @@ class PoolActivity : AppCompatActivity() {
             private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = 0x80000000.toInt()
             }
+
+            private const val GLOSS_RADIUS = BALL_RADIUS * 0.95f
+
+            private val glossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = RadialGradient(
+                    -3.0f, -4.0f, 7.5f,
+                    intArrayOf(
+                        0x99FFFFFF.toInt(),
+                        0x44FFFFFF.toInt(),
+                        0x00FFFFFF
+                    ),
+                    floatArrayOf(0.0f, 0.45f, 1.0f),
+                    Shader.TileMode.CLAMP
+                )
+            }
+
+            private val glossPaint2 = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = RadialGradient(
+                    -1.5f, -2.5f, 4.5f,
+                    intArrayOf(
+                        0x55FFFFFF,
+                        0x18FFFFFF,
+                        0x00FFFFFF
+                    ),
+                    floatArrayOf(0.0f, 0.55f, 1.0f),
+                    Shader.TileMode.CLAMP
+                )
+            }
         }
 
-        val bitmap: Bitmap = BitmapFactory.decodeResource(resources, ballOrder[number])
+        private val sourceBitmap: Bitmap = BitmapFactory
+            .decodeResource(resources, ballOrder[number])
+            .let { decoded ->
+                if (decoded.config == Bitmap.Config.ARGB_8888) {
+                    decoded
+                } else {
+                    decoded.copy(Bitmap.Config.ARGB_8888, false)
+                }
+            }
 
+        private val sourceWidth = sourceBitmap.width
+        private val sourceHeight = sourceBitmap.height
+        private val sourcePixels = IntArray(sourceWidth * sourceHeight).also {
+            sourceBitmap.getPixels(it, 0, sourceWidth, 0, 0, sourceWidth, sourceHeight)
+        }
+
+        private val sphereBitmap = Bitmap.createBitmap(
+            SPHERE_RENDER_SIZE,
+            SPHERE_RENDER_SIZE,
+            Bitmap.Config.ARGB_8888
+        )
+
+        private val spherePixels = IntArray(SPHERE_RENDER_SIZE * SPHERE_RENDER_SIZE)
+
+        private var sphereDirty = true
         private var lastDrawX = Float.NaN
         private var lastDrawY = Float.NaN
-        private var visualRollRadians = 0f
 
         val x: Float
             get() = data.get(0)
@@ -2108,6 +2382,16 @@ class PoolActivity : AppCompatActivity() {
         val inPocket: Boolean
             get() = holeX != -1f && holeY != -1f && !sunk
 
+        fun exportVisualRotationString(): String {
+            return String.format(
+                Locale.US,
+                "%.6f,%.6f,%.6f",
+                visualRotationX,
+                visualRotationY,
+                visualRotationZ
+            )
+        }
+
         private fun updateVisualRoll() {
             if (lastDrawX.isNaN() || lastDrawY.isNaN()) {
                 lastDrawX = x
@@ -2126,13 +2410,133 @@ class PoolActivity : AppCompatActivity() {
                 return
             }
 
-            val sign = if (abs(dx) >= abs(dy)) {
-                if (dx >= 0f) 1f else -1f
-            } else {
-                if (dy >= 0f) -1f else 1f
+            // Captured iOS behavior:
+            // movement in +X drives large negative rotationX.
+            visualRotationX += dx * IOS_ROLL_DEGREES_PER_WORLD_UNIT
+            visualRotationY += -dy * IOS_ROLL_DEGREES_PER_WORLD_UNIT
+
+            sphereDirty = true
+        }
+
+        private fun degToRad(value: Float): Double {
+            return value.toDouble() * Math.PI / 180.0
+        }
+
+        private fun sampleSource(uFloat: Float, vFloat: Float): Int {
+            var u = uFloat.toInt() % sourceWidth
+            if (u < 0) u += sourceWidth
+
+            val v = vFloat.toInt().coerceIn(0, sourceHeight - 1)
+
+            return sourcePixels[v * sourceWidth + u]
+        }
+
+        private fun applyShade(color: Int, normalX: Float, normalY: Float, normalZ: Float): Int {
+            val a = color ushr 24
+            if (a == 0) return 0
+
+            val r = (color shr 16) and 0xff
+            val g = (color shr 8) and 0xff
+            val b = color and 0xff
+
+            // Static iOS-style top-left highlight / bottom-right shade.
+            val lightDot = (
+                    normalX * -0.35f +
+                            normalY * -0.45f +
+                            normalZ * 0.90f
+                    ).coerceIn(0f, 1f)
+
+            val edgeShade = normalZ.coerceIn(0f, 1f)
+
+            val shade = (0.48f + lightDot * 0.42f + edgeShade * 0.10f)
+                .coerceIn(0.35f, 1.05f)
+
+            val rr = (r * shade).toInt().coerceIn(0, 255)
+            val gg = (g * shade).toInt().coerceIn(0, 255)
+            val bb = (b * shade).toInt().coerceIn(0, 255)
+
+            return (a shl 24) or (rr shl 16) or (gg shl 8) or bb
+        }
+
+        private fun renderSphereIfNeeded() {
+            if (!sphereDirty) return
+            sphereDirty = false
+
+            val rx = -degToRad(visualRotationX)
+            val ry = -degToRad(visualRotationY)
+            val rz = -degToRad(visualRotationZ)
+
+            val cosX = Math.cos(rx)
+            val sinX = Math.sin(rx)
+            val cosY = Math.cos(ry)
+            val sinY = Math.sin(ry)
+            val cosZ = Math.cos(rz)
+            val sinZ = Math.sin(rz)
+
+            for (py in 0 until SPHERE_RENDER_SIZE) {
+                for (px in 0 until SPHERE_RENDER_SIZE) {
+                    val index = py * SPHERE_RENDER_SIZE + px
+
+                    val nx = (px - SPHERE_CENTER) / SPHERE_RADIUS
+                    val ny = (py - SPHERE_CENTER) / SPHERE_RADIUS
+                    val r2 = nx * nx + ny * ny
+
+                    if (r2 > 1f) {
+                        spherePixels[index] = 0x00000000
+                        continue
+                    }
+
+                    val nz = sqrt(1f - r2)
+
+                    // Screen-space visible hemisphere normal.
+                    var vx = nx.toDouble()
+                    var vy = -ny.toDouble()
+                    var vz = nz.toDouble()
+
+                    // Inverse Z rotation.
+                    run {
+                        val tx = vx * cosZ - vy * sinZ
+                        val ty = vx * sinZ + vy * cosZ
+                        vx = tx
+                        vy = ty
+                    }
+
+                    // Inverse Y rotation.
+                    run {
+                        val tx = vx * cosY + vz * sinY
+                        val tz = -vx * sinY + vz * cosY
+                        vx = tx
+                        vz = tz
+                    }
+
+                    // Inverse X rotation.
+                    run {
+                        val ty = vy * cosX - vz * sinX
+                        val tz = vy * sinX + vz * cosX
+                        vy = ty
+                        vz = tz
+                    }
+
+                    val longitude = Math.atan2(vx, vz)
+                    val latitude = Math.asin(vy.coerceIn(-1.0, 1.0))
+
+                    val u = ((longitude / (Math.PI * 2.0)) + 0.5) * sourceWidth
+                    val v = (0.5 - (latitude / Math.PI)) * sourceHeight
+
+                    val sampled = sampleSource(u.toFloat(), v.toFloat())
+                    spherePixels[index] = applyShade(sampled, nx, ny, nz)
+                }
             }
 
-            visualRollRadians += sign * (dist / BALL_RADIUS) * ROLL_VISUAL_SCALE
+            sphereBitmap.setPixels(
+                spherePixels,
+                0,
+                SPHERE_RENDER_SIZE,
+                0,
+                0,
+                SPHERE_RENDER_SIZE,
+                SPHERE_RENDER_SIZE
+            )
         }
 
         fun drawShadow(canvas: Canvas) {
@@ -2154,25 +2558,54 @@ class PoolActivity : AppCompatActivity() {
             )
         }
 
+        private fun drawGloss(canvas: Canvas) {
+            if (sunk || inPocket) {
+                return
+            }
+
+            // Fixed screen-facing gloss, not part of the rolling texture.
+            canvas.drawOval(
+                RectF(
+                    -8.0f,
+                    -8.5f,
+                    2.0f,
+                    1.5f
+                ),
+                glossPaint
+            )
+
+            canvas.drawOval(
+                RectF(
+                    -4.5f,
+                    -5.0f,
+                    0.8f,
+                    0.2f
+                ),
+                glossPaint2
+            )
+        }
+
         fun draw(canvas: Canvas) {
             updateVisualRoll()
+            renderSphereIfNeeded()
 
+            // Draw the rolling sphere surface.
             canvas.save()
             canvas.translate(x, y)
-
-            val drawRotationDegrees =
-                IOS_BALL_CANCEL_TABLE_ROTATION_DEGREES +
-                        Math.toDegrees((rot + visualRollRadians).toDouble()).toFloat()
-
-            canvas.rotate(drawRotationDegrees)
+            canvas.rotate(IOS_BALL_CANCEL_TABLE_ROTATION_DEGREES)
 
             canvas.drawBitmap(
-                bitmap,
+                sphereBitmap,
                 null,
                 RectF(-10.0f, -10.0f, 10.0f, 10.0f),
                 ballPaint
             )
+            canvas.restore()
 
+            // Draw a fixed gloss on top so the ball does not look flat.
+            canvas.save()
+            canvas.translate(x, y)
+            drawGloss(canvas)
             canvas.restore()
         }
     }
@@ -2238,15 +2671,15 @@ class PoolActivity : AppCompatActivity() {
 
             if (centerScratch && it.number == 0) {
                 OpenPigeonLog.i("White", "scratching")
-                return@map "#392.000000,220.000000,0.000000,$density,0,5.632916,7.415801,5.384167"
+                return@map "#392.000000,220.000000,0.000000,$density,0,${it.exportVisualRotationString()}"
             }
 
             if (isNineBall && centerScratch && it.sunk && it.number in 1..9) {
                 OpenPigeonLog.i("POOL9_DEBUG", "Respotted fouled pocketed ball ${it.number}")
-                return@map "#560.000000,220.000000,0.000000,1.000000,${it.number},5.632916,7.415801,5.384167"
+                return@map "#560.000000,220.000000,0.000000,1.000000,${it.number},${it.exportVisualRotationString()}"
             }
 
-            "#${it.x},${it.y},${it.rot},$density,${it.number},5.632916,7.415801,5.384167"
+            "#${it.x},${it.y},${it.rot},$density,${it.number},${it.exportVisualRotationString()}"
         }.joinToString("")
     }
 
@@ -2389,6 +2822,9 @@ class PoolActivity : AppCompatActivity() {
             val rot = details[2].toFloat()
             val density = details[3].toFloat()
             val number = details[4].toInt()
+            val visualRotX = details.getOrNull(5)?.toFloatOrNull() ?: 0f
+            val visualRotY = details.getOrNull(6)?.toFloatOrNull() ?: 0f
+            val visualRotZ = details.getOrNull(7)?.toFloatOrNull() ?: -1f
 
             val buffer = ByteBuffer.allocateDirect(4 /*f32*/ * 7)
             buffer.order(ByteOrder.nativeOrder())
@@ -2450,7 +2886,15 @@ class PoolActivity : AppCompatActivity() {
                 floatBuffer
             )
 
-            val poolBall = PoolBall(number, floatBuffer, resources, density)
+            val poolBall = PoolBall(
+                number = number,
+                data = floatBuffer,
+                resources = resources,
+                density = density,
+                visualRotationX = visualRotX,
+                visualRotationY = visualRotY,
+                visualRotationZ = visualRotZ
+            )
             poolBalls.add(poolBall)
 
             if (number == 0) {
@@ -2506,8 +2950,12 @@ class PoolActivity : AppCompatActivity() {
         skipReplayFadeStarted = false
         cancelAllShots()
         cancelAllShots = {}
-        didIWin = null
         call8Ball = false
+        gameEnded = false
+        winLossState = ""
+        pendingWinLossState = ""
+        stateLabelVisual = StateLabelVisual.Hidden
+        setStatusDimVisible(false)
         clearBalls(table)
         poolBalls.clear()
         cueBall = null
@@ -2556,6 +3004,10 @@ class PoolActivity : AppCompatActivity() {
 
         val sender = msg["sender"].orEmpty()
         val isYourTurn = sender != ipc.getSenderUUID(sessionId)
+
+        localWinLossStateFromWinner(msg["winner"]).takeIf { it.isNotBlank() }?.let { state ->
+            setPendingWinLossState(state)
+        }
 
         OpenPigeonLog.i(
             "PoolMsg",
@@ -2618,7 +3070,12 @@ class PoolActivity : AppCompatActivity() {
                 if (output["win"] != null) {
                     val win = output["win"]?.toIntOrNull()
                     if (win != null) {
-                        didIWin = if (!isYourTurn) win == 1 else win != 1
+                        val localState = if (!isYourTurn) {
+                            if (win == 1) "1" else "-1"
+                        } else {
+                            if (win == 1) "-1" else "1"
+                        }
+                        setPendingWinLossState(localState)
                     } else {
                         OpenPigeonLog.w("PoolReplay", "bad_win_value index=$index value=${output["win"]}")
                     }
@@ -2706,6 +3163,14 @@ class PoolActivity : AppCompatActivity() {
             buildBalls(finalBalls, null)
             scratch = isNineBall || !isEightBallPlus
 
+            if (pendingWinLossState.isNotBlank()) {
+                markGameOver(pendingWinLossState)
+                if (!renderer.isAlive) {
+                    renderer.start()
+                }
+                return
+            }
+
             mode = PoolMode.Aiming
             isFirst = true
 
@@ -2740,10 +3205,14 @@ class PoolActivity : AppCompatActivity() {
                 hideSkipReplayButton("not_replaying")
                 setCueUiVisible(false)
 
-                if (didIWin != null) {
-                    setStateLabelText(if (didIWin!!) "You won!" else "They won!")
+                if (pendingWinLossState.isNotBlank()) {
+                    markGameOver(pendingWinLossState)
                 } else if (!sentWaitingSequenceActive) {
-                    showWaitingLabelAnimated()
+                    if (pendingWinLossState.isNotBlank()) {
+                        markGameOver(pendingWinLossState)
+                    } else {
+                        showWaitingLabelAnimated()
+                    }
                 }
             }
             mode = PoolMode.Disabled
