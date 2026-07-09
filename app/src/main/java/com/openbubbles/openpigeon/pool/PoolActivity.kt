@@ -2270,8 +2270,6 @@ class PoolActivity : AppCompatActivity() {
             private const val IOS_SHADOW_OFFSET_Y = 0.0f
             private const val IOS_SHADOW_RADIUS = BALL_RADIUS
 
-            // iOS trace: cue ball dx=11.811432 produced drx=-52.805118.
-            // 52.805118 / 11.811432 = 4.47 degrees per table unit.
             private const val IOS_ROLL_DEGREES_PER_WORLD_UNIT = 4.47f
             private const val MAX_ROLL_STEP = 60f
 
@@ -2410,8 +2408,6 @@ class PoolActivity : AppCompatActivity() {
                 return
             }
 
-            // Captured iOS behavior:
-            // movement in +X drives large negative rotationX.
             visualRotationX += dx * IOS_ROLL_DEGREES_PER_WORLD_UNIT
             visualRotationY += -dy * IOS_ROLL_DEGREES_PER_WORLD_UNIT
 
@@ -2439,7 +2435,6 @@ class PoolActivity : AppCompatActivity() {
             val g = (color shr 8) and 0xff
             val b = color and 0xff
 
-            // Static iOS-style top-left highlight / bottom-right shade.
             val lightDot = (
                     normalX * -0.35f +
                             normalY * -0.45f +
@@ -2488,12 +2483,10 @@ class PoolActivity : AppCompatActivity() {
 
                     val nz = sqrt(1f - r2)
 
-                    // Screen-space visible hemisphere normal.
                     var vx = nx.toDouble()
                     var vy = -ny.toDouble()
                     var vz = nz.toDouble()
 
-                    // Inverse Z rotation.
                     run {
                         val tx = vx * cosZ - vy * sinZ
                         val ty = vx * sinZ + vy * cosZ
@@ -2501,7 +2494,6 @@ class PoolActivity : AppCompatActivity() {
                         vy = ty
                     }
 
-                    // Inverse Y rotation.
                     run {
                         val tx = vx * cosY + vz * sinY
                         val tz = -vx * sinY + vz * cosY
@@ -2509,7 +2501,6 @@ class PoolActivity : AppCompatActivity() {
                         vz = tz
                     }
 
-                    // Inverse X rotation.
                     run {
                         val ty = vy * cosX - vz * sinX
                         val tz = vy * sinX + vz * cosX
@@ -2563,7 +2554,6 @@ class PoolActivity : AppCompatActivity() {
                 return
             }
 
-            // Fixed screen-facing gloss, not part of the rolling texture.
             canvas.drawOval(
                 RectF(
                     -8.0f,
@@ -2589,7 +2579,6 @@ class PoolActivity : AppCompatActivity() {
             updateVisualRoll()
             renderSphereIfNeeded()
 
-            // Draw the rolling sphere surface.
             canvas.save()
             canvas.translate(x, y)
             canvas.rotate(IOS_BALL_CANCEL_TABLE_ROTATION_DEGREES)
@@ -2602,7 +2591,6 @@ class PoolActivity : AppCompatActivity() {
             )
             canvas.restore()
 
-            // Draw a fixed gloss on top so the ball does not look flat.
             canvas.save()
             canvas.translate(x, y)
             drawGloss(canvas)
