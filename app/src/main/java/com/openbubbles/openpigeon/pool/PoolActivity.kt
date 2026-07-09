@@ -2954,10 +2954,14 @@ class PoolActivity : AppCompatActivity() {
         poolTraceEnabled =
             msg["pool_trace"] == "1" ||
                     msg["debug_pool"] == "1" ||
-                    msg["trace"] == "pool" ||
-                    msg["replay"]?.isNotBlank() == true
+                    msg["trace"] == "pool"
 
-        setPoolDebugTrace(table, poolTraceEnabled, if (poolTraceEnabled) 1 else 0)
+        val poolTraceEveryFrames = msg["pool_trace_every"]
+            ?.toIntOrNull()
+            ?.coerceAtLeast(1)
+            ?: 30
+
+        setPoolDebugTrace(table, poolTraceEnabled, if (poolTraceEnabled) poolTraceEveryFrames else 0)
 
         disableSend = false
         skipReplayRequested = false
