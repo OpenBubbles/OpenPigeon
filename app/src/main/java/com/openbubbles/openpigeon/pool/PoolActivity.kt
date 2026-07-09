@@ -1935,45 +1935,59 @@ class PoolActivity : AppCompatActivity() {
 
     fun tableIsScratch(): Boolean {
         val cueBall = cueBall ?: return false
+        val cueBallScratch = cueBall.sunk || cueBall.inPocket
 
         if (isNineBall) {
-            val scratch =
-                cueBall.sunk ||
+            val result =
+                cueBallScratch ||
                         !cueBall.hitBall ||
                         cueBall.ballHit != nineBallTargetAtShot
 
+            this.scratch = result
+
             OpenPigeonLog.i(
                 "POOL9_DEBUG",
-                "SCRATCH_CHECK cueBall.sunk=${cueBall.sunk} hitBall=${cueBall.hitBall} ballHit=${cueBall.ballHit} target=$nineBallTargetAtShot scratch=$scratch"
+                "SCRATCH_CHECK cueBall.sunk=${cueBall.sunk} cueBall.inPocket=${cueBall.inPocket} " +
+                        "hitBall=${cueBall.hitBall} ballHit=${cueBall.ballHit} target=$nineBallTargetAtShot scratch=$result"
             )
 
-            return scratch
+            return result
         }
 
-        var scratch = !cueBall.hitBall || cueBall.sunk
+        var result = !cueBall.hitBall || cueBallScratch
 
         if (cueBall.ballHit != -1) {
-            val ballHit = poolBalls.find { it.number == cueBall.ballHit } ?: return scratch
+            val ballHit = poolBalls.find { it.number == cueBall.ballHit } ?: return result
             val stripes = iAmStripes
-            val hasMoreBalls = stripes == null || poolBalls.count { !it.sunk && ((stripes && it.isStripe) || (!stripes && it.isSolid)) } != 0
+            val hasMoreBalls =
+                stripes == null ||
+                        poolBalls.count {
+                            !it.sunk && ((stripes && it.isStripe) || (!stripes && it.isSolid))
+                        } != 0
 
             if (ballHit.number == 8 && !hasMoreBalls) {
-                if (!cueBall.sunk) {
-                    scratch = false
+                if (!cueBallScratch) {
+                    result = false
                 }
-            } else if (iAmStripes != null && ((!ballHit.isSolid && !iAmStripes!!) || (!ballHit.isStripe && iAmStripes!!))) {
-                scratch = true
+            } else if (
+                iAmStripes != null &&
+                ((!ballHit.isSolid && !iAmStripes!!) || (!ballHit.isStripe && iAmStripes!!))
+            ) {
+                result = true
             }
         }
 
+        this.scratch = result
+
         OpenPigeonLog.i(
             "POOL_DEBUG",
-            "SCRATCH_CHECK cueBall.sunk=${cueBall.sunk} blackBall.sunk=${poolBalls.find { it.number == 8 }?.sunk} ballHit=${cueBall.ballHit} scratch=$scratch"
+            "SCRATCH_CHECK cueBall.sunk=${cueBall.sunk} cueBall.inPocket=${cueBall.inPocket} " +
+                    "blackBall.sunk=${poolBalls.find { it.number == 8 }?.sunk} " +
+                    "ballHit=${cueBall.ballHit} scratch=$result"
         )
 
-        return scratch
-    }
-    var disableSend = false
+        return result
+    } var disableSend = false
 
     fun finishReplay() {
         disableSend = true
