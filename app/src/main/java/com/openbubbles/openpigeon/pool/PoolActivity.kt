@@ -19,7 +19,6 @@ import android.view.MotionEvent
 import android.view.SurfaceView
 import android.view.View
 import android.view.Window
-import android.widget.Button
 import java.util.Locale
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -29,7 +28,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.animation.doOnEnd
 import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import android.graphics.Paint
 import android.graphics.Color
 import com.openbubbles.openpigeon.settings.AvatarData
@@ -49,7 +47,6 @@ import kotlin.math.atan2
 import kotlin.math.min
 import kotlin.math.sqrt
 import kotlin.math.max
-import android.content.Context
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -66,6 +63,15 @@ import kotlin.random.Random
 import android.os.SystemClock
 import android.graphics.RadialGradient
 import android.graphics.Shader
+import androidx.core.content.edit
+import androidx.core.view.isVisible
+import kotlin.math.asin
+import kotlin.math.cos
+import kotlin.math.sin
+import androidx.core.graphics.withTranslation
+import androidx.core.graphics.createBitmap
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 
 
 class PoolActivity : AppCompatActivity() {
@@ -152,10 +158,10 @@ class PoolActivity : AppCompatActivity() {
     private fun applyDarkMode(enabled: Boolean) {
         darkMode = enabled
 
-        getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean("pool/dark_mode", enabled)
-            .apply()
+        getSharedPreferences("avatar_settings", MODE_PRIVATE)
+            .edit {
+                putBoolean("pool/dark_mode", enabled)
+            }
 
         val root = findViewById<FrameLayout>(R.id.poolRoot)
         val bgRes = if (enabled) {
@@ -173,15 +179,39 @@ class PoolActivity : AppCompatActivity() {
         val channelMask: Int,
         val encoding: Int,
         val frameCount: Int
-    )
+    ) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as WavLoopData
+
+            if (sampleRate != other.sampleRate) return false
+            if (channelMask != other.channelMask) return false
+            if (encoding != other.encoding) return false
+            if (frameCount != other.frameCount) return false
+            if (!pcm.contentEquals(other.pcm)) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = sampleRate
+            result = 31 * result + channelMask
+            result = 31 * result + encoding
+            result = 31 * result + frameCount
+            result = 31 * result + pcm.contentHashCode()
+            return result
+        }
+    }
 
     private fun applyMusicEnabled(enabled: Boolean) {
         musicEnabled = enabled
 
-        getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean("global/music_enabled", enabled)
-            .apply()
+        getSharedPreferences("avatar_settings", MODE_PRIVATE)
+            .edit {
+                putBoolean("global/music_enabled", enabled)
+            }
 
         if (enabled) {
             startMusic()
@@ -240,10 +270,10 @@ class PoolActivity : AppCompatActivity() {
             musicEnabled = false
             currentMusicTrackPath = null
 
-            getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean("pool/music_enabled", false)
-                .apply()
+            getSharedPreferences("avatar_settings", MODE_PRIVATE)
+                .edit {
+                    putBoolean("pool/music_enabled", false)
+                }
         }
     }
 
@@ -497,12 +527,7 @@ class PoolActivity : AppCompatActivity() {
 
         if (!vibrator.hasVibrator()) return
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(12, 180))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(6)
-        }
+        vibrator.vibrate(VibrationEffect.createOneShot(12, 180))
     }
 
     private fun stateLabelDp(value: Float): Int {
@@ -534,8 +559,8 @@ class PoolActivity : AppCompatActivity() {
 
         val params = label.layoutParams as? FrameLayout.LayoutParams
         if (params != null) {
-            params.width = FrameLayout.LayoutParams.WRAP_CONTENT
-            params.height = FrameLayout.LayoutParams.WRAP_CONTENT
+            params.width = WRAP_CONTENT
+            params.height = WRAP_CONTENT
             params.gravity = Gravity.CENTER
             params.topMargin = 0
             params.bottomMargin = 0
@@ -544,7 +569,7 @@ class PoolActivity : AppCompatActivity() {
             label.layoutParams = params
         } else {
             val fallbackParams = label.layoutParams
-            fallbackParams.width = FrameLayout.LayoutParams.WRAP_CONTENT
+            fallbackParams.width = WRAP_CONTENT
             label.layoutParams = fallbackParams
         }
 
@@ -586,8 +611,8 @@ class PoolActivity : AppCompatActivity() {
         root.addView(
             dim,
             FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+                MATCH_PARENT,
+                MATCH_PARENT
             )
         )
 
@@ -637,9 +662,9 @@ class PoolActivity : AppCompatActivity() {
 
     private fun gameOverText(): String {
         return when (winLossState) {
-            "1" -> "You Win!"
-            "-1" -> "You Lose!"
-            "0" -> "Draw!"
+            "1" -> TEXT_YOU_WIN
+            "-1" -> TEXT_YOU_LOSE
+            "0" -> TEXT_DRAW
             else -> ""
         }
     }
@@ -726,13 +751,13 @@ class PoolActivity : AppCompatActivity() {
             val label = findViewById<TextView>(R.id.state_label)
             resetStateLabelLayout(label)
 
-            val sentWidth = measureStateLabelWidth(label, "Sent ✔")
+            val sentWidth = measureStateLabelWidth(label, TEXT_SENT_CHECK)
 
             val params = label.layoutParams
             params.width = sentWidth
             label.layoutParams = params
 
-            label.text = "Sent"
+            label.text = TEXT_SENT
             label.alpha = 1f
             label.setTextColor(0xFFFFFFFF.toInt())
             label.visibility = View.VISIBLE
@@ -740,16 +765,14 @@ class PoolActivity : AppCompatActivity() {
         }
     }
 
-    private fun setStateLabelText(text: CharSequence, visible: Boolean = true) {
+    private fun hideStateLabel() {
         stopStateLabelAnimation()
 
         val label = findViewById<TextView>(R.id.state_label)
         resetStateLabelLayout(label)
-        label.text = text
-        label.visibility = if (visible) View.VISIBLE else View.GONE
-        if (!visible) {
-            setStatusDimVisible(false)
-        }
+        label.text = null
+        label.visibility = View.GONE
+        setStatusDimVisible(false)
     }
 
     private fun startWaitingDots(label: TextView) {
@@ -761,8 +784,8 @@ class PoolActivity : AppCompatActivity() {
             override fun run() {
                 if (waitingDotsRunnable !== this) return
 
-                if (label.visibility == View.VISIBLE) {
-                    label.text = "WAITING FOR OPPONENT" + ".".repeat(dots)
+                if (label.isVisible) {
+                    label.text = waitingOpponentText(dots)
                     dots = if (dots >= 3) 1 else dots + 1
                 }
 
@@ -772,6 +795,10 @@ class PoolActivity : AppCompatActivity() {
 
         waitingDotsRunnable = runnable
         stateLabelHandler.post(runnable)
+    }
+
+    private fun waitingOpponentText(dots: Int): String {
+        return TEXT_WAITING_BASE + ".".repeat(dots.coerceIn(1, 3))
     }
 
     private fun showWaitingLabelAnimated() {
@@ -789,7 +816,7 @@ class PoolActivity : AppCompatActivity() {
             resetStateLabelLayout(label)
             label.bringToFront()
 
-            val waitingWidth = measureStateLabelWidth(label, "WAITING FOR OPPONENT...")
+            val waitingWidth = measureStateLabelWidth(label, TEXT_WAITING_FULL)
             val params = label.layoutParams
             params.width = waitingWidth
             label.layoutParams = params
@@ -812,14 +839,14 @@ class PoolActivity : AppCompatActivity() {
             val label = findViewById<TextView>(R.id.state_label)
             resetStateLabelLayout(label)
 
-            val sentWidth = measureStateLabelWidth(label, "Sent ✔")
-            val waitingWidth = measureStateLabelWidth(label, "WAITING FOR OPPONENT...")
+            val sentWidth = measureStateLabelWidth(label, TEXT_SENT_CHECK)
+            val waitingWidth = measureStateLabelWidth(label, TEXT_WAITING_FULL)
 
             val params = label.layoutParams
             params.width = sentWidth
             label.layoutParams = params
 
-            val sentCheck = SpannableString("Sent ✔")
+            val sentCheck = SpannableString(TEXT_SENT_CHECK)
             sentCheck.setSpan(
                 ForegroundColorSpan(0xFF7257D8.toInt()),
                 5,
@@ -852,7 +879,7 @@ class PoolActivity : AppCompatActivity() {
 
                 label.animate().cancel()
                 label.alpha = 1f
-                label.text = "WAITING FOR OPPONENT."
+                label.text = TEXT_WAITING_ONE_DOT
                 label.setTextColor(0x00FFFFFF)
                 label.visibility = View.VISIBLE
                 label.bringToFront()
@@ -1208,7 +1235,7 @@ class PoolActivity : AppCompatActivity() {
     val cueBallMaxX = 744f - cueBallPlacementRadius
     val cueBallMinY = 40f + cueBallPlacementRadius
     val cueBallMaxY = 400f - cueBallPlacementRadius
-    val breakLineX = 205f
+    val breakLineX = 221f
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -1221,7 +1248,8 @@ class PoolActivity : AppCompatActivity() {
 
         enableEdgeToEdge()
         setContentView(R.layout.activity_pool)
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content)) { _, insets ->
+        val contentRoot = findViewById<FrameLayout>(android.R.id.content)
+        ViewCompat.setOnApplyWindowInsetsListener(contentRoot) { _, insets ->
             insets
         }
 
@@ -1229,8 +1257,7 @@ class PoolActivity : AppCompatActivity() {
 
         AvatarData.init(applicationContext)
 
-        val rootFrame = findViewById<FrameLayout>(android.R.id.content)
-        settingsSheet = SettingsSheet(this, rootFrame)
+        settingsSheet = SettingsSheet(this, contentRoot)
 
         val settingsBtn = findViewById<ImageButton>(R.id.settingsButton)
         try {
@@ -1241,20 +1268,20 @@ class PoolActivity : AppCompatActivity() {
 
         // Build dark mode switch and register it as a game control
         val darkSwitch = SwitchCompat(this)
-        darkSwitch.isChecked = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+        darkSwitch.isChecked = getSharedPreferences("avatar_settings", MODE_PRIVATE)
             .getBoolean("pool/dark_mode", false)
         darkSwitch.setOnCheckedChangeListener { _, checked -> applyDarkMode(checked) }
         applyDarkMode(darkSwitch.isChecked)
 
-        settingsSheet.addGameControl("Dark Mode", darkSwitch)
+        settingsSheet.addGameControl(TEXT_DARK_MODE, darkSwitch)
 
         val musicSwitch = SwitchCompat(this)
-        musicSwitch.isChecked = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+        musicSwitch.isChecked = getSharedPreferences("avatar_settings", MODE_PRIVATE)
             .getBoolean("global/music_enabled", true)
         musicEnabled = musicSwitch.isChecked
         musicSwitch.setOnCheckedChangeListener { _, checked -> applyMusicEnabled(checked) }
 
-        settingsSheet.addGameControl("Music", musicSwitch)
+        settingsSheet.addGameControl(TEXT_MUSIC, musicSwitch)
 
         val gameAvatarAnchor = findViewById<FrameLayout>(R.id.gameAvatarAnchor)
         settingsSheet.attachGameAvatar(gameAvatarAnchor)
@@ -1270,8 +1297,6 @@ class PoolActivity : AppCompatActivity() {
         } catch (e: Exception) { e.printStackTrace() }
 
         rulesBtn.setOnClickListener {
-            val root = findViewById<FrameLayout>(android.R.id.content)
-
             val title = when {
                 isNineBall -> "9 Ball Rules"
                 isEightBallPlus -> "8 Ball+ Rules"
@@ -1381,7 +1406,7 @@ class PoolActivity : AppCompatActivity() {
 
             RulesPopup.show(
                 context = this,
-                rootView = root,
+                rootView = contentRoot,
                 title = title,
                 sections = sections
             )
@@ -1425,7 +1450,7 @@ class PoolActivity : AppCompatActivity() {
             val pressed = assets.open("global/next_pressed.png").use { BitmapFactory.decodeStream(it) }
 
             skipReplayButton.setImageBitmap(normal)
-            skipReplayButton.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            skipReplayButton.setBackgroundColor(Color.TRANSPARENT)
             skipReplayButton.scaleType = ImageView.ScaleType.FIT_CENTER
 
             skipReplayButton.setOnTouchListener { _, event ->
@@ -1436,7 +1461,7 @@ class PoolActivity : AppCompatActivity() {
                     }
                     MotionEvent.ACTION_UP -> {
                         skipReplayButton.setImageBitmap(normal)
-                        synchronized(this@PoolActivity) {
+                        synchronized(this) {
                             replayWasSkipped = true
                             skipReplayRequested = true
                             finishReplay()
@@ -1455,7 +1480,7 @@ class PoolActivity : AppCompatActivity() {
         }
 
         val container = findViewById<FrameLayout>(R.id.cueContainer)
-        container.setOnTouchListener { v, event ->
+        container.setOnTouchListener { _, event ->
             if (mode != PoolMode.Aiming) return@setOnTouchListener true
 
             when (event.actionMasked) {
@@ -1506,7 +1531,7 @@ class PoolActivity : AppCompatActivity() {
             syncCueRailsToTable()
         }
 
-        view.setOnTouchListener { v, event ->
+        view.setOnTouchListener { _, event ->
             val inverted = Matrix()
             renderer.transform.invert(inverted)
 
@@ -1691,22 +1716,26 @@ class PoolActivity : AppCompatActivity() {
                 activity.startNineBallBarRefresh()
             }
 
-            OpenPigeonLog.i(
-                "PoolShot",
-                "shot_start replaying=${activity.replaying} direction=$direction power=$power " +
-                        "spinX=$spinX spinY=$spinY wasStripes=$wasStripes first=${activity.isFirst} " +
-                        "tableBefore=${activity.dumpPoolTable(activity.table)}"
-            )
+            if (activity.poolTraceEnabled) {
+                OpenPigeonLog.i(
+                    "PoolShot",
+                    "shot_start replaying=${activity.replaying} direction=$direction power=$power " +
+                            "spinX=$spinX spinY=$spinY wasStripes=$wasStripes first=${activity.isFirst} " +
+                            "tableBefore=${activity.dumpPoolTable(activity.table)}"
+                )
+            }
             if (activity.isNineBall) {
                 activity.nineBallTargetAtShot = activity.lowestNineBallNumber() ?: 9
             }
 
             activity.markNativeShotStarted(this)
             activity.hitBall(activity.table, 0 /*white*/, direction, power, spinX, spinY, activity.isFirst)
-            OpenPigeonLog.i(
-                "PoolShot",
-                "shot_after_hit tableAfter=${activity.dumpPoolTable(activity.table)}"
-            )
+            if (activity.poolTraceEnabled) {
+                OpenPigeonLog.i(
+                    "PoolShot",
+                    "shot_after_hit tableAfter=${activity.dumpPoolTable(activity.table)}"
+                )
+            }
             activity.wasFirst = activity.isFirst
             activity.isFirst = false
         }
@@ -1726,7 +1755,6 @@ class PoolActivity : AppCompatActivity() {
     var replayWasSkipped = false
     var skipReplayFadeStarted = false
 
-    private val POOL_REPLAY_SHOT_TIMEOUT_MS = 12_000L
     private var nativeShotStartedAtMs = 0L
     private var nativeShotSeq = 0
     private var currentNativeShotDebug = ""
@@ -1801,7 +1829,7 @@ class PoolActivity : AppCompatActivity() {
             setCueDrawAmount(animation.animatedValue as Float)
         }
         animator.doOnEnd {
-            synchronized(this@PoolActivity) {
+            synchronized(this) {
                 if (cancelled || skipReplayRequested || poolActivityClosing || table == 0L) return@synchronized
                 val cueBall = cueBall ?: return@synchronized
                 renderer.cuePos = floatArrayOf(cueBall.x, cueBall.y)
@@ -1981,16 +2009,17 @@ class PoolActivity : AppCompatActivity() {
             OpenPigeonLog.e("PoolReplay", "finishReplay_missing_finalBalls; falling back to current exported state")
             finalBalls = exportBalls(scratch)
         }
+        if (poolTraceEnabled) {
+            OpenPigeonLog.i(
+                "PoolReplay",
+                "finishReplay_native_before_snap table=${dumpPoolTable(table)}"
+            )
 
-        OpenPigeonLog.i(
-            "PoolReplay",
-            "finishReplay_native_before_snap table=${dumpPoolTable(table)}"
-        )
-
-        OpenPigeonLog.i(
-            "PoolReplay",
-            "finishReplay_android_buffers_before_snap balls=${dumpPoolBallBuffers()}"
-        )
+            OpenPigeonLog.i(
+                "PoolReplay",
+                "finishReplay_android_buffers_before_snap balls=${dumpPoolBallBuffers()}"
+            )
+        }
 
         clearBalls(table)
         poolBalls = arrayListOf()
@@ -2021,7 +2050,7 @@ class PoolActivity : AppCompatActivity() {
             runOnUiThread {
                 setCueUiVisible(true)
                 renderer.setCueVisible(true)
-                setStateLabelText("", false)
+                hideStateLabel()
             }
             return
         }
@@ -2037,7 +2066,7 @@ class PoolActivity : AppCompatActivity() {
                 val label = findViewById<TextView>(R.id.state_label)
                 label.visibility = View.VISIBLE
                 stopStateLabelAnimation()
-                label.text = "Choose a pocket"
+                label.text = TEXT_CHOOSE_POCKET
             }
             return
         }
@@ -2104,20 +2133,14 @@ class PoolActivity : AppCompatActivity() {
                 )
 
                 if (blackBallSunk) {
-                    if (
-                        wasFirst ||
-                        iAmStripes == null ||
-                        blackBall == null ||
-                        poolBalls.count { !it.sunk && ((iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid)) } != 0 ||
-                        cueBall.sunk ||
-                        calledPocket.isEmpty() ||
-                        blackBall.holeX != calledPocket[0].toFloat() ||
-                        blackBall.holeY != calledPocket[1].toFloat()
-                    ) {
-                        winState = false
-                    } else {
-                        winState = true
-                    }
+                    winState = !(wasFirst ||
+                            iAmStripes == null ||
+                            blackBall == null ||
+                            poolBalls.count { !it.sunk && ((iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid)) } != 0 ||
+                            cueBall.sunk ||
+                            calledPocket.isEmpty() ||
+                            blackBall.holeX != calledPocket[0].toFloat() ||
+                            blackBall.holeY != calledPocket[1].toFloat())
                 }
 
                 if (!scratch && winState == null) {
@@ -2145,7 +2168,7 @@ class PoolActivity : AppCompatActivity() {
                             runOnUiThread {
                                 val label = findViewById<TextView>(R.id.state_label)
                                 label.visibility = View.VISIBLE
-                                label.text = "Choose a pocket"
+                                label.text = TEXT_CHOOSE_POCKET
                             }
                             return
                         }
@@ -2287,14 +2310,12 @@ class PoolActivity : AppCompatActivity() {
                 color = 0x80000000.toInt()
             }
 
-            private const val GLOSS_RADIUS = BALL_RADIUS * 0.95f
-
             private val glossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 shader = RadialGradient(
                     -3.0f, -4.0f, 7.5f,
                     intArrayOf(
                         0x99FFFFFF.toInt(),
-                        0x44FFFFFF.toInt(),
+                        0x44FFFFFF,
                         0x00FFFFFF
                     ),
                     floatArrayOf(0.0f, 0.45f, 1.0f),
@@ -2316,27 +2337,33 @@ class PoolActivity : AppCompatActivity() {
             }
         }
 
-        private val sourceBitmap: Bitmap = BitmapFactory
-            .decodeResource(resources, ballOrder[number])
-            .let { decoded ->
-                if (decoded.config == Bitmap.Config.ARGB_8888) {
-                    decoded
-                } else {
-                    decoded.copy(Bitmap.Config.ARGB_8888, false)
-                }
-            }
+        private val sourceBitmapCache = HashMap<Int, Bitmap>()
+        private val sourcePixelsCache = HashMap<Int, Triple<IntArray, Int, Int>>() // pixels, width, height
 
-        private val sourceWidth = sourceBitmap.width
-        private val sourceHeight = sourceBitmap.height
-        private val sourcePixels = IntArray(sourceWidth * sourceHeight).also {
-            sourceBitmap.getPixels(it, 0, sourceWidth, 0, 0, sourceWidth, sourceHeight)
+        private fun getSourceData(resources: Resources, number: Int): Triple<IntArray, Int, Int> {
+            sourcePixelsCache[number]?.let { return it }
+
+            val bitmap = BitmapFactory.decodeResource(resources, ballOrder[number]).let { decoded ->
+                if (decoded.config == Bitmap.Config.ARGB_8888) decoded
+                else decoded.copy(Bitmap.Config.ARGB_8888, false)
+            }
+            sourceBitmapCache[number] = bitmap
+
+            val pixels = IntArray(bitmap.width * bitmap.height)
+            bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+
+            val data = Triple(pixels, bitmap.width, bitmap.height)
+            sourcePixelsCache[number] = data
+            return data
         }
 
-        private val sphereBitmap = Bitmap.createBitmap(
-            SPHERE_RENDER_SIZE,
-            SPHERE_RENDER_SIZE,
-            Bitmap.Config.ARGB_8888
-        )
+        private val sourceData = getSourceData(resources, number)
+        private val sourceWidth = sourceData.second
+        private val sourceHeight = sourceData.third
+        private val sourcePixels = sourceData.first
+
+
+        private val sphereBitmap = createBitmap(SPHERE_RENDER_SIZE, SPHERE_RENDER_SIZE)
 
         private val spherePixels = IntArray(SPHERE_RENDER_SIZE * SPHERE_RENDER_SIZE)
 
@@ -2415,7 +2442,7 @@ class PoolActivity : AppCompatActivity() {
         }
 
         private fun degToRad(value: Float): Double {
-            return value.toDouble() * Math.PI / 180.0
+            return value.toDouble() * PI / 180.0
         }
 
         private fun sampleSource(uFloat: Float, vFloat: Float): Int {
@@ -2461,12 +2488,12 @@ class PoolActivity : AppCompatActivity() {
             val ry = -degToRad(visualRotationY)
             val rz = -degToRad(visualRotationZ)
 
-            val cosX = Math.cos(rx)
-            val sinX = Math.sin(rx)
-            val cosY = Math.cos(ry)
-            val sinY = Math.sin(ry)
-            val cosZ = Math.cos(rz)
-            val sinZ = Math.sin(rz)
+            val cosX = cos(rx)
+            val sinX = sin(rx)
+            val cosY = cos(ry)
+            val sinY = sin(ry)
+            val cosZ = cos(rz)
+            val sinZ = sin(rz)
 
             for (py in 0 until SPHERE_RENDER_SIZE) {
                 for (px in 0 until SPHERE_RENDER_SIZE) {
@@ -2508,11 +2535,11 @@ class PoolActivity : AppCompatActivity() {
                         vz = tz
                     }
 
-                    val longitude = Math.atan2(vx, vz)
-                    val latitude = Math.asin(vy.coerceIn(-1.0, 1.0))
+                    val longitude = atan2(vx, vz)
+                    val latitude = asin(vy.coerceIn(-1.0, 1.0))
 
-                    val u = ((longitude / (Math.PI * 2.0)) + 0.5) * sourceWidth
-                    val v = (0.5 - (latitude / Math.PI)) * sourceHeight
+                    val u = ((longitude / (PI * 2.0)) + 0.5) * sourceWidth
+                    val v = (0.5 - (latitude / PI)) * sourceHeight
 
                     val sampled = sampleSource(u.toFloat(), v.toFloat())
                     spherePixels[index] = applyShade(sampled, nx, ny, nz)
@@ -2579,22 +2606,20 @@ class PoolActivity : AppCompatActivity() {
             updateVisualRoll()
             renderSphereIfNeeded()
 
-            canvas.save()
-            canvas.translate(x, y)
-            canvas.rotate(IOS_BALL_CANCEL_TABLE_ROTATION_DEGREES)
+            canvas.withTranslation(x, y) {
+                rotate(IOS_BALL_CANCEL_TABLE_ROTATION_DEGREES)
 
-            canvas.drawBitmap(
-                sphereBitmap,
-                null,
-                RectF(-10.0f, -10.0f, 10.0f, 10.0f),
-                ballPaint
-            )
-            canvas.restore()
+                drawBitmap(
+                    sphereBitmap,
+                    null,
+                    RectF(-10.0f, -10.0f, 10.0f, 10.0f),
+                    ballPaint
+                )
+            }
 
-            canvas.save()
-            canvas.translate(x, y)
-            drawGloss(canvas)
-            canvas.restore()
+            canvas.withTranslation(x, y) {
+                drawGloss(this)
+            }
         }
     }
 
@@ -2606,7 +2631,7 @@ class PoolActivity : AppCompatActivity() {
 
     private val nineBallFrontBallX = 560.000000f
     private val nineBallFrontBallY = 220.000000f
-    private val nineBallCueBallX = 205.000000f
+    private val nineBallCueBallX = 221.000000f
     private val nineBallCueBallMinY = 110.000000
     private val nineBallCueBallMaxY = 330.000000
 
@@ -2723,9 +2748,9 @@ class PoolActivity : AppCompatActivity() {
 
         val builder = StringBuilder()
 
-        for (i in 0 until slots.size) {
-            val x = slots[i].x
-            val y = slots[i].y
+        for ((i, element) in slots.withIndex()) {
+            val x = element.x
+            val y = element.y
 
             val ballNum: Int = when (i) {
                 0 -> 8
@@ -2922,7 +2947,9 @@ class PoolActivity : AppCompatActivity() {
     }
 
     fun handleMessage(msg: Map<String, String>) {
-        if (table == 0L) return; // we are dead
+        if (table == 0L) return // we are dead
+
+        renderer.resetFrameReadySignal()
 
         poolTraceEnabled =
             msg["pool_trace"] == "1" ||
@@ -2984,11 +3011,6 @@ class PoolActivity : AppCompatActivity() {
         }
 
         scratch = false
-
-        runOnUiThread {
-            val label = findViewById<TextView>(R.id.state_label)
-            label.visibility = View.VISIBLE
-        }
 
         val sender = msg["sender"].orEmpty()
         val isYourTurn = sender != ipc.getSenderUUID(sessionId)
@@ -3140,13 +3162,13 @@ class PoolActivity : AppCompatActivity() {
                 val seed = seedStr?.toLongOrNull()
                 if (seed == null) {
                     OpenPigeonLog.e("PoolPlus", "pool3 game without valid seed (got '$seedStr'); falling back to normal rack")
-                    finalBalls = "#632.746155,178.000000,0.000000,0.801981,9,5.632916,7.415801,5.384167#632.746155,199.000000,0.000000,0.050000,10,-1.479509,5.981912,-0.639594#632.746155,220.000000,0.000000,0.145560,7,-4.857441,-3.796834,-5.439248#632.746155,241.000000,0.000000,0.050000,6,3.548234,-7.060621,-3.771457#632.746155,262.000000,0.000000,0.964504,1,7.809305,-4.673173,7.553514#614.559570,188.500000,0.000000,0.868768,12,6.889496,7.963203,-4.292648#614.559570,209.500000,0.000000,0.759525,13,4.140916,-0.562560,-5.371364#614.559570,230.500000,0.000000,0.839745,15,-7.863293,-3.022674,-7.419384#614.559570,251.500000,0.000000,1.153367,11,-5.802108,7.468212,-7.951379#596.373047,199.000000,0.000000,1.053345,4,1.589040,2.324956,0.526632#596.373047,220.000000,0.000000,1.437710,8,3.826384,-4.029884,3.487882#596.373047,241.000000,0.000000,1.085851,3,4.912686,3.917787,5.660569#578.186523,209.500000,0.000000,1.100000,2,-5.776122,-4.926837,0.760138#578.186523,230.500000,0.000000,0.900000,5,-1.848043,-0.386153,6.410922#560.000000,220.000000,0.000000,1.000000,14,2.079596,7.069168,-7.283604#205.000000,220.000000,0.000000,0.990000,0,4.519086,0.074793,-2.054408"
+                    finalBalls = "#632.746155,178.000000,0.000000,0.801981,9,5.632916,7.415801,5.384167#632.746155,199.000000,0.000000,0.050000,10,-1.479509,5.981912,-0.639594#632.746155,220.000000,0.000000,0.145560,7,-4.857441,-3.796834,-5.439248#632.746155,241.000000,0.000000,0.050000,6,3.548234,-7.060621,-3.771457#632.746155,262.000000,0.000000,0.964504,1,7.809305,-4.673173,7.553514#614.559570,188.500000,0.000000,0.868768,12,6.889496,7.963203,-4.292648#614.559570,209.500000,0.000000,0.759525,13,4.140916,-0.562560,-5.371364#614.559570,230.500000,0.000000,0.839745,15,-7.863293,-3.022674,-7.419384#614.559570,251.500000,0.000000,1.153367,11,-5.802108,7.468212,-7.951379#596.373047,199.000000,0.000000,1.053345,4,1.589040,2.324956,0.526632#596.373047,220.000000,0.000000,1.437710,8,3.826384,-4.029884,3.487882#596.373047,241.000000,0.000000,1.085851,3,4.912686,3.917787,5.660569#578.186523,209.500000,0.000000,1.100000,2,-5.776122,-4.926837,0.760138#578.186523,230.500000,0.000000,0.900000,5,-1.848043,-0.386153,6.410922#560.000000,220.000000,0.000000,1.000000,14,2.079596,7.069168,-7.283604#221.000000,220.000000,0.000000,0.990000,0,4.519086,0.074793,-2.054408"
                 } else {
                     OpenPigeonLog.i("PoolPlus", "Generating 8 Ball+ rack with seed=$seed")
                     finalBalls = generateRandomRack(seed)
                 }
             } else {
-                finalBalls = "#632.746155,178.000000,0.000000,0.801981,9,5.632916,7.415801,5.384167#632.746155,199.000000,0.000000,0.050000,10,-1.479509,5.981912,-0.639594#632.746155,220.000000,0.000000,0.145560,7,-4.857441,-3.796834,-5.439248#632.746155,241.000000,0.000000,0.050000,6,3.548234,-7.060621,-3.771457#632.746155,262.000000,0.000000,0.964504,1,7.809305,-4.673173,7.553514#614.559570,188.500000,0.000000,0.868768,12,6.889496,7.963203,-4.292648#614.559570,209.500000,0.000000,0.759525,13,4.140916,-0.562560,-5.371364#614.559570,230.500000,0.000000,0.839745,15,-7.863293,-3.022674,-7.419384#614.559570,251.500000,0.000000,1.153367,11,-5.802108,7.468212,-7.951379#596.373047,199.000000,0.000000,1.053345,4,1.589040,2.324956,0.526632#596.373047,220.000000,0.000000,1.437710,8,3.826384,-4.029884,3.487882#596.373047,241.000000,0.000000,1.085851,3,4.912686,3.917787,5.660569#578.186523,209.500000,0.000000,1.100000,2,-5.776122,-4.926837,0.760138#578.186523,230.500000,0.000000,0.900000,5,-1.848043,-0.386153,6.410922#560.000000,220.000000,0.000000,1.000000,14,2.079596,7.069168,-7.283604#205.000000,220.000000,0.000000,0.990000,0,4.519086,0.074793,-2.054408"
+                finalBalls = "#632.746155,178.000000,0.000000,0.801981,9,5.632916,7.415801,5.384167#632.746155,199.000000,0.000000,0.050000,10,-1.479509,5.981912,-0.639594#632.746155,220.000000,0.000000,0.145560,7,-4.857441,-3.796834,-5.439248#632.746155,241.000000,0.000000,0.050000,6,3.548234,-7.060621,-3.771457#632.746155,262.000000,0.000000,0.964504,1,7.809305,-4.673173,7.553514#614.559570,188.500000,0.000000,0.868768,12,6.889496,7.963203,-4.292648#614.559570,209.500000,0.000000,0.759525,13,4.140916,-0.562560,-5.371364#614.559570,230.500000,0.000000,0.839745,15,-7.863293,-3.022674,-7.419384#614.559570,251.500000,0.000000,1.153367,11,-5.802108,7.468212,-7.951379#596.373047,199.000000,0.000000,1.053345,4,1.589040,2.324956,0.526632#596.373047,220.000000,0.000000,1.437710,8,3.826384,-4.029884,3.487882#596.373047,241.000000,0.000000,1.085851,3,4.912686,3.917787,5.660569#578.186523,209.500000,0.000000,1.100000,2,-5.776122,-4.926837,0.760138#578.186523,230.500000,0.000000,0.900000,5,-1.848043,-0.386153,6.410922#560.000000,220.000000,0.000000,1.000000,14,2.079596,7.069168,-7.283604#221.000000,220.000000,0.000000,0.990000,0,4.519086,0.074793,-2.054408"
             }
             buildBalls(finalBalls, null)
             scratch = isNineBall || !isEightBallPlus
@@ -3162,23 +3184,25 @@ class PoolActivity : AppCompatActivity() {
             mode = PoolMode.Aiming
             isFirst = true
 
-            runOnUiThread {
-                setCueUiVisible(true)
-                renderer.setCueVisible(true)
-
-                if (isNineBall) {
-                    findViewById<SurfaceView>(R.id.surfaceView).post {
-                        setDefaultNineBallBreakCueRotation()
-                    }
-                }
-
-                val label = findViewById<TextView>(R.id.state_label)
-                label.visibility = View.GONE
-                hideSkipReplayButton("not_replaying")
-            }
-
             if (!renderer.isAlive) {
                 renderer.start()
+            }
+
+            renderer.notifyWhenFrameReady {
+                runOnUiThread {
+                    setCueUiVisible(true)
+                    renderer.setCueVisible(true)
+
+                    if (isNineBall) {
+                        findViewById<SurfaceView>(R.id.surfaceView).post {
+                            setDefaultNineBallBreakCueRotation()
+                        }
+                    }
+
+                    val label = findViewById<TextView>(R.id.state_label)
+                    label.visibility = View.GONE
+                    hideSkipReplayButton("not_replaying")
+                }
             }
 
             return
@@ -3210,15 +3234,30 @@ class PoolActivity : AppCompatActivity() {
 
             runOnUiThread {
                 setCueUiVisible(false)
-                setStateLabelText("", false)
+                hideStateLabel()
             }
 
-            showSkipReplayButton("handleMessage_before_playNextReplay")
-            playNextReplay()
+            renderer.notifyWhenFrameReady {
+                showSkipReplayButton("handleMessage_before_playNextReplay")
+                playNextReplay()
+            }
         }
     }
 
     companion object {
+        private const val TEXT_SENT = "Sent"
+        private const val TEXT_SENT_CHECK = "Sent ✔"
+        private const val TEXT_WAITING_BASE = "WAITING FOR OPPONENT"
+        private const val TEXT_WAITING_ONE_DOT = "WAITING FOR OPPONENT."
+        private const val TEXT_WAITING_FULL = "WAITING FOR OPPONENT..."
+        private const val TEXT_CHOOSE_POCKET = "Choose a pocket"
+        private const val TEXT_YOU_WIN = "You Win!"
+        private const val TEXT_YOU_LOSE = "You Lose!"
+        private const val TEXT_DRAW = "Draw!"
+        private const val TEXT_DARK_MODE = "Dark Mode"
+        private const val TEXT_MUSIC = "Music"
+        private const val POOL_REPLAY_SHOT_TIMEOUT_MS = 12_000L
+
         init {
             System.loadLibrary("openbubblesextension")
         }

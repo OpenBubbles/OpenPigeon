@@ -24,6 +24,9 @@ import kotlin.math.tan
 import kotlin.math.min
 import android.util.TypedValue
 import kotlin.math.max
+import android.os.Handler
+import android.os.Looper
+import androidx.core.graphics.withMatrix
 
 class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thread(), SurfaceHolder.Callback {
     var running = true
@@ -35,8 +38,8 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         holder.addCallback(this)
     }
 
-    private val TARGET_FPS: Int = 60
-    private val FRAME_TIME: Long = (1000 / TARGET_FPS).toLong()
+    private val targetFps: Int = 60
+    private val frameTime: Long = (1000 / targetFps).toLong()
 
     var cueRot = 0.0f
     var cueDraw = 0.0f
@@ -47,6 +50,34 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
 
 
     @Volatile var tableScreenBounds: RectF = RectF()
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    @Volatile private var frameReadySignaled = true
+    @Volatile private var onFrameReadyCallback: (() -> Unit)? = null
+
+    fun notifyWhenFrameReady(callback: () -> Unit) {
+        if (frameReadySignaled) {
+            mainHandler.post(callback)
+            return
+        }
+        onFrameReadyCallback = callback
+    }
+
+    fun resetFrameReadySignal() {
+        frameReadySignaled = false
+        onFrameReadyCallback = null
+    }
+
+    private fun signalFrameReady() {
+        if (frameReadySignaled) return
+        frameReadySignaled = true
+        val cb = onFrameReadyCallback
+        onFrameReadyCallback = null
+        if (cb != null) {
+            mainHandler.post(cb)
+        }
+    }
 
     companion object {
         private const val WORLD_WIDTH = 784.743f
@@ -60,6 +91,7 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         val by: Float
     )
 
+    @Suppress("FloatingPointLiteralPrecision")
     private val iosAimWallSegments = listOf(
         PoolWallSegment(370.000000f, 50.000000f, 75.000000f, 50.000000f),
         PoolWallSegment(414.000000f, 50.000000f, 709.000000f, 50.000000f),
@@ -426,86 +458,75 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                 return@synchronized
             }
 
-            canvas.save()
-            canvas.concat(transform)
+            canvas.withMatrix(transform) {
+                val nativeMoving = update(activity.table)
 
-            val nativeMoving = update(activity.table)
-
-            if (activity.mode == PoolActivity.PoolMode.Playing) {
-                if (!nativeMoving) {
-                    activity.handleFinishPlay()
-                } else {
-                    activity.handleNativeStillMoving()
+                if (activity.mode == PoolActivity.PoolMode.Playing) {
+                    if (!nativeMoving) {
+                        activity.handleFinishPlay()
+                    } else {
+                        activity.handleNativeStillMoving()
+                    }
                 }
-            }
 
-            drawPockets(canvas)
+                drawPockets(this)
 
-            for (ball in activity.poolBalls) {
-                if (!ball.inPocket) continue
-                ball.draw(canvas)
-            }
+                for (ball in activity.poolBalls) {
+                    if (!ball.inPocket) continue
+                    ball.draw(this)
+                }
 
-            canvas.drawBitmap(bitmap, null, RectF(-0.057f, -0.189f, WORLD_WIDTH, WORLD_HEIGHT), null)
+                drawBitmap(bitmap, null, RectF(-0.057f, -0.189f, WORLD_WIDTH, WORLD_HEIGHT), null)
 
-            for (ball in activity.poolBalls) {
-                if (ball.sunk || ball.inPocket) continue
-                ball.drawShadow(canvas)
-            }
+                for (ball in activity.poolBalls) {
+                    if (ball.sunk || ball.inPocket) continue
+                    ball.drawShadow(this)
+                }
 
-            drawNineBallTargetRing(canvas)
+                drawNineBallTargetRing(this)
 
-            for (ball in activity.poolBalls) {
-                if (ball.sunk || ball.inPocket) continue
-                ball.draw(canvas)
-            }
+                for (ball in activity.poolBalls) {
+                    if (ball.sunk || ball.inPocket) continue
+                    ball.draw(this)
+                }
 
-            drawScratchRing(canvas)
-            drawAimAssist(canvas)
+                drawScratchRing(this)
+                drawAimAssist(this)
 
-            if (activity.call8Ball) {
-                for (hole in activity.holes) {
-                    canvas.drawCircle(
-                        hole[0].toFloat(),
-                        hole[1].toFloat(),
-                        20f,
-                        Paint().apply {
-                            color = 0x55FFFFFF
-                        }
+                if (activity.call8Ball) {
+                    for (hole in activity.holes) {
+                        drawCircle(
+                            hole[0].toFloat(),
+                            hole[1].toFloat(),
+                            20f,
+                            Paint().apply { color = 0x55FFFFFF }
+                        )
+                    }
+                }
+
+                if (
+                    activity.mode == PoolActivity.PoolMode.Aiming ||
+                    activity.mode == PoolActivity.PoolMode.ReplayAiming ||
+                    activity.mode == PoolActivity.PoolMode.Playing
+                ) {
+                    val translation = if (activity.mode != PoolActivity.PoolMode.Playing) {
+                        val cueBall = activity.cueBall ?: return@withMatrix
+                        floatArrayOf(cueBall.x, cueBall.y)
+                    } else {
+                        cuePos
+                    }
+
+                    translate(translation[0], translation[1])
+                    rotate(Math.toDegrees(cueRot.toDouble()).toFloat())
+
+                    drawBitmap(
+                        cue,
+                        null,
+                        RectF(-520f - 20f - cueDraw, -5.0f, -20.0f - cueDraw, 5.0f),
+                        Paint().apply { alpha = (cueAlpha * 255).roundToInt() }
                     )
                 }
             }
-
-            if (
-                activity.mode == PoolActivity.PoolMode.Aiming ||
-                activity.mode == PoolActivity.PoolMode.ReplayAiming ||
-                activity.mode == PoolActivity.PoolMode.Playing
-            ) {
-                val translation = if (activity.mode != PoolActivity.PoolMode.Playing) {
-                    val cueBall = activity.cueBall
-                    if (cueBall == null) {
-                        canvas.restore()
-                        return
-                    }
-                    floatArrayOf(cueBall.x, cueBall.y)
-                } else {
-                    cuePos
-                }
-
-                canvas.translate(translation[0], translation[1])
-                canvas.rotate(Math.toDegrees(cueRot.toDouble()).toFloat())
-
-                canvas.drawBitmap(
-                    cue,
-                    null,
-                    RectF(-520f - 20f - cueDraw, -5.0f, -20.0f - cueDraw, 5.0f),
-                    Paint().apply {
-                        alpha = (cueAlpha * 255).roundToInt()
-                    }
-                )
-            }
-
-            canvas.restore()
         }
     }
 
@@ -611,17 +632,18 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                     holder.unlockCanvasAndPost(canvas)
 
                     frame += 1
+                    signalFrameReady()
                 }
             }
 
             timeMillis = (System.nanoTime() - startTime) / 1000000
 
-            waitTime = FRAME_TIME - timeMillis
+            waitTime = frameTime - timeMillis
 
             if (waitTime > 0) {
                 try {
                     sleep(waitTime)
-                } catch (e: InterruptedException) {
+                } catch (_: InterruptedException) {
                 }
             }
         }

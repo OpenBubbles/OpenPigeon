@@ -49,6 +49,7 @@ void PoolBall::writeOutputs() {
         outputs[0] = body->GetPosition().x;
         outputs[1] = body->GetPosition().y;
         outputs[2] = body->GetAngle();
+        outputs[7] = body->GetAngularVelocity();
     }
 
     outputs[3] = (float)sunkOrder;
