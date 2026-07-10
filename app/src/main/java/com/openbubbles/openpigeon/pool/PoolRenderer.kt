@@ -712,7 +712,11 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
             }
 
             canvas.withMatrix(transform) {
+                val frameStartNs = System.nanoTime()
+
+                val updateStartNs = System.nanoTime()
                 val nativeMoving = update(activity.table)
+                val updateMs = (System.nanoTime() - updateStartNs) / 1_000_000.0
 
                 activity.traceVisualRoll(
                     reason = "renderer_after_native_update",
@@ -798,6 +802,16 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                         null,
                         cueDrawRect,
                         cuePaint
+                    )
+                }
+                val frameMs = (System.nanoTime() - frameStartNs) / 1_000_000.0
+
+                if (activity.mode == PoolActivity.PoolMode.Playing && frameMs > 20.0) {
+                    OpenPigeonLog.w(
+                        "PoolFramePerf",
+                        "slow_frame frameMs=${String.format("%.2f", frameMs)} " +
+                                "nativeUpdateMs=${String.format("%.2f", updateMs)} " +
+                                "balls=${activity.poolBalls.size} replaying=${activity.replaying}"
                     )
                 }
             }
