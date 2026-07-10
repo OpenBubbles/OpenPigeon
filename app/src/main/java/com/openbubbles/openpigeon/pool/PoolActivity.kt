@@ -2461,9 +2461,34 @@ class PoolActivity : AppCompatActivity() {
             private const val IOS_ROLL_SMALL_ANGULAR_DAMPING = 0.8f
             private const val IOS_MIN_ROLL_VECTOR_LENGTH = 0.000001f
 
-            private const val SPHERE_RENDER_SIZE = 72
+            private const val SPHERE_RENDER_SIZE = 48
             private const val SPHERE_CENTER = (SPHERE_RENDER_SIZE - 1) * 0.5f
             private const val SPHERE_RADIUS = (SPHERE_RENDER_SIZE - 2) * 0.5f
+
+            private const val SPHERE_RENDER_FAST_FRAME_STRIDE = 2
+            private const val SPHERE_RENDER_FAST_LINEAR_SPEED = 90f
+            private const val SPHERE_RENDER_FAST_ANGULAR_SPEED = 4f
+
+            private val BALL_DRAW_RECT = RectF(
+                -BALL_RADIUS,
+                -BALL_RADIUS,
+                BALL_RADIUS,
+                BALL_RADIUS
+            )
+
+            private val GLOSS_RECT_1 = RectF(
+                -8.0f,
+                -8.5f,
+                2.0f,
+                1.5f
+            )
+
+            private val GLOSS_RECT_2 = RectF(
+                -4.5f,
+                -5.0f,
+                0.8f,
+                0.2f
+            )
 
             private val ballPaint = Paint(
                 Paint.ANTI_ALIAS_FLAG or
@@ -2735,6 +2760,8 @@ class PoolActivity : AppCompatActivity() {
         private val spherePixels = IntArray(SPHERE_RENDER_SIZE * SPHERE_RENDER_SIZE)
 
         private var sphereDirty = true
+        private var sphereInvalidationFrame = 0
+        private val shadowRect = RectF()
 
         private data class IosRollQuaternion(
             val w: Double,
@@ -2844,6 +2871,24 @@ class PoolActivity : AppCompatActivity() {
             )
         }
 
+        private fun markSphereDirtyForCurrentMotion() {
+            sphereInvalidationFrame += 1
+
+            val linearSpeedSq = vx * vx + vy * vy
+
+            val movingFast =
+                linearSpeedSq > SPHERE_RENDER_FAST_LINEAR_SPEED * SPHERE_RENDER_FAST_LINEAR_SPEED ||
+                        abs(av) > SPHERE_RENDER_FAST_ANGULAR_SPEED
+
+            if (
+                !movingFast ||
+                sphereInvalidationFrame == 1 ||
+                sphereInvalidationFrame % SPHERE_RENDER_FAST_FRAME_STRIDE == 0
+            ) {
+                sphereDirty = true
+            }
+        }
+
         private fun applyIosRollingVector(
             deltaRotationX: Float,
             deltaRotationY: Float,
@@ -2868,7 +2913,7 @@ class PoolActivity : AppCompatActivity() {
             visualRotationX = next[0]
             visualRotationY = next[1]
             visualRotationZ = next[2]
-            sphereDirty = true
+            markSphereDirtyForCurrentMotion()
         }
 
         val x: Float
@@ -3066,15 +3111,14 @@ class PoolActivity : AppCompatActivity() {
             val sx = x + IOS_SHADOW_OFFSET_X
             val sy = y + IOS_SHADOW_OFFSET_Y
 
-            canvas.drawOval(
-                RectF(
-                    sx - IOS_SHADOW_RADIUS,
-                    sy - IOS_SHADOW_RADIUS,
-                    sx + IOS_SHADOW_RADIUS,
-                    sy + IOS_SHADOW_RADIUS
-                ),
-                shadowPaint
+            shadowRect.set(
+                sx - IOS_SHADOW_RADIUS,
+                sy - IOS_SHADOW_RADIUS,
+                sx + IOS_SHADOW_RADIUS,
+                sy + IOS_SHADOW_RADIUS
             )
+
+            canvas.drawOval(shadowRect, shadowPaint)
         }
 
         private fun drawGloss(canvas: Canvas) {
@@ -3082,25 +3126,8 @@ class PoolActivity : AppCompatActivity() {
                 return
             }
 
-            canvas.drawOval(
-                RectF(
-                    -8.0f,
-                    -8.5f,
-                    2.0f,
-                    1.5f
-                ),
-                glossPaint
-            )
-
-            canvas.drawOval(
-                RectF(
-                    -4.5f,
-                    -5.0f,
-                    0.8f,
-                    0.2f
-                ),
-                glossPaint2
-            )
+            canvas.drawOval(GLOSS_RECT_1, glossPaint)
+            canvas.drawOval(GLOSS_RECT_2, glossPaint2)
         }
 
         fun draw(canvas: Canvas) {
@@ -3113,7 +3140,7 @@ class PoolActivity : AppCompatActivity() {
                 drawBitmap(
                     sphereBitmap,
                     null,
-                    RectF(-10.0f, -10.0f, 10.0f, 10.0f),
+                    BALL_DRAW_RECT,
                     ballPaint
                 )
             }

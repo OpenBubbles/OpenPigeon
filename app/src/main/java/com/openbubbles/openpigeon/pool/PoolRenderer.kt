@@ -57,6 +57,22 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                 Paint.DITHER_FLAG
     )
 
+    private val pocketPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.BLACK
+    }
+
+    private val callPocketPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x55FFFFFF
+    }
+
+    private val cuePaint = Paint(
+        Paint.ANTI_ALIAS_FLAG or
+                Paint.FILTER_BITMAP_FLAG or
+                Paint.DITHER_FLAG
+    )
+
+    private val cueDrawRect = RectF()
+
     val cue: Bitmap = BitmapFactory.decodeResource(activity.resources, R.drawable.cue)
 
     init {
@@ -748,7 +764,7 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                             hole[0].toFloat(),
                             hole[1].toFloat(),
                             20f,
-                            Paint().apply { color = 0x55FFFFFF }
+                            callPocketPaint
                         )
                     }
                 }
@@ -768,11 +784,20 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                     translate(translation[0], translation[1])
                     rotate(Math.toDegrees(cueRot.toDouble()).toFloat())
 
+                    cueDrawRect.set(
+                        -520f - 20f - cueDraw,
+                        -5.0f,
+                        -20.0f - cueDraw,
+                        5.0f
+                    )
+
+                    cuePaint.alpha = (cueAlpha * 255).roundToInt().coerceIn(0, 255)
+
                     drawBitmap(
                         cue,
                         null,
-                        RectF(-520f - 20f - cueDraw, -5.0f, -20.0f - cueDraw, 5.0f),
-                        Paint().apply { alpha = (cueAlpha * 255).roundToInt() }
+                        cueDrawRect,
+                        cuePaint
                     )
                 }
             }
@@ -780,11 +805,6 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
     }
 
     private fun drawPockets(canvas: Canvas) {
-        val pocketPaint = Paint().apply {
-            color = Color.BLACK
-            isAntiAlias = true
-        }
-
         val pocketRadius = 28f
 
         for (hole in activity.holes) {
