@@ -12,7 +12,6 @@ import com.openbubbles.openpigeon.util.OpenPigeonLog
 import android.view.SurfaceHolder
 import android.view.Surface
 import androidx.core.animation.doOnEnd
-import com.openbubbles.openpigeon.R
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -27,11 +26,38 @@ import kotlin.math.max
 import android.os.Handler
 import android.os.Looper
 import androidx.core.graphics.withMatrix
+import android.graphics.ColorMatrixColorFilter
+import com.openbubbles.openpigeon.R
+import android.graphics.Rect
+import androidx.core.graphics.withTranslation
+import androidx.core.graphics.createBitmap
 
 class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thread(), SurfaceHolder.Callback {
     var running = true
 
-    var bitmap: Bitmap = BitmapFactory.decodeResource(activity.resources, R.drawable.pool_transparent)
+    private fun decodeTableBitmap(resId: Int, name: String): Bitmap {
+        return BitmapFactory.decodeResource(
+            activity.resources,
+            resId,
+            BitmapFactory.Options().apply {
+                inScaled = false
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+        ) ?: error("Unable to decode pool table bitmap: $name")
+    }
+
+    private val poolFill: Bitmap = decodeTableBitmap(R.drawable.pool_fill, "pool_fill")
+    private val poolLine: Bitmap = decodeTableBitmap(R.drawable.pool_line, "pool_line")
+    private val poolPlus: Bitmap = decodeTableBitmap(R.drawable.pool_plus, "pool_plus")
+    private val poolBorderFelt: Bitmap = decodeTableBitmap(R.drawable.pool_border_felt, "pool_border_felt")
+    private val poolBorder: Bitmap = decodeTableBitmap(R.drawable.pool_border, "pool_border")
+
+    private val tablePaint = Paint(
+        Paint.ANTI_ALIAS_FLAG or
+                Paint.FILTER_BITMAP_FLAG or
+                Paint.DITHER_FLAG
+    )
+
     val cue: Bitmap = BitmapFactory.decodeResource(activity.resources, R.drawable.cue)
 
     init {
@@ -82,7 +108,41 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
     companion object {
         private const val WORLD_WIDTH = 784.743f
         private const val WORLD_HEIGHT = 441.189f
+
+        private const val TABLE_CACHE_WIDTH = 1200
+        private const val TABLE_CACHE_HEIGHT = 677
+
+        private const val COLOR_RED = 0xFFcf0019.toInt()
+        private const val COLOR_BLUE = 0xFF1065e6.toInt()
+        private const val COLOR_PURPLE = 0xFFba82ff.toInt()
+
+        private const val FELT_TINT_LUMA_SCALE = 1.32f
+        private const val FELT_TINT_BRIGHTNESS_LIFT = 34f
+
+        private const val TABLE_ASSET_CONTENT_SCALE = 1.09f
+
+        private const val TABLE_ASSET_CONTENT_OFFSET_X_PX = 0f
+        private const val TABLE_ASSET_CONTENT_OFFSET_Y_PX = 0f
     }
+
+    private val tableBitmapRect = RectF(-0.057f, -0.189f, WORLD_WIDTH, WORLD_HEIGHT)
+
+    private data class TableCacheKey(
+        val tintColor: Int,
+        val drawBreakLine: Boolean,
+        val drawPlus: Boolean
+    )
+
+    private var cachedTableKey: TableCacheKey? = null
+    private var cachedBaseTableBitmap: Bitmap? = null
+    private var cachedTopTableBitmap: Bitmap? = null
+
+    private val portraitAssetDrawRect = RectF(
+        0f,
+        0f,
+        TABLE_CACHE_HEIGHT.toFloat(),
+        TABLE_CACHE_WIDTH.toFloat()
+    )
 
     private data class PoolWallSegment(
         val ax: Float,
@@ -440,6 +500,199 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         )
     }
 
+    private fun feltTintColor(): Int? {
+        return when {
+            activity.isNineBall && activity.isHard -> COLOR_PURPLE
+            activity.isNineBall -> COLOR_BLUE
+            activity.isHard -> COLOR_RED
+            else -> null
+        }
+    }
+
+    private fun feltPaintForTint(tint: Int?): Paint? {
+        return tint?.let { color ->
+            Paint(
+                Paint.ANTI_ALIAS_FLAG or
+                        Paint.FILTER_BITMAP_FLAG or
+                        Paint.DITHER_FLAG
+            ).apply {
+                colorFilter = ColorMatrixColorFilter(colorizeMatrix(color))
+            }
+        }
+    }
+
+    private fun colorizeMatrix(color: Int): FloatArray {
+        val targetR = Color.red(color) / 255f
+        val targetG = Color.green(color) / 255f
+        val targetB = Color.blue(color) / 255f
+
+        val lumR = 0.2126f
+        val lumG = 0.7152f
+        val lumB = 0.0722f
+
+        val scale = FELT_TINT_LUMA_SCALE
+        val lift = FELT_TINT_BRIGHTNESS_LIFT
+
+        return floatArrayOf(
+            lumR * targetR * scale, lumG * targetR * scale, lumB * targetR * scale, 0f, lift,
+            lumR * targetG * scale, lumG * targetG * scale, lumB * targetG * scale, 0f, lift,
+            lumR * targetB * scale, lumG * targetB * scale, lumB * targetB * scale, 0f, lift,
+            0f, 0f, 0f, 1f, 0f
+        )
+    }
+
+    private fun shouldDrawBreakLine(): Boolean {
+        return !activity.isHard && !activity.isEightBallPlus
+    }
+
+    private fun shouldDrawPlus(): Boolean {
+        return activity.isEightBallPlus
+    }
+
+    private fun currentTableCacheKey(): TableCacheKey {
+        val tint = feltTintColor()
+
+        return TableCacheKey(
+            tintColor = tint ?: 0,
+            drawBreakLine = shouldDrawBreakLine(),
+            drawPlus = shouldDrawPlus()
+        )
+    }
+
+    private fun portraitAssetSourceRect(bitmap: Bitmap): Rect {
+        val targetPortraitAspect = TABLE_CACHE_HEIGHT.toFloat() / TABLE_CACHE_WIDTH.toFloat()
+
+        val sourceCenterX = bitmap.width * 0.5f + TABLE_ASSET_CONTENT_OFFSET_X_PX
+        val sourceCenterY = bitmap.height * 0.5f + TABLE_ASSET_CONTENT_OFFSET_Y_PX
+
+        val sourceHeight = bitmap.height / TABLE_ASSET_CONTENT_SCALE
+        val sourceWidth = sourceHeight * targetPortraitAspect
+
+        var left = (sourceCenterX - sourceWidth * 0.5f).roundToInt()
+        var top = (sourceCenterY - sourceHeight * 0.5f).roundToInt()
+        var right = (sourceCenterX + sourceWidth * 0.5f).roundToInt()
+        var bottom = (sourceCenterY + sourceHeight * 0.5f).roundToInt()
+
+        if (left < 0) {
+            right -= left
+            left = 0
+        }
+
+        if (right > bitmap.width) {
+            left -= right - bitmap.width
+            right = bitmap.width
+        }
+
+        if (top < 0) {
+            bottom -= top
+            top = 0
+        }
+
+        if (bottom > bitmap.height) {
+            top -= bottom - bitmap.height
+            bottom = bitmap.height
+        }
+
+        left = left.coerceIn(0, bitmap.width - 1)
+        right = right.coerceIn(left + 1, bitmap.width)
+        top = top.coerceIn(0, bitmap.height - 1)
+        bottom = bottom.coerceIn(top + 1, bitmap.height)
+
+        return Rect(left, top, right, bottom)
+    }
+
+    private fun drawPortraitAssetIntoHorizontalCache(
+        canvas: Canvas,
+        bitmap: Bitmap,
+        paint: Paint?
+    ) {
+        canvas.withTranslation(TABLE_CACHE_WIDTH.toFloat(), 0f) {
+
+            rotate(90f)
+
+            drawBitmap(
+                bitmap,
+                portraitAssetSourceRect(bitmap),
+                portraitAssetDrawRect,
+                paint
+            )
+
+        }
+    }
+
+    private fun buildBaseTableBitmap(tint: Int?, drawBreakLine: Boolean, drawPlus: Boolean): Bitmap {
+        val output = createBitmap(TABLE_CACHE_WIDTH, TABLE_CACHE_HEIGHT)
+
+        val canvas = Canvas(output)
+        val feltPaint = feltPaintForTint(tint)
+
+        drawPortraitAssetIntoHorizontalCache(canvas, poolFill, feltPaint)
+
+        if (drawBreakLine) {
+            drawPortraitAssetIntoHorizontalCache(canvas, poolLine, tablePaint)
+        }
+
+        if (drawPlus) {
+            drawPortraitAssetIntoHorizontalCache(canvas, poolPlus, tablePaint)
+        }
+
+        return output
+    }
+
+    private fun buildTopTableBitmap(tint: Int?): Bitmap {
+        val output = createBitmap(TABLE_CACHE_WIDTH, TABLE_CACHE_HEIGHT)
+
+        val canvas = Canvas(output)
+        val feltPaint = feltPaintForTint(tint)
+
+        drawPortraitAssetIntoHorizontalCache(canvas, poolBorderFelt, feltPaint)
+        drawPortraitAssetIntoHorizontalCache(canvas, poolBorder, tablePaint)
+
+        return output
+    }
+
+    private fun ensureTableBitmaps() {
+        val key = currentTableCacheKey()
+        if (cachedTableKey == key && cachedBaseTableBitmap != null && cachedTopTableBitmap != null) {
+            return
+        }
+
+        val tint = feltTintColor()
+
+        cachedTableKey = key
+        cachedBaseTableBitmap = buildBaseTableBitmap(
+            tint = tint,
+            drawBreakLine = key.drawBreakLine,
+            drawPlus = key.drawPlus
+        )
+        cachedTopTableBitmap = buildTopTableBitmap(tint)
+
+        OpenPigeonLog.i(
+            "PoolAssets",
+            "rebuilt_table_cache tint=${tint?.let { String.format("#%08X", it) } ?: "green"} " +
+                    "line=${key.drawBreakLine} plus=${key.drawPlus} " +
+                    "contentScale=$TABLE_ASSET_CONTENT_SCALE " +
+                    "fillSrc=${portraitAssetSourceRect(poolFill)} " +
+                    "cache=${TABLE_CACHE_WIDTH}x${TABLE_CACHE_HEIGHT}"
+        )
+    }
+
+    private fun drawTableBase(canvas: Canvas) {
+        ensureTableBitmaps()
+
+        cachedBaseTableBitmap?.let { bitmap ->
+            canvas.drawBitmap(bitmap, null, tableBitmapRect, tablePaint)
+        }
+    }
+
+    private fun drawTableTop(canvas: Canvas) {
+        ensureTableBitmaps()
+
+        cachedTopTableBitmap?.let { bitmap ->
+            canvas.drawBitmap(bitmap, null, tableBitmapRect, tablePaint)
+        }
+    }
+
     external fun update(table: Long): Boolean
 
     private fun getBackgroundColor(): Int {
@@ -470,13 +723,15 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                 }
 
                 drawPockets(this)
+                drawTableBase(this)
+                drawAimAssist(this)
 
                 for (ball in activity.poolBalls) {
                     if (!ball.inPocket) continue
                     ball.draw(this)
                 }
 
-                drawBitmap(bitmap, null, RectF(-0.057f, -0.189f, WORLD_WIDTH, WORLD_HEIGHT), null)
+                drawTableTop(this)
 
                 for (ball in activity.poolBalls) {
                     if (ball.sunk || ball.inPocket) continue
@@ -491,7 +746,6 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                 }
 
                 drawScratchRing(this)
-                drawAimAssist(this)
 
                 if (activity.call8Ball) {
                     for (hole in activity.holes) {

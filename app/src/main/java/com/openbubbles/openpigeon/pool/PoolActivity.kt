@@ -465,11 +465,12 @@ class PoolActivity : AppCompatActivity() {
                 for (number in 1..9) {
                     val image = ImageView(this).apply {
                         tag = number
-                        setImageResource(PoolBall.ballOrder[number])
+                        setImageBitmap(PoolBall.previewBitmap(resources, number))
                         scaleType = ImageView.ScaleType.FIT_CENTER
+                        adjustViewBounds = false
                         layoutParams = LinearLayout.LayoutParams(
-                            stateLabelDp(20f),
-                            stateLabelDp(20f)
+                            stateLabelDp(22f),
+                            stateLabelDp(22f)
                         ).apply {
                             topMargin = stateLabelDp(1f)
                             bottomMargin = stateLabelDp(1f)
@@ -2348,6 +2349,208 @@ class PoolActivity : AppCompatActivity() {
                     floatArrayOf(0.0f, 0.55f, 1.0f),
                     Shader.TileMode.CLAMP
                 )
+            }
+
+            private val previewTextureCache = HashMap<Int, Triple<IntArray, Int, Int>>()
+            private val previewBitmapCache = HashMap<Int, Bitmap>()
+
+            private fun getPreviewTextureData(resources: Resources, number: Int): Triple<IntArray, Int, Int> {
+                previewTextureCache[number]?.let { return it }
+
+                val decoded = BitmapFactory.decodeResource(
+                    resources,
+                    ballOrder[number],
+                    BitmapFactory.Options().apply {
+                        inScaled = false
+                        inPreferredConfig = Bitmap.Config.ARGB_8888
+                    }
+                ) ?: error("Unable to decode pool ball preview bitmap: number=$number")
+
+                val bitmap = if (decoded.config == Bitmap.Config.ARGB_8888) {
+                    decoded
+                } else {
+                    decoded.copy(Bitmap.Config.ARGB_8888, false)
+                }
+
+                val pixels = IntArray(bitmap.width * bitmap.height)
+                bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+
+                val data = Triple(pixels, bitmap.width, bitmap.height)
+                previewTextureCache[number] = data
+                return data
+            }
+
+            private fun previewSampleSource(
+                sourcePixels: IntArray,
+                sourceWidth: Int,
+                sourceHeight: Int,
+                uFloat: Float,
+                vFloat: Float
+            ): Int {
+                var u = uFloat.toInt() % sourceWidth
+                if (u < 0) u += sourceWidth
+
+                val v = vFloat.toInt().coerceIn(0, sourceHeight - 1)
+
+                return sourcePixels[v * sourceWidth + u]
+            }
+
+            private fun previewApplyShade(
+                color: Int,
+                normalX: Float,
+                normalY: Float,
+                normalZ: Float
+            ): Int {
+                val a = color ushr 24
+                if (a == 0) return 0
+
+                val r = (color shr 16) and 0xff
+                val g = (color shr 8) and 0xff
+                val b = color and 0xff
+
+                val lightDot = (
+                        normalX * -0.35f +
+                                normalY * -0.45f +
+                                normalZ * 0.90f
+                        ).coerceIn(0f, 1f)
+
+                val edgeShade = normalZ.coerceIn(0f, 1f)
+
+                val shade = (0.48f + lightDot * 0.42f + edgeShade * 0.10f)
+                    .coerceIn(0.35f, 1.05f)
+
+                val rr = (r * shade).toInt().coerceIn(0, 255)
+                val gg = (g * shade).toInt().coerceIn(0, 255)
+                val bb = (b * shade).toInt().coerceIn(0, 255)
+
+                return (a shl 24) or (rr shl 16) or (gg shl 8) or bb
+            }
+
+            fun previewBitmap(resources: Resources, number: Int): Bitmap {
+                val safeNumber = number.coerceIn(0, ballOrder.lastIndex)
+
+                previewBitmapCache[safeNumber]?.let { return it }
+
+                val sourceData = getPreviewTextureData(resources, safeNumber)
+                val sourcePixels = sourceData.first
+                val sourceWidth = sourceData.second
+                val sourceHeight = sourceData.third
+
+                val output = createBitmap(SPHERE_RENDER_SIZE, SPHERE_RENDER_SIZE)
+                val outputPixels = IntArray(SPHERE_RENDER_SIZE * SPHERE_RENDER_SIZE)
+
+                val rx = 0.0
+                val ry = PI / 2.0
+                val rz = 0.0
+
+                val cosX = cos(rx)
+                val sinX = sin(rx)
+                val cosY = cos(ry)
+                val sinY = sin(ry)
+                val cosZ = cos(rz)
+                val sinZ = sin(rz)
+
+                for (py in 0 until SPHERE_RENDER_SIZE) {
+                    for (px in 0 until SPHERE_RENDER_SIZE) {
+                        val index = py * SPHERE_RENDER_SIZE + px
+
+                        val nx = (px - SPHERE_CENTER) / SPHERE_RADIUS
+                        val ny = (py - SPHERE_CENTER) / SPHERE_RADIUS
+                        val r2 = nx * nx + ny * ny
+
+                        if (r2 > 1f) {
+                            outputPixels[index] = 0x00000000
+                            continue
+                        }
+
+                        val nz = sqrt(1f - r2)
+
+                        var vx = nx.toDouble()
+                        var vy = -ny.toDouble()
+                        var vz = nz.toDouble()
+
+                        run {
+                            val tx = vx * cosZ - vy * sinZ
+                            val ty = vx * sinZ + vy * cosZ
+                            vx = tx
+                            vy = ty
+                        }
+
+                        run {
+                            val tx = vx * cosY + vz * sinY
+                            val tz = -vx * sinY + vz * cosY
+                            vx = tx
+                            vz = tz
+                        }
+
+                        run {
+                            val ty = vy * cosX - vz * sinX
+                            val tz = vy * sinX + vz * cosX
+                            vy = ty
+                            vz = tz
+                        }
+
+                        val longitude = atan2(vx, vz)
+                        val latitude = asin(vy.coerceIn(-1.0, 1.0))
+
+                        val u = ((longitude / (PI * 2.0)) + 0.5) * sourceWidth
+                        val v = (0.5 - (latitude / PI)) * sourceHeight
+
+                        val sampled = previewSampleSource(
+                            sourcePixels,
+                            sourceWidth,
+                            sourceHeight,
+                            u.toFloat(),
+                            v.toFloat()
+                        )
+
+                        outputPixels[index] = previewApplyShade(sampled, nx, ny, nz)
+                    }
+                }
+
+                output.setPixels(
+                    outputPixels,
+                    0,
+                    SPHERE_RENDER_SIZE,
+                    0,
+                    0,
+                    SPHERE_RENDER_SIZE,
+                    SPHERE_RENDER_SIZE
+                )
+
+                Canvas(output).apply {
+                    save()
+
+                    translate(SPHERE_CENTER, SPHERE_CENTER)
+
+                    val previewScale = SPHERE_RENDER_SIZE / (BALL_RADIUS * 2f)
+                    scale(previewScale, previewScale)
+
+                    drawOval(
+                        RectF(
+                            -8.0f,
+                            -8.5f,
+                            2.0f,
+                            1.5f
+                        ),
+                        glossPaint
+                    )
+
+                    drawOval(
+                        RectF(
+                            -4.5f,
+                            -5.0f,
+                            0.8f,
+                            0.2f
+                        ),
+                        glossPaint2
+                    )
+
+                    restore()
+                }
+
+                previewBitmapCache[safeNumber] = output
+                return output
             }
         }
 
