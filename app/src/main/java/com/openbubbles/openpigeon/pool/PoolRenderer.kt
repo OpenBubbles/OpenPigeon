@@ -714,6 +714,11 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
             canvas.withMatrix(transform) {
                 val nativeMoving = update(activity.table)
 
+                activity.traceVisualRoll(
+                    reason = "renderer_after_native_update",
+                    nativeMoving = nativeMoving
+                )
+
                 if (activity.mode == PoolActivity.PoolMode.Playing) {
                     if (!nativeMoving) {
                         activity.handleFinishPlay()
@@ -723,15 +728,14 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                 }
 
                 drawPockets(this)
-                drawTableBase(this)
-                drawAimAssist(this)
 
                 for (ball in activity.poolBalls) {
                     if (!ball.inPocket) continue
                     ball.draw(this)
                 }
 
-                drawTableTop(this)
+                drawTableBase(this)
+                drawAimAssist(this)
 
                 for (ball in activity.poolBalls) {
                     if (ball.sunk || ball.inPocket) continue
@@ -745,7 +749,14 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                     ball.draw(this)
                 }
 
+                activity.traceVisualRoll(
+                    reason = "renderer_after_ball_draw",
+                    nativeMoving = nativeMoving
+                )
+
                 drawScratchRing(this)
+
+                drawTableTop(this)
 
                 if (activity.call8Ball) {
                     for (hole in activity.holes) {

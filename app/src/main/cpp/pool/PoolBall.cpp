@@ -45,17 +45,30 @@ void PoolBall::writeOutputs() {
         return;
     }
 
+    b2Vec2 position(-1.0f, -1.0f);
+    b2Vec2 velocity(0.0f, 0.0f);
+    float angle = 0.0f;
+    float angularVelocity = 0.0f;
+
     if (body != nullptr) {
-        outputs[0] = body->GetPosition().x;
-        outputs[1] = body->GetPosition().y;
-        outputs[2] = body->GetAngle();
-        outputs[7] = body->GetAngularVelocity();
+        position = body->GetPosition();
+        velocity = body->GetLinearVelocity();
+        angle = body->GetAngle();
+        angularVelocity = body->GetAngularVelocity();
     }
 
-    outputs[3] = (float)sunkOrder;
-    outputs[4] = (float)numberHit;
+    outputs[0] = position.x;
+    outputs[1] = position.y;
+    outputs[2] = angle;
+
+    outputs[3] = static_cast<float>(sunkOrder);
+    outputs[4] = static_cast<float>(numberHit);
     outputs[5] = hole.x;
     outputs[6] = hole.y;
+
+    outputs[7] = velocity.x;
+    outputs[8] = velocity.y;
+    outputs[9] = angularVelocity;
 }
 
 void PoolBall::markSunk(const b2Vec2& tableHole, const char* reason) {

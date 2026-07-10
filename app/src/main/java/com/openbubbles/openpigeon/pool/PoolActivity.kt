@@ -1762,6 +1762,11 @@ class PoolActivity : AppCompatActivity() {
 
     var poolTraceEnabled = false
 
+    private var poolVisualTraceLastDump = ""
+    var poolVisualTraceEnabled = false
+    private var poolVisualTraceEveryFrames = 6
+    private var poolVisualTraceFrame = 0L
+
     private fun showSkipReplayButton(reason: String) {
         runOnUiThread {
             val controls = findViewById<LinearLayout>(R.id.controls)
@@ -2020,6 +2025,18 @@ class PoolActivity : AppCompatActivity() {
 
         clearNativeShotWatchdog()
 
+        traceVisualRoll(
+            reason = "finishReplay_before_snap",
+            force = true
+        )
+
+        if (poolVisualTraceEnabled) {
+            OpenPigeonLog.i(
+                "PoolVisualRoll",
+                "finishReplay_finalBalls_before_snap len=${finalBalls.length} finalBalls=$finalBalls"
+            )
+        }
+
         if (finalBalls.isBlank()) {
             OpenPigeonLog.e("PoolReplay", "finishReplay_missing_finalBalls; falling back to current exported state")
             finalBalls = exportBalls(scratch)
@@ -2040,14 +2057,25 @@ class PoolActivity : AppCompatActivity() {
         poolBalls = arrayListOf()
         cueBall = null
 
-        OpenPigeonLog.i(
-            "PoolReplay",
-            "finishReplay_authoritative_final finalBallsLen=${finalBalls.length} finalBalls=$finalBalls"
-        )
+        if (poolTraceEnabled) {
+            OpenPigeonLog.i(
+                "PoolReplay",
+                "finishReplay_authoritative_final finalBallsLen=${finalBalls.length} finalBalls=$finalBalls"
+            )
+        }
 
         buildBalls(finalBalls, null)
 
+        traceVisualRoll(
+            reason = "finishReplay_after_buildBalls",
+            force = true
+        )
+
         poolTraceEnabled = false
+        poolVisualTraceEnabled = false
+        poolVisualTraceFrame = 0L
+        poolVisualTraceLastDump = ""
+
         if (table != 0L) {
             setPoolDebugTrace(table, false, 0)
         }
@@ -2096,6 +2124,11 @@ class PoolActivity : AppCompatActivity() {
     var call8Ball = false
 
     fun handleFinishPlay() {
+        traceVisualRoll(
+            reason = "handleFinishPlay_entry",
+            force = true
+        )
+
         if (disableSend || skipReplayRequested) return
         clearNativeShotWatchdog()
         cancelAllShots()
@@ -2307,9 +2340,11 @@ class PoolActivity : AppCompatActivity() {
             private const val IOS_SHADOW_OFFSET_X = -4.5f
             private const val IOS_SHADOW_OFFSET_Y = 0.0f
             private const val IOS_SHADOW_RADIUS = BALL_RADIUS
-
-            private const val IOS_ROLL_DEGREES_PER_WORLD_UNIT = 4.47f
-            private const val MAX_ROLL_STEP = 60f
+            private const val IOS_ROLL_LINEAR_VELOCITY_DIVISOR = -20f
+            private const val IOS_ROLL_ANGULAR_VELOCITY_DIVISOR = 10f
+            private const val IOS_ROLL_SMALL_ANGULAR_DAMPING_LIMIT = 3f
+            private const val IOS_ROLL_SMALL_ANGULAR_DAMPING = 0.8f
+            private const val IOS_MIN_ROLL_VECTOR_LENGTH = 0.000001f
 
             private const val SPHERE_RENDER_SIZE = 72
             private const val SPHERE_CENTER = (SPHERE_RENDER_SIZE - 1) * 0.5f
@@ -2585,8 +2620,141 @@ class PoolActivity : AppCompatActivity() {
         private val spherePixels = IntArray(SPHERE_RENDER_SIZE * SPHERE_RENDER_SIZE)
 
         private var sphereDirty = true
-        private var lastDrawX = Float.NaN
-        private var lastDrawY = Float.NaN
+
+        private data class IosRollQuaternion(
+            val w: Double,
+            val x: Double,
+            val y: Double,
+            val z: Double
+        )
+
+        private fun iosRotationVectorToQuaternion(
+            rotationX: Float,
+            rotationY: Float,
+            rotationZ: Float
+        ): IosRollQuaternion {
+            val x = rotationX.toDouble()
+            val y = rotationY.toDouble()
+            val z = rotationZ.toDouble()
+
+            val magnitudeDegrees = sqrt(x * x + y * y + z * z)
+
+            if (magnitudeDegrees <= 0.0000001) {
+                return IosRollQuaternion(1.0, 0.0, 0.0, 0.0)
+            }
+
+            val halfAngleRadians = magnitudeDegrees * 0.5 * PI / 180.0
+            val axisScale = Math.sin(halfAngleRadians) / magnitudeDegrees
+
+            return IosRollQuaternion(
+                w = Math.cos(halfAngleRadians),
+                x = x * axisScale,
+                y = y * axisScale,
+                z = z * axisScale
+            )
+        }
+
+        private fun iosMultiplyQuaternion(
+            left: IosRollQuaternion,
+            right: IosRollQuaternion
+        ): IosRollQuaternion {
+            return IosRollQuaternion(
+                w = left.w * right.w - left.x * right.x - left.y * right.y - left.z * right.z,
+                x = left.w * right.x + left.x * right.w + left.y * right.z - left.z * right.y,
+                y = left.w * right.y - left.x * right.z + left.y * right.w + left.z * right.x,
+                z = left.w * right.z + left.x * right.y - left.y * right.x + left.z * right.w
+            )
+        }
+
+        private fun iosConjugateQuaternion(q: IosRollQuaternion): IosRollQuaternion {
+            return IosRollQuaternion(
+                w = q.w,
+                x = -q.x,
+                y = -q.y,
+                z = -q.z
+            )
+        }
+
+        private fun iosRotateVectorByQuaternion(
+            qRaw: IosRollQuaternion,
+            x: Double,
+            y: Double,
+            z: Double
+        ): DoubleArray {
+            val q = iosNormalizeQuaternion(qRaw)
+
+            val rotated = iosMultiplyQuaternion(
+                iosMultiplyQuaternion(
+                    q,
+                    IosRollQuaternion(0.0, x, y, z)
+                ),
+                iosConjugateQuaternion(q)
+            )
+
+            return doubleArrayOf(rotated.x, rotated.y, rotated.z)
+        }
+
+        private fun iosNormalizeQuaternion(q: IosRollQuaternion): IosRollQuaternion {
+            val len = sqrt(q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z)
+
+            if (len <= 0.0000001) {
+                return IosRollQuaternion(1.0, 0.0, 0.0, 0.0)
+            }
+
+            return IosRollQuaternion(
+                w = q.w / len,
+                x = q.x / len,
+                y = q.y / len,
+                z = q.z / len
+            )
+        }
+
+        private fun iosQuaternionToRotationVector(qRaw: IosRollQuaternion): FloatArray {
+            val q = iosNormalizeQuaternion(qRaw)
+
+            val sinHalfLen = sqrt(q.x * q.x + q.y * q.y + q.z * q.z)
+
+            if (sinHalfLen <= 0.0000001) {
+                return floatArrayOf(0f, 0f, 0f)
+            }
+
+            val angleRadians = 2.0 * Math.atan2(sinHalfLen, q.w)
+            val angleDegrees = Math.toDegrees(angleRadians)
+            val scale = angleDegrees / sinHalfLen
+
+            return floatArrayOf(
+                (q.x * scale).toFloat(),
+                (q.y * scale).toFloat(),
+                (q.z * scale).toFloat()
+            )
+        }
+
+        private fun applyIosRollingVector(
+            deltaRotationX: Float,
+            deltaRotationY: Float,
+            deltaRotationZ: Float
+        ) {
+            val current = iosRotationVectorToQuaternion(
+                visualRotationX,
+                visualRotationY,
+                visualRotationZ
+            )
+
+            val delta = iosRotationVectorToQuaternion(
+                deltaRotationX,
+                deltaRotationY,
+                deltaRotationZ
+            )
+
+            val next = iosQuaternionToRotationVector(
+                iosMultiplyQuaternion(current, delta)
+            )
+
+            visualRotationX = next[0]
+            visualRotationY = next[1]
+            visualRotationZ = next[2]
+            sphereDirty = true
+        }
 
         val x: Float
             get() = data.get(0)
@@ -2596,6 +2764,23 @@ class PoolActivity : AppCompatActivity() {
 
         val rot: Float
             get() = data.get(2)
+
+        private fun optionalData(index: Int): Float {
+            return if (data.capacity() > index) {
+                data.get(index)
+            } else {
+                0f
+            }
+        }
+
+        val vx: Float
+            get() = optionalData(7)
+
+        val vy: Float
+            get() = optionalData(8)
+
+        val av: Float
+            get() = optionalData(9)
 
         val sunk: Boolean
             get() = data.get(3) != -1f
@@ -2635,31 +2820,34 @@ class PoolActivity : AppCompatActivity() {
         }
 
         private fun updateVisualRoll() {
-            if (lastDrawX.isNaN() || lastDrawY.isNaN()) {
-                lastDrawX = x
-                lastDrawY = y
+            if (data.capacity() <= 9) {
                 return
             }
 
-            val dx = x - lastDrawX
-            val dy = y - lastDrawY
-            val dist = sqrt(dx * dx + dy * dy)
+            var angularVelocity = av
 
-            lastDrawX = x
-            lastDrawY = y
+            if (abs(angularVelocity) < IOS_ROLL_SMALL_ANGULAR_DAMPING_LIMIT) {
+                angularVelocity *= IOS_ROLL_SMALL_ANGULAR_DAMPING
+            }
 
-            if (dist <= 0.001f || dist > MAX_ROLL_STEP) {
+            val deltaRotationX = vx / IOS_ROLL_LINEAR_VELOCITY_DIVISOR
+            val deltaRotationY = vy / IOS_ROLL_LINEAR_VELOCITY_DIVISOR
+            val deltaRotationZ = angularVelocity / IOS_ROLL_ANGULAR_VELOCITY_DIVISOR
+
+            val lenSq =
+                deltaRotationX * deltaRotationX +
+                        deltaRotationY * deltaRotationY +
+                        deltaRotationZ * deltaRotationZ
+
+            if (lenSq <= IOS_MIN_ROLL_VECTOR_LENGTH * IOS_MIN_ROLL_VECTOR_LENGTH) {
                 return
             }
 
-            visualRotationX += dx * IOS_ROLL_DEGREES_PER_WORLD_UNIT
-            visualRotationY += -dy * IOS_ROLL_DEGREES_PER_WORLD_UNIT
-
-            sphereDirty = true
-        }
-
-        private fun degToRad(value: Float): Double {
-            return value.toDouble() * PI / 180.0
+            applyIosRollingVector(
+                deltaRotationX,
+                deltaRotationY,
+                deltaRotationZ
+            )
         }
 
         private fun sampleSource(uFloat: Float, vFloat: Float): Int {
@@ -2701,16 +2889,11 @@ class PoolActivity : AppCompatActivity() {
             if (!sphereDirty) return
             sphereDirty = false
 
-            val rx = -degToRad(visualRotationX)
-            val ry = -degToRad(visualRotationY)
-            val rz = -degToRad(visualRotationZ)
-
-            val cosX = cos(rx)
-            val sinX = sin(rx)
-            val cosY = cos(ry)
-            val sinY = sin(ry)
-            val cosZ = cos(rz)
-            val sinZ = sin(rz)
+            val inverseTextureRotation = iosRotationVectorToQuaternion(
+                -visualRotationX,
+                -visualRotationY,
+                -visualRotationZ
+            )
 
             for (py in 0 until SPHERE_RENDER_SIZE) {
                 for (px in 0 until SPHERE_RENDER_SIZE) {
@@ -2727,30 +2910,16 @@ class PoolActivity : AppCompatActivity() {
 
                     val nz = sqrt(1f - r2)
 
-                    var vx = nx.toDouble()
-                    var vy = -ny.toDouble()
-                    var vz = nz.toDouble()
+                    val rotated = iosRotateVectorByQuaternion(
+                        inverseTextureRotation,
+                        nx.toDouble(),
+                        -ny.toDouble(),
+                        nz.toDouble()
+                    )
 
-                    run {
-                        val tx = vx * cosZ - vy * sinZ
-                        val ty = vx * sinZ + vy * cosZ
-                        vx = tx
-                        vy = ty
-                    }
-
-                    run {
-                        val tx = vx * cosY + vz * sinY
-                        val tz = -vx * sinY + vz * cosY
-                        vx = tx
-                        vz = tz
-                    }
-
-                    run {
-                        val ty = vy * cosX - vz * sinX
-                        val tz = vy * sinX + vz * cosX
-                        vy = ty
-                        vz = tz
-                    }
+                    var vx = rotated[0]
+                    var vy = rotated[1]
+                    var vz = rotated[2]
 
                     val longitude = atan2(vx, vz)
                     val latitude = asin(vy.coerceIn(-1.0, 1.0))
@@ -2892,7 +3061,7 @@ class PoolActivity : AppCompatActivity() {
     }
 
     private fun exportBalls(centerScratch: Boolean): String {
-        return poolBalls.filter {
+        val result = poolBalls.filter {
             !it.sunk ||
                     (centerScratch && it.number == 0) ||
                     (isNineBall && centerScratch && it.number in 1..9)
@@ -2911,6 +3080,15 @@ class PoolActivity : AppCompatActivity() {
 
             "#${it.x},${it.y},${it.rot},$density,${it.number},${it.exportVisualRotationString()}"
         }.joinToString("")
+
+        if (poolVisualTraceEnabled) {
+            OpenPigeonLog.i(
+                "PoolVisualRoll",
+                "exportBalls centerScratch=$centerScratch result=$result live=${dumpVisualRotationState()}"
+            )
+        }
+
+        return result
     }
 
     private fun generateRandomRack(seed: Long): String {
@@ -3009,8 +3187,63 @@ class PoolActivity : AppCompatActivity() {
                     ",r:${ball.rot}" +
                     ",sunk:${ball.sunkOrder}" +
                     ",hit:${ball.ballHit}" +
-                    ",hole:${ball.holeX},${ball.holeY}"
+                    ",hole:${ball.holeX},${ball.holeY}" +
+                    ",vx:${ball.vx}" +
+                    ",vy:${ball.vy}" +
+                    ",av:${ball.av}"
         }
+    }
+
+    fun traceVisualRoll(
+        reason: String,
+        nativeMoving: Boolean? = null,
+        force: Boolean = false
+    ) {
+        if (!poolTraceEnabled || !poolVisualTraceEnabled) return
+
+        if (!force) {
+            poolVisualTraceFrame += 1
+            if (poolVisualTraceFrame % poolVisualTraceEveryFrames != 0L) return
+        }
+
+        val dump = dumpVisualRotationState()
+
+        if (!force && dump == poolVisualTraceLastDump) {
+            return
+        }
+
+        poolVisualTraceLastDump = dump
+
+        OpenPigeonLog.i(
+            "PoolVisualRoll",
+            "reason=$reason mode=$mode moving=$nativeMoving replaying=$replaying " +
+                    "scratch=$scratch finalBallsLen=${finalBalls.length} balls=$dump"
+        )
+    }
+
+    private fun dumpVisualRotationState(): String {
+        return poolBalls
+            .sortedWith(compareBy<PoolBall> { it.number }.thenBy { it.x }.thenBy { it.y })
+            .joinToString("|") { ball ->
+                String.format(
+                    Locale.US,
+                    "b:%d x:%.3f y:%.3f nativeRot:%.6f vx:%.6f vy:%.6f av:%.6f sunk:%s pocket:%s hole:%.3f,%.3f vr:%.6f,%.6f,%.6f",
+                    ball.number,
+                    ball.x,
+                    ball.y,
+                    ball.rot,
+                    ball.vx,
+                    ball.vy,
+                    ball.av,
+                    ball.sunk,
+                    ball.inPocket,
+                    ball.holeX,
+                    ball.holeY,
+                    ball.visualRotationX,
+                    ball.visualRotationY,
+                    ball.visualRotationZ
+                )
+            }
     }
 
     private fun buildBalls(balls: String, skew: String?) {
@@ -3056,7 +3289,7 @@ class PoolActivity : AppCompatActivity() {
             val visualRotY = details.getOrNull(6)?.toFloatOrNull() ?: 0f
             val visualRotZ = details.getOrNull(7)?.toFloatOrNull() ?: -1f
 
-            val buffer = ByteBuffer.allocateDirect(4 /*f32*/ * 7)
+            val buffer = ByteBuffer.allocateDirect(4 /*f32*/ * 10)
             buffer.order(ByteOrder.nativeOrder())
 
             val floatBuffer = buffer.asFloatBuffer()
@@ -3068,6 +3301,10 @@ class PoolActivity : AppCompatActivity() {
             floatBuffer.put(4, -1f) // numberHit
             floatBuffer.put(5, -1f) // holeX
             floatBuffer.put(6, -1f) // holeY
+
+            floatBuffer.put(7, 0f) // vx
+            floatBuffer.put(8, 0f) // vy
+            floatBuffer.put(9, 0f) // angularVelocity
 
             val shouldGoInMode = if (finalBalls == null) {
                 0
@@ -3168,17 +3405,37 @@ class PoolActivity : AppCompatActivity() {
 
         renderer.resetFrameReadySignal()
 
-        poolTraceEnabled =
+        val explicitPoolTraceEnabled =
             msg["pool_trace"] == "1" ||
                     msg["debug_pool"] == "1" ||
-                    msg["trace"] == "pool"
+                    msg["trace"] == "pool" ||
+                    msg["pool_visual_trace"] == "1" ||
+                    msg["visual_trace"] == "1" ||
+                    msg["trace"] == "pool_visual" ||
+                    msg["trace_visual"] == "1"
 
-        val poolTraceEveryFrames = msg["pool_trace_every"]
+        poolTraceEnabled = explicitPoolTraceEnabled
+
+        poolVisualTraceEnabled = poolTraceEnabled
+
+        poolVisualTraceEveryFrames = msg["pool_visual_trace_every"]
             ?.toIntOrNull()
             ?.coerceAtLeast(1)
-            ?: 30
+            ?: 6
 
-        setPoolDebugTrace(table, poolTraceEnabled, if (poolTraceEnabled) poolTraceEveryFrames else 0)
+        poolVisualTraceFrame = 0L
+        poolVisualTraceLastDump = ""
+
+        setPoolDebugTrace(table, poolTraceEnabled, if (poolTraceEnabled) 1 else 0)
+
+        if (poolTraceEnabled) {
+            OpenPigeonLog.i(
+                "PoolVisualRoll",
+                "enabled everyFrames=$poolVisualTraceEveryFrames " +
+                        "poolTrace=$poolTraceEnabled replayLen=${msg["replay"]?.length ?: 0} " +
+                        "num=${msg["num"]} game=${msg["game"] ?: msg["name"] ?: msg["gameName"]}"
+            )
+        }
 
         disableSend = false
         skipReplayRequested = false
