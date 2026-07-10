@@ -199,7 +199,7 @@ class ShuffleRenderer @JvmOverloads constructor(
         drawTopHud(canvas, w)
         drawBoardAndPucks(canvas, w, h)
         drawBottomHud(canvas, w, h)
-        drawStatusOverlay(canvas, w, h)
+        drawStatusOverlay(canvas, w)
     }
 
     fun setLocalPlayer(player: Int) {
@@ -626,9 +626,9 @@ class ShuffleRenderer @JvmOverloads constructor(
         puck: ShufflePuck,
         boardRect: RectF
     ): Float {
-        return when {
-            puck.player == 1 && puck.y <= -200f -> bottomOutOfPlayPuckY(boardRect)
-            puck.player == 2 && puck.y >= 200f -> topOutOfPlayPuckY(boardRect)
+        return when (puck.player) {
+            1 if puck.y <= -200f -> bottomOutOfPlayPuckY(boardRect)
+            2 if puck.y >= 200f -> topOutOfPlayPuckY(boardRect)
             else -> puckScreenY(puck.y, boardRect)
         }
     }
@@ -938,7 +938,6 @@ class ShuffleRenderer @JvmOverloads constructor(
         val shaftEndY = tipY - sinA * headLength * 0.78f
 
         val normalX = -sinA
-        val normalY = cosA
 
         linePaint.style = Paint.Style.STROKE
         linePaint.strokeCap = Paint.Cap.ROUND
@@ -973,11 +972,11 @@ class ShuffleRenderer @JvmOverloads constructor(
             moveTo(tipX + shadowOffset, tipY + shadowOffset)
             lineTo(
                 headBackX + normalX * (headWidth * 0.5f) + shadowOffset,
-                headBackY + normalY * (headWidth * 0.5f) + shadowOffset
+                headBackY + cosA * (headWidth * 0.5f) + shadowOffset
             )
             lineTo(
                 headBackX - normalX * (headWidth * 0.5f) + shadowOffset,
-                headBackY - normalY * (headWidth * 0.5f) + shadowOffset
+                headBackY - cosA * (headWidth * 0.5f) + shadowOffset
             )
             close()
         }
@@ -990,11 +989,11 @@ class ShuffleRenderer @JvmOverloads constructor(
             moveTo(tipX, tipY)
             lineTo(
                 headBackX + normalX * (headWidth * 0.5f),
-                headBackY + normalY * (headWidth * 0.5f)
+                headBackY + cosA * (headWidth * 0.5f)
             )
             lineTo(
                 headBackX - normalX * (headWidth * 0.5f),
-                headBackY - normalY * (headWidth * 0.5f)
+                headBackY - cosA * (headWidth * 0.5f)
             )
             close()
         }
@@ -1609,8 +1608,7 @@ class ShuffleRenderer @JvmOverloads constructor(
 
     private fun drawStatusOverlay(
         canvas: Canvas,
-        w: Float,
-        h: Float
+        w: Float
     ) {
         if (uiMode != ShuffleUiMode.Playing) {
             return
@@ -1894,47 +1892,6 @@ class ShuffleRenderer @JvmOverloads constructor(
         )
 
         postInvalidateOnAnimation()
-    }
-
-    private fun buildNativeLaunchPucks(): List<ShufflePuck> {
-        val out = mutableListOf<ShufflePuck>()
-
-        var replacedReadyPuck = false
-        val readyX = cuePuckXNorm * READY_PUCK_X_LIMIT
-
-        for (puck in pucks) {
-            if (puck.player == 1 && puck.y <= -200f) {
-                out.add(
-                    puck.copy(
-                        x = readyX,
-                        y = READY_PUCK_PLAYER1_Y,
-                        bodyAngle = 0f,
-                        shotAngle = 0f,
-                        shotDistance = 0f,
-                        velocityX = 0f,
-                        velocityY = 0f
-                    )
-                )
-                replacedReadyPuck = true
-            } else {
-                out.add(puck)
-            }
-        }
-
-        if (!replacedReadyPuck) {
-            out.add(
-                ShufflePuck(
-                    x = readyX,
-                    y = READY_PUCK_PLAYER1_Y,
-                    player = 1,
-                    bodyAngle = 0f,
-                    shotAngle = 0f,
-                    shotDistance = 0f
-                )
-            )
-        }
-
-        return out
     }
 
     private fun updateNativeSimulationFrame() {
