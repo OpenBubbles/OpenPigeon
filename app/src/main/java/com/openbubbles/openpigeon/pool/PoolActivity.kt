@@ -134,6 +134,11 @@ class PoolActivity : AppCompatActivity() {
 
     var lastAngle = 0f
 
+    private var cueDragLastTimeMs = 0L
+    private var cueInertiaVelocity = 0f
+    private var cueInertiaLastTimeMs = 0L
+    private var cueInertiaRunnable: Runnable? = null
+
     var touchDownCueX = 0f
 
     private var lastCueHapticStep = -1
@@ -939,6 +944,74 @@ class PoolActivity : AppCompatActivity() {
         renderer.cueDraw = frac * 500
     }
 
+    private fun shortestAngleDelta(to: Float, from: Float): Float {
+        var diff = to - from
+
+        if (diff > PI) {
+            diff -= PI.toFloat() * 2f
+        }
+
+        if (diff < -PI) {
+            diff += PI.toFloat() * 2f
+        }
+
+        return diff
+    }
+
+    private fun cancelCueInertia() {
+        cueInertiaRunnable?.let { stateLabelHandler.removeCallbacks(it) }
+        cueInertiaRunnable = null
+        cueInertiaVelocity = 0f
+        cueInertiaLastTimeMs = 0L
+    }
+
+    private fun startCueInertia() {
+        if (abs(cueInertiaVelocity) < CUE_INERTIA_START_SPEED) {
+            cueInertiaVelocity = 0f
+            return
+        }
+
+        cueInertiaVelocity = cueInertiaVelocity.coerceIn(
+            -CUE_INERTIA_MAX_SPEED,
+            CUE_INERTIA_MAX_SPEED
+        )
+
+        cueInertiaLastTimeMs = SystemClock.uptimeMillis()
+
+        val runnable = object : Runnable {
+            override fun run() {
+                if (
+                    poolActivityClosing ||
+                    mode != PoolMode.Aiming ||
+                    draggingCue ||
+                    !::renderer.isInitialized
+                ) {
+                    cancelCueInertia()
+                    return
+                }
+
+                val now = SystemClock.uptimeMillis()
+                val dt = ((now - cueInertiaLastTimeMs).coerceIn(1L, 50L)).toFloat() / 1000f
+                cueInertiaLastTimeMs = now
+
+                renderer.cueRot += cueInertiaVelocity * dt
+
+                val damping = Math.exp((-CUE_INERTIA_DECAY_PER_SECOND * dt).toDouble()).toFloat()
+                cueInertiaVelocity *= damping
+
+                if (abs(cueInertiaVelocity) < CUE_INERTIA_STOP_SPEED) {
+                    cancelCueInertia()
+                    return
+                }
+
+                stateLabelHandler.postDelayed(this, 16L)
+            }
+        }
+
+        cueInertiaRunnable = runnable
+        stateLabelHandler.postDelayed(runnable, 16L)
+    }
+
     private fun openCuePopup() {
         runOnUiThread {
             if (cuePopupOpen || cuePopupAnimating || mode != PoolMode.Aiming) return@runOnUiThread
@@ -1564,14 +1637,25 @@ class PoolActivity : AppCompatActivity() {
 
                 val position = -atan2(points[0], points[1])
 
-                when(event.actionMasked) {
+                when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
+                        cancelCueInertia()
+
+                        cueDragLastTimeMs = SystemClock.uptimeMillis()
+                        cueInertiaVelocity = 0f
+                        lastAngle = position
+
                         if (scratch && abs(points[0]) < 20 && abs(points[1]) < 20) {
                             draggingCue = true
                         }
                     }
+
                     MotionEvent.ACTION_MOVE -> {
+                        val now = SystemClock.uptimeMillis()
+
                         if (draggingCue) {
+                            cueInertiaVelocity = 0f
+
                             val (moveX, moveY) = clampCueBallPosition(origPoints[0], origPoints[1])
                             for (ball in poolBalls) {
                                 if (ball.number == 0) continue
@@ -1579,29 +1663,53 @@ class PoolActivity : AppCompatActivity() {
                                 val distY = ball.y - moveY
                                 val distance = sqrt(distX * distX + distY * distY)
                                 if (distance < 20f) {
-                                    // we overslap another ball, reject this move
                                     return@setOnTouchListener true
                                 }
                             }
+
                             synchronized(this) {
                                 moveBall(table, 0, moveX, moveY, 0f)
                             }
                         } else {
-                            var diff = position - lastAngle
-                            if (diff > PI) {
-                                diff -= PI.toFloat() * 2
-                            }
-                            if (diff < -PI) {
-                                diff += PI.toFloat() * 2
-                            }
-                            renderer.cueRot += diff * 0.5f
+                            val diff = shortestAngleDelta(position, lastAngle)
+                            val appliedDiff = diff * CUE_ROTATION_DRAG_GAIN
+
+                            renderer.cueRot += appliedDiff
+
+                            val dt = ((now - cueDragLastTimeMs).coerceIn(1L, 50L)).toFloat() / 1000f
+                            val instantVelocity = (appliedDiff / dt).coerceIn(
+                                -CUE_INERTIA_MAX_SPEED,
+                                CUE_INERTIA_MAX_SPEED
+                            )
+
+                            cueInertiaVelocity =
+                                cueInertiaVelocity * CUE_INERTIA_SMOOTHING +
+                                        instantVelocity * (1f - CUE_INERTIA_SMOOTHING)
                         }
+
+                        cueDragLastTimeMs = now
+                        lastAngle = position
                     }
+
                     MotionEvent.ACTION_UP -> {
+                        val wasDraggingCueBall = draggingCue
                         draggingCue = false
+
+                        if (wasDraggingCueBall) {
+                            cancelCueInertia()
+                        } else {
+                            startCueInertia()
+                        }
+
+                        lastAngle = position
+                    }
+
+                    MotionEvent.ACTION_CANCEL -> {
+                        draggingCue = false
+                        cancelCueInertia()
+                        lastAngle = position
                     }
                 }
-                lastAngle = position
                 // this is our direction vector
                 OpenPigeonLog.i("Point", "${points[0]} ${points[1]}")
             }
@@ -1638,6 +1746,7 @@ class PoolActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         poolActivityClosing = true
+        cancelCueInertia()
         disableSend = true
         skipReplayRequested = true
         mode = PoolMode.Disabled
@@ -3735,6 +3844,13 @@ class PoolActivity : AppCompatActivity() {
         private const val TEXT_DARK_MODE = "Dark Mode"
         private const val TEXT_MUSIC = "Music"
         private const val POOL_REPLAY_SHOT_TIMEOUT_MS = 12_000L
+        private const val CUE_ROTATION_DRAG_GAIN = 0.5f
+
+        private const val CUE_INERTIA_SMOOTHING = 0.65f
+        private const val CUE_INERTIA_START_SPEED = 0.45f
+        private const val CUE_INERTIA_STOP_SPEED = 0.035f
+        private const val CUE_INERTIA_MAX_SPEED = 4.0f
+        private const val CUE_INERTIA_DECAY_PER_SECOND = 12.0f
 
         init {
             System.loadLibrary("openbubblesextension")
