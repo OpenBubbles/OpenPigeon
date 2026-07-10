@@ -28,7 +28,6 @@ import android.os.Looper
 import androidx.core.graphics.withMatrix
 import android.graphics.ColorMatrixColorFilter
 import com.openbubbles.openpigeon.R
-import android.graphics.Rect
 import androidx.core.graphics.withTranslation
 import androidx.core.graphics.createBitmap
 
@@ -112,20 +111,40 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         private const val TABLE_CACHE_WIDTH = 1200
         private const val TABLE_CACHE_HEIGHT = 677
 
+        private const val TABLE_CACHE_SHADOW_PADDING_X_PX = 120
+        private const val TABLE_CACHE_SHADOW_PADDING_Y_PX = 90
+
+        private const val TABLE_CACHE_BITMAP_WIDTH =
+            TABLE_CACHE_WIDTH + TABLE_CACHE_SHADOW_PADDING_X_PX * 2
+
+        private const val TABLE_CACHE_BITMAP_HEIGHT =
+            TABLE_CACHE_HEIGHT + TABLE_CACHE_SHADOW_PADDING_Y_PX * 2
+
         private const val COLOR_RED = 0xFFcf0019.toInt()
         private const val COLOR_BLUE = 0xFF1065e6.toInt()
         private const val COLOR_PURPLE = 0xFFba82ff.toInt()
 
         private const val FELT_TINT_LUMA_SCALE = 1.32f
         private const val FELT_TINT_BRIGHTNESS_LIFT = 34f
-
-        private const val TABLE_ASSET_CONTENT_SCALE = 1.09f
+        private const val TABLE_ASSET_CONTENT_SCALE_HORIZONTAL = 1.09f
+        private const val TABLE_ASSET_CONTENT_SCALE_VERTICAL = 1.16f
 
         private const val TABLE_ASSET_CONTENT_OFFSET_X_PX = 0f
         private const val TABLE_ASSET_CONTENT_OFFSET_Y_PX = 0f
     }
 
     private val tableBitmapRect = RectF(-0.057f, -0.189f, WORLD_WIDTH, WORLD_HEIGHT)
+
+    private val tableBitmapWithShadowRect = RectF(
+        tableBitmapRect.left -
+                tableBitmapRect.width() * TABLE_CACHE_SHADOW_PADDING_X_PX / TABLE_CACHE_WIDTH,
+        tableBitmapRect.top -
+                tableBitmapRect.height() * TABLE_CACHE_SHADOW_PADDING_Y_PX / TABLE_CACHE_HEIGHT,
+        tableBitmapRect.right +
+                tableBitmapRect.width() * TABLE_CACHE_SHADOW_PADDING_X_PX / TABLE_CACHE_WIDTH,
+        tableBitmapRect.bottom +
+                tableBitmapRect.height() * TABLE_CACHE_SHADOW_PADDING_Y_PX / TABLE_CACHE_HEIGHT
+    )
 
     private data class TableCacheKey(
         val tintColor: Int,
@@ -137,12 +156,17 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
     private var cachedBaseTableBitmap: Bitmap? = null
     private var cachedTopTableBitmap: Bitmap? = null
 
-    private val portraitAssetDrawRect = RectF(
-        0f,
-        0f,
-        TABLE_CACHE_HEIGHT.toFloat(),
-        TABLE_CACHE_WIDTH.toFloat()
-    )
+    private val portraitAssetDrawRect = run {
+        val scaledWidth = TABLE_CACHE_HEIGHT * TABLE_ASSET_CONTENT_SCALE_VERTICAL
+        val scaledHeight = TABLE_CACHE_WIDTH * TABLE_ASSET_CONTENT_SCALE_HORIZONTAL
+
+        RectF(
+            (TABLE_CACHE_HEIGHT - scaledWidth) * 0.5f + TABLE_ASSET_CONTENT_OFFSET_X_PX,
+            (TABLE_CACHE_WIDTH - scaledHeight) * 0.5f + TABLE_ASSET_CONTENT_OFFSET_Y_PX,
+            (TABLE_CACHE_HEIGHT + scaledWidth) * 0.5f + TABLE_ASSET_CONTENT_OFFSET_X_PX,
+            (TABLE_CACHE_WIDTH + scaledHeight) * 0.5f + TABLE_ASSET_CONTENT_OFFSET_Y_PX
+        )
+    }
 
     private data class PoolWallSegment(
         val ax: Float,
@@ -559,69 +583,28 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         )
     }
 
-    private fun portraitAssetSourceRect(bitmap: Bitmap): Rect {
-        val targetPortraitAspect = TABLE_CACHE_HEIGHT.toFloat() / TABLE_CACHE_WIDTH.toFloat()
-
-        val sourceCenterX = bitmap.width * 0.5f + TABLE_ASSET_CONTENT_OFFSET_X_PX
-        val sourceCenterY = bitmap.height * 0.5f + TABLE_ASSET_CONTENT_OFFSET_Y_PX
-
-        val sourceHeight = bitmap.height / TABLE_ASSET_CONTENT_SCALE
-        val sourceWidth = sourceHeight * targetPortraitAspect
-
-        var left = (sourceCenterX - sourceWidth * 0.5f).roundToInt()
-        var top = (sourceCenterY - sourceHeight * 0.5f).roundToInt()
-        var right = (sourceCenterX + sourceWidth * 0.5f).roundToInt()
-        var bottom = (sourceCenterY + sourceHeight * 0.5f).roundToInt()
-
-        if (left < 0) {
-            right -= left
-            left = 0
-        }
-
-        if (right > bitmap.width) {
-            left -= right - bitmap.width
-            right = bitmap.width
-        }
-
-        if (top < 0) {
-            bottom -= top
-            top = 0
-        }
-
-        if (bottom > bitmap.height) {
-            top -= bottom - bitmap.height
-            bottom = bitmap.height
-        }
-
-        left = left.coerceIn(0, bitmap.width - 1)
-        right = right.coerceIn(left + 1, bitmap.width)
-        top = top.coerceIn(0, bitmap.height - 1)
-        bottom = bottom.coerceIn(top + 1, bitmap.height)
-
-        return Rect(left, top, right, bottom)
-    }
-
     private fun drawPortraitAssetIntoHorizontalCache(
         canvas: Canvas,
         bitmap: Bitmap,
         paint: Paint?
     ) {
-        canvas.withTranslation(TABLE_CACHE_WIDTH.toFloat(), 0f) {
-
+        canvas.withTranslation(
+            TABLE_CACHE_WIDTH.toFloat() + TABLE_CACHE_SHADOW_PADDING_X_PX,
+            TABLE_CACHE_SHADOW_PADDING_Y_PX.toFloat()
+        ) {
             rotate(90f)
 
             drawBitmap(
                 bitmap,
-                portraitAssetSourceRect(bitmap),
+                null,
                 portraitAssetDrawRect,
                 paint
             )
-
         }
     }
 
     private fun buildBaseTableBitmap(tint: Int?, drawBreakLine: Boolean, drawPlus: Boolean): Bitmap {
-        val output = createBitmap(TABLE_CACHE_WIDTH, TABLE_CACHE_HEIGHT)
+        val output = createBitmap(TABLE_CACHE_BITMAP_WIDTH, TABLE_CACHE_BITMAP_HEIGHT)
 
         val canvas = Canvas(output)
         val feltPaint = feltPaintForTint(tint)
@@ -640,7 +623,7 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
     }
 
     private fun buildTopTableBitmap(tint: Int?): Bitmap {
-        val output = createBitmap(TABLE_CACHE_WIDTH, TABLE_CACHE_HEIGHT)
+        val output = createBitmap(TABLE_CACHE_BITMAP_WIDTH, TABLE_CACHE_BITMAP_HEIGHT)
 
         val canvas = Canvas(output)
         val feltPaint = feltPaintForTint(tint)
@@ -671,9 +654,10 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
             "PoolAssets",
             "rebuilt_table_cache tint=${tint?.let { String.format("#%08X", it) } ?: "green"} " +
                     "line=${key.drawBreakLine} plus=${key.drawPlus} " +
-                    "contentScale=$TABLE_ASSET_CONTENT_SCALE " +
-                    "fillSrc=${portraitAssetSourceRect(poolFill)} " +
-                    "cache=${TABLE_CACHE_WIDTH}x${TABLE_CACHE_HEIGHT}"
+                    "contentScaleH=$TABLE_ASSET_CONTENT_SCALE_HORIZONTAL " +
+                    "contentScaleV=$TABLE_ASSET_CONTENT_SCALE_VERTICAL " +
+                    "shadowPad=${TABLE_CACHE_SHADOW_PADDING_X_PX}x${TABLE_CACHE_SHADOW_PADDING_Y_PX} " +
+                    "cache=${TABLE_CACHE_BITMAP_WIDTH}x${TABLE_CACHE_BITMAP_HEIGHT}"
         )
     }
 
@@ -681,7 +665,7 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         ensureTableBitmaps()
 
         cachedBaseTableBitmap?.let { bitmap ->
-            canvas.drawBitmap(bitmap, null, tableBitmapRect, tablePaint)
+            canvas.drawBitmap(bitmap, null, tableBitmapWithShadowRect, tablePaint)
         }
     }
 
@@ -689,7 +673,7 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         ensureTableBitmaps()
 
         cachedTopTableBitmap?.let { bitmap ->
-            canvas.drawBitmap(bitmap, null, tableBitmapRect, tablePaint)
+            canvas.drawBitmap(bitmap, null, tableBitmapWithShadowRect, tablePaint)
         }
     }
 
@@ -870,12 +854,30 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
     }
 
     var cueAnimator: ValueAnimator? = null
+
     fun setCueVisible(visible: Boolean) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post {
+                setCueVisible(visible)
+            }
+            return
+        }
+
         cueAnimator?.cancel()
-        cueAnimator = ValueAnimator.ofFloat(cueAlpha, if (visible) 1f else 0f)?.apply {
+        cueAnimator = null
+
+        cueAnimator = ValueAnimator.ofFloat(cueAlpha, if (visible) 1f else 0f).apply {
             duration = 200L
-            doOnEnd { cueAnimator = null }
-            addUpdateListener { animation -> cueAlpha = animation.animatedValue as Float }
+
+            addUpdateListener { animation ->
+                cueAlpha = animation.animatedValue as Float
+            }
+
+            doOnEnd {
+                cueAnimator = null
+                cueAlpha = if (visible) 1f else 0f
+            }
+
             start()
         }
     }

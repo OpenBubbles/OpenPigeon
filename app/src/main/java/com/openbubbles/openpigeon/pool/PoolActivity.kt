@@ -718,7 +718,13 @@ class PoolActivity : AppCompatActivity() {
         mode = PoolMode.Disabled
 
         setCueUiVisible(false)
-        renderer.setCueVisible(false)
+
+        runOnUiThread {
+            if (::renderer.isInitialized) {
+                renderer.setCueVisible(false)
+            }
+        }
+
         showGameOverLabel()
     }
 
