@@ -97,6 +97,7 @@ class GolfActivity : AppCompatActivity() {
     private lateinit var gameAvatarAnchor: FrameLayout
     private lateinit var oppAvatarAnchor: FrameLayout
     private lateinit var localAvatarYouLabel: TextView
+    private lateinit var spectatorLabel: TextView
 
     private lateinit var localStrokeCounterView: FrameLayout
     private lateinit var opponentStrokeCounterView: FrameLayout
@@ -168,6 +169,7 @@ class GolfActivity : AppCompatActivity() {
     private var zoomOverviewEnabled = false
     private var roundResultSent = false
     private var waitingForOpponent = false
+    private var spectatorMode = false
     private var activityExiting = false
 
     private val stateLabelHandler = Handler(Looper.getMainLooper())
@@ -594,6 +596,7 @@ class GolfActivity : AppCompatActivity() {
         root.addView(oppAvatarAnchor)
 
         buildLocalAvatarYouLabel()
+        buildSpectatorLabel()
         buildStrokeHud()
 
         zoomButton = AppCompatImageButton(this).apply {
@@ -702,7 +705,16 @@ class GolfActivity : AppCompatActivity() {
             return
         }
 
-        val anchorParams = gameAvatarAnchor.layoutParams as? FrameLayout.LayoutParams ?: return
+        if (spectatorMode) {
+            localAvatarYouLabel.visibility = View.GONE
+            return
+        }
+
+        localAvatarYouLabel.visibility = View.VISIBLE
+
+        val anchorParams =
+            gameAvatarAnchor.layoutParams as? FrameLayout.LayoutParams
+                ?: return
 
         val anchorWidth = gameAvatarAnchor.width.takeIf { it > 0 }
             ?: anchorParams.width.takeIf { it > 0 }
@@ -734,6 +746,45 @@ class GolfActivity : AppCompatActivity() {
         localAvatarYouLabel.bringToFront()
 
         bringMenuPopupToFrontIfVisible()
+    }
+
+    private fun buildSpectatorLabel() {
+        spectatorLabel = TextView(this).apply {
+            text = "Spectating..."
+            visibility = View.GONE
+
+            setTextColor(Color.WHITE)
+            setTextSize(
+                TypedValue.COMPLEX_UNIT_SP,
+                24f
+            )
+
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
+            includeFontPadding = false
+
+            setPadding(0, 0, 0, 0)
+            background = null
+
+            // Slight drop shadow.
+            setShadowLayer(
+                3f,
+                0f,
+                2f,
+                Color.argb(145, 0, 0, 0)
+            )
+
+            setUiLayer(this, LAYER_HUD + 10f)
+
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            )
+        }
+
+        root.addView(spectatorLabel)
     }
 
     private fun buildLocalAvatarYouLabel() {
@@ -923,6 +974,22 @@ class GolfActivity : AppCompatActivity() {
             }
         }
 
+        if (::spectatorLabel.isInitialized) {
+            (spectatorLabel.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
+                params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                params.topMargin = top + dp(4)
+                spectatorLabel.layoutParams = params
+            }
+        }
+
+        if (
+            spectatorMode &&
+            ::spectatorLabel.isInitialized
+        ) {
+            spectatorLabel.visibility = View.VISIBLE
+            spectatorLabel.bringToFront()
+        }
+
         positionLocalAvatarYouLabel()
         attachStrokeCountersToAvatarAnchors()
         bringMenuPopupToFrontIfVisible()
@@ -982,6 +1049,9 @@ class GolfActivity : AppCompatActivity() {
             isClickable = false
             isFocusable = false
             setBackgroundColor(Color.TRANSPARENT)
+
+            scaleX = 1.22f
+            scaleY = 1.22f
 
             val bm = loadGolfUiBitmap(assetFileName)
 
@@ -2362,7 +2432,8 @@ class GolfActivity : AppCompatActivity() {
     }
 
     private fun canAimNow(): Boolean {
-        return currentMap != null &&
+        return !spectatorMode &&
+                currentMap != null &&
                 !physicsRunning &&
                 !dualReplayRunning &&
                 !dualReplayWaitingToFire &&
@@ -2572,14 +2643,24 @@ class GolfActivity : AppCompatActivity() {
             player1Id = parsed.player1Id
             player2Id = parsed.player2Id
 
+            updateSpectatorMode(
+                data = parsed,
+                current = msg
+            )
+
             val localPlayer = localPlayerNumberFor(parsed)
             val messageFromMe = isCurrentMessageFromMe(msg)
 
-            val incomingLocalPlayableMapNum = firstLocalPlayableHoleForIncomingData(
-                data = parsed,
-                localPlayer = localPlayer,
-                messageFromMe = messageFromMe
-            )
+            val incomingLocalPlayableMapNum =
+                if (spectatorMode) {
+                    null
+                } else {
+                    firstLocalPlayableHoleForIncomingData(
+                        data = parsed,
+                        localPlayer = localPlayer,
+                        messageFromMe = messageFromMe
+                    )
+                }
 
             if (
                 incomingLocalPlayableMapNum != null &&
@@ -2766,7 +2847,10 @@ class GolfActivity : AppCompatActivity() {
                         replayIsFinalHole &&
                         incomingWinnerResult == null
 
-            waitingForOpponent = messageFromMe && !shouldReplay
+            waitingForOpponent =
+                !spectatorMode &&
+                        messageFromMe &&
+                        !shouldReplay
 
             if (waitingForOpponent) {
                 val waitingDisplayMapNum = waitingDisplayHoleForSentMessage(
@@ -2872,6 +2956,40 @@ class GolfActivity : AppCompatActivity() {
                     )
                 }
 
+                spectatorMode -> {
+                    waitingForOpponent = false
+
+                    stopStateLabelAnimation()
+                    hideWaitingOverlay()
+                    hideAimReadyUi(immediate = true)
+                    hideSkipReplayButton()
+
+                    stopBallPhysics(clearVelocity = true)
+                    stopDualReplay()
+
+                    generateAndShowMap(
+                        showIntro = false,
+                        source = "handleMessage spectator",
+                        afterIntro = {
+                            if (isFinishing || isDestroyed) {
+                                return@generateAndShowMap
+                            }
+
+                            hideWaitingOverlay()
+                            hideAimReadyUi(immediate = true)
+
+                            if (::spectatorLabel.isInitialized) {
+                                spectatorLabel.visibility = View.VISIBLE
+                                spectatorLabel.bringToFront()
+                            }
+
+                            renderer.clearAimPreview()
+                            renderer.setAimReadyIndicator(null)
+                            renderer.clearCameraFocus()
+                        }
+                    )
+                }
+
                 waitingForOpponent -> {
                     stopStateLabelAnimation()
                     hideAimReadyUi()
@@ -2955,6 +3073,10 @@ class GolfActivity : AppCompatActivity() {
 
     @Suppress("SameReturnValue")
     private fun handleGolfTouch(event: MotionEvent): Boolean {
+        if (spectatorMode) {
+            return true
+        }
+
         if (
             ::menuPopup.isInitialized &&
             menuPopup.isVisible
@@ -3855,6 +3977,124 @@ class GolfActivity : AppCompatActivity() {
         } catch (t: Throwable) {
             OpenPigeonLog.e(TAG, "sendCurrentGolfState failed roundComplete=true", t)
             stateLabel.text = "Mini Golf send failed"
+        }
+    }
+
+    private fun updateSpectatorMode(
+        data: GolfGameData,
+        current: Map<String, String>
+    ) {
+        val myId = runCatching {
+            gameSessionIPC?.getSenderUUID(sessionId)
+        }.getOrNull().orEmpty()
+
+        val p1 = current["player1"]
+            .orEmpty()
+            .ifBlank { data.player1Id }
+
+        val p2 = current["player2"]
+            .orEmpty()
+            .ifBlank { data.player2Id }
+
+        spectatorMode =
+            myId.isNotBlank() &&
+                    p1.isNotBlank() &&
+                    p2.isNotBlank() &&
+                    myId != p1 &&
+                    myId != p2
+
+        if (::spectatorLabel.isInitialized) {
+            spectatorLabel.visibility =
+                if (spectatorMode) View.VISIBLE else View.GONE
+
+            if (spectatorMode) {
+                spectatorLabel.text = "Spectating..."
+                spectatorLabel.bringToFront()
+            }
+        }
+
+        if (::localAvatarYouLabel.isInitialized) {
+            localAvatarYouLabel.visibility =
+                if (spectatorMode) View.GONE else View.VISIBLE
+        }
+
+        if (spectatorMode) {
+            applySpectatorAvatars(current)
+        }
+
+        if (spectatorMode) {
+            waitingForOpponent = false
+            stopStateLabelAnimation()
+            hideWaitingOverlay()
+            hideAimReadyUi(immediate = true)
+            hideSkipReplayButton()
+
+            isAiming = false
+            activeAim = GolfShot.Aim.NONE
+            renderer.clearAimPreview()
+            renderer.setAimReadyIndicator(null)
+        }
+
+        OpenPigeonLog.i(
+            TAG,
+            "updateSpectatorMode spectator=$spectatorMode " +
+                    "myIdBlank=${myId.isBlank()} " +
+                    "p1Blank=${p1.isBlank()} p2Blank=${p2.isBlank()}"
+        )
+    }
+
+    private fun findAvatarView(
+        anchor: FrameLayout
+    ): AvatarView? {
+        for (index in 0 until anchor.childCount) {
+            val child = anchor.getChildAt(index)
+
+            if (child is AvatarView) {
+                return child
+            }
+        }
+
+        return null
+    }
+
+    private fun applyAvatarToAnchor(
+        anchor: FrameLayout,
+        avatarString: String
+    ) {
+        val avatarView = findAvatarView(anchor) ?: return
+
+        if (avatarString.isBlank()) {
+            avatarView.showPlaceholder()
+        } else {
+            avatarView.applyFromOpponentString(avatarString)
+        }
+
+        normalizeAvatarAnchor(anchor)
+    }
+
+    private fun applySpectatorAvatars(
+        message: Map<String, String>
+    ) {
+        if (!spectatorMode) return
+
+        applyAvatarToAnchor(
+            anchor = gameAvatarAnchor,
+            avatarString = message["avatar1"].orEmpty()
+        )
+
+        applyAvatarToAnchor(
+            anchor = oppAvatarAnchor,
+            avatarString = message["avatar2"].orEmpty()
+        )
+
+        gameAvatarAnchor.post {
+            normalizeAvatarAnchor(gameAvatarAnchor)
+            attachStrokeCountersToAvatarAnchors()
+        }
+
+        oppAvatarAnchor.post {
+            normalizeAvatarAnchor(oppAvatarAnchor)
+            attachStrokeCountersToAvatarAnchors()
         }
     }
 
@@ -4792,7 +5032,10 @@ class GolfActivity : AppCompatActivity() {
             updatedData?.replay2.orEmpty()
         }
 
-        val shouldWait = isCurrentMessageFromMe(lastMessage)
+        val shouldWait =
+            !spectatorMode &&
+                    isCurrentMessageFromMe(lastMessage)
+
         waitingForOpponent = shouldWait
 
         OpenPigeonLog.i(
@@ -4808,13 +5051,33 @@ class GolfActivity : AppCompatActivity() {
             afterIntro = {
                 if (isFinishing || isDestroyed) return@generateAndShowMap
 
-                if (shouldWait) {
-                    focusCameraOnCurrentBall()
-                    showWaitingLabelAnimated()
-                } else {
-                    stopStateLabelAnimation()
-                    updateAimReadyUi()
-                    focusCameraOnCurrentBall()
+                when {
+                    spectatorMode -> {
+                        waitingForOpponent = false
+                        stopStateLabelAnimation()
+                        hideWaitingOverlay()
+                        hideAimReadyUi(immediate = true)
+
+                        if (::spectatorLabel.isInitialized) {
+                            spectatorLabel.visibility = View.VISIBLE
+                            spectatorLabel.bringToFront()
+                        }
+
+                        renderer.clearAimPreview()
+                        renderer.setAimReadyIndicator(null)
+                        renderer.clearCameraFocus()
+                    }
+
+                    shouldWait -> {
+                        focusCameraOnCurrentBall()
+                        showWaitingLabelAnimated()
+                    }
+
+                    else -> {
+                        stopStateLabelAnimation()
+                        updateAimReadyUi()
+                        focusCameraOnCurrentBall()
+                    }
                 }
             }
         )
