@@ -795,20 +795,20 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
                 message?.caption ?: "Game Name"
             }
 
-        val previewSubcaption = session
-            ?.currentMessage
-            ?.get("subcaption")
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-
-        val shouldShowSubcaption =
-            displaySubtitle.startsWith("Let's", ignoreCase = true) &&
-                    previewSubcaption != null
+        val previewSubcaption =
+            if (extension != null && session?.getGame() != null) {
+                session.getGame()!!.getDisplaySubcaption(
+                    extension.context,
+                    session.currentMessage
+                )
+            } else {
+                null
+            }
 
         Column(
             modifier = GlanceModifier
                 .fillMaxWidth()
-                .padding(vertical = if (shouldShowSubcaption) 6.dp else 10.dp),
+                .padding(vertical = if (previewSubcaption != null) 6.dp else 10.dp),
             horizontalAlignment = Alignment.Horizontal.CenterHorizontally
         ) {
             Text(
@@ -822,11 +822,11 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
                 modifier = GlanceModifier.fillMaxWidth()
             )
 
-            if (shouldShowSubcaption) {
+            previewSubcaption?.let { subcaption ->
                 Spacer(modifier = GlanceModifier.height(1.dp))
 
                 Text(
-                    previewSubcaption!!.uppercase(),
+                    subcaption.uppercase(),
                     style = TextStyle(
                         fontSize = 13.sp,
                         color = ColorProvider(Color.Gray),

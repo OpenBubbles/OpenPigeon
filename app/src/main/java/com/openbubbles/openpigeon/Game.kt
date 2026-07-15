@@ -102,6 +102,13 @@ interface Game {
             }
             return if (iWon) "You Won!" else "You Lost!"
         }
+        if (message["game"] == "questions") {
+            return message["caption"]
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: "20 Questions"
+        }
+
         return if (message["caption"]?.startsWith("Let's") == true) {
             message["caption"]!!
         } else {
@@ -109,7 +116,12 @@ interface Game {
             val player1 = message["player1"]
             val player2 = message["player2"]
 
-            if (player1 != null && player2 != null && myId != player1 && myId != player2) {
+            if (
+                player1 != null &&
+                player2 != null &&
+                myId != player1 &&
+                myId != player2
+            ) {
                 "Spectating Game"
             } else if (message["sender"] == myId) {
                 "Opponent's Move."
@@ -117,6 +129,15 @@ interface Game {
                 "Your Move."
             }
         }
+    }
+
+    fun getDisplaySubcaption(
+        context: Context,
+        message: Map<String, String>
+    ): String? {
+        return message["subcaption"]
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
     }
 
     fun getWinStateImage(context: Context, message: Map<String, String>): Int? {
@@ -174,6 +195,7 @@ interface Game {
 
             imageBase64 = imageEncoded
             caption = message["caption"]
+            subcaption = message["subcaption"]
 
             isLive = true
         }

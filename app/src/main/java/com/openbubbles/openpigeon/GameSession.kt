@@ -95,9 +95,20 @@ class GameSession(var handle: IMessageViewHandle) {
             modifiedUpdated["player1"] = myUUID
         }
 
-        modifiedUpdated["caption"] = getGame()!!.getSubtitle(context, modifiedUpdated)
+        val game = getGame()!!
 
-        val update = getGame()!!.buildGameMessage(context, modifiedUpdated, currentSession = mySession)
+        if (
+            game.getName() != "questions" ||
+            modifiedUpdated["caption"].isNullOrBlank()
+        ) {
+            modifiedUpdated["caption"] = game.getSubtitle(context, modifiedUpdated)
+        }
+
+        val update = game.buildGameMessage(
+            context,
+            modifiedUpdated,
+            currentSession = mySession
+        )
 
         handle.updateMessage(update, object : ITaskCompleteCallback.Stub() {
             override fun complete() {
