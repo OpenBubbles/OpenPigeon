@@ -38,6 +38,8 @@ const PIECE_TEXTURES: Dictionary = {
 	"bK": preload("res://chess/pieces/chess_bK.png"),
 }
 
+var _cropped_piece_textures: Dictionary = {}
+
 # Verbose-debugging-enabled ChessTop for OpenPidgeon integration
 # - Local-mode friendly (play both sides in debug)
 # - Lots of CHESSDBG logs
@@ -52,6 +54,8 @@ const FILE_RANKS: Array[String] = ["a","b","c","d","e","f","g","h"]
 var SQUARE_SIZE: float = 100.0
 var BOARD_ORIGIN: Vector2 = Vector2(40, 40)
 var BORDER_THICK: float = 16.0
+const BOARD_SAFE_TOP: float = 145.0
+const BOARD_SAFE_BOTTOM: float = 105.0
 var board_border: ColorRect = null
 var black_border: ColorRect = null
 var BLACK_THICK: float = 2.0
@@ -452,16 +456,27 @@ func _update_turn_flags() -> void:
 
 # ---------- UI / sizes ----------
 func _compute_sizes() -> void:
-	# Delegate to ChessUI.calculate_board_dimensions for consistent dimension calculations
-	var vp: Vector2 = get_viewport_rect().size
-	var dims: Dictionary = ChessUI.calculate_board_dimensions(vp)
+	var viewport_size: Vector2 = get_viewport_rect().size
+
+	var dims: Dictionary = ChessUI.calculate_board_dimensions(
+		viewport_size,
+		BOARD_SAFE_TOP,
+		BOARD_SAFE_BOTTOM
+	)
 
 	SQUARE_SIZE = dims["square_size"]
 	BORDER_THICK = dims["border_thick"]
 	BOARD_ORIGIN = dims["board_origin"]
 	BLACK_THICK = dims["black_thick"]
 
-	_log_ui.debug("_compute_sizes: SQUARE_SIZE=%d, BORDER_THICK=%d, BOARD_ORIGIN=%s" % [SQUARE_SIZE, BORDER_THICK, str(BOARD_ORIGIN)])
+	_log_ui.debug(
+		"_compute_sizes: viewport=%s square=%f border=%f origin=%s" % [
+			str(viewport_size),
+			SQUARE_SIZE,
+			BORDER_THICK,
+			str(BOARD_ORIGIN)
+		]
+	)
 
 ## Flip board orientation without rebuilding nodes.
 ## Updates positions of existing squares, pieces, overlays, and labels in-place.
@@ -481,8 +496,14 @@ func _flip_board_ui() -> void:
 			squares[r][f].position = new_pos
 
 			# Update piece position using ChessUI helper for consistent sizing
-			var piece_rect: Dictionary = ChessUI.calculate_piece_rect(new_pos, SQUARE_SIZE)
+			var piece_rect: Dictionary = ChessUI.calculate_piece_rect(
+				new_pos,
+				SQUARE_SIZE
+			)
+
 			pieces[r][f].position = piece_rect["position"]
+			pieces[r][f].size = piece_rect["size"]
+			pieces[r][f].scale = Vector2.ONE
 
 			# Update overlay positions
 			var overlay_rect: Dictionary = ChessUI.calculate_overlay_rect(new_pos, SQUARE_SIZE)
@@ -506,6 +527,7 @@ func _create_square_elements(_r: int, _f: int, rect: ColorRect, pieces_row: Arra
 	tex.position = piece_rect["position"]
 	tex.size = piece_rect["size"]
 	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tex.z_index = 10  # Pieces layer (above squares, below overlays)
 	container.add_child(tex)
@@ -766,10 +788,26 @@ func _build_board_ui() -> void:
 
 
 func _get_piece_texture(code: String) -> Texture2D:
-	# Return preloaded PNG texture from PIECE_TEXTURES dictionary
 	if code == "":
 		return null
-	return PIECE_TEXTURES.get(code, null)
+
+	if _cropped_piece_textures.has(code):
+		return _cropped_piece_textures[code]
+
+	var source_texture: Texture2D = PIECE_TEXTURES.get(code, null)
+	if source_texture == null:
+		return null
+
+	# The artwork in the supplied 100x100 images occupies the upper-left
+	# approximately 48x48 pixels. AtlasTexture removes the unused transparent
+	# canvas without modifying the original assets.
+	var cropped_texture := AtlasTexture.new()
+	cropped_texture.atlas = source_texture
+	cropped_texture.region = ChessUI.PIECE_SOURCE_REGION
+	cropped_texture.filter_clip = true
+
+	_cropped_piece_textures[code] = cropped_texture
+	return cropped_texture
 
 func _refresh_board_ui() -> void:
 	_log_ui.info("_refresh_board_ui start")
@@ -789,9 +827,13 @@ func _refresh_board_ui() -> void:
 			# Reset piece position and scale (critical for undo and post-animation state)
 			# This ensures pieces are at their correct grid positions even if animation was interrupted
 			var square: ColorRect = squares[r][f]
-			var board_piece_size: Vector2 = Vector2(SQUARE_SIZE * 0.9, SQUARE_SIZE * 0.9)
-			var correct_pos: Vector2 = square.position + (square.size - board_piece_size) * 0.5 + Vector2(SQUARE_SIZE * 0.1, SQUARE_SIZE * 0.1)
-			pieces[r][f].position = correct_pos
+			var piece_rect: Dictionary = ChessUI.calculate_piece_rect(
+				square.position,
+				SQUARE_SIZE
+			)
+
+			pieces[r][f].position = piece_rect["position"]
+			pieces[r][f].size = piece_rect["size"]
 			pieces[r][f].scale = Vector2.ONE
 
 			# Reset default modulate

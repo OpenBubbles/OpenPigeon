@@ -340,21 +340,34 @@ class KnockoutRenderer(
     }
 
     private fun computeTransforms(width: Int, height: Int) {
-        val safeWidth = width.coerceAtLeast(1)
-        val safeHeight = height.coerceAtLeast(1)
+        val safeWidth = width.coerceAtLeast(1).toFloat()
+        val safeHeight = height.coerceAtLeast(1).toFloat()
 
-        val baseScale = min(safeWidth, safeHeight).toFloat() / KnockoutConstants.BOARD_SIZE
+        val boardTop = activity.knockoutBoardSafeTopPx()
+            .coerceIn(0f, safeHeight * 0.35f)
+
+        val boardBottom = activity.knockoutBoardSafeBottomPx()
+            .coerceIn(boardTop + 1f, safeHeight)
+
+        val availableHeight = (boardBottom - boardTop).coerceAtLeast(1f)
+        val availableWidth = safeWidth
+
+        val baseScale = min(
+            availableWidth / KnockoutConstants.BOARD_SIZE,
+            availableHeight / KnockoutConstants.BOARD_SIZE
+        )
+
         val boardScale = baseScale * boardVisualScale()
 
         val centerX = safeWidth / 2f
-        val centerY = safeHeight / 2f
+        val centerY = boardTop + availableHeight / 2f
 
-        // World transform: pieces, arrows, rings, touches, physics coordinates.
+        // Pieces, arrows, rings, touch conversion, and physics coordinates.
         transform.reset()
         transform.postScale(baseScale, baseScale)
         transform.postTranslate(centerX, centerY)
 
-        // Board transform: board image only.
+        // Board artwork.
         boardTransform.reset()
         boardTransform.postScale(boardScale, boardScale)
         boardTransform.postTranslate(centerX, centerY)

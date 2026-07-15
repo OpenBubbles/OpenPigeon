@@ -26,8 +26,8 @@ const LABEL_BORDER_PADDING: float = 6.0
 const BORDER_RATIO: float = 0.03
 
 ## Piece sizing ratios (relative to square size)
-const PIECE_SIZE_RATIO: float = 0.9
-const PIECE_OFFSET_RATIO: float = 0.1
+const PIECE_SIZE_RATIO: float = 0.86
+const PIECE_SOURCE_REGION: Rect2 = Rect2(0.0, 0.0, 48.0, 48.0)
 
 ## Overlay sizing ratios (relative to square size)
 const OVERLAY_MARGIN_RATIO: float = 0.06
@@ -69,46 +69,118 @@ static func get_move_highlight_color(is_capture: bool) -> Color:
 	return CAPTURE_COLOR if is_capture else LEGAL_MOVE_COLOR
 
 ## Calculate board dimensions based on viewport
-static func calculate_board_dimensions(viewport_size: Vector2, margin: float = VIEWPORT_MARGIN) -> Dictionary:
-	var avail: float = minf(viewport_size.x, viewport_size.y) - margin * 2.0
+static func calculate_board_dimensions(
+	viewport_size: Vector2,
+	safe_top: float = 0.0,
+	safe_bottom: float = 0.0,
+	margin: float = VIEWPORT_MARGIN
+) -> Dictionary:
+	# The board is constrained to the area below the avatar HUD and above the
+	# bottom controls. On a normal portrait phone, width remains the limiting
+	# dimension, so its existing appearance is preserved.
+	var available_left: float = margin
+	var available_right: float = viewport_size.x - margin
+	var available_top: float = safe_top + margin
+	var available_bottom: float = viewport_size.y - safe_bottom - margin
 
-	# Initial estimate using conservative border ratio so labels fit inside the border
-	var square_size: float = floorf((avail - VIEWPORT_PADDING * 2.0) / (BOARD_DIMENSION + 2.0 * FILE_LABEL_HEIGHT_RATIO))
+	var available_width: float = maxf(
+		1.0,
+		available_right - available_left
+	)
+	var available_height: float = maxf(
+		1.0,
+		available_bottom - available_top
+	)
+
+	var avail: float = minf(available_width, available_height)
+
+	# Initial estimate using conservative border sizing so labels fit.
+	var square_size: float = floorf(
+		(avail - VIEWPORT_PADDING * 2.0) /
+		(BOARD_DIMENSION + 2.0 * FILE_LABEL_HEIGHT_RATIO)
+	)
+
 	if square_size < MIN_SQUARE_SIZE + 2.0:
 		square_size = MIN_SQUARE_SIZE + 2.0
 
-	# Calculate border thickness based on label sizes
-	var file_label_h: float = maxf(MIN_LABEL_SIZE, square_size * FILE_LABEL_HEIGHT_RATIO)
-	var rank_label_w: float = maxf(MIN_LABEL_SIZE, square_size * RANK_LABEL_WIDTH_RATIO)
-	var border_thick: float = maxf(file_label_h, rank_label_w) + LABEL_BORDER_PADDING
+	var file_label_h: float = maxf(
+		MIN_LABEL_SIZE,
+		square_size * FILE_LABEL_HEIGHT_RATIO
+	)
+	var rank_label_w: float = maxf(
+		MIN_LABEL_SIZE,
+		square_size * RANK_LABEL_WIDTH_RATIO
+	)
+	var border_thick: float = maxf(
+		file_label_h,
+		rank_label_w
+	) + LABEL_BORDER_PADDING
 
-	# Verify fit and adjust if needed
-	var total_w: float = BOARD_DIMENSION * square_size + 2.0 * border_thick
-	if total_w > avail:
-		square_size = floorf((avail - 2.0 * border_thick) / BOARD_DIMENSION)
-		if square_size < MIN_SQUARE_SIZE:
-			square_size = MIN_SQUARE_SIZE
-		# Recalculate border with new square size
-		file_label_h = maxf(MIN_LABEL_SIZE, square_size * FILE_LABEL_HEIGHT_RATIO)
-		rank_label_w = maxf(MIN_LABEL_SIZE, square_size * RANK_LABEL_WIDTH_RATIO)
-		border_thick = maxf(file_label_h, rank_label_w) + LABEL_BORDER_PADDING
-		total_w = BOARD_DIMENSION * square_size + 2.0 * border_thick
-		# As a last resort, shave the border down to fit
-		if total_w > avail:
-			var overflow: float = total_w - avail
-			border_thick = maxf(MIN_BORDER_THICK, border_thick - overflow * 0.5)
-			total_w = BOARD_DIMENSION * square_size + 2.0 * border_thick
+	var total_size: float = (
+		BOARD_DIMENSION * square_size +
+		2.0 * border_thick
+	)
 
-	var total_h: float = total_w  # Keep square board area
-	var top_left: Vector2 = Vector2((viewport_size.x - total_w) / 2.0, (viewport_size.y - total_h) / 2.0)
-	var board_origin: Vector2 = top_left + Vector2(border_thick, border_thick)
+	if total_size > avail:
+		square_size = floorf(
+			(avail - 2.0 * border_thick) /
+			BOARD_DIMENSION
+		)
+
+		square_size = maxf(square_size, MIN_SQUARE_SIZE)
+
+		file_label_h = maxf(
+			MIN_LABEL_SIZE,
+			square_size * FILE_LABEL_HEIGHT_RATIO
+		)
+		rank_label_w = maxf(
+			MIN_LABEL_SIZE,
+			square_size * RANK_LABEL_WIDTH_RATIO
+		)
+		border_thick = maxf(
+			file_label_h,
+			rank_label_w
+		) + LABEL_BORDER_PADDING
+
+		total_size = (
+			BOARD_DIMENSION * square_size +
+			2.0 * border_thick
+		)
+
+		if total_size > avail:
+			var overflow: float = total_size - avail
+			border_thick = maxf(
+				MIN_BORDER_THICK,
+				border_thick - overflow * 0.5
+			)
+
+			total_size = (
+				BOARD_DIMENSION * square_size +
+				2.0 * border_thick
+			)
+
+	var center_x: float = viewport_size.x * 0.5
+	var center_y: float = available_top + available_height * 0.5
+
+	var top_left := Vector2(
+		center_x - total_size * 0.5,
+		center_y - total_size * 0.5
+	)
+
+	var board_origin: Vector2 = (
+		top_left +
+		Vector2(border_thick, border_thick)
+	)
 
 	return {
 		"square_size": square_size,
 		"border_thick": border_thick,
 		"board_origin": board_origin,
-		"total_size": Vector2(total_w, total_h),
-		"black_thick": maxf(2.0, square_size * BORDER_RATIO)
+		"total_size": Vector2(total_size, total_size),
+		"black_thick": maxf(
+			2.0,
+			square_size * BORDER_RATIO
+		)
 	}
 
 ## Convert a board position to screen coordinates
@@ -209,10 +281,19 @@ static func get_piece_texture_key(piece_code: String) -> String:
 	return piece_code  # e.g., "wP", "bK"
 
 ## Calculate piece display size and position within a square
-static func calculate_piece_rect(square_pos: Vector2, square_size: float) -> Dictionary:
-	var piece_size: Vector2 = Vector2(square_size * PIECE_SIZE_RATIO, square_size * PIECE_SIZE_RATIO)
-	var offset: float = square_size * PIECE_OFFSET_RATIO
-	var piece_pos: Vector2 = square_pos + (Vector2(square_size, square_size) - piece_size) * 0.5 + Vector2(offset, offset)
+static func calculate_piece_rect(
+	square_pos: Vector2,
+	square_size: float
+) -> Dictionary:
+	var display_size: float = square_size * PIECE_SIZE_RATIO
+	var piece_size := Vector2(display_size, display_size)
+
+	# Center the piece exactly in the square. Do not add a second offset.
+	var piece_pos: Vector2 = (
+		square_pos +
+		(Vector2(square_size, square_size) - piece_size) * 0.5
+	)
+
 	return {
 		"position": piece_pos,
 		"size": piece_size

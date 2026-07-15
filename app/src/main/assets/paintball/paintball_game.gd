@@ -244,11 +244,52 @@ func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
 	
 func _get_dev_data() -> String:
-	var DEV_SCENARIO: int = 3
+	var DEV_SCENARIO: int = 1
+	var local_id: String = my_uuid
 
-	var dev_data_1 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV1"}'
-	var dev_data_2 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV1","replay":"hp1:3,hp2:3,pos1:0,pos2:0,target1:2,target2:2"}'
-	var dev_data_3 := '{"isYourTurn": true,"player":"2","myPlayerId":"","player1":"","player2":"","avatar1":"","avatar2":"","game":"paint","tver":"5","ios":"26.2.1","id":"DEV3","replay":"hp1:3,hp2:3,pos1:0,pos2:0,target1:0,target2:0|hp1:2,hp2:3,pos1:0,pos2:0,target1:-1,target2:0"}'
+	var dev_data_1 := JSON.stringify({
+		"isYourTurn": true,
+		"player": "1",
+		"myPlayerId": local_id,
+		"player1": local_id,
+		"player2": "DEV_OPPONENT",
+		"avatar1": "",
+		"avatar2": "",
+		"game": "paint",
+		"tver": "5",
+		"ios": "26.2.1",
+		"id": "DEV1"
+	})
+
+	var dev_data_2 := JSON.stringify({
+		"isYourTurn": true,
+		"player": "1",
+		"myPlayerId": local_id,
+		"player1": local_id,
+		"player2": "DEV_OPPONENT",
+		"avatar1": "",
+		"avatar2": "",
+		"game": "paint",
+		"tver": "5",
+		"ios": "26.2.1",
+		"id": "DEV2",
+		"replay": "hp1:3,hp2:3,pos1:0,pos2:0,target1:2,target2:2"
+	})
+
+	var dev_data_3 := JSON.stringify({
+		"isYourTurn": true,
+		"player": "1",
+		"myPlayerId": local_id,
+		"player1": local_id,
+		"player2": "DEV_OPPONENT",
+		"avatar1": "",
+		"avatar2": "",
+		"game": "paint",
+		"tver": "5",
+		"ios": "26.2.1",
+		"id": "DEV3",
+		"replay": "hp1:3,hp2:3,pos1:0,pos2:0,target1:0,target2:0|hp1:2,hp2:3,pos1:0,pos2:0,target1:-1,target2:0"
+	})
 
 	if DEV_SCENARIO == 2:
 		return dev_data_2
@@ -290,14 +331,15 @@ Pick where to move and where to shoot. Try to hit your opponent before they hit 
 
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
-	_build_modules()
+	_configure_camera_aspect()
+	
+	var viewport := get_viewport()
+	var resize_callable := Callable(self, "_on_paintball_viewport_size_changed")
 
-	buttons.setup(self)
-	shots.setup(self)
-	ui.setup(self)
-	states.setup(self)
-	replay.setup(self)
-	round_mgr.setup(self)
+	if not viewport.size_changed.is_connected(resize_callable):
+		viewport.size_changed.connect(resize_callable)
+	
+	_ensure_modules()
 
 	buttons.setup_buttons_root(buttons_root)
 	buttons.collect_and_index_buttons()
@@ -365,17 +407,41 @@ func _process(delta: float) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_RESUMED:
 		OpLog.i(LOG_TAG, "app_resumed")
+		
+func _on_paintball_viewport_size_changed() -> void:
+	_configure_camera_aspect()
+
+	if ui != null:
+		await get_tree().process_frame
+		await ui.init_fire_button()
 
 # -------------------------------------------------------------------
 # Modules bootstrapping
 # -------------------------------------------------------------------
-func _build_modules() -> void:
-	buttons = PBButtons.new()
-	replay = PBReplay.new()
-	round_mgr = PBRound.new()
-	shots = PBShots.new()
-	states = PBState.new()
-	ui = PBUI.new()
+func _ensure_modules() -> void:
+	if buttons == null:
+		buttons = PBButtons.new()
+		buttons.setup(self)
+
+	if replay == null:
+		replay = PBReplay.new()
+		replay.setup(self)
+
+	if round_mgr == null:
+		round_mgr = PBRound.new()
+		round_mgr.setup(self)
+
+	if shots == null:
+		shots = PBShots.new()
+		shots.setup(self)
+
+	if states == null:
+		states = PBState.new()
+		states.setup(self)
+
+	if ui == null:
+		ui = PBUI.new()
+		ui.setup(self)
 
 # -------------------------------------------------------------------
 # ActionButton3D signal hookup (robust: clicked OR pressed)
@@ -393,6 +459,8 @@ func _set_game_data(raw_text: String) -> void:
 	if typeof(parsed) != TYPE_DICTIONARY:
 		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", raw_text])
 		return
+		
+	_ensure_modules()
 
 	my_id = my_uuid
 
@@ -849,3 +917,46 @@ func _replay_build_after_my_fire(my_pos_enc: int, my_target_enc: int) -> String:
 	if _last_replay_str == "":
 		return seg
 	return _last_replay_str + "|" + seg
+
+
+const CAMERA_BASE_VERTICAL_FOV: float = 61.5
+
+# 648 / 1152, matching the normal portrait framing from your log.
+const CAMERA_REFERENCE_ASPECT: float = 0.5625
+
+
+func _configure_camera_aspect() -> void:
+	if not is_instance_valid(cam):
+		return
+
+	var viewport_size: Vector2 = get_viewport().get_visible_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return
+
+	var current_aspect: float = viewport_size.x / viewport_size.y
+	var adjusted_fov: float = CAMERA_BASE_VERTICAL_FOV
+
+	if current_aspect > CAMERA_REFERENCE_ASPECT:
+		var base_half_fov_radians: float = deg_to_rad(
+			CAMERA_BASE_VERTICAL_FOV * 0.5
+		)
+
+		var adjusted_half_fov_radians: float = atan(
+			tan(base_half_fov_radians)
+			* CAMERA_REFERENCE_ASPECT
+			/ current_aspect
+		)
+
+		adjusted_fov = rad_to_deg(adjusted_half_fov_radians * 2.0)
+
+	cam.keep_aspect = Camera3D.KEEP_HEIGHT
+	cam.fov = adjusted_fov
+
+	OpLog.i(LOG_TAG, [
+		"camera_aspect_configured viewport=", viewport_size,
+		" aspect=", current_aspect,
+		" referenceAspect=", CAMERA_REFERENCE_ASPECT,
+		" keepAspect=KEEP_HEIGHT",
+		" baseFov=", CAMERA_BASE_VERTICAL_FOV,
+		" adjustedFov=", adjusted_fov
+	])

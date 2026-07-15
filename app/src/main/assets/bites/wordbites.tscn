@@ -249,7 +249,7 @@ grow_horizontal = 2
 grow_vertical = 2
 texture = ExtResource("2_vokfg")
 expand_mode = 3
-stretch_mode = 5
+stretch_mode = 6
 
 [node name="SentLabel" type="Label" parent="." unique_id=1734536700]
 unique_name_in_owner = true

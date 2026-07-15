@@ -124,18 +124,94 @@ func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
 
 func _get_dev_data() -> String:
-	return JSON.stringify({
-		"size": 9,
-		"isYourTurn": true,
-		"player": 2,
-		"myPlayerId": "DEV_PLAYER",
-		"replay": "",
-		"bullets1": "",
-		"bullets2": "",
-		"skip_ships": "",
-		"ships1": "",
-		"ships2": "",
-	})
+	var local_id: String = my_uuid
+	if local_id.is_empty():
+		local_id = "DEV_LOCAL_PLAYER"
+
+	var opponent_id: String = "DEV_OPPONENT"
+
+	var zero_bullets: String = ",".join(
+		PackedStringArray([
+			"0", "0", "0", "0", "0", "0", "0", "0",
+			"0", "0", "0", "0", "0", "0", "0", "0",
+			"0", "0", "0", "0", "0", "0", "0", "0",
+			"0", "0", "0", "0", "0", "0", "0", "0",
+			"0", "0", "0", "0", "0", "0", "0", "0",
+			"0", "0", "0", "0", "0", "0", "0", "0",
+			"0", "0", "0", "0", "0", "0", "0", "0",
+			"0", "0", "0", "0", "0", "0", "0", "0"
+		])
+	)
+
+	var report_data: Dictionary = {
+		"isYourTurn": false,
+		"myPlayerId": local_id,
+
+		# The report's updated payload identifies the local user as player 2.
+		"player": "2",
+		"player1": opponent_id,
+		"player2": local_id,
+		"sender": local_id,
+
+		"game": "sea",
+		"size": "8",
+		"mode": "1,3,3,0",
+		"num": "3",
+		"version": "0",
+		"tver": "5",
+		"ios": "26.5.1",
+		"build": "EB0c3PUeBgiZ94wrU8jsu",
+		"id": "DEV_SEA_REPORT",
+
+		"avatar1": "",
+		"avatar2": "",
+
+		"ships1":
+			"pos:4,3&num:0,0,0,0&rot:2|" +
+			"pos:0,5&num:0,0,0&rot:0|" +
+			"pos:7,2&num:0,0,0&rot:2|" +
+			"pos:2,5&num:0,0,0&rot:1|" +
+			"pos:0,1&num:0,0&rot:0|" +
+			"pos:7,4&num:0,0&rot:0|" +
+			"pos:4,7&num:0,0&rot:1",
+
+		"ships2":
+			"pos:1,7&num:0,0,0,0&rot:1|" +
+			"pos:1,0&num:0,0,0&rot:1|" +
+			"pos:7,2&num:0,0,0&rot:0|" +
+			"pos:0,3&num:0,0,0&rot:0|" +
+			"pos:5,1&num:0,0&rot:0|" +
+			"pos:2,2&num:0,0&rot:1|" +
+			"pos:6,6&num:0,0&rot:1",
+
+		"bullets1": zero_bullets,
+		"bullets2": zero_bullets,
+
+		"replay": "4,6|4,7|5,7|4,5|4,4|4,3|6,1",
+
+		"skip_ships":
+			"pos:4,1&num:1,1,1,1&rot:0|" +
+			"pos:0,0&num:0,0,0&rot:0|" +
+			"pos:7,3&num:0,0,0&rot:0|" +
+			"pos:-1,-1&num:0,0,0&rot:1|" +
+			"pos:0,5&num:0,0&rot:0|" +
+			"pos:-1,-1&num:0,0&rot:0|" +
+			"pos:4,0&num:1,1&rot:1",
+
+		"skip_bullets":
+			"0,0,0,1,0,0,1,0," +
+			"0,0,0,1,0,1,1,0," +
+			"0,0,0,1,0,1,0,0," +
+			"0,0,0,1,0,1,0,0," +
+			"0,0,0,1,0,1,0,0," +
+			"0,0,0,1,1,1,0,0," +
+			"0,0,0,0,0,0,1,0," +
+			"0,0,0,0,0,0,0,0",
+
+		"caption": "Your Move."
+	}
+
+	return JSON.stringify(report_data)
 
 func _get_rules_title() -> String:
 	return "How to Play Sea Battle"
@@ -235,6 +311,7 @@ func _set_game_data(new_replay: String) -> void:
 	var bullets1: String = parsed.get("bullets1", "")
 	var bullets2: String = parsed.get("bullets2", "")
 	var skip: String = parsed.get("skip_ships", "")
+	var skip_bullets: String = parsed.get("skip_bullets", "")
 	var bsize: int = int(parsed.get("size", 8))
 	
 	OpLog.i(LOG_TAG, [
@@ -249,7 +326,8 @@ func _set_game_data(new_replay: String) -> void:
 		" ships2Len=", s2.length(),
 		" bullets1=", _csv_true_count(bullets1),
 		" bullets2=", _csv_true_count(bullets2),
-		" skipShipsLen=", skip.length()
+		" skipShipsLen=", skip.length(),
+		" skipBullets=", _csv_true_count(skip_bullets)
 	])
 
 	spectator_mode = my_player != "" and p1_id != "" and p2_id != "" and my_player != p1_id and my_player != p2_id
@@ -443,8 +521,19 @@ func _set_game_data(new_replay: String) -> void:
 		
 		if not skip.is_empty():
 			var flipped_skip := _flip_ships_encoded_vertical(skip, bsize)
-			OpLog.i(LOG_TAG, ["apply_skip_ships originalLen=", skip.length(), " flippedLen=", flipped_skip.length()])
+
+			OpLog.i(LOG_TAG, [
+				"apply_skip_state shipsOriginalLen=", skip.length(),
+				" shipsFlippedLen=", flipped_skip.length(),
+				" skipBullets=", _csv_true_count(skip_bullets)
+			])
+
 			theirBattleground.from_encoded(flipped_skip)
+
+			_apply_bullets_from_payload(
+				theirBattleground,
+				skip_bullets
+			)
 
 		_apply_bullets_from_payload(battleground1, bullets1)
 		_apply_bullets_from_payload(battleground2, bullets2)

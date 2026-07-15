@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://cswfhmw2pi3a8" path="res://dots/dots_boxes.gd" id="1_ac22s"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_oiv88"]
 [ext_resource type="Texture2D" uid="uid://ctw34ci8fsof3" path="res://dots/cross_icon.svg" id="3_oiv88"]
-[ext_resource type="Script" path="res://dots/dots_grid.gd" id="3_tsn4m"]
+[ext_resource type="Script" uid="uid://cyudgfftfpgnh" path="res://dots/dots_grid.gd" id="3_tsn4m"]
 [ext_resource type="Texture2D" uid="uid://dvnbqteof630k" path="res://dots/paper_tex.png" id="4_tsn4m"]
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="4_xoh6u"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="5_f1idx"]
@@ -35,17 +35,6 @@ shadow_offset = Vector2(0.47, 5.075)
 bake_resolution = 481
 _data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(0.265487, 1), 0.0686304, 0.0686304, 0, 0, Vector2(0.49115, 1), 0.0, 0.0, 0, 0, Vector2(0.752212, 1), 0.0, 0.0, 0, 0, Vector2(1, 1), 0.117292, 0.0, 0, 0]
 point_count = 5
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_xoh6u"]
-bg_color = Color(0, 0, 0, 0.788235)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
-expand_margin_left = 20.0
-expand_margin_top = 10.0
-expand_margin_right = 20.0
-expand_margin_bottom = 10.0
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_feg08"]
 texture = ExtResource("4_xoh6u")
@@ -112,6 +101,17 @@ shadow_size = 2
 shadow_offset = Vector2(0, 2)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tsn4m"]
+bg_color = Color(0, 0, 0, 0.788235)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+expand_margin_left = 20.0
+expand_margin_top = 10.0
+expand_margin_right = 20.0
+expand_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_xoh6u"]
 bg_color = Color(0, 0, 0, 0.788235)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
@@ -303,25 +303,6 @@ width_curve = SubResource("Curve_oiv88")
 default_color = Color(1, 1, 1, 0.592157)
 antialiased = true
 
-[node name="WinLossLabel" type="Label" parent="VBoxContainer/Center" unique_id=283709108]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-theme_override_font_sizes/font_size = 25
-theme_override_styles/normal = SubResource("StyleBoxFlat_xoh6u")
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="SentLabel" type="Label" parent="VBoxContainer/Center" unique_id=1929047777]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-theme_override_font_sizes/font_size = 25
-theme_override_styles/normal = SubResource("StyleBoxFlat_xoh6u")
-text = "SENT"
-horizontal_alignment = 1
-vertical_alignment = 1
-
 [node name="BottomItemHBoxContainer" type="HBoxContainer" parent="VBoxContainer" unique_id=106398128]
 custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
@@ -400,15 +381,63 @@ color = Color(0.152941, 0.152941, 0.152941, 0.556863)
 [node name="waitingLabel" type="Label" parent="." unique_id=1856745764]
 unique_name_in_owner = true
 visible = false
-layout_mode = 0
-offset_left = 161.0
-offset_top = 579.0
-offset_right = 487.0
-offset_bottom = 614.0
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -163.0
+offset_top = -17.5
+offset_right = 163.0
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 25
 theme_override_styles/normal = SubResource("StyleBoxFlat_tsn4m")
 text = "WAITING FOR OPPONENT..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="WinLossLabel" type="Label" parent="." unique_id=283709108]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -0.5
+offset_top = -17.5
+offset_right = 0.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_xoh6u")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SentLabel" type="Label" parent="." unique_id=1929047777]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -30.5
+offset_top = -17.5
+offset_right = 30.5
+offset_bottom = 17.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 25
+theme_override_styles/normal = SubResource("StyleBoxFlat_xoh6u")
+text = "SENT"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -419,10 +448,14 @@ wait_time = 0.75
 [node name="SpecLabel" type="Label" parent="." unique_id=1589311018]
 unique_name_in_owner = true
 visible = false
-layout_mode = 0
-offset_top = 165.0
-offset_right = 648.0
-offset_bottom = 234.0
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -324.0
+offset_right = 324.0
+offset_bottom = 69.0
+grow_horizontal = 2
 size_flags_vertical = 0
 theme_override_font_sizes/font_size = 50
 text = "Spectating..."

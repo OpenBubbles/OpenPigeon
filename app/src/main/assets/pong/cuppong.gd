@@ -105,11 +105,7 @@ const IOS_SHORT_Y_OFFSET: float = -3.0
 const IOS_BALL_Y_AIM_OFFSET: float = 0.45
 const IOS_DRAG_DEAD_DIST: float = 0.06
 
-# iOS seems to use about 0.21 to 0.31 depending on player/cup state.
-# Keep this slightly generous for our version.
 @export var ios_aim_assist: float = 0.20
-
-# Screen-pixel -> world-meter conversion.
 @export var ios_screen_to_world_scale: float = 0.0030
 
 var player: int
@@ -739,6 +735,30 @@ func _process_game_state():
 		" replayCups={", _cup_summary(replay_cups), "}"
 	])
 
+func _should_award_balls_back() -> bool:
+	if throws.size() < 2:
+		return false
+
+	if throws.size() % 2 != 0:
+		return false
+
+	var last_throw: Dictionary = throws[-1]
+	var previous_throw: Dictionary = throws[-2]
+
+	if int(last_throw.get("cup", -1)) < 0:
+		return false
+
+	if int(previous_throw.get("cup", -1)) < 0:
+		return false
+
+	if not is_instance_valid(my_cups):
+		return false
+
+	if my_cups.cups_in_play.is_empty():
+		return false
+
+	return true
+
 func throw_finished():
 	OpLog.i(LOG_TAG, [
 		"throw_finished throws=", throws.size(),
@@ -748,41 +768,73 @@ func throw_finished():
 		" myCups=", my_cups.cups_in_play if is_instance_valid(my_cups) else []
 	])
 	
-	if len(throws) > 0 and len(throws) % 2 == 0:
-		if throws[-1]["cup"] > -1 and throws[-2]["cup"] > -1:
-			if is_instance_valid(balls_back_label):
-				if balls_back_tween and balls_back_tween.is_running():
-					balls_back_tween.kill()
+	var rack_cleared: bool = (
+		is_instance_valid(my_cups)
+		and my_cups.cups_in_play.is_empty()
+	)
 
-				balls_back_label.visible = true
-				balls_back_label.modulate.a = 1.0
+	var award_balls_back: bool = _should_award_balls_back()
 
-				balls_back_tween = create_tween().set_parallel(false)
-				balls_back_tween.tween_interval(2.0)
-				balls_back_tween.tween_property(balls_back_label, "modulate:a", 0.0, 0.5)
-				balls_back_tween.tween_callback(func():
-					if is_instance_valid(balls_back_label):
-						balls_back_label.visible = false
-						balls_back_label.modulate.a = 1.0
-				)
+	OpLog.i(LOG_TAG, [
+		"throw_resolution rackCleared=", rack_cleared,
+		" awardBallsBack=", award_balls_back,
+		" redemption=", redemption,
+		" numBallsBefore=", num_balls
+	])
 
-			num_balls = 2
+	if award_balls_back:
+		if is_instance_valid(balls_back_label):
+			if balls_back_tween and balls_back_tween.is_running():
+				balls_back_tween.kill()
 
-	if redemption:
-		if throws[-1]["cup"] == -1:
+			balls_back_label.visible = true
+			balls_back_label.modulate.a = 1.0
+
+			balls_back_tween = create_tween().set_parallel(false)
+			balls_back_tween.tween_interval(2.0)
+			balls_back_tween.tween_property(
+				balls_back_label,
+				"modulate:a",
+				0.0,
+				0.5
+			)
+			balls_back_tween.tween_callback(func():
+				if is_instance_valid(balls_back_label):
+					balls_back_label.visible = false
+					balls_back_label.modulate.a = 1.0
+			)
+
+		num_balls = 2
+	elif rack_cleared:
+		num_balls = 0
+
+	if redemption and throws.size() > 0:
+		var last_cup: int = int(throws[-1].get("cup", -1))
+
+		if last_cup == -1:
 			lost = true
+
 			var outgoing := export_replay()
 			_handle_game_over_i_lost()
-			OpLog.event(LOG_TAG, ["send_game_out redemption_loss raw=", outgoing])
+
+			OpLog.event(LOG_TAG, [
+				"send_game_out redemption_loss raw=", outgoing
+			])
+
 			send_game_data(outgoing)
 			return
-		elif len(my_cups.cups_in_play) == 0:
+
+		if rack_cleared:
 			if mode != "h":
 				my_cups.reset_cups([0, 1, 2])
 				replay_cups.reset_cups([0, 1, 2])
-				overtime_label.popup()
+
+				if is_instance_valid(overtime_label):
+					overtime_label.popup()
+
 				await get_tree().create_timer(1.5).timeout
-				num_balls = 0
+
+			num_balls = 0
 
 	if num_balls > 0 and not game_over:
 		if preview_ball != null and is_instance_valid(preview_ball):

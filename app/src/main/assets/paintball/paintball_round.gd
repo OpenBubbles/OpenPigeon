@@ -490,6 +490,8 @@ func play_round() -> void:
 		_end_round_sequence()
 		return
 
+	cam3d.keep_aspect = Camera3D.KEEP_HEIGHT
+
 	# --- Begin cinematic state ---
 	g._is_shot_sequence_running = true
 	(g.fire_button as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE

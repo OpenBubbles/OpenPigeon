@@ -2,7 +2,6 @@ package com.openbubbles.openpigeon.knockout
 
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
-import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -46,6 +45,9 @@ import android.view.ViewGroup
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import androidx.core.view.isVisible
+import androidx.core.content.edit
+import androidx.core.graphics.toColorInt
 
 class KnockoutActivity : AppCompatActivity() {
     enum class Mode { Disabled, Aiming, Playing }
@@ -76,8 +78,6 @@ class KnockoutActivity : AppCompatActivity() {
     private var waterView: KnockoutWaterView? = null
 
     private var selectedPiece: KnockoutPiece? = null
-    val selectedAimPiece: KnockoutPiece?
-        get() = selectedPiece
     private var p1Bitmap: Bitmap? = null
     private var p2Bitmap: Bitmap? = null
     private var lastMessage: Map<String, String> = emptyMap()
@@ -102,6 +102,8 @@ class KnockoutActivity : AppCompatActivity() {
     @Volatile private var pendingReplayWinLossState = ""
     @Volatile private var initialGameDataApplied = false
     @Volatile private var gameShownToPlayer = false
+    @Volatile private var knockoutBoardTopPx = 0f
+    @Volatile private var knockoutBoardBottomPx = 0f
 
     private var statusDimView: View? = null
     @Volatile private var statusDimVisible = false
@@ -158,6 +160,11 @@ class KnockoutActivity : AppCompatActivity() {
         renderer = KnockoutRenderer(surface.holder, this)
 
         val rootFrame = findViewById<FrameLayout>(R.id.knockoutRoot)
+
+        rootFrame.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateKnockoutBoardSafeArea()
+        }
+
         waterView = KnockoutWaterView(this).apply {
             setWaterTexture("knockout/water.png")
         }
@@ -174,20 +181,20 @@ class KnockoutActivity : AppCompatActivity() {
         settingsSheet.attachOpponentAvatar(findViewById(R.id.knockoutOpponentAvatarAnchor))
         updateAvatarHud()
         val darkSwitch = SwitchCompat(this)
-        darkSwitch.isChecked = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+        darkSwitch.isChecked = getSharedPreferences("avatar_settings", MODE_PRIVATE)
             .getBoolean("knockout/dark_mode", false)
         darkMode = darkSwitch.isChecked
         darkSwitch.setOnCheckedChangeListener { _, checked ->
             darkMode = checked
-            getSharedPreferences("avatar_settings", Context.MODE_PRIVATE).edit()
-                .putBoolean("knockout/dark_mode", checked)
-                .apply()
+            getSharedPreferences("avatar_settings", MODE_PRIVATE).edit {
+                    putBoolean("knockout/dark_mode", checked)
+            }
             waterView?.visibility = if (checked) View.GONE else View.VISIBLE
         }
         settingsSheet.addGameControl("Dark Mode", darkSwitch)
 
         val musicSwitch = SwitchCompat(this)
-        musicSwitch.isChecked = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
+        musicSwitch.isChecked = getSharedPreferences("avatar_settings", MODE_PRIVATE)
             .getBoolean("global/music_enabled", true)
 
         musicEnabled = musicSwitch.isChecked
@@ -270,7 +277,31 @@ class KnockoutActivity : AppCompatActivity() {
         val channelMask: Int,
         val encoding: Int,
         val frameCount: Int
-    )
+    ) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as WavLoopData
+
+            if (sampleRate != other.sampleRate) return false
+            if (channelMask != other.channelMask) return false
+            if (encoding != other.encoding) return false
+            if (frameCount != other.frameCount) return false
+            if (!pcm.contentEquals(other.pcm)) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = sampleRate
+            result = 31 * result + channelMask
+            result = 31 * result + encoding
+            result = 31 * result + frameCount
+            result = 31 * result + pcm.contentHashCode()
+            return result
+        }
+    }
 
     private fun currentMusicTrack(): String {
         return "knockout/knockout.wav"
@@ -279,10 +310,10 @@ class KnockoutActivity : AppCompatActivity() {
     private fun applyMusicEnabled(enabled: Boolean) {
         musicEnabled = enabled
 
-        getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean("global/music_enabled", enabled)
-            .apply()
+        getSharedPreferences("avatar_settings", MODE_PRIVATE)
+            .edit {
+            putBoolean("global/music_enabled", enabled)
+            }
 
         if (enabled) {
             startMusic()
@@ -337,10 +368,10 @@ class KnockoutActivity : AppCompatActivity() {
             musicEnabled = false
             currentMusicTrackPath = null
 
-            getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean("global/music_enabled", false)
-                .apply()
+            getSharedPreferences("avatar_settings", MODE_PRIVATE)
+                .edit {
+                    putBoolean("global/music_enabled", false)
+                }
         }
     }
 
@@ -475,6 +506,53 @@ class KnockoutActivity : AppCompatActivity() {
         )
     }
 
+    private fun updateKnockoutBoardSafeArea() {
+        val root = findViewById<View>(R.id.knockoutRoot) ?: return
+        val myAvatar = findViewById<View>(R.id.knockoutGameAvatarAnchor)
+        val opponentAvatar = findViewById<View>(R.id.knockoutOpponentAvatarAnchor)
+
+        if (root.height <= 0) return
+
+        val rootLocation = IntArray(2)
+        root.getLocationOnScreen(rootLocation)
+
+        fun bottomRelativeToRoot(view: View?): Float {
+            if (view == null || view.height <= 0) return 0f
+
+            val location = IntArray(2)
+            view.getLocationOnScreen(location)
+
+            return (
+                    location[1] -
+                            rootLocation[1] +
+                            view.height
+                    ).toFloat()
+        }
+
+        val avatarBottom = maxOf(
+            bottomRelativeToRoot(myAvatar),
+            bottomRelativeToRoot(opponentAvatar),
+            dp(84f)
+        )
+
+        knockoutBoardTopPx = avatarBottom + dp(8f)
+        knockoutBoardBottomPx =
+            (root.height.toFloat() - dp(24f))
+                .coerceAtLeast(knockoutBoardTopPx + 1f)
+    }
+
+    fun knockoutBoardSafeTopPx(): Float {
+        return knockoutBoardTopPx.takeIf { it > 0f } ?: dp(92f)
+    }
+
+    fun knockoutBoardSafeBottomPx(): Float {
+        val rootHeight = findViewById<View>(R.id.knockoutRoot)?.height ?: 0
+
+        return knockoutBoardBottomPx.takeIf { it > 0f }
+            ?: (rootHeight.toFloat() - dp(24f))
+                .coerceAtLeast(knockoutBoardSafeTopPx() + 1f)
+    }
+
     private fun handleMessage(msg: Map<String, String>) {
         if (mode == Mode.Playing && msg["winner"].isNullOrBlank()) {
             OpenPigeonLog.w(
@@ -501,8 +579,6 @@ class KnockoutActivity : AppCompatActivity() {
         player = resolvePlayer(msg)
         applyOpponentAvatarFromMessage(msg)
         updateAvatarHud()
-
-        val incomingWinner = applyIncomingWinner(msg)
 
         gateAimingForIntro = shouldShowIntroPopupFor(msg) && !introPopupDismissed
 
@@ -1071,7 +1147,6 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun firePreparedBoard(
-        board: KnockoutBoard,
         source: PlaySource,
         fireStates: List<Pair<Int, KnockoutPieceState>>
     ) {
@@ -1166,7 +1241,7 @@ class KnockoutActivity : AppCompatActivity() {
 
                 doOnEndCompat {
                     playHandler.postDelayed({
-                        firePreparedBoard(board, source, fireStates)
+                        firePreparedBoard(source, fireStates)
                     }, 1000L)
                 }
 
@@ -1437,8 +1512,8 @@ class KnockoutActivity : AppCompatActivity() {
         val myAvatarKey = if (player == 1) "avatar1" else "avatar2"
         val nextNum = ((currentMessage["num"] ?: lastMessage["num"])?.toIntOrNull() ?: 0) + 1
 
-        val p1 = (currentMessage["player1"] ?: player1Id).orEmpty()
-        val p2 = (currentMessage["player2"] ?: player2Id).orEmpty()
+        val p1 = (currentMessage["player1"] ?: player1Id)
+        val p2 = (currentMessage["player2"] ?: player2Id)
 
         val msg = mutableMapOf(
             "game" to "knock",
@@ -1565,11 +1640,6 @@ class KnockoutActivity : AppCompatActivity() {
 
         updateStateLabel()
         return true
-    }
-
-    private fun allMyPiecesPowered(): Boolean {
-        val mine = pieces.filter { it.player == player && it.alive }
-        return mine.isNotEmpty() && mine.all { it.power > KnockoutConstants.READY_POWER_EPS }
     }
 
     private fun currentBoardWithLiveAims(): KnockoutBoard {
@@ -1722,34 +1792,6 @@ class KnockoutActivity : AppCompatActivity() {
             setStatusDimVisible(true)
             label.bringToFront()
         }
-    }
-
-    private fun applyIncomingWinner(msg: Map<String, String>): Boolean {
-        val rawWinner = msg["winner"].orEmpty()
-        if (rawWinner.isBlank()) return false
-
-        val parts = rawWinner.split("|", limit = 2)
-        if (parts.size != 2) return false
-
-        val senderWinnerId = parts[0]
-        val senderState = parts[1].toIntOrNull()?.coerceIn(-1, 1) ?: return false
-
-        val myId = localUserId(msg)
-
-        val localState = when {
-            senderState == 0 -> 0
-            myId.isNotBlank() && senderWinnerId == myId -> senderState
-            else -> -senderState
-        }
-
-        pendingReplayWinLossState = localState.toString()
-
-        OpenPigeonLog.i(
-            "KnockoutNative",
-            "Incoming winner stored pending until replay shrink finishes. state=$pendingReplayWinLossState"
-        )
-
-        return true
     }
 
     private fun finishPendingReplayGameOverIfNeeded(board: KnockoutBoard): Boolean {
@@ -1917,10 +1959,11 @@ class KnockoutActivity : AppCompatActivity() {
         waitingDotsRunnable?.let { stateLabelHandler.removeCallbacks(it) }
 
         val runnable = object : Runnable {
+            @SuppressLint("SetTextI18n")
             override fun run() {
                 if (waitingDotsRunnable !== this) return
 
-                if (label.visibility == View.VISIBLE) {
+                if (label.isVisible) {
                     label.text = "WAITING FOR OPPONENT" + ".".repeat(dots)
                     dots = if (dots >= 3) 1 else dots + 1
                 }
@@ -1959,6 +2002,7 @@ class KnockoutActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private fun showSendingLabelImmediately() {
         runOnUiThread {
             stopStateLabelAnimation()
@@ -1982,6 +2026,7 @@ class KnockoutActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private fun showSentCheckThenWaitingAnimation() {
         runOnUiThread {
             sentWaitingSequenceActive = true
@@ -2089,7 +2134,7 @@ class KnockoutActivity : AppCompatActivity() {
         val label = findViewById<TextView>(R.id.knockoutPowerHintLabel) ?: return
 
         if (visible) {
-            if (powerHintVisible && label.visibility == View.VISIBLE) return
+            if (powerHintVisible && label.isVisible) return
 
             powerHintVisible = true
             label.animate().cancel()
@@ -2147,7 +2192,7 @@ class KnockoutActivity : AppCompatActivity() {
                     .setDuration(280L)
                     .start()
             }
-        } else if (button.visibility == View.VISIBLE) {
+        } else if (button.isVisible) {
             button.animate()
                 .translationY(button.height.toFloat() + dp(48f))
                 .alpha(0f)
@@ -2199,7 +2244,7 @@ class KnockoutActivity : AppCompatActivity() {
 
             val bottomMargin = dp(34f).toInt()
 
-            if (button != null && button.visibility == View.VISIBLE) {
+            if (button != null && button.isVisible) {
                 val lp = button.layoutParams as? FrameLayout.LayoutParams
                 if (
                     lp != null &&
@@ -2218,7 +2263,7 @@ class KnockoutActivity : AppCompatActivity() {
                 button.bringToFront()
             }
 
-            if (hint != null && hint.visibility == View.VISIBLE) {
+            if (hint != null && hint.isVisible) {
                 val lp = hint.layoutParams as? FrameLayout.LayoutParams
                 if (
                     lp != null &&
@@ -2265,6 +2310,7 @@ class KnockoutActivity : AppCompatActivity() {
         (startButton?.parent as? ViewGroup)?.clipToPadding = false
     }
 
+    @SuppressLint("SetTextI18n")
     private fun ensureIntroPopup() {
         val overlay = findViewById<FrameLayout>(R.id.knockoutIntroOverlay) ?: return
         val card = findViewById<LinearLayout>(R.id.knockoutIntroCard) ?: return
@@ -2430,23 +2476,23 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun map1BlueColor(): Int {
-        return Color.parseColor("#aad9f7")
+        return "#aad9f7".toColorInt()
     }
 
     private fun map2YellowColor(): Int {
-        return Color.parseColor("#ffd84d")
+        return "#ffd84d".toColorInt()
     }
 
     private fun map2DarkRedColor(): Int {
-        return Color.parseColor("#a82a2a")
+        return "#a82a2a".toColorInt()
     }
 
     private fun map3GreenColor(): Int {
-        return Color.parseColor("#6fd68b")
+        return "#6fd68b".toColorInt()
     }
 
     private fun map3DarkGreenColor(): Int {
-        return Color.parseColor("#2e7d32")
+        return "#2e7d32".toColorInt()
     }
 
     private fun colorForMap(): Int {
@@ -2525,6 +2571,7 @@ class KnockoutActivity : AppCompatActivity() {
         label.visibility = if (powerHintVisible) View.VISIBLE else View.GONE
     }
 
+    @SuppressLint("SetTextI18n")
     private fun styleIntroButton(button: Button?) {
         button ?: return
 

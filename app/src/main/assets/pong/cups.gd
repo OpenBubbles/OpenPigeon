@@ -60,10 +60,38 @@ const CUP_REMOVE_LIFT_DURATION: float = 0.18
 const CUP_REMOVE_SLIDE_DURATION: float = 0.22
 const CUP_REMOVE_EXIT_X: float = 2.0
 
-func remove_cup(cup_num: int):
-	var cup: StaticBody3D = get_node("cup" + str(cup_num))
+func remove_cup(cup_num: int) -> void:
+	var cup_index: int = cup_num - 1
+
+	if cup_index < 0 or cup_index >= get_child_count():
+		OpLog.w(LOG_TAG, [
+			"remove_cup invalid cup=", cup_num,
+			" childCount=", get_child_count()
+		])
+		return
+
+	if cup_index not in cups_in_play:
+		OpLog.w(LOG_TAG, [
+			"remove_cup already_removed cup=", cup_num,
+			" remaining=", cups_in_play
+		])
+		return
+
+	var cup := get_child(cup_index) as StaticBody3D
+
+	if not is_instance_valid(cup):
+		OpLog.w(LOG_TAG, [
+			"remove_cup missing_node cup=", cup_num
+		])
+		return
+
 	cup.name = "cupremoved"
-	cup.get_child(0).use_collision = false
+
+	if cup.get_child_count() > 0:
+		var cup_mesh := cup.get_child(0)
+
+		if "use_collision" in cup_mesh:
+			cup_mesh.use_collision = false
 
 	var start_pos: Vector3 = cup.position
 	var exit_x_sign: float = 1.0 if start_pos.x >= 0.0 else -1.0
@@ -81,7 +109,7 @@ func remove_cup(cup_num: int):
 	)
 	anim.play()
 
-	cups_in_play.remove_at(cups_in_play.find(cup_num-1))
+	cups_in_play.erase(cup_index)
 	OpLog.i(LOG_TAG, ["remove_cup name=", name, " cup=", cup_num, " remaining=", cups_in_play])
 
 	# In random mode don't rerack cups

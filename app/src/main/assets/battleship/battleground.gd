@@ -24,8 +24,16 @@ func set_grid_tint(color: Color) -> void:
 	grid_color = color
 	queue_redraw()
 
-func set_attack():
+func set_attack() -> void:
+	placing_items = false
 	can_attack = true
+
+	has_conflict = false
+	for i in range(grid_state.size()):
+		grid_state[i] = GridState.NONE
+
+	queue_redraw()
+
 	for ship in ships:
 		ship.visible = ship.is_sunk()
 
@@ -179,14 +187,18 @@ func _draw():
 
 	draw_rect(Rect2(Vector2.ZERO, rect_size), grid_color, false)
 
-	for x in range(columns):
-		for y in range(rows):
-			var state := grid_state[y * columns + x]
-			if state == GridState.CONFLICT:
-				draw_rect(
-					Rect2(grid_to_coord(Vector2(x, y)), Vector2(cell_width, cell_height)),
-					Color.RED
-				)
+	if placing_items:
+		for x in range(columns):
+			for y in range(rows):
+				var state := grid_state[y * columns + x]
+				if state == GridState.CONFLICT:
+					draw_rect(
+						Rect2(
+							grid_to_coord(Vector2(x, y)),
+							Vector2(cell_width, cell_height)
+						),
+						Color.RED
+					)
 
 func get_grid_neighbours(x: int, y: int) -> Array[Vector2]:
 	var neighbours: Array[Vector2] = []
