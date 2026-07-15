@@ -331,11 +331,23 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
         val displayMetrics = context.resources.displayMetrics
         val dpWidth = displayMetrics.widthPixels / displayMetrics.density
-        val messageWidth = (dpWidth * 0.60).roundToInt() - 10
+        val messageWidth = ((dpWidth * 0.60f).roundToInt() - 10)
+            .coerceAtLeast(1)
+
+        val messageHeight = 250
 
         val result = runBlocking {
-            session.liveRemoteViews.compose(context, DpSize(messageWidth.dp, 250.dp)) {
-                RenderLiveExtension(this@MadridExtension, session, message)
+            session.liveRemoteViews.compose(
+                context,
+                DpSize(messageWidth.dp, messageHeight.dp)
+            ) {
+                RenderLiveExtension(
+                    extension = this@MadridExtension,
+                    session = session,
+                    message = message,
+                    previewWidthDp = messageWidth,
+                    previewHeightDp = messageHeight
+                )
             }
         }
 
@@ -739,7 +751,39 @@ fun RenderKeyboardConfig(extension: MadridExtension?, game: Game) {
 
 @OptIn(ExperimentalGlanceApi::class)
 @Composable
-fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, message: MadridMessage?) {
+fun RenderLiveExtension(
+    extension: MadridExtension?, session: GameSession?, message: MadridMessage?, previewWidthDp: Int = 200, previewHeightDp: Int = 250) {
+    val previewSubcaption =
+        if (extension != null && session?.getGame() != null) {
+            session.getGame()!!.getDisplaySubcaption(
+                extension.context,
+                session.currentMessage
+            )
+        } else {
+            null
+        }
+
+    val captionAreaDp =
+        if (previewSubcaption != null) 58 else 46
+
+    val boardWidthDp = previewWidthDp
+    val boardHeightDp = (previewHeightDp - captionAreaDp)
+        .coerceAtLeast(1)
+
+    val density = extension?.context
+        ?.resources
+        ?.displayMetrics
+        ?.density
+        ?: 1f
+
+    val boardWidthPx = (boardWidthDp * density)
+        .roundToInt()
+        .coerceAtLeast(1)
+
+    val boardHeightPx = (boardHeightDp * density)
+        .roundToInt()
+        .coerceAtLeast(1)
+
     Column(modifier = GlanceModifier.fillMaxHeight().let {
         if (extension != null) {
             val intent = Intent(extension.context, if (session?.getGame()?.isSupported(session.currentMessage) == true) session.getGame()!!.gameClass() else GameNotFound::class.java).apply {
@@ -764,13 +808,23 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
             it
         }
     }, horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
-        Box(modifier = GlanceModifier.defaultWeight()) {
+        Box(
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .height(boardHeightDp.dp)
+        ) {
             val game = session?.getGame()
-            val previewBitmap = if (extension != null && game is DynamicPreviewGame) {
-                game.gamePreviewBitmap(extension.context, session.currentMessage)
-            } else {
-                null
-            }
+            val previewBitmap =
+                if (extension != null && game is DynamicPreviewGame) {
+                    game.gamePreviewBitmap(
+                        context = extension.context,
+                        message = session.currentMessage,
+                        targetWidthPx = boardWidthPx,
+                        targetHeightPx = boardHeightPx
+                    )
+                } else {
+                    null
+                }
 
             Image(
                 if (previewBitmap != null) {
@@ -784,8 +838,14 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
             )
             val winMode = session?.getGame()?.getWinStateImage(extension!!.context, session.currentMessage)
             if (winMode != null) {
-                Image(ImageProvider(winMode), message?.caption ?: "Game Over", contentScale = ContentScale.Crop,
-                    modifier = GlanceModifier.fillMaxSize().padding(32.dp))
+                Image(
+                    ImageProvider(winMode),
+                    message?.caption ?: "Game Over",
+                    contentScale = ContentScale.Crop,
+                    modifier = GlanceModifier
+                        .fillMaxSize()
+                        .padding(32.dp)
+                )
             }
         }
         val displaySubtitle =
@@ -793,16 +853,6 @@ fun RenderLiveExtension(extension: MadridExtension?, session: GameSession?, mess
                 session.getGame()!!.getDisplaySubtitle(extension.context, session.currentMessage)
             } else {
                 message?.caption ?: "Game Name"
-            }
-
-        val previewSubcaption =
-            if (extension != null && session?.getGame() != null) {
-                session.getGame()!!.getDisplaySubcaption(
-                    extension.context,
-                    session.currentMessage
-                )
-            } else {
-                null
             }
 
         Column(

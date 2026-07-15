@@ -34,6 +34,11 @@ object ReversiPreviewRenderer {
         isDither = true
     }
 
+    private val outputPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        isFilterBitmap = true
+        isDither = true
+    }
+
     fun defaultBoard(): IntArray {
         val board = IntArray(BOARD_SIZE * BOARD_SIZE)
 
@@ -45,22 +50,89 @@ object ReversiPreviewRenderer {
         return board
     }
 
-    fun render(context: Context, flatBoard: IntArray): Bitmap {
+    fun render(
+        context: Context,
+        flatBoard: IntArray
+    ): Bitmap {
+        return render(
+            context = context,
+            flatBoard = flatBoard,
+            targetWidthPx = PREVIEW_SIZE,
+            targetHeightPx = PREVIEW_SIZE
+        )
+    }
+
+    fun render(
+        context: Context,
+        flatBoard: IntArray,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap {
         ensurePieceCache(context)
 
-        val bitmap = createBitmap(PREVIEW_SIZE, PREVIEW_SIZE)
+        val logicalBitmap = createBitmap(
+            PREVIEW_SIZE,
+            PREVIEW_SIZE
+        )
 
-        val canvas = Canvas(bitmap)
+        val logicalCanvas = Canvas(logicalBitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-        canvas.drawColor(Color.rgb(229, 229, 229))
+        logicalCanvas.drawColor(Color.rgb(229, 229, 229))
 
-        drawBoardShadow(canvas, paint)
-        drawBoard(canvas, paint)
-        drawStarPoints(canvas, paint)
-        drawPieces(canvas, paint, flatBoard)
+        drawBoardShadow(logicalCanvas, paint)
+        drawBoard(logicalCanvas, paint)
+        drawStarPoints(logicalCanvas, paint)
+        drawPieces(logicalCanvas, paint, flatBoard)
 
-        return bitmap
+        return fitLogicalBitmap(
+            source = logicalBitmap,
+            targetWidthPx = targetWidthPx,
+            targetHeightPx = targetHeightPx,
+            backgroundColor = Color.rgb(229, 229, 229)
+        )
+    }
+
+    private fun fitLogicalBitmap(
+        source: Bitmap,
+        targetWidthPx: Int,
+        targetHeightPx: Int,
+        backgroundColor: Int
+    ): Bitmap {
+        val outputWidth = targetWidthPx.coerceAtLeast(1)
+        val outputHeight = targetHeightPx.coerceAtLeast(1)
+
+        val output = createBitmap(
+            outputWidth,
+            outputHeight
+        )
+
+        val canvas = Canvas(output)
+        canvas.drawColor(backgroundColor)
+
+        val scale = minOf(
+            outputWidth.toFloat() / source.width.toFloat(),
+            outputHeight.toFloat() / source.height.toFloat()
+        )
+
+        val drawWidth = source.width * scale
+        val drawHeight = source.height * scale
+        val left = (outputWidth - drawWidth) / 2f
+        val top = (outputHeight - drawHeight) / 2f
+
+        canvas.drawBitmap(
+            source,
+            null,
+            RectF(
+                left,
+                top,
+                left + drawWidth,
+                top + drawHeight
+            ),
+            outputPaint
+        )
+
+        return output
     }
 
     private fun drawBoardShadow(canvas: Canvas, paint: Paint) {

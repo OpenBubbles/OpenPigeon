@@ -94,27 +94,48 @@ object ChessPreviewRenderer {
         replay: String?,
         flipBoard: Boolean
     ): Bitmap {
+        return render(
+            context = context,
+            replay = replay,
+            flipBoard = flipBoard,
+            targetWidthPx = OUTPUT_SIZE,
+            targetHeightPx = OUTPUT_SIZE
+        )
+    }
+
+    fun render(
+        context: Context,
+        replay: String?,
+        flipBoard: Boolean,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap {
         ensureAssetCache(context)
 
         val state = parseReplay(replay)
 
-        val bitmap = createBitmap(
+        val logicalBitmap = createBitmap(
             PREVIEW_SIZE,
             PREVIEW_SIZE,
             Bitmap.Config.ARGB_8888
         )
 
-        val canvas = Canvas(bitmap)
+        val logicalCanvas = Canvas(logicalBitmap)
 
-        canvas.drawColor(Color.rgb(148, 121, 114))
+        logicalCanvas.drawColor(Color.rgb(148, 121, 114))
 
-        drawBoardShadow(canvas)
-        drawBoardFrame(canvas)
-        drawSquares(canvas, flipBoard)
-        drawLastMoveHighlight(canvas, state.move, flipBoard)
-        drawPieces(canvas, state.board, flipBoard)
+        drawBoardShadow(logicalCanvas)
+        drawBoardFrame(logicalCanvas)
+        drawSquares(logicalCanvas, flipBoard)
+        drawLastMoveHighlight(logicalCanvas, state.move, flipBoard)
+        drawPieces(logicalCanvas, state.board, flipBoard)
 
-        return compactForRemoteViews(bitmap)
+        return fitLogicalBitmap(
+            source = logicalBitmap,
+            targetWidthPx = targetWidthPx,
+            targetHeightPx = targetHeightPx,
+            backgroundColor = Color.rgb(148, 121, 114)
+        )
     }
 
     private fun drawBoardShadow(canvas: Canvas) {
@@ -416,23 +437,43 @@ object ChessPreviewRenderer {
         }
     }
 
-    private fun compactForRemoteViews(source: Bitmap): Bitmap {
+    private fun fitLogicalBitmap(
+        source: Bitmap,
+        targetWidthPx: Int,
+        targetHeightPx: Int,
+        backgroundColor: Int
+    ): Bitmap {
+        val outputWidth = targetWidthPx.coerceAtLeast(1)
+        val outputHeight = targetHeightPx.coerceAtLeast(1)
+
         val output = createBitmap(
-            OUTPUT_SIZE,
-            OUTPUT_SIZE,
+            outputWidth,
+            outputHeight,
             Bitmap.Config.RGB_565
         )
 
         val canvas = Canvas(output)
+        canvas.drawColor(backgroundColor)
+
+        val scale = minOf(
+            outputWidth.toFloat() / source.width.toFloat(),
+            outputHeight.toFloat() / source.height.toFloat()
+        )
+
+        val drawWidth = source.width * scale
+        val drawHeight = source.height * scale
+
+        val left = (outputWidth - drawWidth) / 2f
+        val top = (outputHeight - drawHeight) / 2f
 
         canvas.drawBitmap(
             source,
             null,
             RectF(
-                0f,
-                0f,
-                OUTPUT_SIZE.toFloat(),
-                OUTPUT_SIZE.toFloat()
+                left,
+                top,
+                left + drawWidth,
+                top + drawHeight
             ),
             downsamplePaint
         )

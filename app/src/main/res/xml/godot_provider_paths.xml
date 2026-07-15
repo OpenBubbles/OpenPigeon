@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Existing Godot paths -->
+    <files-path
+        name="filesRoot"
+        path="/" />
+
+    <external-path
+        name="public"
+        path="." />
+
+    <external-files-path
+        name="app"
+        path="." />
+
+    <!-- OpenPigeon diagnostic reports -->
+    <cache-path
+        name="diagnostic_reports"
+        path="diagnostic_reports/" />
+
+</paths>

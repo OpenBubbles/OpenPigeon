@@ -78,6 +78,34 @@ class CheckersGame : Game, DynamicPreviewGame {
         context: Context,
         message: Map<String, String>
     ): Bitmap? {
+        return buildPreview(
+            context = context,
+            message = message,
+            targetWidthPx = 720,
+            targetHeightPx = 720
+        )
+    }
+
+    override fun gamePreviewBitmap(
+        context: Context,
+        message: Map<String, String>,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap? {
+        return buildPreview(
+            context = context,
+            message = message,
+            targetWidthPx = targetWidthPx,
+            targetHeightPx = targetHeightPx
+        )
+    }
+
+    private fun buildPreview(
+        context: Context,
+        message: Map<String, String>,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap? {
         return try {
             val board = extractLatestReplayBoard(message["replay"])
                 ?: CheckersPreviewRenderer.defaultBoard()
@@ -87,12 +115,16 @@ class CheckersGame : Game, DynamicPreviewGame {
             CheckersPreviewRenderer.render(
                 context = context,
                 flatBoard = board,
-                previewPlayer = previewPlayer
+                previewPlayer = previewPlayer,
+                targetWidthPx = targetWidthPx,
+                targetHeightPx = targetHeightPx
             )
         } catch (e: Exception) {
             OpenPigeonLog.w(
                 "CheckersGame",
-                "Failed to build dynamic Checkers preview, falling back to static image: ${e.message}"
+                "Failed to build dynamic Checkers preview, " +
+                        "size=${targetWidthPx}x${targetHeightPx}, " +
+                        "falling back to static image: ${e.message}"
             )
             null
         }

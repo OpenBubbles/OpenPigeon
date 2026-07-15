@@ -34,6 +34,34 @@ class ChessGame : Game, DynamicPreviewGame {
         context: Context,
         message: Map<String, String>
     ): Bitmap? {
+        return buildPreview(
+            context = context,
+            message = message,
+            targetWidthPx = 384,
+            targetHeightPx = 384
+        )
+    }
+
+    override fun gamePreviewBitmap(
+        context: Context,
+        message: Map<String, String>,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap? {
+        return buildPreview(
+            context = context,
+            message = message,
+            targetWidthPx = targetWidthPx,
+            targetHeightPx = targetHeightPx
+        )
+    }
+
+    private fun buildPreview(
+        context: Context,
+        message: Map<String, String>,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap? {
         return try {
             val replay = message["replay"].orEmpty()
             val flipBoard = shouldFlipBoardForPreview(message)
@@ -41,12 +69,16 @@ class ChessGame : Game, DynamicPreviewGame {
             ChessPreviewRenderer.render(
                 context = context,
                 replay = replay.ifBlank { getDefaultReplay() },
-                flipBoard = flipBoard
+                flipBoard = flipBoard,
+                targetWidthPx = targetWidthPx,
+                targetHeightPx = targetHeightPx
             )
         } catch (e: Exception) {
             OpenPigeonLog.w(
                 "ChessGame",
-                "Failed to build dynamic Chess preview, falling back to static image: ${e.message}"
+                "Failed to build dynamic Chess preview, " +
+                        "size=${targetWidthPx}x${targetHeightPx}, " +
+                        "falling back to static image: ${e.message}"
             )
             null
         }

@@ -9,12 +9,13 @@ import android.graphics.Paint
 import android.graphics.RectF
 import androidx.core.graphics.createBitmap
 import com.openbubbles.openpigeon.util.OpenPigeonLog
+import androidx.core.graphics.withTranslation
 
 object ConnectPreviewRenderer {
     private const val BOARD_W = 7
     private const val BOARD_H = 6
 
-    private const val PREVIEW_SIZE = 720
+    private const val LOGICAL_PREVIEW_SIZE = 720f
 
     private const val BOARD_ASSET_WIDTH = 730f
     private const val BOARD_ASSET_HEIGHT = 634f
@@ -64,23 +65,62 @@ object ConnectPreviewRenderer {
         context: Context,
         flatBoard: IntArray
     ): Bitmap {
+        return render(
+            context = context,
+            flatBoard = flatBoard,
+            targetWidthPx = LOGICAL_PREVIEW_SIZE.toInt(),
+            targetHeightPx = LOGICAL_PREVIEW_SIZE.toInt()
+        )
+    }
+
+    fun render(
+        context: Context,
+        flatBoard: IntArray,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap {
         ensureAssetCache(context)
 
-        val bitmap = createBitmap(PREVIEW_SIZE, PREVIEW_SIZE)
+        val outputWidth = targetWidthPx.coerceAtLeast(1)
+        val outputHeight = targetHeightPx.coerceAtLeast(1)
+
+        val bitmap = createBitmap(
+            outputWidth,
+            outputHeight
+        )
+
         val canvas = Canvas(bitmap)
 
         canvas.drawColor(Color.rgb(216, 199, 194))
 
-        val hasBoardLayers = cachedBoardBack != null && cachedBoardFront != null
+        val scale = minOf(
+            outputWidth / LOGICAL_PREVIEW_SIZE,
+            outputHeight / LOGICAL_PREVIEW_SIZE
+        )
 
-        if (hasBoardLayers) {
-            drawBoardBitmapLayer(canvas, cachedBoardBack)
-            drawPieces(canvas, flatBoard)
-            drawBoardBitmapLayer(canvas, cachedBoardFront)
-        } else {
-            drawFallbackBoardBase(canvas)
-            drawPieces(canvas, flatBoard)
-            drawFallbackBoardFront(canvas)
+        val scaledWidth = LOGICAL_PREVIEW_SIZE * scale
+        val scaledHeight = LOGICAL_PREVIEW_SIZE * scale
+
+        val offsetX = (outputWidth - scaledWidth) / 2f
+        val offsetY = (outputHeight - scaledHeight) / 2f
+
+        canvas.withTranslation(offsetX, offsetY) {
+            scale(scale, scale)
+
+            val hasBoardLayers =
+                cachedBoardBack != null &&
+                        cachedBoardFront != null
+
+            if (hasBoardLayers) {
+                drawBoardBitmapLayer(this, cachedBoardBack)
+                drawPieces(this, flatBoard)
+                drawBoardBitmapLayer(this, cachedBoardFront)
+            } else {
+                drawFallbackBoardBase(this)
+                drawPieces(this, flatBoard)
+                drawFallbackBoardFront(this)
+            }
+
         }
 
         return bitmap

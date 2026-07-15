@@ -10,6 +10,7 @@ import android.graphics.PointF
 import android.graphics.RectF
 import com.openbubbles.openpigeon.util.OpenPigeonLog
 import kotlin.math.sqrt
+import androidx.core.graphics.createBitmap
 
 object DotsPreviewRenderer {
     private const val MIN_BOARD_SIZE = 4
@@ -80,27 +81,44 @@ object DotsPreviewRenderer {
         replay: String?,
         boardSize: Int
     ): Bitmap {
+        return render(
+            context = context,
+            replay = replay,
+            boardSize = boardSize,
+            targetWidthPx = OUTPUT_SIZE,
+            targetHeightPx = OUTPUT_SIZE
+        )
+    }
+
+    fun render(
+        context: Context,
+        replay: String?,
+        boardSize: Int,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap {
         ensureAssetCache(context)
 
         val safeBoardSize = boardSize.coerceIn(MIN_BOARD_SIZE, MAX_BOARD_SIZE)
         val state = parseReplay(replay, safeBoardSize)
 
-        val bitmap = Bitmap.createBitmap(
-            PREVIEW_SIZE,
-            PREVIEW_SIZE,
-            Bitmap.Config.ARGB_8888
+        val logicalBitmap = createBitmap(PREVIEW_SIZE, PREVIEW_SIZE)
+
+        val logicalCanvas = Canvas(logicalBitmap)
+
+        logicalCanvas.drawColor(Color.rgb(148, 121, 114))
+
+        drawPaper(logicalCanvas)
+        drawSquares(logicalCanvas, state.squares, safeBoardSize)
+        drawLines(logicalCanvas, state.lines, safeBoardSize)
+        drawDots(logicalCanvas, safeBoardSize)
+
+        return fitLogicalBitmap(
+            source = logicalBitmap,
+            targetWidthPx = targetWidthPx,
+            targetHeightPx = targetHeightPx,
+            backgroundColor = Color.rgb(148, 121, 114)
         )
-
-        val canvas = Canvas(bitmap)
-
-        canvas.drawColor(Color.rgb(148, 121, 114))
-
-        drawPaper(canvas)
-        drawSquares(canvas, state.squares, safeBoardSize)
-        drawLines(canvas, state.lines, safeBoardSize)
-        drawDots(canvas, safeBoardSize)
-
-        return compactForRemoteViews(bitmap)
     }
 
     private fun drawPaper(canvas: Canvas) {
@@ -508,24 +526,34 @@ object DotsPreviewRenderer {
                 square.y in 0 until boardSize - 1
     }
 
-    private fun compactForRemoteViews(source: Bitmap): Bitmap {
-        val output = Bitmap.createBitmap(
-            OUTPUT_SIZE,
-            OUTPUT_SIZE,
-            Bitmap.Config.RGB_565
-        )
+    private fun fitLogicalBitmap(
+        source: Bitmap,
+        targetWidthPx: Int,
+        targetHeightPx: Int,
+        backgroundColor: Int
+    ): Bitmap {
+        val outputWidth = targetWidthPx.coerceAtLeast(1)
+        val outputHeight = targetHeightPx.coerceAtLeast(1)
+
+        val output = createBitmap(outputWidth, outputHeight, Bitmap.Config.RGB_565)
 
         val canvas = Canvas(output)
+        canvas.drawColor(backgroundColor)
+
+        val scale = minOf(
+            outputWidth.toFloat() / source.width,
+            outputHeight.toFloat() / source.height
+        )
+
+        val drawWidth = source.width * scale
+        val drawHeight = source.height * scale
+        val left = (outputWidth - drawWidth) / 2f
+        val top = (outputHeight - drawHeight) / 2f
 
         canvas.drawBitmap(
             source,
             null,
-            RectF(
-                0f,
-                0f,
-                OUTPUT_SIZE.toFloat(),
-                OUTPUT_SIZE.toFloat()
-            ),
+            RectF(left, top, left + drawWidth, top + drawHeight),
             downsamplePaint
         )
 

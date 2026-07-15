@@ -43,15 +43,50 @@ class ConnectGame : Game, DynamicPreviewGame {
         context: Context,
         message: Map<String, String>
     ): Bitmap? {
+        return buildPreview(
+            context = context,
+            message = message,
+            targetWidthPx = 720,
+            targetHeightPx = 720
+        )
+    }
+
+    override fun gamePreviewBitmap(
+        context: Context,
+        message: Map<String, String>,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap? {
+        return buildPreview(
+            context = context,
+            message = message,
+            targetWidthPx = targetWidthPx,
+            targetHeightPx = targetHeightPx
+        )
+    }
+
+    private fun buildPreview(
+        context: Context,
+        message: Map<String, String>,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap? {
         return try {
             val board = extractRenderedBoard(message["replay"])
                 ?: ConnectPreviewRenderer.defaultBoard()
 
-            ConnectPreviewRenderer.render(context, board)
+            ConnectPreviewRenderer.render(
+                context = context,
+                flatBoard = board,
+                targetWidthPx = targetWidthPx,
+                targetHeightPx = targetHeightPx
+            )
         } catch (e: Exception) {
             OpenPigeonLog.w(
                 "ConnectGame",
-                "Failed to build dynamic Four in a Row preview, falling back to static image: ${e.message}"
+                "Failed to build dynamic Four in a Row preview, " +
+                        "size=${targetWidthPx}x${targetHeightPx}, " +
+                        "falling back to static image: ${e.message}"
             )
             null
         }

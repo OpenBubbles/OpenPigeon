@@ -104,6 +104,34 @@ class MancalaGame : Game, DynamicPreviewGame {
         context: Context,
         message: Map<String, String>
     ): Bitmap? {
+        return buildPreview(
+            context = context,
+            message = message,
+            targetWidthPx = 384,
+            targetHeightPx = 384
+        )
+    }
+
+    override fun gamePreviewBitmap(
+        context: Context,
+        message: Map<String, String>,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap? {
+        return buildPreview(
+            context = context,
+            message = message,
+            targetWidthPx = targetWidthPx,
+            targetHeightPx = targetHeightPx
+        )
+    }
+
+    private fun buildPreview(
+        context: Context,
+        message: Map<String, String>,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap? {
         return try {
             val replay = message["replay"].orEmpty()
             val previewPlayer = resolvePreviewPlayer(message)
@@ -111,12 +139,16 @@ class MancalaGame : Game, DynamicPreviewGame {
             MancalaPreviewRenderer.render(
                 context = context,
                 replay = replay.ifBlank { getDefaultReplay() },
-                previewPlayer = previewPlayer
+                previewPlayer = previewPlayer,
+                targetWidthPx = targetWidthPx,
+                targetHeightPx = targetHeightPx
             )
         } catch (e: Exception) {
             OpenPigeonLog.w(
                 "MancalaGame",
-                "Failed to build dynamic Mancala preview, falling back to static image: ${e.message}"
+                "Failed to build dynamic Mancala preview, " +
+                        "size=${targetWidthPx}x${targetHeightPx}, " +
+                        "falling back to static image: ${e.message}"
             )
             null
         }
@@ -152,13 +184,13 @@ class MancalaGame : Game, DynamicPreviewGame {
 
         if (difficulty == "Normal") {
             for (i in 0..5) {
-                for (j in 0 until 4) {
+                repeat(4) {
                     pits[i].add(Random.nextInt(1, 4))
                 }
             }
 
             for (i in 7..12) {
-                for (j in 0 until 4) {
+                repeat(4) {
                     pits[i].add(Random.nextInt(11, 14))
                 }
             }
@@ -168,7 +200,7 @@ class MancalaGame : Game, DynamicPreviewGame {
             val nonStorePits = (0..5) + (7..12)
             val stonesPerPit = MutableList(nonStorePits.size) { 0 }
 
-            for (i in 0 until nonStorePits.size) {
+            for (i in nonStorePits.indices) {
                 stonesPerPit[i] = Random.nextInt(1, 6)
                 totalStones += stonesPerPit[i]
             }
@@ -194,7 +226,7 @@ class MancalaGame : Game, DynamicPreviewGame {
             for (i in 0..5) {
                 val numStones = stonesPerPit[currentStoneIndex++]
 
-                for (j in 0 until numStones) {
+                repeat(numStones) {
                     pits[i].add(Random.nextInt(1, 4))
                 }
             }
@@ -202,7 +234,7 @@ class MancalaGame : Game, DynamicPreviewGame {
             for (i in 7..12) {
                 val numStones = stonesPerPit[currentStoneIndex++]
 
-                for (j in 0 until numStones) {
+                repeat(numStones) {
                     pits[i].add(Random.nextInt(11, 14))
                 }
             }

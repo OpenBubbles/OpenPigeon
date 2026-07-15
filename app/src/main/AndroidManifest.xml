@@ -34,7 +34,6 @@
             android:theme="@style/Theme.OpenBubblesSampleExtension" />
         <activity
             android:name=".shuffle.ShuffleActivity"
-            android:screenOrientation="portrait"
             android:exported="false" />
         <activity
             android:name=".godot.GodotGameActivity"
@@ -93,7 +92,8 @@
         <service
             android:name=".MadridExtensionService"
             android:enabled="true"
-            android:exported="true">
+            android:exported="true"
+            tools:ignore="ExportedService">
             <intent-filter>
                 <action android:name="com.openbubbles.messaging.MadridExtensionService" />
             </intent-filter>
@@ -116,7 +116,8 @@
         <service
             android:name=".godot.GameSessionService"
             android:enabled="true"
-            android:exported="true">
+            android:exported="true"
+            tools:ignore="ExportedService">
             <intent-filter>
                 <action android:name=".IGameSession" />
             </intent-filter>

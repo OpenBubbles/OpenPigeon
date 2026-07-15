@@ -9,6 +9,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import androidx.core.graphics.createBitmap
 import com.openbubbles.openpigeon.util.OpenPigeonLog
+import androidx.core.graphics.withSave
 
 object CheckersPreviewRenderer {
     private const val BOARD_SIZE = 8
@@ -26,6 +27,11 @@ object CheckersPreviewRenderer {
         PADDING + BOARD_SIDE,
         PADDING + BOARD_SIDE
     )
+
+    private val outputPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        isFilterBitmap = true
+        isDither = true
+    }
 
     private val cacheLock = Any()
 
@@ -63,18 +69,77 @@ object CheckersPreviewRenderer {
         flatBoard: IntArray,
         previewPlayer: Int = 1
     ): Bitmap {
+        return render(
+            context = context,
+            flatBoard = flatBoard,
+            previewPlayer = previewPlayer,
+            targetWidthPx = PREVIEW_SIZE,
+            targetHeightPx = PREVIEW_SIZE
+        )
+    }
+
+    fun render(
+        context: Context,
+        flatBoard: IntArray,
+        previewPlayer: Int = 1,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap {
         ensureAssetCache(context)
 
-        val bitmap = createBitmap(PREVIEW_SIZE, PREVIEW_SIZE)
-        val canvas = Canvas(bitmap)
+        val logicalBitmap = createBitmap(
+            PREVIEW_SIZE,
+            PREVIEW_SIZE
+        )
 
-        canvas.drawColor(Color.rgb(229, 229, 229))
+        val logicalCanvas = Canvas(logicalBitmap)
 
-        drawBoardShadow(canvas)
-        drawBoard(canvas, previewPlayer)
-        drawPieces(canvas, flatBoard, previewPlayer)
+        logicalCanvas.drawColor(Color.rgb(229, 229, 229))
 
-        return bitmap
+        drawBoardShadow(logicalCanvas)
+        drawBoard(logicalCanvas, previewPlayer)
+        drawPieces(logicalCanvas, flatBoard, previewPlayer)
+
+        return fitLogicalBitmap(
+            source = logicalBitmap,
+            targetWidthPx = targetWidthPx,
+            targetHeightPx = targetHeightPx,
+            backgroundColor = Color.rgb(229, 229, 229)
+        )
+    }
+
+    private fun fitLogicalBitmap(
+        source: Bitmap,
+        targetWidthPx: Int,
+        targetHeightPx: Int,
+        backgroundColor: Int
+    ): Bitmap {
+        val outputWidth = targetWidthPx.coerceAtLeast(1)
+        val outputHeight = targetHeightPx.coerceAtLeast(1)
+
+        val output = createBitmap(outputWidth, outputHeight)
+        val canvas = Canvas(output)
+
+        canvas.drawColor(backgroundColor)
+
+        val scale = minOf(
+            outputWidth.toFloat() / source.width,
+            outputHeight.toFloat() / source.height
+        )
+
+        val drawWidth = source.width * scale
+        val drawHeight = source.height * scale
+        val left = (outputWidth - drawWidth) / 2f
+        val top = (outputHeight - drawHeight) / 2f
+
+        canvas.drawBitmap(
+            source,
+            null,
+            RectF(left, top, left + drawWidth, top + drawHeight),
+            outputPaint
+        )
+
+        return output
     }
 
     private fun drawBoardShadow(canvas: Canvas) {
@@ -100,14 +165,14 @@ object CheckersPreviewRenderer {
             val cx = boardRect.centerX()
             val cy = boardRect.centerY()
 
-            canvas.save()
+            canvas.withSave {
 
-            if (previewPlayer == 2) {
-                canvas.rotate(180f, cx, cy)
+                if (previewPlayer == 2) {
+                    rotate(180f, cx, cy)
+                }
+
+                drawBitmap(board, null, boardRect, imagePaint)
             }
-
-            canvas.drawBitmap(board, null, boardRect, imagePaint)
-            canvas.restore()
             return
         }
 
@@ -267,13 +332,12 @@ object CheckersPreviewRenderer {
         sourceCol: Int,
         previewPlayer: Int
     ): Pair<Int, Int> {
-        val mirroredRow = sourceRow
         val mirroredCol = BOARD_SIZE - 1 - sourceCol
 
         return if (previewPlayer == 2) {
-            (BOARD_SIZE - 1 - mirroredRow) to (BOARD_SIZE - 1 - mirroredCol)
+            (BOARD_SIZE - 1 - sourceRow) to (BOARD_SIZE - 1 - mirroredCol)
         } else {
-            mirroredRow to mirroredCol
+            sourceRow to mirroredCol
         }
     }
 

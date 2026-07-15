@@ -5,6 +5,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import kotlin.math.floor
+import android.graphics.RectF
+import androidx.core.graphics.createBitmap
 
 object FillerPreviewRenderer {
     private const val BOARD_WIDTH = 8
@@ -17,6 +19,14 @@ object FillerPreviewRenderer {
     private const val DRAND48_MASK = (1L shl 48) - 1L
     private const val DRAND48_DENOM = 281474976710656.0
 
+    private const val LOGICAL_CELL = 36
+    private const val LOGICAL_PADDING = 18
+
+    private val outputPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        isFilterBitmap = true
+        isDither = true
+    }
+
     private val colors = intArrayOf(
         Color.rgb(235, 33, 110),
         Color.rgb(115, 191, 74),
@@ -28,58 +38,188 @@ object FillerPreviewRenderer {
 
     private var state = 0L
 
-    fun render(seed: Int, player: Int = 1): Bitmap {
-        return renderBoardArray(generateBoard(seed), player)
+    fun render(
+        seed: Int,
+        player: Int = 1
+    ): Bitmap {
+        return renderBoardArray(
+            board = generateBoard(seed),
+            player = player
+        )
     }
 
-    fun renderBoard(flatBoard: IntArray, player: Int = 1): Bitmap {
-        val board = Array(BOARD_HEIGHT) { y ->
+    fun render(
+        seed: Int,
+        player: Int = 1,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap {
+        return renderBoardArray(
+            board = generateBoard(seed),
+            player = player,
+            targetWidthPx = targetWidthPx,
+            targetHeightPx = targetHeightPx
+        )
+    }
+
+    fun renderBoard(
+        flatBoard: IntArray,
+        player: Int = 1,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap {
+        return renderBoardArray(
+            board = boardFromFlatArray(flatBoard),
+            player = player,
+            targetWidthPx = targetWidthPx,
+            targetHeightPx = targetHeightPx
+        )
+    }
+
+    private fun boardFromFlatArray(
+        flatBoard: IntArray
+    ): Array<IntArray> {
+        return Array(BOARD_HEIGHT) { y ->
             IntArray(BOARD_WIDTH) { x ->
-                flatBoard.getOrElse(y * BOARD_WIDTH + x) { 0 }.coerceIn(0, colors.lastIndex)
+                flatBoard
+                    .getOrElse(y * BOARD_WIDTH + x) { 0 }
+                    .coerceIn(0, colors.lastIndex)
             }
         }
-
-        return renderBoardArray(board, player)
     }
 
-    private fun renderBoardArray(board: Array<IntArray>, player: Int): Bitmap {
-        val cell = 36
-        val padding = 18
-        val width = BOARD_WIDTH * cell + padding * 2
-        val height = BOARD_HEIGHT * cell + padding * 2
+    private fun renderBoardArray(
+        board: Array<IntArray>,
+        player: Int
+    ): Bitmap {
+        val width =
+            BOARD_WIDTH * LOGICAL_CELL +
+                    LOGICAL_PADDING * 2
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val height =
+            BOARD_HEIGHT * LOGICAL_CELL +
+                    LOGICAL_PADDING * 2
+
+        val bitmap = createBitmap(
+            width,
+            height,
+            Bitmap.Config.ARGB_8888
+        )
+
         val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
         canvas.drawColor(Color.rgb(232, 232, 232))
 
         paint.color = Color.argb(70, 0, 0, 0)
+
         canvas.drawRect(
-            (padding + 4).toFloat(),
-            (padding + 6).toFloat(),
-            (padding + BOARD_WIDTH * cell + 4).toFloat(),
-            (padding + BOARD_HEIGHT * cell + 6).toFloat(),
+            (LOGICAL_PADDING + 4).toFloat(),
+            (LOGICAL_PADDING + 6).toFloat(),
+            (
+                    LOGICAL_PADDING +
+                            BOARD_WIDTH * LOGICAL_CELL +
+                            4
+                    ).toFloat(),
+            (
+                    LOGICAL_PADDING +
+                            BOARD_HEIGHT * LOGICAL_CELL +
+                            6
+                    ).toFloat(),
             paint
         )
 
         for (y in 0 until BOARD_HEIGHT) {
             for (x in 0 until BOARD_WIDTH) {
-                val drawX = if (player == 2) (BOARD_WIDTH - 1) - x else x
-                val drawY = if (player == 2) y else (BOARD_HEIGHT - 1) - y
-                print("Player: $player, drawX: $drawX, drawY: $drawY, x: $x, y: $y")
-                paint.color = colors[board[y][x].coerceIn(0, colors.lastIndex)]
+                val drawX =
+                    if (player == 2) {
+                        BOARD_WIDTH - 1 - x
+                    } else {
+                        x
+                    }
+
+                val drawY =
+                    if (player == 2) {
+                        y
+                    } else {
+                        BOARD_HEIGHT - 1 - y
+                    }
+
+                paint.color = colors[
+                    board[y][x].coerceIn(0, colors.lastIndex)
+                ]
+
                 canvas.drawRect(
-                    (padding + drawX * cell).toFloat(),
-                    (padding + drawY * cell).toFloat(),
-                    (padding + (drawX + 1) * cell).toFloat(),
-                    (padding + (drawY + 1) * cell).toFloat(),
+                    (
+                            LOGICAL_PADDING +
+                                    drawX * LOGICAL_CELL
+                            ).toFloat(),
+                    (
+                            LOGICAL_PADDING +
+                                    drawY * LOGICAL_CELL
+                            ).toFloat(),
+                    (
+                            LOGICAL_PADDING +
+                                    (drawX + 1) * LOGICAL_CELL
+                            ).toFloat(),
+                    (
+                            LOGICAL_PADDING +
+                                    (drawY + 1) * LOGICAL_CELL
+                            ).toFloat(),
                     paint
                 )
             }
         }
 
         return bitmap
+    }
+
+    private fun renderBoardArray(
+        board: Array<IntArray>,
+        player: Int,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap {
+        val logical = renderBoardArray(
+            board = board,
+            player = player
+        )
+
+        val outputWidth = targetWidthPx.coerceAtLeast(1)
+        val outputHeight = targetHeightPx.coerceAtLeast(1)
+
+        val output = createBitmap(
+            outputWidth,
+            outputHeight,
+            Bitmap.Config.ARGB_8888
+        )
+
+        val canvas = Canvas(output)
+        canvas.drawColor(Color.rgb(232, 232, 232))
+
+        val scale = minOf(
+            outputWidth.toFloat() / logical.width,
+            outputHeight.toFloat() / logical.height
+        )
+
+        val drawWidth = logical.width * scale
+        val drawHeight = logical.height * scale
+        val left = (outputWidth - drawWidth) / 2f
+        val top = (outputHeight - drawHeight) / 2f
+
+        canvas.drawBitmap(
+            logical,
+            null,
+            RectF(
+                left,
+                top,
+                left + drawWidth,
+                top + drawHeight
+            ),
+            outputPaint
+        )
+
+        return output
     }
 
     private fun srand48(seed: Int) {
@@ -135,7 +275,7 @@ object FillerPreviewRenderer {
             board[BOARD_HEIGHT - 1][BOARD_WIDTH - 2] == board[BOARD_HEIGHT - 2][BOARD_WIDTH - 1]
         )
 
-        for (passIndex in 0 until POLISH_ITERATIONS) {
+        repeat(POLISH_ITERATIONS) {
             for (y in 0 until BOARD_HEIGHT) {
                 for (x in 0 until BOARD_WIDTH) {
                     val connected = flood(board, y, x, board[y][x])

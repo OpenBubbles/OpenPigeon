@@ -18,77 +18,237 @@ object KnockoutPreviewRenderer {
     private const val OUT_SIZE = 320
     private const val PADDING = 10
 
-    fun render(context: Context, board: KnockoutBoard, mapMode: Int): Bitmap {
-        val boardPx = OUT_SIZE - PADDING * 2
-        val bitmap = Bitmap.createBitmap(OUT_SIZE, OUT_SIZE, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    fun render(
+        context: Context,
+        board: KnockoutBoard,
+        mapMode: Int
+    ): Bitmap {
+        return render(
+            context = context,
+            board = board,
+            mapMode = mapMode,
+            targetWidthPx = OUT_SIZE,
+            targetHeightPx = OUT_SIZE
+        )
+    }
 
-        // Background color = the map's solid color (same values as backgroundColorForMap()).
+    fun render(
+        context: Context,
+        board: KnockoutBoard,
+        mapMode: Int,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap {
+        val logicalBitmap = renderLogical(
+            context = context,
+            board = board,
+            mapMode = mapMode
+        )
+
+        val outputWidth = targetWidthPx.coerceAtLeast(1)
+        val outputHeight = targetHeightPx.coerceAtLeast(1)
+
+        val output = Bitmap.createBitmap(
+            outputWidth,
+            outputHeight,
+            Bitmap.Config.ARGB_8888
+        )
+
+        val canvas = Canvas(output)
+        val paint = Paint(
+            Paint.ANTI_ALIAS_FLAG or
+                    Paint.FILTER_BITMAP_FLAG
+        )
+
         canvas.drawColor(backgroundColorForMap(mapMode))
 
-        // World→thumbnail scale: WORLD_SIZE maps to boardPx.
+        val scale = minOf(
+            outputWidth.toFloat() / logicalBitmap.width,
+            outputHeight.toFloat() / logicalBitmap.height
+        )
+
+        val drawWidth = logicalBitmap.width * scale
+        val drawHeight = logicalBitmap.height * scale
+        val left = (outputWidth - drawWidth) / 2f
+        val top = (outputHeight - drawHeight) / 2f
+
+        canvas.drawBitmap(
+            logicalBitmap,
+            null,
+            RectF(
+                left,
+                top,
+                left + drawWidth,
+                top + drawHeight
+            ),
+            paint
+        )
+
+        return output
+    }
+
+    private fun renderLogical(
+        context: Context,
+        board: KnockoutBoard,
+        mapMode: Int
+    ): Bitmap {
+        val boardPx = OUT_SIZE - PADDING * 2
+
+        val bitmap = Bitmap.createBitmap(
+            OUT_SIZE,
+            OUT_SIZE,
+            Bitmap.Config.ARGB_8888
+        )
+
+        val canvas = Canvas(bitmap)
+        val paint = Paint(
+            Paint.ANTI_ALIAS_FLAG or
+                    Paint.FILTER_BITMAP_FLAG
+        )
+
+        canvas.drawColor(backgroundColorForMap(mapMode))
+
         val scale = boardPx.toFloat() / WORLD_SIZE
         val cx = OUT_SIZE / 2f
         val cy = OUT_SIZE / 2f
 
-        // Board image (ice floe), centered.
-        val boardBmp = loadAsset(context, boardAssetForMap(mapMode))
+        val boardBmp = loadAsset(
+            context,
+            boardAssetForMap(mapMode)
+        )
+
         val half = boardPx / 2f
+
         if (boardBmp != null) {
             canvas.drawBitmap(
-                boardBmp, null,
-                RectF(cx - half, cy - half, cx + half, cy + half),
+                boardBmp,
+                null,
+                RectF(
+                    cx - half,
+                    cy - half,
+                    cx + half,
+                    cy + half
+                ),
                 paint
             )
         } else {
             paint.color = Color.rgb(232, 240, 242)
-            canvas.drawOval(RectF(cx - half, cy - half, cx + half, cy + half), paint)
+
+            canvas.drawOval(
+                RectF(
+                    cx - half,
+                    cy - half,
+                    cx + half,
+                    cy + half
+                ),
+                paint
+            )
         }
 
-        // Mushrooms on map 3 (same world positions as the in-game renderer).
         if (mapMode == 3) {
-            val mush = loadAsset(context, "knockout/mushroom.png")
-            val mushHalf = 22.5f * scale
-            for ((mx, my) in listOf(-100f to -100f, 100f to -100f, -100f to 100f, 100f to 100f)) {
+            val mushroom = loadAsset(
+                context,
+                "knockout/mushroom.png"
+            )
+
+            val mushroomHalf = 22.5f * scale
+
+            val mushroomPositions = listOf(
+                -100f to -100f,
+                100f to -100f,
+                -100f to 100f,
+                100f to 100f
+            )
+
+            for ((mx, my) in mushroomPositions) {
                 val sx = cx + mx * scale
                 val sy = cy - my * scale
-                if (mush != null) {
+
+                if (mushroom != null) {
                     canvas.drawBitmap(
-                        mush, null,
-                        RectF(sx - mushHalf, sy - mushHalf, sx + mushHalf, sy + mushHalf),
+                        mushroom,
+                        null,
+                        RectF(
+                            sx - mushroomHalf,
+                            sy - mushroomHalf,
+                            sx + mushroomHalf,
+                            sy + mushroomHalf
+                        ),
                         paint
                     )
                 } else {
                     paint.color = Color.rgb(139, 90, 43)
-                    canvas.drawCircle(sx, sy, mushHalf, paint)
+                    canvas.drawCircle(
+                        sx,
+                        sy,
+                        mushroomHalf,
+                        paint
+                    )
                 }
             }
         }
 
-        // Penguins.
-        val p1 = loadAsset(context, "knockout/bw_penguin.png")
-        val p2 = loadAsset(context, "knockout/gw_penguin.png")
-        val pieceHalf = (PIECE_VISUAL_SIZE / 2f) * scale
+        val player1Bitmap = loadAsset(
+            context,
+            "knockout/bw_penguin.png"
+        )
+
+        val player2Bitmap = loadAsset(
+            context,
+            "knockout/gw_penguin.png"
+        )
+
+        val pieceHalf =
+            PIECE_VISUAL_SIZE / 2f * scale
 
         board.pieces.forEach { piece ->
             val sx = cx + piece.x * scale
             val sy = cy - piece.y * scale
-            val bmp = if (piece.player == 1) p1 else p2
 
-            if (bmp != null) {
+            val pieceBitmap =
+                if (piece.player == 1) {
+                    player1Bitmap
+                } else {
+                    player2Bitmap
+                }
+
+            if (pieceBitmap != null) {
                 canvas.save()
                 canvas.translate(sx, sy)
-                canvas.rotate(-Math.toDegrees(piece.rotation.toDouble()).toFloat())
+
+                canvas.rotate(
+                    -Math.toDegrees(
+                        piece.rotation.toDouble()
+                    ).toFloat()
+                )
+
                 canvas.drawBitmap(
-                    bmp, null,
-                    RectF(-pieceHalf, -pieceHalf, pieceHalf, pieceHalf),
+                    pieceBitmap,
+                    null,
+                    RectF(
+                        -pieceHalf,
+                        -pieceHalf,
+                        pieceHalf,
+                        pieceHalf
+                    ),
                     paint
                 )
+
                 canvas.restore()
             } else {
-                paint.color = if (piece.player == 1) Color.rgb(34, 34, 34) else Color.rgb(221, 221, 221)
-                canvas.drawCircle(sx, sy, pieceHalf, paint)
+                paint.color =
+                    if (piece.player == 1) {
+                        Color.rgb(34, 34, 34)
+                    } else {
+                        Color.rgb(221, 221, 221)
+                    }
+
+                canvas.drawCircle(
+                    sx,
+                    sy,
+                    pieceHalf,
+                    paint
+                )
             }
         }
 

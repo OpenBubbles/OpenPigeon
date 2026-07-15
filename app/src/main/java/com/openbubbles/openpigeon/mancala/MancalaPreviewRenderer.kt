@@ -15,6 +15,7 @@ import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
+import androidx.core.graphics.withRotation
 
 object MancalaPreviewRenderer {
     private const val PIT_COUNT = 14
@@ -33,7 +34,7 @@ object MancalaPreviewRenderer {
     private const val STONE_DRAW_SIZE = 20f
     private const val MAX_VISIBLE_STONES_PER_PIT = 14
 
-    private const val GOLDEN_ANGLE = 2.3999632f
+    private const val GOLDEN_ANGLE = 2.3999631f
 
     private val boardRect = RectF(
         BOARD_LEFT,
@@ -72,25 +73,46 @@ object MancalaPreviewRenderer {
         replay: String?,
         previewPlayer: Int
     ): Bitmap {
+        return render(
+            context = context,
+            replay = replay,
+            previewPlayer = previewPlayer,
+            targetWidthPx = OUTPUT_SIZE,
+            targetHeightPx = OUTPUT_SIZE
+        )
+    }
+
+    fun render(
+        context: Context,
+        replay: String?,
+        previewPlayer: Int,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap {
         ensureAssetCache(context)
 
         val board = parseLatestBoard(replay)
         val player = previewPlayer.coerceIn(1, 2)
 
-        val bitmap = createBitmap(
+        val logicalBitmap = createBitmap(
             PREVIEW_SIZE,
             PREVIEW_SIZE,
             Bitmap.Config.ARGB_8888
         )
 
-        val canvas = Canvas(bitmap)
+        val logicalCanvas = Canvas(logicalBitmap)
 
-        canvas.drawColor(Color.rgb(132, 106, 92))
+        logicalCanvas.drawColor(Color.rgb(132, 106, 92))
 
-        drawBoard(canvas)
-        drawPits(canvas, board, player)
+        drawBoard(logicalCanvas)
+        drawPits(logicalCanvas, board, player)
 
-        return compactForRemoteViews(bitmap)
+        return fitLogicalBitmap(
+            source = logicalBitmap,
+            targetWidthPx = targetWidthPx,
+            targetHeightPx = targetHeightPx,
+            backgroundColor = Color.rgb(132, 106, 92)
+        )
     }
 
     private fun drawBoard(canvas: Canvas) {
@@ -209,10 +231,9 @@ object MancalaPreviewRenderer {
                 )
             }
 
-            canvas.save()
-            canvas.rotate(rotationDegrees.toFloat(), centerX, centerY)
-            canvas.drawBitmap(stone, null, dest, paint)
-            canvas.restore()
+            canvas.withRotation(rotationDegrees.toFloat(), centerX, centerY) {
+                drawBitmap(stone, null, dest, paint)
+            }
         } else {
             fillPaint.color = stoneColor(label)
             canvas.drawOval(dest, fillPaint)
@@ -315,23 +336,42 @@ object MancalaPreviewRenderer {
         }
     }
 
-    private fun compactForRemoteViews(source: Bitmap): Bitmap {
+    private fun fitLogicalBitmap(
+        source: Bitmap,
+        targetWidthPx: Int,
+        targetHeightPx: Int,
+        backgroundColor: Int
+    ): Bitmap {
+        val outputWidth = targetWidthPx.coerceAtLeast(1)
+        val outputHeight = targetHeightPx.coerceAtLeast(1)
+
         val output = createBitmap(
-            OUTPUT_SIZE,
-            OUTPUT_SIZE,
+            outputWidth,
+            outputHeight,
             Bitmap.Config.RGB_565
         )
 
         val canvas = Canvas(output)
+        canvas.drawColor(backgroundColor)
+
+        val scale = minOf(
+            outputWidth.toFloat() / source.width.toFloat(),
+            outputHeight.toFloat() / source.height.toFloat()
+        )
+
+        val drawWidth = source.width * scale
+        val drawHeight = source.height * scale
+        val left = (outputWidth - drawWidth) / 2f
+        val top = (outputHeight - drawHeight) / 2f
 
         canvas.drawBitmap(
             source,
             null,
             RectF(
-                0f,
-                0f,
-                OUTPUT_SIZE.toFloat(),
-                OUTPUT_SIZE.toFloat()
+                left,
+                top,
+                left + drawWidth,
+                top + drawHeight
             ),
             downsamplePaint
         )

@@ -93,12 +93,40 @@ class AboutActivity : Activity() {
         MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
             .setTitle("Send diagnostic report?")
             .setMessage(
-                "This creates a recent diagnostic report from app warnings, errors, and safe app events. " +
-                        "It is designed to exclude personal information like names, messages, session IDs, room IDs, avatars, emails, URLs, IP addresses, and auth tokens."
+                """
+    OpenPigeon will create a sanitized ZIP containing recent warnings, errors, safe diagnostic events, and basic app and device information.
+
+    Player and session identifiers are replaced with consistent labels such as p1uid, p2uid, uid1, and session1. This allows related events to be followed without including the original identifiers.
+
+    Emails, URLs, IP addresses, authentication data, avatar data, contact names, and user-message fields are removed.
+
+    Your email app will open with the report addressed to support@colerabe.com. You can review or cancel the email before sending it.
+    """.trimIndent()
             )
-            .setPositiveButton("Send") { _, _ ->
-                OpenPigeonLog.shareReport(this)
-                showAboutDialog(currentYear, versionText)
+            .setPositiveButton("Create report") { _, _ ->
+                runCatching {
+                    OpenPigeonLog.shareReport(this)
+                }.onFailure { error ->
+                    OpenPigeonLog.e(
+                        "Diagnostics",
+                        "Unable to create diagnostic report",
+                        error
+                    )
+
+                    MaterialAlertDialogBuilder(
+                        this,
+                        com.google.android.material.R.style
+                            .ThemeOverlay_Material3_MaterialAlertDialog
+                    )
+                        .setTitle("Report could not be created")
+                        .setMessage(
+                            "OpenPigeon could not prepare the diagnostic report. Please try again."
+                        )
+                        .setPositiveButton("OK") { _, _ ->
+                            showAboutDialog(currentYear, versionText)
+                        }
+                        .show()
+                }
             }
             .setNegativeButton("Cancel") { _, _ ->
                 showAboutDialog(currentYear, versionText)

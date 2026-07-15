@@ -45,6 +45,34 @@ class GomokuGame : Game, DynamicPreviewGame {
         context: Context,
         message: Map<String, String>
     ): Bitmap? {
+        return buildPreview(
+            context = context,
+            message = message,
+            targetWidthPx = 720,
+            targetHeightPx = 720
+        )
+    }
+
+    override fun gamePreviewBitmap(
+        context: Context,
+        message: Map<String, String>,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap? {
+        return buildPreview(
+            context = context,
+            message = message,
+            targetWidthPx = targetWidthPx,
+            targetHeightPx = targetHeightPx
+        )
+    }
+
+    private fun buildPreview(
+        context: Context,
+        message: Map<String, String>,
+        targetWidthPx: Int,
+        targetHeightPx: Int
+    ): Bitmap? {
         return try {
             val board = extractRenderedBoard(
                 map = message["map"],
@@ -53,12 +81,16 @@ class GomokuGame : Game, DynamicPreviewGame {
 
             GomokuPreviewRenderer.render(
                 context = context,
-                flatBoard = board
+                flatBoard = board,
+                targetWidthPx = targetWidthPx,
+                targetHeightPx = targetHeightPx
             )
         } catch (e: Exception) {
             OpenPigeonLog.w(
                 "GomokuGame",
-                "Failed to build dynamic Gomoku preview, falling back to static image: ${e.message}"
+                "Failed to build dynamic Gomoku preview, " +
+                        "size=${targetWidthPx}x${targetHeightPx}, " +
+                        "falling back to static image: ${e.message}"
             )
             null
         }
@@ -91,9 +123,8 @@ class GomokuGame : Game, DynamicPreviewGame {
                 val protoCol = i % dim
 
                 val gridRow = (dim - 1) - protoRow
-                val gridCol = protoCol
 
-                board[gridRow * dim + gridCol] = value
+                board[gridRow * dim + protoCol] = value
             }
         }
 
@@ -108,14 +139,13 @@ class GomokuGame : Game, DynamicPreviewGame {
                 val player = parts[2]
 
                 val gridRow = (dim - 1) - protoRow
-                val gridCol = protoCol
 
                 if (
                     gridRow in 0 until dim &&
-                    gridCol in 0 until dim &&
+                    protoCol in 0 until dim &&
                     (player == 1 || player == 2)
                 ) {
-                    board[gridRow * dim + gridCol] = player
+                    board[gridRow * dim + protoCol] = player
                 } else {
                     OpenPigeonLog.w(
                         "GomokuGame",
