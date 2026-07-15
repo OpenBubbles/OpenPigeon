@@ -36,6 +36,12 @@ val debugGodotAssetsDir = generatedGodotRoot.map { it.dir("debug") }
 val releaseGodotAssetsDir = generatedGodotRoot.map { it.dir("release") }
 val godotExportZip = layout.buildDirectory.file("intermediates/godot/release/godot_export.zip")
 
+val androidOnlyAssetDirs = listOf(
+    "knockout",
+    "golf",
+    "shuffle"
+)
+
 fun releaseDateCode(): Int {
     val datePart = SimpleDateFormat("yyMMdd", Locale.US).format(Date())
     val dailyRelease = (project.findProperty("dailyRelease") as String?) ?: "01"
@@ -282,6 +288,17 @@ val prepareGodotReleaseAssets by tasks.registering(Sync::class) {
     from(godotProjectDir) {
         include("attributions.html")
         include("global/gp_wg_*.txt")
+    }
+
+    androidOnlyAssetDirs.forEach { assetDir ->
+        from(godotProjectDir.dir(assetDir)) {
+            into(assetDir)
+            exclude(".gdignore")
+        }
+    }
+
+    from(godotProjectDir) {
+        include("global/settings.png")
     }
 }
 
