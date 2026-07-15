@@ -36,7 +36,11 @@ val debugGodotAssetsDir = generatedGodotRoot.map { it.dir("debug") }
 val releaseGodotAssetsDir = generatedGodotRoot.map { it.dir("release") }
 val godotExportZip = layout.buildDirectory.file("intermediates/godot/release/godot_export.zip")
 
-val godotAndroidExportPreset = "Android"
+val androidOnlyAssetDirs = listOf(
+    "knockout",
+    "golf",
+    "shuffle"
+)
 
 fun releaseDateCode(): Int {
     val datePart = SimpleDateFormat("yyMMdd", Locale.US).format(Date())
@@ -59,7 +63,7 @@ android {
 
         androidResources {
             ignoreAssetsPattern =
-                "!.svn:!.git:!.gitignore:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"
+                "!.svn:!.git:!.gitignore:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~:!~*"
         }
 
         buildConfigField("String", "PIO_SHARED_SECRET", "\"${props["PIO_SHARED_SECRET"]}\"")
@@ -180,9 +184,20 @@ val importGodotAssets by tasks.registering(Exec::class) {
 
     inputs.files(fileTree(godotProjectDir) {
         exclude(".godot/**")
+        exclude("addons/**/bin/~*")
     }).withPathSensitivity(PathSensitivity.RELATIVE)
 
     outputs.dir(godotHiddenFolder)
+
+    doFirst {
+        fileTree(godotProjectDir) {
+            include("addons/**/bin/~*")
+        }.forEach { file ->
+            if (file.exists() && !file.delete()) {
+                logger.warn("Unable to delete temporary Godot file: ${file.absolutePath}. It may be in use.")
+            }
+        }
+    }
 
     commandLine(
         godotCmd,
@@ -203,37 +218,38 @@ val prepareGodotDebugAssets by tasks.registering(Sync::class) {
 
     dependsOn(importGodotAssets)
 
-    from(godotProjectDir)
+    from(godotProjectDir) {
+        exclude("addons/**/bin/~*")
+        exclude("addons/**/bin/*.dll")
+        exclude("addons/**/bin/*.dylib")
+        exclude("addons/**/bin/*.exe")
+        exclude("addons/**/bin/*.pdb")
+        exclude("addons/**/bin/*windows*")
+        exclude("addons/**/bin/*macos*")
+        exclude("addons/**/bin/*linux*")
+    }
+
     into(debugGodotAssetsDir)
 
     includeEmptyDirs = false
 }
-
 /**
  * Release pipeline:
  * import -> export pack -> unzip -> overlay extra files
  */
 val exportGodotRelease by tasks.registering(Exec::class) {
-    description = "Exports the Godot project pack ZIP for the release build."
+    description = "Exports the Godot project pack for release."
     group = "godot"
 
     dependsOn(importGodotAssets)
 
-    inputs.dir(godotProjectDir).withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(fileTree(godotProjectDir) {
+        exclude("addons/**/bin/~*")
+    }).withPathSensitivity(PathSensitivity.RELATIVE)
     outputs.file(godotExportZip)
 
     doFirst {
-        val zipFile = godotExportZip.get().asFile
-        zipFile.parentFile.mkdirs()
-
-        if (zipFile.exists()) {
-            zipFile.delete()
-        }
-
-        println("Godot executable: $godotCmd")
-        println("Godot project dir: ${godotProjectDir.asFile.absolutePath}")
-        println("Godot export preset: $godotAndroidExportPreset")
-        println("Godot export zip: ${zipFile.absolutePath}")
+        godotExportZip.get().asFile.parentFile.mkdirs()
     }
 
     commandLine(
@@ -243,21 +259,10 @@ val exportGodotRelease by tasks.registering(Exec::class) {
         "--path",
         godotProjectDir.asFile.absolutePath,
         "--export-pack",
-        godotAndroidExportPreset,
-        godotExportZip.get().asFile.absolutePath
+        "Android",              // <-- must match a preset NAME in export_presets.cfg
+        godotExportZip.get().asFile.absolutePath,
+        "--quit"
     )
-
-    doLast {
-        val zipFile = godotExportZip.get().asFile
-
-        if (!zipFile.exists()) {
-            throw GradleException(
-                "Godot export did not create ${zipFile.absolutePath}. " +
-                        "Check that export templates are installed and that " +
-                        "src/main/assets/export_presets.cfg has a preset named '$godotAndroidExportPreset'."
-            )
-        }
-    }
 }
 
 val prepareGodotReleaseAssets by tasks.registering(Sync::class) {
@@ -283,6 +288,17 @@ val prepareGodotReleaseAssets by tasks.registering(Sync::class) {
     from(godotProjectDir) {
         include("attributions.html")
         include("global/gp_wg_*.txt")
+    }
+
+    androidOnlyAssetDirs.forEach { assetDir ->
+        from(godotProjectDir.dir(assetDir)) {
+            into(assetDir)
+            exclude(".gdignore")
+        }
+    }
+
+    from(godotProjectDir) {
+        include("global/settings.png")
     }
 }
 
