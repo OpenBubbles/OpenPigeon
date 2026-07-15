@@ -87,8 +87,13 @@ interface Game {
             val player1 = message["player1"]
             val player2 = message["player2"]
 
-            // Spectator override
-            if (player1 != null && player2 != null && myId != player1 && myId != player2) {
+            if (
+                message["game"] != "questions" &&
+                player1 != null &&
+                player2 != null &&
+                myId != player1 &&
+                myId != player2
+            ) {
                 return "Game Over"
             }
 
@@ -147,7 +152,13 @@ interface Game {
             val player2 = message["player2"]
 
             // Spectator override
-            if (player1 != null && player2 != null && myId != player1 && myId != player2) {
+            if (
+                message["game"] != "questions" &&
+                player1 != null &&
+                player2 != null &&
+                myId != player1 &&
+                myId != player2
+            ) {
                 return R.drawable.game_end
             }
 

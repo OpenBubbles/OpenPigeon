@@ -164,10 +164,20 @@ func _on_game_ready() -> void:
 	_make_scrollbars_invisible()
 	_update_ui_interactivity()
 
+	if game_over:
+		_hide_waiting_ui()
+		return
+
 	if i_am_player == 2:
 		call_deferred("_maybe_show_answer_popup")
 	else:
-		call_deferred("_show_question_input")
+		if is_my_turn:
+			call_deferred("_show_question_input")
+		else:
+			_update_ui_interactivity()
+			_set_wait_base_text()
+			start_waiting_animation()
+			call_deferred("_refresh_questions_layout")
 	
 func _get_s(parsed_dict: Dictionary, key: String, def: String = "") -> String:
 	if not parsed_dict.has(key):
@@ -435,7 +445,37 @@ func _set_game_data(data_json: String) -> void:
 	if i_am_player == 2:
 		is_my_turn = unanswered > 0
 	else:
-		is_my_turn = questions.size() < MAX_QUESTIONS
+		var local_sent_current_state := (
+			sender_id != ""
+			and _local_player_id != ""
+			and sender_id == _local_player_id
+		)
+
+		var latest_question_unanswered := false
+
+		if questions.size() > 0:
+			latest_question_unanswered = (
+				int(questions[-1].get("resp", 0)) == 0
+			)
+
+		var waiting_for_own_answer := (
+			local_sent_current_state
+			and latest_question_unanswered
+		)
+
+		is_my_turn = (
+			not waiting_for_own_answer
+			and questions.size() < MAX_QUESTIONS
+		)
+
+		OpLog.i(LOG_TAG, [
+			"asker_turn_resolved sender_id=", sender_id,
+			" local_id=", _local_player_id,
+			" local_sent=", local_sent_current_state,
+			" latest_unanswered=", latest_question_unanswered,
+			" waiting_for_own_answer=", waiting_for_own_answer,
+			" is_my_turn=", is_my_turn
+		])
 
 	OpLog.i(LOG_TAG, [
 		"questions_loaded count=", questions.size(),
@@ -460,7 +500,9 @@ func _set_game_data(data_json: String) -> void:
 	_update_ui_interactivity()
 
 	if game_over:
-		stop_waiting_animation()
+		_hide_waiting_ui()
+		_update_ui_interactivity()
+		return
 	elif i_am_player == 2:
 		if is_my_turn:
 			stop_waiting_animation()
@@ -475,8 +517,11 @@ func _show_result_from_state(state: String, spectator_winner_player: int = 0) ->
 	game_over = true
 	is_my_turn = false
 
-	stop_waiting_animation()
+	_hide_waiting_ui()
 	_hide_answer_overlay()
+
+	if is_instance_valid(sent_label):
+		sent_label.visible = false
 
 	if is_instance_valid(bottom_items):
 		bottom_items.visible = false
@@ -763,8 +808,10 @@ func _replay_from_state() -> void:
 func _on_send_pressed() -> void:
 	var can_ask: bool = (
 		i_am_player != 2
+		and is_my_turn
 		and not game_over
 		and questions.size() < MAX_QUESTIONS
+		and not _sent_animation_active
 	)
 
 	if not can_ask or not is_instance_valid(text_box):
@@ -1019,6 +1066,9 @@ func send_game() -> void:
 	check_win()
 
 	if game_over:
+		payload["caption"] = ""
+		payload["subcaption"] = ""
+
 		var outgoing_state := "0"
 
 		if winner == 1:
@@ -1056,14 +1106,43 @@ func send_game() -> void:
 		return
 
 	is_my_turn = false
-	play_sent_animation()
+	
+	if is_instance_valid(text_box):
+		text_box.release_focus()
+
+	if DisplayServer.has_feature(DisplayServer.FEATURE_VIRTUAL_KEYBOARD):
+		DisplayServer.virtual_keyboard_hide()
+	
 	_update_ui_interactivity()
+	call_deferred("_refresh_questions_layout")
+	play_sent_animation()
 
 func _update_ui_interactivity() -> void:
+	if game_over:
+		_hide_waiting_ui()
+
+		if is_instance_valid(bottom_items):
+			bottom_items.visible = false
+
+		if is_instance_valid(questions_text_container):
+			questions_text_container.visible = false
+
+		if is_instance_valid(text_box):
+			text_box.visible = false
+			text_box.editable = false
+
+		if is_instance_valid(send_button):
+			send_button.visible = false
+			send_button.disabled = true
+
+		return
+	
 	var enable_input := (
 		i_am_player != 2
+		and is_my_turn
 		and not game_over
 		and questions.size() < MAX_QUESTIONS
+		and not _sent_animation_active
 	)
 
 	if is_instance_valid(send_button):
@@ -1072,17 +1151,29 @@ func _update_ui_interactivity() -> void:
 
 	if is_instance_valid(questions_text_container):
 		questions_text_container.visible = enable_input
+		questions_text_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+
+		if enable_input:
+			questions_text_container.custom_minimum_size = Vector2(min(get_viewport().get_visible_rect().size.x * 0.88, 640.0), 64.0)
+		else:
+			questions_text_container.custom_minimum_size = Vector2.ZERO
 
 	if is_instance_valid(text_box):
 		text_box.visible = enable_input
 		text_box.editable = enable_input
+		text_box.custom_minimum_size.y = 56.0 if enable_input else 0.0
 
 	if is_instance_valid(bottom_items):
 		bottom_items.visible = enable_input
+		bottom_items.custom_minimum_size.y = 0.0
 
-	dbg("ui: enable_input=%s, i_am_player=%d, is_my_turn=%s, game_over=%s" % [str(is_my_turn and not game_over and i_am_player == 1), i_am_player, str(is_my_turn), str(game_over)])
-	if is_instance_valid(bottom_items):
-		dbg("ui: bottom_items.visible=%s" % str(bottom_items.visible))
+	if is_instance_valid(questions_container):
+		questions_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	if is_instance_valid(questions_scroll):
+		questions_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	call_deferred("_refresh_questions_layout")
 
 	var should_wait: bool = false
 
@@ -1099,20 +1190,26 @@ func _update_ui_interactivity() -> void:
 		stop_waiting_animation()
 
 func _show_question_input() -> void:
-	if i_am_player == 2 or game_over or questions.size() >= MAX_QUESTIONS:
+	if (
+		i_am_player == 2
+		or not is_my_turn
+		or game_over
+		or questions.size() >= MAX_QUESTIONS
+	):
+		_update_ui_interactivity()
 		return
 
 	stop_waiting_animation()
 	_waiting_active = false
-	is_my_turn = true
 
 	if is_instance_valid(bottom_items):
 		bottom_items.visible = true
+		bottom_items.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	if is_instance_valid(questions_text_container):
 		questions_text_container.visible = true
-		questions_text_container.custom_minimum_size.y = 64.0
-		questions_text_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		questions_text_container.custom_minimum_size = Vector2(min(get_viewport().get_visible_rect().size.x * 0.88, 640.0), 64.0)
+		questions_text_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 
 	if is_instance_valid(text_box):
 		text_box.visible = true
@@ -1140,6 +1237,36 @@ func _show_question_input() -> void:
 		" textEditable=",
 		text_box.editable if is_instance_valid(text_box) else false
 	])
+
+func _refresh_questions_layout() -> void:
+	await get_tree().process_frame
+
+	if is_instance_valid(questions_container):
+		questions_container.reset_size()
+		questions_container.queue_sort()
+
+	if is_instance_valid(questions_list):
+		questions_list.reset_size()
+		questions_list.queue_sort()
+
+	if is_instance_valid(questions_scroll):
+		questions_scroll.reset_size()
+
+	var parent := (
+		questions_container.get_parent()
+		if is_instance_valid(questions_container)
+		else null
+	)
+
+	if parent is Container:
+		parent.queue_sort()
+
+	await get_tree().process_frame
+
+	if is_instance_valid(questions_scroll):
+		questions_scroll.reset_size()
+
+	_smooth_scroll_to_bottom()
 
 func _render_all_questions() -> void:
 	if not is_instance_valid(questions_list):
@@ -1597,8 +1724,27 @@ func _update_description_fill() -> void:
 
 var DEBUG_20Q := true
 
+func _hide_waiting_ui() -> void:
+	stop_waiting_animation()
+	_waiting_active = false
+
+	if is_instance_valid(wait_for_label):
+		wait_for_label.visible = false
+		wait_for_label.text = ""
+		wait_for_label.modulate.a = 1.0
+
 func _set_wait_base_text() -> void:
-	_questions_wait_text = ("Waiting for an answer" if i_am_player != 2 else "Waiting for a question")
+	if game_over:
+		if is_instance_valid(wait_for_label):
+			wait_for_label.visible = false
+			wait_for_label.text = ""
+		return
+
+	_questions_wait_text = (
+		"Waiting for an answer"
+		if i_am_player != 2
+		else "Waiting for a question"
+	)
 
 	if is_instance_valid(wait_for_label):
 		wait_for_label.text = _questions_wait_text
@@ -1613,6 +1759,15 @@ func _renumber_from_one() -> void:
 	questions = arr
 
 func play_sent_animation() -> void:
+	if game_over:
+		stop_waiting_animation()
+
+		if is_instance_valid(wait_for_label):
+			wait_for_label.visible = false
+			wait_for_label.text = ""
+
+		return
+		
 	if not is_instance_valid(sent_label):
 		OpLog.w(LOG_TAG, "sent_animation_missing_label")
 		_set_wait_base_text()
