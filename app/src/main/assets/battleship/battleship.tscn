@@ -283,15 +283,6 @@ layout_mode = 2
 mouse_filter = 2
 alignment = 1
 
-[node name="ShuffleButton" type="TextureButton" parent="MarginContainer/VBoxContainer/BottomBar" unique_id=558923282]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(56, 56)
-layout_mode = 2
-texture_normal = ExtResource("4_cnvch")
-texture_pressed = ExtResource("5_8c2i7")
-ignore_texture_size = true
-stretch_mode = 5
-
 [node name="CenterContainer" type="CenterContainer" parent="MarginContainer/VBoxContainer/BottomBar" unique_id=164986195]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -347,10 +338,16 @@ text = "Choose your target."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Spacer" type="Control" parent="MarginContainer/VBoxContainer/BottomBar" unique_id=1165774890]
-custom_minimum_size = Vector2(48, 48)
+[node name="ShuffleButton" type="TextureButton" parent="MarginContainer" unique_id=558923282]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(56, 56)
 layout_mode = 2
-mouse_filter = 2
+size_flags_horizontal = 0
+size_flags_vertical = 8
+texture_normal = ExtResource("4_cnvch")
+texture_pressed = ExtResource("5_8c2i7")
+ignore_texture_size = true
+stretch_mode = 5
 
 [node name="WaitBlur" type="ColorRect" parent="." unique_id=1296293352]
 unique_name_in_owner = true
@@ -371,7 +368,6 @@ wait_time = 0.75
 
 [node name="SpecLabel" type="Label" parent="." unique_id=742369017]
 unique_name_in_owner = true
-visible = false
 layout_mode = 0
 offset_top = 165.0
 offset_right = 648.0

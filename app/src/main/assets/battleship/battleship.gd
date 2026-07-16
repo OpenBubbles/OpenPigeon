@@ -52,9 +52,17 @@ var _shake_tween: Tween
 var replay: Array = []
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _last_random_layout_by_size: Dictionary = {}
+
+const IOS_RAND48_MULTIPLIER: int = 0x5DEECE66D
+const IOS_RAND48_ADDEND: int = 0xB
+const IOS_RAND48_MASK: int = (1 << 48) - 1
+const IOS_RAND48_DIVISOR: float = 281474976710656.0 # 2^48
+
+var _ios_rand48_state: int = 0
+var _ios_rand48_initialized: bool = false
+var _ios_ship_creation_draws_consumed: bool = false
 var _popup_input_blocked: bool = false
 
-const USE_DIAGONAL_BUFFER := false
 const SHIP_TEMPLATES := {
 	8:  "pos:2,3&num:0,0,0,0&rot:0|pos:1,0&num:0,0,0&rot:1|pos:4,2&num:0,0,0&rot:1|pos:7,4&num:0,0,0&rot:0|pos:0,4&num:0,0&rot:0|pos:5,6&num:0,0&rot:0|pos:5,0&num:0,0&rot:1",
 	9:  "pos:2,0&num:0,0,0,0&rot:0|pos:5,7&num:0,0,0,0&rot:1|pos:0,5&num:0,0,0,0&rot:0|pos:8,3&num:0,0,0&rot:0|pos:2,5&num:0,0,0&rot:0|pos:4,0&num:0,0,0&rot:0|pos:0,0&num:0,0,0&rot:0|pos:6,0&num:0,0,0&rot:0",
@@ -103,21 +111,6 @@ func _bg_summary(bg: BattleGround) -> String:
 		_bool_array_true_count(bg.bullets),
 		_bool_array_true_count(bg.marked_cells)
 	]
-
-const BUFFER_OFFSETS_ORTHO: Array[Vector2i] = [
-	Vector2i(0, 0),
-	Vector2i(1, 0),
-	Vector2i(-1, 0),
-	Vector2i(0, 1),
-	Vector2i(0, -1),
-]
-
-const BUFFER_OFFSETS_DIAG: Array[Vector2i] = [
-	Vector2i(1, 1),
-	Vector2i(1, -1),
-	Vector2i(-1, 1),
-	Vector2i(-1, -1),
-]
 
 # ----- Base overrides -----
 func _get_music_stream() -> AudioStream:
@@ -230,6 +223,28 @@ func _get_settings_avatar_display():
 func _add_settings_rows(_container, popup_script) -> void:
 	popup_script.settings_theme_selected.connect(_on_theme_changed)
 
+func _ios_srand48(seed: int) -> void:
+	# libc srand48() initializes the 48-bit state as:
+	# ((seed & 0xffffffff) << 16) | 0x330e
+	var unsigned_seed: int = seed & 0xffffffff
+	_ios_rand48_state = (
+		(unsigned_seed << 16) | 0x330e
+	) & IOS_RAND48_MASK
+
+	_ios_rand48_initialized = true
+
+
+func _ios_drand48() -> float:
+	if not _ios_rand48_initialized:
+		_ios_srand48(_rng.randi())
+
+	_ios_rand48_state = (
+		IOS_RAND48_MULTIPLIER * _ios_rand48_state +
+		IOS_RAND48_ADDEND
+	) & IOS_RAND48_MASK
+
+	return float(_ios_rand48_state) / IOS_RAND48_DIVISOR
+
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	if player == null:
@@ -241,6 +256,7 @@ func _on_game_ready() -> void:
 		_update_you_labels(false)
 
 	_rng.randomize()
+	_ios_srand48(_rng.randi())
 
 	if is_instance_valid(battleground1):
 		_board_center_pos = battleground1.global_position
@@ -514,10 +530,44 @@ func _set_game_data(new_replay: String) -> void:
 			_set_setup_mode(true)
 
 	else:
-		OpLog.i(LOG_TAG, ["wait_flow turn=", isTurn, " spectator=", spectator_mode])
+		OpLog.i(
+			LOG_TAG,
+			[
+				"wait_flow turn=",
+				isTurn,
+				" spectator=",
+				spectator_mode
+			]
+		)
+
 		_set_setup_mode(false)
+
+		fireMode = false
+
+		if is_instance_valid(fire_button):
+			fire_button.visible = false
+			fire_button.disabled = true
+
 		if is_instance_valid(start_button):
+			start_button.visible = false
 			start_button.disabled = true
+
+		if is_instance_valid(shuffle_button):
+			shuffle_button.visible = false
+			shuffle_button.disabled = true
+			shuffle_button.modulate.a = 0.0
+
+		if is_instance_valid(myBattleground):
+			myBattleground.placing_items = false
+			myBattleground.can_attack = false
+
+			for ship in myBattleground.ships:
+				if is_instance_valid(ship):
+					ship.canBeMoved = false
+
+		if is_instance_valid(theirBattleground):
+			theirBattleground.placing_items = false
+			theirBattleground.can_attack = false
 		
 		if not skip.is_empty():
 			var flipped_skip := _flip_ships_encoded_vertical(skip, bsize)
@@ -647,217 +697,308 @@ func _start_replay_move_async(local_pos: Vector2, delay: float, token: int) -> v
 		emit_signal("replay_finished")
 
 func _on_shuffle_button_pressed() -> void:
-	if not is_instance_valid(myBattleground):
+	OpLog.i(
+		LOG_TAG,
+		[
+			"shuffle_pressed turn=",
+			isTurn,
+			" spectator=",
+			spectator_mode,
+			" placing=",
+			myBattleground.placing_items
+				if is_instance_valid(myBattleground)
+				else false
+		]
+	)
+
+	if not _can_edit_ship_placement():
+		OpLog.w(
+			LOG_TAG,
+			"shuffle_ignored placement_not_allowed"
+		)
 		return
+
 	if not myBattleground.placing_items:
+		OpLog.w(
+			LOG_TAG,
+			"shuffle_ignored not_in_setup_mode"
+		)
 		return
-	
+
 	_randomize_my_ships(myBattleground.columns)
 
 func _randomize_my_ships(board_size: int) -> void:
 	if not is_instance_valid(myBattleground):
-		print("Missing BattleGround")
+		push_error("[RANDOMIZE] Missing BattleGround")
 		return
 
 	var template: String = SHIP_TEMPLATES.get(board_size, "")
 	if template.is_empty():
-		print("[RANDOMIZE] No template for board_size=", board_size, " – keeping existing layout")
+		push_warning(
+			"[RANDOMIZE] No template for board_size=%d; keeping existing layout" %
+			board_size
+		)
 		return
 
-	var encoded := template
+	var encoded := _build_randomized_encoded(
+		template,
+		board_size
+	)
 
-	# Minimal stability fix:
-	# size 9 currently crashes in the backtracking randomizer, so use the known-good layout.
-	if board_size != 9:
-		var previous_layout: String = _last_random_layout_by_size.get(board_size, "")
-		var max_distinct_attempts := 6
-
-		for i in range(max_distinct_attempts):
-			encoded = _build_randomized_encoded(template, board_size)
-			if encoded != previous_layout:
-				break
-
-		if encoded == "":
-			print("[RANDOMIZE] Empty encoded result; falling back to template.")
-			encoded = template
-
-		if encoded == previous_layout:
-			print("[RANDOMIZE] Could not find a different layout after ", max_distinct_attempts,
-				" attempts; reusing previous layout.")
-		else:
-			print("[RANDOMIZE] FINAL encoded layout for my board_size=", board_size, " => ", encoded)
-	else:
-		print("[RANDOMIZE] board_size=9 -> using known-good template layout for stability")
+	if encoded.is_empty():
+		push_warning(
+			"[RANDOMIZE] iOS-style generation failed; using known-good template"
+		)
+		encoded = template
 
 	_last_random_layout_by_size[board_size] = encoded
 
+	OpLog.i(
+		LOG_TAG,
+		[
+			"randomized_ships boardSize=",
+			board_size,
+			" encoded=",
+			encoded
+		]
+	)
+
 	myBattleground.from_encoded(encoded)
-	myBattleground.placing_items = true
+
+	var setup_enabled := _can_edit_ship_placement()
+
+	myBattleground.placing_items = setup_enabled
+
+	for ship in myBattleground.ships:
+		if is_instance_valid(ship):
+			ship.canBeMoved = setup_enabled
 
 	for ship in myBattleground.ships:
 		if ship == null or not is_instance_valid(ship):
-			push_error("[RANDOMIZE] Invalid ship after from_encoded. encoded=" + encoded)
+			push_error(
+				"[RANDOMIZE] Invalid ship after from_encoded. encoded=" +
+				encoded
+			)
 			return
+
 		ship.canBeMoved = true
 
-func _build_randomized_encoded(template: String, bsize: int) -> String:
+func _build_randomized_encoded(
+	template: String,
+	bsize: int
+) -> String:
 	var ship_defs: Array[Dictionary] = []
+
+	# Preserve the exact template/fleet order. iOS places ships in the order
+	# they were added to the ships array; it does not sort them.
 	for piece in template.split("|", false):
 		if piece.is_empty():
 			continue
-		
+
 		var num_text := ""
+
 		for section in piece.split("&", false):
 			if section.begins_with("num:"):
 				num_text = section.substr(4)
 				break
-		
+
 		if num_text.is_empty():
 			continue
-		
+
 		var length := num_text.split(",", false).size()
+
 		ship_defs.append({
 			"num_text": num_text,
 			"length": length,
 		})
 
 	if ship_defs.is_empty():
-		return template
+		return ""
 
-	var cmp := func(a: Dictionary, b: Dictionary) -> bool:
-		return int(a["length"]) > int(b["length"])
-	ship_defs.sort_custom(cmp)
+	# SeaScene addShip:rot:atPos: consumes one drand48() value for
+	# each ship's visual scale before SeaScene Shuffle is called.
+	# This occurs once when the fleet is first created, not each time
+	# the player taps Shuffle.
+	if not _ios_ship_creation_draws_consumed:
+		for _ship_def in ship_defs:
+			_ios_drand48()
 
-	var blocked: Array = []
-	for x in range(bsize):
-		var col: Array[bool] = []
-		col.resize(bsize)
-		col.fill(false)
-		blocked.append(col)
+		_ios_ship_creation_draws_consumed = true
 
+	var occupied: Dictionary = {}
 	var placed: Array[String] = []
-	if _try_place_ships(ship_defs, 0, blocked, bsize, placed):
-		var final_encoded := "|".join(placed)
-		print("[RANDOMIZE] Backtracking success encoded=", final_encoded)
-		return final_encoded
 
-	push_warning("Backtracking randomization failed; using template.")
-	print("[RANDOMIZE] Backtracking FAILED, returning ORIGINAL TEMPLATE: ", template)
-	return template
+	for ship_index in range(ship_defs.size()):
+		var ship_def: Dictionary = ship_defs[ship_index]
+		var length: int = int(ship_def["length"])
+		var num_text: String = String(ship_def["num_text"])
 
-func _try_place_ships(ship_defs: Array[Dictionary], ship_idx: int, blocked: Array, bsize: int, placed: Array[String]) -> bool:
-	if ship_idx >= ship_defs.size():
-		return true
+		var accepted := false
+		var attempts := 0
 
-	var def: Dictionary = ship_defs[ship_idx]
-	var length: int = int(def["length"])
-	var num_text: String = String(def["num_text"])
+		# iOS loops until it finds a valid position. Keep a very high
+		# defensive limit so corrupt fleet definitions cannot freeze Godot.
+		const MAX_PLACEMENT_ATTEMPTS := 100000
 
-	var candidates: Array[Dictionary] = []
+		while not accepted and attempts < MAX_PLACEMENT_ATTEMPTS:
+			attempts += 1
 
-	for rot in [0, 1]:
-		var is_horizontal: bool = (rot == 1)
-		var max_x := bsize - (length if is_horizontal else 1)
-		var max_y := bsize - (1 if is_horizontal else length)
+			# Exact iOS random-call order:
+			# 1. x
+			# 2. y
+			# 3. rotation
+			var x := int(floor(_ios_drand48() * float(bsize)))
+			var y := int(floor(_ios_drand48() * float(bsize)))
+			var rot := int(floor(_ios_drand48() * 2.0))
 
-		if max_x < 0 or max_y < 0:
-			continue
-
-		for x in range(max_x + 1):
-			for y in range(max_y + 1):
-				if _can_place_ship_at(blocked, bsize, x, y, length, rot):
-					candidates.append({
-						"x": x,
-						"y": y,
-						"rot": rot,
-					})
-
-	_shuffle_in_place(candidates)
-
-	for choice in candidates:
-		var px: int = int(choice["x"])
-		var py: int = int(choice["y"])
-		var prot: int = int(choice["rot"])
-
-		var next_blocked := _clone_blocked(blocked)
-		_place_ship_on_blocked(next_blocked, bsize, px, py, length, prot)
-
-		placed.append("pos:%d,%d&num:%s&rot:%d" % [px, py, num_text, prot])
-
-		if _try_place_ships(ship_defs, ship_idx + 1, next_blocked, bsize, placed):
-			return true
-
-		placed.pop_back()
-
-	return false
-
-func _shuffle_in_place(arr: Array) -> void:
-	for i in range(arr.size() - 1, 0, -1):
-		var j := _rng.randi_range(0, i)
-		var tmp = arr[i]
-		arr[i] = arr[j]
-		arr[j] = tmp
-
-func _clone_blocked(blocked: Array) -> Array:
-	var out: Array = []
-	for col in blocked:
-		out.append((col as Array).duplicate())
-	return out
-
-func _can_place_ship_at(blocked: Array, bsize: int, x: int, y: int, length: int, rot: int) -> bool:
-	var is_horizontal: bool = (rot == 1)
-
-	for i in range(length):
-		var cx: int = x + i if is_horizontal else x
-		var cy: int = y if is_horizontal else y + i
-
-		if cx < 0 or cy < 0 or cx >= bsize or cy >= bsize:
-			return false
-
-		for off: Vector2i in BUFFER_OFFSETS_ORTHO:
-			var nx: int = cx + off.x
-			var ny: int = cy + off.y
-
-			if nx < 0 or ny < 0 or nx >= bsize or ny >= bsize:
+			if not _ios_candidate_fits_board(
+				x,
+				y,
+				length,
+				rot,
+				bsize
+			):
 				continue
-			if blocked[nx][ny]:
-				return false
 
-		if USE_DIAGONAL_BUFFER:
-			for off: Vector2i in BUFFER_OFFSETS_DIAG:
-				var dx: int = cx + off.x
-				var dy: int = cy + off.y
+			var cells := _ios_ship_cells(
+				x,
+				y,
+				length,
+				rot
+			)
 
-				if dx < 0 or dy < 0 or dx >= bsize or dy >= bsize:
-					continue
-				if blocked[dx][dy]:
-					return false
+			if _ios_candidate_conflicts(
+				cells,
+				occupied
+			):
+				continue
+
+			accepted = true
+
+			for cell in cells:
+				occupied[cell] = true
+
+			placed.append(
+				"pos:%d,%d&num:%s&rot:%d" % [
+					x,
+					y,
+					num_text,
+					rot
+				]
+			)
+
+			OpLog.d(
+				LOG_TAG,
+				[
+					"ios_place shipIndex=",
+					ship_index,
+					" length=",
+					length,
+					" x=",
+					x,
+					" y=",
+					y,
+					" rot=",
+					rot,
+					" attempts=",
+					attempts
+				]
+			)
+
+		if not accepted:
+			OpLog.e(
+				LOG_TAG,
+				[
+					"ios_place failed shipIndex=",
+					ship_index,
+					" length=",
+					length,
+					" attempts=",
+					attempts
+				]
+			)
+			return ""
+
+	return "|".join(placed)
+	
+func _ios_ship_cells(
+	x: int,
+	y: int,
+	length: int,
+	rot: int
+) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+
+	for index in range(length):
+		match rot:
+			0:
+				# iOS rotation 0 extends in +Y.
+				cells.append(
+					Vector2i(x, y + index)
+				)
+
+			1:
+				# iOS rotation 1 extends in +X.
+				cells.append(
+					Vector2i(x + index, y)
+				)
+
+			2:
+				cells.append(
+					Vector2i(x, y - index)
+				)
+
+			3:
+				cells.append(
+					Vector2i(x - index, y)
+				)
+
+	return cells
+
+
+func _ios_candidate_fits_board(
+	x: int,
+	y: int,
+	length: int,
+	rot: int,
+	bsize: int
+) -> bool:
+	var cells := _ios_ship_cells(
+		x,
+		y,
+		length,
+		rot
+	)
+
+	for cell in cells:
+		if (
+			cell.x < 0 or
+			cell.y < 0 or
+			cell.x >= bsize or
+			cell.y >= bsize
+		):
+			return false
 
 	return true
 
-func _place_ship_on_blocked(blocked: Array, bsize: int, x: int, y: int, length: int, rot: int) -> void:
-	var is_horizontal: bool = (rot == 1)
+func _ios_candidate_conflicts(
+	cells: Array[Vector2i],
+	occupied: Dictionary
+) -> bool:
+	for cell in cells:
+		# iOS hit: rejects the occupied cell itself.
+		# iOS hit2: rejects all eight surrounding cells.
+		for offset_x in range(-1, 2):
+			for offset_y in range(-1, 2):
+				var checked_cell := Vector2i(
+					cell.x + offset_x,
+					cell.y + offset_y
+				)
 
-	for i in range(length):
-		var cx: int = x + i if is_horizontal else x
-		var cy: int = y if is_horizontal else y + i
+				if occupied.has(checked_cell):
+					return true
 
-		for off: Vector2i in BUFFER_OFFSETS_ORTHO:
-			var nx: int = cx + off.x
-			var ny: int = cy + off.y
-
-			if nx < 0 or ny < 0 or nx >= bsize or ny >= bsize:
-				continue
-			blocked[nx][ny] = true
-
-		if USE_DIAGONAL_BUFFER:
-			for off: Vector2i in BUFFER_OFFSETS_DIAG:
-				var dx: int = cx + off.x
-				var dy: int = cy + off.y
-
-				if dx < 0 or dy < 0 or dx >= bsize or dy >= bsize:
-					continue
-				blocked[dx][dy] = true
+	return false
 
 func _set_avatar_display_shown(display: Control, should_show: bool) -> void:
 	if not is_instance_valid(display):
@@ -882,16 +1023,55 @@ func _get_opp_avatar_display() -> Control:
 	elif player == 2:
 		return p1_avatar_display
 	return null
+	
+func _can_edit_ship_placement() -> bool:
+	return (
+		isTurn and
+		not spectator_mode and
+		not is_end and
+		is_instance_valid(myBattleground)
+	)
 
 func _set_setup_mode(enabled: bool) -> void:
+	var setup_enabled := (
+		enabled and
+		_can_edit_ship_placement()
+	)
+
 	if is_instance_valid(state):
 		state.text = "Arrange your ships"
-		state.visible = enabled
+		state.visible = setup_enabled
+
+	if is_instance_valid(myBattleground):
+		myBattleground.placing_items = setup_enabled
+
+		for ship in myBattleground.ships:
+			if is_instance_valid(ship):
+				ship.canBeMoved = setup_enabled
+
+	if is_instance_valid(start_button):
+		start_button.visible = setup_enabled
+		start_button.disabled = (
+			not setup_enabled or
+			myBattleground.has_conflict
+		)
+
+	if is_instance_valid(shuffle_button):
+		shuffle_button.visible = setup_enabled
+		shuffle_button.disabled = not setup_enabled
+		shuffle_button.modulate.a = 1.0 if setup_enabled else 0.0
 
 	var my_avatar := _get_my_avatar_display()
-	var should_show_avatar := not enabled and not spectator_mode
+	var should_show_avatar := (
+		not setup_enabled and
+		not spectator_mode
+	)
 
-	_set_avatar_display_shown(my_avatar, should_show_avatar)
+	_set_avatar_display_shown(
+		my_avatar,
+		should_show_avatar
+	)
+
 	_update_you_labels(should_show_avatar)
 
 func show_battleground(mine: bool):
@@ -1716,24 +1896,70 @@ func mark_end(win: bool):
 		return true
 
 func _on_start_button_pressed() -> void:
-	OpLog.i(LOG_TAG, ["start_pressed fireMode=", fireMode])
-	
-	if not fireMode:
-		if is_instance_valid(myBattleground):
-			myBattleground.placing_items = false
-			for ship in myBattleground.ships:
-				ship.canBeMoved = false
+	OpLog.i(
+		LOG_TAG,
+		[
+			"start_pressed fireMode=",
+			fireMode,
+			" turn=",
+			isTurn,
+			" spectator=",
+			spectator_mode,
+			" placing=",
+			myBattleground.placing_items
+				if is_instance_valid(myBattleground)
+				else false
+		]
+	)
 
-		_set_setup_mode(false)
-		start_button.disabled = true
-		shuffle_button.modulate.a = 0
-		shuffle_button.disabled = true
-
-		my_battleground_ready()
+	if fireMode:
 		return
 
+	if not _can_edit_ship_placement():
+		OpLog.w(
+			LOG_TAG,
+			"start_ignored placement_not_allowed"
+		)
+		_set_setup_mode(false)
+		return
+
+	if not myBattleground.placing_items:
+		OpLog.w(
+			LOG_TAG,
+			"start_ignored not_in_setup_mode"
+		)
+		return
+
+	if myBattleground.has_conflict:
+		OpLog.w(
+			LOG_TAG,
+			"start_ignored board_has_conflict"
+		)
+		return
+
+	myBattleground.placing_items = false
+
+	for ship in myBattleground.ships:
+		if is_instance_valid(ship):
+			ship.canBeMoved = false
+
+	_set_setup_mode(false)
+
+	my_battleground_ready()
+
 func _on_battle_ground_is_valid(valid: bool) -> void:
-	start_button.disabled = not valid
+	if not is_instance_valid(start_button):
+		return
+
+	var can_start := (
+		valid and
+		_can_edit_ship_placement() and
+		is_instance_valid(myBattleground) and
+		myBattleground.placing_items
+	)
+
+	start_button.disabled = not can_start
+	start_button.visible = can_start
 
 func _haptic_explosion(strength: float = 1.0, duration_ms: int = 45) -> void:
 	if not (OS.has_feature("android") or OS.has_feature("ios")):

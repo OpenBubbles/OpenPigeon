@@ -59,24 +59,81 @@ func decode_ship(encodedShip: String, battleground: BattleGround):
 
 func validate_position(pos: Vector2, horizontal: bool) -> bool:
 	for i in range(my_len):
-		var thisPos = pos
+		var this_pos := pos
+
 		if horizontal:
-			thisPos += Vector2(i, 0)
+			this_pos += Vector2(i, 0)
 		else:
-			thisPos += Vector2(0, i)
-		
-		if thisPos.x >= this_battleground.columns or thisPos.x < 0:
-			dbg(["reject_position oob_x pos=", pos, " horizontal=", horizontal])
+			this_pos += Vector2(0, i)
+
+		if this_pos.x >= this_battleground.columns or this_pos.x < 0:
+			dbg([
+				"reject_position oob_x pos=",
+				pos,
+				" horizontal=",
+				horizontal
+			])
 			return false
-		
-		if thisPos.y < 0 or thisPos.y >= this_battleground.rows:
-			dbg(["reject_position oob_y pos=", pos, " horizontal=", horizontal])
+
+		if this_pos.y < 0 or this_pos.y >= this_battleground.rows:
+			dbg([
+				"reject_position oob_y pos=",
+				pos,
+				" horizontal=",
+				horizontal
+			])
 			return false
-			
-		var idx = thisPos.y * this_battleground.columns + thisPos.x
-		if this_battleground.ship_grid[idx] != null and this_battleground.ship_grid[idx] != self:
-			dbg(["reject_position conflict pos=", pos, " horizontal=", horizontal])
+
+		var idx := (
+			int(this_pos.y) *
+			this_battleground.columns +
+			int(this_pos.x)
+		)
+
+		var occupying_ship = this_battleground.ship_grid[idx]
+
+		if (
+			occupying_ship != null and
+			occupying_ship != self
+		):
+			dbg([
+				"reject_position overlap pos=",
+				pos,
+				" horizontal=",
+				horizontal
+			])
 			return false
+
+		# iOS forbids ships from touching horizontally,
+		# vertically, or diagonally.
+		for neighbour in this_battleground.get_grid_neighbours(
+			int(this_pos.x),
+			int(this_pos.y)
+		):
+			var neighbour_idx := (
+				int(neighbour.y) *
+				this_battleground.columns +
+				int(neighbour.x)
+			)
+
+			var neighbour_ship = (
+				this_battleground.ship_grid[neighbour_idx]
+			)
+
+			if (
+				neighbour_ship != null and
+				neighbour_ship != self
+			):
+				dbg([
+					"reject_position adjacent pos=",
+					pos,
+					" horizontal=",
+					horizontal,
+					" neighbour=",
+					neighbour
+				])
+				return false
+
 	return true
 
 func is_sunk() -> bool:
