@@ -12,6 +12,13 @@ const MUSIC_STREAM := preload("res://global/audio/darts.ogg")
 @onready var opp_score_label: Label = %OpponentScoreLabel
 @onready var main_overlay: Control = %MainOverlay
 @onready var spectator_label: Label = %SpecLabel
+var points_to_win_popup: Control
+var points_to_win_panel: PanelContainer
+var points_to_win_label: RichTextLabel
+var points_to_win_arrow: Polygon2D
+var points_to_win_fade_tween: Tween
+
+const POINTS_TO_WIN_FADE_TIME := 0.22
 
 var main_dart: Dart
 
@@ -81,6 +88,18 @@ var dart_indicator_slots: Array[Control] = []
 var score_popup_textures: Dictionary = {}
 var drag_start_pos: Vector2 = Vector2.ZERO
 var dragging: bool = false
+var player_score_tween: Tween
+var opponent_score_tween: Tween
+
+const SCORE_TICK_MIN_DURATION := 0.30
+const SCORE_TICK_MAX_DURATION := 1.05
+const SCORE_TICK_LOG_SCALE := 0.16
+
+const POINTS_TO_WIN_COLOR := Color(1.0, 0.84, 0.0)
+const POINTS_TO_WIN_SIZE := Vector2(142.0, 42.0)
+const POINTS_TO_WIN_PANEL_HEIGHT := 38.0
+const POINTS_TO_WIN_ARROW_HEIGHT := 10.0
+const POINTS_TO_WIN_AVATAR_GAP := 6.0
 
 const RESULT_NONE := 0
 const RESULT_WIN := 1
@@ -204,6 +223,8 @@ func _update_dart_indicator() -> void:
 		var slot := dart_indicator_slots[i]
 		slot.visible = i < limit
 		slot.modulate.a = 1.0 if i < left else 0.25
+	
+	_update_points_to_win()
 
 func _score_popup_texture(path: String) -> Texture2D:
 	if score_popup_textures.has(path):
@@ -372,10 +393,319 @@ func _show_score_popup(world_pos: Vector3, score: Array = [], bust: bool = false
 			popup.queue_free()
 	)
 
+func _has_available_shot() -> bool:
+	return (
+		is_my_turn and
+		not spectator_mode and
+		not game_over and
+		not is_replaying and
+		num_shots < _get_turn_dart_limit()
+	)
+
+
+func _winning_target_for_score(score: int) -> Dictionary:
+	if score <= 0:
+		return {}
+
+	# Prefer the visible single-number cell when the remaining score
+	# is one of the numbers printed around the dartboard.
+	if score >= 1 and score <= 20:
+		return {
+			"score": score,
+			"multiplier": 1
+		}
+
+	if score == 25:
+		return {
+			"score": 25,
+			"multiplier": 1
+		}
+
+	if score == 50:
+		return {
+			"score": 50,
+			"multiplier": 2
+		}
+
+	# Scores above 20 can still be won with a double or triple.
+	# Prefer doubles because they are the conventional finishing target.
+	if score % 2 == 0:
+		var double_base := score / 2
+
+		if double_base >= 1 and double_base <= 20:
+			return {
+				"score": double_base,
+				"multiplier": 2
+			}
+
+	if score % 3 == 0:
+		var triple_base := score / 3
+
+		if triple_base >= 1 and triple_base <= 20:
+			return {
+				"score": triple_base,
+				"multiplier": 3
+			}
+
+	return {}
+
+func _update_points_to_win() -> void:
+	if not is_instance_valid(points_to_win_popup):
+		return
+
+	var dartboard := get_node_or_null("dart_board") as Dartboard
+
+	# Never show the badge or highlighted target outside our active turn.
+	if (
+		not is_my_turn or
+		spectator_mode or
+		game_over or
+		is_replaying
+	):
+		_hide_points_to_win_popup()
+
+		if is_instance_valid(dartboard):
+			dartboard.clear_win_target()
+
+		return
+
+	if not _has_available_shot():
+		_hide_points_to_win_popup()
+
+		if is_instance_valid(dartboard):
+			dartboard.clear_win_target()
+
+		return
+
+	var local_score := get_score(player)
+	var target := _winning_target_for_score(local_score)
+
+	if target.is_empty():
+		_hide_points_to_win_popup()
+
+		if is_instance_valid(dartboard):
+			dartboard.clear_win_target()
+
+		return
+
+	points_to_win_label.text = "[b]%d[/b] to Win" % local_score
+	_show_points_to_win_popup()
+
+	if is_instance_valid(dartboard):
+		dartboard.show_win_target(
+			int(target["score"]),
+			int(target["multiplier"])
+		)
+
+func _setup_points_to_win_popup() -> void:
+	if is_instance_valid(points_to_win_popup):
+		return
+
+	if not is_instance_valid(main_overlay):
+		OpLog.w(LOG_TAG, "points_to_win_missing_main_overlay")
+		return
+
+	# Root contains both the rounded panel and the downward-pointing arrow.
+	points_to_win_popup = Control.new()
+	points_to_win_popup.name = "PointsToWinPopup"
+	points_to_win_popup.size = POINTS_TO_WIN_SIZE
+	points_to_win_popup.custom_minimum_size = POINTS_TO_WIN_SIZE
+	points_to_win_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	points_to_win_popup.visible = false
+	points_to_win_popup.modulate.a = 0.0
+	points_to_win_popup.z_index = 1500
+
+	main_overlay.add_child(points_to_win_popup)
+
+	points_to_win_panel = PanelContainer.new()
+	points_to_win_panel.name = "PointsToWinPanel"
+	points_to_win_panel.position = Vector2.ZERO
+	points_to_win_panel.size = Vector2(
+		POINTS_TO_WIN_SIZE.x,
+		POINTS_TO_WIN_PANEL_HEIGHT
+	)
+	points_to_win_panel.custom_minimum_size = points_to_win_panel.size
+	points_to_win_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = POINTS_TO_WIN_COLOR
+	style.corner_radius_top_left = 17
+	style.corner_radius_top_right = 17
+	style.corner_radius_bottom_left = 17
+	style.corner_radius_bottom_right = 17
+	style.content_margin_left = 10.0
+	style.content_margin_right = 10.0
+	style.content_margin_top = 2.0
+	style.content_margin_bottom = 2.0
+
+	points_to_win_panel.add_theme_stylebox_override(
+		"panel",
+		style
+	)
+
+	points_to_win_popup.add_child(points_to_win_panel)
+
+	points_to_win_label = RichTextLabel.new()
+	points_to_win_label.name = "PointsToWinLabel"
+	points_to_win_label.bbcode_enabled = true
+	points_to_win_label.fit_content = true
+	points_to_win_label.scroll_active = false
+	points_to_win_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	points_to_win_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	points_to_win_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	points_to_win_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	points_to_win_label.add_theme_font_size_override(
+		"normal_font_size",
+		24
+	)
+	
+	points_to_win_label.add_theme_font_size_override(
+		"bold_font_size",
+		24
+	)
+
+	points_to_win_label.add_theme_color_override(
+		"default_color",
+		Color.BLACK
+	)
+
+	points_to_win_panel.add_child(points_to_win_label)
+
+	# Downward triangle centered below the yellow panel.
+	points_to_win_arrow = Polygon2D.new()
+	points_to_win_arrow.name = "PointsToWinArrow"
+	points_to_win_arrow.polygon = PackedVector2Array([
+		Vector2(-10.0, 0.0),
+		Vector2(10.0, 0.0),
+		Vector2(0.0, POINTS_TO_WIN_ARROW_HEIGHT)
+	])
+	points_to_win_arrow.color = POINTS_TO_WIN_COLOR
+	points_to_win_arrow.position = Vector2(
+		POINTS_TO_WIN_SIZE.x * 0.5,
+		POINTS_TO_WIN_PANEL_HEIGHT - 1.0
+	)
+
+	points_to_win_popup.add_child(points_to_win_arrow)
+	
+func _find_score_texture(
+	root: Node
+) -> TextureRect:
+	if root is TextureRect:
+		return root as TextureRect
+
+	for child in root.get_children():
+		var found := _find_score_texture(child)
+
+		if is_instance_valid(found):
+			return found
+
+	return null
+
+func _position_points_to_win_popup() -> void:
+	if (
+		not is_instance_valid(points_to_win_popup) or
+		not is_instance_valid(player_avatar_display) or
+		not is_instance_valid(main_overlay)
+	):
+		return
+
+	var avatar_control: Control = player_avatar_display as Control
+
+	if avatar_control == null:
+		OpLog.w(LOG_TAG, "points_to_win_avatar_is_not_control")
+		return
+
+	var avatar_rect: Rect2 = avatar_control.get_global_rect()
+
+	var avatar_top_in_overlay: float = (
+		avatar_rect.position.y -
+		main_overlay.global_position.y
+	)
+
+	var avatar_center_x_in_overlay: float = (
+		avatar_rect.position.x -
+		main_overlay.global_position.x +
+		avatar_rect.size.x * 0.5
+	)
+
+	points_to_win_popup.position = Vector2(
+		avatar_center_x_in_overlay -
+			POINTS_TO_WIN_SIZE.x * 0.5,
+		avatar_top_in_overlay -
+			POINTS_TO_WIN_SIZE.y -
+			POINTS_TO_WIN_AVATAR_GAP
+	)
+	
+func _show_points_to_win_popup() -> void:
+	if not is_instance_valid(points_to_win_popup):
+		return
+
+	if points_to_win_fade_tween and points_to_win_fade_tween.is_valid():
+		points_to_win_fade_tween.kill()
+
+	points_to_win_popup.visible = true
+	_position_points_to_win_popup()
+
+	points_to_win_fade_tween = create_tween()
+	points_to_win_fade_tween.tween_property(
+		points_to_win_popup,
+		"modulate:a",
+		1.0,
+		POINTS_TO_WIN_FADE_TIME
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+
+func _hide_points_to_win_popup() -> void:
+	if not is_instance_valid(points_to_win_popup):
+		return
+
+	if not points_to_win_popup.visible:
+		points_to_win_popup.modulate.a = 0.0
+		return
+
+	if points_to_win_fade_tween and points_to_win_fade_tween.is_valid():
+		points_to_win_fade_tween.kill()
+
+	points_to_win_fade_tween = create_tween()
+	points_to_win_fade_tween.tween_property(
+		points_to_win_popup,
+		"modulate:a",
+		0.0,
+		POINTS_TO_WIN_FADE_TIME
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+
+	points_to_win_fade_tween.finished.connect(
+		func() -> void:
+			if is_instance_valid(points_to_win_popup):
+				points_to_win_popup.visible = false
+	)
+
+func _on_viewport_size_changed() -> void:
+	if (
+		is_instance_valid(points_to_win_popup) and
+		points_to_win_popup.visible
+	):
+		call_deferred("_position_points_to_win_popup")
+
 func _on_game_ready():
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	_ensure_main_dart()
 	_setup_dart_indicator()
+	_setup_points_to_win_popup()
+
+	var viewport := get_viewport()
+
+	if (
+		is_instance_valid(viewport) and
+		not viewport.size_changed.is_connected(
+			_on_viewport_size_changed
+		)
+	):
+		viewport.size_changed.connect(
+			_on_viewport_size_changed
+		)
 
 	OpLog.i(LOG_TAG, [
 		"game_ready main_dart_valid=", is_instance_valid(main_dart),
@@ -408,6 +738,11 @@ func _set_game_data(new_replay: String):
 	player = int(parsed.get("player", 1))
 	replay = incoming_replay
 	mode = int(parsed.get("mode", mode if mode > 0 else 101))
+
+	# Hide immediately when this message is not our turn.
+	# The popup may still be visible from the previous local turn.
+	if not is_my_turn:
+		_update_points_to_win()
 
 	var opponent_avatar_key = ""
 	var p1_id: String = String(parsed.get("player1", ""))
@@ -497,9 +832,20 @@ func _set_game_data(new_replay: String):
 		else:
 			OpLog.w(LOG_TAG, ["bad_winner_payload payload=", winner_payload])
 
-		if not replay.is_empty() and not replay_played:
+		# A completed game should open directly at its final state.
+		# Do not replay the winning turn again when the message is reopened.
+		if not replay.is_empty():
+			var completed_replay := parse_replay(replay)
+
+			if completed_replay.has("post_state"):
+				var post_state: Array = completed_replay["post_state"]
+
+				if post_state.size() >= 2:
+					set_score(1, int(post_state[0]), false)
+					set_score(2, int(post_state[1]), false)
+
 			replay_played = true
-			await play_replay(replay)
+			last_replay_played = replay
 
 		_show_result(result_code)
 		return
@@ -683,6 +1029,7 @@ func _show_result(result_code: int) -> void:
 
 	is_my_turn = false
 	stop_waiting_animation()
+	_update_points_to_win()
 
 	if not is_instance_valid(winner_label):
 		OpLog.w(LOG_TAG, ["show_result_missing_winner_label result_code=", result_code])
@@ -814,6 +1161,10 @@ func send_replay():
 		turn_ended_game = false
 	else:
 		turn_ended_game = false
+		
+	if turn_ended_game:
+		is_my_turn = false
+		_update_points_to_win()
 
 	if turn_ended_game:
 		var winner_value := ""
@@ -834,6 +1185,7 @@ func send_replay():
 			])
 	else:
 		is_my_turn = false
+		_update_points_to_win()
 		play_sent_animation()
 
 	var avatar_key := ("avatar1" if player == 1 else "avatar2")
@@ -865,6 +1217,7 @@ func play_replay(replay_str: String):
 		return
 
 	is_replaying = true
+	_update_points_to_win()
 	OpLog.event(LOG_TAG, ["play_replay_start len=", replay_str.length()])
 
 	var parsed = parse_replay(replay_str)
@@ -872,6 +1225,7 @@ func play_replay(replay_str: String):
 	if not parsed.has("pre_state") or not parsed.has("post_state"):
 		OpLog.e(LOG_TAG, ["play_replay_missing_state parsed=", parsed])
 		is_replaying = false
+		_update_points_to_win()
 		return
 
 	var other_player = 1 if player == 2 else 2
@@ -943,6 +1297,7 @@ func play_replay(replay_str: String):
 	
 	last_replay_played = replay_str
 	is_replaying = false
+	_update_points_to_win()
 
 func parse_replay(replay_str: String) -> Dictionary:
 	var result = {"moves": []}
@@ -1000,29 +1355,147 @@ func _format_score(score: int) -> String:
 
 	return str(score)
 
-func set_score(target_player: int, score: int) -> void:
+func set_score(
+	target_player: int,
+	score: int,
+	animate: bool = true
+) -> void:
+	var previous_score := get_score(target_player)
+
 	if target_player == 1:
 		p1_score = score
 	elif target_player == 2:
 		p2_score = score
 	else:
-		OpLog.w(LOG_TAG, ["set_score_bad_target target_player=", target_player, " score=", score])
+		OpLog.w(
+			LOG_TAG,
+			[
+				"set_score_bad_target target_player=",
+				target_player,
+				" score=",
+				score
+			]
+		)
 		return
 
-	var score_text := _format_score(score)
+	var label: Label = null
+	var is_local_score := self.player == target_player
 
-	if self.player == target_player:
-		if is_instance_valid(you_score_label):
-			you_score_label.text = score_text
-		else:
-			OpLog.w(LOG_TAG, ["you_score_label_missing score=", score_text])
+	if is_local_score:
+		label = you_score_label
 	else:
-		if is_instance_valid(opp_score_label):
-			opp_score_label.text = score_text
-		else:
-			OpLog.w(LOG_TAG, ["opp_score_label_missing score=", score_text])
+		label = opp_score_label
 
-	dbg("set_score target=%d score=%d p1=%d p2=%d" % [target_player, score, p1_score, p2_score])
+	if not is_instance_valid(label):
+		OpLog.w(
+			LOG_TAG,
+			[
+				"score_label_missing target_player=",
+				target_player,
+				" score=",
+				score
+			]
+		)
+		return
+
+	if not animate or previous_score < 0 or previous_score == score:
+		_stop_score_tween(is_local_score)
+		label.text = _format_score(score)
+	else:
+		_animate_score_label(
+			label,
+			previous_score,
+			score,
+			is_local_score
+		)
+
+	dbg(
+		"set_score target=%d score=%d p1=%d p2=%d" %
+		[target_player, score, p1_score, p2_score]
+	)
+
+	_update_points_to_win()
+
+func _stop_score_tween(local_score: bool) -> void:
+	var tween := (
+		player_score_tween
+		if local_score
+		else opponent_score_tween
+	)
+
+	if tween and tween.is_valid():
+		tween.kill()
+
+	if local_score:
+		player_score_tween = null
+	else:
+		opponent_score_tween = null
+
+
+func _animate_score_label(
+	label: Label,
+	from_score: int,
+	to_score: int,
+	local_score: bool
+) -> void:
+	_stop_score_tween(local_score)
+
+	var score_difference : Variant = abs(to_score - from_score)
+
+	if score_difference == 0:
+		label.text = _format_score(to_score)
+		return
+
+	# Duration grows logarithmically. Large score changes therefore move
+	# through the early values quickly instead of taking one fixed amount
+	# of time per point.
+	var animation_duration := clampf(
+		SCORE_TICK_MIN_DURATION +
+			log(1.0 + float(score_difference)) *
+			SCORE_TICK_LOG_SCALE,
+		SCORE_TICK_MIN_DURATION,
+		SCORE_TICK_MAX_DURATION
+	)
+
+	var last_displayed_score := from_score
+	var tween := create_tween()
+
+	# Fast early movement, gradually slowing near the final number.
+	tween.set_trans(Tween.TRANS_EXPO)
+	tween.set_ease(Tween.EASE_OUT)
+
+	tween.tween_method(
+		func(value: float) -> void:
+			if not is_instance_valid(label):
+				return
+
+			var displayed_score := int(round(value))
+
+			if displayed_score == last_displayed_score:
+				return
+
+			last_displayed_score = displayed_score
+			label.text = _format_score(displayed_score),
+		float(from_score),
+		float(to_score),
+		animation_duration
+	)
+
+	tween.finished.connect(
+		func() -> void:
+			if is_instance_valid(label):
+				label.text = _format_score(to_score)
+
+			if local_score:
+				player_score_tween = null
+			else:
+				opponent_score_tween = null
+	)
+
+	if local_score:
+		player_score_tween = tween
+	else:
+		opponent_score_tween = tween
 
 func dec_score(target_player: int, score: int):
 	if target_player == 1:

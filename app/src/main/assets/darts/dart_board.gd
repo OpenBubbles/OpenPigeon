@@ -19,6 +19,12 @@ const SECTOR_ANGLE_DEGREES = 18.0
 const SECTOR_ANGLE_RADIANS = deg_to_rad(SECTOR_ANGLE_DEGREES)
 
 var highlight_polygon: CSGPolygon3D
+var win_target_tween: Tween
+var showing_win_target: bool = false
+
+const WIN_TARGET_MIN_ALPHA := 0.18
+const WIN_TARGET_MAX_ALPHA := 0.62
+const WIN_TARGET_PULSE_TIME := 0.85
 
 const LOG_TAG := "Dartboard"
 var DEBUG_DARTBOARD := false
@@ -69,6 +75,107 @@ func set_replay_highlight(hit_pos: Vector2, score: int, multiplier: int) -> void
 				_update_highlight_visuals("sector", sector_idx, OUTER_BULL_RADIUS, TRIPLE_RING_INNER_RADIUS)
 			else:
 				_update_highlight_visuals("sector", sector_idx, TRIPLE_RING_OUTER_RADIUS, DOUBLE_RING_INNER_RADIUS)
+
+func clear_win_target() -> void:
+	showing_win_target = false
+
+	if win_target_tween and win_target_tween.is_valid():
+		win_target_tween.kill()
+
+	win_target_tween = null
+
+	if is_instance_valid(highlight_polygon):
+		highlight_polygon.visible = false
+		highlight_polygon.polygon = []
+
+
+func show_win_target(score: int, multiplier: int) -> void:
+	if not is_instance_valid(highlight_polygon):
+		return
+
+	if score == 50:
+		_update_highlight_visuals(
+			"bullseye",
+			-1,
+			-1,
+			BULLSEYE_RADIUS
+		)
+	elif score == 25:
+		_update_highlight_visuals(
+			"outer_bull",
+			-1,
+			BULLSEYE_RADIUS,
+			OUTER_BULL_RADIUS
+		)
+	else:
+		var sector_idx := SECTOR_SCORES.find(score)
+
+		if sector_idx < 0:
+			clear_win_target()
+			return
+
+		match multiplier:
+			3:
+				_update_highlight_visuals(
+					"sector",
+					sector_idx,
+					TRIPLE_RING_INNER_RADIUS,
+					TRIPLE_RING_OUTER_RADIUS
+				)
+
+			2:
+				_update_highlight_visuals(
+					"sector",
+					sector_idx,
+					DOUBLE_RING_INNER_RADIUS,
+					DOUBLE_RING_OUTER_RADIUS
+				)
+
+			_:
+				_update_highlight_visuals(
+					"sector",
+					sector_idx,
+					TRIPLE_RING_OUTER_RADIUS,
+					DOUBLE_RING_INNER_RADIUS
+				)
+
+	_start_win_target_pulse()
+
+
+func _start_win_target_pulse() -> void:
+	showing_win_target = true
+
+	if win_target_tween and win_target_tween.is_valid():
+		win_target_tween.kill()
+
+	var material := highlight_polygon.material
+
+	if material == null:
+		return
+
+	material.albedo_color = Color(
+		1,
+		1,
+		0,
+		WIN_TARGET_MIN_ALPHA
+	)
+
+	win_target_tween = create_tween()
+	win_target_tween.set_loops()
+
+	win_target_tween.tween_property(
+		material,
+		"albedo_color:a",
+		WIN_TARGET_MAX_ALPHA,
+		WIN_TARGET_PULSE_TIME
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	win_target_tween.tween_property(
+		material,
+		"albedo_color:a",
+		WIN_TARGET_MIN_ALPHA,
+		WIN_TARGET_PULSE_TIME
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 #Returns array [full_points, points, multiplier]
 func get_score(hit_pos: Vector2) -> Array[int]:
