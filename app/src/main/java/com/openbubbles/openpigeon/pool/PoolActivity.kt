@@ -59,6 +59,7 @@ import kotlin.math.ceil
 import android.graphics.drawable.GradientDrawable
 import android.os.Looper
 import android.view.Gravity
+import android.view.ViewGroup
 import kotlin.random.Random
 import android.os.SystemClock
 import android.graphics.RadialGradient
@@ -155,6 +156,13 @@ class PoolActivity : AppCompatActivity() {
     @Volatile private var pendingWinLossState = ""
     private enum class StateLabelVisual { Hidden, Waiting, SentWaiting, GameOver }
     private var stateLabelVisual = StateLabelVisual.Hidden
+
+    private var spectatorMode = false
+    private var lastMessageWinner = ""
+    private var lastMessage: Map<String, String> = emptyMap()
+
+    private lateinit var gameAvatarAnchor: FrameLayout
+    private lateinit var oppAvatarAnchor: FrameLayout
 
     fun isPoolDarkModeEnabled(): Boolean {
         return darkMode
@@ -667,6 +675,19 @@ class PoolActivity : AppCompatActivity() {
     }
 
     private fun gameOverText(): String {
+        if (spectatorMode) {
+            return when (
+                winningPlayerFromWinner(
+                    lastMessageWinner
+                )
+            ) {
+                1 -> "Player 1 Wins!"
+                2 -> "Player 2 Wins!"
+                0 -> TEXT_DRAW
+                else -> TEXT_DRAW
+            }
+        }
+
         return when (winLossState) {
             "1" -> TEXT_YOU_WIN
             "-1" -> TEXT_YOU_LOSE
@@ -676,6 +697,17 @@ class PoolActivity : AppCompatActivity() {
     }
 
     private fun gameOverTextColor(): Int {
+        if (spectatorMode) {
+            return when (
+                winningPlayerFromWinner(
+                    lastMessageWinner
+                )
+            ) {
+                1, 2 -> Color.rgb(255, 214, 0)
+                else -> Color.WHITE
+            }
+        }
+
         return when (winLossState) {
             "1" -> Color.rgb(255, 214, 0)
             "-1" -> Color.rgb(255, 51, 51)
@@ -1363,11 +1395,18 @@ class PoolActivity : AppCompatActivity() {
 
         settingsSheet.addGameControl(TEXT_MUSIC, musicSwitch)
 
-        val gameAvatarAnchor = findViewById<FrameLayout>(R.id.gameAvatarAnchor)
+        gameAvatarAnchor =
+            findViewById(R.id.gameAvatarAnchor)
+
+        oppAvatarAnchor =
+            findViewById(R.id.oppAvatarAnchor)
+
         settingsSheet.attachGameAvatar(gameAvatarAnchor)
-        val oppAvatarAnchor = findViewById<FrameLayout>(R.id.oppAvatarAnchor)
         settingsSheet.attachOpponentAvatar(oppAvatarAnchor)
-        settingsBtn.setOnClickListener { settingsSheet.open() }
+        settingsBtn.setOnClickListener {
+            configureSettingsAvatarTarget()
+            settingsSheet.open()
+        }
 
         val rulesBtn = findViewById<ImageButton>(R.id.rulesButton)
         try {
@@ -1498,6 +1537,10 @@ class PoolActivity : AppCompatActivity() {
         val cuePopupDot = findViewById<ImageView>(R.id.cuePopupDot)
 
         cueView.setOnClickListener {
+            if (spectatorMode) {
+                return@setOnClickListener
+            }
+
             openCuePopup()
         }
 
@@ -1510,7 +1553,13 @@ class PoolActivity : AppCompatActivity() {
         }
 
         cuePopup.setOnTouchListener { _, event ->
-            if (!cuePopupOpen || mode != PoolMode.Aiming) return@setOnTouchListener true
+            if (spectatorMode) {
+                return@setOnTouchListener true
+            }
+
+            if (!cuePopupOpen || mode != PoolMode.Aiming) {
+                return@setOnTouchListener true
+            }
 
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN,
@@ -1561,7 +1610,13 @@ class PoolActivity : AppCompatActivity() {
 
         val container = findViewById<FrameLayout>(R.id.cueContainer)
         container.setOnTouchListener { _, event ->
-            if (mode != PoolMode.Aiming) return@setOnTouchListener true
+            if (spectatorMode) {
+                return@setOnTouchListener true
+            }
+
+            if (mode != PoolMode.Aiming) {
+                return@setOnTouchListener true
+            }
 
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
@@ -1612,6 +1667,10 @@ class PoolActivity : AppCompatActivity() {
         }
 
         view.setOnTouchListener { _, event ->
+            if (spectatorMode) {
+                return@setOnTouchListener true
+            }
+
             val inverted = Matrix()
             renderer.transform.invert(inverted)
 
@@ -1798,6 +1857,11 @@ class PoolActivity : AppCompatActivity() {
         } else {
             OpenPigeonLog.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
         }
+
+        if (spectatorMode) {
+            restoreSpectatorAvatarsAfterSettingsOpen()
+        }
+
         resumeMusic()
         super.onResume()
     }
@@ -1854,6 +1918,38 @@ class PoolActivity : AppCompatActivity() {
             }
             activity.wasFirst = activity.isFirst
             activity.isFirst = false
+        }
+    }
+
+    private fun winningPlayerFromWinner(
+        rawWinner: String?
+    ): Int? {
+        val parts = rawWinner
+            .orEmpty()
+            .split("|", limit = 2)
+
+        if (parts.size != 2) return null
+
+        val senderId = parts[0]
+        val senderResult =
+            parts[1].toIntOrNull()
+                ?.coerceIn(-1, 1)
+                ?: return null
+
+        if (senderResult == 0) {
+            return 0
+        }
+
+        val senderPlayer = when (senderId) {
+            uuid1 -> 1
+            uuid2 -> 2
+            else -> return null
+        }
+
+        return if (senderResult > 0) {
+            senderPlayer
+        } else {
+            if (senderPlayer == 1) 2 else 1
         }
     }
 
@@ -2030,8 +2126,8 @@ class PoolActivity : AppCompatActivity() {
     }
 
     fun handleNativeStillMoving() {
-        if (mode != PoolMode.Playing) return
         if (!replaying) return
+        if (mode != PoolMode.Playing) return
 
         val startedAt = nativeShotStartedAtMs
         if (startedAt <= 0L) return
@@ -2052,6 +2148,58 @@ class PoolActivity : AppCompatActivity() {
         return poolBalls
             .filter { !it.sunk && it.number in 1..9 }
             .minOfOrNull { it.number }
+    }
+
+    private fun alignSpectatorAvatarAnchors() {
+        if (!spectatorMode) return
+
+        runOnUiThread {
+            fun removeSpectatorTopSpace(anchor: FrameLayout) {
+                val anchorParams =
+                    anchor.layoutParams as? ViewGroup.MarginLayoutParams
+
+                if (anchorParams != null) {
+                    anchorParams.topMargin = 0
+                    anchor.layoutParams = anchorParams
+                }
+
+                anchor.setPadding(
+                    anchor.paddingLeft,
+                    0,
+                    anchor.paddingRight,
+                    anchor.paddingBottom
+                )
+
+                anchor.translationY = 0f
+
+                for (index in 0 until anchor.childCount) {
+                    val child = anchor.getChildAt(index)
+
+                    val childParams =
+                        child.layoutParams as? ViewGroup.MarginLayoutParams
+
+                    if (childParams != null) {
+                        childParams.topMargin = 0
+                        child.layoutParams = childParams
+                    }
+
+                    child.setPadding(
+                        child.paddingLeft,
+                        0,
+                        child.paddingRight,
+                        child.paddingBottom
+                    )
+
+                    child.translationY = 0f
+                    child.requestLayout()
+                }
+
+                anchor.requestLayout()
+            }
+
+            removeSpectatorTopSpace(gameAvatarAnchor)
+            removeSpectatorTopSpace(oppAvatarAnchor)
+        }
     }
 
     fun tableIsScratch(): Boolean {
@@ -2202,6 +2350,12 @@ class PoolActivity : AppCompatActivity() {
             return
         }
 
+        if (spectatorMode) {
+            mode = PoolMode.Disabled
+            applySpectatorReadOnlyUi()
+            return
+        }
+
         if (isNineBall) {
             updateNineBallBar()
             mode = PoolMode.Aiming
@@ -2239,20 +2393,37 @@ class PoolActivity : AppCompatActivity() {
     var call8Ball = false
 
     fun handleFinishPlay() {
+        if (spectatorMode && !replaying) {
+            disableSend = true
+            mode = PoolMode.Disabled
+            applySpectatorReadOnlyUi()
+            return
+        }
+
         traceVisualRoll(
             reason = "handleFinishPlay_entry",
             force = true
         )
 
-        if (disableSend || skipReplayRequested) return
+        if (skipReplayRequested) return
+
         clearNativeShotWatchdog()
         cancelAllShots()
         cancelAllShots = {}
+
         if (replayHits.isNotEmpty()) {
             playNextReplay()
         } else if (replaying) {
             finishReplay()
         } else {
+            if (disableSend) {
+                OpenPigeonLog.i(
+                    "PoolSpectator",
+                    "handleFinishPlay blocked local send because disableSend=true"
+                )
+                return
+            }
+
             val scratch = tableIsScratch()
             val cueBall = cueBall ?: return
 
@@ -3522,6 +3693,221 @@ class PoolActivity : AppCompatActivity() {
     var isNineBall = false
     var nineBallTargetAtShot = 1
 
+    private fun updateSpectatorMode(
+        msg: Map<String, String>
+    ) {
+        val myId = gameSessionIPC
+            ?.getSenderUUID(sessionId)
+            .orEmpty()
+
+        val player1Id = msg["player1"].orEmpty()
+        val player2Id = msg["player2"].orEmpty()
+
+        spectatorMode =
+            myId.isNotBlank() &&
+                    player1Id.isNotBlank() &&
+                    player2Id.isNotBlank() &&
+                    myId != player1Id &&
+                    myId != player2Id
+
+        if (spectatorMode) {
+            disableSend = true
+            mode = PoolMode.Disabled
+            draggingCue = false
+            call8Ball = false
+
+            cancelCueInertia()
+            closeCuePopup(force = true)
+
+            applySpectatorAvatars(msg)
+        }
+
+        configureSettingsAvatarTarget()
+
+        OpenPigeonLog.i(
+            "PoolSpectator",
+            "spectator=$spectatorMode " +
+                    "myIdBlank=${myId.isBlank()} " +
+                    "p1Blank=${player1Id.isBlank()} " +
+                    "p2Blank=${player2Id.isBlank()}"
+        )
+    }
+
+    private fun findAvatarView(
+        parent: View
+    ): AvatarView? {
+        if (parent is AvatarView) {
+            return parent
+        }
+
+        if (parent is android.view.ViewGroup) {
+            for (index in 0 until parent.childCount) {
+                val found = findAvatarView(
+                    parent.getChildAt(index)
+                )
+
+                if (found != null) {
+                    return found
+                }
+            }
+        }
+
+        return null
+    }
+
+    private fun applyAvatarToAnchor(
+        anchor: FrameLayout,
+        avatarData: String
+    ) {
+        val avatar = findAvatarView(anchor) ?: return
+
+        if (avatarData.isBlank()) {
+            avatar.showPlaceholder()
+        } else {
+            avatar.applyFromOpponentString(avatarData)
+        }
+    }
+
+    private fun configureSettingsAvatarTarget() {
+        if (!::settingsSheet.isInitialized) return
+
+        settingsSheet.setGameAvatarRefreshEnabled(
+            enabled = !spectatorMode
+        )
+    }
+
+    private fun restoreSpectatorAvatarsAfterSettingsOpen() {
+        if (!spectatorMode || lastMessage.isEmpty()) return
+
+        gameAvatarAnchor.post {
+            if (!spectatorMode || poolActivityClosing) {
+                return@post
+            }
+
+            settingsSheet.setGameAvatarRefreshEnabled(false)
+            applySpectatorAvatars(lastMessage)
+            hidePoolYouLabel()
+            alignSpectatorAvatarAnchors()
+            showSpectatorLabel()
+        }
+    }
+
+    private fun applySpectatorAvatars(
+        msg: Map<String, String>
+    ) {
+        if (!spectatorMode) return
+
+        runOnUiThread {
+            applyAvatarToAnchor(
+                anchor = gameAvatarAnchor,
+                avatarData = msg["avatar1"].orEmpty()
+            )
+
+            applyAvatarToAnchor(
+                anchor = oppAvatarAnchor,
+                avatarData = msg["avatar2"].orEmpty()
+            )
+
+            hidePoolYouLabel()
+            alignSpectatorAvatarAnchors()
+        }
+    }
+
+    private fun hidePoolYouLabel() {
+        val root = findViewById<View>(R.id.poolRoot)
+
+        fun hideInside(view: View) {
+            if (
+                view is TextView &&
+                view.text?.toString()?.trim()
+                    ?.equals("You", ignoreCase = true) == true
+            ) {
+                view.visibility = View.GONE
+            }
+
+            if (view is android.view.ViewGroup) {
+                for (index in 0 until view.childCount) {
+                    hideInside(view.getChildAt(index))
+                }
+            }
+        }
+
+        hideInside(root)
+    }
+
+    private fun showSpectatorLabel() {
+        runOnUiThread {
+            stopStateLabelAnimation()
+            stateLabelVisual = StateLabelVisual.Hidden
+            setStatusDimVisible(false)
+
+            val label =
+                findViewById<TextView>(R.id.state_label)
+
+            label.animate().cancel()
+            label.text = "Spectating..."
+            label.visibility = View.VISIBLE
+            label.alpha = 1f
+            label.scaleX = 1f
+            label.scaleY = 1f
+
+            label.background = null
+            label.setPadding(0, 0, 0, 0)
+            label.setTextColor(Color.WHITE)
+            label.setTextSize(
+                TypedValue.COMPLEX_UNIT_SP,
+                24f
+            )
+            label.typeface =
+                android.graphics.Typeface.DEFAULT_BOLD
+
+            label.setShadowLayer(
+                3f,
+                0f,
+                2f,
+                Color.argb(145, 0, 0, 0)
+            )
+
+            val params =
+                label.layoutParams as? FrameLayout.LayoutParams
+
+            if (params != null) {
+                params.width = WRAP_CONTENT
+                params.height = WRAP_CONTENT
+                params.gravity =
+                    Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                params.topMargin = stateLabelDp(10f)
+                label.layoutParams = params
+            }
+
+            label.bringToFront()
+        }
+    }
+
+    private fun applySpectatorReadOnlyUi() {
+        if (!spectatorMode) return
+
+        disableSend = true
+        mode = PoolMode.Disabled
+        draggingCue = false
+        call8Ball = false
+
+        cancelCueInertia()
+        closeCuePopup(force = true)
+
+        runOnUiThread {
+            setCueUiVisible(false)
+            renderer.setCueVisible(false)
+            hideSkipReplayButton("spectator_read_only")
+
+            findViewById<LinearLayout>(R.id.controls)
+                .visibility = View.GONE
+
+            hidePoolYouLabel()
+            alignSpectatorAvatarAnchors()
+            showSpectatorLabel()
+        }
+    }
     private fun resolveMyPlayerSlot(msg: Map<String, String>): Int {
         val myId = gameSessionIPC?.getSenderUUID(sessionId) ?: ""
         val p1 = msg["player1"].orEmpty()
@@ -3543,6 +3929,9 @@ class PoolActivity : AppCompatActivity() {
     }
 
     fun handleMessage(msg: Map<String, String>) {
+        lastMessage = msg
+        lastMessageWinner = msg["winner"].orEmpty()
+
         if (table == 0L) return // we are dead
 
         renderer.resetFrameReadySignal()
@@ -3616,11 +4005,25 @@ class PoolActivity : AppCompatActivity() {
         uuid1 = msg["player1"]
         uuid2 = msg["player2"]
 
+        updateSpectatorMode(msg)
+
         player = resolveMyPlayerSlot(msg)
 
-        val oppAvatarKey = if (player == 1) "avatar2" else "avatar1"
-        msg[oppAvatarKey]?.takeIf { it.isNotBlank() }?.let { avatarStr ->
-            runOnUiThread { settingsSheet.applyOpponentAvatarString(avatarStr) }
+        if (spectatorMode) {
+            applySpectatorAvatars(msg)
+        } else {
+            val oppAvatarKey =
+                if (player == 1) "avatar2" else "avatar1"
+
+            msg[oppAvatarKey]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { avatarStr ->
+                    runOnUiThread {
+                        settingsSheet.applyOpponentAvatarString(
+                            avatarStr
+                        )
+                    }
+                }
         }
 
         OpenPigeonLog.i("number", num)
@@ -3801,7 +4204,13 @@ class PoolActivity : AppCompatActivity() {
                 return
             }
 
-            mode = PoolMode.Aiming
+            mode =
+                if (spectatorMode) {
+                    PoolMode.Disabled
+                } else {
+                    PoolMode.Aiming
+                }
+
             isFirst = true
 
             if (!renderer.isAlive) {
@@ -3810,8 +4219,12 @@ class PoolActivity : AppCompatActivity() {
 
             renderer.notifyWhenFrameReady {
                 runOnUiThread {
-                    setCueUiVisible(true)
-                    renderer.setCueVisible(true)
+                    if (spectatorMode) {
+                        applySpectatorReadOnlyUi()
+                    } else {
+                        setCueUiVisible(true)
+                        renderer.setCueVisible(true)
+                    }
 
                     if (isNineBall) {
                         findViewById<SurfaceView>(R.id.surfaceView).post {
@@ -3837,16 +4250,21 @@ class PoolActivity : AppCompatActivity() {
                 hideSkipReplayButton("not_replaying")
                 setCueUiVisible(false)
 
-                if (pendingWinLossState.isNotBlank()) {
-                    markGameOver(pendingWinLossState)
-                } else if (!sentWaitingSequenceActive) {
-                    if (pendingWinLossState.isNotBlank()) {
+                when {
+                    pendingWinLossState.isNotBlank() -> {
                         markGameOver(pendingWinLossState)
-                    } else {
+                    }
+
+                    spectatorMode -> {
+                        applySpectatorReadOnlyUi()
+                    }
+
+                    !sentWaitingSequenceActive -> {
                         showWaitingLabelAnimated()
                     }
                 }
             }
+
             mode = PoolMode.Disabled
             closeCuePopup()
         } else {

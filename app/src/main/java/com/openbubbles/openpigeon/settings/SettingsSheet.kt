@@ -63,6 +63,7 @@ class SettingsSheet(
     // In-game avatars
     private var gameAvatarView: AvatarView? = null
     private var oppAvatarView: AvatarView? = null
+    private var gameAvatarRefreshEnabled = true
 
     private val extraRows = mutableListOf<View>()
     private var isOpen = false
@@ -150,7 +151,17 @@ class SettingsSheet(
         oppAvatarView?.applyFromOpponentString(avatarString)
     }
 
+    fun setGameAvatarRefreshEnabled(enabled: Boolean) {
+        gameAvatarRefreshEnabled = enabled
+
+        if (enabled) {
+            refreshGameAvatar()
+        }
+    }
+
     fun refreshGameAvatar() {
+        if (!gameAvatarRefreshEnabled) return
+
         gameAvatarView?.applyFromAvatarData()
     }
 

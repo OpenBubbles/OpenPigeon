@@ -1174,6 +1174,14 @@ class GolfActivity : AppCompatActivity() {
     }
 
     private fun resultTextFor(result: Int): String {
+        if (spectatorMode){
+            return when{
+                result > 0 -> "Player 1 Wins!"
+                result < 0 -> "Player 2 Wins!"
+                else -> "Draw"
+            }
+        }
+
         return when {
             result > 0 -> "You Win!"
             result < 0 -> "You Lose!"
@@ -1279,11 +1287,21 @@ class GolfActivity : AppCompatActivity() {
             if (localPlayer == 1) p2Strokes else p1Strokes
 
         val hasBothScores = p1Strokes > 0 && p2Strokes > 0
-        val scoreBasedResult = when {
-            localStrokes < opponentStrokes -> 1
-            localStrokes > opponentStrokes -> -1
-            else -> 0
-        }
+
+        val scoreBasedResult =
+            if (spectatorMode) {
+                when {
+                    p1Strokes < p2Strokes -> 1
+                    p1Strokes > p2Strokes -> -1
+                    else -> 0
+                }
+            } else {
+                when {
+                    localStrokes < opponentStrokes -> 1
+                    localStrokes > opponentStrokes -> -1
+                    else -> 0
+                }
+            }
 
         val localResult =
             if (hasBothScores) {
@@ -1303,18 +1321,26 @@ class GolfActivity : AppCompatActivity() {
         )
 
         setStrokeHudCounts(
-            localCount = localStrokes,
-            opponentCount = opponentStrokes
+            localCount = if (spectatorMode) p1Strokes else localStrokes,
+            opponentCount = if (spectatorMode) p2Strokes else opponentStrokes
         )
 
         showGameOverLabel(result = localResult)
 
-        if (shouldSendWinner) {
+        if (shouldSendWinner && !spectatorMode) {
             sendWinnerResultIfNeeded(localResult)
         }
     }
 
     private fun sendWinnerResultIfNeeded(localResult: Int) {
+        if (spectatorMode) {
+            OpenPigeonLog.i(
+                TAG,
+                "sendWinnerResultIfNeeded skipped for spectator"
+            )
+            return
+        }
+
         val ipc = gameSessionIPC
         if (ipc == null || sessionId.isBlank()) {
             OpenPigeonLog.w(TAG, "sendWinnerResultIfNeeded skipped ipcNull=${ipc == null} sessionBlank=${sessionId.isBlank()}")
@@ -1678,9 +1704,13 @@ class GolfActivity : AppCompatActivity() {
                 hideMenuPopup()
 
                 if (::settingsSheet.isInitialized) {
+                    configureSettingsAvatarTarget()
                     settingsSheet.open()
                 } else {
-                    OpenPigeonLog.w(TAG, "Settings tapped before settingsSheet initialized")
+                    OpenPigeonLog.w(
+                        TAG,
+                        "Settings tapped before settingsSheet initialized"
+                    )
                 }
             }
         }
@@ -4035,6 +4065,8 @@ class GolfActivity : AppCompatActivity() {
             renderer.setAimReadyIndicator(null)
         }
 
+        configureSettingsAvatarTarget()
+
         OpenPigeonLog.i(
             TAG,
             "updateSpectatorMode spectator=$spectatorMode " +
@@ -4095,6 +4127,37 @@ class GolfActivity : AppCompatActivity() {
         oppAvatarAnchor.post {
             normalizeAvatarAnchor(oppAvatarAnchor)
             attachStrokeCountersToAvatarAnchors()
+        }
+    }
+
+    private fun configureSettingsAvatarTarget() {
+        if (!::settingsSheet.isInitialized) return
+
+        settingsSheet.setGameAvatarRefreshEnabled(
+            enabled = !spectatorMode
+        )
+    }
+
+    private fun restoreSpectatorAvatarsAfterSettingsOpen() {
+        if (!spectatorMode || lastMessage.isEmpty()) return
+
+        gameAvatarAnchor.post {
+            if (!spectatorMode || isFinishing || isDestroyed) {
+                return@post
+            }
+
+            settingsSheet.setGameAvatarRefreshEnabled(false)
+            applySpectatorAvatars(lastMessage)
+
+            normalizeAvatarAnchor(gameAvatarAnchor)
+            normalizeAvatarAnchor(oppAvatarAnchor)
+
+            positionLocalAvatarYouLabel()
+            attachStrokeCountersToAvatarAnchors()
+            syncStrokeCounterTextSizing()
+
+            spectatorLabel.visibility = View.VISIBLE
+            spectatorLabel.bringToFront()
         }
     }
 
@@ -5623,6 +5686,10 @@ class GolfActivity : AppCompatActivity() {
 
         if (::renderer.isInitialized) {
             resumeDualReplayAfterLifecycle()
+        }
+
+        if (spectatorMode) {
+            restoreSpectatorAvatarsAfterSettingsOpen()
         }
     }
 
