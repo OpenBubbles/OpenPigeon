@@ -104,8 +104,6 @@ func validate_position(pos: Vector2, horizontal: bool) -> bool:
 			])
 			return false
 
-		# iOS forbids ships from touching horizontally,
-		# vertically, or diagonally.
 		for neighbour in this_battleground.get_grid_neighbours(
 			int(this_pos.x),
 			int(this_pos.y)

@@ -6,12 +6,12 @@ const MUSIC_STREAM := preload("res://global/audio/darts.ogg")
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var winner_label: Label = %WinLossLabel
-@onready var bust_label: Label = %BustLabel
 @onready var sent_label: Label = %SentLabel
 @onready var you_score_label: Label = %PlayerScoreLabel
 @onready var opp_score_label: Label = %OpponentScoreLabel
 @onready var main_overlay: Control = %MainOverlay
 @onready var spectator_label: Label = %SpecLabel
+@onready var darts_menu_button: Button = %MenuButton
 var points_to_win_popup: Control
 var points_to_win_panel: PanelContainer
 var points_to_win_label: RichTextLabel
@@ -22,9 +22,11 @@ const POINTS_TO_WIN_FADE_TIME := 0.22
 
 var main_dart: Dart
 
-const DART_IDLE_POSITION := Vector3(0.032, -0.816, 1.217)
+const DART_IDLE_POSITION := Vector3(0.0, -0.095, 1.803)
 const DART_IDLE_BOUNCE_Z := 0.035
 const DART_IDLE_BOUNCE_TIME := 0.65
+const DARTS_MODAL_Z_INDEX := 4096
+const DARTS_MODAL_CANVAS_LAYER := 1000
 
 const DART_ICON_TEX := preload("res://darts/dart2d.png")
 const DART_INDICATOR_POS := Vector2(10, 8)
@@ -42,11 +44,20 @@ const SCORE_POPUP_TIME := 1.35
 const SCORE_POPUP_FADE_DELAY := 0.45
 const SCORE_REPLAY_POPUP_WAIT := 1.15
 const SCORE_BUST_DELAY := 0.25
-const DART_REPLAY_HIT_WAIT := 0.65
+const DART_REPLAY_HIT_WAIT := 0.52
 
 const DART_BOARD_CENTER := Vector2(0.0, 0.344)
 const DART_BOARD_RADIUS := 0.535
 const DART_SEGMENTS := [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5]
+
+const DARTS_MENU_SIZE := Vector2(142.0, 104.0)
+const DARTS_MENU_ROW_HEIGHT := 48.0
+const DARTS_MENU_BUTTON_GAP := 6.0
+const DARTS_MENU_SCREEN_MARGIN := 8.0
+
+var darts_menu_layer: Control
+var darts_menu_panel: PanelContainer
+var darts_menu_open: bool = false
 
 const DART_WHITE_SEGMENTS := {
 	20: true,
@@ -123,10 +134,136 @@ func _get_dev_data() -> String:
 	
 func _get_settings_avatar_display() -> Control:
 	return player_avatar_display
+	
+func _add_settings_rows(
+	container,
+	_popup_script
+) -> void:
+	if not is_instance_valid(container):
+		OpLog.e(
+			LOG_TAG,
+			"darts_settings_missing_rows_container"
+		)
+		return
+
+	var separator := HSeparator.new()
+	separator.custom_minimum_size = Vector2(0.0, 8.0)
+	container.add_child(separator)
+
+	var music_row := HBoxContainer.new()
+	music_row.name = "DartsMusicRow"
+	music_row.custom_minimum_size = Vector2(0.0, 54.0)
+	music_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	music_row.add_theme_constant_override(
+		"separation",
+		16
+	)
+
+	var music_label := Label.new()
+	music_label.text = "Music"
+	music_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	music_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	music_label.add_theme_font_size_override(
+		"font_size",
+		20
+	)
+
+	var music_toggle := CheckButton.new()
+	music_toggle.name = "MusicToggle"
+	music_toggle.focus_mode = Control.FOCUS_NONE
+	music_toggle.custom_minimum_size = Vector2(58.0, 40.0)
+	music_toggle.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+
+	var music_enabled := bool(
+		SettingsManager.get_setting(
+			"global",
+			"music_enabled",
+			true
+		)
+	)
+
+	music_toggle.set_pressed_no_signal(
+		music_enabled
+	)
+
+	music_toggle.toggled.connect(
+		_on_darts_music_toggled
+	)
+
+	music_row.add_child(music_label)
+	music_row.add_child(music_toggle)
+	container.add_child(music_row)
+
+	OpLog.d(LOG_TAG, [
+		"darts_music_setting_added enabled=",
+		music_enabled
+	])
+	
+func _on_darts_music_toggled(
+	enabled: bool
+) -> void:
+	SettingsManager.set_setting(
+		"global",
+		"music_enabled",
+		enabled
+	)
+
+	if enabled:
+		GameUtils.start_music(
+			self,
+			_get_music_stream(),
+			mediaPlugin
+		)
+	else:
+		GameUtils.stop_music(self)
+
+	OpLog.event(LOG_TAG, [
+		"darts_music_toggled enabled=",
+		enabled
+	])
 
 func _get_rules_title() -> String:
 	return "Darts"
-	
+
+
+func _get_rules_text() -> String:
+	return (
+		"[font_size=24][b]Goal[/b][/font_size]\n" +
+		"\n" +
+		"Be the first player to reduce your score to exactly 0.\n" +
+		"\n" +
+		"[font_size=24][b]How to Play[/b][/font_size]\n" +
+		"\n" +
+		"• Players take turns throwing up to 3 darts.\n" +
+		"• Drag and release to throw a dart at the board.\n" +
+		"• The score from each dart is subtracted from your remaining score.\n" +
+		"• You must finish on exactly 0. A double is not required to win.\n" +
+		"\n" +
+		"[font_size=24][b]Board Scoring[/b][/font_size]\n" +
+		"\n" +
+		"• The large black and white sections score the number shown beside them.\n" +
+		"• The thin inner red and green ring scores triple the section number.\n" +
+		"• The thin outer red and green ring scores double the section number.\n" +
+		"• The outer green bullseye scores 25 points.\n" +
+		"• The center red bullseye scores 50 points.\n" +
+		"• A dart outside the scoring area scores 0 points.\n" +
+		"\n" +
+		"[font_size=24][b]Busts[/b][/font_size]\n" +
+		"\n" +
+		"If your score falls below 0, your turn is a bust. Any points scored " +
+		"during that turn are canceled, and your score returns to what it " +
+		"was at the beginning of the turn.\n" +
+		"\n" +
+		"[font_size=24][b]Last Chance[/b][/font_size]\n" +
+		"\n" +
+		"If the player who went first reaches 0 first, the other player gets " +
+		"one final turn of up to 3 darts.\n" +
+		"\n" +
+		"• If the second player also reaches exactly 0, the game ends in a draw.\n" +
+		"• If the second player does not reach 0, the first player wins."
+	)
+
+
 func _ensure_main_dart() -> bool:
 	if is_instance_valid(main_dart):
 		return true
@@ -407,8 +544,6 @@ func _winning_target_for_score(score: int) -> Dictionary:
 	if score <= 0:
 		return {}
 
-	# Prefer the visible single-number cell when the remaining score
-	# is one of the numbers printed around the dartboard.
 	if score >= 1 and score <= 20:
 		return {
 			"score": score,
@@ -427,8 +562,6 @@ func _winning_target_for_score(score: int) -> Dictionary:
 			"multiplier": 2
 		}
 
-	# Scores above 20 can still be won with a double or triple.
-	# Prefer doubles because they are the conventional finishing target.
 	if score % 2 == 0:
 		var double_base := score / 2
 
@@ -455,7 +588,6 @@ func _update_points_to_win() -> void:
 
 	var dartboard := get_node_or_null("dart_board") as Dartboard
 
-	# Never show the badge or highlighted target outside our active turn.
 	if (
 		not is_my_turn or
 		spectator_mode or
@@ -505,7 +637,6 @@ func _setup_points_to_win_popup() -> void:
 		OpLog.w(LOG_TAG, "points_to_win_missing_main_overlay")
 		return
 
-	# Root contains both the rounded panel and the downward-pointing arrow.
 	points_to_win_popup = Control.new()
 	points_to_win_popup.name = "PointsToWinPopup"
 	points_to_win_popup.size = POINTS_TO_WIN_SIZE
@@ -513,7 +644,7 @@ func _setup_points_to_win_popup() -> void:
 	points_to_win_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	points_to_win_popup.visible = false
 	points_to_win_popup.modulate.a = 0.0
-	points_to_win_popup.z_index = 1500
+	points_to_win_popup.z_index = 100
 
 	main_overlay.add_child(points_to_win_popup)
 
@@ -573,7 +704,6 @@ func _setup_points_to_win_popup() -> void:
 
 	points_to_win_panel.add_child(points_to_win_label)
 
-	# Downward triangle centered below the yellow panel.
 	points_to_win_arrow = Polygon2D.new()
 	points_to_win_arrow.name = "PointsToWinArrow"
 	points_to_win_arrow.polygon = PackedVector2Array([
@@ -688,12 +818,582 @@ func _on_viewport_size_changed() -> void:
 		points_to_win_popup.visible
 	):
 		call_deferred("_position_points_to_win_popup")
+		
+	if is_instance_valid(darts_menu_panel):
+		call_deferred("_position_darts_menu")
+
+func _make_darts_menu_button_style(
+	background_color: Color
+) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+
+	style.bg_color = background_color
+
+	style.corner_radius_top_left = 6
+	style.corner_radius_top_right = 6
+	style.corner_radius_bottom_left = 6
+	style.corner_radius_bottom_right = 6
+
+	style.content_margin_left = 8.0
+	style.content_margin_right = 8.0
+	style.content_margin_top = 2.0
+	style.content_margin_bottom = 2.0
+
+	return style
+
+
+func _make_darts_menu_row(text_value: String) -> Button:
+	var button := Button.new()
+
+	button.text = text_value
+	button.custom_minimum_size = Vector2(
+		DARTS_MENU_SIZE.x - 8.0,
+		DARTS_MENU_ROW_HEIGHT
+	)
+
+	button.focus_mode = Control.FOCUS_NONE
+	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	button.add_theme_font_size_override(
+		"font_size",
+		21
+	)
+
+	button.add_theme_color_override(
+		"font_color",
+		Color(0.04, 0.04, 0.04, 1.0)
+	)
+
+	button.add_theme_color_override(
+		"font_hover_color",
+		Color(0.04, 0.04, 0.04, 1.0)
+	)
+
+	button.add_theme_color_override(
+		"font_pressed_color",
+		Color(0.04, 0.04, 0.04, 1.0)
+	)
+
+	button.add_theme_stylebox_override(
+		"normal",
+		_make_darts_menu_button_style(
+			Color(1.0, 1.0, 1.0, 0.0)
+		)
+	)
+
+	button.add_theme_stylebox_override(
+		"hover",
+		_make_darts_menu_button_style(
+			Color(0.94, 0.94, 0.94, 1.0)
+		)
+	)
+
+	button.add_theme_stylebox_override(
+		"pressed",
+		_make_darts_menu_button_style(
+			Color(0.86, 0.86, 0.86, 1.0)
+		)
+	)
+
+	button.add_theme_stylebox_override(
+		"focus",
+		StyleBoxEmpty.new()
+	)
+
+	return button
+
+
+func _setup_darts_menu() -> void:
+	if (
+		is_instance_valid(darts_menu_layer) or
+		not is_instance_valid(main_overlay) or
+		not is_instance_valid(darts_menu_button)
+	):
+		return
+
+	for connection: Dictionary in (
+		darts_menu_button.pressed.get_connections()
+	):
+		var callback: Callable = connection.get(
+			"callable",
+			Callable()
+		)
+
+		if not callback.is_valid():
+			continue
+
+		if callback == Callable(
+			self,
+			"_on_darts_menu_button_pressed"
+		):
+			continue
+
+		if darts_menu_button.pressed.is_connected(callback):
+			darts_menu_button.pressed.disconnect(callback)
+
+	if not darts_menu_button.pressed.is_connected(
+		_on_darts_menu_button_pressed
+	):
+		darts_menu_button.pressed.connect(
+			_on_darts_menu_button_pressed
+		)
+
+	darts_menu_button.tooltip_text = "Menu"
+
+	darts_menu_layer = Control.new()
+	darts_menu_layer.name = "DartsMenuLayer"
+	darts_menu_layer.set_anchors_and_offsets_preset(
+		Control.PRESET_FULL_RECT
+	)
+	darts_menu_layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	darts_menu_layer.visible = false
+	darts_menu_layer.z_index = 5000
+
+	main_overlay.add_child(darts_menu_layer)
+
+	darts_menu_layer.gui_input.connect(
+		_on_darts_menu_layer_gui_input
+	)
+
+	darts_menu_panel = PanelContainer.new()
+	darts_menu_panel.name = "DartsMenuPanel"
+	darts_menu_panel.custom_minimum_size = DARTS_MENU_SIZE
+	darts_menu_panel.size = DARTS_MENU_SIZE
+	darts_menu_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color.WHITE
+
+	panel_style.corner_radius_top_left = 10
+	panel_style.corner_radius_top_right = 10
+	panel_style.corner_radius_bottom_left = 10
+	panel_style.corner_radius_bottom_right = 10
+
+	panel_style.content_margin_left = 4.0
+	panel_style.content_margin_top = 4.0
+	panel_style.content_margin_right = 4.0
+	panel_style.content_margin_bottom = 4.0
+
+	panel_style.shadow_color = Color(
+		0.0,
+		0.0,
+		0.0,
+		0.22
+	)
+	panel_style.shadow_size = 8
+	panel_style.shadow_offset = Vector2(0.0, 3.0)
+
+	darts_menu_panel.add_theme_stylebox_override(
+		"panel",
+		panel_style
+	)
+
+	darts_menu_layer.add_child(darts_menu_panel)
+
+	var rows := VBoxContainer.new()
+	rows.name = "Rows"
+	rows.add_theme_constant_override(
+		"separation",
+		0
+	)
+
+	darts_menu_panel.add_child(rows)
+
+	var settings_row := _make_darts_menu_row(
+		"Settings"
+	)
+	settings_row.name = "Settings"
+
+	var help_row := _make_darts_menu_row(
+		"Help"
+	)
+	help_row.name = "Help"
+
+	rows.add_child(settings_row)
+	rows.add_child(help_row)
+
+	settings_row.pressed.connect(
+		_on_darts_menu_settings_pressed
+	)
+
+	help_row.pressed.connect(
+		_on_darts_menu_help_pressed
+	)
+
+	call_deferred(
+		"_position_darts_menu"
+	)
+
+
+func _position_darts_menu() -> void:
+	if (
+		not is_instance_valid(darts_menu_panel) or
+		not is_instance_valid(darts_menu_button) or
+		not is_instance_valid(main_overlay)
+	):
+		return
+
+	var overlay_rect := main_overlay.get_global_rect()
+	var button_rect := darts_menu_button.get_global_rect()
+
+	var target_position := Vector2(
+		button_rect.end.x -
+			overlay_rect.position.x -
+			DARTS_MENU_SIZE.x,
+		button_rect.end.y -
+			overlay_rect.position.y +
+			DARTS_MENU_BUTTON_GAP
+	)
+
+	var maximum_position := Vector2(
+		maxf(
+			DARTS_MENU_SCREEN_MARGIN,
+			main_overlay.size.x -
+				DARTS_MENU_SIZE.x -
+				DARTS_MENU_SCREEN_MARGIN
+		),
+		maxf(
+			DARTS_MENU_SCREEN_MARGIN,
+			main_overlay.size.y -
+				DARTS_MENU_SIZE.y -
+				DARTS_MENU_SCREEN_MARGIN
+		)
+	)
+
+	target_position.x = clampf(
+		target_position.x,
+		DARTS_MENU_SCREEN_MARGIN,
+		maximum_position.x
+	)
+
+	target_position.y = clampf(
+		target_position.y,
+		DARTS_MENU_SCREEN_MARGIN,
+		maximum_position.y
+	)
+
+	darts_menu_panel.position = target_position
+	darts_menu_panel.size = DARTS_MENU_SIZE
+
+
+func _on_darts_menu_button_pressed() -> void:
+	if darts_menu_open:
+		_hide_darts_menu()
+	else:
+		_show_darts_menu()
+
+
+func _show_darts_menu() -> void:
+	if (
+		not is_instance_valid(darts_menu_layer) or
+		not is_instance_valid(darts_menu_panel)
+	):
+		return
+
+	darts_menu_open = true
+	_settings_open = true
+
+	_position_darts_menu()
+
+	darts_menu_layer.visible = true
+	darts_menu_layer.move_to_front()
+
+	darts_menu_panel.pivot_offset = Vector2(
+		DARTS_MENU_SIZE.x,
+		0.0
+	)
+
+	darts_menu_panel.scale = Vector2(
+		0.92,
+		0.92
+	)
+
+	darts_menu_panel.modulate.a = 0.0
+
+	var tween := create_tween().set_parallel(true)
+
+	tween.tween_property(
+		darts_menu_panel,
+		"scale",
+		Vector2.ONE,
+		0.12
+	).set_trans(
+		Tween.TRANS_BACK
+	).set_ease(
+		Tween.EASE_OUT
+	)
+
+	tween.tween_property(
+		darts_menu_panel,
+		"modulate:a",
+		1.0,
+		0.10
+	)
+
+
+func _hide_darts_menu() -> void:
+	darts_menu_open = false
+
+	if is_instance_valid(darts_menu_layer):
+		darts_menu_layer.visible = false
+
+	_settings_open = false
+
+
+func _on_darts_menu_layer_gui_input(
+	event: InputEvent
+) -> void:
+	if (
+		event is InputEventMouseButton and
+		event.button_index == MOUSE_BUTTON_LEFT and
+		event.pressed
+	):
+		_hide_darts_menu()
+		get_viewport().set_input_as_handled()
+
+func _on_darts_menu_settings_pressed() -> void:
+	OpLog.event(
+		LOG_TAG,
+		"darts_menu_settings_pressed"
+	)
+
+	_hide_darts_menu()
+
+	call_deferred(
+		"_open_darts_settings_popup"
+	)
+
+
+func _open_darts_settings_popup() -> void:
+	if _settings_open:
+		OpLog.w(
+			LOG_TAG,
+			"darts_settings_already_open"
+		)
+		return
+
+	if not is_instance_valid(darts_menu_button):
+		OpLog.e(
+			LOG_TAG,
+			"darts_settings_missing_menu_button"
+		)
+		return
+
+	var existing_node_ids := _snapshot_darts_node_ids()
+
+	_settings_open = true
+	_hide_points_to_win_popup()
+
+	GameUtils.open_settings_popup(
+		self,
+		mediaPlugin,
+		darts_menu_button,
+		_get_settings_avatar_display(),
+		_get_music_stream(),
+		Callable(self, "_add_settings_rows"),
+		func() -> void:
+			_settings_open = false
+			_update_points_to_win()
+
+			OpLog.event(
+				LOG_TAG,
+				"darts_settings_popup_closed"
+			)
+	)
+
+	call_deferred(
+		"_raise_new_darts_modal",
+		existing_node_ids
+	)
+
+func _on_darts_menu_help_pressed() -> void:
+	OpLog.event(
+		LOG_TAG,
+		"darts_menu_help_pressed"
+	)
+
+	_hide_darts_menu()
+
+	call_deferred(
+		"_open_darts_rules_popup"
+	)
+
+
+func _open_darts_rules_popup() -> void:
+	if not is_instance_valid(darts_menu_button):
+		OpLog.e(
+			LOG_TAG,
+			"darts_rules_missing_menu_button"
+		)
+		return
+
+	var existing_node_ids := _snapshot_darts_node_ids()
+
+	OpLog.event(LOG_TAG, [
+		"darts_rules_popup_open",
+		" title=",
+		_get_rules_title(),
+		" text_length=",
+		_get_rules_text().length()
+	])
+	
+	_hide_points_to_win_popup()
+
+	GameUtils.open_rules_popup(
+		self,
+		darts_menu_button,
+		_get_rules_title(),
+		_get_rules_text()
+	)
+
+	call_deferred(
+		"_raise_new_darts_modal",
+		existing_node_ids
+	)
+
+func _snapshot_darts_node_ids() -> Dictionary:
+	var existing_node_ids: Dictionary = {}
+	var tree_root := get_tree().root
+
+	if not is_instance_valid(tree_root):
+		return existing_node_ids
+
+	_collect_darts_node_ids(
+		tree_root,
+		existing_node_ids
+	)
+
+	return existing_node_ids
+
+
+func _collect_darts_node_ids(
+	node: Node,
+	existing_node_ids: Dictionary
+) -> void:
+	if not is_instance_valid(node):
+		return
+
+	existing_node_ids[node.get_instance_id()] = true
+
+	for child: Node in node.get_children():
+		_collect_darts_node_ids(
+			child,
+			existing_node_ids
+		)
+
+
+func _raise_new_darts_modal(
+	existing_node_ids: Dictionary
+) -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	if not is_inside_tree():
+		return
+
+	var tree_root := get_tree().root
+
+	if not is_instance_valid(tree_root):
+		return
+
+	_raise_new_darts_modal_recursive(
+		tree_root,
+		existing_node_ids
+	)
+
+
+func _raise_new_darts_modal_recursive(
+	node: Node,
+	existing_node_ids: Dictionary
+) -> void:
+	if not is_instance_valid(node):
+		return
+
+	var node_is_new := not existing_node_ids.has(
+		node.get_instance_id()
+	)
+
+	if node_is_new and node is Window:
+		var popup_window := node as Window
+
+		popup_window.always_on_top = true
+		popup_window.transient = true
+		popup_window.grab_focus()
+
+		OpLog.d(LOG_TAG, [
+			"modal_window_raised path=",
+			popup_window.get_path()
+		])
+
+		return
+
+	if node_is_new and node is CanvasLayer:
+		var canvas_layer := node as CanvasLayer
+
+		canvas_layer.layer = DARTS_MODAL_CANVAS_LAYER
+
+		OpLog.d(LOG_TAG, [
+			"modal_canvas_layer_raised path=",
+			canvas_layer.get_path(),
+			" layer=",
+			canvas_layer.layer
+		])
+
+		return
+
+	if node_is_new and node is CanvasItem:
+		var parent := node.get_parent()
+
+		var parent_is_new_canvas_node := (
+			is_instance_valid(parent) and
+			not existing_node_ids.has(parent.get_instance_id()) and
+			(
+				parent is CanvasItem or
+				parent is CanvasLayer
+			)
+		)
+
+		if not parent_is_new_canvas_node:
+			var canvas_item := node as CanvasItem
+
+			canvas_item.z_as_relative = false
+			canvas_item.z_index = DARTS_MODAL_Z_INDEX
+			canvas_item.move_to_front()
+
+			OpLog.d(LOG_TAG, [
+				"modal_canvas_item_raised path=",
+				canvas_item.get_path(),
+				" z_index=",
+				canvas_item.z_index
+			])
+
+			return
+
+	for child: Node in node.get_children():
+		_raise_new_darts_modal_recursive(
+			child,
+			existing_node_ids
+		)
 
 func _on_game_ready():
-	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
+	OpLog.game_opened(
+		LOG_TAG,
+		[
+			"localMode=",
+			appPlugin == null,
+			" uuid=",
+			my_uuid
+		]
+	)
+
 	_ensure_main_dart()
 	_setup_dart_indicator()
 	_setup_points_to_win_popup()
+
+	settings_button = darts_menu_button
+	rules_button = darts_menu_button
+
+	call_deferred("_setup_darts_menu")
 
 	var viewport := get_viewport()
 
@@ -708,9 +1408,16 @@ func _on_game_ready():
 		)
 
 	OpLog.i(LOG_TAG, [
-		"game_ready main_dart_valid=", is_instance_valid(main_dart),
-		" mode=", mode,
-		" player=", player
+		"game_ready main_dart_valid=",
+		is_instance_valid(main_dart),
+		" mode=",
+		mode,
+		" player=",
+		player,
+		" menu_valid=",
+		is_instance_valid(darts_menu_button),
+		" settings_anchor_valid=",
+		is_instance_valid(settings_button)
 	])
 
 func _set_game_data(new_replay: String):
@@ -739,8 +1446,6 @@ func _set_game_data(new_replay: String):
 	replay = incoming_replay
 	mode = int(parsed.get("mode", mode if mode > 0 else 101))
 
-	# Hide immediately when this message is not our turn.
-	# The popup may still be visible from the previous local turn.
 	if not is_my_turn:
 		_update_points_to_win()
 
@@ -832,8 +1537,6 @@ func _set_game_data(new_replay: String):
 		else:
 			OpLog.w(LOG_TAG, ["bad_winner_payload payload=", winner_payload])
 
-		# A completed game should open directly at its final state.
-		# Do not replay the winning turn again when the message is reopened.
 		if not replay.is_empty():
 			var completed_replay := parse_replay(replay)
 
@@ -1246,7 +1949,11 @@ func play_replay(replay_str: String):
 		spawn_dart(false)
 
 		var dart_pos: Vector3 = Vector3(float(move[1]), float(move[2]), 0.067)
-		var replay_score: Array = [int(move[3]), int(move[4]), int(move[5])]
+		var replay_score: Array[int] = [
+			int(move[3]),
+			int(move[4]),
+			int(move[5])
+		]
 		var replay_dart: Dart = current_dart
 		var replay_popup_pos: Vector3 = dart_pos
 
@@ -1258,6 +1965,7 @@ func play_replay(replay_str: String):
 		])
 
 		if is_instance_valid(replay_dart):
+			replay_dart.replay_hit = replay_score
 			replay_dart.throw(dart_pos)
 			await get_tree().create_timer(DART_REPLAY_HIT_WAIT).timeout
 		else:
@@ -1446,9 +2154,6 @@ func _animate_score_label(
 		label.text = _format_score(to_score)
 		return
 
-	# Duration grows logarithmically. Large score changes therefore move
-	# through the early values quickly instead of taking one fixed amount
-	# of time per point.
 	var animation_duration := clampf(
 		SCORE_TICK_MIN_DURATION +
 			log(1.0 + float(score_difference)) *
@@ -1460,7 +2165,6 @@ func _animate_score_label(
 	var last_displayed_score := from_score
 	var tween := create_tween()
 
-	# Fast early movement, gradually slowing near the final number.
 	tween.set_trans(Tween.TRANS_EXPO)
 	tween.set_ease(Tween.EASE_OUT)
 
@@ -1531,10 +2235,22 @@ func spawn_dart(is_mine: bool) -> Dart:
 	if not _ensure_main_dart():
 		return null
 
-	var new_dart: Dart = main_dart.duplicate()
+	main_dart.visible = false
+
+	var new_dart := main_dart.duplicate() as Dart
+
+	if not is_instance_valid(new_dart):
+		OpLog.e(LOG_TAG, "spawn_dart_duplicate_failed")
+		return null
+
 	new_dart.is_mine = is_mine
+	new_dart.finished = false
+	new_dart.replay_hit.clear()
 	new_dart.position = DART_IDLE_POSITION
+	new_dart.visible = true
+
 	add_child(new_dart)
+
 	darts.append(new_dart)
 	current_dart = new_dart
 	num_shots += 1
@@ -1548,7 +2264,8 @@ func spawn_dart(is_mine: bool) -> Dart:
 		"spawn_dart is_mine=", is_mine,
 		" num_shots=", num_shots,
 		" player=", player,
-		" pos=", new_dart.position
+		" pos=", new_dart.position,
+		" basis=", new_dart.basis
 	])
 
 	return new_dart

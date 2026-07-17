@@ -53,14 +53,14 @@ var replay: Array = []
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _last_random_layout_by_size: Dictionary = {}
 
-const IOS_RAND48_MULTIPLIER: int = 0x5DEECE66D
-const IOS_RAND48_ADDEND: int = 0xB
-const IOS_RAND48_MASK: int = (1 << 48) - 1
-const IOS_RAND48_DIVISOR: float = 281474976710656.0 # 2^48
+const RAND48_MULTIPLIER: int = 0x5DEECE66D
+const RAND48_ADDEND: int = 0xB
+const RAND48_MASK: int = (1 << 48) - 1
+const RAND48_DIVISOR: float = 281474976710656.0 # 2^48
 
-var _ios_rand48_state: int = 0
-var _ios_rand48_initialized: bool = false
-var _ios_ship_creation_draws_consumed: bool = false
+var _rand48_state: int = 0
+var _rand48_initialized: bool = false
+var _ship_creation_draws_consumed: bool = false
 var _popup_input_blocked: bool = false
 
 const SHIP_TEMPLATES := {
@@ -140,7 +140,6 @@ func _get_dev_data() -> String:
 		"isYourTurn": false,
 		"myPlayerId": local_id,
 
-		# The report's updated payload identifies the local user as player 2.
 		"player": "2",
 		"player1": opponent_id,
 		"player2": local_id,
@@ -223,27 +222,25 @@ func _get_settings_avatar_display():
 func _add_settings_rows(_container, popup_script) -> void:
 	popup_script.settings_theme_selected.connect(_on_theme_changed)
 
-func _ios_srand48(seed: int) -> void:
-	# libc srand48() initializes the 48-bit state as:
-	# ((seed & 0xffffffff) << 16) | 0x330e
+func _srand48(seed: int) -> void:
 	var unsigned_seed: int = seed & 0xffffffff
-	_ios_rand48_state = (
+	_rand48_state = (
 		(unsigned_seed << 16) | 0x330e
-	) & IOS_RAND48_MASK
+	) & RAND48_MASK
 
-	_ios_rand48_initialized = true
+	_rand48_initialized = true
 
 
-func _ios_drand48() -> float:
-	if not _ios_rand48_initialized:
-		_ios_srand48(_rng.randi())
+func _drand48() -> float:
+	if not _rand48_initialized:
+		_srand48(_rng.randi())
 
-	_ios_rand48_state = (
-		IOS_RAND48_MULTIPLIER * _ios_rand48_state +
-		IOS_RAND48_ADDEND
-	) & IOS_RAND48_MASK
+	_rand48_state = (
+		RAND48_MULTIPLIER * _rand48_state +
+		RAND48_ADDEND
+	) & RAND48_MASK
 
-	return float(_ios_rand48_state) / IOS_RAND48_DIVISOR
+	return float(_rand48_state) / RAND48_DIVISOR
 
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
@@ -256,7 +253,7 @@ func _on_game_ready() -> void:
 		_update_you_labels(false)
 
 	_rng.randomize()
-	_ios_srand48(_rng.randi())
+	_srand48(_rng.randi())
 
 	if is_instance_valid(battleground1):
 		_board_center_pos = battleground1.global_position
@@ -747,7 +744,7 @@ func _randomize_my_ships(board_size: int) -> void:
 
 	if encoded.is_empty():
 		push_warning(
-			"[RANDOMIZE] iOS-style generation failed; using known-good template"
+			"[RANDOMIZE] generation failed; using known-good template"
 		)
 		encoded = template
 
@@ -789,8 +786,6 @@ func _build_randomized_encoded(
 ) -> String:
 	var ship_defs: Array[Dictionary] = []
 
-	# Preserve the exact template/fleet order. iOS places ships in the order
-	# they were added to the ships array; it does not sort them.
 	for piece in template.split("|", false):
 		if piece.is_empty():
 			continue
@@ -815,15 +810,11 @@ func _build_randomized_encoded(
 	if ship_defs.is_empty():
 		return ""
 
-	# SeaScene addShip:rot:atPos: consumes one drand48() value for
-	# each ship's visual scale before SeaScene Shuffle is called.
-	# This occurs once when the fleet is first created, not each time
-	# the player taps Shuffle.
-	if not _ios_ship_creation_draws_consumed:
+	if not _ship_creation_draws_consumed:
 		for _ship_def in ship_defs:
-			_ios_drand48()
+			_drand48()
 
-		_ios_ship_creation_draws_consumed = true
+		_ship_creation_draws_consumed = true
 
 	var occupied: Dictionary = {}
 	var placed: Array[String] = []
@@ -836,22 +827,16 @@ func _build_randomized_encoded(
 		var accepted := false
 		var attempts := 0
 
-		# iOS loops until it finds a valid position. Keep a very high
-		# defensive limit so corrupt fleet definitions cannot freeze Godot.
 		const MAX_PLACEMENT_ATTEMPTS := 100000
 
 		while not accepted and attempts < MAX_PLACEMENT_ATTEMPTS:
 			attempts += 1
 
-			# Exact iOS random-call order:
-			# 1. x
-			# 2. y
-			# 3. rotation
-			var x := int(floor(_ios_drand48() * float(bsize)))
-			var y := int(floor(_ios_drand48() * float(bsize)))
-			var rot := int(floor(_ios_drand48() * 2.0))
+			var x := int(floor(_drand48() * float(bsize)))
+			var y := int(floor(_drand48() * float(bsize)))
+			var rot := int(floor(_drand48() * 2.0))
 
-			if not _ios_candidate_fits_board(
+			if not _candidate_fits_board(
 				x,
 				y,
 				length,
@@ -860,14 +845,14 @@ func _build_randomized_encoded(
 			):
 				continue
 
-			var cells := _ios_ship_cells(
+			var cells := _ship_cells(
 				x,
 				y,
 				length,
 				rot
 			)
 
-			if _ios_candidate_conflicts(
+			if _candidate_conflicts(
 				cells,
 				occupied
 			):
@@ -890,7 +875,7 @@ func _build_randomized_encoded(
 			OpLog.d(
 				LOG_TAG,
 				[
-					"ios_place shipIndex=",
+					"place shipIndex=",
 					ship_index,
 					" length=",
 					length,
@@ -909,7 +894,7 @@ func _build_randomized_encoded(
 			OpLog.e(
 				LOG_TAG,
 				[
-					"ios_place failed shipIndex=",
+					"place failed shipIndex=",
 					ship_index,
 					" length=",
 					length,
@@ -921,7 +906,7 @@ func _build_randomized_encoded(
 
 	return "|".join(placed)
 	
-func _ios_ship_cells(
+func _ship_cells(
 	x: int,
 	y: int,
 	length: int,
@@ -932,13 +917,11 @@ func _ios_ship_cells(
 	for index in range(length):
 		match rot:
 			0:
-				# iOS rotation 0 extends in +Y.
 				cells.append(
 					Vector2i(x, y + index)
 				)
 
 			1:
-				# iOS rotation 1 extends in +X.
 				cells.append(
 					Vector2i(x + index, y)
 				)
@@ -956,14 +939,14 @@ func _ios_ship_cells(
 	return cells
 
 
-func _ios_candidate_fits_board(
+func _candidate_fits_board(
 	x: int,
 	y: int,
 	length: int,
 	rot: int,
 	bsize: int
 ) -> bool:
-	var cells := _ios_ship_cells(
+	var cells := _ship_cells(
 		x,
 		y,
 		length,
@@ -981,13 +964,11 @@ func _ios_candidate_fits_board(
 
 	return true
 
-func _ios_candidate_conflicts(
+func _candidate_conflicts(
 	cells: Array[Vector2i],
 	occupied: Dictionary
 ) -> bool:
 	for cell in cells:
-		# iOS hit: rejects the occupied cell itself.
-		# iOS hit2: rejects all eight surrounding cells.
 		for offset_x in range(-1, 2):
 			for offset_y in range(-1, 2):
 				var checked_cell := Vector2i(

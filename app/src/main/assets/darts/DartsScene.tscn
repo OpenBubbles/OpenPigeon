@@ -9,7 +9,7 @@
 [ext_resource type="Script" uid="uid://cukl83aya8biu" path="res://darts/highlight.gd" id="5_uhkgs"]
 [ext_resource type="Texture2D" uid="uid://bbq34m7tcwfew" path="res://darts/Score_Card.png" id="10_g6j2t"]
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="10_ge5bb"]
-[ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="11_g6j2t"]
+[ext_resource type="Texture2D" uid="uid://dxa2vtwt0j2qh" path="res://global/burger.png" id="11_g6j2t"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_uhkgs"]
 albedo_texture = ExtResource("2_8txtq")
@@ -127,7 +127,9 @@ visible = false
 light_energy = 8.1
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=1274428411]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.00999451, -0.485268, 2.24285)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2.5)
+keep_aspect = 0
+fov = 30.5
 
 [node name="background" type="MeshInstance3D" parent="." unique_id=829757732]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.0952802, -0.40157)
@@ -140,7 +142,7 @@ mesh = SubResource("BoxMesh_sjdir")
 shape = SubResource("ConcavePolygonShape3D_qvdfv")
 
 [node name="dart_board" type="MeshInstance3D" parent="." unique_id=1159141919]
-transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0.344, 0.02)
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0.34438443, 0.02)
 material_override = SubResource("StandardMaterial3D_8o3o4")
 mesh = SubResource("CylinderMesh_bx3e1")
 script = ExtResource("4_sj7sf")
@@ -185,7 +187,8 @@ radius = 0.009
 height = 0.111
 
 [node name="dart" type="MeshInstance3D" parent="." unique_id=183450799]
-transform = Transform3D(-0.03, 0, 0, 0, -0.00443428, -0.0296705, 0, 0.0296705, -0.00443428, -0.00171092, 0.352618, 1.96165)
+transform = Transform3D(-0.023, 0, 0, 0, -0.003399615, -0.022747383, 0, 0.022747383, -0.003399615, -0.00171092, 0.352618, 1.96165)
+visible = false
 mesh = ExtResource("4_8o3o4")
 surface_material_override/0 = SubResource("StandardMaterial3D_8txtq")
 surface_material_override/1 = SubResource("StandardMaterial3D_sj7sf")
@@ -237,7 +240,7 @@ size_flags_horizontal = 3
 size_flags_vertical = 4
 mouse_filter = 2
 
-[node name="SettingsButton" type="Button" parent="MainOverlay/MarginContainer/VBoxContainer/TopHBoxContainer" unique_id=1742747350]
+[node name="MenuButton" type="Button" parent="MainOverlay/MarginContainer/VBoxContainer/TopHBoxContainer" unique_id=1742747350]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
