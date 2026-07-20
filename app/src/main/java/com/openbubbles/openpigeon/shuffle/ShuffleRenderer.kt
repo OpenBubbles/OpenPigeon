@@ -47,6 +47,17 @@ class ShuffleRenderer @JvmOverloads constructor(
         val floatBuffer: FloatBuffer
     )
 
+    private data class PushStickState(
+        val traceId: Int,
+        val shotAngle: Float,
+    )
+
+    private data class ScoreAnimationItem(
+        val puckIndex: Int,
+        val player: Int,
+        val score: Int,
+    )
+
     private enum class ShuffleUiMode {
         Aiming,
         Waiting,
@@ -71,6 +82,9 @@ class ShuffleRenderer @JvmOverloads constructor(
     private var lastAimHapticStep = -1
     private var cuePuckXNorm = 0.0f
 
+    private var aimUiAlpha = 0f
+    private var aimUiFadeStartMs = 0L
+
     private var hasCueAim = false
     private var cueAimAngleRad = (-90.0).toRadiansFloat()
     private var cueAimDist = 0.0f
@@ -88,7 +102,28 @@ class ShuffleRenderer @JvmOverloads constructor(
 
     private var showReplayArrows = false
     private var replayArrowAlpha = 0f
+    private var opponentRevealStartMs = 0L
+    private var opponentRevealEndMs = 0L
     private var pendingRoundStartRunnable: Runnable? = null
+
+    private var pendingReplayPrefix = ""
+    private var currentRoundStartBoard = ""
+
+    private var pushStickStates:
+            List<PushStickState> = emptyList()
+
+    private var pushStickStartMs = 0L
+    private var pushStickActive = false
+    private var pushStickPushStartMs = 0L
+    private var currentRoundFiredTraceIds:
+            List<Int> = emptyList()
+
+    private var scoreAnimationItems:
+            List<ScoreAnimationItem> = emptyList()
+
+    private var scoreAnimationStartMs = 0L
+    private var scoreAnimationActive = false
+    private var scoreAnimationAppliedCount = 0
 
     private var wallIntroStartMs = 0L
     private var wallIntroActive = false
@@ -100,6 +135,7 @@ class ShuffleRenderer @JvmOverloads constructor(
     private var puck1Bitmap: Bitmap? = null
     private var puck2Bitmap: Bitmap? = null
     private var puckShadowBitmap: Bitmap? = null
+    private var stickBitmap: Bitmap? = null
     private var bumperBitmap: Bitmap? = null
     private var bumperShadowBitmap: Bitmap? = null
 
@@ -159,6 +195,14 @@ class ShuffleRenderer @JvmOverloads constructor(
             defaultMapScoresForMode(layoutMode)
         }
 
+        pendingReplayPrefix = ""
+        currentRoundStartBoard = ""
+        currentRoundFiredTraceIds = emptyList()
+
+        stopPushStickAnimation()
+        stopScoreAnimation()
+        stopOpponentPositionReveal()
+
         parseReplay(replay)
 
         nativeRunning = false
@@ -190,19 +234,96 @@ class ShuffleRenderer @JvmOverloads constructor(
         return Math.toRadians(this).toFloat()
     }
 
-    override fun onDraw(canvas: Canvas) {
+    private fun stopOpponentPositionReveal() {
+        opponentRevealStartMs = 0L
+        opponentRevealEndMs = 0L
+    }
+
+    override fun onDraw(
+        canvas: Canvas,
+    ) {
         super.onDraw(canvas)
 
         updateNativeSimulationFrame()
+        updateScoreAnimation()
+        updateAimUiFade()
 
-        val w = width.toFloat()
-        val h = height.toFloat()
+        val w =
+            width.toFloat()
 
-        drawBackground(canvas, w, h)
-        drawTopHud(canvas, w)
-        drawBoardAndPucks(canvas, w, h)
-        drawBottomHud(canvas, w, h)
-        drawStatusOverlay(canvas, w)
+        val h =
+            height.toFloat()
+
+        drawBackground(
+            canvas,
+            w,
+            h,
+        )
+
+        drawTopHud(
+            canvas,
+            w,
+        )
+
+        drawBoardAndPucks(
+            canvas,
+            w,
+            h,
+        )
+
+        drawBottomHud(
+            canvas,
+            w,
+            h,
+        )
+
+        drawStatusOverlay(
+            canvas,
+            w,
+        )
+    }
+
+    private fun updateAimUiFade() {
+        if (uiMode != ShuffleUiMode.Aiming) {
+            aimUiAlpha = 0f
+            aimUiFadeStartMs = 0L
+            return
+        }
+
+        if (aimUiFadeStartMs <= 0L) {
+            aimUiAlpha = 1f
+            return
+        }
+
+        val elapsed =
+            (
+                    System.currentTimeMillis() -
+                            aimUiFadeStartMs
+                    ).coerceAtLeast(0L)
+
+        val progress =
+            (
+                    elapsed.toFloat() /
+                            AIM_UI_FADE_DURATION_MS.toFloat()
+                    ).coerceIn(
+                    0f,
+                    1f,
+                )
+
+
+        aimUiAlpha =
+            1f -
+                    (
+                            (1f - progress) *
+                                    (1f - progress)
+                            )
+
+        if (progress < 1f) {
+            postInvalidateOnAnimation()
+        } else {
+            aimUiAlpha = 1f
+            aimUiFadeStartMs = 0L
+        }
     }
 
     fun setLocalPlayer(
@@ -321,9 +442,28 @@ class ShuffleRenderer @JvmOverloads constructor(
         }
     }
 
-    private fun readyPuckForPlayer(player: Int): ShufflePuck? {
+    private fun isPuckOnReadyRowForPlayer(
+        puck: ShufflePuck,
+        player: Int,
+    ): Boolean {
+        val normalizedPlayer =
+            player.coerceIn(1, 2)
+
+        if (puck.player != normalizedPlayer) {
+            return false
+        }
+
+        return abs(
+            puck.y -
+                    readyYForPlayer(normalizedPlayer),
+        ) <= READY_PUCK_Y_TOLERANCE
+    }
+
+    private fun readyPuckForPlayer(
+        player: Int,
+    ): ShufflePuck? {
         return pucks.lastOrNull { puck ->
-            isReadyPuckForPlayer(
+            isPuckOnReadyRowForPlayer(
                 puck = puck,
                 player = player,
             )
@@ -346,11 +486,20 @@ class ShuffleRenderer @JvmOverloads constructor(
     }
 
     fun showAiming() {
-        uiMode = ShuffleUiMode.Aiming
+        uiMode =
+            ShuffleUiMode.Aiming
+
         nativeRoundFinished = null
 
-        pendingRoundStartRunnable?.let { removeCallbacks(it) }
+        pendingRoundStartRunnable?.let {
+            removeCallbacks(it)
+        }
+
         pendingRoundStartRunnable = null
+
+        stopPushStickAnimation()
+        stopScoreAnimation()
+        stopOpponentPositionReveal()
 
         showReplayArrows = false
         replayArrowAlpha = 0f
@@ -358,59 +507,139 @@ class ShuffleRenderer @JvmOverloads constructor(
         wallIntroActive = false
         wallIntroStartMs = 0L
 
+        hasCueAim = false
+        draggingCuePuck = false
+        draggingArrowHead = false
+        lastAimHapticStep = -1
+
         launchButtonPressed = false
+        launchButtonProgress = 0f
+
+        launchButtonRect.set(
+            0f,
+            0f,
+            0f,
+            0f,
+        )
+
+        aimUiAlpha = 0f
+        aimUiFadeStartMs =
+            System.currentTimeMillis()
+
         invalidate()
     }
 
     fun showWaitingForOpponent() {
-        uiMode = ShuffleUiMode.Waiting
+        uiMode =
+            ShuffleUiMode.Waiting
+
+        stopPushStickAnimation()
+        stopScoreAnimation()
+        stopOpponentPositionReveal()
+
         hasCueAim = false
+
         draggingCuePuck = false
         draggingArrowHead = false
+
         launchButtonPressed = false
         launchButtonProgress = 0f
-        launchButtonRect.set(0f, 0f, 0f, 0f)
+
+        launchButtonRect.set(
+            0f,
+            0f,
+            0f,
+            0f,
+        )
 
         wallIntroActive = false
         wallIntroStartMs = 0L
 
-        showReplayArrows = pucks.any { it.shotDistance > SHOT_DISTANCE_EPS }
-        replayArrowAlpha = if (showReplayArrows) ARROW_MAX_ALPHA else 0f
+        aimUiAlpha = 0f
+        aimUiFadeStartMs = 0L
+
+        showReplayArrows = false
+        replayArrowAlpha = 0f
 
         invalidate()
     }
 
     fun showPlaying() {
-        uiMode = ShuffleUiMode.Playing
+        uiMode =
+            ShuffleUiMode.Playing
+
+        stopPushStickAnimation()
+        stopScoreAnimation()
+        stopOpponentPositionReveal()
+
         hasCueAim = false
+
         draggingCuePuck = false
         draggingArrowHead = false
+
         launchButtonPressed = false
         launchButtonProgress = 0f
-        launchButtonRect.set(0f, 0f, 0f, 0f)
 
-        showReplayArrows = pucks.any { it.shotDistance > SHOT_DISTANCE_EPS }
-        replayArrowAlpha = if (showReplayArrows) ARROW_MAX_ALPHA else 0f
+        launchButtonRect.set(
+            0f,
+            0f,
+            0f,
+            0f,
+        )
+
+        aimUiAlpha = 0f
+        aimUiFadeStartMs = 0L
+
+        showReplayArrows =
+            pucks.any { puck ->
+                puck.shotDistance >
+                        SHOT_DISTANCE_EPS
+            }
+
+        replayArrowAlpha =
+            if (showReplayArrows) {
+                ARROW_MAX_ALPHA
+            } else {
+                0f
+            }
 
         invalidate()
     }
 
     fun showSentThenWaiting() {
-        uiMode = ShuffleUiMode.SentWaiting
-        sentWaitingStartMs = System.currentTimeMillis()
+        uiMode =
+            ShuffleUiMode.SentWaiting
+
+        sentWaitingStartMs =
+            System.currentTimeMillis()
+
+        stopPushStickAnimation()
+        stopScoreAnimation()
+        stopOpponentPositionReveal()
 
         hasCueAim = false
+
         draggingCuePuck = false
         draggingArrowHead = false
+
         launchButtonPressed = false
         launchButtonProgress = 0f
-        launchButtonRect.set(0f, 0f, 0f, 0f)
+
+        launchButtonRect.set(
+            0f,
+            0f,
+            0f,
+            0f,
+        )
 
         wallIntroActive = false
         wallIntroStartMs = 0L
 
-        showReplayArrows = pucks.any { it.shotDistance > SHOT_DISTANCE_EPS }
-        replayArrowAlpha = if (showReplayArrows) ARROW_MAX_ALPHA else 0f
+        aimUiAlpha = 0f
+        aimUiFadeStartMs = 0L
+
+        showReplayArrows = false
+        replayArrowAlpha = 0f
 
         invalidate()
     }
@@ -428,6 +657,58 @@ class ShuffleRenderer @JvmOverloads constructor(
 
     fun hasBothPlayerShots(): Boolean {
         return hasShotForPlayer(1) && hasShotForPlayer(2)
+    }
+
+    fun prepareNextLocalAimAfterPlayback(): String {
+        val settledPucks =
+            pucks.filterNot { puck ->
+                isPuckOnReadyRowForPlayer(
+                    puck = puck,
+                    player = puck.player,
+                )
+            }
+
+        pucks.clear()
+
+        pucks +=
+            ShufflePuck(
+                x = 0f,
+                y = READY_PUCK_PLAYER1_Y,
+                player = 1,
+                bodyAngle = 0f,
+                shotAngle = 0f,
+                shotDistance = 0f,
+            )
+
+        pucks +=
+            ShufflePuck(
+                x = 0f,
+                y = READY_PUCK_PLAYER2_Y,
+                player = 2,
+                bodyAngle = 0f,
+                shotAngle = 0f,
+                shotDistance = 0f,
+            )
+
+        pucks.addAll(settledPucks)
+
+        cuePuckXNorm = 0f
+        hasCueAim = false
+        draggingCuePuck = false
+        draggingArrowHead = false
+        lastAimHapticStep = -1
+
+        rebuildCommittedUsedPuckCounts()
+        syncCuePositionFromReadyPuck()
+
+        replay =
+            buildBoardSegment(
+                pucks,
+            )
+
+        invalidate()
+
+        return replay
     }
 
     fun currentZeroShotReplay(): String {
@@ -711,8 +992,15 @@ class ShuffleRenderer @JvmOverloads constructor(
     }
 
     private fun destroyNativeTable() {
+        stopPushStickAnimation()
+        stopScoreAnimation()
+        stopOpponentPositionReveal()
+
         if (nativeTablePtr != 0L) {
-            ShuffleNativePhysics.destroyShuffleTable(nativeTablePtr)
+            ShuffleNativePhysics.destroyShuffleTable(
+                nativeTablePtr,
+            )
+
             nativeTablePtr = 0L
         }
 
@@ -849,37 +1137,631 @@ class ShuffleRenderer @JvmOverloads constructor(
     private fun drawBoardAndPucks(
         canvas: Canvas,
         w: Float,
-        h: Float
+        h: Float,
     ) {
-        val boardRect = calculateBoardRect(w, h)
+        val boardRect =
+            calculateBoardRect(
+                w,
+                h,
+            )
 
-        drawOpponentReadyPuck(canvas, boardRect)
-        drawBoard(canvas, boardRect)
+        drawBoard(
+            canvas,
+            boardRect,
+        )
 
         if (layoutMode == 2) {
-            drawMode2Bumper(canvas, boardRect)
+            drawMode2Bumper(
+                canvas,
+                boardRect,
+            )
         }
 
-        for (puck in pucks) {
-            drawReplayPuck(canvas, boardRect, puck)
+        drawIncomingWalls(
+            canvas,
+            boardRect,
+        )
+
+        drawPushSticks(
+            canvas,
+            boardRect,
+        )
+
+        if (scoreAnimationActive) {
+            drawScoringPucks(
+                canvas,
+                boardRect,
+            )
+        } else {
+            for (puck in pucks) {
+                drawReplayPuck(
+                    canvas,
+                    boardRect,
+                    puck,
+                )
+            }
         }
 
-        drawReplayShotArrows(canvas, boardRect)
-        drawIncomingWalls(canvas, boardRect)
+        drawReplayShotArrows(
+            canvas,
+            boardRect,
+        )
 
-        drawCueLineAndPuck(canvas, boardRect, w)
+        if (scoreAnimationActive) {
+            drawScoringLabels(
+                canvas,
+                boardRect,
+            )
+        }
+
+        if (
+            uiMode == ShuffleUiMode.Aiming &&
+            aimUiAlpha > 0.001f
+        ) {
+            drawOpponentReadyPuck(
+                canvas = canvas,
+                boardRect = boardRect,
+                alpha = aimUiAlpha,
+            )
+
+            drawCueLineAndPuck(
+                canvas = canvas,
+                boardRect = boardRect,
+                w = w,
+                alpha = aimUiAlpha,
+            )
+        }
+    }
+
+    private fun drawScoringPucks(
+        canvas: Canvas,
+        boardRect: RectF,
+    ) {
+        val now =
+            System.currentTimeMillis()
+
+        val cleanupProgress =
+            scoreCleanupProgress(
+                now,
+            )
+
+        val cleanupEase =
+            cleanupProgress *
+                    cleanupProgress *
+                    (
+                            3f -
+                                    2f *
+                                    cleanupProgress
+                            )
+
+        val cleanupScale =
+            1f -
+                    cleanupEase
+
+        for (
+        itemIndex in
+        scoreAnimationItems.indices
+        ) {
+            val item =
+                scoreAnimationItems[
+                    itemIndex
+                ]
+
+            val puck =
+                pucks.getOrNull(
+                    item.puckIndex,
+                ) ?: continue
+
+            val itemProgress =
+                scoreAnimationProgress(
+                    itemIndex,
+                    now,
+                )
+
+            val individualEase =
+                itemProgress *
+                        itemProgress *
+                        (
+                                3f -
+                                        2f *
+                                        itemProgress
+                                )
+
+            val countedPuckScale =
+                1f -
+                        0.5f *
+                        individualEase
+
+            val finalPuckScale =
+                countedPuckScale *
+                        cleanupScale
+
+            if (finalPuckScale <= 0.001f) {
+                continue
+            }
+
+            drawPuck(
+                canvas = canvas,
+                cx =
+                    puckVisualScreenX(
+                        puck,
+                        boardRect,
+                    ),
+                cy =
+                    puckVisualScreenY(
+                        puck,
+                        boardRect,
+                    ),
+                player =
+                    puck.player,
+                rotation =
+                    puck.bodyAngle,
+                size =
+                    puckSize(
+                        boardRect,
+                    ) *
+                            finalPuckScale,
+            )
+        }
+
+        postInvalidateOnAnimation()
+    }
+
+    private fun drawScoringLabels(
+        canvas: Canvas,
+        boardRect: RectF,
+    ) {
+        val now =
+            System.currentTimeMillis()
+
+        val cleanupProgress =
+            scoreCleanupProgress(
+                now,
+            )
+
+        val cleanupAlpha =
+            1f -
+                    cleanupProgress
+
+        for (
+        itemIndex in
+        scoreAnimationItems.indices
+        ) {
+            val item =
+                scoreAnimationItems[
+                    itemIndex
+                ]
+
+            val progress =
+                scoreAnimationProgress(
+                    itemIndex,
+                    now,
+                )
+
+            if (
+                progress <= 0f ||
+                cleanupAlpha <= 0.001f
+            ) {
+                continue
+            }
+
+            val puck =
+                pucks.getOrNull(
+                    item.puckIndex,
+                ) ?: continue
+
+            val puckX =
+                puckVisualScreenX(
+                    puck,
+                    boardRect,
+                )
+
+            val puckY =
+                puckVisualScreenY(
+                    puck,
+                    boardRect,
+                )
+
+            val growProgress =
+                (
+                        progress /
+                                0.70f
+                        ).coerceIn(
+                        0f,
+                        1f,
+                    )
+
+            val scoreScale =
+                if (growProgress < 0.80f) {
+                    0.25f +
+                            1.25f *
+                            (
+                                    growProgress /
+                                            0.80f
+                                    )
+                } else {
+                    1.50f -
+                            0.50f *
+                            (
+                                    (
+                                            growProgress -
+                                                    0.80f
+                                            ) /
+                                            0.20f
+                                    )
+                }
+
+            val appearanceAlpha =
+                (
+                        progress /
+                                0.22f
+                        ).coerceIn(
+                        0f,
+                        1f,
+                    )
+
+            val finalAlpha =
+                appearanceAlpha *
+                        cleanupAlpha
+
+            val riseProgress =
+                1f -
+                        (
+                                1f -
+                                        progress
+                                ) *
+                        (
+                                1f -
+                                        progress
+                                )
+
+            val scoreY =
+                puckY -
+                        puckSize(
+                            boardRect,
+                        ) *
+                        0.55f -
+                        iosSize(
+                            8f +
+                                    18f *
+                                    riseProgress,
+                            boardRect,
+                        )
+
+            val scoreText =
+                "+${item.score}"
+
+            val scoreColor =
+                playerArrowColor(
+                    item.player,
+                )
+
+            val outlineColor =
+                if (item.player == 1) {
+                    Color.BLACK
+                } else {
+                    Color.WHITE
+                }
+
+            textPaint.textAlign =
+                Paint.Align.CENTER
+
+            textPaint.typeface =
+                android.graphics.Typeface.DEFAULT_BOLD
+
+            textPaint.textSize =
+                iosSize(
+                    23f,
+                    boardRect,
+                ) *
+                        scoreScale
+
+            textPaint.style =
+                Paint.Style.STROKE
+
+            textPaint.strokeWidth =
+                iosSize(
+                    2.2f,
+                    boardRect,
+                )
+
+            textPaint.color =
+                Color.argb(
+                    (
+                            220f *
+                                    finalAlpha
+                            ).toInt().coerceIn(
+                            0,
+                            255,
+                        ),
+                    Color.red(
+                        outlineColor,
+                    ),
+                    Color.green(
+                        outlineColor,
+                    ),
+                    Color.blue(
+                        outlineColor,
+                    ),
+                )
+
+            canvas.drawText(
+                scoreText,
+                puckX,
+                scoreY,
+                textPaint,
+            )
+
+            textPaint.style =
+                Paint.Style.FILL
+
+            textPaint.color =
+                Color.argb(
+                    (
+                            255f *
+                                    finalAlpha
+                            ).toInt().coerceIn(
+                            0,
+                            255,
+                        ),
+                    Color.red(
+                        scoreColor,
+                    ),
+                    Color.green(
+                        scoreColor,
+                    ),
+                    Color.blue(
+                        scoreColor,
+                    ),
+                )
+
+            canvas.drawText(
+                scoreText,
+                puckX,
+                scoreY,
+                textPaint,
+            )
+        }
+
+        textPaint.style =
+            Paint.Style.FILL
+    }
+
+    private fun drawPushSticks(
+        canvas: Canvas,
+        boardRect: RectF,
+    ) {
+        if (
+            !pushStickActive ||
+            pushStickStartMs <= 0L ||
+            pushStickStates.isEmpty()
+        ) {
+            return
+        }
+
+        val now =
+            System.currentTimeMillis()
+
+        if (now < pushStickStartMs) {
+            postInvalidateOnAnimation()
+            return
+        }
+
+        val stick =
+            stickBitmap
+                ?: return
+
+        val isPushPhase =
+            pushStickPushStartMs > 0L
+
+        val backwardOffset: Float
+        val stickAlpha: Float
+
+        if (!isPushPhase) {
+            val prePushElapsed =
+                (
+                        now -
+                                pushStickStartMs
+                        ).coerceAtLeast(0L)
+
+            val approachProgress =
+                (
+                        prePushElapsed.toFloat() /
+                                STICK_APPROACH_DURATION_MS.toFloat()
+                        ).coerceIn(
+                        0f,
+                        1f,
+                    )
+
+            val easedApproach =
+                1f -
+                        (
+                                (1f - approachProgress) *
+                                        (1f - approachProgress)
+                                )
+
+            backwardOffset =
+                iosSize(
+                    STICK_START_OFFSET_GAME,
+                    boardRect,
+                ) * (
+                        1f -
+                                easedApproach
+                        )
+
+            stickAlpha = 0.96f
+        } else {
+            val pushElapsed =
+                (
+                        now -
+                                pushStickPushStartMs
+                        ).coerceAtLeast(0L)
+
+            val pushProgress =
+                (
+                        pushElapsed.toFloat() /
+                                STICK_PUSH_DURATION_MS.toFloat()
+                        ).coerceIn(
+                        0f,
+                        1f,
+                    )
+
+            if (pushProgress >= 1f) {
+                stopPushStickAnimation()
+                return
+            }
+
+            backwardOffset = 0f
+
+            val fade =
+                if (
+                    pushProgress <=
+                    STICK_PUSH_FADE_START
+                ) {
+                    1f
+                } else {
+                    (
+                            1f -
+                                    (
+                                            pushProgress -
+                                                    STICK_PUSH_FADE_START
+                                            ) /
+                                    (
+                                            1f -
+                                                    STICK_PUSH_FADE_START
+                                            )
+                            ).coerceIn(
+                            0f,
+                            1f,
+                        )
+                }
+
+            stickAlpha =
+                0.96f *
+                        fade
+        }
+
+        val stickWidth =
+            iosSize(
+                STICK_WIDTH_GAME,
+                boardRect,
+            )
+
+        val stickHeight =
+            stickWidth *
+                    (
+                            stick.height.toFloat() /
+                                    stick.width.toFloat()
+                            )
+
+        val forkForwardOffset =
+            iosSize(
+                STICK_FORK_FORWARD_OFFSET_GAME,
+                boardRect,
+            )
+
+        val previousAlpha =
+            imagePaint.alpha
+
+        imagePaint.alpha =
+            (
+                    255f *
+                            stickAlpha
+                    ).toInt().coerceIn(
+                    0,
+                    255,
+                )
+
+        for (state in pushStickStates) {
+            val puck =
+                pucks.getOrNull(
+                    state.traceId,
+                ) ?: continue
+
+            val puckX =
+                puckVisualScreenX(
+                    puck,
+                    boardRect,
+                )
+
+            val puckY =
+                puckVisualScreenY(
+                    puck,
+                    boardRect,
+                )
+
+            val screenAngle =
+                worldShotAngleToScreen(
+                    state.shotAngle,
+                )
+
+            val angleDegrees =
+                Math.toDegrees(
+                    screenAngle.toDouble(),
+                ).toFloat()
+
+            val destination =
+                RectF(
+                    puckX -
+                            stickWidth +
+                            forkForwardOffset -
+                            backwardOffset,
+                    puckY -
+                            stickHeight / 2f,
+                    puckX +
+                            forkForwardOffset -
+                            backwardOffset,
+                    puckY +
+                            stickHeight / 2f,
+                )
+
+            canvas.withRotation(
+                degrees = angleDegrees,
+                pivotX = puckX,
+                pivotY = puckY,
+            ) {
+                drawBitmap(
+                    stick,
+                    null,
+                    destination,
+                    imagePaint,
+                )
+            }
+        }
+
+        imagePaint.alpha =
+            previousAlpha
+
+        postInvalidateOnAnimation()
     }
 
     private fun drawReplayShotArrows(
         canvas: Canvas,
-        boardRect: RectF
+        boardRect: RectF,
     ) {
-        if (!showReplayArrows || replayArrowAlpha <= 0.001f) {
+        if (
+            !showReplayArrows ||
+            replayArrowAlpha <= 0.001f
+        ) {
+            return
+        }
+
+        val now =
+            System.currentTimeMillis()
+
+        if (
+            opponentRevealEndMs > 0L &&
+            now < opponentRevealEndMs
+        ) {
+            postInvalidateOnAnimation()
             return
         }
 
         for (puck in pucks) {
-            if (puck.shotDistance <= SHOT_DISTANCE_EPS) {
+            if (
+                puck.shotDistance <=
+                SHOT_DISTANCE_EPS
+            ) {
                 continue
             }
 
@@ -900,10 +1782,16 @@ class ShuffleRenderer @JvmOverloads constructor(
                 boardRect = boardRect,
                 cueX = originX,
                 cueY = originY,
-                angle = replayArrowDrawAngle(puck),
-                distance = puck.shotDistance,
-                alpha = replayArrowAlpha,
-                player = puck.player,
+                angle =
+                    replayArrowDrawAngle(
+                        puck,
+                    ),
+                distance =
+                    puck.shotDistance,
+                alpha =
+                    replayArrowAlpha,
+                player =
+                    puck.player,
             )
         }
     }
@@ -912,10 +1800,73 @@ class ShuffleRenderer @JvmOverloads constructor(
         puck: ShufflePuck,
         boardRect: RectF,
     ): Float {
+        val targetX =
+            puckScreenX(
+                worldXToVisual(
+                    puck.x,
+                ),
+                boardRect,
+            )
+
+        val isOpponentPendingShot =
+            uiMode == ShuffleUiMode.Playing &&
+                    puck.player == opponentPlayer() &&
+                    puck.shotDistance >
+                    SHOT_DISTANCE_EPS &&
+                    isPuckOnReadyRowForPlayer(
+                        puck = puck,
+                        player = opponentPlayer(),
+                    )
+
         if (
-            isReadyPuckForPlayer(
-                puck,
-                localPlayer,
+            isOpponentPendingShot &&
+            opponentRevealStartMs > 0L &&
+            opponentRevealEndMs >
+            opponentRevealStartMs
+        ) {
+            val now =
+                System.currentTimeMillis()
+
+            val revealProgress =
+                (
+                        (
+                                now -
+                                        opponentRevealStartMs
+                                ).toFloat() /
+                                (
+                                        opponentRevealEndMs -
+                                                opponentRevealStartMs
+                                        ).toFloat()
+                        ).coerceIn(
+                        0f,
+                        1f,
+                    )
+
+            val easedProgress =
+                revealProgress *
+                        revealProgress *
+                        (
+                                3f -
+                                        2f *
+                                        revealProgress
+                                )
+
+            if (revealProgress < 1f) {
+                postInvalidateOnAnimation()
+            }
+
+            return boardRect.centerX() +
+                    (
+                            targetX -
+                                    boardRect.centerX()
+                            ) *
+                    easedProgress
+        }
+
+        if (
+            isPuckOnReadyRowForPlayer(
+                puck = puck,
+                player = localPlayer,
             )
         ) {
             return cuePuckScreenX(
@@ -923,10 +1874,7 @@ class ShuffleRenderer @JvmOverloads constructor(
             )
         }
 
-        return puckScreenX(
-            worldXToVisual(puck.x),
-            boardRect,
-        )
+        return targetX
     }
 
     private fun puckVisualScreenY(
@@ -934,16 +1882,16 @@ class ShuffleRenderer @JvmOverloads constructor(
         boardRect: RectF,
     ): Float {
         return when {
-            isReadyPuckForPlayer(
-                puck,
-                localPlayer,
+            isPuckOnReadyRowForPlayer(
+                puck = puck,
+                player = localPlayer,
             ) -> {
                 bottomOutOfPlayPuckY(boardRect)
             }
 
-            isReadyPuckForPlayer(
-                puck,
-                opponentPlayer(),
+            isPuckOnReadyRowForPlayer(
+                puck = puck,
+                player = opponentPlayer(),
             ) -> {
                 topOutOfPlayPuckY(boardRect)
             }
@@ -967,90 +1915,198 @@ class ShuffleRenderer @JvmOverloads constructor(
 
     private fun drawIncomingWalls(
         canvas: Canvas,
-        boardRect: RectF
+        boardRect: RectF,
     ) {
-        if (!wallIntroActive && !nativeRunning) {
+        if (
+            !wallIntroActive &&
+            !nativeRunning
+        ) {
             return
         }
 
-        val now = System.currentTimeMillis()
+        val now =
+            System.currentTimeMillis()
 
-        if (wallIntroStartMs == 0L || now < wallIntroStartMs) {
-            if (wallIntroActive || nativeRunning) {
+        if (
+            wallIntroStartMs == 0L ||
+            now < wallIntroStartMs
+        ) {
+            if (
+                wallIntroActive ||
+                nativeRunning
+            ) {
                 postInvalidateOnAnimation()
             }
 
             return
         }
 
-        val elapsed = now - wallIntroStartMs
+        val elapsed =
+            now -
+                    wallIntroStartMs
 
-        val t = (elapsed / WALL_INTRO_DURATION_MS.toFloat())
-            .coerceIn(0f, 1f)
+        val progress =
+            (
+                    elapsed.toFloat() /
+                            WALL_INTRO_DURATION_MS.toFloat()
+                    ).coerceIn(
+                    0f,
+                    1f,
+                )
 
-        val eased = 1f - ((1f - t) * (1f - t))
-        val scale = WALL_INTRO_START_SCALE + (1f - WALL_INTRO_START_SCALE) * eased
+        val easedProgress =
+            1f -
+                    (
+                            (1f - progress) *
+                                    (1f - progress)
+                            )
 
-        val cx = boardRect.centerX()
-        val cy = boardRect.centerY()
+        val scale =
+            WALL_INTRO_START_SCALE +
+                    (
+                            1f -
+                                    WALL_INTRO_START_SCALE
+                            ) *
+                    easedProgress
 
-        val innerBase = RectF(
-            boardRect.left,
-            boardRect.top,
-            boardRect.right,
-            boardRect.bottom
-        )
+        val centerX =
+            boardRect.centerX()
 
-        val scaledInner = scaleRectAboutCenter(
-            rect = innerBase,
-            cx = cx,
-            cy = cy,
-            scale = scale
-        )
+        val centerY =
+            boardRect.centerY()
 
-        val thickness = iosSize(WALL_INTRO_THICKNESS, boardRect)
-
-        val outer = RectF(
-            scaledInner.left - thickness,
-            scaledInner.top - thickness,
-            scaledInner.right + thickness,
-            scaledInner.bottom + thickness
-        )
-
-        val path = Path().apply {
-            fillType = Path.FillType.EVEN_ODD
-
-            addRoundRect(
-                outer,
-                iosSize(6f, boardRect),
-                iosSize(6f, boardRect),
-                Path.Direction.CW
+        val scaledInner =
+            scaleRectAboutCenter(
+                rect = boardRect,
+                cx = centerX,
+                cy = centerY,
+                scale = scale,
             )
 
-            addRoundRect(
-                scaledInner,
-                iosSize(2f, boardRect),
-                iosSize(2f, boardRect),
-                Path.Direction.CCW
+        val thickness =
+            iosSize(
+                WALL_INTRO_THICKNESS,
+                boardRect,
             )
-        }
 
-        fillPaint.style = Paint.Style.FILL
-        fillPaint.color = Color.rgb(238, 242, 245)
-        canvas.drawPath(path, fillPaint)
+        val outer =
+            RectF(
+                scaledInner.left -
+                        thickness,
+                scaledInner.top -
+                        thickness,
+                scaledInner.right +
+                        thickness,
+                scaledInner.bottom +
+                        thickness,
+            )
 
-        linePaint.style = Paint.Style.STROKE
-        linePaint.strokeWidth = iosSize(1.4f, boardRect)
-        linePaint.color = Color.WHITE
+        val clipPadding =
+            thickness +
+                    iosSize(
+                        WALL_INTRO_CLIP_PADDING,
+                        boardRect,
+                    )
+
+        val clipRect =
+            RectF(
+                boardRect.left -
+                        clipPadding,
+                boardRect.top -
+                        clipPadding,
+                boardRect.right +
+                        clipPadding,
+                boardRect.bottom +
+                        clipPadding,
+            )
+
+        val saveCount =
+            canvas.save()
+
+        canvas.clipRect(
+            clipRect,
+        )
+
+        val wallPath =
+            Path().apply {
+                fillType =
+                    Path.FillType.EVEN_ODD
+
+                addRoundRect(
+                    outer,
+                    iosSize(
+                        6f,
+                        boardRect,
+                    ),
+                    iosSize(
+                        6f,
+                        boardRect,
+                    ),
+                    Path.Direction.CW,
+                )
+
+                addRoundRect(
+                    scaledInner,
+                    iosSize(
+                        2f,
+                        boardRect,
+                    ),
+                    iosSize(
+                        2f,
+                        boardRect,
+                    ),
+                    Path.Direction.CCW,
+                )
+            }
+
+        fillPaint.shader = null
+        fillPaint.alpha = 255
+        fillPaint.style =
+            Paint.Style.FILL
+
+        fillPaint.color =
+            Color.rgb(
+                238,
+                242,
+                245,
+            )
+
+        canvas.drawPath(
+            wallPath,
+            fillPaint,
+        )
+
+        linePaint.alpha = 255
+        linePaint.style =
+            Paint.Style.STROKE
+
+        linePaint.strokeWidth =
+            iosSize(
+                1.4f,
+                boardRect,
+            )
+
+        linePaint.color =
+            Color.WHITE
 
         canvas.drawRoundRect(
             scaledInner,
-            iosSize(2f, boardRect),
-            iosSize(2f, boardRect),
-            linePaint
+            iosSize(
+                2f,
+                boardRect,
+            ),
+            iosSize(
+                2f,
+                boardRect,
+            ),
+            linePaint,
         )
 
-        if (t < 1f) {
+        canvas.restoreToCount(
+            saveCount,
+        )
+
+        if (progress < 1f) {
             postInvalidateOnAnimation()
         }
     }
@@ -1119,32 +2175,42 @@ class ShuffleRenderer @JvmOverloads constructor(
     private fun drawOpponentReadyPuck(
         canvas: Canvas,
         boardRect: RectF,
+        alpha: Float,
     ) {
-        val opponentPlayer = opponentPlayer()
+        if (
+            uiMode != ShuffleUiMode.Aiming ||
+            alpha <= 0.001f
+        ) {
+            return
+        }
+
+        val opponent =
+            opponentPlayer()
 
         val topPuck =
-            readyPuckForPlayer(opponentPlayer)
+            readyPuckForPlayer(
+                opponent,
+            )
 
-        val x =
-            if (topPuck != null) {
-                puckVisualScreenX(
-                    topPuck,
-                    boardRect,
-                )
-            } else {
-                boardRect.centerX()
-            }
-
-        val y =
-            topOutOfPlayPuckY(boardRect)
+        val hiddenPositionX =
+            boardRect.centerX()
 
         drawPuck(
             canvas = canvas,
-            cx = x,
-            cy = y,
-            player = opponentPlayer,
-            rotation = topPuck?.bodyAngle ?: 0f,
-            size = puckSize(boardRect),
+            cx = hiddenPositionX,
+            cy =
+                topOutOfPlayPuckY(
+                    boardRect,
+                ),
+            player = opponent,
+            rotation =
+                topPuck?.bodyAngle
+                    ?: 0f,
+            size =
+                puckSize(
+                    boardRect,
+                ),
+            alpha = alpha,
         )
     }
 
@@ -1152,7 +2218,15 @@ class ShuffleRenderer @JvmOverloads constructor(
         canvas: Canvas,
         boardRect: RectF,
         w: Float,
+        alpha: Float,
     ) {
+        if (
+            uiMode != ShuffleUiMode.Aiming ||
+            alpha <= 0.001f
+        ) {
+            return
+        }
+
         val cueY =
             bottomOutOfPlayPuckY(
                 boardRect,
@@ -1163,21 +2237,29 @@ class ShuffleRenderer @JvmOverloads constructor(
                 boardRect,
             )
 
+        val guideColor =
+            playerHudColor(
+                localPlayer,
+            )
+
         linePaint.style =
             Paint.Style.STROKE
+
+        linePaint.strokeCap =
+            Paint.Cap.ROUND
 
         linePaint.strokeWidth =
             dp(1.2f)
 
-        val guideColor =
-            playerHudColor(localPlayer)
-
-        linePaint.color = Color.argb(
-            170,
-            Color.red(guideColor),
-            Color.green(guideColor),
-            Color.blue(guideColor),
-        )
+        linePaint.color =
+            Color.argb(
+                (170f * alpha)
+                    .toInt()
+                    .coerceIn(0, 255),
+                Color.red(guideColor),
+                Color.green(guideColor),
+                Color.blue(guideColor),
+            )
 
         canvas.drawLine(
             dp(14f),
@@ -1187,15 +2269,86 @@ class ShuffleRenderer @JvmOverloads constructor(
             linePaint,
         )
 
+        if (!hasCueAim) {
+            val phase =
+                (
+                        System.currentTimeMillis() %
+                                HIGHLIGHT_PULSE_PERIOD_MS
+                        ).toFloat() /
+                        HIGHLIGHT_PULSE_PERIOD_MS.toFloat()
+
+            val triangle =
+                if (phase <= 0.5f) {
+                    phase * 2f
+                } else {
+                    (1f - phase) * 2f
+                }
+
+            val pulseScale =
+                1f +
+                        (
+                                HIGHLIGHT_PULSE_MAX_SCALE -
+                                        1f
+                                ) * triangle
+
+            val ringColor =
+                playerArrowColor(
+                    localPlayer,
+                )
+
+            linePaint.style =
+                Paint.Style.STROKE
+
+            linePaint.strokeCap =
+                Paint.Cap.ROUND
+
+            linePaint.strokeWidth =
+                iosSize(
+                    1.8f,
+                    boardRect,
+                )
+
+            linePaint.color =
+                Color.argb(
+                    (
+                            255f *
+                                    ARROW_MAX_ALPHA *
+                                    alpha
+                            ).toInt().coerceIn(
+                            0,
+                            255,
+                        ),
+                    Color.red(ringColor),
+                    Color.green(ringColor),
+                    Color.blue(ringColor),
+                )
+
+            val ringRadius =
+                (
+                        puckSize(boardRect) *
+                                0.5f +
+                                iosSize(
+                                    4f,
+                                    boardRect,
+                                )
+                        ) * pulseScale
+
+            canvas.drawCircle(
+                cueX,
+                cueY,
+                ringRadius,
+                linePaint,
+            )
+
+            postInvalidateOnAnimation()
+        }
+
         val bottomPuck =
             readyPuckForPlayer(
                 localPlayer,
             )
 
-        if (
-            uiMode == ShuffleUiMode.Aiming &&
-            hasCueAim
-        ) {
+        if (hasCueAim) {
             drawCueAimArrow(
                 canvas = canvas,
                 boardRect = boardRect,
@@ -1217,6 +2370,7 @@ class ShuffleRenderer @JvmOverloads constructor(
                 bottomPuck?.bodyAngle
                     ?: 0f,
             size = puckSize(boardRect),
+            alpha = alpha,
         )
     }
 
@@ -1264,7 +2418,9 @@ class ShuffleRenderer @JvmOverloads constructor(
         }
 
         val arrowColor =
-            playerArrowColor(player)
+            playerArrowColor(
+                player,
+            )
 
         val shadowColor =
             if (player == 1) {
@@ -1274,9 +2430,13 @@ class ShuffleRenderer @JvmOverloads constructor(
             }
 
         val visualAlpha =
-            (255f * alpha)
-                .toInt()
-                .coerceIn(0, 255)
+            (
+                    255f *
+                            alpha
+                    ).toInt().coerceIn(
+                    0,
+                    255,
+                )
 
         val shadowAlpha =
             (
@@ -1285,170 +2445,286 @@ class ShuffleRenderer @JvmOverloads constructor(
                     } else {
                         115f * alpha
                     }
-                    ).toInt().coerceIn(0, 255)
-
-        val length = iosSize(
-            distance.coerceIn(
-                MIN_AIM_VISUAL_LENGTH,
-                MAX_AIM_DISTANCE,
-            ),
-            boardRect,
-        )
+                    ).toInt().coerceIn(
+                    0,
+                    255,
+                )
 
         val startOffset =
-            puckSize(boardRect) * 0.68f
+            puckSize(boardRect) *
+                    0.68f
 
-        val headLength = min(
-            iosSize(24f, boardRect),
-            length * 0.55f,
-        )
+        val requestedLength =
+            iosSize(
+                distance.coerceIn(
+                    MIN_AIM_VISUAL_LENGTH,
+                    MAX_AIM_DISTANCE,
+                ),
+                boardRect,
+            )
 
-        val headWidth = min(
-            iosSize(20f, boardRect),
-            length * 0.50f,
-        )
+        val length =
+            requestedLength.coerceAtLeast(
+                startOffset +
+                        iosSize(
+                            12f,
+                            boardRect,
+                        ),
+            )
 
-        val cosA = cos(angle)
-        val sinA = sin(angle)
+        val availableLength =
+            (
+                    length -
+                            startOffset
+                    ).coerceAtLeast(
+                    iosSize(
+                        8f,
+                        boardRect,
+                    ),
+                )
+
+        val headLength =
+            min(
+                iosSize(
+                    24f,
+                    boardRect,
+                ),
+                availableLength *
+                        0.55f,
+            )
+
+        val headHalfWidth =
+            min(
+                iosSize(
+                    10f,
+                    boardRect,
+                ),
+                headLength *
+                        0.55f,
+            )
+
+        val shaftHalfWidth =
+            iosSize(
+                2.8f,
+                boardRect,
+            )
+
+        val cosA =
+            cos(angle)
+
+        val sinA =
+            sin(angle)
+
+        val normalX =
+            -sinA
+
+        val normalY =
+            cosA
 
         val startX =
-            cueX + cosA * startOffset
+            cueX +
+                    cosA *
+                    startOffset
 
         val startY =
-            cueY + sinA * startOffset
+            cueY +
+                    sinA *
+                    startOffset
 
         val tipX =
-            cueX + cosA * length
+            cueX +
+                    cosA *
+                    length
 
         val tipY =
-            cueY + sinA * length
-
-        val shaftEndX =
-            tipX - cosA * headLength * 0.78f
-
-        val shaftEndY =
-            tipY - sinA * headLength * 0.78f
-
-        val normalX = -sinA
-
-        val shadowOffset =
-            iosSize(1.5f, boardRect)
-
-        linePaint.style = Paint.Style.STROKE
-        linePaint.strokeCap = Paint.Cap.ROUND
-        linePaint.strokeWidth =
-            iosSize(8.5f, boardRect)
-
-        linePaint.color = Color.argb(
-            shadowAlpha,
-            Color.red(shadowColor),
-            Color.green(shadowColor),
-            Color.blue(shadowColor),
-        )
-
-        canvas.drawLine(
-            startX + shadowOffset,
-            startY + shadowOffset,
-            shaftEndX + shadowOffset,
-            shaftEndY + shadowOffset,
-            linePaint,
-        )
-
-        // Shaft.
-        linePaint.strokeWidth =
-            iosSize(5.6f, boardRect)
-
-        linePaint.color = Color.argb(
-            visualAlpha,
-            Color.red(arrowColor),
-            Color.green(arrowColor),
-            Color.blue(arrowColor),
-        )
-
-        canvas.drawLine(
-            startX,
-            startY,
-            shaftEndX,
-            shaftEndY,
-            linePaint,
-        )
+            cueY +
+                    sinA *
+                    length
 
         val headBackX =
-            tipX - cosA * headLength
+            tipX -
+                    cosA *
+                    headLength
 
         val headBackY =
-            tipY - sinA * headLength
+            tipY -
+                    sinA *
+                    headLength
 
-        val headPathShadow = Path().apply {
-            moveTo(
-                tipX + shadowOffset,
-                tipY + shadowOffset,
+        val arrowPath =
+            Path().apply {
+                moveTo(
+                    startX +
+                            normalX *
+                            shaftHalfWidth,
+                    startY +
+                            normalY *
+                            shaftHalfWidth,
+                )
+
+                lineTo(
+                    headBackX +
+                            normalX *
+                            shaftHalfWidth,
+                    headBackY +
+                            normalY *
+                            shaftHalfWidth,
+                )
+
+                lineTo(
+                    headBackX +
+                            normalX *
+                            headHalfWidth,
+                    headBackY +
+                            normalY *
+                            headHalfWidth,
+                )
+
+                lineTo(
+                    tipX,
+                    tipY,
+                )
+
+                lineTo(
+                    headBackX -
+                            normalX *
+                            headHalfWidth,
+                    headBackY -
+                            normalY *
+                            headHalfWidth,
+                )
+
+                lineTo(
+                    headBackX -
+                            normalX *
+                            shaftHalfWidth,
+                    headBackY -
+                            normalY *
+                            shaftHalfWidth,
+                )
+
+                lineTo(
+                    startX -
+                            normalX *
+                            shaftHalfWidth,
+                    startY -
+                            normalY *
+                            shaftHalfWidth,
+                )
+
+                close()
+            }
+
+        val shadowOffset =
+            iosSize(
+                1.5f,
+                boardRect,
             )
 
-            lineTo(
-                headBackX +
-                        normalX * headWidth * 0.5f +
-                        shadowOffset,
-                headBackY +
-                        cosA * headWidth * 0.5f +
-                        shadowOffset,
+        val shadowPath =
+            Path().apply {
+                moveTo(
+                    startX +
+                            normalX *
+                            shaftHalfWidth +
+                            shadowOffset,
+                    startY +
+                            normalY *
+                            shaftHalfWidth +
+                            shadowOffset,
+                )
+
+                lineTo(
+                    headBackX +
+                            normalX *
+                            shaftHalfWidth +
+                            shadowOffset,
+                    headBackY +
+                            normalY *
+                            shaftHalfWidth +
+                            shadowOffset,
+                )
+
+                lineTo(
+                    headBackX +
+                            normalX *
+                            headHalfWidth +
+                            shadowOffset,
+                    headBackY +
+                            normalY *
+                            headHalfWidth +
+                            shadowOffset,
+                )
+
+                lineTo(
+                    tipX +
+                            shadowOffset,
+                    tipY +
+                            shadowOffset,
+                )
+
+                lineTo(
+                    headBackX -
+                            normalX *
+                            headHalfWidth +
+                            shadowOffset,
+                    headBackY -
+                            normalY *
+                            headHalfWidth +
+                            shadowOffset,
+                )
+
+                lineTo(
+                    headBackX -
+                            normalX *
+                            shaftHalfWidth +
+                            shadowOffset,
+                    headBackY -
+                            normalY *
+                            shaftHalfWidth +
+                            shadowOffset,
+                )
+
+                lineTo(
+                    startX -
+                            normalX *
+                            shaftHalfWidth +
+                            shadowOffset,
+                    startY -
+                            normalY *
+                            shaftHalfWidth +
+                            shadowOffset,
+                )
+
+                close()
+            }
+
+        fillPaint.style =
+            Paint.Style.FILL
+
+        fillPaint.color =
+            Color.argb(
+                shadowAlpha,
+                Color.red(shadowColor),
+                Color.green(shadowColor),
+                Color.blue(shadowColor),
             )
-
-            lineTo(
-                headBackX -
-                        normalX * headWidth * 0.5f +
-                        shadowOffset,
-                headBackY -
-                        cosA * headWidth * 0.5f +
-                        shadowOffset,
-            )
-
-            close()
-        }
-
-        fillPaint.style = Paint.Style.FILL
-
-        fillPaint.color = Color.argb(
-            shadowAlpha,
-            Color.red(shadowColor),
-            Color.green(shadowColor),
-            Color.blue(shadowColor),
-        )
 
         canvas.drawPath(
-            headPathShadow,
+            shadowPath,
             fillPaint,
         )
 
-        val headPath = Path().apply {
-            moveTo(tipX, tipY)
-
-            lineTo(
-                headBackX +
-                        normalX * headWidth * 0.5f,
-                headBackY +
-                        cosA * headWidth * 0.5f,
+        fillPaint.color =
+            Color.argb(
+                visualAlpha,
+                Color.red(arrowColor),
+                Color.green(arrowColor),
+                Color.blue(arrowColor),
             )
-
-            lineTo(
-                headBackX -
-                        normalX * headWidth * 0.5f,
-                headBackY -
-                        cosA * headWidth * 0.5f,
-            )
-
-            close()
-        }
-
-        fillPaint.color = Color.argb(
-            visualAlpha,
-            Color.red(arrowColor),
-            Color.green(arrowColor),
-            Color.blue(arrowColor),
-        )
 
         canvas.drawPath(
-            headPath,
+            arrowPath,
             fillPaint,
         )
     }
@@ -1836,16 +3112,33 @@ class ShuffleRenderer @JvmOverloads constructor(
 
     private fun shuffleBoardX(
         gameX: Float,
-        boardRect: RectF
+        boardRect: RectF,
     ): Float {
-        return boardRect.centerX() + gameX * iosSceneScale(boardRect)
+        val visualX =
+            if (localPlayer == 2) {
+                -gameX
+            } else {
+                gameX
+            }
+
+        return boardRect.centerX() +
+                visualX * iosSceneScale(boardRect)
     }
+
 
     private fun shuffleBoardY(
         gameY: Float,
-        boardRect: RectF
+        boardRect: RectF,
     ): Float {
-        return boardRect.centerY() - gameY * iosSceneScale(boardRect)
+        val visualY =
+            if (localPlayer == 2) {
+                -gameY
+            } else {
+                gameY
+            }
+
+        return boardRect.centerY() -
+                visualY * iosSceneScale(boardRect)
     }
 
     private fun baseBoardColor(mode: Int): Int {
@@ -1946,23 +3239,35 @@ class ShuffleRenderer @JvmOverloads constructor(
         boardRect: RectF,
         puck: ShufflePuck,
     ) {
+        val isOnReadyRow =
+            isPuckOnReadyRowForPlayer(
+                puck,
+                1,
+            ) ||
+                    isPuckOnReadyRowForPlayer(
+                        puck,
+                        2,
+                    )
+
         if (
-            isReadyPuckForPlayer(puck, 1) ||
-            isReadyPuckForPlayer(puck, 2)
+            isOnReadyRow &&
+            uiMode != ShuffleUiMode.Playing
         ) {
             return
         }
 
         drawPuck(
             canvas = canvas,
-            cx = puckVisualScreenX(
-                puck,
-                boardRect,
-            ),
-            cy = puckVisualScreenY(
-                puck,
-                boardRect,
-            ),
+            cx =
+                puckVisualScreenX(
+                    puck,
+                    boardRect,
+                ),
+            cy =
+                puckVisualScreenY(
+                    puck,
+                    boardRect,
+                ),
             player = puck.player,
             rotation = puck.bodyAngle,
             size = puckSize(boardRect),
@@ -1975,95 +3280,217 @@ class ShuffleRenderer @JvmOverloads constructor(
         cy: Float,
         player: Int,
         rotation: Float,
-        size: Float
+        size: Float,
+        alpha: Float = 1f,
     ) {
-        val shadowSize = size * 1.25f
-        val shadow = puckShadowBitmap
+        val clampedAlpha =
+            alpha.coerceIn(
+                0f,
+                1f,
+            )
 
-        val shadowRect = RectF(
-            cx - shadowSize / 2f,
-            cy - shadowSize / 2f + dp(2f),
-            cx + shadowSize / 2f,
-            cy + shadowSize / 2f + dp(2f)
-        )
+        if (clampedAlpha <= 0.001f) {
+            return
+        }
+
+        val previousImageAlpha =
+            imagePaint.alpha
+
+        val previousFillAlpha =
+            fillPaint.alpha
+
+        val paintAlpha =
+            (
+                    clampedAlpha *
+                            255f
+                    ).toInt().coerceIn(
+                    0,
+                    255,
+                )
+
+        imagePaint.alpha =
+            paintAlpha
+
+        fillPaint.alpha =
+            paintAlpha
+
+        val shadowSize =
+            size * 1.25f
+
+        val shadow =
+            puckShadowBitmap
+
+        val shadowRect =
+            RectF(
+                cx - shadowSize / 2f,
+                cy - shadowSize / 2f + dp(2f),
+                cx + shadowSize / 2f,
+                cy + shadowSize / 2f + dp(2f),
+            )
 
         if (shadow != null) {
-            canvas.drawBitmap(shadow, null, shadowRect, imagePaint)
+            canvas.drawBitmap(
+                shadow,
+                null,
+                shadowRect,
+                imagePaint,
+            )
         } else {
-            fillPaint.style = Paint.Style.FILL
-            fillPaint.color = Color.argb(65, 0, 0, 0)
-            canvas.drawCircle(cx + dp(1f), cy + dp(2f), shadowSize / 2f, fillPaint)
+            fillPaint.style =
+                Paint.Style.FILL
+
+            fillPaint.color =
+                Color.argb(
+                    65,
+                    0,
+                    0,
+                    0,
+                )
+
+            canvas.drawCircle(
+                cx + dp(1f),
+                cy + dp(2f),
+                shadowSize / 2f,
+                fillPaint,
+            )
         }
 
-        val bitmap = if (player == 1) {
-            puck1Bitmap
-        } else {
-            puck2Bitmap
-        }
+        val bitmap =
+            if (player == 1) {
+                puck1Bitmap
+            } else {
+                puck2Bitmap
+            }
 
-        val rect = RectF(
-            cx - size / 2f,
-            cy - size / 2f,
-            cx + size / 2f,
-            cy + size / 2f
-        )
+        val rect =
+            RectF(
+                cx - size / 2f,
+                cy - size / 2f,
+                cx + size / 2f,
+                cy + size / 2f,
+            )
 
         if (bitmap != null) {
             canvas.withRotation(
-                degrees = Math.toDegrees(rotation.toDouble()).toFloat(),
+                degrees =
+                    Math.toDegrees(
+                        rotation.toDouble(),
+                    ).toFloat(),
                 pivotX = cx,
-                pivotY = cy
+                pivotY = cy,
             ) {
-                drawBitmap(bitmap, null, rect, imagePaint)
+                drawBitmap(
+                    bitmap,
+                    null,
+                    rect,
+                    imagePaint,
+                )
             }
         } else {
-            fillPaint.color = if (player == 1) {
-                Color.rgb(255, 215, 0)
-            } else {
-                Color.rgb(35, 35, 35)
-            }
-            canvas.drawCircle(cx, cy, size / 2f, fillPaint)
+            fillPaint.style =
+                Paint.Style.FILL
+
+            fillPaint.color =
+                if (player == 1) {
+                    Color.rgb(
+                        255,
+                        215,
+                        0,
+                    )
+                } else {
+                    Color.rgb(
+                        35,
+                        35,
+                        35,
+                    )
+                }
+
+            canvas.drawCircle(
+                cx,
+                cy,
+                size / 2f,
+                fillPaint,
+            )
         }
+
+        imagePaint.alpha =
+            previousImageAlpha
+
+        fillPaint.alpha =
+            previousFillAlpha
     }
 
     private fun drawBottomHud(
         canvas: Canvas,
         w: Float,
-        h: Float
+        h: Float,
     ) {
         updateLaunchButtonAnimation()
 
-        val bottomY = h - dp(28f)
+        val bottomY =
+            h -
+                    dp(28f)
 
         if (uiMode == ShuffleUiMode.Aiming) {
-            val textAlpha = ((1f - launchButtonProgress) * 255f).toInt().coerceIn(0, 255)
+            val textAlpha =
+                (
+                        (1f - launchButtonProgress) *
+                                aimUiAlpha *
+                                255f
+                        ).toInt().coerceIn(
+                        0,
+                        255,
+                    )
 
             if (textAlpha > 0) {
-                textPaint.textAlign = Paint.Align.CENTER
-                textPaint.typeface = android.graphics.Typeface.DEFAULT_BOLD
-                textPaint.textSize = dp(16f)
-                textPaint.color = Color.argb(
-                    textAlpha,
-                    105,
-                    111,
-                    115
-                )
+                textPaint.textAlign =
+                    Paint.Align.CENTER
+
+                textPaint.typeface =
+                    android.graphics.Typeface.DEFAULT_BOLD
+
+                textPaint.textSize =
+                    dp(16f)
+
+                textPaint.color =
+                    Color.argb(
+                        textAlpha,
+                        105,
+                        111,
+                        115,
+                    )
 
                 canvas.drawText(
                     "Adjust position and trajectory.",
                     w * 0.50f,
                     bottomY + dp(12f),
-                    textPaint
+                    textPaint,
                 )
             }
 
-            drawLaunchButton(canvas, w, h, bottomY)
+            drawLaunchButton(
+                canvas,
+                w,
+                h,
+                bottomY,
+            )
+
+            drawReservePucks(
+                canvas = canvas,
+                cx = w - dp(23f),
+                cy = bottomY - dp(3f),
+                alpha = aimUiAlpha,
+            )
         } else {
             launchButtonProgress = 0f
-            launchButtonRect.set(0f, 0f, 0f, 0f)
-        }
 
-        drawReservePucks(canvas, w - dp(23f), bottomY - dp(3f))
+            launchButtonRect.set(
+                0f,
+                0f,
+                0f,
+                0f,
+            )
+        }
     }
 
     private fun drawStatusOverlay(
@@ -2118,54 +3545,131 @@ class ShuffleRenderer @JvmOverloads constructor(
         canvas: Canvas,
         w: Float,
         h: Float,
-        bottomY: Float
+        bottomY: Float,
     ) {
         if (launchButtonProgress <= 0.001f) {
-            launchButtonRect.set(0f, 0f, 0f, 0f)
+            launchButtonRect.set(
+                0f,
+                0f,
+                0f,
+                0f,
+            )
+
             return
         }
 
-        val buttonWidth = dp(148f)
-        val buttonHeight = dp(42f)
+        val buttonWidth =
+            dp(148f)
 
-        val targetCenterY = bottomY - dp(13f)
-        val hiddenCenterY = h + buttonHeight
+        val buttonHeight =
+            dp(42f)
 
-        val currentCenterY = hiddenCenterY + (targetCenterY - hiddenCenterY) * launchButtonProgress
+        val cornerRadius =
+            dp(10f)
 
-        val left = (w - buttonWidth) * 0.5f
-        val top = currentCenterY - buttonHeight / 2f
-        val right = left + buttonWidth
-        val bottom = top + buttonHeight
+        val targetCenterY =
+            bottomY -
+                    dp(13f)
 
-        launchButtonRect.set(left, top, right, bottom)
+        val hiddenCenterY =
+            h +
+                    buttonHeight
 
-        // Shadow
-        fillPaint.style = Paint.Style.FILL
-        fillPaint.color = Color.argb(65, 0, 0, 0)
+        val currentCenterY =
+            hiddenCenterY +
+                    (
+                            targetCenterY -
+                                    hiddenCenterY
+                            ) * launchButtonProgress
+
+        val left =
+            (
+                    w -
+                            buttonWidth
+                    ) * 0.5f
+
+        val top =
+            currentCenterY -
+                    buttonHeight / 2f
+
+        val right =
+            left +
+                    buttonWidth
+
+        val bottom =
+            top +
+                    buttonHeight
+
+        launchButtonRect.set(
+            left,
+            top,
+            right,
+            bottom,
+        )
+
+        fillPaint.style =
+            Paint.Style.FILL
+
+        fillPaint.color =
+            Color.argb(
+                28,
+                0,
+                0,
+                0,
+            )
+
+        canvas.drawRoundRect(
+            RectF(
+                left - dp(2f),
+                top + dp(3f),
+                right + dp(2f),
+                bottom + dp(7f),
+            ),
+            cornerRadius + dp(2f),
+            cornerRadius + dp(2f),
+            fillPaint,
+        )
+
+        fillPaint.color =
+            Color.argb(
+                65,
+                0,
+                0,
+                0,
+            )
+
         canvas.drawRoundRect(
             RectF(
                 left,
                 top + dp(2f),
                 right,
-                bottom + dp(2f)
+                bottom + dp(4f),
             ),
-            dp(21f),
-            dp(21f),
-            fillPaint
+            cornerRadius,
+            cornerRadius,
+            fillPaint,
         )
 
         val normalButtonColor =
-            playerArrowColor(localPlayer)
+            playerArrowColor(
+                localPlayer,
+            )
 
         val pressedButtonColor =
             if (localPlayer == 1) {
-                Color.rgb(232, 196, 0)
+                Color.rgb(
+                    232,
+                    196,
+                    0,
+                )
             } else {
-                Color.rgb(15, 15, 15)
+                Color.rgb(
+                    15,
+                    15,
+                    15,
+                )
             }
 
-        // Button.
         fillPaint.color =
             if (launchButtonPressed) {
                 pressedButtonColor
@@ -2175,14 +3679,16 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         canvas.drawRoundRect(
             launchButtonRect,
-            dp(21f),
-            dp(21f),
+            cornerRadius,
+            cornerRadius,
             fillPaint,
         )
 
-        // Border.
-        linePaint.style = Paint.Style.STROKE
-        linePaint.strokeWidth = dp(1.2f)
+        linePaint.style =
+            Paint.Style.STROKE
+
+        linePaint.strokeWidth =
+            dp(1.2f)
 
         linePaint.color =
             if (localPlayer == 1) {
@@ -2203,21 +3709,27 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         canvas.drawRoundRect(
             launchButtonRect,
-            dp(21f),
-            dp(21f),
+            cornerRadius,
+            cornerRadius,
             linePaint,
         )
 
-        // Text.
-        textPaint.textAlign = Paint.Align.CENTER
+        textPaint.textAlign =
+            Paint.Align.CENTER
+
         textPaint.typeface =
             android.graphics.Typeface.DEFAULT_BOLD
 
-        textPaint.textSize = dp(18f)
+        textPaint.textSize =
+            dp(18f)
 
         textPaint.color =
             if (localPlayer == 1) {
-                Color.rgb(70, 62, 0)
+                Color.rgb(
+                    70,
+                    62,
+                    0,
+                )
             } else {
                 Color.WHITE
             }
@@ -2284,51 +3796,185 @@ class ShuffleRenderer @JvmOverloads constructor(
 
     fun playRoundFromReplay(
         roundReplay: String,
-        onFinished: () -> Unit
+        onFinished: () -> Unit,
     ) {
-        pendingRoundStartRunnable?.let { removeCallbacks(it) }
+        pendingRoundStartRunnable?.let {
+            removeCallbacks(it)
+        }
+
         pendingRoundStartRunnable = null
 
-        replay = roundReplay
-        parseReplay(roundReplay)
+        stopPushStickAnimation()
+        stopScoreAnimation()
+        stopOpponentPositionReveal()
 
-        uiMode = ShuffleUiMode.Playing
-        nativeRoundFinished = onFinished
+        replay =
+            roundReplay
+
+        parseReplay(
+            roundReplay,
+        )
+
+        currentRoundStartBoard =
+            buildBoardSegment(
+                pucks,
+            )
+
+        currentRoundFiredTraceIds =
+            pucks.indices.filter { index ->
+                pucks[index].shotDistance >
+                        SHOT_DISTANCE_EPS
+            }
+
+        pushStickStates =
+            currentRoundFiredTraceIds.mapNotNull { traceId ->
+                pucks.getOrNull(
+                    traceId,
+                )?.let { puck ->
+                    PushStickState(
+                        traceId = traceId,
+                        shotAngle = puck.shotAngle,
+                    )
+                }
+            }
+
+        val now =
+            System.currentTimeMillis()
+
+        val hasOpponentPendingShot =
+            currentRoundFiredTraceIds.any { traceId ->
+                val puck =
+                    pucks.getOrNull(
+                        traceId,
+                    )
+
+                puck != null &&
+                        puck.player ==
+                        opponentPlayer() &&
+                        isPuckOnReadyRowForPlayer(
+                            puck = puck,
+                            player =
+                                opponentPlayer(),
+                        )
+            }
+
+        opponentRevealStartMs =
+            now
+
+        opponentRevealEndMs =
+            now +
+                    if (hasOpponentPendingShot) {
+                        OPPONENT_POSITION_REVEAL_DURATION_MS
+                    } else {
+                        0L
+                    }
+
+        pushStickStartMs =
+            opponentRevealEndMs
+
+        pushStickPushStartMs =
+            0L
+
+        pushStickActive =
+            pushStickStates.isNotEmpty()
+
+        uiMode =
+            ShuffleUiMode.Playing
+
+        nativeRoundFinished =
+            onFinished
 
         hasCueAim = false
         draggingCuePuck = false
         draggingArrowHead = false
+
         launchButtonPressed = false
         launchButtonProgress = 0f
-        launchButtonRect.set(0f, 0f, 0f, 0f)
 
-        showReplayArrows = pucks.any { it.shotDistance > SHOT_DISTANCE_EPS }
-        replayArrowAlpha = if (showReplayArrows) ARROW_MAX_ALPHA else 0f
+        launchButtonRect.set(
+            0f,
+            0f,
+            0f,
+            0f,
+        )
+
+        aimUiAlpha = 0f
+        aimUiFadeStartMs = 0L
+
+        showReplayArrows =
+            currentRoundFiredTraceIds.isNotEmpty()
+
+        replayArrowAlpha =
+            if (showReplayArrows) {
+                ARROW_MAX_ALPHA
+            } else {
+                0f
+            }
 
         wallIntroActive = false
         wallIntroStartMs = 0L
 
-        val startRunnable = Runnable {
-            pendingRoundStartRunnable = null
-            startNativeRoundFromCurrentPucks()
-        }
+        val revealDuration =
+            (
+                    opponentRevealEndMs -
+                            opponentRevealStartMs
+                    ).coerceAtLeast(
+                    0L,
+                )
 
-        pendingRoundStartRunnable = startRunnable
+        OpenPigeonLog.i(
+            "ShuffleRenderer",
+            "Shuffle preplay started " +
+                    "fired=${currentRoundFiredTraceIds.size} " +
+                    "opponentReveal=$hasOpponentPendingShot " +
+                    "revealDuration=$revealDuration " +
+                    "stickStates=${pushStickStates.size} " +
+                    "assetLoaded=${stickBitmap != null}",
+        )
+
+        val startRunnable =
+            Runnable {
+                pendingRoundStartRunnable =
+                    null
+
+                startNativeRoundFromCurrentPucks()
+            }
+
+        pendingRoundStartRunnable =
+            startRunnable
 
         invalidate()
-        postDelayed(startRunnable, PREPLAY_ARROW_HOLD_MS)
+        postInvalidateOnAnimation()
+
+        postDelayed(
+            startRunnable,
+            revealDuration +
+                    STICK_APPROACH_DURATION_MS +
+                    STICK_CONTACT_HOLD_DURATION_MS,
+        )
     }
 
     private fun startNativeRoundFromCurrentPucks() {
         showReplayArrows = false
         replayArrowAlpha = 0f
 
-        wallIntroActive = true
-        wallIntroStartMs =
-            System.currentTimeMillis() +
-                    WALL_INTRO_DELAY_MS
-
         commitCurrentRoundShots()
+
+        val pushStartMs =
+            System.currentTimeMillis()
+
+        pushStickPushStartMs =
+            pushStartMs
+
+        pushStickActive =
+            pushStickStates.isNotEmpty()
+
+        wallIntroActive = true
+
+        wallIntroStartMs =
+            pushStartMs +
+                    STICK_PUSH_DURATION_MS +
+                    WALL_INTRO_AFTER_STICK_GAP_MS
 
         val tablePtr =
             ensureNativeTable()
@@ -2396,6 +4042,10 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         if (firedCount == 0) {
             nativeRunning = false
+
+            stopPushStickAnimation()
+            stopOpponentPositionReveal()
+
             uiMode =
                 ShuffleUiMode.Aiming
 
@@ -2421,6 +4071,9 @@ class ShuffleRenderer @JvmOverloads constructor(
             "ShuffleRenderer",
             "Native round started " +
                     "firedCount=$firedCount " +
+                    "stickStates=${pushStickStates.size} " +
+                    "stickActive=$pushStickActive " +
+                    "pushStart=$pushStickPushStartMs " +
                     "pucks=${pucks.size} " +
                     "usedP1=${committedUsedPucksByPlayer[1]} " +
                     "usedP2=${committedUsedPucksByPlayer[2]}",
@@ -2429,38 +4082,116 @@ class ShuffleRenderer @JvmOverloads constructor(
         postInvalidateOnAnimation()
     }
 
-    private fun updateNativeSimulationFrame() {
-        if (!nativeRunning || nativeTablePtr == 0L) {
+    private fun orderSettledPucksMostRecentFirst() {
+        if (pucks.isEmpty()) {
             return
         }
 
-        val moving = ShuffleNativePhysics.updateShuffle(nativeTablePtr)
+        val firedIds =
+            currentRoundFiredTraceIds.toSet()
+
+        val newestPucks =
+            currentRoundFiredTraceIds
+                .mapNotNull { traceId ->
+                    pucks.getOrNull(traceId)
+                }
+                .filterNot { puck ->
+                    isPuckOnReadyRowForPlayer(
+                        puck,
+                        puck.player,
+                    )
+                }
+                .sortedBy { puck ->
+                    if (puck.player == localPlayer) {
+                        0
+                    } else {
+                        1
+                    }
+                }
+
+        val olderPucks =
+            pucks
+                .filterIndexed { index, puck ->
+                    index !in firedIds &&
+                            !isPuckOnReadyRowForPlayer(
+                                puck,
+                                puck.player,
+                            )
+                }
+
+        pucks.clear()
+        pucks.addAll(newestPucks)
+        pucks.addAll(olderPucks)
+    }
+
+    private fun updateNativeSimulationFrame() {
+        if (
+            !nativeRunning ||
+            nativeTablePtr == 0L
+        ) {
+            return
+        }
+
+        val moving =
+            ShuffleNativePhysics.updateShuffle(
+                nativeTablePtr,
+            )
+
         syncNativePucksFromOutputs()
 
         if (moving) {
             postInvalidateOnAnimation()
-        } else {
-            nativeRunning = false
-            wallIntroActive = false
+            return
+        }
 
-            snapFinalPucksToBoardEnvelope()
+        nativeRunning = false
+        wallIntroActive = false
 
-            replay = buildZeroShotBoardReplay()
+        stopPushStickAnimation()
+        stopOpponentPositionReveal()
 
-            OpenPigeonLog.i(
-                "ShuffleRenderer",
-                "Native shuffle stopped zeroReplay=${replay.take(300)}"
+        snapFinalPucksToBoardEnvelope()
+        orderSettledPucksMostRecentFirst()
+
+        pendingReplayPrefix =
+            if (currentRoundStartBoard.isNotBlank()) {
+                "$currentRoundStartBoard|shoot:1|"
+            } else {
+                ""
+            }
+
+        replay =
+            buildBoardSegment(
+                pucks,
             )
 
-            val callback = nativeRoundFinished
-            nativeRoundFinished = null
-            uiMode = ShuffleUiMode.Aiming
-            showReplayArrows = false
-            replayArrowAlpha = 0f
+        showReplayArrows = false
+        replayArrowAlpha = 0f
 
-            callback?.invoke()
-            invalidate()
+        OpenPigeonLog.i(
+            "ShuffleRenderer",
+            "Native shuffle stopped " +
+                    "allPlayed=${haveAllPucksBeenPlayed()} " +
+                    "pucks=${pucks.size} " +
+                    "prefixLen=${pendingReplayPrefix.length} " +
+                    "currentBoard=${replay.take(300)}",
+        )
+
+        if (haveAllPucksBeenPlayed()) {
+            startScoreAnimation()
+            return
         }
+
+        val callback =
+            nativeRoundFinished
+
+        nativeRoundFinished = null
+
+        uiMode =
+            ShuffleUiMode.Aiming
+
+        callback?.invoke()
+        invalidate()
     }
 
     private fun snapFinalPucksToBoardEnvelope() {
@@ -2557,9 +4288,25 @@ class ShuffleRenderer @JvmOverloads constructor(
         pucks.addAll(updated)
     }
 
+    private fun buildBoardSegment(
+        boardPucks: List<ShufflePuck>,
+    ): String {
+        return buildString {
+            append("board:")
+            append(score1)
+            append(",")
+            append(score2)
+
+            boardPucks.forEach { puck ->
+                appendReplayPuck(puck)
+            }
+            append("#")
+        }
+    }
+
     private fun buildLaunchBoardReplay(
         shotAngleRad: Float,
-        shotDistance: Float
+        shotDistance: Float,
     ): String {
         val visualReadyX =
             cuePuckXNorm *
@@ -2569,18 +4316,26 @@ class ShuffleRenderer @JvmOverloads constructor(
             visualXToWorld(
                 visualReadyX,
             )
-        val readyY = readyYForPlayer(localPlayer)
-        var wroteReadyPuck = false
 
-        return buildString {
-            append("board:")
-            append(score1)
-            append(",")
-            append(score2)
+        val readyY =
+            readyYForPlayer(
+                localPlayer,
+            )
 
-            for (puck in pucks) {
-                val outputPuck = if (isReadyPuckForPlayer(puck, localPlayer)) {
-                    wroteReadyPuck = true
+        val outputPucks =
+            mutableListOf<ShufflePuck>()
+
+        var wroteLocalReadyPuck = false
+
+        for (puck in pucks) {
+            val outputPuck =
+                if (
+                    isPuckOnReadyRowForPlayer(
+                        puck = puck,
+                        player = localPlayer,
+                    )
+                ) {
+                    wroteLocalReadyPuck = true
 
                     puck.copy(
                         x = readyX,
@@ -2589,28 +4344,92 @@ class ShuffleRenderer @JvmOverloads constructor(
                         shotAngle = shotAngleRad,
                         shotDistance = shotDistance,
                         velocityX = 0f,
-                        velocityY = 0f
+                        velocityY = 0f,
                     )
                 } else {
                     puck
                 }
 
-                appendReplayPuck(outputPuck)
-            }
+            outputPucks += outputPuck
+        }
 
-            if (!wroteReadyPuck) {
-                appendReplayPuck(
-                    ShufflePuck(
-                        x = readyX,
-                        y = readyY,
-                        player = localPlayer,
-                        bodyAngle = 0f,
-                        shotAngle = shotAngleRad,
-                        shotDistance = shotDistance
-                    )
+        if (!wroteLocalReadyPuck) {
+            outputPucks +=
+                ShufflePuck(
+                    x = readyX,
+                    y = readyY,
+                    player = localPlayer,
+                    bodyAngle = 0f,
+                    shotAngle = shotAngleRad,
+                    shotDistance = shotDistance,
+                    velocityX = 0f,
+                    velocityY = 0f,
+                )
+        }
+
+        val opponent =
+            opponentPlayer()
+
+        val hasOpponentReadyPuck =
+            outputPucks.any { puck ->
+                isPuckOnReadyRowForPlayer(
+                    puck = puck,
+                    player = opponent,
                 )
             }
+
+        if (!hasOpponentReadyPuck) {
+            outputPucks +=
+                ShufflePuck(
+                    x = 0f,
+                    y = readyYForPlayer(
+                        opponent,
+                    ),
+                    player = opponent,
+                    bodyAngle = 0f,
+                    shotAngle = 0f,
+                    shotDistance = 0f,
+                    velocityX = 0f,
+                    velocityY = 0f,
+                )
         }
+
+        val currentBoard =
+            buildBoardSegment(
+                outputPucks,
+            )
+
+        val stagedReplay =
+            buildString {
+                if (
+                    pendingReplayPrefix.isNotBlank()
+                ) {
+                    append(
+                        pendingReplayPrefix,
+                    )
+                }
+
+                append(
+                    currentBoard,
+                )
+
+                append("|")
+
+                append(
+                    currentBoard,
+                )
+            }
+
+        OpenPigeonLog.i(
+            "ShuffleRenderer",
+            "Built launch replay " +
+                    "localPlayer=$localPlayer " +
+                    "endsWithPipe=${stagedReplay.endsWith("|")} " +
+                    "length=${stagedReplay.length} " +
+                    "replay=${stagedReplay.take(420)}",
+        )
+
+        return stagedReplay
     }
 
     private fun buildZeroShotBoardReplay(): String {
@@ -2720,7 +4539,7 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         return pucks.count { puck ->
             puck.player == normalizedPlayer &&
-                    !isReadyPuckForPlayer(
+                    !isPuckOnReadyRowForPlayer(
                         puck = puck,
                         player = normalizedPlayer,
                     )
@@ -2729,7 +4548,6 @@ class ShuffleRenderer @JvmOverloads constructor(
             PUCKS_PER_PLAYER,
         )
     }
-
 
     private fun rebuildCommittedUsedPuckCounts() {
         for (player in 1..2) {
@@ -2792,27 +4610,30 @@ class ShuffleRenderer @JvmOverloads constructor(
         )
     }
 
-    private fun remainingPuckCountForPlayer(
-        player: Int,
-    ): Int {
-        return (
-                PUCKS_PER_PLAYER -
-                        usedPuckCountForPlayer(player)
-                ).coerceIn(
-                0,
-                PUCKS_PER_PLAYER,
-            )
-    }
-
     private fun drawReservePucks(
         canvas: Canvas,
         cx: Float,
         cy: Float,
+        alpha: Float,
     ) {
+        if (
+            uiMode != ShuffleUiMode.Aiming ||
+            alpha <= 0.001f
+        ) {
+            return
+        }
+
         val remaining =
-            remainingPuckCountForPlayer(
-                localPlayer,
-            )
+            (
+                    PUCKS_PER_PLAYER -
+                            usedPuckCountForPlayer(
+                                localPlayer,
+                            ) -
+                            1
+                    ).coerceIn(
+                    0,
+                    3,
+                )
 
         if (remaining <= 0) {
             return
@@ -2829,6 +4650,7 @@ class ShuffleRenderer @JvmOverloads constructor(
                 player = localPlayer,
                 rotation = 0f,
                 size = size,
+                alpha = alpha,
             )
         }
 
@@ -2840,6 +4662,7 @@ class ShuffleRenderer @JvmOverloads constructor(
                 player = localPlayer,
                 rotation = 0f,
                 size = size,
+                alpha = alpha,
             )
         }
 
@@ -2851,6 +4674,7 @@ class ShuffleRenderer @JvmOverloads constructor(
                 player = localPlayer,
                 rotation = 0f,
                 size = size,
+                alpha = alpha,
             )
         }
     }
@@ -2943,9 +4767,17 @@ class ShuffleRenderer @JvmOverloads constructor(
         }
     }
 
-    private fun updateCuePositionFromGameX(gameX: Float) {
-        cuePuckXNorm = (gameX / READY_PUCK_X_LIMIT)
-            .coerceIn(-1.0f, 1.0f)
+    private fun updateCuePositionFromGameX(
+        gameX: Float,
+    ) {
+        cuePuckXNorm =
+            (
+                    gameX /
+                            READY_PUCK_X_LIMIT
+                    ).coerceIn(
+                    -1f,
+                    1f,
+                )
     }
 
     private fun updateCueAimFromGameTouch(
@@ -2960,10 +4792,12 @@ class ShuffleRenderer @JvmOverloads constructor(
             READY_PUCK_PLAYER1_Y
 
         val dxGame =
-            touchGameX - cueGameX
+            touchGameX -
+                    cueGameX
 
         val dyGame =
-            touchGameY - cueGameY
+            touchGameY -
+                    cueGameY
 
         val distance =
             hypot(
@@ -2988,6 +4822,7 @@ class ShuffleRenderer @JvmOverloads constructor(
             )
 
         hasCueAim = true
+
         updateAimHaptic()
     }
 
@@ -2996,6 +4831,508 @@ class ShuffleRenderer @JvmOverloads constructor(
             cueAimDist.coerceIn(MIN_AIM_VISUAL_LENGTH, MAX_AIM_DISTANCE),
             boardRect
         )
+    }
+
+    private fun stopScoreAnimation() {
+        scoreAnimationActive = false
+        scoreAnimationStartMs = 0L
+        scoreAnimationAppliedCount = 0
+        scoreAnimationItems = emptyList()
+    }
+
+
+    private fun haveAllPucksBeenPlayed(): Boolean {
+        for (player in 1..2) {
+            val playedCount =
+                pucks.count { puck ->
+                    puck.player == player &&
+                            !isPuckOnReadyRowForPlayer(
+                                puck = puck,
+                                player = player,
+                            )
+                }
+
+            if (playedCount < PUCKS_PER_PLAYER) {
+                return false
+            }
+        }
+
+        return true
+    }
+
+
+    private fun startScoreAnimation() {
+        stopPushStickAnimation()
+        stopScoreAnimation()
+
+        scoreAnimationItems =
+            pucks.indices.map { puckIndex ->
+                val puck =
+                    pucks[puckIndex]
+
+                ScoreAnimationItem(
+                    puckIndex = puckIndex,
+                    player = puck.player,
+                    score = scoreForSettledPuck(puck),
+                )
+            }
+
+        scoreAnimationAppliedCount = 0
+        scoreAnimationStartMs =
+            System.currentTimeMillis()
+
+        scoreAnimationActive =
+            scoreAnimationItems.isNotEmpty()
+
+        showReplayArrows = false
+        replayArrowAlpha = 0f
+
+        wallIntroActive = false
+        wallIntroStartMs = 0L
+
+        OpenPigeonLog.i(
+            "ShuffleRenderer",
+            "Score animation started " +
+                    "items=${scoreAnimationItems.joinToString { item ->
+                        "index=${item.puckIndex},p=${item.player},score=${item.score}"
+                    }}",
+        )
+
+        if (!scoreAnimationActive) {
+            finishScoreAnimation()
+            return
+        }
+
+        postInvalidateOnAnimation()
+    }
+
+
+    private fun updateScoreAnimation() {
+        if (
+            !scoreAnimationActive ||
+            scoreAnimationStartMs <= 0L
+        ) {
+            return
+        }
+
+        val now =
+            System.currentTimeMillis()
+
+        val elapsed =
+            (
+                    now -
+                            scoreAnimationStartMs
+                    ).coerceAtLeast(0L)
+
+        while (
+            scoreAnimationAppliedCount <
+            scoreAnimationItems.size
+        ) {
+            val itemIndex =
+                scoreAnimationAppliedCount
+
+            val itemCommitTime =
+                SCORE_ANIMATION_INITIAL_DELAY_MS +
+                        itemIndex *
+                        SCORE_ANIMATION_ITEM_STEP_MS +
+                        (
+                                SCORE_ANIMATION_ITEM_DURATION_MS *
+                                        SCORE_HUD_COMMIT_PROGRESS
+                                ).toLong()
+
+            if (elapsed < itemCommitTime) {
+                break
+            }
+
+            val item =
+                scoreAnimationItems[
+                    itemIndex
+                ]
+
+            if (item.player == 1) {
+                score1 +=
+                    item.score
+            } else {
+                score2 +=
+                    item.score
+            }
+
+            scoreAnimationAppliedCount++
+
+            OpenPigeonLog.i(
+                "ShuffleRenderer",
+                "Applied puck score " +
+                        "index=${item.puckIndex} " +
+                        "player=${item.player} " +
+                        "score=${item.score} " +
+                        "totals=$score1,$score2",
+            )
+        }
+
+        val totalDuration =
+            scoreCountSequenceEndElapsedMs() +
+                    SCORE_POST_COUNT_HOLD_MS +
+                    SCORE_CLEANUP_DURATION_MS
+
+        if (elapsed >= totalDuration) {
+            finishScoreAnimation()
+            return
+        }
+
+        postInvalidateOnAnimation()
+    }
+
+    private fun scoreForSettledPuck(
+        puck: ShufflePuck,
+    ): Int {
+        val segments =
+            shuffleSegmentSpecs(
+                layoutMode,
+            )
+
+        if (segments.isEmpty()) {
+            return 0
+        }
+
+        val sampleCounts =
+            IntArray(
+                segments.size,
+            )
+
+        var totalPuckSamples = 0
+        var samplesInsideBoard = 0
+
+        for (
+        gridY in
+        -PUCK_SCORE_SAMPLE_GRID_RADIUS..
+                PUCK_SCORE_SAMPLE_GRID_RADIUS
+        ) {
+            val offsetY =
+                PUCK_RADIUS_GAME *
+                        gridY.toFloat() /
+                        PUCK_SCORE_SAMPLE_GRID_RADIUS.toFloat()
+
+            for (
+            gridX in
+            -PUCK_SCORE_SAMPLE_GRID_RADIUS..
+                    PUCK_SCORE_SAMPLE_GRID_RADIUS
+            ) {
+                val offsetX =
+                    PUCK_RADIUS_GAME *
+                            gridX.toFloat() /
+                            PUCK_SCORE_SAMPLE_GRID_RADIUS.toFloat()
+
+                if (
+                    offsetX * offsetX +
+                    offsetY * offsetY >
+                    PUCK_RADIUS_GAME *
+                    PUCK_RADIUS_GAME
+                ) {
+                    continue
+                }
+
+                totalPuckSamples++
+
+                val sampleX =
+                    puck.x +
+                            offsetX
+
+                val sampleY =
+                    puck.y +
+                            offsetY
+
+                var matchedBoard =
+                    false
+
+                for (segmentIndex in segments.indices) {
+                    if (
+                        pointIsInsidePolygon(
+                            x = sampleX,
+                            y = sampleY,
+                            points =
+                                segments[
+                                    segmentIndex
+                                ].points,
+                        )
+                    ) {
+                        sampleCounts[
+                            segmentIndex
+                        ]++
+
+                        matchedBoard =
+                            true
+                    }
+                }
+
+                if (matchedBoard) {
+                    samplesInsideBoard++
+                }
+            }
+        }
+
+        if (totalPuckSamples <= 0) {
+            return 0
+        }
+
+        val boardCoverage =
+            samplesInsideBoard.toFloat() /
+                    totalPuckSamples.toFloat()
+
+        if (
+            boardCoverage <
+            PUCK_MIN_BOARD_COVERAGE
+        ) {
+            return 0
+        }
+
+        val centerSegment =
+            segments.indices.firstOrNull { segmentIndex ->
+                pointIsInsidePolygon(
+                    x = puck.x,
+                    y = puck.y,
+                    points =
+                        segments[
+                            segmentIndex
+                        ].points,
+                )
+            }
+
+        var bestSegment =
+            centerSegment
+                ?: 0
+
+        var bestCount =
+            sampleCounts[
+                bestSegment
+            ]
+
+        for (segmentIndex in sampleCounts.indices) {
+            val count =
+                sampleCounts[
+                    segmentIndex
+                ]
+
+            if (count > bestCount) {
+                bestCount = count
+                bestSegment = segmentIndex
+            }
+        }
+
+        if (bestCount <= 0) {
+            return 0
+        }
+
+        val defaults =
+            defaultMapScoresForMode(
+                layoutMode,
+            )
+
+        return mapScores.getOrNull(
+            bestSegment,
+        )
+            ?: defaults.getOrNull(
+                bestSegment,
+            )
+            ?: 0
+    }
+
+
+    private fun pointIsInsidePolygon(
+        x: Float,
+        y: Float,
+        points: List<Pair<Float, Float>>,
+    ): Boolean {
+        if (points.size < 3) {
+            return false
+        }
+
+        var inside = false
+        var previousIndex =
+            points.lastIndex
+
+        for (currentIndex in points.indices) {
+            val current =
+                points[currentIndex]
+
+            val previous =
+                points[previousIndex]
+
+            val currentX =
+                current.first
+
+            val currentY =
+                current.second
+
+            val previousX =
+                previous.first
+
+            val previousY =
+                previous.second
+
+            val crossesY =
+                (
+                        currentY > y
+                        ) != (
+                        previousY > y
+                        )
+
+            if (crossesY) {
+                val intersectionX =
+                    (
+                            previousX -
+                                    currentX
+                            ) *
+                            (
+                                    y -
+                                            currentY
+                                    ) /
+                            (
+                                    previousY -
+                                            currentY
+                                    ) +
+                            currentX
+
+                if (x < intersectionX) {
+                    inside =
+                        !inside
+                }
+            }
+
+            previousIndex =
+                currentIndex
+        }
+
+        return inside
+    }
+
+    private fun finishScoreAnimation() {
+        while (
+            scoreAnimationAppliedCount <
+            scoreAnimationItems.size
+        ) {
+            val item =
+                scoreAnimationItems[
+                    scoreAnimationAppliedCount
+                ]
+
+            if (item.player == 1) {
+                score1 += item.score
+            } else {
+                score2 += item.score
+            }
+
+            scoreAnimationAppliedCount++
+        }
+
+        OpenPigeonLog.i(
+            "ShuffleRenderer",
+            "Score animation finished " +
+                    "score1=$score1 score2=$score2",
+        )
+
+        stopScoreAnimation()
+        stopOpponentPositionReveal()
+
+        pucks.clear()
+
+        committedUsedPucksByPlayer.fill(
+            0,
+        )
+
+        replay =
+            buildBoardSegment(
+                pucks,
+            )
+
+        uiMode =
+            ShuffleUiMode.Aiming
+
+        val callback =
+            nativeRoundFinished
+
+        nativeRoundFinished = null
+
+        callback?.invoke()
+
+        invalidate()
+    }
+
+    private fun scoreCountSequenceEndElapsedMs(): Long {
+        return if (scoreAnimationItems.isEmpty()) {
+            SCORE_ANIMATION_INITIAL_DELAY_MS
+        } else {
+            SCORE_ANIMATION_INITIAL_DELAY_MS +
+                    (
+                            scoreAnimationItems.size -
+                                    1
+                            ) *
+                    SCORE_ANIMATION_ITEM_STEP_MS +
+                    SCORE_ANIMATION_ITEM_DURATION_MS
+        }
+    }
+
+
+    private fun scoreCleanupProgress(
+        nowMs: Long,
+    ): Float {
+        if (
+            !scoreAnimationActive ||
+            scoreAnimationStartMs <= 0L
+        ) {
+            return 0f
+        }
+
+        val cleanupStartMs =
+            scoreAnimationStartMs +
+                    scoreCountSequenceEndElapsedMs() +
+                    SCORE_POST_COUNT_HOLD_MS
+
+        return (
+                (
+                        nowMs -
+                                cleanupStartMs
+                        ).toFloat() /
+                        SCORE_CLEANUP_DURATION_MS.toFloat()
+                ).coerceIn(
+                0f,
+                1f,
+            )
+    }
+
+    private fun scoreAnimationProgress(
+        itemIndex: Int,
+        nowMs: Long,
+    ): Float {
+        if (
+            !scoreAnimationActive ||
+            scoreAnimationStartMs <= 0L
+        ) {
+            return 0f
+        }
+
+        val itemStart =
+            scoreAnimationStartMs +
+                    SCORE_ANIMATION_INITIAL_DELAY_MS +
+                    itemIndex *
+                    SCORE_ANIMATION_ITEM_STEP_MS
+
+        return (
+                (
+                        nowMs -
+                                itemStart
+                        ).toFloat() /
+                        SCORE_ANIMATION_ITEM_DURATION_MS.toFloat()
+                ).coerceIn(
+                0f,
+                1f,
+            )
+    }
+
+    private fun stopPushStickAnimation() {
+        pushStickActive = false
+        pushStickStartMs = 0L
+        pushStickPushStartMs = 0L
+        pushStickStates = emptyList()
     }
 
     private fun screenToGameX(
@@ -3124,30 +5461,41 @@ class ShuffleRenderer @JvmOverloads constructor(
     }
 
     private fun loadAssets() {
-        puck1Bitmap = loadAssetBitmap(
-            "shuffle/shuffle_puck1_Normal@3x.png",
-            "shuffle_puck1_Normal@3x.png"
-        )
+        puck1Bitmap =
+            loadAssetBitmap(
+                "shuffle/shuffle_puck1_Normal@3x.png",
+                "shuffle_puck1_Normal@3x.png",
+            )
 
-        puck2Bitmap = loadAssetBitmap(
-            "shuffle/shuffle_puck2_Normal@3x.png",
-            "shuffle_puck2_Normal@3x.png"
-        )
+        puck2Bitmap =
+            loadAssetBitmap(
+                "shuffle/shuffle_puck2_Normal@3x.png",
+                "shuffle_puck2_Normal@3x.png",
+            )
 
-        puckShadowBitmap = loadAssetBitmap(
-            "shuffle/shuffle_puck_shadow_Normal@3x.png",
-            "shuffle_puck_shadow_Normal@3x.png"
-        )
+        puckShadowBitmap =
+            loadAssetBitmap(
+                "shuffle/shuffle_puck_shadow_Normal@3x.png",
+                "shuffle_puck_shadow_Normal@3x.png",
+            )
 
-        bumperBitmap = loadAssetBitmap(
-            "shuffle/shuffle_bumper_Normal@3x.png",
-            "shuffle_bumper_Normal@3x.png"
-        )
+        bumperBitmap =
+            loadAssetBitmap(
+                "shuffle/shuffle_bumper_Normal@3x.png",
+                "shuffle_bumper_Normal@3x.png",
+            )
 
-        bumperShadowBitmap = loadAssetBitmap(
-            "shuffle/shuffle_bumper_shadow_Normal@3x.png",
-            "shuffle_bumper_shadow_Normal@3x.png"
-        )
+        bumperShadowBitmap =
+            loadAssetBitmap(
+                "shuffle/shuffle_bumper_shadow_Normal@3x.png",
+                "shuffle_bumper_shadow_Normal@3x.png",
+            )
+
+        stickBitmap =
+            loadAssetBitmap(
+                "shuffle/shuffle_stick_Normal@3x.png",
+                "shuffle_stick_Normal@3x.png",
+            )
     }
 
     private fun loadAssetBitmap(
@@ -3188,7 +5536,13 @@ class ShuffleRenderer @JvmOverloads constructor(
         private const val IOS_BOARD_WIDTH = 380f
         private const val IOS_BOARD_HEIGHT = 410f
 
-        private const val PUCKS_PER_PLAYER = 3
+        private const val PUCKS_PER_PLAYER = 4
+
+        private const val AIM_UI_FADE_DURATION_MS = 280L
+
+        private const val HIGHLIGHT_PULSE_PERIOD_MS = 900L
+        private const val HIGHLIGHT_PULSE_MAX_SCALE = 1.10f
+
         private const val BOARD_ASPECT_HEIGHT_OVER_WIDTH = IOS_BOARD_HEIGHT / IOS_BOARD_WIDTH
         private const val AIM_HAPTIC_STEP_DISTANCE = 4f
 
@@ -3203,9 +5557,18 @@ class ShuffleRenderer @JvmOverloads constructor(
         private const val READY_PUCK_PLAYER2_Y = 215f
         private const val SHOT_DISTANCE_EPS = 0.001f
         private const val ARROW_MAX_ALPHA = 0.80f
-        private const val PREPLAY_ARROW_HOLD_MS = 1050L
+        private const val STICK_APPROACH_DURATION_MS = 1000L
+        private const val STICK_CONTACT_HOLD_DURATION_MS = 500L
+        private const val STICK_PUSH_DURATION_MS = 480L
 
-        private const val WALL_INTRO_DELAY_MS = 180L
+        private const val STICK_PUSH_FADE_START = 0.62f
+
+        private const val STICK_WIDTH_GAME = 240f
+        private const val STICK_START_OFFSET_GAME = 36f
+        private const val STICK_FORK_FORWARD_OFFSET_GAME = 13f
+        private const val OPPONENT_POSITION_REVEAL_DURATION_MS = 420L
+        private const val WALL_INTRO_AFTER_STICK_GAP_MS = 40L
+        private const val WALL_INTRO_CLIP_PADDING = 4f
         private const val WALL_INTRO_DURATION_MS = 520L
         private const val WALL_INTRO_START_SCALE = 1.50f
         private const val WALL_INTRO_THICKNESS = 12f
@@ -3217,6 +5580,14 @@ class ShuffleRenderer @JvmOverloads constructor(
         private const val TABLE_AIM_X_LIMIT = 195f
         private const val TABLE_AIM_Y_LIMIT = 205f
         private const val READY_ROW_DRAG_PAD = 10f
+        private const val SCORE_ANIMATION_INITIAL_DELAY_MS = 300L
+        private const val SCORE_ANIMATION_ITEM_DURATION_MS = 520L
+        private const val SCORE_ANIMATION_ITEM_STEP_MS = 600L
+        private const val SCORE_POST_COUNT_HOLD_MS = 500L
+        private const val SCORE_CLEANUP_DURATION_MS = 360L
+        private const val SCORE_HUD_COMMIT_PROGRESS = 0.52f
+        private const val PUCK_SCORE_SAMPLE_GRID_RADIUS = 6
+        private const val PUCK_MIN_BOARD_COVERAGE = 0.50f
 
         private val DEFAULT_MAP_SCORES_MODE_1 = listOf(
             5, 10, 5, 2, 3, 10,

@@ -36,6 +36,10 @@ class ShuffleActivity : AppCompatActivity() {
 
     private var localPlayer: Int = 1
     private var lastOutgoingReplay: String? = null
+    private var lastPlayedQueuedReplayKey: String? = null
+
+    private var pendingMessageAfterPlayback:
+            Map<String, String>? = null
     private var ignoreNextOutgoingReplayEcho = false
     private val stateLabelHandler = Handler(Looper.getMainLooper())
     private var waitingDotsRunnable: Runnable? = null
@@ -210,79 +214,281 @@ class ShuffleActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleMessage(message: Map<String, String>) {
-        if (message.isEmpty()) return
+    private fun handleMessage(
+        message: Map<String, String>,
+    ) {
+        if (message.isEmpty()) {
+            return
+        }
 
-        val game = message["game"]
+        val game =
+            message["game"]
 
-        if (!game.isNullOrBlank() && game != "shuffle") {
+        if (
+            !game.isNullOrBlank() &&
+            game != "shuffle"
+        ) {
             OpenPigeonLog.w(
                 "ShuffleActivity",
-                "Ignoring non-shuffle message game=$game keys=${message.keys.sorted()}"
+                "Ignoring non-shuffle message " +
+                        "game=$game " +
+                        "keys=${message.keys.sorted()}",
             )
 
             return
         }
 
-        val incomingReplay = message["replay"].orEmpty()
+        val incomingReplay =
+            message["replay"].orEmpty()
 
-        if (ignoreNextOutgoingReplayEcho && incomingReplay == lastOutgoingReplay) {
-            ignoreNextOutgoingReplayEcho = false
+        if (
+            ignoreNextOutgoingReplayEcho &&
+            incomingReplay ==
+            lastOutgoingReplay
+        ) {
+            ignoreNextOutgoingReplayEcho =
+                false
 
             OpenPigeonLog.i(
                 "ShuffleActivity",
-                "Ignoring own outgoing replay echo"
+                "Ignoring own outgoing replay echo",
             )
 
             return
         }
 
         if (renderer.isPlayingRound()) {
+            pendingMessageAfterPlayback =
+                message
+
             OpenPigeonLog.i(
                 "ShuffleActivity",
-                "Ignoring message update while shuffle replay is playing"
+                "Queued message during shuffle playback " +
+                        messageSummary(message),
             )
 
             return
         }
 
-        lastMessage = message
+        lastMessage =
+            message
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "handleMessage ${messageSummary(message)}"
+            "handleMessage ${messageSummary(message)}",
         )
 
-        applyGameData(message)
+        applyGameData(
+            message,
+        )
     }
 
-    private fun applyGameData(data: Map<String, String>) {
+    private fun finishPlaybackOrApplyQueuedMessage(
+        onNoQueuedMessage: () -> Unit,
+    ) {
+        val queuedMessage =
+            pendingMessageAfterPlayback
+
+        pendingMessageAfterPlayback =
+            null
+
+        if (queuedMessage != null) {
+            OpenPigeonLog.i(
+                "ShuffleActivity",
+                "Applying message queued during playback " +
+                        messageSummary(queuedMessage),
+            )
+
+            handleMessage(
+                queuedMessage,
+            )
+
+            return
+        }
+
+        onNoQueuedMessage()
+    }
+
+    private fun applyGameData(
+        data: Map<String, String>,
+    ) {
+        val rawReplay =
+            data["replay"].orEmpty()
+
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "applyGameData mode=${data["mode"]} map=${data["map"]} replay=${data["replay"]?.take(120)}"
+            "applyGameData " +
+                    "mode=${data["mode"]} " +
+                    "map=${data["map"]} " +
+                    "replay=${rawReplay.take(160)}",
         )
 
-        localPlayer = resolveLocalPlayer(data)
+        localPlayer =
+            resolveLocalPlayer(
+                data,
+            )
 
-        renderer.setLocalPlayer(localPlayer)
-        renderer.setGameData(data)
+        renderer.setLocalPlayer(
+            localPlayer,
+        )
 
-        applyOpponentAvatarFromMessage(data)
+        applyOpponentAvatarFromMessage(
+            data,
+        )
 
         myAvatarAnchor.bringToFront()
         opponentAvatarAnchor.bringToFront()
         settingsButton.bringToFront()
 
-        applyTurnFlow(data)
+        val markerIndex =
+            rawReplay.indexOf(
+                REPLAY_QUEUE_MARKER,
+            )
+
+        if (markerIndex >= 0) {
+            val queuedRoundReplay =
+                rawReplay
+                    .substring(
+                        0,
+                        markerIndex,
+                    )
+                    .trim()
+                    .trimEnd('|')
+
+            val postRoundReplay =
+                rawReplay
+                    .substring(
+                        markerIndex +
+                                REPLAY_QUEUE_MARKER.length,
+                    )
+                    .trim()
+                    .trimStart('|')
+                    .ifBlank {
+                        DEFAULT_REPLAY
+                    }
+
+            val queuedReplayKey =
+                buildString {
+                    append(
+                        data["id"].orEmpty(),
+                    )
+
+                    append("|")
+
+                    append(
+                        data["num"].orEmpty(),
+                    )
+
+                    append("|")
+
+                    append(
+                        rawReplay.hashCode(),
+                    )
+                }
+
+            val shouldPlayQueuedRound =
+                isYourTurn(data) &&
+                        queuedRoundReplay.isNotBlank() &&
+                        queuedReplayKey !=
+                        lastPlayedQueuedReplayKey
+
+            val postRoundData =
+                data
+                    .toMutableMap()
+                    .apply {
+                        put(
+                            "replay",
+                            postRoundReplay,
+                        )
+                    }
+
+            if (shouldPlayQueuedRound) {
+                lastPlayedQueuedReplayKey =
+                    queuedReplayKey
+
+                val roundData =
+                    data
+                        .toMutableMap()
+                        .apply {
+                            put(
+                                "replay",
+                                queuedRoundReplay,
+                            )
+                        }
+
+                renderer.setGameData(
+                    roundData,
+                )
+
+                hideStateLabelNow()
+
+                OpenPigeonLog.i(
+                    "ShuffleActivity",
+                    "Playing queued shuffle replay " +
+                            "key=$queuedReplayKey " +
+                            "round=${queuedRoundReplay.take(260)} " +
+                            "post=${postRoundReplay.take(260)}",
+                )
+
+                renderer.playRoundFromReplay(
+                    roundReplay =
+                        queuedRoundReplay,
+                ) {
+                    finishPlaybackOrApplyQueuedMessage {
+                        lastMessage =
+                            postRoundData
+
+                        renderer.setGameData(
+                            postRoundData,
+                        )
+
+                        applyTurnFlow(
+                            postRoundData,
+                        )
+                    }
+                }
+
+                return
+            }
+
+            lastMessage =
+                postRoundData
+
+            renderer.setGameData(
+                postRoundData,
+            )
+
+            applyTurnFlow(
+                postRoundData,
+            )
+
+            return
+        }
+
+        renderer.setGameData(
+            data,
+        )
+
+        applyTurnFlow(
+            data,
+        )
     }
 
-    private fun applyTurnFlow(data: Map<String, String>) {
-        val yourTurn = isYourTurn(data)
+    private fun applyTurnFlow(
+        data: Map<String, String>,
+    ) {
+        val yourTurn =
+            isYourTurn(
+                data,
+            )
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "applyTurnFlow localPlayer=$localPlayer yourTurn=$yourTurn " +
-                    "p1Shot=${renderer.hasShotForPlayer(1)} p2Shot=${renderer.hasShotForPlayer(2)}"
+            "applyTurnFlow " +
+                    "localPlayer=$localPlayer " +
+                    "yourTurn=$yourTurn " +
+                    "p1Shot=${renderer.hasShotForPlayer(1)} " +
+                    "p2Shot=${renderer.hasShotForPlayer(2)}",
         )
 
         if (!yourTurn) {
@@ -293,18 +499,27 @@ class ShuffleActivity : AppCompatActivity() {
 
         if (renderer.hasBothPlayerShots()) {
             hideStateLabelNow()
+
             renderer.showPlaying()
 
             renderer.playRoundFromReplay(
-                roundReplay = data["replay"] ?: DEFAULT_REPLAY
+                roundReplay =
+                    data["replay"]
+                        ?: DEFAULT_REPLAY,
             ) {
-                enableNextLocalAimAfterPlayback()
+                finishPlaybackOrApplyQueuedMessage {
+                    enableNextLocalAimAfterPlayback()
+                }
             }
 
             return
         }
 
-        if (renderer.hasShotForPlayer(localPlayer)) {
+        if (
+            renderer.hasShotForPlayer(
+                localPlayer,
+            )
+        ) {
             renderer.showWaitingForOpponent()
             showWaitingLabelAnimated()
             return
@@ -314,11 +529,24 @@ class ShuffleActivity : AppCompatActivity() {
         renderer.showAiming()
     }
 
-    private fun handleLocalLaunchReplay(stagedReplay: String) {
+    private fun handleLocalLaunchReplay(
+        stagedReplayValue: String,
+    ) {
+        val stagedReplay =
+            stagedReplayValue.trim()
+
+        OpenPigeonLog.i(
+            "ShuffleActivity",
+            "handleLocalLaunchReplay " +
+                    "endsWithPipe=${stagedReplay.endsWith("|")} " +
+                    "rawLength=${stagedReplayValue.length} " +
+                    "formattedLength=${stagedReplay.length}",
+        )
+
         if (!isYourTurn(lastMessage)) {
             OpenPigeonLog.w(
                 "ShuffleActivity",
-                "Ignoring local launch because it is not our turn"
+                "Ignoring local launch because it is not our turn",
             )
 
             renderer.showWaitingForOpponent()
@@ -326,13 +554,21 @@ class ShuffleActivity : AppCompatActivity() {
             return
         }
 
-        val opponentPlayer = 3 - localPlayer
-        val opponentAlreadyHasShot = renderer.hasShotForPlayer(opponentPlayer)
+        val opponentPlayer =
+            3 - localPlayer
+
+        val opponentAlreadyHasShot =
+            renderer.hasShotForPlayer(
+                opponentPlayer,
+            )
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "handleLocalLaunchReplay localPlayer=$localPlayer opponent=$opponentPlayer " +
-                    "opponentAlreadyHasShot=$opponentAlreadyHasShot replay=${stagedReplay.take(220)}"
+            "handleLocalLaunchReplay " +
+                    "localPlayer=$localPlayer " +
+                    "opponent=$opponentPlayer " +
+                    "opponentAlreadyHasShot=$opponentAlreadyHasShot " +
+                    "replay=${stagedReplay.take(420)}",
         )
 
         if (opponentAlreadyHasShot) {
@@ -340,28 +576,35 @@ class ShuffleActivity : AppCompatActivity() {
             renderer.showPlaying()
 
             renderer.playRoundFromReplay(
-                roundReplay = stagedReplay
+                roundReplay = stagedReplay,
             ) {
-                enableNextLocalAimAfterPlayback()
+                finishPlaybackOrApplyQueuedMessage {
+                    enableNextLocalAimAfterPlayback()
+                }
             }
 
             return
         }
 
-        sendReplayToOpponent(stagedReplay)
+        sendReplayToOpponent(
+            stagedReplay,
+        )
     }
 
     private fun enableNextLocalAimAfterPlayback() {
-        val zeroReplay = renderer.currentZeroShotReplay()
+        val currentBoard =
+            renderer.prepareNextLocalAimAfterPlayback()
 
-        lastMessage = lastMessage
-            .toMutableMap()
-            .apply {
-                put("replay", zeroReplay)
-            }
+        lastMessage =
+            lastMessage
+                .toMutableMap()
+                .apply {
+                    put(
+                        "replay",
+                        currentBoard,
+                    )
+                }
 
-        renderer.setLocalPlayer(localPlayer)
-        renderer.setGameData(lastMessage)
         hideStateLabelNow()
         renderer.showAiming()
 
@@ -371,77 +614,166 @@ class ShuffleActivity : AppCompatActivity() {
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "Playback finished; enabling next local aim replay=${zeroReplay.take(220)}"
+            "Playback finished; enabling next local aim " +
+                    "currentBoard=${currentBoard.take(260)}",
         )
     }
 
-    private fun sendReplayToOpponent(stagedReplay: String) {
-        val currentMessage = try {
-            if (sessionId.isNotBlank()) {
-                gameSessionIPC?.getCurrentMessage(sessionId).orEmpty()
-            } else {
+    private fun sendReplayToOpponent(
+        stagedReplay: String,
+    ) {
+        val currentMessage =
+            try {
+                if (sessionId.isNotBlank()) {
+                    gameSessionIPC
+                        ?.getCurrentMessage(sessionId)
+                        .orEmpty()
+                } else {
+                    emptyMap()
+                }
+            } catch (throwable: Throwable) {
+                OpenPigeonLog.e(
+                    "ShuffleActivity",
+                    "getCurrentMessage before send failed",
+                    throwable,
+                )
+
                 emptyMap()
             }
-        } catch (t: Throwable) {
-            OpenPigeonLog.e("ShuffleActivity", "getCurrentMessage before send failed", t)
-            emptyMap()
-        }
 
-        val sourceMessage = currentMessage.ifEmpty { lastMessage }
-        val myId = localUserId(sourceMessage)
-        val myAvatarKey = if (localPlayer == 1) "avatar1" else "avatar2"
-        val nextNum = ((sourceMessage["num"] ?: lastMessage["num"])?.toIntOrNull() ?: 0) + 1
+        val sourceMessage =
+            currentMessage.ifEmpty {
+                lastMessage
+            }
 
-        val p1 = (sourceMessage["player1"] ?: lastMessage["player1"]).orEmpty()
-        val p2 = (sourceMessage["player2"] ?: lastMessage["player2"]).orEmpty()
+        val myId =
+            localUserId(sourceMessage)
 
-        val msg = mutableMapOf(
-            "game" to "shuffle",
-            "mode" to (sourceMessage["mode"] ?: lastMessage["mode"] ?: "1"),
-            "map" to (sourceMessage["map"] ?: lastMessage["map"] ?: defaultMapForMode(1)),
-            "player" to localPlayer.toString(),
-            "num" to nextNum.toString(),
-            "sender" to myId,
-            "replay" to stagedReplay,
-            myAvatarKey to AvatarView.buildAvatarString()
-        )
+        val myAvatarKey =
+            if (localPlayer == 1) {
+                "avatar1"
+            } else {
+                "avatar2"
+            }
+
+        val sourceNum =
+            sourceMessage["num"]
+                ?.toIntOrNull()
+                ?: 0
+
+        val cachedNum =
+            lastMessage["num"]
+                ?.toIntOrNull()
+                ?: 0
+
+        val nextNum =
+            maxOf(
+                sourceNum,
+                cachedNum,
+            ) + 1
+
+        val player1Id =
+            (
+                    sourceMessage["player1"]
+                        ?: lastMessage["player1"]
+                    ).orEmpty()
+
+        val player2Id =
+            (
+                    sourceMessage["player2"]
+                        ?: lastMessage["player2"]
+                    ).orEmpty()
+
+        val updates =
+            mutableMapOf(
+                "game" to "shuffle",
+                "mode" to (
+                        sourceMessage["mode"]
+                            ?: lastMessage["mode"]
+                            ?: "1"
+                        ),
+                "map" to (
+                        sourceMessage["map"]
+                            ?: lastMessage["map"]
+                            ?: defaultMapForMode(1)
+                        ),
+                "player" to
+                        localPlayer.toString(),
+                "num" to
+                        nextNum.toString(),
+                "sender" to
+                        myId,
+                "replay" to
+                        stagedReplay,
+                myAvatarKey to
+                        AvatarView.buildAvatarString(),
+            )
 
         if (localPlayer == 1) {
-            msg["player1"] = myId
-            if (p2.isNotBlank()) msg["player2"] = p2
+            updates["player1"] = myId
+
+            if (player2Id.isNotBlank()) {
+                updates["player2"] =
+                    player2Id
+            }
         } else {
-            if (p1.isNotBlank()) msg["player1"] = p1
-            msg["player2"] = myId
+            if (player1Id.isNotBlank()) {
+                updates["player1"] =
+                    player1Id
+            }
+
+            updates["player2"] = myId
         }
 
-        lastOutgoingReplay = stagedReplay
-        ignoreNextOutgoingReplayEcho = true
-        lastMessage = msg
+        lastMessage =
+            sourceMessage
+                .toMutableMap()
+                .apply {
+                    putAll(updates)
+                }
+
+        lastOutgoingReplay =
+            stagedReplay
+
+        ignoreNextOutgoingReplayEcho =
+            true
 
         renderer.showSentThenWaiting()
         showSendingLabelImmediately()
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "sendReplayToOpponent localPlayer=$localPlayer replay=${stagedReplay.take(260)}"
+            "sendReplayToOpponent " +
+                    "localPlayer=$localPlayer " +
+                    "num=$nextNum " +
+                    "replay=${stagedReplay.take(420)}",
         )
 
-        val ipc = gameSessionIPC
+        val ipc =
+            gameSessionIPC
 
-        if (ipc == null || sessionId.isBlank()) {
+        if (
+            ipc == null ||
+            sessionId.isBlank()
+        ) {
             OpenPigeonLog.w(
                 "ShuffleActivity",
-                "No IPC/session available; showing sent/waiting locally"
+                "No IPC/session available; " +
+                        "showing sent/waiting locally",
             )
 
             showSentCheckThenWaitingAnimation()
             return
         }
 
-        ipc.updateSession(msg, sessionId) {
+        ipc.updateSession(
+            updates,
+            sessionId,
+        ) {
             OpenPigeonLog.i(
                 "ShuffleActivity",
-                "Shuffle session updated"
+                "Shuffle session updated " +
+                        "num=$nextNum",
             )
 
             runOnUiThread {
@@ -1002,5 +1334,8 @@ class ShuffleActivity : AppCompatActivity() {
             "board:0,0#" +
                     "0.000000,-215.000000,1,0.000000,0.000000,0.000000#" +
                     "0.000000,215.000000,2,0.000000,0.000000,0.000000#"
+
+        private const val REPLAY_QUEUE_MARKER =
+            "|shoot:1|"
     }
 }
