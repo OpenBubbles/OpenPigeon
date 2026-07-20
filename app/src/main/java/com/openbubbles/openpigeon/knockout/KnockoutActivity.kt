@@ -48,6 +48,7 @@ import android.media.AudioTrack
 import androidx.core.view.isVisible
 import androidx.core.content.edit
 import androidx.core.graphics.toColorInt
+import androidx.core.view.WindowInsetsCompat
 
 class KnockoutActivity : AppCompatActivity() {
     enum class Mode { Disabled, Aiming, Playing }
@@ -102,8 +103,10 @@ class KnockoutActivity : AppCompatActivity() {
     @Volatile private var pendingReplayWinLossState = ""
     @Volatile private var initialGameDataApplied = false
     @Volatile private var gameShownToPlayer = false
+
     @Volatile private var knockoutBoardTopPx = 0f
     @Volatile private var knockoutBoardBottomPx = 0f
+    @Volatile private var knockoutBottomInsetPx = 0
 
     private var statusDimView: View? = null
     @Volatile private var statusDimVisible = false
@@ -145,7 +148,28 @@ class KnockoutActivity : AppCompatActivity() {
         }
         applyStateLabelBackground(findViewById(R.id.knockoutStateLabel))
         hideStateLabel()
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content)) { _, insets -> insets }
+        val contentView =
+            findViewById<View>(android.R.id.content)
+
+        ViewCompat.setOnApplyWindowInsetsListener(
+            contentView
+        ) { _, insets ->
+            val bottomInset = insets.getInsets(
+                WindowInsetsCompat.Type.navigationBars() or
+                        WindowInsetsCompat.Type.displayCutout()
+            ).bottom
+
+            if (knockoutBottomInsetPx != bottomInset) {
+                knockoutBottomInsetPx = bottomInset
+
+                updateKnockoutSettingsButtonPlacement()
+                updateKnockoutBoardSafeArea()
+            }
+
+            insets
+        }
+
+        ViewCompat.requestApplyInsets(contentView)
 
         AvatarData.init(applicationContext)
         table = createKnockoutTable()
@@ -162,6 +186,7 @@ class KnockoutActivity : AppCompatActivity() {
         val rootFrame = findViewById<FrameLayout>(R.id.knockoutRoot)
 
         rootFrame.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateKnockoutSettingsButtonPlacement()
             updateKnockoutBoardSafeArea()
         }
 
@@ -506,18 +531,83 @@ class KnockoutActivity : AppCompatActivity() {
         )
     }
 
-    private fun updateKnockoutBoardSafeArea() {
-        val root = findViewById<View>(R.id.knockoutRoot) ?: return
-        val myAvatar = findViewById<View>(R.id.knockoutGameAvatarAnchor)
-        val opponentAvatar = findViewById<View>(R.id.knockoutOpponentAvatarAnchor)
+    private fun updateKnockoutSettingsButtonPlacement() {
+        val button =
+            findViewById<ImageButton>(
+                R.id.knockoutSettingsButton
+            ) ?: return
 
-        if (root.height <= 0) return
+        val lp =
+            button.layoutParams as? FrameLayout.LayoutParams
+                ?: return
+
+        val desiredBottomMargin =
+            knockoutBottomInsetPx +
+                    dp(10f).toInt()
+
+        val desiredRightMargin =
+            dp(10f).toInt()
+
+        if (
+            lp.gravity !=
+            (Gravity.BOTTOM or Gravity.END) ||
+            lp.bottomMargin != desiredBottomMargin ||
+            lp.rightMargin != desiredRightMargin
+        ) {
+            lp.gravity =
+                Gravity.BOTTOM or Gravity.END
+
+            lp.bottomMargin =
+                desiredBottomMargin
+
+            lp.rightMargin =
+                desiredRightMargin
+
+            lp.topMargin = 0
+
+            button.layoutParams = lp
+        }
+
+        button.bringToFront()
+    }
+
+    private fun updateKnockoutBoardSafeArea() {
+        val root =
+            findViewById<View>(
+                R.id.knockoutRoot
+            ) ?: return
+
+        val myAvatar =
+            findViewById<View>(
+                R.id.knockoutGameAvatarAnchor
+            )
+
+        val opponentAvatar =
+            findViewById<View>(
+                R.id.knockoutOpponentAvatarAnchor
+            )
+
+        val settingsButton =
+            findViewById<View>(
+                R.id.knockoutSettingsButton
+            )
+
+        if (root.height <= 0) {
+            return
+        }
 
         val rootLocation = IntArray(2)
         root.getLocationOnScreen(rootLocation)
 
-        fun bottomRelativeToRoot(view: View?): Float {
-            if (view == null || view.height <= 0) return 0f
+        fun bottomRelativeToRoot(
+            view: View?
+        ): Float {
+            if (
+                view == null ||
+                view.height <= 0
+            ) {
+                return 0f
+            }
 
             val location = IntArray(2)
             view.getLocationOnScreen(location)
@@ -529,16 +619,56 @@ class KnockoutActivity : AppCompatActivity() {
                     ).toFloat()
         }
 
+        fun topRelativeToRoot(
+            view: View?
+        ): Float? {
+            if (
+                view == null ||
+                view.visibility != View.VISIBLE ||
+                view.height <= 0
+            ) {
+                return null
+            }
+
+            val location = IntArray(2)
+            view.getLocationOnScreen(location)
+
+            return (
+                    location[1] -
+                            rootLocation[1]
+                    ).toFloat()
+        }
+
         val avatarBottom = maxOf(
             bottomRelativeToRoot(myAvatar),
             bottomRelativeToRoot(opponentAvatar),
             dp(84f)
         )
 
-        knockoutBoardTopPx = avatarBottom + dp(8f)
+        knockoutBoardTopPx =
+            avatarBottom + dp(8f)
+
+
+        val bottomAboveSystemBar =
+            root.height.toFloat() -
+                    knockoutBottomInsetPx.toFloat() -
+                    dp(16f)
+
+        val settingsButtonTop =
+            topRelativeToRoot(settingsButton)
+
+        val bottomAboveSettings =
+            settingsButtonTop
+                ?.minus(dp(10f))
+                ?: bottomAboveSystemBar
+
         knockoutBoardBottomPx =
-            (root.height.toFloat() - dp(24f))
-                .coerceAtLeast(knockoutBoardTopPx + 1f)
+            minOf(
+                bottomAboveSystemBar,
+                bottomAboveSettings
+            ).coerceAtLeast(
+                knockoutBoardTopPx + 1f
+            )
     }
 
     fun knockoutBoardSafeTopPx(): Float {
@@ -546,11 +676,20 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     fun knockoutBoardSafeBottomPx(): Float {
-        val rootHeight = findViewById<View>(R.id.knockoutRoot)?.height ?: 0
+        val rootHeight =
+            findViewById<View>(
+                R.id.knockoutRoot
+            )?.height ?: 0
 
-        return knockoutBoardBottomPx.takeIf { it > 0f }
-            ?: (rootHeight.toFloat() - dp(24f))
-                .coerceAtLeast(knockoutBoardSafeTopPx() + 1f)
+        return knockoutBoardBottomPx
+            .takeIf { it > 0f }
+            ?: (
+                    rootHeight.toFloat() -
+                            knockoutBottomInsetPx.toFloat() -
+                            dp(16f)
+                    ).coerceAtLeast(
+                    knockoutBoardSafeTopPx() + 1f
+                )
     }
 
     private fun handleMessage(msg: Map<String, String>) {
@@ -2242,7 +2381,9 @@ class KnockoutActivity : AppCompatActivity() {
             val button = findViewById<Button>(R.id.knockoutLaunchButton)
             val hint = findViewById<TextView>(R.id.knockoutPowerHintLabel)
 
-            val bottomMargin = dp(34f).toInt()
+            val bottomMargin =
+                knockoutBottomInsetPx +
+                        dp(34f).toInt()
 
             if (button != null && button.isVisible) {
                 val lp = button.layoutParams as? FrameLayout.LayoutParams
