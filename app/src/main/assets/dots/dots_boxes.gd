@@ -39,6 +39,11 @@ var prev_lines_cache: Array = []
 var last_replay_sent: String = ""
 var _loading_replay: bool = false
 
+var _send_button_home_global := Vector2.ZERO
+var _send_button_home_ready := false
+var _send_button_target_visible := false
+var _send_button_init_queued := false
+
 @export var board_size: int = 4 : set = set_board_size # 4, 5, or 6
 var blue_marker_tex: Texture2D = preload("res://dots/blue_marker.png")
 var red_marker_tex: Texture2D = preload("res://dots/red_marker.png")
@@ -119,20 +124,29 @@ func _on_game_ready() -> void:
 		push_warning("No %DotsGrid in scene")
 
 	if is_instance_valid(send_button):
-		_update_send_button_visibility(false)
+		send_button.visible = true
+		send_button.disabled = true
+		send_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		send_button.modulate.a = 0.0
-		send_button.scale = Vector2(1.0, 1.0)
+		send_button.scale = Vector2.ONE
 
 		if not send_button.pressed.is_connected(_on_send_pressed):
 			send_button.pressed.connect(_on_send_pressed)
 
+		_queue_send_button_initialization()
+
 		OpLog.d(LOG_TAG, [
-			"send_button_ready visible=", send_button.visible,
-			" alpha=", send_button.modulate.a
+			"send_button_ready visible=",
+			send_button.visible
 		])
 	else:
 		OpLog.w(LOG_TAG, "missing_send_button")
 		push_warning("No %SendButton in scene")
+
+		OpLog.d(LOG_TAG, [
+			"send_button_ready visible=",
+			send_button.visible
+		])
 
 	_apply_player_color_icons()
 
@@ -492,49 +506,143 @@ func _on_temp_line_changed(has_line: bool) -> void:
 
 	_update_send_button_visibility(has_line)
 	
-func _update_send_button_visibility(should_show: bool) -> void:
+func _queue_send_button_initialization() -> void:
+	if (
+		_send_button_home_ready or
+		_send_button_init_queued or
+		not is_instance_valid(send_button)
+	):
+		return
+
+	_send_button_init_queued = true
+	call_deferred("_initialize_send_button_animation")
+
+func _initialize_send_button_animation() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	_send_button_init_queued = false
+
 	if not is_instance_valid(send_button):
 		return
 
-	send_button.disabled = not should_show
-	send_button.set_as_top_level(true)
+	_send_button_home_global = send_button.global_position
+	_send_button_home_ready = true
 
-	if not send_button.has_meta("home_pos"):
-		send_button.set_meta("home_pos", send_button.global_position)
+	OpLog.i(LOG_TAG, [
+		"send_button_home_captured position=",
+		_send_button_home_global,
+		" size=",
+		send_button.size,
+		" parent=",
+		send_button.get_parent().get_path()
+	])
+
+	send_button.set_as_top_level(true)
+	send_button.global_position = _send_button_home_global
+	send_button.visible = false
+	send_button.disabled = true
+	send_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	send_button.modulate.a = 1.0
+
+	if _send_button_target_visible:
+		_update_send_button_visibility(true)
+
+func _update_send_button_visibility(
+	should_show: bool
+) -> void:
+	if not is_instance_valid(send_button):
+		return
+
+	_send_button_target_visible = should_show
+	send_button.disabled = not should_show
+
+	if not _send_button_home_ready:
+		send_button.visible = true
+		send_button.disabled = true
+		send_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		send_button.modulate.a = 0.0
+
+		_queue_send_button_initialization()
+		return
 
 	if send_button.has_meta("sb_tween"):
-		var old_tw: Variant = send_button.get_meta("sb_tween")
-		if old_tw is Tween and (old_tw as Tween).is_running():
-			(old_tw as Tween).kill()
+		var old_tween: Variant = send_button.get_meta(
+			"sb_tween"
+		)
 
-	var home: Vector2 = send_button.get_meta("home_pos")
-	var vp := get_viewport_rect()
-	var off_y: float = vp.size.y + send_button.size.y + 30.0
-	var start_pos := Vector2(home.x, off_y)
+		if (
+			old_tween is Tween and
+			(old_tween as Tween).is_running()
+		):
+			(old_tween as Tween).kill()
+
+	var home := _send_button_home_global
+	var viewport_height := get_viewport_rect().size.y
+
+	var offscreen_position := Vector2(
+		home.x,
+		viewport_height +
+			send_button.size.y +
+			30.0
+	)
 
 	if should_show:
-		if not send_button.visible:
-			send_button.global_position = start_pos
-			send_button.visible = true
-			send_button.modulate.a = 1.0
-		elif send_button.global_position.y > vp.size.y:
-			send_button.global_position = start_pos
+		send_button.global_position = offscreen_position
+		send_button.visible = true
+		send_button.disabled = false
+		send_button.mouse_filter = Control.MOUSE_FILTER_STOP
+		send_button.modulate.a = 1.0
 
-		var t_in := create_tween()
-		send_button.set_meta("sb_tween", t_in)
-		t_in.tween_property(send_button, "global_position", home, 0.35) \
-			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		var tween_in := create_tween()
+		send_button.set_meta(
+			"sb_tween",
+			tween_in
+		)
+
+		tween_in.tween_property(
+			send_button,
+			"global_position",
+			home,
+			0.35
+		).set_trans(
+			Tween.TRANS_QUAD
+		).set_ease(
+			Tween.EASE_OUT
+		)
 	else:
-		if send_button.visible:
-			var end_pos := Vector2(home.x, off_y)
-			var t_out := create_tween()
-			send_button.set_meta("sb_tween", t_out)
-			t_out.tween_property(send_button, "global_position", end_pos, 0.25) \
-				.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-			t_out.tween_callback(func():
-				if is_instance_valid(send_button):
+		if not send_button.visible:
+			return
+
+		var tween_out := create_tween()
+		send_button.set_meta(
+			"sb_tween",
+			tween_out
+		)
+
+		tween_out.tween_property(
+			send_button,
+			"global_position",
+			offscreen_position,
+			0.25
+		).set_trans(
+			Tween.TRANS_QUAD
+		).set_ease(
+			Tween.EASE_IN
+		)
+
+		tween_out.tween_callback(
+			func() -> void:
+				if (
+					is_instance_valid(send_button) and
+					not _send_button_target_visible
+				):
 					send_button.visible = false
-			)
+					send_button.disabled = true
+					send_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+					send_button.global_position = _send_button_home_global
+		)
 
 func _on_send_pressed() -> void:
 	OpLog.event(LOG_TAG, [

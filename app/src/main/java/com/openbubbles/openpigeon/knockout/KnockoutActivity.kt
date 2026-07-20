@@ -571,6 +571,19 @@ class KnockoutActivity : AppCompatActivity() {
         button.bringToFront()
     }
 
+    private fun scheduleKnockoutBoardSafeAreaUpdate() {
+        val root =
+            findViewById<View>(
+                R.id.knockoutRoot
+            ) ?: return
+
+        root.post {
+            if (!closing) {
+                updateKnockoutBoardSafeArea()
+            }
+        }
+    }
+
     private fun updateKnockoutBoardSafeArea() {
         val root =
             findViewById<View>(
@@ -592,6 +605,16 @@ class KnockoutActivity : AppCompatActivity() {
                 R.id.knockoutSettingsButton
             )
 
+        val powerHint =
+            findViewById<View>(
+                R.id.knockoutPowerHintLabel
+            )
+
+        val launchButton =
+            findViewById<View>(
+                R.id.knockoutLaunchButton
+            )
+
         if (root.height <= 0) {
             return
         }
@@ -600,7 +623,7 @@ class KnockoutActivity : AppCompatActivity() {
         root.getLocationOnScreen(rootLocation)
 
         fun bottomRelativeToRoot(
-            view: View?
+            view: View?,
         ): Float {
             if (
                 view == null ||
@@ -620,7 +643,7 @@ class KnockoutActivity : AppCompatActivity() {
         }
 
         fun topRelativeToRoot(
-            view: View?
+            view: View?,
         ): Float? {
             if (
                 view == null ||
@@ -642,33 +665,42 @@ class KnockoutActivity : AppCompatActivity() {
         val avatarBottom = maxOf(
             bottomRelativeToRoot(myAvatar),
             bottomRelativeToRoot(opponentAvatar),
-            dp(84f)
+            dp(84f),
         )
 
         knockoutBoardTopPx =
             avatarBottom + dp(8f)
-
 
         val bottomAboveSystemBar =
             root.height.toFloat() -
                     knockoutBottomInsetPx.toFloat() -
                     dp(16f)
 
-        val settingsButtonTop =
-            topRelativeToRoot(settingsButton)
+        val bottomCandidates =
+            mutableListOf(bottomAboveSystemBar)
 
-        val bottomAboveSettings =
-            settingsButtonTop
-                ?.minus(dp(10f))
-                ?: bottomAboveSystemBar
+        topRelativeToRoot(settingsButton)?.let { top ->
+            bottomCandidates +=
+                top - dp(10f)
+        }
+
+        topRelativeToRoot(powerHint)?.let { top ->
+            bottomCandidates +=
+                top - dp(12f)
+        }
+
+        topRelativeToRoot(launchButton)?.let { top ->
+            bottomCandidates +=
+                top - dp(12f)
+        }
 
         knockoutBoardBottomPx =
-            minOf(
-                bottomAboveSystemBar,
-                bottomAboveSettings
-            ).coerceAtLeast(
-                knockoutBoardTopPx + 1f
-            )
+            (
+                    bottomCandidates.minOrNull()
+                        ?: bottomAboveSystemBar
+                    ).coerceAtLeast(
+                    knockoutBoardTopPx + 1f
+                )
     }
 
     fun knockoutBoardSafeTopPx(): Float {
@@ -2269,27 +2301,47 @@ class KnockoutActivity : AppCompatActivity() {
         }
     }
 
-    private fun setPowerHintVisible(visible: Boolean) {
-        val label = findViewById<TextView>(R.id.knockoutPowerHintLabel) ?: return
+    private fun setPowerHintVisible(
+        visible: Boolean,
+    ) {
+        val label =
+            findViewById<TextView>(
+                R.id.knockoutPowerHintLabel
+            ) ?: return
 
         if (visible) {
-            if (powerHintVisible && label.isVisible) return
+            if (
+                powerHintVisible &&
+                label.isVisible
+            ) {
+                scheduleKnockoutBoardSafeAreaUpdate()
+                return
+            }
 
             powerHintVisible = true
+
             label.animate().cancel()
             label.alpha = 0f
             label.visibility = View.VISIBLE
             label.bringToFront()
 
+            scheduleKnockoutBoardSafeAreaUpdate()
+
             label.animate()
                 .alpha(1f)
                 .setDuration(220L)
+                .withEndAction {
+                    scheduleKnockoutBoardSafeAreaUpdate()
+                }
                 .start()
         } else {
             powerHintVisible = false
+
             label.animate().cancel()
             label.alpha = 0f
             label.visibility = View.GONE
+
+            scheduleKnockoutBoardSafeAreaUpdate()
         }
     }
 
@@ -2314,21 +2366,31 @@ class KnockoutActivity : AppCompatActivity() {
             button.bringToFront()
 
             button.post {
-                if (!launchButtonVisible) return@post
-
-                val postedStartTranslation = if (button.height > 0) {
-                    button.height.toFloat() + dp(48f)
-                } else {
-                    dp(96f)
+                if (!launchButtonVisible) {
+                    return@post
                 }
 
-                button.translationY = postedStartTranslation
+                val postedStartTranslation =
+                    if (button.height > 0) {
+                        button.height.toFloat() + dp(48f)
+                    } else {
+                        dp(96f)
+                    }
+
+                button.translationY =
+                    postedStartTranslation
+
                 button.alpha = 1f
+
+                scheduleKnockoutBoardSafeAreaUpdate()
 
                 button.animate()
                     .translationY(0f)
                     .alpha(1f)
                     .setDuration(280L)
+                    .withEndAction {
+                        scheduleKnockoutBoardSafeAreaUpdate()
+                    }
                     .start()
             }
         } else if (button.isVisible) {
@@ -2341,6 +2403,8 @@ class KnockoutActivity : AppCompatActivity() {
                         button.visibility = View.GONE
                         button.translationY = 0f
                         button.alpha = 1f
+
+                        scheduleKnockoutBoardSafeAreaUpdate()
                     }
                 }
                 .start()
@@ -2348,6 +2412,8 @@ class KnockoutActivity : AppCompatActivity() {
             button.visibility = View.GONE
             button.translationY = 0f
             button.alpha = 1f
+
+            scheduleKnockoutBoardSafeAreaUpdate()
         }
     }
 
@@ -2422,6 +2488,8 @@ class KnockoutActivity : AppCompatActivity() {
 
                 hint.bringToFront()
             }
+
+            scheduleKnockoutBoardSafeAreaUpdate()
         }
     }
 
