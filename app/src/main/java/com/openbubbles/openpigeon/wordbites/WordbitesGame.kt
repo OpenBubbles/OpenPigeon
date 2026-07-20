@@ -7,12 +7,28 @@ import com.openbubbles.openpigeon.godot.GodotGameActivity
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
 import kotlin.random.Random
+import androidx.compose.runtime.Composable
+import androidx.glance.GlanceModifier
+import androidx.glance.layout.Column
+import androidx.glance.layout.padding
+import androidx.compose.ui.unit.dp
+import com.openbubbles.openpigeon.RenderConfigOption
+import com.openbubbles.openpigeon.wordgames.WordGameLanguage
+import com.openbubbles.openpigeon.wordgames.WordGameLanguages
 
 class WordbitesGame : Game {
 
     override fun getVersion(): String {
         return "1"
     }
+
+    var language: String
+        get() =
+            WordGameLanguages.selectedOptionLabel
+
+        set(value) {
+            WordGameLanguages.select(value)
+        }
 
     override fun getName(): String {
         return "wordbites"
@@ -30,20 +46,60 @@ class WordbitesGame : Game {
         return R.drawable.wordbites
     }
 
-    private fun loadDictionary(context: Context): List<String> {
-        val list = mutableListOf<String>()
-        context.resources.openRawResource(R.raw.gp_en2).bufferedReader().useLines { lines ->
-            lines.forEach { line ->
-                val w = line.trim().uppercase()
-                if (w.length in 3..9) {
-                    list.add(w)
-                }
-            }
-        }
-        return list
+    override fun isConfigurable(): Boolean {
+        return true
     }
 
-    private fun chooseLetterBank(dict: List<String>): String {
+    @Composable
+    override fun Configuration(
+        context: Context?,
+    ) {
+        Column(
+            modifier = GlanceModifier.padding(16.dp),
+        ) {
+            RenderConfigOption(
+                this@WordbitesGame,
+                "Language",
+                WordGameLanguages.configurationOptions,
+                language,
+            )
+        }
+    }
+
+    override fun setConfigOption(
+        name: String,
+        value: String,
+    ) {
+        when (name.lowercase()) {
+            "language" -> {
+                language = WordGameLanguages
+                    .fromSelection(value)
+                    .optionLabel
+            }
+
+            else -> {
+                println("Warning: unknown config option '$name'")
+            }
+        }
+
+        println("Config option '$name' set to '$value'")
+    }
+
+    private fun loadDictionary(
+        context: Context,
+        selectedLanguage: WordGameLanguage,
+    ): List<String> {
+        return WordGameLanguages
+            .loadDictionary(context, selectedLanguage)
+            .filter { word ->
+                word.length in 3..9
+            }
+    }
+
+    private fun chooseLetterBank(
+        dict: List<String>,
+        selectedLanguage: WordGameLanguage,
+    ): String {
         val fives = dict.filter { it.length == 5 }
         val fours = dict.filter { it.length == 4 }
 
@@ -56,14 +112,16 @@ class WordbitesGame : Game {
             val w3 = fourShuffled[0]
             val w4 = fourShuffled[1]
 
-            val combined = (w1 + w2 + w3 + w4).toMutableList()
-            combined.shuffle()
-            return combined.joinToString("")
+            return (w1 + w2 + w3 + w4)
+                .toList()
+                .shuffled()
+                .joinToString("")
         }
 
-        // Fallback: random letters (should basically never happen)
-        val randomChars = CharArray(18) { ('A'..'Z').random() }
-        return String(randomChars)
+        return WordGameLanguages.randomLetters(
+            language = selectedLanguage,
+            count = 18,
+        )
     }
 
     private fun generatePieces(letterBank: String): List<String> {
@@ -224,29 +282,40 @@ class WordbitesGame : Game {
         return null
     }
 
-    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+    override fun getNewGameData(
+        context: Context,
+    ): MutableMap<String, String>? {
         AvatarData.init(context)
+
+        val selectedLanguage =
+            WordGameLanguages.fromSelection(language)
+
+        val dict = loadDictionary(
+            context = context,
+            selectedLanguage = selectedLanguage,
+        )
+
+        val bank = chooseLetterBank(
+            dict = dict,
+            selectedLanguage = selectedLanguage,
+        )
+
+        val pieces = generatePieces(bank)
+        val levelString = toLevelString(pieces)
+
         return super.getNewGameData(context)?.apply {
-            // Match the Godot side expectations
-            put("lang", "en")
+            WordGameLanguages.applyToGameData(
+                gameData = this,
+                language = selectedLanguage,
+            )
+
             put("mode", "1")
             put("letters", "AAA")
-
-            // 1) Load dictionary (same file as Godot: gp_en2)
-            val dict = loadDictionary(context)
-
-            // 2) Build a strong letter bank from real words
-            val bank = chooseLetterBank(dict)
-
-            // 3) Split into 6 single tiles + 5 multi-letter tiles
-            val pieces = generatePieces(bank)
-
-            // 4) Encode into the level string for Godot
-            val levelString = toLevelString(pieces)
-
-            // 5) Send it down to Godot
             put("level", levelString)
-            put("avatar2", AvatarView.buildAvatarString())
+            put(
+                "avatar2",
+                AvatarView.buildAvatarString(),
+            )
         }
     }
 

@@ -25,7 +25,15 @@ extends BaseGame
 @onready var words_scroll: ScrollContainer = %VScrollBar
 
 const LETTER_BG: Texture2D = preload("res://anagrams/letter_bg.png")
-const DICT_PATH := "res://global/gp_wg_en2.txt"
+
+var game_language: String = WordLanguage.DEFAULT_LANGUAGE
+
+var dictionary_path: String = WordLanguage.get_dictionary_path(
+	WordLanguage.DEFAULT_LANGUAGE
+)
+
+var _loaded_dictionary_path: String = ""
+
 const MUSIC_STREAM := preload("res://global/audio/anagrams.ogg")
 
 var _tear_rng := RandomNumberGenerator.new()
@@ -47,7 +55,6 @@ var p2_score_s = ""
 var _all_words_cache: Array = []
 var my_has_data := false
 var _dict_words: Array[String] = []
-var _dict_loaded := false
 var _words_scroll: ScrollContainer = null
 var _is_dragging_words := false
 var _last_drag_pos := Vector2.ZERO
@@ -63,7 +70,57 @@ func dbg(msg: String) -> void:
 		OpLog.d(LOG_TAG, msg)
 	
 func _get_dev_data() -> String:
-	return '{"isYourTurn": true,"player":"2","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
+	return '{"isYourTurn": true,"player":"2","lang":"en","letters":"ANAGRAM","score1":"4100","words1":"5","words_list1":"LOSERS|LOSER|LOSE|LOSS|SOS","score2":"4000","words2":"4","words_list2":"LOSERS|LOSER|LOSE|LOSS","id":"dev"}'
+
+func _set_game_language(raw_language: String) -> void:
+	var resolved_language := WordLanguage.resolve_code(
+		raw_language
+	)
+
+	var resolved_dictionary_path := WordLanguage.get_dictionary_path(
+		resolved_language
+	)
+
+	var language_changed := (
+		game_language != resolved_language or
+		dictionary_path != resolved_dictionary_path
+	)
+
+	game_language = resolved_language
+	dictionary_path = resolved_dictionary_path
+
+	# GameScreen validates words entered during gameplay.
+	if (
+		is_instance_valid(game_screen) and
+		game_screen.has_method("set_game_language")
+	):
+		game_screen.set_game_language(
+			game_language,
+			dictionary_path
+		)
+	else:
+		OpLog.w(
+			LOG_TAG,
+			"game_screen_missing_set_game_language"
+		)
+
+	if not language_changed:
+		return
+
+	# The parent script maintains a second dictionary used to generate
+	# the complete list of possible words.
+	_dict_words.clear()
+	_loaded_dictionary_path = ""
+	_all_words_cache.clear()
+
+	OpLog.event(LOG_TAG, [
+		"language_changed requested=",
+		raw_language,
+		" resolved=",
+		game_language,
+		" dictionary=",
+		dictionary_path
+	])
 
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
@@ -98,12 +155,16 @@ func _on_game_ready() -> void:
 	_apply_score_box_style(main_score_box)
 	_apply_score_box_style(player_score_box)
 	_apply_score_box_style(opp_score_box)
-
+	_set_game_language(game_language)
 	_sync_waiting_animation()
 	
 	OpLog.i(LOG_TAG, [
-		"game_ready letters=", game_screen.letters if is_instance_valid(game_screen) else "",
-		" dict_path=", DICT_PATH
+		"game_ready letters=",
+		game_screen.letters if is_instance_valid(game_screen) else "",
+		" language=",
+		game_language,
+		" dictionary=",
+		dictionary_path
 	])
 	
 func _sync_waiting_animation() -> void:
@@ -180,6 +241,15 @@ func _set_game_data(raw_text: String) -> void:
 	game_id = _get_first(d, "id", game_id)
 	my_id = _get_first(d, "myPlayerId", my_id)
 
+	var incoming_language := _get_first(
+		d,
+		"lang",
+		WordLanguage.DEFAULT_LANGUAGE
+	)
+
+	# Resolve the dictionary before the letters or possible-word cache are processed.
+	_set_game_language(incoming_language)
+
 	if my_id == "":
 		my_id = my_uuid
 
@@ -195,6 +265,8 @@ func _set_game_data(raw_text: String) -> void:
 		" player1=", p1_id,
 		" player2=", p2_id,
 		" sender_player=", sender_s,
+		" language=", game_language,
+		" dictionary=", dictionary_path,
 		" letters_len=", letters_from_data.length(),
 		" keys=", d.keys()
 	])
@@ -375,33 +447,61 @@ func _set_game_data(raw_text: String) -> void:
 	])
 
 func _load_dictionary() -> void:
-	if _dict_loaded:
+	if (
+		not _dict_words.is_empty() and
+		_loaded_dictionary_path == dictionary_path
+	):
 		return
 
-	var f := FileAccess.open(DICT_PATH, FileAccess.READ)
+	_dict_words.clear()
+	_loaded_dictionary_path = ""
+
+	var load_path := dictionary_path
+	var f := FileAccess.open(
+		load_path,
+		FileAccess.READ
+	)
+
 	if f == null:
-		OpLog.e(LOG_TAG, ["dictionary_open_failed path=", DICT_PATH])
-		push_error("Could not open dictionary file: %s" % DICT_PATH)
-		_dict_words = []
-		_dict_loaded = true
+		OpLog.e(LOG_TAG, [
+			"dictionary_open_failed path=",
+			load_path,
+			" language=",
+			game_language
+		])
+
+		push_error(
+			"Could not open dictionary file: %s" %
+			load_path
+		)
+
 		return
 
 	var words: Array[String] = []
 
 	while not f.eof_reached():
-		var line := f.get_line().strip_edges()
+		var line := WordLanguage.normalize_word(
+			f.get_line()
+		)
 
 		if line.is_empty():
 			continue
 
-		words.append(line.to_upper())
+		words.append(line)
 
 	f.close()
 
 	_dict_words = words
-	_dict_loaded = true
+	_loaded_dictionary_path = load_path
 
-	OpLog.i(LOG_TAG, ["dictionary_loaded words=", _dict_words.size()])
+	OpLog.i(LOG_TAG, [
+		"dictionary_loaded language=",
+		game_language,
+		" path=",
+		load_path,
+		" words=",
+		_dict_words.size()
+	])
 
 func _make_letter_counts(pool: String) -> Dictionary:
 	var counts := {}
@@ -713,6 +813,8 @@ func send_game() -> void:
 
 	var payload: Dictionary = {}
 
+	payload["lang"] = game_language
+
 	payload[score_key] = str(final_score)
 	payload[words_key] = str(total_words)
 	payload[words_list_key] = words_joined
@@ -736,6 +838,8 @@ func send_game() -> void:
 
 	OpLog.event(LOG_TAG, [
 		"send_game_out my_player=", my_player,
+		" language=", game_language,
+		" dictionary=", dictionary_path,
 		" final_score=", final_score,
 		" total_words=", total_words,
 		" word_list_len=", words_joined.length(),

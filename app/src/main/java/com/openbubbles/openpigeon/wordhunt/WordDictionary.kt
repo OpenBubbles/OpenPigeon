@@ -1,32 +1,41 @@
 package com.openbubbles.openpigeon.wordhunt
 
 import android.content.Context
-import com.openbubbles.openpigeon.R
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import com.openbubbles.openpigeon.wordgames.WordGameLanguage
+import com.openbubbles.openpigeon.wordgames.WordGameLanguages
 import java.util.HashSet
 
-class WordDictionary(context: Context) {
+class WordDictionary(
+    context: Context,
+    val language: WordGameLanguage,
+) {
     private val wordSet = HashSet<String>()
 
-    private val inputStream = context.resources.openRawResource(R.raw.gp_en2)
-    private val reader = BufferedReader(InputStreamReader(inputStream))
-
-    private var line = reader.readLine()
-
     init {
-        while (line != null) {
-            if (line.length >= 3) {
-                wordSet.add(line.uppercase())
-            }
-            line = reader.readLine()
-        }
+        context.resources
+            .openRawResource(language.dictionaryResource)
+            .bufferedReader(Charsets.UTF_8)
+            .useLines { lines ->
+                lines.forEach { rawLine ->
+                    val word = WordGameLanguages.normalizeWord(rawLine)
 
-        reader.close()
-        inputStream.close()
+                    if (
+                        word.length >= WordHuntActivity.MIN_WORD_LENGTH &&
+                        word.all { character -> character.isLetter() }
+                    ) {
+                        wordSet.add(word)
+                    }
+                }
+            }
     }
 
     fun isValidWord(word: String): Boolean {
-        return wordSet.contains(word.uppercase())
+        return wordSet.contains(
+            WordGameLanguages.normalizeWord(word),
+        )
+    }
+
+    fun size(): Int {
+        return wordSet.size
     }
 }

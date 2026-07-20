@@ -4,7 +4,14 @@ signal time_up
 const LETTER_BG: Texture2D = preload("res://anagrams/letter_bg.png")
 const LETTER_VOID: Texture2D = preload("res://anagrams/letter_void.png")
 const LETTER_PLACEHOLDER: Texture2D = preload("res://anagrams/placeholder.png")
-const DICT_PATH := "res://global/gp_wg_en2.txt"
+
+var game_language: String = WordLanguage.DEFAULT_LANGUAGE
+
+var dictionary_path: String = WordLanguage.get_dictionary_path(
+	WordLanguage.DEFAULT_LANGUAGE
+)
+
+var _loaded_dictionary_path: String = ""
 
 const LOG_TAG := "AnagramsGameScreen"
 var DEBUG_ANAGRAMS_SCREEN := false
@@ -59,7 +66,6 @@ func _ready() -> void:
 
 	resized.connect(_on_resized)
 	
-	_load_dictionary()
 	score = 0
 	displayed_score = 0
 	word_count = 0
@@ -78,26 +84,89 @@ func _ready() -> void:
 	if not shuffle_button.pressed.is_connected(_on_shuffle_pressed):
 		shuffle_button.pressed.connect(_on_shuffle_pressed)
 
+func set_game_language(
+	language_code: String,
+	new_dictionary_path: String = ""
+) -> void:
+	var resolved_language := WordLanguage.resolve_code(
+		language_code
+	)
+
+	var resolved_path := new_dictionary_path
+
+	if resolved_path.is_empty():
+		resolved_path = WordLanguage.get_dictionary_path(
+			resolved_language
+		)
+
+	var dictionary_changed := (
+		game_language != resolved_language or
+		dictionary_path != resolved_path
+	)
+
+	game_language = resolved_language
+	dictionary_path = resolved_path
+
+	if not dictionary_changed:
+		return
+
+	word_dict.clear()
+	_loaded_dictionary_path = ""
+
+	OpLog.event(LOG_TAG, [
+		"language_changed code=",
+		game_language,
+		" dictionary=",
+		dictionary_path
+	])
+
 func _load_dictionary() -> void:
 	word_dict.clear()
+	_loaded_dictionary_path = ""
 
-	var f := FileAccess.open(DICT_PATH, FileAccess.READ)
+	var load_path := dictionary_path
+	var f := FileAccess.open(
+		load_path,
+		FileAccess.READ
+	)
+
 	if f == null:
-		OpLog.e(LOG_TAG, ["dictionary_open_failed path=", DICT_PATH])
-		push_error("Could not open dictionary file: %s" % DICT_PATH)
+		OpLog.e(LOG_TAG, [
+			"dictionary_open_failed path=",
+			load_path,
+			" language=",
+			game_language
+		])
+
+		push_error(
+			"Could not open dictionary file: %s" %
+			load_path
+		)
+
 		return
 
 	while not f.eof_reached():
-		var line := f.get_line().strip_edges()
+		var line := WordLanguage.normalize_word(
+			f.get_line()
+		)
 
 		if line.is_empty():
 			continue
 
-		word_dict[line.to_upper()] = true
+		word_dict[line] = true
 
 	f.close()
 
-	OpLog.i(LOG_TAG, ["dictionary_loaded words=", word_dict.size()])
+	_loaded_dictionary_path = load_path
+
+	OpLog.i(LOG_TAG, [
+		"dictionary_loaded language=",
+		game_language,
+		" path=",
+		load_path,
+		" words=",
+		word_dict.size()
+	])
 
 func _update_word_score_labels() -> void:
 	if words_label:
@@ -107,12 +176,18 @@ func _update_word_score_labels() -> void:
 
 
 func start_game() -> void:
+	if (
+		word_dict.is_empty() or
+		_loaded_dictionary_path != dictionary_path
+	):
+		_load_dictionary()
+
 	selected_indices.clear()
+
+	await get_tree().process_frame
 
 	_create_source_buttons()
 	_create_picked_slots()
-
-	await get_tree().process_frame
 	_update_tile_sizes()
 	_update_ui()
 	score = 0

@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
-import androidx.glance.layout.Box
 import androidx.glance.layout.padding
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
@@ -12,9 +11,21 @@ import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
+import androidx.glance.layout.Column
+import androidx.glance.layout.Spacer
+import androidx.glance.layout.height
+import com.openbubbles.openpigeon.wordgames.WordGameLanguage
+import com.openbubbles.openpigeon.wordgames.WordGameLanguages
 
 class AnagramsGame : Game {
     var mode = "6 Letters" // "6 Letters" or "7 Letters"
+    var language: String
+        get() =
+            WordGameLanguages.selectedOptionLabel
+
+        set(value) {
+            WordGameLanguages.select(value)
+        }
 
     override fun getVersion(): String {
         return "5"
@@ -36,18 +47,49 @@ class AnagramsGame : Game {
     override fun Configuration(
         context: Context?,
     ) {
-        Box(modifier = GlanceModifier.padding(16.dp)) {
-            RenderConfigOption(this, "Game Mode", listOf("6 Letters", "7 Letters"), mode)
+        Column(
+            modifier = GlanceModifier.padding(16.dp),
+        ) {
+            RenderConfigOption(
+                this@AnagramsGame,
+                "Game Mode",
+                listOf("6 Letters", "7 Letters"),
+                mode,
+            )
+
+            Spacer(
+                modifier = GlanceModifier.height(12.dp),
+            )
+
+            RenderConfigOption(
+                this@AnagramsGame,
+                "Language",
+                WordGameLanguages.configurationOptions,
+                language,
+            )
         }
     }
 
-    override fun setConfigOption(name: String, value: String) {
+    override fun setConfigOption(
+        name: String,
+        value: String,
+    ) {
         when (name.lowercase()) {
-            "game mode" -> mode = value
+            "game mode" -> {
+                mode = value
+            }
+
+            "language" -> {
+                language = WordGameLanguages
+                    .fromSelection(value)
+                    .optionLabel
+            }
+
             else -> {
-                println("Warning: unknown config option ‘$name’")
+                println("Warning: unknown config option '$name'")
             }
         }
+
         println("Config option '$name' set to '$value'")
     }
 
@@ -64,60 +106,72 @@ class AnagramsGame : Game {
         }
     }
 
-    /**
-     * Generate a 6- or 7-letter *word* and shuffle its letters.
-     * Uses the same dictionary as Godot: gp_wg_en2.txt
-     */
     private fun generateStartingLetters(
         context: Context,
-        letterCount: Int
+        letterCount: Int,
+        selectedLanguage: WordGameLanguage,
     ): String {
         require(letterCount == 6 || letterCount == 7)
 
-        val candidates = mutableListOf<String>()
-
-        // Load from res/raw instead of assets
-        context.resources.openRawResource(R.raw.gp_en2).bufferedReader().useLines { lines ->
-            lines.forEach { line ->
-                val w = line.trim().uppercase()
-                if (w.length == letterCount) {
-                    candidates.add(w)
-                }
+        val candidates = WordGameLanguages
+            .loadDictionary(context, selectedLanguage)
+            .filter { word ->
+                word.length == letterCount
             }
-        }
 
         if (candidates.isEmpty()) {
-            // Emergency fallback
-            val fallback = CharArray(letterCount) { ('A'..'Z').random() }
-            return String(fallback)
+            return WordGameLanguages.randomLetters(
+                language = selectedLanguage,
+                count = letterCount,
+            )
         }
 
         val baseWord = candidates.random()
-        val chars = baseWord.toCharArray().toMutableList()
-
         var shuffled = baseWord
+
         repeat(10) {
-            chars.shuffle()
-            shuffled = chars.joinToString("")
-            if (shuffled != baseWord) return@repeat
+            shuffled = baseWord
+                .toList()
+                .shuffled()
+                .joinToString("")
+
+            if (shuffled != baseWord) {
+                return shuffled
+            }
         }
 
         return shuffled
     }
 
-    override fun getNewGameData(context: Context): MutableMap<String, String>? {
+    override fun getNewGameData(
+        context: Context,
+    ): MutableMap<String, String>? {
         AvatarData.init(context)
+
+        val selectedLanguage =
+            WordGameLanguages.fromSelection(language)
+
+        val letterCount =
+            if (mode.contains("7")) 7 else 6
+
+        val letters = generateStartingLetters(
+            context = context,
+            letterCount = letterCount,
+            selectedLanguage = selectedLanguage,
+        )
+
         return super.getNewGameData(context)?.apply {
-            put("lang", "en")
+            WordGameLanguages.applyToGameData(
+                gameData = this,
+                language = selectedLanguage,
+            )
+
             put("mode", mode)
-
-            // Decide 6 vs 7 letters based on the selected mode string
-            val letterCount = if (mode.contains("7")) 7 else 6
-
-            // Generate starting letters from a real word
-            val letters = generateStartingLetters(context, letterCount)
             put("letters", letters)
-            put("avatar2", AvatarView.buildAvatarString())
+            put(
+                "avatar2",
+                AvatarView.buildAvatarString(),
+            )
         }
     }
 

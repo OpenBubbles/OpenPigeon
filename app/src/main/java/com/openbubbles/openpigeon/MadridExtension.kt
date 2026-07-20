@@ -939,24 +939,122 @@ class ConfigureCallback : ActionCallback {
 }
 
 @Composable
-fun RenderConfigOption(game: Game, name: String, options: List<String>, selected: String) {
-    Column(modifier = GlanceModifier.padding(8.dp)) {
-        Text(name.uppercase(), style = TextStyle(color = ColorProvider(Color.Gray),
-            fontWeight = FontWeight.Bold, fontSize = 11.sp))
-        Spacer(modifier = GlanceModifier.height(2.dp).background(Color.Gray).fillMaxWidth())
-        Row(verticalAlignment = Alignment.Vertical.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
-            for (option in options) {
-                Text(option, style = TextStyle(fontWeight =
-                    if (selected == option) FontWeight.Bold else FontWeight.Normal, color = ColorProvider(Color.Gray),
-                    fontSize = 18.sp, textAlign = TextAlign.Center
-                ), modifier = GlanceModifier.padding(horizontal = 8.dp, vertical = 4.dp).clickable(onClick = actionRunCallback<ConfigureCallback>(actionParametersOf(
-                    gameName to game.getName(),
-                    configName to name,
-                    configVal to option,
-                ))).defaultWeight())
-                if (options.last() != option) {
-                    Spacer(modifier = GlanceModifier.width(1.dp).background(Color.Gray).height(15.dp))
+fun RenderConfigOption(
+    game: Game,
+    name: String,
+    options: List<String>,
+    selected: String,
+) {
+    val useMultipleRows = options.size >= 6
+
+    Column(
+        modifier = GlanceModifier.padding(
+            horizontal = 8.dp,
+            vertical = 8.dp,
+        ),
+    ) {
+        Text(
+            name.uppercase(),
+            style = TextStyle(
+                color = ColorProvider(Color.Gray),
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+            ),
+        )
+
+        Spacer(
+            modifier = GlanceModifier
+                .height(2.dp)
+                .background(Color.Gray)
+                .fillMaxWidth(),
+        )
+
+        if (useMultipleRows) {
+            val optionRows = options.chunked(3)
+
+            optionRows.forEachIndexed { rowIndex, rowOptions ->
+                RenderConfigOptionRow(
+                    game = game,
+                    name = name,
+                    options = rowOptions,
+                    selected = selected,
+                    fontSize = 16.sp,
+                )
+
+                if (rowIndex < optionRows.lastIndex) {
+                    Spacer(
+                        modifier = GlanceModifier.height(6.dp),
+                    )
                 }
+            }
+        } else {
+            RenderConfigOptionRow(
+                game = game,
+                name = name,
+                options = options,
+                selected = selected,
+                fontSize = 18.sp,
+            )
+        }
+    }
+}
+
+
+@Composable
+private fun RenderConfigOptionRow(
+    game: Game,
+    name: String,
+    options: List<String>,
+    selected: String,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+) {
+    Row(
+        verticalAlignment = Alignment.Vertical.CenterVertically,
+        modifier = GlanceModifier.fillMaxWidth(),
+    ) {
+        options.forEachIndexed { index, option ->
+            Box(
+                modifier = GlanceModifier
+                    .defaultWeight()
+                    .clickable(
+                        onClick = actionRunCallback<
+                                ConfigureCallback
+                                >(
+                            actionParametersOf(
+                                gameName to game.getName(),
+                                configName to name,
+                                configVal to option,
+                            ),
+                        ),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    option,
+                    style = TextStyle(
+                        fontWeight =
+                            if (selected == option) {
+                                FontWeight.Bold
+                            } else {
+                                FontWeight.Normal
+                            },
+                        color = ColorProvider(Color.Gray),
+                        fontSize = fontSize,
+                        textAlign = TextAlign.Center,
+                    ),
+                    modifier = GlanceModifier.padding(
+                        vertical = 4.dp,
+                    ),
+                )
+            }
+
+            if (index < options.lastIndex) {
+                Spacer(
+                    modifier = GlanceModifier
+                        .width(1.dp)
+                        .height(15.dp)
+                        .background(Color.Gray),
+                )
             }
         }
     }

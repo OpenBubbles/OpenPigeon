@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
 import com.openbubbles.openpigeon.wordhunt.WordHuntActivity.Companion.MIN_WORD_LENGTH
+import java.util.Locale
 
 class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHuntActivity.GameMode) {
     var isGameActive: Boolean = false
@@ -41,7 +42,7 @@ class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHu
 
     fun sortedWords(): List<String> {
         return _foundWords.sortedWith(compareByDescending<String> { it.length }
-            .thenBy { it.lowercase() })
+            .thenBy {it.lowercase(Locale.ROOT)})
     }
 
     fun clearLastAwardedText() {

@@ -25,13 +25,19 @@ extends BaseGame
 
 const LETTER_BG: Texture2D = preload("res://anagrams/letter_bg.png")
 const MUSIC_STREAM := preload("res://global/audio/wordbites.ogg")
-const DICT_PATH := "res://global/gp_wg_en2.txt"
+
+var game_language: String = WordLanguage.DEFAULT_LANGUAGE
+var dictionary_path: String = WordLanguage.get_dictionary_path(
+	WordLanguage.DEFAULT_LANGUAGE
+)
+
+var _dictionary_trie_root: TrieNode = null
+var _dictionary_trie_path: String = ""
+var _words_compute_language: String = ""
 
 class TrieNode:
 	var children: Dictionary = {}
 	var is_word: bool = false
-
-var _dictionary_trie_root: TrieNode = null
 
 var _tear_rng := RandomNumberGenerator.new()
 var found_word_keys: Dictionary = {}
@@ -114,6 +120,73 @@ Find as many valid words as possible before time runs out.
 [/font_size]
 """
 
+func _set_game_language(raw_language: String) -> void:
+	var resolved_language := WordLanguage.resolve_code(
+		raw_language
+	)
+
+	var resolved_dictionary_path := (
+		WordLanguage.get_dictionary_path(
+			resolved_language
+		)
+	)
+
+	var language_changed := (
+		game_language != resolved_language or
+		dictionary_path != resolved_dictionary_path
+	)
+
+	game_language = resolved_language
+	dictionary_path = resolved_dictionary_path
+
+	# The GameScreen maintains the live word-validation dictionary.
+	if (
+		is_instance_valid(game_screen) and
+		game_screen.has_method("set_game_language")
+	):
+		game_screen.set_game_language(
+			game_language,
+			dictionary_path
+		)
+	else:
+		OpLog.w(
+			LOG_TAG,
+			"game_screen_missing_set_game_language"
+		)
+
+	if not language_changed:
+		return
+
+	# The parent WordBites script maintains a separate Trie used for calculating all possible words. It must also be invalidated.
+	_dictionary_trie_root = null
+	_dictionary_trie_path = ""
+
+	_possible_words_cache.clear()
+	_words_cache_ready = false
+	_words_compute_level = ""
+	_words_compute_language = ""
+
+	possible_word_count = 0
+	_update_possible_words_count_label()
+
+	OpLog.event(LOG_TAG, [
+		"language_changed requested=",
+		raw_language,
+		" resolved=",
+		game_language,
+		" dictionary=",
+		dictionary_path
+	])
+
+	# If a level is already loaded, recalculate its possible words using the newly selected dictionary.
+	if (
+		_cached_possible_level != "" and
+		not _words_computing
+	):
+		call_deferred(
+			"_begin_background_word_precompute"
+		)
+
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	if is_instance_valid(start_button):
@@ -147,6 +220,8 @@ func _on_game_ready() -> void:
 
 	_ensure_possible_words_count_label()
 	_update_possible_words_count_label()
+	
+	_set_game_language(game_language)
 
 func _set_game_data(raw_text: String) -> void:
 	OpLog.event(LOG_TAG, ["set_game_data_in raw=", raw_text])
@@ -176,6 +251,14 @@ func _set_game_data(raw_text: String) -> void:
 		win_loss_label.modulate.a = 1.0
 
 	game_id = _get_first(d, "id", game_id)
+	
+	var incoming_language := _get_first(
+		d,
+		"lang",
+		WordLanguage.DEFAULT_LANGUAGE
+	)
+	
+	_set_game_language(incoming_language)
 
 	var p1_id: String = _get_first(d, "player1", "")
 	var p2_id: String = _get_first(d, "player2", "")
@@ -190,6 +273,8 @@ func _set_game_data(raw_text: String) -> void:
 		" player1=", p1_id,
 		" player2=", p2_id,
 		" sender_player=", sender_player,
+		" language=", game_language,
+		" dictionary=", dictionary_path,
 		" level_len=", level_s.length(),
 		" has_winner=", winner_payload != "",
 		" keys=", d.keys()
@@ -1439,27 +1524,72 @@ func _load_words_async() -> void:
 	_compute_words_async()
 	
 func _init_dictionary_trie() -> void:
-	if _dictionary_trie_root != null: return
-	
-	_dictionary_trie_root = TrieNode.new()
-	var f := FileAccess.open(DICT_PATH, FileAccess.READ)
-	if f == null:
-		OpLog.e(LOG_TAG, ["dictionary_trie_open_failed path=", DICT_PATH])
-		push_error("Could not open dictionary for Trie: %s" % DICT_PATH)
+	if (
+		_dictionary_trie_root != null and
+		_dictionary_trie_path == dictionary_path
+	):
 		return
 
+	_dictionary_trie_root = TrieNode.new()
+	_dictionary_trie_path = ""
+
+	var load_path := dictionary_path
+	var f := FileAccess.open(
+		load_path,
+		FileAccess.READ
+	)
+
+	if f == null:
+		OpLog.e(LOG_TAG, [
+			"dictionary_trie_open_failed path=",
+			load_path,
+			" language=",
+			game_language
+		])
+
+		push_error(
+			"Could not open dictionary for Trie: %s" %
+			load_path
+		)
+
+		return
+
+	var loaded_words := 0
+
 	while not f.eof_reached():
-		var line := f.get_line().strip_edges().to_upper()
-		if line.length() < 3: continue 
-		
+		var line := WordLanguage.normalize_word(
+			f.get_line()
+		)
+
+		if line.length() < 3:
+			continue
+
 		var node := _dictionary_trie_root
+
 		for i in line.length():
 			var char_str := line[i]
+
 			if not node.children.has(char_str):
 				node.children[char_str] = TrieNode.new()
+
 			node = node.children[char_str]
+
 		node.is_word = true
-		
+		loaded_words += 1
+
+	f.close()
+
+	_dictionary_trie_path = load_path
+
+	OpLog.i(LOG_TAG, [
+		"dictionary_trie_loaded language=",
+		game_language,
+		" path=",
+		load_path,
+		" words=",
+		loaded_words
+	])
+
 func _find_candidates_via_trie(piece_runs: Array[String]) -> Array[String]:
 	var results: Array[String] = []
 	if _dictionary_trie_root == null:
@@ -1519,33 +1649,97 @@ const WORDS_COMPUTE_BATCH_SIZE := 250
 const WORDS_LIST_ROW_BATCH_SIZE := 40
 
 func _init_dictionary_trie_async() -> void:
-	if _dictionary_trie_root != null:
+	var load_path := dictionary_path
+	var load_language := game_language
+
+	if (
+		_dictionary_trie_root != null and
+		_dictionary_trie_path == load_path
+	):
 		return
 
 	var root := TrieNode.new()
-	var f := FileAccess.open(DICT_PATH, FileAccess.READ)
+	var f := FileAccess.open(
+		load_path,
+		FileAccess.READ
+	)
+
 	if f == null:
-		OpLog.e(LOG_TAG, ["dictionary_trie_open_failed path=", DICT_PATH])
+		OpLog.e(LOG_TAG, [
+			"dictionary_trie_open_failed path=",
+			load_path,
+			" language=",
+			load_language
+		])
+
 		_dictionary_trie_root = root
+		_dictionary_trie_path = ""
 		return
 
 	var slice_start := Time.get_ticks_msec()
+	var loaded_words := 0
+
 	while not f.eof_reached():
-		var line := f.get_line().strip_edges().to_upper()
+		var line := WordLanguage.normalize_word(
+			f.get_line()
+		)
+
 		if line.length() >= 3:
 			var node := root
+
 			for i in line.length():
 				var char_str := line[i]
+
 				if not node.children.has(char_str):
 					node.children[char_str] = TrieNode.new()
-				node = node.children[char_str]
-			node.is_word = true
 
-		if Time.get_ticks_msec() - slice_start >= WORDS_COMPUTE_BUDGET_MS:
+				node = node.children[char_str]
+
+			node.is_word = true
+			loaded_words += 1
+
+		if (
+			Time.get_ticks_msec() -
+			slice_start >= WORDS_COMPUTE_BUDGET_MS
+		):
 			await get_tree().process_frame
 			slice_start = Time.get_ticks_msec()
 
+			# Stop building this Trie if a different language arrived while the dictionary was loading.
+			if (
+				load_path != dictionary_path or
+				load_language != game_language
+			):
+				f.close()
+
+				OpLog.w(LOG_TAG, [
+					"dictionary_trie_load_cancelled old_language=",
+					load_language,
+					" new_language=",
+					game_language
+				])
+
+				return
+
+	f.close()
+
+	if (
+		load_path != dictionary_path or
+		load_language != game_language
+	):
+		return
+
 	_dictionary_trie_root = root
+	_dictionary_trie_path = load_path
+
+	OpLog.i(LOG_TAG, [
+		"dictionary_trie_loaded_async language=",
+		load_language,
+		" path=",
+		load_path,
+		" words=",
+		loaded_words
+	])
 
 func _can_form_with_orientation_fast(
 	word_upper: String,
@@ -1566,6 +1760,12 @@ func _can_form_with_orientation_fast(
 	var memo: Dictionary = {}
 	return _can_form_with_orientation_dfs(
 		word_upper, runs_upper, orientations, want_horizontal, 0, 0, memo
+	)
+	
+func _word_compute_context_changed() -> bool:
+	return (
+		_words_compute_level != _cached_possible_level or
+		_words_compute_language != game_language
 	)
 
 func _begin_background_word_precompute() -> void:
@@ -1592,13 +1792,14 @@ func _compute_words_async() -> void:
 	_words_computing = true
 	_words_cache_ready = false
 	_words_compute_level = _cached_possible_level
+	_words_compute_language = game_language
 	_possible_words_cache.clear()
 
 	var started_at: int = Time.get_ticks_msec()
 
 	await _init_dictionary_trie_async()
 
-	if _words_compute_level != _cached_possible_level:
+	if _word_compute_context_changed():
 		_words_computing = false
 		_words_cache_ready = false
 		_possible_words_cache.clear()
@@ -2096,6 +2297,7 @@ func send_game() -> void:
 		p2_score_s = str(final_score)
 
 	var payload: Dictionary = {}
+	payload["lang"] = game_language
 
 	payload[score_key] = str(final_score)
 	payload[words_key] = str(total_words)

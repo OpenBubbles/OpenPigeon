@@ -28,6 +28,9 @@ import android.widget.FrameLayout
 import android.widget.ImageButton
 import androidx.appcompat.widget.SwitchCompat
 import com.openbubbles.openpigeon.settings.SettingsSheet
+import com.openbubbles.openpigeon.wordgames.WordGameLanguage
+import com.openbubbles.openpigeon.wordgames.WordGameLanguages
+import kotlin.random.Random
 
 class WordHuntActivity : AppCompatActivity() {
     private val baseGame: Game = WordHuntGame()
@@ -59,7 +62,13 @@ class WordHuntActivity : AppCompatActivity() {
         OpenPigeonLog.title(
             "WordHunt",
             "Word Hunt",
-            "mode=${msg["mode"].orEmpty()} letters=${msg["letters"]?.length ?: 0} player=$player start=$startDestination score1=${!msg["score1"].isNullOrBlank()} score2=${!msg["score2"].isNullOrBlank()}"
+            "mode=${msg["mode"].orEmpty()} " +
+                    "lang=${msg["lang"].orEmpty()} " +
+                    "letters=${msg["letters"]?.length ?: 0} " +
+                    "player=$player " +
+                    "start=$startDestination " +
+                    "score1=${!msg["score1"].isNullOrBlank()} " +
+                    "score2=${!msg["score2"].isNullOrBlank()}",
         )
     }
 
@@ -81,46 +90,86 @@ class WordHuntActivity : AppCompatActivity() {
         const val GAME_DURATION = 80000L // 80 seconds
         const val MIN_WORD_LENGTH = 3
 
-        fun generateLetterPool(mode: GameMode): List<Char> {
-            val totalLetters = mode.gridSize * mode.gridSize
+        fun generateLetterPool(
+            context: Context,
+            mode: GameMode,
+            language: WordGameLanguage,
+        ): List<Char> {
+            val totalLetters =
+                mode.gridSize * mode.gridSize
 
-            // Define letter frequencies
-            val scrabbleFrequencyMap = mapOf(
-                'E' to 12,
-                'A' to 9,
-                'I' to 9,
-                'O' to 8,
-                'N' to 6,
-                'R' to 6,
-                'T' to 6,
-                'L' to 4,
-                'S' to 4,
-                'U' to 4,
-                'D' to 4,
-                'G' to 3,
-                'B' to 2,
-                'C' to 2,
-                'M' to 2,
-                'P' to 2,
-                'F' to 2,
-                'H' to 2,
-                'V' to 2,
-                'W' to 2,
-                'Y' to 2,
-                'K' to 1,
-                'J' to 1,
-                'X' to 1,
-                'Q' to 1,
-                'Z' to 1
+            val dictionary = WordGameLanguages.loadDictionary(
+                context = context,
+                language = language,
             )
 
-            // Build full frequency list
-            val fullPool = scrabbleFrequencyMap.flatMap { (char, count) -> List(count) { char } }
-                .toMutableList()
+            /*
+             * Build letter frequencies directly from the selected dictionary.
+             * This avoids using English frequencies for Spanish, French,
+             * German, Russian, or Italian.
+             */
+            val frequencies = linkedMapOf<Char, Int>()
 
-            // Shuffle and select as many as needed
-            fullPool.shuffle()
-            return fullPool.take(totalLetters)
+            dictionary.forEach { word ->
+                if (word.length !in 3..12) {
+                    return@forEach
+                }
+
+                word.forEach { character ->
+                    if (character.isLetter()) {
+                        frequencies[character] =
+                            frequencies.getOrDefault(
+                                character,
+                                0,
+                            ) + 1
+                    }
+                }
+            }
+
+            if (frequencies.isEmpty()) {
+                OpenPigeonLog.w(
+                    "WordHunt",
+                    "No dictionary frequencies for " +
+                            "language=${language.code}; using alphabet fallback",
+                )
+
+                return WordGameLanguages.randomLetters(
+                    language = language,
+                    count = totalLetters,
+                ).toList()
+            }
+
+            val totalWeight = frequencies.values.sum()
+            val random = Random(System.currentTimeMillis())
+
+            fun chooseWeightedLetter(): Char {
+                var target = random.nextInt(totalWeight)
+
+                for ((character, weight) in frequencies) {
+                    if (target < weight) {
+                        return character
+                    }
+
+                    target -= weight
+                }
+
+                return frequencies.keys.first()
+            }
+
+            val letters = MutableList(totalLetters) {
+                chooseWeightedLetter()
+            }
+
+            letters.shuffle(random)
+
+            OpenPigeonLog.i(
+                "WordHunt",
+                "generated letters language=${language.code} " +
+                        "mode=${mode.name} count=${letters.size} " +
+                        "dictionaryWords=${dictionary.size}",
+            )
+
+            return letters
         }
 
         fun mode(mode: Int): GameMode {
@@ -431,7 +480,6 @@ class WordHuntActivity : AppCompatActivity() {
 
         sessionId = intent.getStringExtra("SESSION")!!
 
-        dictionary = WordDictionary(this)
         AvatarData.init(this)
         lateinit var startDestination: String
         GameSessionIPC(applicationContext) { gameSessionIPC ->
@@ -480,9 +528,65 @@ class WordHuntActivity : AppCompatActivity() {
     }
 
     private fun setupGame() {
-        gameState = WordHuntGameState(dictionary, mode(currentMessage["mode"]!!.toInt()))
-        gameState.setBoard(populatedBoard(currentMessage["letters"]!!))
+        val selectedLanguage =
+            WordGameLanguages.fromCode(
+                currentMessage["lang"],
+            )
+
+        dictionary = WordDictionary(
+            context = this,
+            language = selectedLanguage,
+        )
+
+        val selectedMode = mode(
+            currentMessage["mode"]
+                ?.toIntOrNull()
+                ?: 1,
+        )
+
+        gameState = WordHuntGameState(
+            dictionary = dictionary,
+            mode = selectedMode,
+        )
+
+        val letters = currentMessage["letters"]
+            .orEmpty()
+
+        val expectedLetterCount =
+            selectedMode.gridSize * selectedMode.gridSize
+
+        if (letters.length < expectedLetterCount) {
+            OpenPigeonLog.e(
+                "WordHunt",
+                "Invalid board letters: " +
+                        "language=${selectedLanguage.code} " +
+                        "expected=$expectedLetterCount " +
+                        "actual=${letters.length}",
+            )
+
+            val fallbackLetters = generateLetterPool(
+                context = this,
+                mode = selectedMode,
+                language = selectedLanguage,
+            ).joinToString("")
+
+            gameState.setBoard(
+                populatedBoard(fallbackLetters),
+            )
+        } else {
+            gameState.setBoard(
+                populatedBoard(letters),
+            )
+        }
+
         gameState.isGameActive = true
+
+        OpenPigeonLog.i(
+            "WordHunt",
+            "setupGame language=${selectedLanguage.code} " +
+                    "dictionaryWords=${dictionary.size()} " +
+                    "mode=${selectedMode.name}",
+        )
     }
 
     private fun startGameTimer() {
@@ -523,13 +627,29 @@ class WordHuntActivity : AppCompatActivity() {
         val scores = arrayOf(score1, score2)
 
         val updates = mutableMapOf(
-            "sender" to gameSessionIPC!!.getSenderUUID(sessionId),
-            "player$player" to gameSessionIPC!!.getSenderUUID(sessionId),
+            "sender" to gameSessionIPC!!
+                .getSenderUUID(sessionId),
+            "player$player" to gameSessionIPC!!
+                .getSenderUUID(sessionId),
             "avatar$player" to AvatarView.buildAvatarString(),
             "score$player" to gameState.score.toString(),
             "words$player" to gameState.wordCount.toString(),
-            "words_list$player" to gameState.sortedWords().joinToString("|"),
+            "words_list$player" to gameState
+                .sortedWords()
+                .joinToString("|"),
         )
+
+        currentMessage["lang"]
+            ?.takeIf { it.isNotBlank() }
+            ?.let { languageCode ->
+                updates["lang"] = languageCode
+            }
+
+        currentMessage["subcaption"]
+            ?.takeIf { it.isNotBlank() }
+            ?.let { subcaption ->
+                updates["subcaption"] = subcaption
+            }
 
         if (!score2.isNullOrBlank() || !score1.isNullOrBlank()){
             updates["winner"] = "${gameSessionIPC!!.getSenderUUID(sessionId)}|${
