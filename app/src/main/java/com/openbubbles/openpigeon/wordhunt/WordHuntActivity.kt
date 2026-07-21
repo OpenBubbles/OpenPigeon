@@ -18,16 +18,11 @@ import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
 import com.openbubbles.openpigeon.util.OpenPigeonLog
 import android.content.Context
-import android.graphics.BitmapFactory
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
 import android.util.TypedValue
-import android.view.Gravity
 import android.widget.FrameLayout
-import android.widget.ImageButton
-import androidx.appcompat.widget.SwitchCompat
-import com.openbubbles.openpigeon.settings.SettingsSheet
+import com.openbubbles.openpigeon.ui.GameMenuController
+import com.openbubbles.openpigeon.ui.GameMenuPlacement
+import com.openbubbles.openpigeon.ui.RulesPopup
 import com.openbubbles.openpigeon.wordgames.WordGameLanguage
 import com.openbubbles.openpigeon.wordgames.WordGameLanguages
 import kotlin.random.Random
@@ -41,12 +36,7 @@ class WordHuntActivity : AppCompatActivity() {
     private lateinit var currentMessageState: MutableState<Map<String, String>>
     private lateinit var dictionary: WordDictionary
     private lateinit var gameState: WordHuntGameState
-    private lateinit var settingsSheet: SettingsSheet
-
-    private var wordHuntActivityClosing = false
-    private var musicEnabled = false
-    private var musicTrack: AudioTrack? = null
-    private var MusicTrackPath = "wordhunt/wordhunt.wav"
+    private lateinit var gameMenu: GameMenuController
 
     private var gameTimer: CountDownTimer? = null
 
@@ -62,27 +52,27 @@ class WordHuntActivity : AppCompatActivity() {
         OpenPigeonLog.title(
             "WordHunt",
             "Word Hunt",
-            "mode=${msg["mode"].orEmpty()} " +
-                    "lang=${msg["lang"].orEmpty()} " +
-                    "letters=${msg["letters"]?.length ?: 0} " +
-                    "player=$player " +
-                    "start=$startDestination " +
-                    "score1=${!msg["score1"].isNullOrBlank()} " +
-                    "score2=${!msg["score2"].isNullOrBlank()}",
+            "mode=${msg["mode"].orEmpty()} " + "lang=${msg["lang"].orEmpty()} " + "letters=${msg["letters"]?.length ?: 0} " + "player=$player " + "start=$startDestination " + "score1=${!msg["score1"].isNullOrBlank()} " + "score2=${!msg["score2"].isNullOrBlank()}",
         )
     }
 
-    enum class GameMode(val gridSize: Int, val invalidPositions: List<Pair<Int, Int>>, val drawable: Int){
-        MODE1(4, emptyList(), R.drawable.wordhunt_board_mode1),
-        MODE2(5, listOf(
-            Pair(0,0), Pair(0,4), Pair(2,2), Pair(4,0), Pair(4,4)
-        ), R.drawable.wordhunt_board_mode2),
-        MODE3(5, listOf(
-            Pair(0,2), Pair(2,0), Pair(2,4), Pair(4,2)
-        ), R.drawable.wordhunt_board_mode3),
+    enum class GameMode(
+        val gridSize: Int,
+        val invalidPositions: List<Pair<Int, Int>>,
+        val drawable: Int
+    ) {
+        MODE1(4, emptyList(), R.drawable.wordhunt_board_mode1), MODE2(
+            5, listOf(
+                Pair(0, 0), Pair(0, 4), Pair(2, 2), Pair(4, 0), Pair(4, 4)
+            ), R.drawable.wordhunt_board_mode2
+        ),
+        MODE3(
+            5, listOf(
+                Pair(0, 2), Pair(2, 0), Pair(2, 4), Pair(4, 2)
+            ), R.drawable.wordhunt_board_mode3
+        ),
         MODE4(5, emptyList(), R.drawable.wordhunt_board_mode1)
     }
-
 
 
     // Game constants
@@ -95,8 +85,7 @@ class WordHuntActivity : AppCompatActivity() {
             mode: GameMode,
             language: WordGameLanguage,
         ): List<Char> {
-            val totalLetters =
-                mode.gridSize * mode.gridSize
+            val totalLetters = mode.gridSize * mode.gridSize
 
             val dictionary = WordGameLanguages.loadDictionary(
                 context = context,
@@ -117,11 +106,10 @@ class WordHuntActivity : AppCompatActivity() {
 
                 word.forEach { character ->
                     if (character.isLetter()) {
-                        frequencies[character] =
-                            frequencies.getOrDefault(
-                                character,
-                                0,
-                            ) + 1
+                        frequencies[character] = frequencies.getOrDefault(
+                            character,
+                            0,
+                        ) + 1
                     }
                 }
             }
@@ -129,8 +117,7 @@ class WordHuntActivity : AppCompatActivity() {
             if (frequencies.isEmpty()) {
                 OpenPigeonLog.w(
                     "WordHunt",
-                    "No dictionary frequencies for " +
-                            "language=${language.code}; using alphabet fallback",
+                    "No dictionary frequencies for " + "language=${language.code}; using alphabet fallback",
                 )
 
                 return WordGameLanguages.randomLetters(
@@ -164,9 +151,7 @@ class WordHuntActivity : AppCompatActivity() {
 
             OpenPigeonLog.i(
                 "WordHunt",
-                "generated letters language=${language.code} " +
-                        "mode=${mode.name} count=${letters.size} " +
-                        "dictionaryWords=${dictionary.size}",
+                "generated letters language=${language.code} " + "mode=${mode.name} count=${letters.size} " + "dictionaryWords=${dictionary.size}",
             )
 
             return letters
@@ -186,273 +171,42 @@ class WordHuntActivity : AppCompatActivity() {
         }
     }
 
-    private fun dp(value: Float): Int {
-        return TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP,
-            value,
-            resources.displayMetrics
-        ).toInt()
-    }
-
-    private fun setupWordHuntSettingsSheet() {
-        val rootFrame = findViewById<FrameLayout>(android.R.id.content)
-        settingsSheet = SettingsSheet(this, rootFrame)
-
-        val settingsBtn = ImageButton(this).apply {
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
-
-            try {
-                val bm = assets.open("global/settings.png")
-                    .use { BitmapFactory.decodeStream(it) }
-                setImageBitmap(bm)
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-
-            setOnClickListener {
-                settingsSheet.open()
-            }
-        }
-
-        rootFrame.addView(
-            settingsBtn,
-            FrameLayout.LayoutParams(
-                dp(60f),
-                dp(60f),
-                Gravity.BOTTOM or Gravity.END
-            ).apply {
-                rightMargin = dp(10f)
-                bottomMargin = dp(10f)
-            }
-        );
-
-        val musicSwitch = SwitchCompat(this)
-        musicSwitch.isChecked = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-            .getBoolean("global/music_enabled", true)
-
-        musicEnabled = musicSwitch.isChecked
-        musicSwitch.setOnCheckedChangeListener { _, checked ->
-            applyMusicEnabled(checked)
-        }
-
-        settingsSheet.addGameControl("Music", musicSwitch)
-
-        if (musicEnabled) {
-            startMusic()
-        }
-    }
-
-    private data class WavLoopData(
-        val pcm: ByteArray,
-        val sampleRate: Int,
-        val channelMask: Int,
-        val encoding: Int,
-        val frameCount: Int
-    )
-
-    private fun applyMusicEnabled(enabled: Boolean) {
-        musicEnabled = enabled
-
-        getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean("global/music_enabled", enabled)
-            .apply()
-
-        if (enabled) {
-            startMusic()
-        } else {
-            stopMusic()
-        }
-    }
-
-    private fun startMusic() {
-        if (!musicEnabled || musicTrack != null) return
-
-        playMusicTrack()
-    }
-
-    private fun playMusicTrack() {
-        releaseMusicPlayer()
-
-        if (!musicEnabled) return
-
-        val trackPath = MusicTrackPath
-
-        try {
-            val wav = loadPcm16Wav(trackPath)
-
-            val track = AudioTrack.Builder()
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_GAME)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
-                .setAudioFormat(
-                    AudioFormat.Builder()
-                        .setSampleRate(wav.sampleRate)
-                        .setChannelMask(wav.channelMask)
-                        .setEncoding(wav.encoding)
-                        .build()
-                )
-                .setBufferSizeInBytes(wav.pcm.size)
-                .setTransferMode(AudioTrack.MODE_STATIC)
-                .build()
-
-            track.write(wav.pcm, 0, wav.pcm.size)
-            track.setLoopPoints(0, wav.frameCount, -1)
-            track.setVolume(0.55f)
-
-            musicTrack = track
-            track.play()
-        } catch (e: Exception) {
-            OpenPigeonLog.e("Music", "Unable to play music track $trackPath", e)
-
-            musicEnabled = false
-
-            getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean("global/music_enabled", true)
-                .apply()
-        }
-    }
-
-    private fun pauseMusic() {
-        try {
-            musicTrack?.let { track ->
-                if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
-                    track.pause()
-                }
-            }
-        } catch (e: Exception) {
-            OpenPigeonLog.w("Music", "Unable to pause music", e)
-        }
-    }
-
-    private fun resumeMusic() {
-        if (!musicEnabled) return
-
-        try {
-            val track = musicTrack
-
-            if (track == null) {
-                startMusic()
-            } else if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
-                track.play()
-            }
-        } catch (e: Exception) {
-            OpenPigeonLog.w("Music", "Unable to resume music, restarting", e)
-            releaseMusicPlayer()
-            startMusic()
-        }
-    }
-
-    private fun stopMusic() {
-        releaseMusicPlayer()
-    }
-
-    private fun releaseMusicPlayer() {
-        val track = musicTrack ?: return
-        musicTrack = null
-
-        try {
-            track.pause()
-        } catch (_: Exception) {
-        }
-
-        track.release()
-    }
-
-    private fun restartMusicForCurrentMode() {
-        if (!musicEnabled) return
-
-        if (musicTrack != null) return
-
-        releaseMusicPlayer()
-        startMusic()
-    }
-
-    private fun loadPcm16Wav(path: String): WavLoopData {
-        val bytes = assets.open(path).use { it.readBytes() }
-
-        if (bytes.size < 44 || chunkName(bytes, 0) != "RIFF" || chunkName(bytes, 8) != "WAVE") {
-            throw IllegalArgumentException("Invalid WAV file: $path")
-        }
-
-        var offset = 12
-        var audioFormat = 0
-        var channelCount = 0
-        var sampleRate = 0
-        var bitsPerSample = 0
-        var dataStart = -1
-        var dataSize = 0
-
-        while (offset + 8 <= bytes.size) {
-            val name = chunkName(bytes, offset)
-            val size = readLeInt(bytes, offset + 4)
-            val start = offset + 8
-
-            if (start + size > bytes.size) break
-
-            when (name) {
-                "fmt " -> {
-                    audioFormat = readLeShort(bytes, start)
-                    channelCount = readLeShort(bytes, start + 2)
-                    sampleRate = readLeInt(bytes, start + 4)
-                    bitsPerSample = readLeShort(bytes, start + 14)
-                }
-                "data" -> {
-                    dataStart = start
-                    dataSize = size
-                }
-            }
-
-            offset = start + size + (size and 1)
-        }
-
-        if (audioFormat != 1 || bitsPerSample != 16 || channelCount !in 1..2 || dataStart < 0 || dataSize <= 0) {
-            throw IllegalArgumentException("WAV must be 16-bit PCM mono/stereo: $path")
-        }
-
-        val pcm = bytes.copyOfRange(dataStart, dataStart + dataSize)
-        val frameSize = channelCount * 2
-        val frameCount = pcm.size / frameSize
-        val channelMask = if (channelCount == 1) {
-            AudioFormat.CHANNEL_OUT_MONO
-        } else {
-            AudioFormat.CHANNEL_OUT_STEREO
-        }
-
-        return WavLoopData(
-            pcm = pcm,
-            sampleRate = sampleRate,
-            channelMask = channelMask,
-            encoding = AudioFormat.ENCODING_PCM_16BIT,
-            frameCount = frameCount
+    private fun setupWordHuntMenu() {
+        val rootFrame = findViewById<FrameLayout>(
+            android.R.id.content,
         )
-    }
 
-    private fun readLeShort(bytes: ByteArray, offset: Int): Int {
-        return (bytes[offset].toInt() and 0xff) or
-                ((bytes[offset + 1].toInt() and 0xff) shl 8)
-    }
+        gameMenu = GameMenuController(
+            activity = this,
+            rootFrame = rootFrame,
+            gameId = "wordhunt",
+            rulesTitle = "Word Hunt Rules",
+            rulesSections = listOf(
+                RulesPopup.Section(
+                    "Objective",
+                    "Find as many valid words as possible before the timer expires.",
+                ),
+                RulesPopup.Section(
+                    "How to Play",
+                    "Trace through adjacent letters to form a word. A board position cannot be reused within the same word.",
+                ),
+                RulesPopup.Section(
+                    "Valid Words",
+                    "Words must contain at least three letters and must exist in the selected language dictionary.",
+                ),
+                RulesPopup.Section(
+                    "Scoring",
+                    "Accepted words add to your score. Longer words are generally more valuable.",
+                ),
+                RulesPopup.Section(
+                    "Winning",
+                    "After both players finish, the player with the higher score wins.",
+                ),
+            ),
+            musicAssetPath = "wordhunt/wordhunt.wav",
+            placement = GameMenuPlacement.BOTTOM_END,
 
-    private fun readLeInt(bytes: ByteArray, offset: Int): Int {
-        return (bytes[offset].toInt() and 0xff) or
-                ((bytes[offset + 1].toInt() and 0xff) shl 8) or
-                ((bytes[offset + 2].toInt() and 0xff) shl 16) or
-                ((bytes[offset + 3].toInt() and 0xff) shl 24)
-    }
-
-    private fun chunkName(bytes: ByteArray, offset: Int): String {
-        return String(
-            byteArrayOf(
-                bytes[offset],
-                bytes[offset + 1],
-                bytes[offset + 2],
-                bytes[offset + 3]
-            )
+            fallbackDarkOverlayAlpha = 0.18f,
         )
     }
 
@@ -486,7 +240,10 @@ class WordHuntActivity : AppCompatActivity() {
             // This is called when the service is bound
             this.gameSessionIPC = gameSessionIPC
             currentMessage = gameSessionIPC.getCurrentMessage(sessionId)
-            OpenPigeonLog.i("WordHunt", "currentMessage loaded keys=${currentMessage.keys.sorted()}")
+            OpenPigeonLog.i(
+                "WordHunt",
+                "currentMessage loaded keys=${currentMessage.keys.sorted()}"
+            )
 
             if (currentMessage.isNotEmpty()) {
                 gameSessionIPC.lockMsgHandle(sessionId)
@@ -502,7 +259,8 @@ class WordHuntActivity : AppCompatActivity() {
                     }
                 }
 
-                val player = if (currentMessage["player2"] == gameSessionIPC.getSenderUUID(sessionId)) 2 else 1
+                val player =
+                    if (currentMessage["player2"] == gameSessionIPC.getSenderUUID(sessionId)) 2 else 1
                 setupGame()
                 startDestination = if (!currentMessage["score$player"].isNullOrBlank()) {
                     GameUI.Screen.Score.route
@@ -516,10 +274,15 @@ class WordHuntActivity : AppCompatActivity() {
                     currentMessageState = remember { mutableStateOf(currentMessage) }
 
                     navController = rememberNavController()
-                    gameUI.WordHuntNavigation(navController, startDestination, gameState, { startGameTimer() }, { getScoreData(currentMessageState.value) })
+                    gameUI.WordHuntNavigation(
+                        navController,
+                        startDestination,
+                        gameState,
+                        { startGameTimer() },
+                        { getScoreData(currentMessageState.value) })
                 }
 
-                setupWordHuntSettingsSheet()
+                setupWordHuntMenu()
             } else {
                 OpenPigeonLog.e("openpigeon-${baseGame.getName()}", "$sessionId does not exist!")
                 finish()
@@ -528,10 +291,9 @@ class WordHuntActivity : AppCompatActivity() {
     }
 
     private fun setupGame() {
-        val selectedLanguage =
-            WordGameLanguages.fromCode(
-                currentMessage["lang"],
-            )
+        val selectedLanguage = WordGameLanguages.fromCode(
+            currentMessage["lang"],
+        )
 
         dictionary = WordDictionary(
             context = this,
@@ -539,9 +301,7 @@ class WordHuntActivity : AppCompatActivity() {
         )
 
         val selectedMode = mode(
-            currentMessage["mode"]
-                ?.toIntOrNull()
-                ?: 1,
+            currentMessage["mode"]?.toIntOrNull() ?: 1,
         )
 
         gameState = WordHuntGameState(
@@ -549,19 +309,14 @@ class WordHuntActivity : AppCompatActivity() {
             mode = selectedMode,
         )
 
-        val letters = currentMessage["letters"]
-            .orEmpty()
+        val letters = currentMessage["letters"].orEmpty()
 
-        val expectedLetterCount =
-            selectedMode.gridSize * selectedMode.gridSize
+        val expectedLetterCount = selectedMode.gridSize * selectedMode.gridSize
 
         if (letters.length < expectedLetterCount) {
             OpenPigeonLog.e(
                 "WordHunt",
-                "Invalid board letters: " +
-                        "language=${selectedLanguage.code} " +
-                        "expected=$expectedLetterCount " +
-                        "actual=${letters.length}",
+                "Invalid board letters: " + "language=${selectedLanguage.code} " + "expected=$expectedLetterCount " + "actual=${letters.length}",
             )
 
             val fallbackLetters = generateLetterPool(
@@ -583,9 +338,7 @@ class WordHuntActivity : AppCompatActivity() {
 
         OpenPigeonLog.i(
             "WordHunt",
-            "setupGame language=${selectedLanguage.code} " +
-                    "dictionaryWords=${dictionary.size()} " +
-                    "mode=${selectedMode.name}",
+            "setupGame language=${selectedLanguage.code} " + "dictionaryWords=${dictionary.size()} " + "mode=${selectedMode.name}",
         )
     }
 
@@ -607,9 +360,9 @@ class WordHuntActivity : AppCompatActivity() {
 
     private fun populatedBoard(letterPool: String): Array<CharArray> {
         val gridSize = gameState.mode.gridSize
-        val boardArray= Array(gridSize) { CharArray(gridSize) }
+        val boardArray = Array(gridSize) { CharArray(gridSize) }
         var poolIndex = 0
-        for (i in gridSize - 1 downTo  0) {
+        for (i in gridSize - 1 downTo 0) {
             for (j in 0 until gridSize) {
                 boardArray[i][j] = letterPool[poolIndex++]
             }
@@ -621,41 +374,33 @@ class WordHuntActivity : AppCompatActivity() {
         currentMessage = gameSessionIPC!!.getCurrentMessage(sessionId)
         gameTimer?.cancel()
         val player: Int = if (currentMessage["score2"].isNullOrBlank()) 2 else 1
-        val opponent = if(player - 1 == 0) 2 else 1
+        val opponent = if (player - 1 == 0) 2 else 1
         val score1 = currentMessage["score1"]
         val score2 = currentMessage["score2"]
         val scores = arrayOf(score1, score2)
 
         val updates = mutableMapOf(
-            "sender" to gameSessionIPC!!
-                .getSenderUUID(sessionId),
-            "player$player" to gameSessionIPC!!
-                .getSenderUUID(sessionId),
+            "sender" to gameSessionIPC!!.getSenderUUID(sessionId),
+            "player$player" to gameSessionIPC!!.getSenderUUID(sessionId),
             "avatar$player" to AvatarView.buildAvatarString(),
             "score$player" to gameState.score.toString(),
             "words$player" to gameState.wordCount.toString(),
-            "words_list$player" to gameState
-                .sortedWords()
-                .joinToString("|"),
+            "words_list$player" to gameState.sortedWords().joinToString("|"),
         )
 
-        currentMessage["lang"]
-            ?.takeIf { it.isNotBlank() }
-            ?.let { languageCode ->
+        currentMessage["lang"]?.takeIf { it.isNotBlank() }?.let { languageCode ->
                 updates["lang"] = languageCode
             }
 
-        currentMessage["subcaption"]
-            ?.takeIf { it.isNotBlank() }
-            ?.let { subcaption ->
+        currentMessage["subcaption"]?.takeIf { it.isNotBlank() }?.let { subcaption ->
                 updates["subcaption"] = subcaption
             }
 
-        if (!score2.isNullOrBlank() || !score1.isNullOrBlank()){
+        if (!score2.isNullOrBlank() || !score1.isNullOrBlank()) {
             updates["winner"] = "${gameSessionIPC!!.getSenderUUID(sessionId)}|${
-                if (gameState.score < scores[opponent-1]!!.toInt()) {
+                if (gameState.score < scores[opponent - 1]!!.toInt()) {
                     "-1"
-                } else if (gameState.score > scores[opponent-1]!!.toInt()) {
+                } else if (gameState.score > scores[opponent - 1]!!.toInt()) {
                     "1"
                 } else {
                     "0"
@@ -676,15 +421,16 @@ class WordHuntActivity : AppCompatActivity() {
     private fun getScoreData(msg: Map<String, String>): MutableMap<String, String> {
         val scores = arrayOf(msg["score1"], msg["score2"])
 
-        val client = if(msg["player1"] == gameSessionIPC!!.getSenderUUID(sessionId)) 1 else 2
-        val opponent = if(client - 1 == 0) 2 else 1
+        val client = if (msg["player1"] == gameSessionIPC!!.getSenderUUID(sessionId)) 1 else 2
+        val opponent = if (client - 1 == 0) 2 else 1
 
         val scoreData = mutableMapOf(
             "score1" to (scores[client - 1] ?: gameState.score.toString()),
             "score2" to (scores[opponent - 1] ?: "????"),
             "words1" to (msg["words$client"] ?: gameState.wordCount.toString()),
             "words2" to (msg["words$opponent"] ?: ""),
-            "words_list1" to (msg["words_list$client"] ?: gameState.sortedWords().joinToString("|")),
+            "words_list1" to (msg["words_list$client"] ?: gameState.sortedWords()
+                .joinToString("|")),
             "words_list2" to (msg["words_list$opponent"] ?: ""),
             // Opponent avatar string so the score screen can display it
             "opponent_avatar" to (msg["avatar$opponent"] ?: ""),
@@ -698,30 +444,45 @@ class WordHuntActivity : AppCompatActivity() {
     }
 
     override fun onResume() {
-        if (gameSessionIPC != null) {
-            gameSessionIPC?.setSuppressNotifications(sessionId, true)
-        } else {
-            OpenPigeonLog.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
+        super.onResume()
+
+        if (::gameMenu.isInitialized) {
+            gameMenu.onResume()
         }
 
-        resumeMusic()
-        super.onResume()
+        if (gameSessionIPC != null) {
+            gameSessionIPC?.setSuppressNotifications(
+                sessionId,
+                true,
+            )
+        } else {
+            OpenPigeonLog.w(
+                "openpigeon-${baseGame.getName()}",
+                "onResume called before gameSessionIPC was initialized!",
+            )
+        }
     }
 
     override fun onPause() {
-        pauseMusic()
-        gameSessionIPC?.setSuppressNotifications(sessionId, false)
+        if (::gameMenu.isInitialized) {
+            gameMenu.onPause()
+        }
+
+        gameSessionIPC?.setSuppressNotifications(
+            sessionId,
+            false,
+        )
+
         gameTimer?.cancel()
+
         super.onPause()
     }
 
     override fun onDestroy() {
-        wordHuntActivityClosing = true
-        stopMusic()
         gameTimer?.cancel()
 
-        if (::settingsSheet.isInitialized) {
-            settingsSheet.detach()
+        if (::gameMenu.isInitialized) {
+            gameMenu.destroy()
         }
 
         super.onDestroy()

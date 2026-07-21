@@ -1,22 +1,14 @@
 package com.openbubbles.openpigeon.shuffle
 
-import android.content.Context
 import com.openbubbles.openpigeon.godot.GameSessionIPC
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.view.Gravity
 import android.view.Window
-import android.widget.FrameLayout
-import android.widget.ImageButton
-import android.widget.ImageView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
-import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
-import com.openbubbles.openpigeon.settings.SettingsSheet
 import com.openbubbles.openpigeon.util.OpenPigeonLog
 import android.animation.ValueAnimator
 import android.graphics.drawable.GradientDrawable
@@ -28,6 +20,12 @@ import android.text.style.ForegroundColorSpan
 import android.util.TypedValue
 import android.view.View
 import android.widget.TextView
+import android.widget.FrameLayout
+import com.openbubbles.openpigeon.ui.RulesPopup
+import com.openbubbles.openpigeon.ui.GameMenuController
+import com.openbubbles.openpigeon.ui.GameMenuPlacement
+import androidx.core.net.toUri
+import androidx.core.view.isVisible
 
 class ShuffleActivity : AppCompatActivity() {
     private var sessionId: String = ""
@@ -38,8 +36,7 @@ class ShuffleActivity : AppCompatActivity() {
     private var lastOutgoingReplay: String? = null
     private var lastPlayedQueuedReplayKey: String? = null
 
-    private var pendingMessageAfterPlayback:
-            Map<String, String>? = null
+    private var pendingMessageAfterPlayback: Map<String, String>? = null
     private var ignoreNextOutgoingReplayEcho = false
     private val stateLabelHandler = Handler(Looper.getMainLooper())
     private var waitingDotsRunnable: Runnable? = null
@@ -49,11 +46,10 @@ class ShuffleActivity : AppCompatActivity() {
 
     private lateinit var rootFrame: FrameLayout
     private lateinit var renderer: ShuffleRenderer
-    private lateinit var settingsSheet: SettingsSheet
 
     private lateinit var myAvatarAnchor: FrameLayout
     private lateinit var opponentAvatarAnchor: FrameLayout
-    private lateinit var settingsButton: ImageButton
+    private lateinit var gameMenu: GameMenuController
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,8 +57,6 @@ class ShuffleActivity : AppCompatActivity() {
         requestWindowFeature(Window.FEATURE_NO_TITLE)
         supportActionBar?.hide()
         enableEdgeToEdge()
-
-        AvatarData.init(applicationContext)
 
         rootFrame = FrameLayout(this)
         setContentView(rootFrame)
@@ -78,25 +72,68 @@ class ShuffleActivity : AppCompatActivity() {
         }
 
         rootFrame.addView(
-            renderer,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+            renderer, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
 
-        settingsSheet = SettingsSheet(this, rootFrame)
-
         createAvatarHud()
-        createSettingsButton()
+
+        renderer.onTopHudAlphaChanged = { alpha ->
+            myAvatarAnchor.alpha = alpha
+            opponentAvatarAnchor.alpha = alpha
+        }
 
         createStateLabel()
         hideStateLabelNow()
-
-        settingsSheet.attachGameAvatar(myAvatarAnchor)
-        settingsSheet.attachOpponentAvatar(opponentAvatarAnchor)
-
+        setupGameMenu()
         startGameSession()
+    }
+
+    private fun setupGameMenu() {
+        gameMenu = GameMenuController(
+            activity = this,
+            rootFrame = rootFrame,
+            gameId = "shuffle",
+            rulesTitle = "Shuffleboard Rules",
+            rulesSections = listOf(
+                RulesPopup.Section(
+                    "Objective",
+                    "Be the first player to reach 50 points.",
+                ),
+                RulesPopup.Section(
+                    "How to Play",
+                    "Move your puck horizontally to choose its starting position, then drag the arrow to choose its direction and power. Both players' pucks are launched together.",
+                ),
+                RulesPopup.Section(
+                    "Scoring",
+                    "After both players have used all four pucks, each puck scores the section containing most of that puck. A puck that is mostly outside the scoring board earns no points.",
+                ),
+                RulesPopup.Section(
+                    "Board Types",
+                    "Shuffleboard includes three scoring layouts. One layout also includes a center bumper that can redirect moving pucks.",
+                ),
+                RulesPopup.Section(
+                    "Winning",
+                    "Points are added after all eight pucks are counted. The first player to reach 50 points wins.",
+                ),
+            ),
+            musicAssetPath = MUSIC_TRACK_PATH,
+            placement = GameMenuPlacement.BOTTOM_START,
+            onDarkModeChanged = { enabled ->
+                renderer.setDarkMode(
+                    enabled,
+                )
+            },
+        )
+
+        gameMenu.sheet.attachGameAvatar(
+            myAvatarAnchor,
+        )
+
+        gameMenu.sheet.attachOpponentAvatar(
+            opponentAvatarAnchor,
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -125,10 +162,9 @@ class ShuffleActivity : AppCompatActivity() {
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "startGameSession sessionIdBlank=${sessionId.isBlank()} " +
-                    "extras=${intent.extras?.keySet()?.sorted().orEmpty()} " +
-                    "dataUri=${intent.data} directKeys=${directData.keys.sorted()} " +
-                    "directMode=${directData["mode"]} directMap=${directData["map"]}"
+            "startGameSession sessionIdBlank=${sessionId.isBlank()} " + "extras=${
+                intent.extras?.keySet()?.sorted().orEmpty()
+            } " + "dataUri=${intent.data} directKeys=${directData.keys.sorted()} " + "directMode=${directData["mode"]} directMap=${directData["map"]}"
         )
 
         if (directData.isNotEmpty() && hasUsableShuffleData(directData)) {
@@ -164,8 +200,7 @@ class ShuffleActivity : AppCompatActivity() {
             }
 
             OpenPigeonLog.i(
-                "ShuffleActivity",
-                "IPC currentMessage ${messageSummary(currentMessage)}"
+                "ShuffleActivity", "IPC currentMessage ${messageSummary(currentMessage)}"
             )
 
             if (currentMessage.isNotEmpty()) {
@@ -178,14 +213,15 @@ class ShuffleActivity : AppCompatActivity() {
                 try {
                     ipc.setSuppressNotifications(sessionId, true)
                 } catch (t: Throwable) {
-                    OpenPigeonLog.e("ShuffleActivity", "IPC setSuppressNotifications(true) failed", t)
+                    OpenPigeonLog.e(
+                        "ShuffleActivity", "IPC setSuppressNotifications(true) failed", t
+                    )
                 }
 
                 try {
                     ipc.onMessageUpdated(sessionId) { msg ->
                         OpenPigeonLog.i(
-                            "ShuffleActivity",
-                            "IPC onMessageUpdated ${messageSummary(msg)}"
+                            "ShuffleActivity", "IPC onMessageUpdated ${messageSummary(msg)}"
                         )
 
                         runOnUiThread {
@@ -203,8 +239,7 @@ class ShuffleActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (lastMessage.isEmpty()) {
                         OpenPigeonLog.w(
-                            "ShuffleActivity",
-                            "IPC currentMessage empty; showing local fallback"
+                            "ShuffleActivity", "IPC currentMessage empty; showing local fallback"
                         )
 
                         handleMessage(defaultLocalMessage())
@@ -221,33 +256,21 @@ class ShuffleActivity : AppCompatActivity() {
             return
         }
 
-        val game =
-            message["game"]
+        val game = message["game"]
 
-        if (
-            !game.isNullOrBlank() &&
-            game != "shuffle"
-        ) {
+        if (!game.isNullOrBlank() && game != "shuffle") {
             OpenPigeonLog.w(
                 "ShuffleActivity",
-                "Ignoring non-shuffle message " +
-                        "game=$game " +
-                        "keys=${message.keys.sorted()}",
+                "Ignoring non-shuffle message " + "game=$game " + "keys=${message.keys.sorted()}",
             )
 
             return
         }
 
-        val incomingReplay =
-            message["replay"].orEmpty()
+        val incomingReplay = message["replay"].orEmpty()
 
-        if (
-            ignoreNextOutgoingReplayEcho &&
-            incomingReplay ==
-            lastOutgoingReplay
-        ) {
-            ignoreNextOutgoingReplayEcho =
-                false
+        if (ignoreNextOutgoingReplayEcho && incomingReplay == lastOutgoingReplay) {
+            ignoreNextOutgoingReplayEcho = false
 
             OpenPigeonLog.i(
                 "ShuffleActivity",
@@ -258,20 +281,17 @@ class ShuffleActivity : AppCompatActivity() {
         }
 
         if (renderer.isPlayingRound()) {
-            pendingMessageAfterPlayback =
-                message
+            pendingMessageAfterPlayback = message
 
             OpenPigeonLog.i(
                 "ShuffleActivity",
-                "Queued message during shuffle playback " +
-                        messageSummary(message),
+                "Queued message during shuffle playback " + messageSummary(message),
             )
 
             return
         }
 
-        lastMessage =
-            message
+        lastMessage = message
 
         OpenPigeonLog.i(
             "ShuffleActivity",
@@ -286,17 +306,14 @@ class ShuffleActivity : AppCompatActivity() {
     private fun finishPlaybackOrApplyQueuedMessage(
         onNoQueuedMessage: () -> Unit,
     ) {
-        val queuedMessage =
-            pendingMessageAfterPlayback
+        val queuedMessage = pendingMessageAfterPlayback
 
-        pendingMessageAfterPlayback =
-            null
+        pendingMessageAfterPlayback = null
 
         if (queuedMessage != null) {
             OpenPigeonLog.i(
                 "ShuffleActivity",
-                "Applying message queued during playback " +
-                        messageSummary(queuedMessage),
+                "Applying message queued during playback " + messageSummary(queuedMessage),
             )
 
             handleMessage(
@@ -312,21 +329,18 @@ class ShuffleActivity : AppCompatActivity() {
     private fun applyGameData(
         data: Map<String, String>,
     ) {
-        val rawReplay =
-            data["replay"].orEmpty()
+        val rawReplay = data["replay"].orEmpty()
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "applyGameData " +
-                    "mode=${data["mode"]} " +
-                    "map=${data["map"]} " +
-                    "replay=${rawReplay.take(160)}",
+            "applyGameData " + "mode=${data["mode"]} " + "map=${data["map"]} " + "replay=${
+                rawReplay.take(160)
+            }",
         )
 
-        localPlayer =
-            resolveLocalPlayer(
-                data,
-            )
+        localPlayer = resolveLocalPlayer(
+            data,
+        )
 
         renderer.setLocalPlayer(
             localPlayer,
@@ -338,83 +352,63 @@ class ShuffleActivity : AppCompatActivity() {
 
         myAvatarAnchor.bringToFront()
         opponentAvatarAnchor.bringToFront()
-        settingsButton.bringToFront()
+        if (::gameMenu.isInitialized) {
+            gameMenu.bringToFront()
+        }
 
-        val markerIndex =
-            rawReplay.indexOf(
-                REPLAY_QUEUE_MARKER,
-            )
+        val markerIndex = rawReplay.indexOf(
+            REPLAY_QUEUE_MARKER,
+        )
 
         if (markerIndex >= 0) {
-            val queuedRoundReplay =
-                rawReplay
-                    .substring(
-                        0,
-                        markerIndex,
-                    )
-                    .trim()
-                    .trimEnd('|')
+            val queuedRoundReplay = rawReplay.substring(
+                0,
+                markerIndex,
+            ).trim().trimEnd('|')
 
-            val postRoundReplay =
-                rawReplay
-                    .substring(
-                        markerIndex +
-                                REPLAY_QUEUE_MARKER.length,
-                    )
-                    .trim()
-                    .trimStart('|')
-                    .ifBlank {
-                        DEFAULT_REPLAY
-                    }
+            val postRoundReplay = rawReplay.substring(
+                markerIndex + REPLAY_QUEUE_MARKER.length,
+            ).trim().trimStart('|').ifBlank {
+                DEFAULT_REPLAY
+            }
 
-            val queuedReplayKey =
-                buildString {
-                    append(
-                        data["id"].orEmpty(),
-                    )
+            val queuedReplayKey = buildString {
+                append(
+                    data["id"].orEmpty(),
+                )
 
-                    append("|")
+                append("|")
 
-                    append(
-                        data["num"].orEmpty(),
-                    )
+                append(
+                    data["num"].orEmpty(),
+                )
 
-                    append("|")
+                append("|")
 
-                    append(
-                        rawReplay.hashCode(),
-                    )
-                }
+                append(
+                    rawReplay.hashCode(),
+                )
+            }
 
             val shouldPlayQueuedRound =
-                isYourTurn(data) &&
-                        queuedRoundReplay.isNotBlank() &&
-                        queuedReplayKey !=
-                        lastPlayedQueuedReplayKey
+                isYourTurn(data) && queuedRoundReplay.isNotBlank() && queuedReplayKey != lastPlayedQueuedReplayKey
 
-            val postRoundData =
-                data
-                    .toMutableMap()
-                    .apply {
-                        put(
-                            "replay",
-                            postRoundReplay,
-                        )
-                    }
+            val postRoundData = data.toMutableMap().apply {
+                put(
+                    "replay",
+                    postRoundReplay,
+                )
+            }
 
             if (shouldPlayQueuedRound) {
-                lastPlayedQueuedReplayKey =
-                    queuedReplayKey
+                lastPlayedQueuedReplayKey = queuedReplayKey
 
-                val roundData =
-                    data
-                        .toMutableMap()
-                        .apply {
-                            put(
-                                "replay",
-                                queuedRoundReplay,
-                            )
-                        }
+                val roundData = data.toMutableMap().apply {
+                    put(
+                        "replay",
+                        queuedRoundReplay,
+                    )
+                }
 
                 renderer.setGameData(
                     roundData,
@@ -424,19 +418,16 @@ class ShuffleActivity : AppCompatActivity() {
 
                 OpenPigeonLog.i(
                     "ShuffleActivity",
-                    "Playing queued shuffle replay " +
-                            "key=$queuedReplayKey " +
-                            "round=${queuedRoundReplay.take(260)} " +
-                            "post=${postRoundReplay.take(260)}",
+                    "Playing queued shuffle replay key=$queuedReplayKey " + "round=${
+                        queuedRoundReplay.take(260)
+                    } " + "post=${postRoundReplay.take(260)}",
                 )
 
                 renderer.playRoundFromReplay(
-                    roundReplay =
-                        queuedRoundReplay,
+                    roundReplay = queuedRoundReplay,
                 ) {
                     finishPlaybackOrApplyQueuedMessage {
-                        lastMessage =
-                            postRoundData
+                        lastMessage = postRoundData
 
                         renderer.setGameData(
                             postRoundData,
@@ -451,8 +442,7 @@ class ShuffleActivity : AppCompatActivity() {
                 return
             }
 
-            lastMessage =
-                postRoundData
+            lastMessage = postRoundData
 
             renderer.setGameData(
                 postRoundData,
@@ -477,18 +467,15 @@ class ShuffleActivity : AppCompatActivity() {
     private fun applyTurnFlow(
         data: Map<String, String>,
     ) {
-        val yourTurn =
-            isYourTurn(
-                data,
-            )
+        val yourTurn = isYourTurn(
+            data,
+        )
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "applyTurnFlow " +
-                    "localPlayer=$localPlayer " +
-                    "yourTurn=$yourTurn " +
-                    "p1Shot=${renderer.hasShotForPlayer(1)} " +
-                    "p2Shot=${renderer.hasShotForPlayer(2)}",
+            "applyTurnFlow localPlayer=$localPlayer yourTurn=$yourTurn " + "p1Shot=${
+                renderer.hasShotForPlayer(1)
+            } " + "p2Shot=${renderer.hasShotForPlayer(2)}",
         )
 
         if (!yourTurn) {
@@ -503,9 +490,7 @@ class ShuffleActivity : AppCompatActivity() {
             renderer.showPlaying()
 
             renderer.playRoundFromReplay(
-                roundReplay =
-                    data["replay"]
-                        ?: DEFAULT_REPLAY,
+                roundReplay = data["replay"] ?: DEFAULT_REPLAY,
             ) {
                 finishPlaybackOrApplyQueuedMessage {
                     enableNextLocalAimAfterPlayback()
@@ -515,8 +500,7 @@ class ShuffleActivity : AppCompatActivity() {
             return
         }
 
-        if (
-            renderer.hasShotForPlayer(
+        if (renderer.hasShotForPlayer(
                 localPlayer,
             )
         ) {
@@ -532,15 +516,11 @@ class ShuffleActivity : AppCompatActivity() {
     private fun handleLocalLaunchReplay(
         stagedReplayValue: String,
     ) {
-        val stagedReplay =
-            stagedReplayValue.trim()
+        val stagedReplay = stagedReplayValue.trim()
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "handleLocalLaunchReplay " +
-                    "endsWithPipe=${stagedReplay.endsWith("|")} " +
-                    "rawLength=${stagedReplayValue.length} " +
-                    "formattedLength=${stagedReplay.length}",
+            "handleLocalLaunchReplay " + "endsWithPipe=${stagedReplay.endsWith("|")} " + "rawLength=${stagedReplayValue.length} " + "formattedLength=${stagedReplay.length}",
         )
 
         if (!isYourTurn(lastMessage)) {
@@ -554,21 +534,17 @@ class ShuffleActivity : AppCompatActivity() {
             return
         }
 
-        val opponentPlayer =
-            3 - localPlayer
+        val opponentPlayer = 3 - localPlayer
 
-        val opponentAlreadyHasShot =
-            renderer.hasShotForPlayer(
-                opponentPlayer,
-            )
+        val opponentAlreadyHasShot = renderer.hasShotForPlayer(
+            opponentPlayer,
+        )
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "handleLocalLaunchReplay " +
-                    "localPlayer=$localPlayer " +
-                    "opponent=$opponentPlayer " +
-                    "opponentAlreadyHasShot=$opponentAlreadyHasShot " +
-                    "replay=${stagedReplay.take(420)}",
+            "handleLocalLaunchReplay localPlayer=$localPlayer opponent=$opponentPlayer opponentAlreadyHasShot=$opponentAlreadyHasShot " + "replay=${
+                stagedReplay.take(420)
+            }",
         )
 
         if (opponentAlreadyHasShot) {
@@ -592,174 +568,123 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun enableNextLocalAimAfterPlayback() {
-        val currentBoard =
-            renderer.prepareNextLocalAimAfterPlayback()
+        val currentBoard = renderer.prepareNextLocalAimAfterPlayback()
 
-        lastMessage =
-            lastMessage
-                .toMutableMap()
-                .apply {
-                    put(
-                        "replay",
-                        currentBoard,
-                    )
-                }
+        lastMessage = lastMessage.toMutableMap().apply {
+            put(
+                "replay",
+                currentBoard,
+            )
+        }
 
         hideStateLabelNow()
         renderer.showAiming()
 
         myAvatarAnchor.bringToFront()
         opponentAvatarAnchor.bringToFront()
-        settingsButton.bringToFront()
+        if (::gameMenu.isInitialized) {
+            gameMenu.bringToFront()
+        }
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "Playback finished; enabling next local aim " +
-                    "currentBoard=${currentBoard.take(260)}",
+            "Playback finished; enabling next local aim " + "currentBoard=${currentBoard.take(260)}",
         )
     }
 
     private fun sendReplayToOpponent(
         stagedReplay: String,
     ) {
-        val currentMessage =
-            try {
-                if (sessionId.isNotBlank()) {
-                    gameSessionIPC
-                        ?.getCurrentMessage(sessionId)
-                        .orEmpty()
-                } else {
-                    emptyMap()
-                }
-            } catch (throwable: Throwable) {
-                OpenPigeonLog.e(
-                    "ShuffleActivity",
-                    "getCurrentMessage before send failed",
-                    throwable,
-                )
-
+        val currentMessage = try {
+            if (sessionId.isNotBlank()) {
+                gameSessionIPC?.getCurrentMessage(sessionId).orEmpty()
+            } else {
                 emptyMap()
             }
-
-        val sourceMessage =
-            currentMessage.ifEmpty {
-                lastMessage
-            }
-
-        val myId =
-            localUserId(sourceMessage)
-
-        val myAvatarKey =
-            if (localPlayer == 1) {
-                "avatar1"
-            } else {
-                "avatar2"
-            }
-
-        val sourceNum =
-            sourceMessage["num"]
-                ?.toIntOrNull()
-                ?: 0
-
-        val cachedNum =
-            lastMessage["num"]
-                ?.toIntOrNull()
-                ?: 0
-
-        val nextNum =
-            maxOf(
-                sourceNum,
-                cachedNum,
-            ) + 1
-
-        val player1Id =
-            (
-                    sourceMessage["player1"]
-                        ?: lastMessage["player1"]
-                    ).orEmpty()
-
-        val player2Id =
-            (
-                    sourceMessage["player2"]
-                        ?: lastMessage["player2"]
-                    ).orEmpty()
-
-        val updates =
-            mutableMapOf(
-                "game" to "shuffle",
-                "mode" to (
-                        sourceMessage["mode"]
-                            ?: lastMessage["mode"]
-                            ?: "1"
-                        ),
-                "map" to (
-                        sourceMessage["map"]
-                            ?: lastMessage["map"]
-                            ?: defaultMapForMode(1)
-                        ),
-                "player" to
-                        localPlayer.toString(),
-                "num" to
-                        nextNum.toString(),
-                "sender" to
-                        myId,
-                "replay" to
-                        stagedReplay,
-                myAvatarKey to
-                        AvatarView.buildAvatarString(),
+        } catch (throwable: Throwable) {
+            OpenPigeonLog.e(
+                "ShuffleActivity",
+                "getCurrentMessage before send failed",
+                throwable,
             )
+
+            emptyMap()
+        }
+
+        val sourceMessage = currentMessage.ifEmpty {
+            lastMessage
+        }
+
+        val myId = localUserId(sourceMessage)
+
+        val myAvatarKey = if (localPlayer == 1) {
+            "avatar1"
+        } else {
+            "avatar2"
+        }
+
+        val sourceNum = sourceMessage["num"]?.toIntOrNull() ?: 0
+
+        val cachedNum = lastMessage["num"]?.toIntOrNull() ?: 0
+
+        val nextNum = maxOf(
+            sourceNum,
+            cachedNum,
+        ) + 1
+
+        val player1Id = (sourceMessage["player1"] ?: lastMessage["player1"]).orEmpty()
+
+        val player2Id = (sourceMessage["player2"] ?: lastMessage["player2"]).orEmpty()
+
+        val updates = mutableMapOf(
+            "game" to "shuffle",
+            "mode" to (sourceMessage["mode"] ?: lastMessage["mode"] ?: "1"),
+            "map" to (sourceMessage["map"] ?: lastMessage["map"] ?: defaultMapForMode(1)),
+            "player" to localPlayer.toString(),
+            "num" to nextNum.toString(),
+            "sender" to myId,
+            "replay" to stagedReplay,
+            myAvatarKey to AvatarView.buildAvatarString(),
+        )
 
         if (localPlayer == 1) {
             updates["player1"] = myId
 
             if (player2Id.isNotBlank()) {
-                updates["player2"] =
-                    player2Id
+                updates["player2"] = player2Id
             }
         } else {
             if (player1Id.isNotBlank()) {
-                updates["player1"] =
-                    player1Id
+                updates["player1"] = player1Id
             }
 
             updates["player2"] = myId
         }
 
-        lastMessage =
-            sourceMessage
-                .toMutableMap()
-                .apply {
-                    putAll(updates)
-                }
+        lastMessage = sourceMessage.toMutableMap().apply {
+            putAll(updates)
+        }
 
-        lastOutgoingReplay =
-            stagedReplay
+        lastOutgoingReplay = stagedReplay
 
-        ignoreNextOutgoingReplayEcho =
-            true
+        ignoreNextOutgoingReplayEcho = true
 
         renderer.showSentThenWaiting()
         showSendingLabelImmediately()
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "sendReplayToOpponent " +
-                    "localPlayer=$localPlayer " +
-                    "num=$nextNum " +
-                    "replay=${stagedReplay.take(420)}",
+            "sendReplayToOpponent localPlayer=$localPlayer num=$nextNum " + "replay=${
+                stagedReplay.take(420)
+            }",
         )
 
-        val ipc =
-            gameSessionIPC
+        val ipc = gameSessionIPC
 
-        if (
-            ipc == null ||
-            sessionId.isBlank()
-        ) {
+        if (ipc == null || sessionId.isBlank()) {
             OpenPigeonLog.w(
                 "ShuffleActivity",
-                "No IPC/session available; " +
-                        "showing sent/waiting locally",
+                "No IPC/session available; " + "showing sent/waiting locally",
             )
 
             showSentCheckThenWaitingAnimation()
@@ -772,8 +697,7 @@ class ShuffleActivity : AppCompatActivity() {
         ) {
             OpenPigeonLog.i(
                 "ShuffleActivity",
-                "Shuffle session updated " +
-                        "num=$nextNum",
+                "Shuffle session updated num=$nextNum",
             )
 
             runOnUiThread {
@@ -795,9 +719,7 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun localUserId(msg: Map<String, String>): String {
-        return gameSessionIPC
-            ?.getSenderUUID(sessionId)
-            ?.takeIf { it.isNotBlank() }
+        return gameSessionIPC?.getSenderUUID(sessionId)?.takeIf { it.isNotBlank() }
             ?: msg["myPlayerId"].orEmpty()
     }
 
@@ -832,71 +754,25 @@ class ShuffleActivity : AppCompatActivity() {
         val avatarSize = dp(46f).toInt()
 
         rootFrame.addView(
-            myAvatarAnchor,
-            FrameLayout.LayoutParams(
-                avatarSize,
-                avatarSize,
-                Gravity.TOP or Gravity.START
+            myAvatarAnchor, FrameLayout.LayoutParams(
+                avatarSize, avatarSize, Gravity.TOP or Gravity.START
             ).apply {
                 leftMargin = dp(10f).toInt()
                 topMargin = dp(40f).toInt()
-            }
-        )
+            })
 
         rootFrame.addView(
-            opponentAvatarAnchor,
-            FrameLayout.LayoutParams(
-                avatarSize,
-                avatarSize,
-                Gravity.TOP or Gravity.END
+            opponentAvatarAnchor, FrameLayout.LayoutParams(
+                avatarSize, avatarSize, Gravity.TOP or Gravity.END
             ).apply {
                 rightMargin = dp(10f).toInt()
                 topMargin = dp(40f).toInt()
-            }
-        )
+            })
     }
 
-    private fun createSettingsButton() {
-        settingsButton = ImageButton(this).apply {
-            background = null
-            alpha = 0.86f
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(
-                dp(4f).toInt(),
-                dp(4f).toInt(),
-                dp(4f).toInt(),
-                dp(4f).toInt()
-            )
-
-            val settingsBitmap = loadAssetBitmap("global/settings.png")
-
-            if (settingsBitmap != null) {
-                setImageBitmap(settingsBitmap)
-            } else {
-                OpenPigeonLog.w("ShuffleActivity", "Missing asset: global/settings.png")
-            }
-
-            setOnClickListener {
-                settingsSheet.open()
-            }
-        }
-
-        val size = dp(48f).toInt()
-
-        rootFrame.addView(
-            settingsButton,
-            FrameLayout.LayoutParams(
-                size,
-                size,
-                Gravity.BOTTOM or Gravity.START
-            ).apply {
-                leftMargin = dp(0f).toInt()
-                bottomMargin = dp(16f).toInt()
-            }
-        )
-    }
-
-    private fun applyOpponentAvatarFromMessage(data: Map<String, String>) {
+    private fun applyOpponentAvatarFromMessage(
+        data: Map<String, String>,
+    ) {
         val opponentAvatarKey = if (localPlayer == 1) {
             "avatar2"
         } else {
@@ -906,14 +782,16 @@ class ShuffleActivity : AppCompatActivity() {
         val avatar = data[opponentAvatarKey]
 
         if (!avatar.isNullOrBlank()) {
-            settingsSheet.applyOpponentAvatarString(avatar)
+            gameMenu.sheet.applyOpponentAvatarString(
+                avatar,
+            )
         }
     }
 
     private fun parseBoolean(value: String?): Boolean {
-        return value.equals("true", ignoreCase = true) ||
-                value == "1" ||
-                value.equals("yes", ignoreCase = true)
+        return value.equals("true", ignoreCase = true) || value == "1" || value.equals(
+            "yes", ignoreCase = true
+        )
     }
 
     private fun extractMessageData(intent: Intent?): Map<String, String> {
@@ -935,9 +813,7 @@ class ShuffleActivity : AppCompatActivity() {
 
         if (extras != null) {
             for (key in extras.keySet()) {
-                val value = extras.get(key)
-
-                when (value) {
+                when (val value = extras.get(key)) {
                     is String -> {
                         out[key] = value
 
@@ -973,11 +849,10 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun parsePackedDataUri(
-        raw: String,
-        out: MutableMap<String, String>
+        raw: String, out: MutableMap<String, String>
     ) {
         try {
-            val uri = android.net.Uri.parse(raw)
+            val uri = raw.toUri()
 
             for (name in uri.queryParameterNames) {
                 out[name] = uri.getQueryParameter(name) ?: ""
@@ -988,30 +863,14 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun hasUsableShuffleData(data: Map<String, String>): Boolean {
-        return data["mode"] != null ||
-                data["map"] != null ||
-                data["replay"] != null
+        return data["mode"] != null || data["map"] != null || data["replay"] != null
     }
 
     private fun messageSummary(message: Map<String, String>): String {
         val map = message["map"]
-        val mapCount = map
-            ?.split(",")
-            ?.map { it.trim() }
-            ?.filter { it.isNotEmpty() }
-            ?.size
-            ?: 0
+        val mapCount = map?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }?.size ?: 0
 
-        return "keys=${message.keys.sorted()} " +
-                "game=${message["game"]} " +
-                "mode=${message["mode"]} " +
-                "mapCount=$mapCount " +
-                "map=$map " +
-                "player=${message["player"]} " +
-                "num=${message["num"]} " +
-                "isYourTurn=${message["isYourTurn"]} " +
-                "sender=${message["sender"]} " +
-                "replayLen=${message["replay"]?.length ?: 0}"
+        return "keys=${message.keys.sorted()} " + "game=${message["game"]} " + "mode=${message["mode"]} " + "mapCount=$mapCount " + "map=$map " + "player=${message["player"]} " + "num=${message["num"]} " + "isYourTurn=${message["isYourTurn"]} " + "sender=${message["sender"]} " + "replayLen=${message["replay"]?.length ?: 0}"
     }
 
     private fun defaultLocalMessage(): Map<String, String> {
@@ -1037,26 +896,59 @@ class ShuffleActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
 
+        if (::gameMenu.isInitialized) {
+            gameMenu.onResume()
+        }
+
         if (sessionId.isNotBlank()) {
             try {
-                gameSessionIPC?.setSuppressNotifications(sessionId, true)
-            } catch (t: Throwable) {
-                OpenPigeonLog.e("ShuffleActivity", "onResume setSuppressNotifications(true) failed", t)
+                gameSessionIPC?.setSuppressNotifications(
+                    sessionId,
+                    true,
+                )
+            } catch (throwable: Throwable) {
+                OpenPigeonLog.e(
+                    "ShuffleActivity",
+                    "onResume setSuppressNotifications(true) failed",
+                    throwable,
+                )
             }
         }
     }
 
+
     override fun onPause() {
+        if (::gameMenu.isInitialized) {
+            gameMenu.onPause()
+        }
+
         if (sessionId.isNotBlank()) {
             try {
-                gameSessionIPC?.setSuppressNotifications(sessionId, false)
-            } catch (t: Throwable) {
-                OpenPigeonLog.e("ShuffleActivity", "onPause setSuppressNotifications(false) failed", t)
+                gameSessionIPC?.setSuppressNotifications(
+                    sessionId,
+                    false,
+                )
+            } catch (throwable: Throwable) {
+                OpenPigeonLog.e(
+                    "ShuffleActivity",
+                    "onPause setSuppressNotifications(false) failed",
+                    throwable,
+                )
             }
         }
 
         stopStateLabelAnimation()
+
         super.onPause()
+    }
+
+
+    override fun onDestroy() {
+        if (::gameMenu.isInitialized) {
+            gameMenu.destroy()
+        }
+
+        super.onDestroy()
     }
 
     private fun createStateLabel() {
@@ -1067,30 +959,22 @@ class ShuffleActivity : AppCompatActivity() {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             includeFontPadding = false
             setPadding(
-                stateLabelDp(14f),
-                stateLabelDp(8f),
-                stateLabelDp(14f),
-                stateLabelDp(8f)
+                stateLabelDp(14f), stateLabelDp(8f), stateLabelDp(14f), stateLabelDp(8f)
             )
             applyStateLabelBackground(this)
             visibility = View.GONE
         }
 
         rootFrame.addView(
-            stateLabel,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                stateLabelDp(38f),
-                Gravity.CENTER
+            stateLabel, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, stateLabelDp(38f), Gravity.CENTER
             )
         )
     }
 
     private fun stateLabelDp(value: Float): Int {
         return TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP,
-            value,
-            resources.displayMetrics
+            TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics
         ).toInt()
     }
 
@@ -1113,14 +997,9 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun measureStateLabelWidth(
-        label: TextView,
-        text: CharSequence
+        label: TextView, text: CharSequence
     ): Int {
-        return (
-                label.paint.measureText(text.toString()) +
-                        label.paddingLeft +
-                        label.paddingRight
-                ).toInt()
+        return (label.paint.measureText(text.toString()) + label.paddingLeft + label.paddingRight).toInt()
     }
 
     private fun stopStateLabelAnimation() {
@@ -1151,7 +1030,7 @@ class ShuffleActivity : AppCompatActivity() {
             override fun run() {
                 if (waitingDotsRunnable !== this) return
 
-                if (label.visibility == View.VISIBLE) {
+                if (label.isVisible) {
                     label.text = "WAITING FOR OPPONENT" + ".".repeat(dots)
                     dots = if (dots >= 3) 1 else dots + 1
                 }
@@ -1172,8 +1051,7 @@ class ShuffleActivity : AppCompatActivity() {
             stateLabel.bringToFront()
 
             val waitingWidth = measureStateLabelWidth(
-                stateLabel,
-                "WAITING FOR OPPONENT..."
+                stateLabel, "WAITING FOR OPPONENT..."
             )
 
             val params = stateLabel.layoutParams
@@ -1185,7 +1063,9 @@ class ShuffleActivity : AppCompatActivity() {
 
             myAvatarAnchor.bringToFront()
             opponentAvatarAnchor.bringToFront()
-            settingsButton.bringToFront()
+            if (::gameMenu.isInitialized) {
+                gameMenu.bringToFront()
+            }
             stateLabel.bringToFront()
         }
     }
@@ -1232,10 +1112,7 @@ class ShuffleActivity : AppCompatActivity() {
 
             val sentCheck = SpannableString("Sent ✔")
             sentCheck.setSpan(
-                ForegroundColorSpan(0xFF7257D8.toInt()),
-                5,
-                6,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                ForegroundColorSpan(0xFF7257D8.toInt()), 5, 6, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             )
 
             stateLabel.text = sentCheck
@@ -1271,57 +1148,43 @@ class ShuffleActivity : AppCompatActivity() {
                         stateLabel.layoutParams = animatedParams
                     }
 
-                    addListener(
-                        object : android.animation.AnimatorListenerAdapter() {
-                            override fun onAnimationEnd(animation: android.animation.Animator) {
-                                if (!sentWaitingSequenceActive) return
+                    addListener(object : android.animation.AnimatorListenerAdapter() {
+                        override fun onAnimationEnd(animation: android.animation.Animator) {
+                            if (!sentWaitingSequenceActive) return
 
-                                stateLabelAnimator = null
+                            stateLabelAnimator = null
 
-                                val finalParams = stateLabel.layoutParams
-                                finalParams.width = waitingWidth
-                                stateLabel.layoutParams = finalParams
+                            val finalParams = stateLabel.layoutParams
+                            finalParams.width = waitingWidth
+                            stateLabel.layoutParams = finalParams
 
-                                ValueAnimator.ofInt(0, 255).apply {
-                                    duration = 180L
+                            ValueAnimator.ofInt(0, 255).apply {
+                                duration = 180L
 
-                                    addUpdateListener { textAnimation ->
-                                        val alpha = textAnimation.animatedValue as Int
-                                        stateLabel.setTextColor((alpha shl 24) or 0x00FFFFFF)
-                                    }
-
-                                    addListener(
-                                        object : android.animation.AnimatorListenerAdapter() {
-                                            override fun onAnimationEnd(animation: android.animation.Animator) {
-                                                if (sentWaitingSequenceActive) {
-                                                    stateLabel.setTextColor(0xFFFFFFFF.toInt())
-                                                    stateLabel.visibility = View.VISIBLE
-                                                    stateLabel.bringToFront()
-                                                    startWaitingDots(stateLabel)
-                                                }
-                                            }
-                                        }
-                                    )
-
-                                    start()
+                                addUpdateListener { textAnimation ->
+                                    val alpha = textAnimation.animatedValue as Int
+                                    stateLabel.setTextColor((alpha shl 24) or 0x00FFFFFF)
                                 }
+
+                                addListener(object : android.animation.AnimatorListenerAdapter() {
+                                    override fun onAnimationEnd(animation: android.animation.Animator) {
+                                        if (sentWaitingSequenceActive) {
+                                            stateLabel.setTextColor(0xFFFFFFFF.toInt())
+                                            stateLabel.visibility = View.VISIBLE
+                                            stateLabel.bringToFront()
+                                            startWaitingDots(stateLabel)
+                                        }
+                                    }
+                                })
+
+                                start()
                             }
                         }
-                    )
+                    })
 
                     start()
                 }
             }, 1000L)
-        }
-    }
-
-    private fun loadAssetBitmap(path: String): Bitmap? {
-        return try {
-            assets.open(path).use { stream ->
-                BitmapFactory.decodeStream(stream)
-            }
-        } catch (_: Exception) {
-            null
         }
     }
 
@@ -1331,11 +1194,10 @@ class ShuffleActivity : AppCompatActivity() {
 
     private companion object {
         private const val DEFAULT_REPLAY =
-            "board:0,0#" +
-                    "0.000000,-215.000000,1,0.000000,0.000000,0.000000#" +
-                    "0.000000,215.000000,2,0.000000,0.000000,0.000000#"
+            "board:0,0#" + "0.000000,-215.000000,1,0.000000,0.000000,0.000000#" + "0.000000,215.000000,2,0.000000,0.000000,0.000000#"
 
-        private const val REPLAY_QUEUE_MARKER =
-            "|shoot:1|"
+        private const val REPLAY_QUEUE_MARKER = "|shoot:1|"
+
+        private const val MUSIC_TRACK_PATH = "shuffle/shuffle.wav"
     }
 }

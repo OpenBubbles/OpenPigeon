@@ -18,6 +18,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -41,7 +42,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -91,13 +91,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import com.openbubbles.openpigeon.ui.GameMenuController
+import com.openbubbles.openpigeon.ui.GameMenuPlacement
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.ui.graphics.BlendMode
@@ -141,11 +138,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.viewinterop.AndroidView
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
-import com.openbubbles.openpigeon.settings.SettingsSheet
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
-import androidx.appcompat.widget.SwitchCompat
 import kotlin.apply
 import kotlin.toString
 import androidx.compose.ui.res.painterResource
@@ -156,13 +148,13 @@ import com.openbubbles.openpigeon.ui.RulesPopup
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 class CrazyParticipant(
     name: String,
@@ -208,7 +200,7 @@ data class CrazyCard(val rank: Int, val file: Int) {
     }
 
     fun displayName(): String {
-        return when(file) {
+        return when (file) {
             8 -> "0"
             10 -> "8"
             11 -> "Ø"
@@ -217,10 +209,6 @@ data class CrazyCard(val rank: Int, val file: Int) {
             14 -> "+4"
             else -> file.toString()
         }
-    }
-
-    fun extraName(): String {
-        return displayName().slice(0..<1)
     }
 
     fun encode(): String {
@@ -234,15 +222,21 @@ class CrazyGame(
     card: CrazyCard,
     val hand: SnapshotStateList<CrazyCard>,
     clockwise: Boolean = true,
-    directionKnown: Boolean = true
 ) {
     var turn by mutableStateOf(turn)
     var card by mutableStateOf(card)
     var clockwise by mutableStateOf(clockwise)
-    var directionKnown by mutableStateOf(directionKnown)
 }
 
 private const val CRAZY8_VERBOSE_LOGS = false
+
+private val CRAZY8_AES_KEY = ByteArray(
+    32,
+)
+
+private val CRAZY8_AES_IV = ByteArray(
+    16,
+)
 
 private data class CrazyPerfProfile(
     val lightweightCards: Boolean,
@@ -254,9 +248,7 @@ private data class CrazyPerfProfile(
 )
 
 private fun buildCrazyPerfProfile(game: CrazyGame): CrazyPerfProfile {
-    val opponentCards = game.participants
-        .filter { !it.isMe }
-        .sumOf { it.cardCount }
+    val opponentCards = game.participants.filter { !it.isMe }.sumOf { it.cardCount }
 
     val totalCards = game.hand.size + opponentCards
     val manyPlayers = game.participants.size >= 5
@@ -281,9 +273,7 @@ private fun Offset.isNear(other: Offset, epsilon: Float = 0.5f): Boolean {
 }
 
 private fun <K> SnapshotStateMap<K, Offset>.putOffsetIfChanged(
-    key: K,
-    value: Offset,
-    epsilon: Float = 0.5f
+    key: K, value: Offset, epsilon: Float = 0.5f
 ) {
     val current = this[key]
     if (current == null || !current.isNear(value, epsilon)) {
@@ -294,15 +284,12 @@ private fun <K> SnapshotStateMap<K, Offset>.putOffsetIfChanged(
 private fun centerOf(coords: LayoutCoordinates): Offset {
     val pos = coords.positionInRoot()
     return Offset(
-        x = pos.x + coords.size.width / 2f,
-        y = pos.y + coords.size.height / 2f
+        x = pos.x + coords.size.width / 2f, y = pos.y + coords.size.height / 2f
     )
 }
 
 private fun <K> SnapshotStateMap<K, Offset>.putCenterIfChanged(
-    key: K,
-    coords: LayoutCoordinates,
-    epsilon: Float = 0.5f
+    key: K, coords: LayoutCoordinates, epsilon: Float = 0.5f
 ) {
     putOffsetIfChanged(key, centerOf(coords), epsilon)
 }
@@ -315,10 +302,7 @@ private fun updatedCenter(current: Offset?, coords: LayoutCoordinates): Offset {
 private fun parseCrazyHand(section: String?): SnapshotStateList<CrazyCard> {
     if (section.isNullOrBlank()) return mutableStateListOf()
 
-    val cards = section
-        .split("&")
-        .filter { it.isNotBlank() }
-        .map { CrazyCard.parse(it) }
+    val cards = section.split("&").filter { it.isNotBlank() }.map { CrazyCard.parse(it) }
         .toMutableStateList()
 
     sortCrazyHandInPlace(cards)
@@ -326,8 +310,7 @@ private fun parseCrazyHand(section: String?): SnapshotStateList<CrazyCard> {
 }
 
 private fun applyCrazyCardCounts(
-    gameParticipants: List<CrazyParticipant>,
-    section: String
+    gameParticipants: List<CrazyParticipant>, section: String
 ) {
     for (cardCount in section.split("&")) {
         val parts = cardCount.split(":")
@@ -342,25 +325,41 @@ private fun buildCrazyGameFromSections(
     cardStateSection: String,
     turnId: Int,
     clockwise: Boolean,
-    directionKnown: Boolean = true
 ): CrazyGame {
-    val participantIds = participantIdsSection
-        .split(",")
-        .mapNotNull { it.toIntOrNull() }
+    val participantIds = participantIdsSection.split(",").mapNotNull {
+            it.toIntOrNull()
+        }
 
-    val gameParticipants = participantIds
-        .mapNotNull { id -> allParticipants.firstOrNull { it.id == id } }
-
-    val cardState = cardStateSection.split("|")
-    val turn = gameParticipants.find { it.id == turnId }
-        ?: error("Missing turn participant for id=$turnId")
-    val currentCard = CrazyCard.parse(cardState[0])
-
-    if (cardState.size > 1) {
-        applyCrazyCardCounts(gameParticipants, cardState[1])
+    val gameParticipants = participantIds.mapNotNull { id ->
+        allParticipants.firstOrNull {
+            it.id == id
+        }
     }
 
-    val myCards = parseCrazyHand(cardState.getOrNull(2))
+    val cardState = cardStateSection.split("|")
+
+    val turn = gameParticipants.find {
+        it.id == turnId
+    } ?: error(
+        "Missing turn participant for id=$turnId",
+    )
+
+    val currentCard = CrazyCard.parse(
+        cardState[0],
+    )
+
+    if (cardState.size > 1) {
+        applyCrazyCardCounts(
+            gameParticipants,
+            cardState[1],
+        )
+    }
+
+    val myCards = parseCrazyHand(
+        cardState.getOrNull(
+            2,
+        ),
+    )
 
     return CrazyGame(
         participants = gameParticipants,
@@ -368,16 +367,11 @@ private fun buildCrazyGameFromSections(
         card = currentCard,
         hand = myCards,
         clockwise = clockwise,
-        directionKnown = directionKnown
     )
 }
 
 private fun <T> showTimedFx(
-    fx: T,
-    durationMs: Long,
-    getCurrent: () -> T?,
-    setCurrent: (T?) -> Unit,
-    keyOf: (T) -> Int
+    fx: T, durationMs: Long, getCurrent: () -> T?, setCurrent: (T?) -> Unit, keyOf: (T) -> Int
 ) {
     setCurrent(fx)
     Handler(Looper.getMainLooper()).postDelayed({
@@ -399,14 +393,11 @@ class Crazy8Activity : ComponentActivity() {
     private var reconnectHandler = Handler(Looper.getMainLooper())
     private var reconnectRunnable: Runnable? = null
 
-    lateinit var settingsSheet: SettingsSheet
-    private var settingsConfigured = false
+    private lateinit var gameMenu: GameMenuController
+
     private var settingsIdentityBeforeOpen: String? = null
 
     private var crazy8ActivityClosing = false
-    private val MusicTrackPath = "crazy8/crazy8.wav"
-    private var musicEnabled = false
-    private var musicTrack: AudioTrack? = null
 
     private var gameOpenedLogged = false
 
@@ -420,265 +411,82 @@ class Crazy8Activity : ComponentActivity() {
             "roomPresent=${!msg["room"].isNullOrBlank()} player=${msg["player"].orEmpty()}"
         )
     }
+
     fun getPrefs(): SharedPreferences {
         return getSharedPreferences("crazy_prefs", MODE_PRIVATE)
     }
 
-    private data class WavLoopData(
-        val pcm: ByteArray,
-        val sampleRate: Int,
-        val channelMask: Int,
-        val encoding: Int,
-        val frameCount: Int
-    )
-
-    private fun applyMusicEnabled(enabled: Boolean) {
-        musicEnabled = enabled
-
-        getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean("global/music_enabled", enabled)
-            .apply()
-
-        if (enabled) {
-            startMusic()
-        } else {
-            stopMusic()
-        }
-    }
-
-    private fun startMusic() {
-        if (!musicEnabled || musicTrack != null) return
-
-        playMusicTrack()
-    }
-
-    private fun playMusicTrack() {
-        releaseMusicPlayer()
-
-        if (!musicEnabled) return
-
-        val trackPath = MusicTrackPath
-
-        try {
-            val wav = loadPcm16Wav(trackPath)
-
-            val track = AudioTrack.Builder()
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_GAME)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
-                .setAudioFormat(
-                    AudioFormat.Builder()
-                        .setSampleRate(wav.sampleRate)
-                        .setChannelMask(wav.channelMask)
-                        .setEncoding(wav.encoding)
-                        .build()
-                )
-                .setBufferSizeInBytes(wav.pcm.size)
-                .setTransferMode(AudioTrack.MODE_STATIC)
-                .build()
-
-            track.write(wav.pcm, 0, wav.pcm.size)
-            track.setLoopPoints(0, wav.frameCount, -1)
-            track.setVolume(0.55f)
-
-            musicTrack = track
-            track.play()
-        } catch (e: Exception) {
-            OpenPigeonLog.e("Music", "Unable to play music track $trackPath", e)
-
-            musicEnabled = false
-
-            getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean("global/music_enabled", false)
-                .apply()
-        }
-    }
-
-    private fun pauseMusic() {
-        try {
-            musicTrack?.let { track ->
-                if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
-                    track.pause()
-                }
-            }
-        } catch (e: Exception) {
-            OpenPigeonLog.w("Music", "Unable to pause music", e)
-        }
-    }
-
-    private fun resumeMusic() {
-        if (!musicEnabled) return
-
-        try {
-            val track = musicTrack
-
-            if (track == null) {
-                startMusic()
-            } else if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
-                track.play()
-            }
-        } catch (e: Exception) {
-            OpenPigeonLog.w("Music", "Unable to resume music, restarting", e)
-            releaseMusicPlayer()
-            startMusic()
-        }
-    }
-
-    private fun stopMusic() {
-        releaseMusicPlayer()
-    }
-
-    private fun releaseMusicPlayer() {
-        val track = musicTrack ?: return
-        musicTrack = null
-
-        try {
-            track.pause()
-        } catch (_: Exception) {
-        }
-
-        track.release()
-    }
-
-    private fun restartMusicForCurrentMode() {
-        if (!musicEnabled) return
-
-        if (musicTrack != null) return
-
-        releaseMusicPlayer()
-        startMusic()
-    }
-
-    private fun loadPcm16Wav(path: String): WavLoopData {
-        val bytes = assets.open(path).use { it.readBytes() }
-
-        if (bytes.size < 44 || chunkName(bytes, 0) != "RIFF" || chunkName(bytes, 8) != "WAVE") {
-            throw IllegalArgumentException("Invalid WAV file: $path")
-        }
-
-        var offset = 12
-        var audioFormat = 0
-        var channelCount = 0
-        var sampleRate = 0
-        var bitsPerSample = 0
-        var dataStart = -1
-        var dataSize = 0
-
-        while (offset + 8 <= bytes.size) {
-            val name = chunkName(bytes, offset)
-            val size = readLeInt(bytes, offset + 4)
-            val start = offset + 8
-
-            if (start + size > bytes.size) break
-
-            when (name) {
-                "fmt " -> {
-                    audioFormat = readLeShort(bytes, start)
-                    channelCount = readLeShort(bytes, start + 2)
-                    sampleRate = readLeInt(bytes, start + 4)
-                    bitsPerSample = readLeShort(bytes, start + 14)
-                }
-                "data" -> {
-                    dataStart = start
-                    dataSize = size
-                }
-            }
-
-            offset = start + size + (size and 1)
-        }
-
-        if (audioFormat != 1 || bitsPerSample != 16 || channelCount !in 1..2 || dataStart < 0 || dataSize <= 0) {
-            throw IllegalArgumentException("WAV must be 16-bit PCM mono/stereo: $path")
-        }
-
-        val pcm = bytes.copyOfRange(dataStart, dataStart + dataSize)
-        val frameSize = channelCount * 2
-        val frameCount = pcm.size / frameSize
-        val channelMask = if (channelCount == 1) {
-            AudioFormat.CHANNEL_OUT_MONO
-        } else {
-            AudioFormat.CHANNEL_OUT_STEREO
-        }
-
-        return WavLoopData(
-            pcm = pcm,
-            sampleRate = sampleRate,
-            channelMask = channelMask,
-            encoding = AudioFormat.ENCODING_PCM_16BIT,
-            frameCount = frameCount
-        )
-    }
-
-    private fun readLeShort(bytes: ByteArray, offset: Int): Int {
-        return (bytes[offset].toInt() and 0xff) or
-                ((bytes[offset + 1].toInt() and 0xff) shl 8)
-    }
-
-    private fun readLeInt(bytes: ByteArray, offset: Int): Int {
-        return (bytes[offset].toInt() and 0xff) or
-                ((bytes[offset + 1].toInt() and 0xff) shl 8) or
-                ((bytes[offset + 2].toInt() and 0xff) shl 16) or
-                ((bytes[offset + 3].toInt() and 0xff) shl 24)
-    }
-
-    private fun chunkName(bytes: ByteArray, offset: Int): String {
-        return String(
-            byteArrayOf(
-                bytes[offset],
-                bytes[offset + 1],
-                bytes[offset + 2],
-                bytes[offset + 3]
-            )
-        )
-    }
-
     private fun refreshSettingsSheetValues() {
-        val current = name ?: getPrefs().getString("name", "") ?: ""
-        settingsSheet.setHeaderNameValue(current)
-        settingsSheet.refreshHeaderAvatar()
+        if (!::gameMenu.isInitialized) {
+            return
+        }
+
+        val current = name ?: getPrefs().getString(
+                "name",
+                "",
+            ) ?: ""
+
+        gameMenu.sheet.setHeaderNameValue(
+            current,
+        )
+
+        gameMenu.sheet.refreshHeaderAvatar()
     }
 
-    private fun setupSettingsSheet() {
-        if (settingsConfigured) return
-        settingsConfigured = true
+    private fun setupGameMenu(
+        rootFrame: FrameLayout,
+    ) {
+        gameMenu = GameMenuController(
+            activity = this,
+            rootFrame = rootFrame,
+            gameId = "crazy8",
+            rulesTitle = "Crazy 8 Rules",
+            rulesSections = listOf(
+                RulesPopup.Section(
+                    "Objective",
+                    "Be the first player to get rid of all your cards.",
+                ),
+                RulesPopup.Section(
+                    "How to Play",
+                    "Play a card that matches the current card by color or symbol. Draw when you cannot play.",
+                ),
+                RulesPopup.Section(
+                    "Wild Cards",
+                    "An 8 is wild. Playing one allows you to select the next color.",
+                ),
+                RulesPopup.Section(
+                    "Action Cards",
+                    "Special cards can skip players, reverse direction, or force another player to draw cards.",
+                ),
+                RulesPopup.Section(
+                    "Winning",
+                    "The first player to play all of their cards wins the round.",
+                ),
+            ),
+            musicAssetPath = "crazy8/crazy8.wav",
+            placement = GameMenuPlacement.TOP_END,
+            fallbackDarkOverlayAlpha = 0.18f,
+            onSettingsClosed = ::onSettingsClosed,
+        )
 
-        settingsSheet.configureHeaderNameField(
+        gameMenu.sheet.configureHeaderNameField(
             enabled = true,
-            value = name ?: getPrefs().getString("name", "") ?: "",
-            hint = "Player name"
+            value = name ?: getPrefs().getString(
+                    "name",
+                    "",
+                ) ?: "",
+            hint = "Player name",
         ) { rawName ->
             val newName = rawName.trim()
+
             getPrefs().edit {
-                putString("name", newName)
-            }
+                    putString(
+                        "name",
+                        newName,
+                    )
+                }
+
             name = newName
-        }
-
-        val musicSwitch = SwitchCompat(this)
-        musicSwitch.isChecked = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-            .getBoolean("global/music_enabled", true)
-        musicEnabled = musicSwitch.isChecked
-        musicSwitch.setOnCheckedChangeListener { _, checked ->
-            applyMusicEnabled(checked)
-        }
-
-        settingsSheet.addGameControl("Music", musicSwitch)
-
-        if (musicEnabled) {
-            startMusic()
-        }
-    }
-
-    fun openSettings() {
-        if (::settingsSheet.isInitialized) {
-            settingsIdentityBeforeOpen = legacyAvatarStringForCrazy8(name ?: "Player")
-            refreshSettingsSheetValues()
-            settingsSheet.open()
         }
     }
 
@@ -693,43 +501,14 @@ class Crazy8Activity : ComponentActivity() {
         settingsIdentityBeforeOpen = null
     }
 
-    fun openRules() {
-        val root = findViewById<FrameLayout>(android.R.id.content)
-        RulesPopup.show(
-            context = this,
-            rootView = root,
-            title = "Crazy 8 Rules",
-            sections = listOf(
-                RulesPopup.Section(
-                    "Objective",
-                    "Be the first player to get rid of all your cards."
-                ),
-                RulesPopup.Section(
-                    "How to Play",
-                    "On your turn, play a card that matches the current card by color or symbol. If you cannot play, draw a card."
-                ),
-                RulesPopup.Section(
-                    "Wild Cards",
-                    "8 cards are wild. When you play one, you choose the new color."
-                ),
-                RulesPopup.Section(
-                    "Action Cards",
-                    "Special cards can skip, reverse, or force draws depending on the game rules in this version."
-                ),
-                RulesPopup.Section(
-                    "Winning",
-                    "The first player to play all of their cards wins the round."
-                )
-            )
-        )
-    }
-
     private fun cancelReconnect() {
         reconnectRunnable?.let { reconnectHandler.removeCallbacks(it) }
         reconnectRunnable = null
     }
 
-    private fun scheduleReconnect(delayMs: Long = 1200L) {
+    private fun scheduleReconnect(
+        delayMs: Long = 1200L,
+    ) {
         if (currentRoom.isBlank()) return
         if (name.isNullOrBlank()) return
         if (isConnecting) return
@@ -737,19 +516,45 @@ class Crazy8Activity : ComponentActivity() {
 
         cancelReconnect()
 
-        reconnectRunnable = Runnable {
-            if (isFinishing || isDestroyed) return@Runnable
-            if (currentRoom.isBlank()) return@Runnable
-            if (name.isNullOrBlank()) return@Runnable
-            if (isConnecting) return@Runnable
-            if (currentConnection != null && connected) return@Runnable
+        val reconnectTask = Runnable {
+            if (isFinishing || isDestroyed) {
+                return@Runnable
+            }
 
-            OpenPigeonLog.w("Crazy8", "Attempting reconnect to room=$currentRoom")
+            if (currentRoom.isBlank()) {
+                return@Runnable
+            }
+
+            if (name.isNullOrBlank()) {
+                return@Runnable
+            }
+
+            if (isConnecting) {
+                return@Runnable
+            }
+
+            if (currentConnection != null && connected) {
+                return@Runnable
+            }
+
+            OpenPigeonLog.w(
+                "Crazy8",
+                "Attempting reconnect to room=$currentRoom",
+            )
+
             connectedError = null
-            joinRoom(currentRoom)
+
+            joinRoom(
+                currentRoom,
+            )
         }
 
-        reconnectHandler.postDelayed(reconnectRunnable!!, delayMs)
+        reconnectRunnable = reconnectTask
+
+        reconnectHandler.postDelayed(
+            reconnectTask,
+            delayMs,
+        )
     }
 
     private val networkExecutor: ExecutorService = Executors.newSingleThreadExecutor()
@@ -785,12 +590,6 @@ class Crazy8Activity : ComponentActivity() {
         }
 
         AvatarData.init(applicationContext)
-        val rootFrame = window.decorView.findViewById<FrameLayout>(android.R.id.content)
-        settingsSheet = SettingsSheet(this, rootFrame)
-        settingsSheet.onClosed = {
-            onSettingsClosed()
-        }
-        setupSettingsSheet()
 
         reconnectHandler.post(pingRunnable)
 
@@ -818,15 +617,24 @@ class Crazy8Activity : ComponentActivity() {
         PlayerIO.setUseSecureApiRequests(true)
 
         setContent {
+            val currentGame = game
+
             val prefs = remember { getPrefs() }
 
             if (CRAZY8_VERBOSE_LOGS) {
-                OpenPigeonLog.w("name", prefs.getString("name", "")!!)
+                OpenPigeonLog.w(
+                    "name",
+                    prefs.getString(
+                        "name",
+                        "",
+                    ).orEmpty(),
+                )
             }
             var thisName by remember { mutableStateOf(prefs.getString("name", "") ?: "") }
             if (name == null) {
                 Box(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
                         .safeContentPadding()
                 ) {
                     Image(
@@ -836,8 +644,10 @@ class Crazy8Activity : ComponentActivity() {
                         contentScale = ContentScale.Crop
                     )
 
-                    Column(modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         OutlinedTextField(
                             value = thisName,
                             onValueChange = { thisName = it },
@@ -861,9 +671,7 @@ class Crazy8Activity : ComponentActivity() {
                                     name = thisName
                                     refreshSettingsSheetValues()
                                     joinRoom(currentRoom)
-                                }
-                            )
-                        )
+                                }))
                         Button(onClick = {
                             prefs.edit().putString("name", thisName).apply()
                             name = thisName
@@ -885,13 +693,17 @@ class Crazy8Activity : ComponentActivity() {
                         contentScale = ContentScale.Crop
                     )
 
-                    Column(modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Failed to connect: $connectedError",
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "Failed to connect: $connectedError",
                             fontSize = 20.sp,
                             color = Color.White,
                             modifier = Modifier.padding(10.dp),
-                            textAlign = TextAlign.Center)
+                            textAlign = TextAlign.Center
+                        )
                         Button(onClick = {
                             connectedError = null
                             refreshSettingsSheetValues()
@@ -912,17 +724,31 @@ class Crazy8Activity : ComponentActivity() {
                         contentScale = ContentScale.Crop
                     )
 
-                    Text("Connecting...",
+                    Text(
+                        "Connecting...",
                         modifier = Modifier.align(Alignment.Center),
                         fontSize = 20.sp,
-                        color = Color.White)
+                        color = Color.White
+                    )
                 }
-            } else if (game != null) {
-                RenderGame(game!!, this, messages)
+            } else if (currentGame != null) {
+                RenderGame(
+                    currentGame,
+                    this,
+                    messages,
+                )
             } else {
-                RenderWaiting(participants, this)
+                RenderWaiting(
+                    participants,
+                    this,
+                )
             }
         }
+        setupGameMenu(
+            findViewById(
+                android.R.id.content,
+            ),
+        )
     }
 
     var currentRoom = ""
@@ -940,41 +766,42 @@ class Crazy8Activity : ComponentActivity() {
         val userid = gameSessionIPC!!.getSenderUUID(sessionId)
         val auth = PlayerIO.calcAuth256(userid, BuildConfig.PIO_SHARED_SECRET)
         val authParams = hashMapOf(
-            "userId" to userid,
-            "auth" to auth
+            "userId" to userid, "auth" to auth
         )
 
-        PlayerIO.authenticate(this, BuildConfig.PIO_GAME_ID, "mobile", authParams, null, object : Callback<Client>() {
-            override fun onSuccess(p0: Client?) {
-                OpenPigeonLog.w("PlayerIO", "Authenticated with playerIO!")
-                val joinData = mapOf(
-                    "id" to userid,
-                    "name" to legacyAvatarStringForCrazy8(name ?: "Player"),
-                    "version" to "52"
-                )
-                p0!!.multiplayer.createJoinRoom(room, "Chat", true, mapOf(), joinData, object : Callback<Connection>() {
-                    override fun onSuccess(connection: Connection?) {
-                        isConnecting = false
-                        cancelReconnect()
-                        setupConnection(connection!!)
-                    }
+        PlayerIO.authenticate(
+            this, BuildConfig.PIO_GAME_ID, "mobile", authParams, null, object : Callback<Client>() {
+                override fun onSuccess(p0: Client?) {
+                    OpenPigeonLog.w("PlayerIO", "Authenticated with playerIO!")
+                    val joinData = mapOf(
+                        "id" to userid,
+                        "name" to legacyAvatarStringForCrazy8(name ?: "Player"),
+                        "version" to "52"
+                    )
+                    p0!!.multiplayer.createJoinRoom(
+                        room, "Chat", true, mapOf(), joinData, object : Callback<Connection>() {
+                            override fun onSuccess(connection: Connection?) {
+                                isConnecting = false
+                                cancelReconnect()
+                                setupConnection(connection!!)
+                            }
 
-                    override fun onError(p0: PlayerIOError?) {
-                        isConnecting = false
-                        OpenPigeonLog.e("PlayerIO", "Error joining $p0")
-                        connectedError = p0.toString()
-                        scheduleReconnect()
-                    }
-                })
-            }
+                            override fun onError(p0: PlayerIOError?) {
+                                isConnecting = false
+                                OpenPigeonLog.e("PlayerIO", "Error joining $p0")
+                                connectedError = p0.toString()
+                                scheduleReconnect()
+                            }
+                        })
+                }
 
-            override fun onError(p0: PlayerIOError?) {
-                isConnecting = false
-                OpenPigeonLog.e("PlayerIO", "Error $p0")
-                connectedError = p0.toString()
-                scheduleReconnect()
-            }
-        })
+                override fun onError(p0: PlayerIOError?) {
+                    isConnecting = false
+                    OpenPigeonLog.e("PlayerIO", "Error $p0")
+                    connectedError = p0.toString()
+                    scheduleReconnect()
+                }
+            })
 
         OpenPigeonLog.w("Godot room", room)
     }
@@ -998,9 +825,12 @@ class Crazy8Activity : ComponentActivity() {
 
         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
         cipher.init(
-            Cipher.ENCRYPT_MODE,
-            SecretKeySpec(ByteArray(32) { 0x00 }, "AES"),
-            IvParameterSpec(ByteArray(16) { 0x00 })
+            Cipher.ENCRYPT_MODE, SecretKeySpec(
+                CRAZY8_AES_KEY,
+                "AES",
+            ), IvParameterSpec(
+                CRAZY8_AES_IV,
+            )
         )
 
         val encrypted = cipher.doFinal(cleanMessage.encodeToByteArray())
@@ -1035,9 +865,9 @@ class Crazy8Activity : ComponentActivity() {
     fun performCardSnapHaptic() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibrator = (getSystemService(VIBRATOR_MANAGER_SERVICE) as? VibratorManager)
-                    ?.defaultVibrator
-                    ?: return
+                val vibrator =
+                    (getSystemService(VIBRATOR_MANAGER_SERVICE) as? VibratorManager)?.defaultVibrator
+                        ?: return
 
                 if (!vibrator.hasVibrator()) return
 
@@ -1045,8 +875,8 @@ class Crazy8Activity : ComponentActivity() {
                     VibrationEffect.createOneShot(28L, 220)
                 )
             } else {
-                @Suppress("DEPRECATION")
-                val vibrator = getSystemService(VIBRATOR_SERVICE) as? Vibrator ?: return
+                @Suppress("DEPRECATION") val vibrator =
+                    getSystemService(VIBRATOR_SERVICE) as? Vibrator ?: return
 
                 if (!vibrator.hasVibrator()) return
 
@@ -1135,7 +965,6 @@ class Crazy8Activity : ComponentActivity() {
     var connected by mutableStateOf(false)
     var showLobbyChat by mutableStateOf(false)
     val lobbySpeechBubbles = mutableStateMapOf<Int, String>()
-    var showBurgerMenu by mutableStateOf(false)
 
     var connectedError by mutableStateOf<String?>(null)
 
@@ -1155,9 +984,7 @@ class Crazy8Activity : ComponentActivity() {
 
     fun showSkipFx(playerId: Int) {
         val fx = CrazyHeadFx(
-            key = nextFxKey(),
-            playerId = playerId,
-            skip = true
+            key = nextFxKey(), playerId = playerId, skip = true
         )
 
         showTimedFx(
@@ -1165,15 +992,12 @@ class Crazy8Activity : ComponentActivity() {
             durationMs = 780,
             getCurrent = { headFx },
             setCurrent = { headFx = it },
-            keyOf = { it.key }
-        )
+            keyOf = { it.key })
     }
 
     fun showPenaltyFx(playerId: Int, text: String) {
         val fx = CrazyHeadFx(
-            key = nextFxKey(),
-            playerId = playerId,
-            text = text
+            key = nextFxKey(), playerId = playerId, text = text
         )
 
         showTimedFx(
@@ -1181,14 +1005,12 @@ class Crazy8Activity : ComponentActivity() {
             durationMs = 1150,
             getCurrent = { headFx },
             setCurrent = { headFx = it },
-            keyOf = { it.key }
-        )
+            keyOf = { it.key })
     }
 
     fun showReverseFx(clockwise: Boolean) {
         val fx = CrazyReverseFx(
-            key = nextFxKey(),
-            clockwise = clockwise
+            key = nextFxKey(), clockwise = clockwise
         )
 
         showTimedFx(
@@ -1196,8 +1018,7 @@ class Crazy8Activity : ComponentActivity() {
             durationMs = 860,
             getCurrent = { reverseFx },
             setCurrent = { reverseFx = it },
-            keyOf = { it.key }
-        )
+            keyOf = { it.key })
     }
 
     fun setupConnection(connection: Connection) {
@@ -1223,15 +1044,10 @@ class Crazy8Activity : ComponentActivity() {
                         connected = true
                         myId = message.getInt(1)
                         participants.clear()
-                        participants.addAll(
-                            message.getString(0)
-                                .split("|")
-                                .map {
-                                    val parts = it.split("&")
-                                    parseParticipant(parts[0].toInt(), parts[1], parts[2] == "1")
-                                }
-                                .distinctBy { it.id }
-                        )
+                        participants.addAll(message.getString(0).split("|").map {
+                                val parts = it.split("&")
+                                parseParticipant(parts[0].toInt(), parts[1], parts[2] == "1")
+                            }.distinctBy { it.id })
                         val currentPacked = legacyAvatarStringForCrazy8(name ?: "Player")
                         applyPackedIdentityUpdate(myId, currentPacked, includeSelf = true)
                         if (message.type == "game_list") {
@@ -1248,23 +1064,31 @@ class Crazy8Activity : ComponentActivity() {
                                 participantIdsSection = message.getString(2),
                                 cardStateSection = message.getString(3),
                                 turnId = message.getInt(4),
-                                clockwise = !reverse,
-                                directionKnown = true
+                                clockwise = !reverse
                             )
                         }
                     }
+
                     "join" -> {
-                        upsertParticipant(message.getInt(0), message.getString(1), false)
+                        upsertParticipant(
+                            id = message.getInt(0),
+                            data = message.getString(1),
+                            ready = false,
+                        )
                     }
+
                     "ready" -> {
                         participants.find { it.id == message.getInt(0) }?.ready = true
                     }
+
                     "notready" -> {
                         participants.find { it.id == message.getInt(0) }?.ready = false
                     }
+
                     "left" -> {
                         participants.removeIf { it.id == message.getInt(0) }
                     }
+
                     "game_start" -> {
                         label = null
                         game = buildCrazyGameFromSections(
@@ -1272,10 +1096,10 @@ class Crazy8Activity : ComponentActivity() {
                             participantIdsSection = message.getString(0),
                             cardStateSection = message.getString(1),
                             turnId = message.getInt(2),
-                            clockwise = true,
-                            directionKnown = true
+                            clockwise = true
                         )
                     }
+
                     "move" -> {
                         game?.let { game ->
                             val moved = game.participants.find { it.id == message.getInt(0) }!!
@@ -1305,7 +1129,6 @@ class Crazy8Activity : ComponentActivity() {
 
                                 if (playedFile == 12) {
                                     game.clockwise = !game.clockwise
-                                    game.directionKnown = true
                                     this@Crazy8Activity.showReverseFx(game.clockwise)
                                 }
 
@@ -1326,15 +1149,17 @@ class Crazy8Activity : ComponentActivity() {
                             } else if (move[1] == "d") {
                                 moved.cardCount += move.size - 2 // card, d
                                 if (moved.isMe) {
-                                    val drawnCards = move.slice(2..<move.size).map { CrazyCard.parse(it) }
+                                    val drawnCards =
+                                        move.slice(2..<move.size).map { CrazyCard.parse(it) }
                                     game.hand.addAll(drawnCards)
                                     sortCrazyHandInPlace(game.hand)
 
                                     val firstDrawnCard = drawnCards.firstOrNull()
 
-                                    if (
-                                        firstDrawnCard != null &&
-                                        shouldAutoPlayDrawnCard(firstDrawnCard, game.card)
+                                    if (firstDrawnCard != null && shouldAutoPlayDrawnCard(
+                                            firstDrawnCard,
+                                            game.card
+                                        )
                                     ) {
                                         if (firstDrawnCard.rank == 5) {
                                             pendingAutoWildDraw = firstDrawnCard
@@ -1351,18 +1176,19 @@ class Crazy8Activity : ComponentActivity() {
                                 if (addedCount > 0 && (playedFile == 13 || playedFile == 14)) {
                                     this@Crazy8Activity.turnConeForceAroundKey += 1
                                     this@Crazy8Activity.showPenaltyFx(
-                                        playerId = added.id,
-                                        text = "+$addedCount"
+                                        playerId = added.id, text = "+$addedCount"
                                     )
                                 }
 
                                 if (added.isMe) {
-                                    game.hand.addAll(move.slice(3..<move.size).map { CrazyCard.parse(it) })
+                                    game.hand.addAll(
+                                        move.slice(3..<move.size).map { CrazyCard.parse(it) })
                                     sortCrazyHandInPlace(game.hand)
                                 }
                             }
                         }
                     }
+
                     "emsg" -> {
                         val sender = participants.find { it.id == message.getInt(0) }
                         if (sender == null) return
@@ -1370,15 +1196,20 @@ class Crazy8Activity : ComponentActivity() {
                         val bytes = message.getByteArray(1)
                         if (CRAZY8_VERBOSE_LOGS) {
                             OpenPigeonLog.w(
-                                "bytes",
-                                Base64.encodeToString(bytes, Base64.NO_WRAP)
+                                "bytes", Base64.encodeToString(bytes, Base64.NO_WRAP)
                             )
                         }
                         val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
                         // Vitalii Zlotskii is very good at cryptography, as showed off here...
                         // this encryption is very effective
-                        cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(ByteArray(32) { 0x00 }, "AES"), IvParameterSpec(
-                            ByteArray(16) { 0x00 }))
+                        cipher.init(
+                            Cipher.DECRYPT_MODE, SecretKeySpec(
+                                CRAZY8_AES_KEY,
+                                "AES",
+                            ), IvParameterSpec(
+                                CRAZY8_AES_IV,
+                            )
+                        )
                         val decrypted = String(cipher.doFinal(bytes))
 
                         messages.add(0, CrazyMessage(decrypted, sender))
@@ -1394,12 +1225,14 @@ class Crazy8Activity : ComponentActivity() {
                             OpenPigeonLog.w("Got message", decrypted)
                         }
                     }
+
                     "name", "avatar" -> {
                         val senderId = message.getInt(0)
                         val packed = message.getString(1)
                         applyPackedIdentityUpdate(senderId, packed)
                     }
-                    else -> { }
+
+                    else -> {}
                 }
             }
         })
@@ -1417,44 +1250,60 @@ class Crazy8Activity : ComponentActivity() {
 
     override fun onDestroy() {
         crazy8ActivityClosing = true
-        stopMusic()
+
+        if (::gameMenu.isInitialized) {
+            gameMenu.destroy()
+        }
+
         cancelReconnect()
-        reconnectHandler.removeCallbacks(pingRunnable)
+        reconnectHandler.removeCallbacks(
+            pingRunnable,
+        )
+
         networkExecutor.shutdownNow()
         currentConnection?.disconnect()
+
         super.onDestroy()
     }
 
     override fun onResume() {
         super.onResume()
 
-        if (gameSessionIPC != null) {
-            gameSessionIPC?.setSuppressNotifications(sessionId, true)
+        if (::gameMenu.isInitialized) {
+            gameMenu.onResume()
+        }
+
+        val ipc = gameSessionIPC
+
+        if (ipc != null) {
+            ipc.setSuppressNotifications(
+                sessionId,
+                true,
+            )
         } else {
-            OpenPigeonLog.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
+            OpenPigeonLog.w(
+                "openpigeon-${baseGame.getName()}",
+                "onResume called before gameSessionIPC was initialized!",
+            )
         }
 
         if (currentConnection == null && currentRoom.isNotBlank() && !name.isNullOrBlank()) {
-            scheduleReconnect(200L)
+            scheduleReconnect(
+                200L,
+            )
         }
-
-        val globalMusicEnabled = getSharedPreferences("avatar_settings", Context.MODE_PRIVATE)
-            .getBoolean("global/music_enabled", true)
-
-        if (musicEnabled != globalMusicEnabled) {
-            musicEnabled = globalMusicEnabled
-
-            if (!musicEnabled) {
-                stopMusic()
-            }
-        }
-
-        resumeMusic()
     }
 
     override fun onPause() {
-        pauseMusic()
-        gameSessionIPC!!.setSuppressNotifications(sessionId, false)
+        if (::gameMenu.isInitialized) {
+            gameMenu.onPause()
+        }
+
+        gameSessionIPC?.setSuppressNotifications(
+            sessionId,
+            false,
+        )
+
         super.onPause()
     }
 }
@@ -1464,50 +1313,113 @@ class Crazy8Activity : ComponentActivity() {
 @Composable
 fun RenderWaitingPreview() {
     RenderWaiting(
-        mutableStateListOf(
-            CrazyParticipant("Testing", 0, true, false),
-            CrazyParticipant("Testing", 1, false, true),
-        )
-        ,  null)
+        participants = mutableStateListOf(
+            CrazyParticipant(
+                name = "Testing",
+                id = 0,
+                isMe = true,
+                ready = false,
+            ),
+            CrazyParticipant(
+                name = "Testing",
+                id = 1,
+                isMe = false,
+                ready = true,
+            ),
+        ),
+        activity = null,
+    )
 }
+
 
 @SuppressLint("UnrememberedMutableState")
 @Preview
 @Composable
 fun RenderGamePreview() {
     val participants = listOf(
-        CrazyParticipant("Testing", 0, true, false),
-        CrazyParticipant("Testing", 1, false, true),
-        CrazyParticipant("Testing", 2, false, true),
-        CrazyParticipant("Testing", 3, false, false),
-        CrazyParticipant("Testing", 4, false, true),
-        CrazyParticipant("Testing", 5, false, true),
+        CrazyParticipant(
+            name = "Testing",
+            id = 0,
+            isMe = true,
+            ready = false,
+        ),
+        CrazyParticipant(
+            name = "Testing",
+            id = 1,
+            isMe = false,
+            ready = true,
+        ),
+        CrazyParticipant(
+            name = "Testing",
+            id = 2,
+            isMe = false,
+            ready = true,
+        ),
+        CrazyParticipant(
+            name = "Testing",
+            id = 3,
+            isMe = false,
+            ready = false,
+        ),
+        CrazyParticipant(
+            name = "Testing",
+            id = 4,
+            isMe = false,
+            ready = true,
+        ),
+        CrazyParticipant(
+            name = "Testing",
+            id = 5,
+            isMe = false,
+            ready = true,
+        ),
     )
+
     participants[1].cardCount = 7
-    participants[2]. cardCount = 7
-    participants[3]. cardCount = 7
-    participants[4]. cardCount = 7
-    participants[5]. cardCount = 7
-    RenderGame(CrazyGame(
-        participants,
-        participants[1],
-        CrazyCard(3, 10),
-        mutableStateListOf(
-            CrazyCard(2, 1),
-            CrazyCard(2, 2),
-            CrazyCard(5, 3),
-            CrazyCard(2, 4),
-            CrazyCard(2, 2),
-        )
-    ), null, mutableStateListOf()
+    participants[2].cardCount = 7
+    participants[3].cardCount = 7
+    participants[4].cardCount = 7
+    participants[5].cardCount = 7
+
+    RenderGame(
+        game = CrazyGame(
+            participants = participants,
+            turn = participants[1],
+            card = CrazyCard(
+                rank = 3,
+                file = 10,
+            ),
+            hand = mutableStateListOf(
+                CrazyCard(
+                    rank = 2,
+                    file = 1,
+                ),
+                CrazyCard(
+                    rank = 2,
+                    file = 2,
+                ),
+                CrazyCard(
+                    rank = 5,
+                    file = 3,
+                ),
+                CrazyCard(
+                    rank = 2,
+                    file = 4,
+                ),
+                CrazyCard(
+                    rank = 2,
+                    file = 2,
+                ),
+            ),
+        ),
+        activity = null,
+        messages = mutableStateListOf(),
     )
 }
 
 @Composable
 fun RenderCard(
-    card: CrazyCard?,
-    modifier: Modifier = Modifier,
-    lightweight: Boolean = false
+    card: CrazyCard?, modifier: Modifier = Modifier, lightweight: Boolean = false
 ) {
     val shape = RoundedCornerShape(7.dp)
     val label = card?.displayName().orEmpty()
@@ -1525,8 +1437,7 @@ fun RenderCard(
         modifier = modifier
             .size(80.dp, 110.dp)
             .background(bgColor, shape)
-            .border(2.dp, Color.White, shape),
-        contentAlignment = Alignment.Center
+            .border(2.dp, Color.White, shape), contentAlignment = Alignment.Center
     ) {
         if (card != null) {
             val isWildLook = card.rank == 5 || card.file == 14
@@ -1551,10 +1462,7 @@ fun RenderCard(
             if (isWildLook) {
                 Canvas(modifier = Modifier.size(54.dp)) {
                     val colors = listOf(
-                        Color(0xFFE53935),
-                        Color(0xFF1E88E5),
-                        Color(0xFFFDD835),
-                        Color(0xFF43A047)
+                        Color(0xFFE53935), Color(0xFF1E88E5), Color(0xFFFDD835), Color(0xFF43A047)
                     )
 
                     for (i in colors.indices) {
@@ -1568,8 +1476,7 @@ fun RenderCard(
                     }
 
                     drawCircle(
-                        color = Color.White.copy(alpha = 0.18f),
-                        radius = size.minDimension * 0.28f
+                        color = Color.White.copy(alpha = 0.18f), radius = size.minDimension * 0.28f
                     )
                 }
             }
@@ -1662,8 +1569,7 @@ fun RenderCard(
 
 @Composable
 fun RenderCardBack(
-    modifier: Modifier = Modifier,
-    lightweight: Boolean = false
+    modifier: Modifier = Modifier, lightweight: Boolean = false
 ) {
     val shape = RoundedCornerShape(4.dp)
 
@@ -1671,8 +1577,7 @@ fun RenderCardBack(
         modifier = modifier
             .size(80.dp, 110.dp)
             .background(Color(0xFF444444), shape)
-            .border(2.dp, Color.White, shape),
-        contentAlignment = Alignment.Center
+            .border(2.dp, Color.White, shape), contentAlignment = Alignment.Center
     ) {
         if (!lightweight) {
             Text(
@@ -1687,7 +1592,8 @@ fun RenderCardBack(
 
 @Composable
 fun rememberAssetBitmap(context: Context, path: String): androidx.compose.ui.graphics.ImageBitmap? {
-    val imageState = remember(path) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    val imageState =
+        remember(path) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
 
     LaunchedEffect(path) {
         try {
@@ -1712,43 +1618,37 @@ fun RenderLobbyAvatar(avatarData: String, modifier: Modifier = Modifier) {
             .border(1.dp, Color(0x22000000), RoundedCornerShape(percent = 50)),
         contentAlignment = Alignment.Center
     ) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { context ->
-                AvatarView(context).apply {
-                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                    alpha = 1f
-                    elevation = 0f
-                    try {
-                        applyFromOpponentString(avatarData)
-                        tag = avatarData
-                    } catch (e: Exception) {
-                        OpenPigeonLog.e("Crazy8", "Failed to render lobby avatar", e)
-                        showPlaceholder()
-                    }
-                }
-            },
-            update = { view ->
-                val lastApplied = view.tag as? String
-                if (lastApplied == avatarData) return@AndroidView
-
+        AndroidView(modifier = Modifier.fillMaxSize(), factory = { context ->
+            AvatarView(context).apply {
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                alpha = 1f
+                elevation = 0f
                 try {
-                    view.applyFromOpponentString(avatarData)
-                    view.tag = avatarData
+                    applyFromOpponentString(avatarData)
+                    tag = avatarData
                 } catch (e: Exception) {
-                    OpenPigeonLog.e("Crazy8", "Failed to update lobby avatar", e)
-                    view.showPlaceholder()
+                    OpenPigeonLog.e("Crazy8", "Failed to render lobby avatar", e)
+                    showPlaceholder()
                 }
             }
-        )
+        }, update = { view ->
+            val lastApplied = view.tag as? String
+            if (lastApplied == avatarData) return@AndroidView
+
+            try {
+                view.applyFromOpponentString(avatarData)
+                view.tag = avatarData
+            } catch (e: Exception) {
+                OpenPigeonLog.e("Crazy8", "Failed to update lobby avatar", e)
+                view.showPlaceholder()
+            }
+        })
     }
 }
 
 @Composable
 fun RenderDrawPile(
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
-    shouldPulse: Boolean = false
+    modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, shouldPulse: Boolean = false
 ) {
     val interactionSource = remember { MutableInteractionSource() }
 
@@ -1762,12 +1662,10 @@ fun RenderDrawPile(
 
         while (true) {
             pulseOverlayAlpha.animateTo(
-                targetValue = 0.34f,
-                animationSpec = tween(620, easing = LinearEasing)
+                targetValue = 0.34f, animationSpec = tween(620, easing = LinearEasing)
             )
             pulseOverlayAlpha.animateTo(
-                targetValue = 0.08f,
-                animationSpec = tween(620, easing = LinearEasing)
+                targetValue = 0.08f, animationSpec = tween(620, easing = LinearEasing)
             )
         }
     }
@@ -1777,15 +1675,12 @@ fun RenderDrawPile(
             .size(88.dp, 118.dp)
             .then(
                 if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = interactionSource,
-                        indication = null
-                    ) { onClick() }
-                } else {
-                    Modifier
-                }
-            )
-    ) {
+                Modifier.clickable(
+                    interactionSource = interactionSource, indication = null
+                ) { onClick() }
+            } else {
+                Modifier
+            })) {
         // Back card (no text)
         Box(
             modifier = Modifier
@@ -1796,9 +1691,7 @@ fun RenderDrawPile(
         }
 
         Box(
-            modifier = Modifier
-                .size(80.dp, 110.dp),
-            contentAlignment = Alignment.Center
+            modifier = Modifier.size(80.dp, 110.dp), contentAlignment = Alignment.Center
         ) {
             RenderCardBack(lightweight = true)
 
@@ -1815,8 +1708,7 @@ fun RenderDrawPile(
                 modifier = Modifier
                     .size(80.dp, 110.dp)
                     .background(
-                        Color.White.copy(alpha = pulseOverlayAlpha.value),
-                        RoundedCornerShape(4.dp)
+                        Color.White.copy(alpha = pulseOverlayAlpha.value), RoundedCornerShape(4.dp)
                     )
                     .border(
                         2.dp,
@@ -1828,62 +1720,111 @@ fun RenderDrawPile(
     }
 }
 
-private fun lerp(start: Float, stop: Float, fraction: Float): Float {
-    return start + (stop - start) * fraction
-}
-
 @Composable
 fun TurnConeOverlay(
     modifier: Modifier = Modifier,
     from: Offset,
     to: Offset,
-    isActive: Boolean,
     lightweight: Boolean = false,
-    blurRadius: androidx.compose.ui.unit.Dp = 0.dp
 ) {
-    if (!isActive) return
+    val pulse = remember {
+        Animatable(
+            0.18f,
+        )
+    }
 
-    val pulse = remember { Animatable(0.18f) }
-
-    LaunchedEffect(isActive) {
-        if (!isActive) return@LaunchedEffect
-
+    LaunchedEffect(
+        Unit,
+    ) {
         while (true) {
             pulse.animateTo(
                 targetValue = 0.28f,
-                animationSpec = tween(350, easing = LinearEasing)
+                animationSpec = tween(
+                    durationMillis = 350,
+                    easing = LinearEasing,
+                ),
             )
+
             pulse.animateTo(
                 targetValue = 0.16f,
-                animationSpec = tween(350, easing = LinearEasing)
+                animationSpec = tween(
+                    durationMillis = 350,
+                    easing = LinearEasing,
+                ),
             )
         }
     }
 
-    val coneAlpha = if (lightweight) pulse.value else pulse.value.coerceAtMost(0.32f)
+    val coneAlpha = if (lightweight) {
+        pulse.value
+    } else {
+        pulse.value.coerceAtMost(
+            0.32f,
+        )
+    }
 
-    Canvas(modifier = modifier) {
+    Canvas(
+        modifier = modifier,
+    ) {
         val dx = to.x - from.x
+
         val dy = to.y - from.y
-        val len = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
-        val ux = dx / len
-        val uy = dy / len
-        val px = -uy
-        val py = ux
+
+        val length = sqrt(
+            dx * dx + dy * dy,
+        ).coerceAtLeast(
+            1f,
+        )
+
+        val perpendicularX = -dy / length
+
+        val perpendicularY = dx / length
 
         val startHalfWidth = 14.dp.toPx()
+
         val endHalfWidth = 60.dp.toPx()
 
-        val p1 = Offset(from.x + px * startHalfWidth, from.y + py * startHalfWidth)
-        val p2 = Offset(from.x - px * startHalfWidth, from.y - py * startHalfWidth)
-        val p3 = Offset(to.x - px * endHalfWidth, to.y - py * endHalfWidth)
-        val p4 = Offset(to.x + px * endHalfWidth, to.y + py * endHalfWidth)
+        val p1 = Offset(
+            x = from.x + perpendicularX * startHalfWidth,
+            y = from.y + perpendicularY * startHalfWidth,
+        )
+
+        val p2 = Offset(
+            x = from.x - perpendicularX * startHalfWidth,
+            y = from.y - perpendicularY * startHalfWidth,
+        )
+
+        val p3 = Offset(
+            x = to.x - perpendicularX * endHalfWidth,
+            y = to.y - perpendicularY * endHalfWidth,
+        )
+
+        val p4 = Offset(
+            x = to.x + perpendicularX * endHalfWidth,
+            y = to.y + perpendicularY * endHalfWidth,
+        )
 
         val path = Path().apply {
-            moveTo(p1.x, p1.y)
-            lineTo(p2.x, p2.y)
-            lineTo(p3.x, p3.y)
-            lineTo(p4.x, p4.y)
+            moveTo(
+                p1.x,
+                p1.y,
+            )
+
+            lineTo(
+                p2.x,
+                p2.y,
+            )
+
+            lineTo(
+                p3.x,
+                p3.y,
+            )
+
+            lineTo(
+                p4.x,
+                p4.y,
+            )
+
             close()
         }
 
@@ -1891,23 +1832,22 @@ fun TurnConeOverlay(
             path = path,
             brush = Brush.linearGradient(
                 colors = listOf(
-                    Color.White.copy(alpha = coneAlpha),
-                    Color.Transparent
+                    Color.White.copy(
+                        alpha = coneAlpha,
+                    ),
+                    Color.Transparent,
                 ),
                 start = from,
-                end = to
+                end = to,
             ),
-            blendMode = BlendMode.Screen
+            blendMode = BlendMode.Screen,
         )
     }
 }
 
 @Composable
 fun DirectionArrowOverlay(
-    modifier: Modifier = Modifier,
-    center: Offset,
-    target: Offset,
-    clockwise: Boolean
+    modifier: Modifier = Modifier, center: Offset, target: Offset, clockwise: Boolean
 ) {
     val density = LocalDensity.current
 
@@ -1915,10 +1855,9 @@ fun DirectionArrowOverlay(
     val dy = target.y - center.y
     val len = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
 
-    val ux = dx / len
-    val uy = dy / len
-    val px = -uy
-    val py = ux
+    val perpendicularX = -dy / len
+
+    val perpendicularY = dx / len
 
     val midT = 0.5f
     val midX = center.x + dx * midT
@@ -1928,13 +1867,13 @@ fun DirectionArrowOverlay(
     val arrowSize = 26.dp
 
     val leftCenter = Offset(
-        x = midX - px * sideOffsetPx,
-        y = midY - py * sideOffsetPx
+        x = midX - perpendicularX * sideOffsetPx,
+        y = midY - perpendicularY * sideOffsetPx,
     )
 
     val rightCenter = Offset(
-        x = midX + px * sideOffsetPx,
-        y = midY + py * sideOffsetPx
+        x = midX + perpendicularX * sideOffsetPx,
+        y = midY + perpendicularY * sideOffsetPx,
     )
 
     val beamAngleDeg = Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
@@ -1951,12 +1890,10 @@ fun DirectionArrowOverlay(
             modifier = Modifier
                 .offset(
                     x = with(density) { leftCenter.x.toDp() - arrowSize / 2 },
-                    y = with(density) { leftCenter.y.toDp() - arrowSize / 2 }
-                )
+                    y = with(density) { leftCenter.y.toDp() - arrowSize / 2 })
                 .size(arrowSize)
                 .rotate(leftRotation),
-            contentScale = ContentScale.Fit
-        )
+            contentScale = ContentScale.Fit)
 
         Image(
             painter = painterResource(id = R.drawable.crazyarrow),
@@ -1964,12 +1901,10 @@ fun DirectionArrowOverlay(
             modifier = Modifier
                 .offset(
                     x = with(density) { rightCenter.x.toDp() - arrowSize / 2 },
-                    y = with(density) { rightCenter.y.toDp() - arrowSize / 2 }
-                )
+                    y = with(density) { rightCenter.y.toDp() - arrowSize / 2 })
                 .size(arrowSize)
                 .rotate(rightRotation),
-            contentScale = ContentScale.Fit
-        )
+            contentScale = ContentScale.Fit)
     }
 }
 
@@ -1989,9 +1924,7 @@ private fun shortestAngleDelta(from: Float, to: Float): Float {
 }
 
 private fun directionalAngleDelta(
-    from: Float,
-    to: Float,
-    clockwise: Boolean
+    from: Float, to: Float, clockwise: Boolean
 ): Float {
     val twoPi = 2f * PI.toFloat()
     var delta = (to - from) % twoPi
@@ -2028,16 +1961,33 @@ private fun crazyCardSortKey(card: CrazyCard): Triple<Int, Int, Int> {
     return Triple(colorBucket, valueBucket, card.rank)
 }
 
-private fun sortCrazyHandInPlace(hand: SnapshotStateList<CrazyCard>) {
+private fun sortCrazyHandInPlace(
+    hand: SnapshotStateList<CrazyCard>,
+) {
     val sorted = hand.sortedWith(
-        compareBy<CrazyCard>(
-            { crazyCardSortKey(it).first },
-            { crazyCardSortKey(it).second },
-            { crazyCardSortKey(it).third }
-        )
+        compareBy(
+            { card: CrazyCard ->
+                crazyCardSortKey(
+                    card,
+                ).first
+            },
+            { card ->
+                crazyCardSortKey(
+                    card,
+                ).second
+            },
+            { card ->
+                crazyCardSortKey(
+                    card,
+                ).third
+            },
+        ),
     )
+
     hand.clear()
-    hand.addAll(sorted)
+    hand.addAll(
+        sorted,
+    )
 }
 
 private fun buildCrazyHandInstanceKeys(cards: List<CrazyCard>): List<String> {
@@ -2071,29 +2021,21 @@ private fun cardScaleForHand(game: CrazyGame): Float {
 }
 
 private fun shouldAutoPlayDrawnCard(
-    drawnCard: CrazyCard,
-    currentCard: CrazyCard
+    drawnCard: CrazyCard, currentCard: CrazyCard
 ): Boolean {
     return drawnCard.isCompatibleWith(currentCard)
 }
 
 data class CrazyHeadFx(
-    val	key: Int,
-    val	playerId: Int,
-    val	text: String? = null,
-    val	skip: Boolean = false
+    val key: Int, val playerId: Int, val text: String? = null, val skip: Boolean = false
 )
 
 data class CrazyReverseFx(
-    val	key: Int,
-    val	clockwise: Boolean
+    val key: Int, val clockwise: Boolean
 )
 
 private fun skippedPlayerId(
-    participants: List<CrazyParticipant>,
-    movedId: Int,
-    nextTurnId: Int,
-    clockwise: Boolean
+    participants: List<CrazyParticipant>, movedId: Int, nextTurnId: Int, clockwise: Boolean
 ): Int? {
     val n = participants.size
     if (n < 3) return null
@@ -2125,27 +2067,95 @@ private data class CrazySeat(
     val bubbleFlip: Boolean = false
 )
 
-private fun crazyOpponentSeats(count: Int): List<CrazySeat> {
-    val top = CrazySeat(0.50f, 0.06f, 0.50f, 0.17f)
-    val leftMid = CrazySeat(0.00f, 0.24f, 0.20f, 0.30f)
-    val rightMid = CrazySeat(1.00f, 0.24f, 0.80f, 0.30f, true)
-    val bottomLeft = CrazySeat(0.00f, 0.60f, 0.20f, 0.63f)
-    val bottomRight = CrazySeat(1.00f, 0.60f, 0.80f, 0.63f, true)
+private fun crazyOpponentSeats(
+    count: Int,
+): List<CrazySeat> {
+    val top = CrazySeat(
+        cardCx = 0.50f,
+        cardCy = 0.06f,
+        avatarCx = 0.50f,
+        avatarCy = 0.17f,
+    )
+
+    val leftMid = CrazySeat(
+        cardCx = 0.00f,
+        cardCy = 0.24f,
+        avatarCx = 0.20f,
+        avatarCy = 0.30f,
+    )
+
+    val rightMid = CrazySeat(
+        cardCx = 1.00f,
+        cardCy = 0.24f,
+        avatarCx = 0.80f,
+        avatarCy = 0.30f,
+        bubbleFlip = true,
+    )
+
+    val bottomLeft = CrazySeat(
+        cardCx = 0.00f,
+        cardCy = 0.60f,
+        avatarCx = 0.20f,
+        avatarCy = 0.63f,
+    )
+
+    val bottomRight = CrazySeat(
+        cardCx = 1.00f,
+        cardCy = 0.60f,
+        avatarCx = 0.80f,
+        avatarCy = 0.63f,
+        bubbleFlip = true,
+    )
 
     return when (count) {
-        2 -> listOf(leftMid, rightMid)
-        3 -> listOf(top, leftMid, rightMid)
-        4 -> listOf(top, leftMid, rightMid, bottomLeft)
-        else -> listOf(top, leftMid, rightMid, bottomLeft, bottomRight)
+        2 -> {
+            listOf(
+                leftMid,
+                rightMid,
+            )
+        }
+
+        3 -> {
+            listOf(
+                top,
+                leftMid,
+                rightMid,
+            )
+        }
+
+        4 -> {
+            listOf(
+                top,
+                leftMid,
+                rightMid,
+                bottomLeft,
+            )
+        }
+
+        else -> {
+            listOf(
+                top,
+                leftMid,
+                rightMid,
+                bottomLeft,
+                bottomRight,
+            )
+        }
     }
 }
 
 @Composable
-fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotStateList<CrazyMessage>) {
+fun RenderGame(
+    game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotStateList<CrazyMessage>
+) {
     val selectedKey = remember { mutableStateOf<String?>(null) }
     val selectedWildcardKey = remember { mutableStateOf<String?>(null) }
     var lastTappedCardKey by remember { mutableStateOf<String?>(null) }
-    var lastTappedAtMs by remember { mutableStateOf(0L) }
+    var lastTappedAtMs by remember {
+        mutableLongStateOf(
+            0L,
+        )
+    }
     val doubleTapWindowMs = 260L
     val me = game.participants.find { it.isMe }
     val label = activity?.label
@@ -2185,11 +2195,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
     val opponentPileCenters = remember { mutableStateMapOf<Int, Offset>() }
     var flyingBackside by remember { mutableStateOf(false) }
     var previousOpponentCounts by remember(game) {
-        mutableStateOf(
-            game.participants
-                .filter { !it.isMe }
-                .associate { it.id to it.cardCount }
-        )
+        mutableStateOf(game.participants.filter { !it.isMe }.associate { it.id to it.cardCount })
     }
 
     var previousHandSnapshot by remember(game) {
@@ -2200,7 +2206,6 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
         handKeys.filter { it !in previousHandSnapshot }.toSet()
     }
 
-    val handLightweight = true
     val maxVisibleOpponentCards = perf.maxVisibleOpponentCards
 
     suspend fun animateFlyingCard(
@@ -2241,11 +2246,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
     }
 
     suspend fun animateOpponentFly(
-        card: CrazyCard?,
-        start: Offset,
-        end: Offset,
-        backside: Boolean,
-        durationMs: Int = 260
+        card: CrazyCard?, start: Offset, end: Offset, backside: Boolean, durationMs: Int = 260
     ) {
         flyingBackside = backside
         flyingCard = card
@@ -2282,18 +2283,10 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
     val clockwise = game.clockwise
     val animatedBeamAngle = remember { Animatable(0f) }
     var beamAngleInitialized by remember { mutableStateOf(false) }
-    var lastHandledForceAroundKey by remember { mutableIntStateOf(activity?.turnConeForceAroundKey ?: 0) }
-
-    val rulesIcon = if (activity != null) {
-        rememberAssetBitmap(activity, "global/rules.png")
-    } else {
-        null
-    }
-
-    val settingsIcon = if (activity != null) {
-        rememberAssetBitmap(activity, "global/settings.png")
-    } else {
-        null
+    var lastHandledForceAroundKey by remember {
+        mutableIntStateOf(
+            activity?.turnConeForceAroundKey ?: 0
+        )
     }
 
     fun avatarFor(participant: CrazyParticipant): String {
@@ -2303,8 +2296,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
     fun centerInBoard(coords: LayoutCoordinates): Offset {
         val rootCenter = centerOf(coords)
         return Offset(
-            x = rootCenter.x - boardOriginRoot.x,
-            y = rootCenter.y - boardOriginRoot.y
+            x = rootCenter.x - boardOriginRoot.x, y = rootCenter.y - boardOriginRoot.y
         )
     }
 
@@ -2357,8 +2349,9 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
         val key = selectedKey.value ?: return
         lastTappedCardKey = null
         lastTappedAtMs = 0L
-        val keys = handKeys
-        val index = keys.indexOf(key)
+        val index = handKeys.indexOf(
+            key,
+        )
         if (index == -1) {
             selectedKey.value = null
             return
@@ -2382,8 +2375,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
 
         val now = SystemClock.uptimeMillis()
         val isDoubleTap =
-            lastTappedCardKey == cardKey &&
-                    (now - lastTappedAtMs) <= doubleTapWindowMs
+            lastTappedCardKey == cardKey && (now - lastTappedAtMs) <= doubleTapWindowMs
 
         if (isDoubleTap) {
             lastTappedCardKey = null
@@ -2400,36 +2392,38 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
     }
 
     LaunchedEffect(handSignature) {
-        val currentSnapshot = handKeys
-
         if (drawPileCenter == null) {
             drawInFlight = false
-            previousHandSnapshot = currentSnapshot
+            previousHandSnapshot = handKeys
             return@LaunchedEffect
         }
 
-        if (currentSnapshot.size > previousHandSnapshot.size) {
+        if (handKeys.size > previousHandSnapshot.size) {
             drawInFlight = false
 
-            val newKeys = currentSnapshot
-                .filter { it !in previousHandSnapshot }
-                .take(8)
+            val newKeys = handKeys.filter {
+                    it !in previousHandSnapshot
+                }.take(
+                    8,
+                )
 
             for ((newIndex, targetKey) in newKeys.withIndex()) {
                 var targetCenter: Offset? = null
                 repeat(12) {
                     targetCenter = handCardCenters[targetKey]
                     if (targetCenter != null) return@repeat
-                    delay(16)
+                    delay(16.milliseconds)
                 }
 
                 val resolvedTargetCenter = targetCenter
-                val targetIndex = currentSnapshot.indexOf(targetKey)
+                val targetIndex = handKeys.indexOf(
+                    targetKey,
+                )
                 val card = game.hand.getOrNull(targetIndex)
 
                 if (card != null && resolvedTargetCenter != null) {
                     if (newIndex > 0) {
-                        delay(35)
+                        delay(35.milliseconds)
                     }
 
                     animateFlyingCard(
@@ -2443,24 +2437,16 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                     )
 
                     val pendingWild = activity?.pendingAutoWildDraw
-                    if (
-                        pendingWild != null &&
-                        pendingWild.rank == card.rank &&
-                        pendingWild.file == card.file
-                    ) {
+                    if (pendingWild != null && pendingWild.rank == card.rank && pendingWild.file == card.file) {
                         selectedKey.value = null
                         selectedWildcardKey.value = targetKey
                         activity.pendingAutoWildDraw = null
-                        previousHandSnapshot = currentSnapshot
+                        previousHandSnapshot = handKeys
                         return@LaunchedEffect
                     }
 
                     val pendingAutoPlay = activity?.pendingAutoPlayDraw
-                    if (
-                        pendingAutoPlay != null &&
-                        pendingAutoPlay.rank == card.rank &&
-                        pendingAutoPlay.file == card.file
-                    ) {
+                    if (pendingAutoPlay != null && pendingAutoPlay.rank == card.rank && pendingAutoPlay.file == card.file) {
                         val discardCenter = discardPileCenter
                         if (discardCenter != null) {
                             interactionLocked = true
@@ -2497,11 +2483,8 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
         previousHandSnapshot = buildCrazyHandInstanceKeys(game.hand)
     }
 
-    LaunchedEffect(
-        game.participants
-            .filter { !it.isMe }
-            .joinToString("|") { "${it.id}:${it.cardCount}" }
-    ) {
+    LaunchedEffect(game.participants.filter { !it.isMe }
+        .joinToString("|") { "${it.id}:${it.cardCount}" }) {
         val opponentsNow = game.participants.filter { !it.isMe }
 
         for (participant in opponentsNow) {
@@ -2524,36 +2507,54 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                     return@repeat
                 }
 
-                delay(16)
+                delay(16.milliseconds)
             }
 
             val resolvedPileCenter = pileCenter
             val resolvedDrawCenter = drawCenter
             val resolvedDiscardCenter = discardCenter
 
-            if (
-                resolvedPileCenter == null ||
-                resolvedDrawCenter == null ||
-                resolvedDiscardCenter == null
-            ) {
+            if (resolvedPileCenter == null || resolvedDrawCenter == null || resolvedDiscardCenter == null) {
                 continue
             }
 
-            val animCount = when {
-                delta > 0 && activity?.headFx?.playerId == participant.id && !activity.headFx?.text.isNullOrBlank() -> {
-                    activity.headFx?.text
-                        ?.removePrefix("+")
-                        ?.toIntOrNull()
-                        ?.coerceIn(1, 8)
-                        ?: abs(delta).coerceIn(1, 8)
+            val penaltyText = activity?.headFx?.takeIf {
+                    it.playerId == participant.id
+                }?.text?.takeIf {
+                    it.isNotBlank()
                 }
-                abs(delta) <= 2 -> abs(delta)
-                else -> 1
+
+            val animCount = when {
+                delta > 0 && penaltyText != null -> {
+                    penaltyText.removePrefix(
+                            "+",
+                        ).toIntOrNull()?.coerceIn(
+                            1,
+                            8,
+                        ) ?: abs(
+                        delta,
+                    ).coerceIn(
+                        1,
+                        8,
+                    )
+                }
+
+                abs(
+                    delta,
+                ) <= 2 -> {
+                    abs(
+                        delta,
+                    )
+                }
+
+                else -> {
+                    1
+                }
             }
 
             if (delta > 0) {
                 repeat(animCount) { index ->
-                    if (index > 0) delay(28)
+                    if (index > 0) delay(28.milliseconds)
 
                     animateOpponentFly(
                         card = null,
@@ -2565,7 +2566,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                 }
             } else {
                 repeat(animCount) { index ->
-                    if (index > 0) delay(28)
+                    if (index > 0) delay(28.milliseconds)
 
                     animateOpponentFly(
                         card = game.card,
@@ -2607,61 +2608,20 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
 
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .statusBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .zIndex(5f)
-        ) {
-            IconButton(
-                onClick = { activity?.openRules() },
-                modifier = Modifier.align(Alignment.CenterStart)
-            ) {
-                if (rulesIcon != null) {
-                    Image(
-                        bitmap = rulesIcon,
-                        contentDescription = "Rules",
-                        modifier = Modifier.size(36.dp),
-                        contentScale = ContentScale.Fit
-                    )
-                }
-            }
-
-            IconButton(
-                onClick = { activity?.openSettings() },
-                modifier = Modifier.align(Alignment.CenterEnd)
-            ) {
-                if (settingsIcon != null) {
-                    Image(
-                        bitmap = settingsIcon,
-                        contentDescription = "Settings",
-                        modifier = Modifier.size(36.dp),
-                        contentScale = ContentScale.Fit
-                    )
-                }
-            }
-        }
-
-
-
-        Box(
-            modifier = Modifier
                 .fillMaxSize()
                 .navigationBarsPadding()
                 .statusBarsPadding()
                 .onGloballyPositioned { coords ->
                     boardOriginRoot = coords.positionInRoot()
                 }
-                .onSizeChanged { boardSize.value = it }
-        ) {
+                .onSizeChanged { boardSize.value = it }) {
             val boardDensity = LocalDensity.current
             val boardWidthPx = boardSize.value.width.toFloat()
             val boardHeightPx = boardSize.value.height.toFloat()
             val boardWidthDp = with(boardDensity) { boardSize.value.width.toDp() }
 
             val fallbackBeamCenter = Offset(
-                x = boardWidthPx * 0.50f,
-                y = boardHeightPx * 0.43f
+                x = boardWidthPx * 0.50f, y = boardHeightPx * 0.43f
             )
 
             val beamCenter = turnPileGroupCenter ?: fallbackBeamCenter
@@ -2689,13 +2649,14 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                 turnAvatarCenters[game.turn.id]
             }
 
-            LaunchedEffect(rawTarget, boardWidthPx, boardHeightPx, clockwise, activity?.turnConeForceAroundKey) {
+            LaunchedEffect(
+                rawTarget, boardWidthPx, boardHeightPx, clockwise, activity?.turnConeForceAroundKey
+            ) {
                 if (rawTarget == null) return@LaunchedEffect
 
                 val targetAngle = normalizedAngle(
                     kotlin.math.atan2(
-                        rawTarget.y - beamCenter.y,
-                        rawTarget.x - beamCenter.x
+                        rawTarget.y - beamCenter.y, rawTarget.x - beamCenter.x
                     )
                 )
 
@@ -2721,8 +2682,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                     animatedBeamAngle.snapTo(targetAngle)
                 } else {
                     animatedBeamAngle.animateTo(
-                        targetValue = current + delta,
-                        animationSpec = tween(
+                        targetValue = current + delta, animationSpec = tween(
                             durationMillis = if (forceAround) 260 else 150,
                             easing = FastOutSlowInEasing
                         )
@@ -2732,8 +2692,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
 
             val beamRadius = if (rawTarget != null) {
                 sqrt(
-                    (rawTarget.x - beamCenter.x) * (rawTarget.x - beamCenter.x) +
-                            (rawTarget.y - beamCenter.y) * (rawTarget.y - beamCenter.y)
+                    (rawTarget.x - beamCenter.x) * (rawTarget.x - beamCenter.x) + (rawTarget.y - beamCenter.y) * (rawTarget.y - beamCenter.y)
                 )
             } else {
                 0f
@@ -2748,11 +2707,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                 null
             }
 
-            if (
-                animatedTarget != null &&
-                boardWidthPx > 0f &&
-                boardHeightPx > 0f
-            ) {
+            if (animatedTarget != null && boardWidthPx > 0f && boardHeightPx > 0f) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -2762,9 +2717,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         modifier = Modifier.fillMaxSize(),
                         from = beamCenter,
                         to = animatedTarget,
-                        isActive = true,
                         lightweight = true,
-                        blurRadius = 0.dp
                     )
                 }
 
@@ -2795,14 +2748,20 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         .onGloballyPositioned { coords ->
                             opponentPileCenters.putCenterIfChanged(participant.id, coords)
                         }
-                        .zIndex(1f)
-                ) {
+                        .zIndex(1f)) {
                     Column(
                         verticalArrangement = Arrangement.spacedBy((-100).dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        (1..min(participant.cardCount, maxVisibleOpponentCards)).forEach {
-                            RenderCardBack(lightweight = true)
+                        repeat(
+                            min(
+                                participant.cardCount,
+                                maxVisibleOpponentCards,
+                            ),
+                        ) {
+                            RenderCardBack(
+                                lightweight = true,
+                            )
                         }
                     }
                 }
@@ -2822,9 +2781,10 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                                 .size(width = avatarWidth, height = avatarHeight)
                                 .onGloballyPositioned { coords ->
                                     avatarCenters.putCenterIfChanged(participant.id, coords)
-                                    turnAvatarCenters.putOffsetIfChanged(participant.id, centerInBoard(coords))
-                                }
-                        )
+                                    turnAvatarCenters.putOffsetIfChanged(
+                                        participant.id, centerInBoard(coords)
+                                    )
+                                })
 
                         Text(
                             participant.name,
@@ -2846,34 +2806,29 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         pileGroupCenter = updatedCenter(pileGroupCenter, coords)
                         turnPileGroupCenter = centerInBoard(coords)
                     }
-                    .zIndex(2f),
-                horizontalArrangement = Arrangement.spacedBy(-8.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .graphicsLayer {
-                            scaleX = pileScale
-                            scaleY = pileScale
-                        }
-                        .onGloballyPositioned { coords ->
-                            drawPileCenter = updatedCenter(drawPileCenter, coords)
-                        }
-                ) {
-                    RenderDrawPile(
-                        shouldPulse = game.turn == me &&
-                                label == null &&
-                                !interactionLocked &&
-                                !drawInFlight &&
-                                game.hand.none { it.isCompatibleWith(game.card) },
-                        onClick = {
-                            if (interactionLocked) return@RenderDrawPile
-                            if (drawInFlight) return@RenderDrawPile
-                            if (game.turn != me) return@RenderDrawPile
-                            drawInFlight = true
-                            drewAndMustWaitThisTurn = true
-                            activity?.drawCard()
-                        }
-                    )
+                    .zIndex(2f), horizontalArrangement = Arrangement.spacedBy(
+                (-8).dp,
+            )) {
+                Box(modifier = Modifier
+                    .graphicsLayer {
+                        scaleX = pileScale
+                        scaleY = pileScale
+                    }
+                    .onGloballyPositioned { coords ->
+                        drawPileCenter = updatedCenter(drawPileCenter, coords)
+                    }) {
+                    RenderDrawPile(shouldPulse = game.turn == me && label == null && !interactionLocked && !drawInFlight && game.hand.none {
+                        it.isCompatibleWith(
+                            game.card
+                        )
+                    }, onClick = {
+                        if (interactionLocked) return@RenderDrawPile
+                        if (drawInFlight) return@RenderDrawPile
+                        if (game.turn != me) return@RenderDrawPile
+                        drawInFlight = true
+                        drewAndMustWaitThisTurn = true
+                        activity?.drawCard()
+                    })
                 }
 
                 Box(
@@ -2890,11 +2845,9 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                             indication = null
                         ) {
                             playCurrentlySelectedCard()
-                        }
-                ) {
+                        }) {
                     RenderCard(
-                        card = game.card,
-                        lightweight = true
+                        card = game.card, lightweight = true
                     )
                 }
             }
@@ -2906,8 +2859,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                 .padding(horizontal = 8.dp, vertical = 62.dp)
                 .navigationBarsPadding()
                 .statusBarsPadding()
-                .zIndex(4f),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .zIndex(4f), horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (me != null) {
                 Box {
@@ -2919,8 +2871,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                             .onGloballyPositioned { coords ->
                                 avatarCenters.putCenterIfChanged(me.id, coords)
                                 turnAvatarCenters.putOffsetIfChanged(me.id, centerInBoard(coords))
-                            }
-                    )
+                            })
                 }
 
                 Text(
@@ -2938,8 +2889,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         .fillMaxWidth()
                         .padding(top = 10.dp)
                         .height(132.dp)
-                        .onSizeChanged { handAreaSize = it }
-                ) {
+                        .onSizeChanged { handAreaSize = it }) {
                     val handDensity = LocalDensity.current
                     val cardCount = game.hand.size
                     val baseCardWidthPx = with(handDensity) { 80.dp.toPx() }
@@ -2979,8 +2929,9 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         val maxRowStepPx = if (maxRowCount <= 1) {
                             0f
                         } else {
-                            ((availableHeightPx - tileCardHeightPx) / (maxRowCount - 1))
-                                .coerceAtLeast(10f)
+                            ((availableHeightPx - tileCardHeightPx) / (maxRowCount - 1)).coerceAtLeast(
+                                    10f
+                                )
                         }
 
                         val rowStepPx = if (maxRowCount <= 1) {
@@ -2999,7 +2950,9 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                             val rawGap = if (countInRow == 1) {
                                 0f
                             } else {
-                                ((availableWidthPx - tileCardWidthPx) / (countInRow - 1)).coerceAtLeast(0f)
+                                ((availableWidthPx - tileCardWidthPx) / (countInRow - 1)).coerceAtLeast(
+                                    0f
+                                )
                             }
 
                             if (countInRow > 1 && rawGap < minimumVisiblePx) {
@@ -3033,11 +2986,9 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         return slots
                     }
 
-                    val tileSlots = buildTileLayout(1)
-                        ?: buildTileLayout(2)
-                        ?: buildTileLayout(3)
+                    val tileSlots = buildTileLayout(1) ?: buildTileLayout(2) ?: buildTileLayout(3)
 
-                    if (tileSlots != null && tileSlots.isNotEmpty()) {
+                    if (!tileSlots.isNullOrEmpty()) {
                         for (slot in tileSlots) {
                             val index = slot.index
                             val card = game.hand[index]
@@ -3078,8 +3029,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                                         indication = null
                                     ) {
                                         handleCardTap(index, cardKey, card, isPlayable)
-                                    }
-                            ) {
+                                    }) {
                                 val faceModifier = Modifier.drawWithContent {
                                     drawContent()
 
@@ -3092,9 +3042,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                                 }
 
                                 RenderCard(
-                                    card,
-                                    modifier = faceModifier,
-                                    lightweight = true
+                                    card, modifier = faceModifier, lightweight = true
                                 )
                             }
                         }
@@ -3120,7 +3068,8 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
 
                         val compressedGaps: List<Float> =
                             if (rawTotalWidth > availableWidthPx && rawGaps.isNotEmpty()) {
-                                val availableForGaps = (availableWidthPx - scaledCardWidthPx).coerceAtLeast(0f)
+                                val availableForGaps =
+                                    (availableWidthPx - scaledCardWidthPx).coerceAtLeast(0f)
                                 val rawGapTotal = rawGaps.sum().coerceAtLeast(1f)
                                 val gapScale = availableForGaps / rawGapTotal
                                 rawGaps.map { it * gapScale }
@@ -3176,12 +3125,9 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                                         indication = null
                                     ) {
                                         handleCardTap(index, cardKey, card, isPlayable)
-                                    }
-                            ) {
+                                    }) {
                                 RenderCard(
-                                    card,
-                                    modifier = Modifier,
-                                    lightweight = true
+                                    card, modifier = Modifier, lightweight = true
                                 )
                             }
 
@@ -3205,14 +3151,11 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                     .blur(0.dp)
                     .clickable(
                         indication = null,
-                        interactionSource = remember { MutableInteractionSource() }
-                    ) { }
+                        interactionSource = remember { MutableInteractionSource() }) { }
                     .zIndex(40f),
-                contentAlignment = Alignment.Center
-            ) {
+                contentAlignment = Alignment.Center) {
                 Box(
-                    modifier = Modifier.size(280.dp),
-                    contentAlignment = Alignment.Center
+                    modifier = Modifier.size(280.dp), contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "Choose Color",
@@ -3240,48 +3183,45 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                         }
 
                         RenderCard(
-                            newCard,
-                            modifier = cardOffset.clickable(
-                                indication = null,
-                                interactionSource = remember { MutableInteractionSource() }
-                            ) {
-                                val start = handCardCenters[wildcardKey]
-                                val end = discardPileCenter
+                            newCard, modifier = cardOffset.clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }) {
+                            val start = handCardCenters[wildcardKey]
+                            val end = discardPileCenter
 
-                                if (start == null || end == null) {
-                                    if (selectedWildcardIndex in game.hand.indices) {
-                                        game.hand.removeAt(selectedWildcardIndex)
-                                    }
-                                    activity?.playCard(newCard)
-                                    selectedWildcardKey.value = null
-                                    selectedKey.value = null
-                                    return@clickable
+                            if (start == null || end == null) {
+                                if (selectedWildcardIndex in game.hand.indices) {
+                                    game.hand.removeAt(selectedWildcardIndex)
                                 }
-
-                                scope.launch {
-                                    interactionLocked = true
-                                    selectedWildcardKey.value = null
-
-                                    animateFlyingCard(
-                                        card = newCard,
-                                        start = start,
-                                        end = end,
-                                        hideKey = wildcardKey,
-                                        startScale = cardScaleForHand(game),
-                                        endScale = cardScaleForHand(game) * 0.96f,
-                                        durationMs = 240
-                                    )
-
-                                    if (selectedWildcardIndex in game.hand.indices) {
-                                        game.hand.removeAt(selectedWildcardIndex)
-                                    }
-
-                                    activity?.playCard(newCard)
-                                    selectedKey.value = null
-                                    interactionLocked = false
-                                }
+                                activity?.playCard(newCard)
+                                selectedWildcardKey.value = null
+                                selectedKey.value = null
+                                return@clickable
                             }
-                        )
+
+                            scope.launch {
+                                interactionLocked = true
+                                selectedWildcardKey.value = null
+
+                                animateFlyingCard(
+                                    card = newCard,
+                                    start = start,
+                                    end = end,
+                                    hideKey = wildcardKey,
+                                    startScale = cardScaleForHand(game),
+                                    endScale = cardScaleForHand(game) * 0.96f,
+                                    durationMs = 240
+                                )
+
+                                if (selectedWildcardIndex in game.hand.indices) {
+                                    game.hand.removeAt(selectedWildcardIndex)
+                                }
+
+                                activity?.playCard(newCard)
+                                selectedKey.value = null
+                                interactionLocked = false
+                            }
+                        })
                     }
                 }
             }
@@ -3299,12 +3239,10 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                     .padding(bottom = 60.dp, start = 8.dp, end = 8.dp, top = 8.dp)
                     .clickable(
                         indication = null,
-                        interactionSource = remember { MutableInteractionSource() }
-                    ) {
+                        interactionSource = remember { MutableInteractionSource() }) {
                         keyboardController?.hide()
                     }
-                    .zIndex(10f)
-            )
+                    .zIndex(10f))
         }
 
         BasicTextField(
@@ -3319,8 +3257,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                 onSend = {
                     activity?.sendMessage(textInput.value)
                     textInput.value = ""
-                }
-            ),
+                }),
             modifier = Modifier
                 .padding(bottom = 10.dp, top = 30.dp, start = 15.dp, end = 15.dp)
                 .align(Alignment.BottomCenter)
@@ -3328,8 +3265,7 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                 .statusBarsPadding()
                 .imePadding()
                 .background(
-                    Color(0x55000000),
-                    shape = RoundedCornerShape(16.dp)
+                    Color(0x55000000), shape = RoundedCornerShape(16.dp)
                 )
                 .padding(vertical = 10.dp, horizontal = 15.dp)
                 .fillMaxWidth()
@@ -3365,16 +3301,11 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
             val bubbleText = entry.value
             val center = avatarCenters[playerId]
 
-            if (!bubbleText.isNullOrBlank() && center != null) {
+            if (bubbleText.isNotBlank() && center != null) {
                 val screenWidthPx = boardSize.value.width.toFloat().coerceAtLeast(1f)
                 val screenHeightPx = boardSize.value.height.toFloat().coerceAtLeast(1f)
 
-                // Match iPhone behavior: decide by the avatar's actual screen position,
-                // not by player seat/index.
                 val bubbleToLeft = center.x > screenWidthPx * 0.50f
-
-                // Anchor the bubble tail near the avatar edge. When flipped, the bubble
-                // draws left from this anchor instead of being pushed left by a fixed width.
                 val avatarEdgeGapPx = with(density) { 34.dp.toPx() }
 
                 val xPx = if (bubbleToLeft) {
@@ -3387,9 +3318,11 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                     center.y < with(density) { 150.dp.toPx() } -> {
                         center.y + with(density) { 18.dp.toPx() }
                     }
+
                     center.y > screenHeightPx - with(density) { 190.dp.toPx() } -> {
                         center.y - with(density) { 62.dp.toPx() }
                     }
+
                     else -> {
                         center.y - with(density) { 24.dp.toPx() }
                     }
@@ -3401,12 +3334,10 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
                     modifier = Modifier
                         .offset {
                             IntOffset(
-                                x = xPx.roundToInt(),
-                                y = yPx.roundToInt()
+                                x = xPx.roundToInt(), y = yPx.roundToInt()
                             )
                         }
-                        .zIndex(29f)
-                )
+                        .zIndex(29f))
             }
         }
 
@@ -3449,14 +3380,11 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
 
             if (flyingBackside) {
                 RenderCardBack(
-                    modifier = flyingModifier,
-                    lightweight = true
+                    modifier = flyingModifier, lightweight = true
                 )
             } else {
                 RenderCard(
-                    card = flyingCard,
-                    modifier = flyingModifier,
-                    lightweight = true
+                    card = flyingCard, modifier = flyingModifier, lightweight = true
                 )
             }
         }
@@ -3465,19 +3393,15 @@ fun RenderGame(game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotSta
 
 @Composable
 fun ChatMessagesList(
-    messages: SnapshotStateList<CrazyMessage>,
-    modifier: Modifier = Modifier
+    messages: SnapshotStateList<CrazyMessage>, modifier: Modifier = Modifier
 ) {
     LazyColumn(
-        modifier = modifier,
-        reverseLayout = true,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        modifier = modifier, reverseLayout = true, verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         items(messages) { item ->
             if (item.sender.isMe) {
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.End
+                    modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End
                 ) {
                     Text(
                         "Me",
@@ -3489,7 +3413,9 @@ fun ChatMessagesList(
                     Text(
                         item.message,
                         modifier = Modifier
-                            .background(Color(0xFF1E88E5), shape = RoundedCornerShape(16.dp))
+                            .background(
+                                Color(0xFF1E88E5), shape = RoundedCornerShape(16.dp)
+                            )
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         color = Color.White,
                         fontSize = 16.sp
@@ -3497,8 +3423,7 @@ fun ChatMessagesList(
                 }
             } else {
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.Start
+                    modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start
                 ) {
                     Text(
                         item.sender.name,
@@ -3510,7 +3435,9 @@ fun ChatMessagesList(
                     Text(
                         item.message,
                         modifier = Modifier
-                            .background(Color.White, shape = RoundedCornerShape(16.dp))
+                            .background(
+                                Color.White, shape = RoundedCornerShape(16.dp)
+                            )
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         color = Color.Black,
                         fontSize = 16.sp
@@ -3523,9 +3450,7 @@ fun ChatMessagesList(
 
 @Composable
 fun WaitingRoomChatPane(
-    messages: SnapshotStateList<CrazyMessage>,
-    onSend: (String) -> Unit,
-    onClose: () -> Unit
+    messages: SnapshotStateList<CrazyMessage>, onSend: (String) -> Unit, onClose: () -> Unit
 ) {
     val textInput = remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -3541,12 +3466,9 @@ fun WaitingRoomChatPane(
             .fillMaxSize()
             .background(Color(0x66000000))
             .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) {
+                indication = null, interactionSource = remember { MutableInteractionSource() }) {
                 onClose()
-            }
-    ) {
+            }) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -3564,11 +3486,9 @@ fun WaitingRoomChatPane(
                     .fillMaxWidth()
                     .clickable(
                         indication = null,
-                        interactionSource = remember { MutableInteractionSource() }
-                    ) {
+                        interactionSource = remember { MutableInteractionSource() }) {
                         onClose()
-                    }
-            )
+                    })
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -3587,8 +3507,7 @@ fun WaitingRoomChatPane(
                             onSend(msg)
                             textInput.value = ""
                         }
-                    }
-                ),
+                    }),
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0x66000000), shape = RoundedCornerShape(16.dp))
@@ -3596,25 +3515,20 @@ fun WaitingRoomChatPane(
                 decorationBox = { innerTextField ->
                     if (textInput.value.isEmpty()) {
                         Text(
-                            text = "Chat",
-                            style = TextStyle(
-                                fontSize = 16.sp,
-                                color = Color.White.copy(alpha = 0.85f)
+                            text = "Chat", style = TextStyle(
+                                fontSize = 16.sp, color = Color.White.copy(alpha = 0.85f)
                             )
                         )
                     }
                     innerTextField()
-                }
-            )
+                })
         }
     }
 }
 
 @Composable
 fun LobbyAvatarSpeechBubble(
-    text: String,
-    modifier: Modifier = Modifier,
-    flip: Boolean = false
+    text: String, modifier: Modifier = Modifier, flip: Boolean = false
 ) {
     Box(
         modifier = modifier
@@ -3624,8 +3538,7 @@ fun LobbyAvatarSpeechBubble(
                 // not from the middle of the bubble.
                 transformOrigin = TransformOrigin(0f, 0.5f)
                 scaleX = if (flip) -1f else 1f
-            }
-    ) {
+            }) {
         Canvas(
             modifier = Modifier.matchParentSize()
         ) {
@@ -3658,13 +3571,9 @@ fun LobbyAvatarSpeechBubble(
                 .graphicsLayer {
                     // Flip text back so the bubble reverses, but the words do not.
                     scaleX = if (flip) -1f else 1f
-                }
-        ) {
+                }) {
             Text(
-                text = text,
-                color = Color.White,
-                fontSize = 12.sp,
-                maxLines = 2
+                text = text, color = Color.White, fontSize = 12.sp, maxLines = 2
             )
         }
     }
@@ -3679,14 +3588,12 @@ fun SkipHeadEffect(center: Offset) {
     LaunchedEffect(Unit) {
         launch {
             scale.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(600, easing = FastOutSlowInEasing)
+                targetValue = 1f, animationSpec = tween(600, easing = FastOutSlowInEasing)
             )
         }
         launch {
             alpha.animateTo(
-                targetValue = 0f,
-                animationSpec = tween(600)
+                targetValue = 0f, animationSpec = tween(600)
             )
         }
     }
@@ -3708,8 +3615,7 @@ fun SkipHeadEffect(center: Offset) {
                 this.alpha = alpha.value
             }
             .zIndex(30f),
-        contentScale = ContentScale.Fit
-    )
+        contentScale = ContentScale.Fit)
 }
 
 @Composable
@@ -3727,8 +3633,7 @@ fun PenaltyHeadEffect(center: Offset, text: String) {
         }
         launch {
             alpha.animateTo(
-                targetValue = 0f,
-                animationSpec = tween(980)
+                targetValue = 0f, animationSpec = tween(980)
             )
         }
     }
@@ -3739,8 +3644,7 @@ fun PenaltyHeadEffect(center: Offset, text: String) {
             .offset {
                 IntOffset(
                     x = (center.x - with(density) { 20.dp.toPx() }).roundToInt(),
-                    y = (center.y - with(density) { 52.dp.toPx() } + rise.value).roundToInt()
-                )
+                    y = (center.y - with(density) { 52.dp.toPx() } + rise.value).roundToInt())
             }
             .graphicsLayer {
                 this.alpha = alpha.value
@@ -3751,12 +3655,9 @@ fun PenaltyHeadEffect(center: Offset, text: String) {
         fontWeight = FontWeight.ExtraBold,
         style = TextStyle(
             shadow = Shadow(
-                color = Color.Black,
-                offset = Offset(2f, 3f),
-                blurRadius = 2f
+                color = Color.Black, offset = Offset(2f, 3f), blurRadius = 2f
             )
-        )
-    )
+        ))
 }
 
 @Composable
@@ -3768,14 +3669,12 @@ fun ReverseCenterEffect(clockwise: Boolean) {
     LaunchedEffect(Unit) {
         launch {
             scale.animateTo(
-                targetValue = 2.4f,
-                animationSpec = tween(700, easing = FastOutSlowInEasing)
+                targetValue = 2.4f, animationSpec = tween(700, easing = FastOutSlowInEasing)
             )
         }
         launch {
             alpha.animateTo(
-                targetValue = 0f,
-                animationSpec = tween(780)
+                targetValue = 0f, animationSpec = tween(780)
             )
         }
         launch {
@@ -3789,8 +3688,7 @@ fun ReverseCenterEffect(clockwise: Boolean) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .zIndex(30f),
-        contentAlignment = Alignment.Center
+            .zIndex(30f), contentAlignment = Alignment.Center
     ) {
         Image(
             painter = painterResource(id = R.drawable.reverse),
@@ -3809,141 +3707,175 @@ fun ReverseCenterEffect(clockwise: Boolean) {
 }
 
 @Composable
-fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: Crazy8Activity?) {
-    val me = participants.find { it.isMe }
-
-    val burgerIcon = if (activity != null) {
-        rememberAssetBitmap(activity, "global/burger.png")
-    } else {
-        null
+fun RenderWaiting(
+    participants: SnapshotStateList<CrazyParticipant>,
+    activity: Crazy8Activity?,
+) {
+    val me = participants.find {
+        it.isMe
     }
 
-    val rulesIcon = if (activity != null) {
-        rememberAssetBitmap(activity, "global/chat.png")
+    val chatIcon = if (activity != null) {
+        rememberAssetBitmap(
+            activity,
+            "global/chat.png",
+        )
     } else {
         null
     }
 
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
     ) {
         Image(
-            painter = painterResource(id = R.drawable.crazybg),
+            painter = painterResource(
+                id = R.drawable.crazybg,
+            ),
             contentDescription = null,
-            modifier = Modifier
-                .fillMaxSize()
-                .blur(if (activity?.showBurgerMenu == true) 8.dp else 0.dp),
-            contentScale = ContentScale.Crop
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
         )
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxSize()
-                .blur(if (activity?.showBurgerMenu == true) 8.dp else 0.dp)
                 .navigationBarsPadding()
-                .statusBarsPadding()
+                .statusBarsPadding(),
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = 8.dp,
+                    ),
             ) {
                 IconButton(
                     onClick = {
                         activity?.showLobbyChat = true
                     },
-                    modifier = Modifier.align(Alignment.CenterStart)
+                    modifier = Modifier.align(
+                        Alignment.CenterStart,
+                    ),
                 ) {
-                    if (rulesIcon != null) {
+                    if (chatIcon != null) {
                         Image(
-                            bitmap = rulesIcon,
-                            contentDescription = "Rules",
-                            modifier = Modifier.size(36.dp),
-                            contentScale = ContentScale.Fit
-                        )
-                    }
-                }
-
-                IconButton(
-                    onClick = {
-                        activity?.let {
-                            it.showBurgerMenu = !it.showBurgerMenu
-                        }
-                    },
-                    modifier = Modifier.align(Alignment.CenterEnd)
-                ) {
-                    if (burgerIcon != null) {
-                        Image(
-                            bitmap = burgerIcon,
-                            contentDescription = "Menu",
-                            modifier = Modifier.size(36.dp),
-                            contentScale = ContentScale.Fit
+                            bitmap = chatIcon,
+                            contentDescription = "Chat",
+                            modifier = Modifier.size(
+                                36.dp,
+                            ),
+                            contentScale = ContentScale.Fit,
                         )
                     }
                 }
             }
 
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.Center
+                modifier = Modifier.weight(
+                    1f,
+                ),
+                verticalArrangement = Arrangement.Center,
             ) {
                 for (participant in participants) {
                     ElevatedCard(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp, vertical = 5.dp),
-                        shape = RoundedCornerShape(32.dp),
+                        modifier = Modifier.padding(
+                            horizontal = 16.dp,
+                            vertical = 5.dp,
+                        ),
+                        shape = RoundedCornerShape(
+                            32.dp,
+                        ),
                         elevation = CardDefaults.cardElevation(
-                            defaultElevation = 6.dp
+                            defaultElevation = 6.dp,
                         ),
                     ) {
                         Box(
                             modifier = Modifier
-                                .padding(horizontal = 4.dp, vertical = 3.dp)
-                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 4.dp,
+                                    vertical = 3.dp,
+                                )
+                                .fillMaxWidth(),
                         ) {
                             RenderLobbyAvatar(
                                 avatarData = participant.avatar,
                                 modifier = Modifier
-                                    .align(Alignment.CenterStart)
-                                    .size(width = 72.dp, height = 52.dp)
+                                    .align(
+                                        Alignment.CenterStart,
+                                    )
+                                    .size(
+                                        width = 72.dp,
+                                        height = 52.dp,
+                                    ),
                             )
 
-                            val bubbleText = activity?.lobbySpeechBubbles?.get(participant.id)
+                            val bubbleText = activity?.lobbySpeechBubbles?.get(
+                                    participant.id,
+                                )
+
                             if (!bubbleText.isNullOrBlank()) {
                                 LobbyAvatarSpeechBubble(
                                     text = bubbleText,
                                     modifier = Modifier
-                                        .align(Alignment.CenterStart)
-                                        .offset(x = 42.dp, y = (-6).dp)
+                                        .align(
+                                            Alignment.CenterStart,
+                                        )
+                                        .offset(
+                                            x = 42.dp,
+                                            y = (-6).dp,
+                                        ),
                                 )
                             }
 
                             Text(
-                                participant.name,
-                                modifier = Modifier.align(Alignment.Center),
+                                text = participant.name,
+                                modifier = Modifier.align(
+                                    Alignment.Center,
+                                ),
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 15.sp
+                                fontSize = 15.sp,
                             )
 
                             Icon(
                                 imageVector = Icons.Rounded.CheckCircle,
-                                contentDescription = "Check",
+                                contentDescription = "Ready",
                                 modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .alpha(if (participant.ready) 1.0f else 0.0f),
-                                tint = Color(0xFF06402B)
+                                    .align(
+                                        Alignment.CenterEnd,
+                                    )
+                                    .alpha(
+                                        if (participant.ready) {
+                                            1f
+                                        } else {
+                                            0f
+                                        },
+                                    ),
+                                tint = Color(
+                                    0xFF06402B,
+                                ),
                             )
 
                             Text(
-                                "—",
+                                text = "—",
                                 modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .alpha(if (participant.ready) 0.0f else 1.0f)
-                                    .padding(horizontal = 5.dp),
+                                    .align(
+                                        Alignment.CenterEnd,
+                                    )
+                                    .alpha(
+                                        if (participant.ready) {
+                                            0f
+                                        } else {
+                                            1f
+                                        },
+                                    )
+                                    .padding(
+                                        horizontal = 5.dp,
+                                    ),
                                 color = Color.DarkGray,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 25.sp
+                                fontSize = 25.sp,
                             )
                         }
                     }
@@ -3951,116 +3883,117 @@ fun RenderWaiting(participants: SnapshotStateList<CrazyParticipant>, activity: C
             }
 
             val playerCountValid = participants.size in 3..6
-            val everyoneReady = participants.isNotEmpty() && participants.all { it.ready }
+
+            val everyoneReady = participants.isNotEmpty() && participants.all {
+                it.ready
+            }
 
             val statusText = when {
-                me?.ready == true && !playerCountValid ->
+                me?.ready == true && !playerCountValid -> {
                     "3-6 players are required to start"
-                me?.ready == true && playerCountValid && !everyoneReady ->
+                }
+
+                me?.ready == true && playerCountValid && !everyoneReady -> {
                     "We'll start once everyone is READY"
-                me?.ready != true ->
+                }
+
+                me?.ready != true -> {
                     "Tap \"READY\" to start the match"
-                else -> null
+                }
+
+                else -> {
+                    null
+                }
             }
 
             if (statusText != null) {
                 Text(
-                    statusText,
+                    text = statusText,
                     color = Color.White,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(
+                        horizontal = 20.dp,
+                        vertical = 6.dp,
+                    ),
                 )
             } else {
-                Spacer(modifier = Modifier.height(28.dp))
+                Spacer(
+                    modifier = Modifier.height(
+                        28.dp,
+                    ),
+                )
             }
 
             Button(
                 onClick = {
-                    me!!.ready = !me.ready
-                    activity!!.setReady(me.ready)
+                    val localPlayer = me ?: return@Button
+
+                    val targetActivity = activity ?: return@Button
+
+                    localPlayer.ready = !localPlayer.ready
+
+                    targetActivity.setReady(
+                        localPlayer.ready,
+                    )
                 },
                 modifier = Modifier
-                    .padding(bottom = 16.dp)
+                    .padding(
+                        bottom = 16.dp,
+                    )
                     .shadow(
                         elevation = 10.dp,
-                        shape = RoundedCornerShape(6.dp),
-                        ambientColor = Color.Black.copy(alpha = 0.24f),
-                        spotColor = Color.Black.copy(alpha = 0.24f)
+                        shape = RoundedCornerShape(
+                            6.dp,
+                        ),
+                        ambientColor = Color.Black.copy(
+                            alpha = 0.24f,
+                        ),
+                        spotColor = Color.Black.copy(
+                            alpha = 0.24f,
+                        ),
                     ),
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(
+                    8.dp,
+                ),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (me?.ready == true) Color(0xFFFF2D2D) else Color(0xFF247E2A),
-                    contentColor = Color.White
-                )
+                    containerColor = if (me?.ready == true) {
+                        Color(
+                            0xFFFF2D2D,
+                        )
+                    } else {
+                        Color(
+                            0xFF247E2A,
+                        )
+                    },
+                    contentColor = Color.White,
+                ),
             ) {
                 Text(
-                    text = if (me?.ready == true) "CANCEL" else "READY",
+                    text = if (me?.ready == true) {
+                        "CANCEL"
+                    } else {
+                        "READY"
+                    },
                     color = Color.White,
-                    fontWeight = FontWeight.ExtraBold
+                    fontWeight = FontWeight.ExtraBold,
                 )
             }
         }
+
         if (activity?.showLobbyChat == true) {
             WaitingRoomChatPane(
                 messages = activity.messages,
-                onSend = { msg -> activity.sendMessage(msg) },
-                onClose = { activity.showLobbyChat = false }
+                onSend = { message ->
+                    activity.sendMessage(
+                        message,
+                    )
+                },
+                onClose = {
+                    activity.showLobbyChat = false
+                },
             )
-        }
-
-        if (activity?.showBurgerMenu == true) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() }
-                    ) {
-                        activity.showBurgerMenu = false
-                    }
-            ) {
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 56.dp, end = 12.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xEEFFFFFF))
-                        .border(1.dp, Color(0x22000000), RoundedCornerShape(10.dp))
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) { }
-                        .padding(vertical = 6.dp)
-                        .widthIn(min = 120.dp)
-                        .wrapContentWidth()
-                ) {
-                    Text(
-                        "Settings",
-                        modifier = Modifier
-                            .clickable {
-                                activity.showBurgerMenu = false
-                                activity.openSettings()
-                            }
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        color = Color.Black,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    Text(
-                        "Help",
-                        modifier = Modifier
-                            .clickable {
-                                activity.showBurgerMenu = false
-                                activity.openRules()
-                            }
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        color = Color.Black,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
         }
     }
 }
@@ -4090,27 +4023,31 @@ private fun legacyCrazy8ToOpponentString(data: String): String {
         return values[key] ?: default
     }
 
-    return "body,${v("b", "4")}" +
-            "|eyes,${v("e", "0")}" +
-            "|mouth,${v("m", "2")}" +
-            "|acc,${v("a", "0")}" +
-            "|wins,${v("w", "0")}" +
-            "|bg_color,${v("bg", "0.0,0.0,0.0")}" +
-            "|body_color,${v("bc", "0.0,0.0,0.0")}" +
-            "|glasses,${v("g", "0")}" +
-            "|stache,${v("s", "0")}" +
-            "|backdrop,${v("d", "0")}" +
-            "|hair,${v("h", "3")}" +
-            "|clothes,${v("c", "2")}" +
-            "|hair_color,${v("hc", "0.0,0.0,0.0")}" +
-            "|clothes_color,${v("cc", "0.290639,0.935341,0.083265")}" +
-            "|n,${v("n", "")}"
+    return "body,${v("b", "4")}" + "|eyes,${v("e", "0")}" + "|mouth,${v("m", "2")}" + "|acc,${
+        v(
+            "a",
+            "0"
+        )
+    }" + "|wins,${v("w", "0")}" + "|bg_color,${v("bg", "0.0,0.0,0.0")}" + "|body_color,${
+        v(
+            "bc",
+            "0.0,0.0,0.0"
+        )
+    }" + "|glasses,${v("g", "0")}" + "|stache,${v("s", "0")}" + "|backdrop,${
+        v(
+            "d",
+            "0"
+        )
+    }" + "|hair,${v("h", "3")}" + "|clothes,${v("c", "2")}" + "|hair_color,${
+        v(
+            "hc",
+            "0.0,0.0,0.0"
+        )
+    }" + "|clothes_color,${v("cc", "0.290639,0.935341,0.083265")}" + "|n,${v("n", "")}"
 }
 
 private const val CRAZY8_PACKED_ALPHABET =
-    "0123456789QWERTYUIOPASDFGHJKLZXCVBNM" +
-            "qwertyuiopasdfghjklzxcvbnm" +
-            "!@#$%^*()-_=+[{]};.<>/?"
+    "0123456789QWERTYUIOPASDFGHJKLZXCVBNM" + "qwertyuiopasdfghjklzxcvbnm" + "!@#$%^*()-_=+[{]};.<>/?"
 
 private fun crazy8CharToInt(char: String): Int {
     if (char.isEmpty()) return 0
@@ -4211,19 +4148,30 @@ private fun legacyAvatarStringForCrazy8(playerName: String): String {
         return "${parts[0]},${parts[1]},${parts[2]}"
     }
 
-    return "b,${v("body", "4")}`" +
-            "e,${v("eyes", "0")}`" +
-            "m,${v("mouth", "2")}`" +
-            "a,${v("acc", "0")}`" +
-            "w,${v("wins", "0")}`" +
-            "bg,${color3("bg_color", "0.0,0.0,0.0")}`" +
-            "bc,${color3("body_color", "0.0,0.0,0.0")}`" +
-            "g,${v("glasses", "0")}`" +
-            "s,${v("stache", "0")}`" +
-            "d,${v("backdrop", "0")}`" +
-            "h,${v("hair", "3")}`" +
-            "c,${v("clothes", "2")}`" +
-            "hc,${color3("hair_color", "0.000000,0.000000,0.000000")}`" +
-            "cc,${color3("clothes_color", "0.290639,0.935341,0.083265")}`" +
-            "n,$playerName"
+    return "b,${v("body", "4")}`" + "e,${v("eyes", "0")}`" + "m,${v("mouth", "2")}`" + "a,${
+        v(
+            "acc",
+            "0"
+        )
+    }`" + "w,${v("wins", "0")}`" + "bg,${
+        color3(
+            "bg_color",
+            "0.0,0.0,0.0"
+        )
+    }`" + "bc,${color3("body_color", "0.0,0.0,0.0")}`" + "g,${
+        v(
+            "glasses",
+            "0"
+        )
+    }`" + "s,${v("stache", "0")}`" + "d,${v("backdrop", "0")}`" + "h,${
+        v(
+            "hair",
+            "3"
+        )
+    }`" + "c,${v("clothes", "2")}`" + "hc,${
+        color3(
+            "hair_color",
+            "0.000000,0.000000,0.000000"
+        )
+    }`" + "cc,${color3("clothes_color", "0.290639,0.935341,0.083265")}`" + "n,$playerName"
 }

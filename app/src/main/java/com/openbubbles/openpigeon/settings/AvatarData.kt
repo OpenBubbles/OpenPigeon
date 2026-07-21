@@ -1,271 +1,321 @@
 package com.openbubbles.openpigeon.settings
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.graphics.Color
-import com.openbubbles.openpigeon.util.OpenPigeonLog
-import androidx.core.content.edit
-import java.io.File
 
 object AvatarData {
+    private val background =
+        SettingScope.Section(
+            "avatar_background",
+        )
 
-    private const val TAG              = "AvatarData"
-    private const val PREFS_NAME       = "avatar_settings"
-    private const val PREF_LAST_WRITE  = "meta/last_android_write_ms"
+    private val faceShape =
+        SettingScope.Section(
+            "avatar_fshape",
+        )
 
-    // Godot 4 writes user:// directly to filesDir with no subfolder.
-    // Confirmed from device log: /data/data/com.openbubbles.openpigeon/files/settings.cfg
-    private const val GODOT_CFG_SUBPATH = "settings.cfg"
+    private val hairFront =
+        SettingScope.Section(
+            "avatar_hair_front",
+        )
 
-    private lateinit var appContext: Context
+    private val hairBack =
+        SettingScope.Section(
+            "avatar_hair_back",
+        )
 
-    // ── Init ──────────────────────────────────────────────────────────────────
-    fun init(context: Context) {
-        appContext = context.applicationContext
-        AvatarBitmapCache.load(appContext)
-        syncFromCfgIfNewer()
+    private val hair =
+        SettingScope.Section(
+            "avatar_hair",
+        )
+
+    private val face =
+        SettingScope.Section(
+            "avatar_face",
+        )
+
+    private val clothing =
+        SettingScope.Section(
+            "avatar_clothing",
+        )
+
+    fun init(
+        context: Context,
+    ) {
+        SettingsData.init(
+            context,
+        )
+
+        AvatarBitmapCache.load(
+            context.applicationContext,
+        )
     }
 
-    // ── Bidirectional sync ────────────────────────────────────────────────────
-    private fun syncFromCfgIfNewer() {
-        val file = File(appContext.filesDir, GODOT_CFG_SUBPATH)
-        if (!file.exists()) {
-            OpenPigeonLog.d(TAG, "No cfg at ${file.absolutePath} — skipping import")
-            return
-        }
-
-        val cfgModified     = file.lastModified()
-        val lastAndroidWrite = prefs().getLong(PREF_LAST_WRITE, 0L)
-
-        OpenPigeonLog.d(TAG, "cfg lastModified=$cfgModified  lastAndroidWrite=$lastAndroidWrite")
-
-        if (cfgModified > lastAndroidWrite) {
-            OpenPigeonLog.d(TAG, "Godot wrote more recently — importing cfg into prefs")
-            importFromCfg(file)
-        } else {
-            OpenPigeonLog.d(TAG, "Android wrote more recently (or same) — keeping prefs, re-writing cfg")
-            // Re-write so Godot always has the freshest Android values
-            writeCfg()
-        }
+    fun refreshFromGodot(): Boolean {
+        return SettingsData.refreshFromGodot()
     }
-
-    // ── Cfg → SharedPreferences ───────────────────────────────────────────────
-    private fun importFromCfg(file: File) {
-        try {
-            val editor = prefs().edit()
-            var currentSection = ""
-
-            file.forEachLine { raw ->
-                val line = raw.trim()
-                when {
-                    line.startsWith("[") && line.endsWith("]") -> {
-                        currentSection = line.drop(1).dropLast(1)
-                    }
-                    line.contains("=") && currentSection.isNotEmpty() -> {
-                        val key      = line.substringBefore("=").trim()
-                        val value    = line.substringAfter("=").trim()
-                        val prefsKey = "$currentSection/$key"
-                        when {
-                            // String: "hair1"
-                            value.startsWith("\"") && value.endsWith("\"") -> {
-                                editor.putString(prefsKey, value.removeSurrounding("\""))
-                            }
-                            // Color: Color(r, g, b, a)
-                            value.startsWith("Color(") -> {
-                                val parts = value
-                                    .removePrefix("Color(").removeSuffix(")")
-                                    .split(",").map { it.trim().toFloatOrNull() ?: 0f }
-                                if (parts.size >= 4) {
-                                    editor.putInt(prefsKey, Color.argb(
-                                        (parts[3] * 255).toInt(),
-                                        (parts[0] * 255).toInt(),
-                                        (parts[1] * 255).toInt(),
-                                        (parts[2] * 255).toInt()
-                                    ))
-                                }
-                            }
-                            // Float
-                            value.toFloatOrNull() != null -> {
-                                editor.putFloat(prefsKey, value.toFloat())
-                            }
-                            value == "true"  -> editor.putBoolean(prefsKey, true)
-                            value == "false" -> editor.putBoolean(prefsKey, false)
-                        }
-                    }
-                }
-            }
-            // Stamp the write time as "now" so we don't re-import next time
-            editor.putLong(PREF_LAST_WRITE, System.currentTimeMillis())
-            editor.apply()
-            OpenPigeonLog.d(TAG, "Import from cfg complete")
-        } catch (e: Exception) {
-            OpenPigeonLog.e(TAG, "Failed to import cfg", e)
-        }
-    }
-
-    // ── SharedPreferences helpers ─────────────────────────────────────────────
-    private fun prefs(): SharedPreferences =
-        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
-    private fun getString(section: String, key: String, default: String): String =
-        prefs().getString("$section/$key", default) ?: default
-
-    private fun putString(section: String, key: String, value: String) {
-        prefs().edit { putString("$section/$key", value) }
-        writeCfg()
-    }
-
-    private fun getFloat(section: String, key: String, default: Float): Float =
-        prefs().getFloat("$section/$key", default)
-
-    private fun putFloat(section: String, key: String, value: Float) {
-        prefs().edit { putFloat("$section/$key", value) }
-        writeCfg()
-    }
-
-    private fun getColor(section: String, key: String, default: Int): Int =
-        prefs().getInt("$section/$key", default)
-
-    private fun putColor(section: String, key: String, value: Int) {
-        prefs().edit { putInt("$section/$key", value) }
-        writeCfg()
-    }
-
-    // ── Avatar properties ─────────────────────────────────────────────────────
 
     var bgStyle: String
-        get() = getString("avatar_background", "style", "Plain")
-        set(v) = putString("avatar_background", "style", v)
+        get() =
+            SettingsData.getString(
+                background,
+                "style",
+                "Plain",
+            )
+        set(value) {
+            SettingsData.putString(
+                background,
+                "style",
+                value,
+            )
+        }
 
     var bgColor: Int
-        get() = getColor("avatar_background", "color", Color.parseColor("#4e5d89"))
-        set(v) = putColor("avatar_background", "color", v)
+        get() =
+            SettingsData.getColor(
+                background,
+                "color",
+                Color.parseColor(
+                    "#4e5d89",
+                ),
+            )
+        set(value) {
+            SettingsData.putColor(
+                background,
+                "color",
+                value,
+            )
+        }
 
     var bgBrightness: Float
-        get() = getFloat("avatar_background", "brightness", 0f)
-        set(v) = putFloat("avatar_background", "brightness", v)
+        get() =
+            SettingsData.getFloat(
+                background,
+                "brightness",
+                0f,
+            )
+        set(value) {
+            SettingsData.putFloat(
+                background,
+                "brightness",
+                value,
+            )
+        }
 
     var fshapeStyle: String
-        get() = getString("avatar_fshape", "head_style", "Default")
-        set(v) = putString("avatar_fshape", "head_style", v)
+        get() =
+            SettingsData.getString(
+                faceShape,
+                "head_style",
+                "Default",
+            )
+        set(value) {
+            SettingsData.putString(
+                faceShape,
+                "head_style",
+                value,
+            )
+        }
 
     var fshapeColor: Int
-        get() = getColor("avatar_fshape", "color", Color.parseColor("#e0ac69"))
-        set(v) = putColor("avatar_fshape", "color", v)
+        get() =
+            SettingsData.getColor(
+                faceShape,
+                "color",
+                Color.parseColor(
+                    "#e0ac69",
+                ),
+            )
+        set(value) {
+            SettingsData.putColor(
+                faceShape,
+                "color",
+                value,
+            )
+        }
 
     var fshapeBrightness: Float
-        get() = getFloat("avatar_fshape", "brightness", 0f)
-        set(v) = putFloat("avatar_fshape", "brightness", v)
+        get() =
+            SettingsData.getFloat(
+                faceShape,
+                "brightness",
+                0f,
+            )
+        set(value) {
+            SettingsData.putFloat(
+                faceShape,
+                "brightness",
+                value,
+            )
+        }
 
     var hairStyle: String
-        get() = getString("avatar_hair_front", "style", "hair1")
-        set(v) {
-            prefs().edit {
-                putString("avatar_hair_front/style", v)
-                putString("avatar_hair_back/style", v)
-                putString("avatar_hair/style", v)
+        get() =
+            SettingsData.getString(
+                hairFront,
+                "style",
+                "hair1",
+            )
+        set(value) {
+            SettingsData.edit {
+                putString(
+                    hairFront,
+                    "style",
+                    value,
+                )
+
+                putString(
+                    hairBack,
+                    "style",
+                    value,
+                )
+
+                putString(
+                    hair,
+                    "style",
+                    value,
+                )
             }
-            writeCfg()
         }
 
     var hairColor: Int
-        get() = getColor("avatar_hair_front", "color", Color.parseColor("#2c232b"))
-        set(v) {
-            prefs().edit {
-                putInt("avatar_hair_front/color", v)
-                putInt("avatar_hair_back/color", v)
-                putInt("avatar_hair/color", v)
+        get() =
+            SettingsData.getColor(
+                hairFront,
+                "color",
+                Color.parseColor(
+                    "#2c232b",
+                ),
+            )
+        set(value) {
+            SettingsData.edit {
+                putColor(
+                    hairFront,
+                    "color",
+                    value,
+                )
+
+                putColor(
+                    hairBack,
+                    "color",
+                    value,
+                )
+
+                putColor(
+                    hair,
+                    "color",
+                    value,
+                )
             }
-            writeCfg()
         }
 
     var hairBrightness: Float
-        get() = getFloat("avatar_hair_front", "brightness", 0f)
-        set(v) {
-            prefs().edit {
-                putFloat("avatar_hair_front/brightness", v)
-                putFloat("avatar_hair_back/brightness", v)
-                putFloat("avatar_hair/brightness", v)
+        get() =
+            SettingsData.getFloat(
+                hairFront,
+                "brightness",
+                0f,
+            )
+        set(value) {
+            SettingsData.edit {
+                putFloat(
+                    hairFront,
+                    "brightness",
+                    value,
+                )
+
+                putFloat(
+                    hairBack,
+                    "brightness",
+                    value,
+                )
+
+                putFloat(
+                    hair,
+                    "brightness",
+                    value,
+                )
             }
-            writeCfg()
         }
 
     var eyesStyle: String
-        get() = getString("avatar_face", "eyes", "eyes1")
-        set(v) = putString("avatar_face", "eyes", v)
+        get() =
+            SettingsData.getString(
+                face,
+                "eyes",
+                "eyes1",
+            )
+        set(value) {
+            SettingsData.putString(
+                face,
+                "eyes",
+                value,
+            )
+        }
 
     var mouthStyle: String
-        get() = getString("avatar_face", "mouth", "mouth1")
-        set(v) = putString("avatar_face", "mouth", v)
+        get() =
+            SettingsData.getString(
+                face,
+                "mouth",
+                "mouth1",
+            )
+        set(value) {
+            SettingsData.putString(
+                face,
+                "mouth",
+                value,
+            )
+        }
 
     var clothingStyle: String
-        get() = getString("avatar_clothing", "style", "clothing1")
-        set(v) = putString("avatar_clothing", "style", v)
+        get() =
+            SettingsData.getString(
+                clothing,
+                "style",
+                "clothing1",
+            )
+        set(value) {
+            SettingsData.putString(
+                clothing,
+                "style",
+                value,
+            )
+        }
 
     var clothingColor: Int
-        get() = getColor("avatar_clothing", "color", Color.parseColor("#a03c3c"))
-        set(v) = putColor("avatar_clothing", "color", v)
+        get() =
+            SettingsData.getColor(
+                clothing,
+                "color",
+                Color.parseColor(
+                    "#a03c3c",
+                ),
+            )
+        set(value) {
+            SettingsData.putColor(
+                clothing,
+                "color",
+                value,
+            )
+        }
 
     var clothingBrightness: Float
-        get() = getFloat("avatar_clothing", "brightness", 0f)
-        set(v) = putFloat("avatar_clothing", "brightness", v)
-
-    // ── SharedPreferences → Godot cfg ─────────────────────────────────────────
-    private fun colorToCfg(argb: Int): String {
-        val r = Color.red(argb)   / 255f
-        val g = Color.green(argb) / 255f
-        val b = Color.blue(argb)  / 255f
-        val a = Color.alpha(argb) / 255f
-        return "Color(%.6f, %.6f, %.6f, %.6f)".format(r, g, b, a)
-    }
+        get() =
+            SettingsData.getFloat(
+                clothing,
+                "brightness",
+                0f,
+            )
+        set(value) {
+            SettingsData.putFloat(
+                clothing,
+                "brightness",
+                value,
+            )
+        }
 
     fun writeCfg() {
-        try {
-            val file = File(appContext.filesDir, GODOT_CFG_SUBPATH)
-            file.parentFile?.mkdirs()
-
-            val sb = StringBuilder()
-            fun section(name: String, vararg pairs: Pair<String, String>) {
-                sb.appendLine("[$name]")
-                for ((k, v) in pairs) sb.appendLine("$k=$v")
-                sb.appendLine()
-            }
-
-            section("avatar_background",
-                "style"      to "\"$bgStyle\"",
-                "color"      to colorToCfg(bgColor),
-                "brightness" to bgBrightness.toString()
-            )
-            section("avatar_fshape",
-                "head_style" to "\"$fshapeStyle\"",
-                "color"      to colorToCfg(fshapeColor),
-                "brightness" to fshapeBrightness.toString()
-            )
-            for (sec in listOf("avatar_hair_front", "avatar_hair_back", "avatar_hair")) {
-                section(sec,
-                    "style"      to "\"$hairStyle\"",
-                    "color"      to colorToCfg(hairColor),
-                    "brightness" to hairBrightness.toString()
-                )
-            }
-            section("avatar_face",
-                "eyes"  to "\"$eyesStyle\"",
-                "mouth" to "\"$mouthStyle\""
-            )
-            section("avatar_clothing",
-                "style"      to "\"$clothingStyle\"",
-                "color"      to colorToCfg(clothingColor),
-                "brightness" to clothingBrightness.toString()
-            )
-
-            file.writeText(sb.toString())
-
-            // Stamp the write time so syncFromCfgIfNewer() knows Android wrote this
-            prefs().edit { putLong(PREF_LAST_WRITE, System.currentTimeMillis()) }
-
-            OpenPigeonLog.d(TAG, "Wrote cfg to ${file.absolutePath}")
-        } catch (e: Exception) {
-            OpenPigeonLog.e(TAG, "Failed to write cfg", e)
-        }
+        SettingsData.flushToGodot()
     }
 }

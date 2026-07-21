@@ -12,6 +12,7 @@ import android.view.*
 import android.view.animation.DecelerateInterpolator
 import android.widget.*
 import androidx.core.view.isVisible
+import androidx.appcompat.widget.SwitchCompat
 
 class SettingsSheet(
     private val context: Context,
@@ -66,6 +67,19 @@ class SettingsSheet(
     private var gameAvatarRefreshEnabled = true
 
     private val extraRows = mutableListOf<View>()
+
+    private data class BooleanSettingBinding(
+        val scope: SettingScope,
+        val key: String,
+        val default: Boolean,
+        val switch: SwitchCompat,
+        val onChanged: (Boolean) -> Unit,
+        var suppressCallback: Boolean = false,
+    )
+
+    private val booleanSettingBindings =
+        mutableListOf<BooleanSettingBinding>()
+
     private var isOpen = false
 
     var onClosed: (() -> Unit)? = null
@@ -113,6 +127,116 @@ class SettingsSheet(
         controlsContainer.addView(row)
     }
 
+    fun addBooleanSetting(
+        label: String,
+        scope: SettingScope,
+        key: String,
+        default: Boolean,
+        onChanged: (Boolean) -> Unit,
+    ): SwitchCompat {
+        SettingsData.init(
+            context,
+        )
+
+        val control =
+            SwitchCompat(
+                context,
+            )
+
+        val binding =
+            BooleanSettingBinding(
+                scope = scope,
+                key = key,
+                default = default,
+                switch = control,
+                onChanged = onChanged,
+            )
+
+        control.setOnCheckedChangeListener { _, checked ->
+            if (binding.suppressCallback) {
+                return@setOnCheckedChangeListener
+            }
+
+            SettingsData.putBoolean(
+                scope = binding.scope,
+                key = binding.key,
+                value = checked,
+            )
+
+            binding.onChanged(
+                checked,
+            )
+        }
+
+        booleanSettingBindings +=
+            binding
+
+        addGameControl(
+            label,
+            control,
+        )
+
+        refreshBooleanSetting(
+            binding,
+        )
+
+        return control
+    }
+
+
+    fun refreshGameControls(
+        refreshFromGodot: Boolean = true,
+    ) {
+        if (refreshFromGodot) {
+            SettingsData.refreshFromGodot()
+        }
+
+        booleanSettingBindings.forEach(
+            ::refreshBooleanSetting,
+        )
+    }
+
+
+    fun refreshFromStorage() {
+        SettingsData.refreshFromGodot()
+
+        refreshGameControls(
+            refreshFromGodot = false,
+        )
+
+        refreshHeaderAvatar()
+    }
+
+
+    private fun refreshBooleanSetting(
+        binding: BooleanSettingBinding,
+    ) {
+        val enabled =
+            SettingsData.getBoolean(
+                scope = binding.scope,
+                key = binding.key,
+                default = binding.default,
+            )
+
+        binding.suppressCallback =
+            true
+
+        if (
+            binding.switch.isChecked !=
+            enabled
+        ) {
+            binding.switch.isChecked =
+                enabled
+        }
+
+        binding.suppressCallback =
+            false
+
+        binding.onChanged(
+            enabled,
+        )
+    }
+
     fun attachGameAvatar(gameRoot: FrameLayout) {
         gameAvatarView?.let {
             if (it.parent != null) (it.parent as ViewGroup).removeView(it)
@@ -143,10 +267,6 @@ class SettingsSheet(
         oppAvatarView = av
     }
 
-    /**
-     * Render the opponent's avatar from the pipe-separated game data string, e.g.:
-     *   "body,4|eyes,2|mouth,1|bg_color,0.68,0.91,0.50|hair,4|clothes,2|..."
-     */
     fun applyOpponentAvatarString(avatarString: String) {
         oppAvatarView?.applyFromOpponentString(avatarString)
     }
@@ -393,7 +513,7 @@ class SettingsSheet(
             setBackgroundColor(COL_DIVIDER)
         })
         controlsSection.addView(TextView(context).apply {
-            text = "Game Settings"; setTextColor(COL_LABEL); textSize = 11f
+            text = "Settings"; setTextColor(COL_LABEL); textSize = 11f
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).also { it.bottomMargin = dp(8f) }
@@ -823,6 +943,7 @@ class SettingsSheet(
     // ── Open / Close ──────────────────────────────────────────────────────────
     fun open() {
         if (isOpen) return
+        refreshFromStorage()
 
         isOpen = true
         hasNotifiedClosed = false

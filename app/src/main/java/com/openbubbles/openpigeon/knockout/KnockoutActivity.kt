@@ -20,13 +20,11 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
 import androidx.core.view.ViewCompat
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.godot.GameSessionIPC
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
-import com.openbubbles.openpigeon.settings.SettingsSheet
 import com.openbubbles.openpigeon.util.OpenPigeonLog
 import java.nio.FloatBuffer
 import android.view.animation.OvershootInterpolator
@@ -42,13 +40,12 @@ import kotlin.math.PI
 import android.os.Build
 import android.view.ViewOutlineProvider
 import android.view.ViewGroup
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
 import androidx.core.view.isVisible
-import androidx.core.content.edit
 import androidx.core.graphics.toColorInt
 import androidx.core.view.WindowInsetsCompat
+import com.openbubbles.openpigeon.ui.GameMenuController
+import com.openbubbles.openpigeon.ui.GameMenuPlacement
+import com.openbubbles.openpigeon.ui.RulesPopup
 
 class KnockoutActivity : AppCompatActivity() {
     enum class Mode { Disabled, Aiming, Playing }
@@ -56,23 +53,22 @@ class KnockoutActivity : AppCompatActivity() {
 
     lateinit var sessionId: String
     var gameSessionIPC: GameSessionIPC? = null
-    private lateinit var settingsSheet: SettingsSheet
+    private lateinit var gameMenu: GameMenuController
 
     var table: Long = 0L
     var closing = false
-    @Volatile var mode = Mode.Disabled
+    @Volatile
+    var mode = Mode.Disabled
     var player = 1
     var myPlayerId = ""
     var player1Id = ""
     var player2Id = ""
     var mapMode = 1
     var boardIndex = 0
-    @Volatile var visualBoardIndex = 0f
+    @Volatile
+    var visualBoardIndex = 0f
+    @Volatile
     var darkMode = false
-
-    private var musicEnabled = false
-    private var musicTrack: AudioTrack? = null
-    private var currentMusicTrackPath: String? = null
 
     val pieces = mutableListOf<KnockoutPiece>()
     lateinit var renderer: KnockoutRenderer
@@ -90,26 +86,43 @@ class KnockoutActivity : AppCompatActivity() {
     private var shrinkAnimator: ValueAnimator? = null
 
     private var introPopupDismissed = false
-    @Volatile private var gateAimingForIntro = false
-    @Volatile private var launchButtonVisible = false
-    @Volatile var showAllReplayArrows = false
-    @Volatile var replayArrowAlpha = 1f
-    @Volatile private var lastPlacementWidth = -1
-    @Volatile private var lastPlacementHeight = -1
-    @Volatile private var lastPlacementLaunchVisible = false
-    @Volatile private var lastPlacementHintVisible = false
-    @Volatile private var gameEnded = false
-    @Volatile private var winLossState = ""
-    @Volatile private var pendingReplayWinLossState = ""
-    @Volatile private var initialGameDataApplied = false
-    @Volatile private var gameShownToPlayer = false
+    @Volatile
+    private var gateAimingForIntro = false
+    @Volatile
+    private var launchButtonVisible = false
+    @Volatile
+    var showAllReplayArrows = false
+    @Volatile
+    var replayArrowAlpha = 1f
+    @Volatile
+    private var lastPlacementWidth = -1
+    @Volatile
+    private var lastPlacementHeight = -1
+    @Volatile
+    private var lastPlacementLaunchVisible = false
+    @Volatile
+    private var lastPlacementHintVisible = false
+    @Volatile
+    private var gameEnded = false
+    @Volatile
+    private var winLossState = ""
+    @Volatile
+    private var pendingReplayWinLossState = ""
+    @Volatile
+    private var initialGameDataApplied = false
+    @Volatile
+    private var gameShownToPlayer = false
 
-    @Volatile private var knockoutBoardTopPx = 0f
-    @Volatile private var knockoutBoardBottomPx = 0f
-    @Volatile private var knockoutBottomInsetPx = 0
+    @Volatile
+    private var knockoutBoardTopPx = 0f
+    @Volatile
+    private var knockoutBoardBottomPx = 0f
+    @Volatile
+    private var knockoutBottomInsetPx = 0
 
     private var statusDimView: View? = null
-    @Volatile private var statusDimVisible = false
+    @Volatile
+    private var statusDimVisible = false
 
     private val stateLabelHandler = Handler(Looper.getMainLooper())
     private val playHandler = Handler(Looper.getMainLooper())
@@ -121,15 +134,26 @@ class KnockoutActivity : AppCompatActivity() {
 
     private var lastOutgoingReplay: String? = null
     private var ignoreNextOutgoingReplayEcho = false
-    @Volatile private var powerHintVisible = false
+    @Volatile
+    private var powerHintVisible = false
 
     private enum class StateLabelVisual { Hidden, Waiting, SentWaiting, GameOver }
+
     private var stateLabelVisual = StateLabelVisual.Hidden
 
     external fun createKnockoutTable(): Long
     external fun destroyKnockoutTable(table: Long)
     external fun clearKnockoutPieces(table: Long)
-    external fun makeKnockoutPiece(table: Long, x: Float, y: Float, angle: Float, traceId: Int, player: Int, outputs: FloatBuffer)
+    external fun makeKnockoutPiece(
+        table: Long,
+        x: Float,
+        y: Float,
+        angle: Float,
+        traceId: Int,
+        player: Int,
+        outputs: FloatBuffer
+    )
+
     external fun fireKnockoutPiece(table: Long, traceId: Int, shootDirRadians: Float, power: Float)
     external fun moveKnockoutPiece(table: Long, traceId: Int, x: Float, y: Float, angle: Float)
     external fun setKnockoutMap(table: Long, mapMode: Int, boardScale: Float)
@@ -148,15 +172,13 @@ class KnockoutActivity : AppCompatActivity() {
         }
         applyStateLabelBackground(findViewById(R.id.knockoutStateLabel))
         hideStateLabel()
-        val contentView =
-            findViewById<View>(android.R.id.content)
+        val contentView = findViewById<View>(android.R.id.content)
 
         ViewCompat.setOnApplyWindowInsetsListener(
             contentView
         ) { _, insets ->
             val bottomInset = insets.getInsets(
-                WindowInsetsCompat.Type.navigationBars() or
-                        WindowInsetsCompat.Type.displayCutout()
+                WindowInsetsCompat.Type.navigationBars() or WindowInsetsCompat.Type.displayCutout()
             ).bottom
 
             if (knockoutBottomInsetPx != bottomInset) {
@@ -194,68 +216,67 @@ class KnockoutActivity : AppCompatActivity() {
             setWaterTexture("knockout/water.png")
         }
         rootFrame.addView(
-            waterView, 0,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+            waterView, 0, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
         waterView?.visibility = if (darkMode) View.GONE else View.VISIBLE
-        settingsSheet = SettingsSheet(this, rootFrame)
-        settingsSheet.attachGameAvatar(findViewById(R.id.knockoutGameAvatarAnchor))
-        settingsSheet.attachOpponentAvatar(findViewById(R.id.knockoutOpponentAvatarAnchor))
+        gameMenu = GameMenuController(
+            activity = this,
+            rootFrame = rootFrame,
+            gameId = "knockout",
+            rulesTitle = "Knockout Rules",
+            rulesSections = listOf(
+                RulesPopup.Section(
+                    "Objective",
+                    "Push all of your opponent's pieces out of the playable area before they eliminate yours.",
+                ),
+                RulesPopup.Section(
+                    "How to Play",
+                    "Drag from each of your pieces to choose its direction and power. Assign a move to every remaining piece, then launch or send the round.",
+                ),
+                RulesPopup.Section(
+                    "Rounds",
+                    "Both players' moves are played together. Surviving pieces remain for the next round while the playable area becomes smaller.",
+                ),
+                RulesPopup.Section(
+                    "Obstacles",
+                    "Different maps may contain holes, bumpers, or other obstacles that can redirect or eliminate pieces.",
+                ),
+                RulesPopup.Section(
+                    "Winning",
+                    "The last player with at least one piece remaining wins.",
+                ),
+            ),
+            musicAssetPath = "knockout/knockout.wav",
+            placement = GameMenuPlacement.BOTTOM_END,
+            existingButton = findViewById(
+                R.id.knockoutSettingsButton,
+            ),
+            onDarkModeChanged = { enabled ->
+                darkMode = enabled
+
+                waterView?.visibility = if (enabled) {
+                    View.GONE
+                } else {
+                    View.VISIBLE
+                }
+            },
+        )
+
+        gameMenu.sheet.attachGameAvatar(
+            findViewById(
+                R.id.knockoutGameAvatarAnchor,
+            ),
+        )
+
+        gameMenu.sheet.attachOpponentAvatar(
+            findViewById(
+                R.id.knockoutOpponentAvatarAnchor,
+            ),
+        )
+
         updateAvatarHud()
-        val darkSwitch = SwitchCompat(this)
-        darkSwitch.isChecked = getSharedPreferences("avatar_settings", MODE_PRIVATE)
-            .getBoolean("knockout/dark_mode", false)
-        darkMode = darkSwitch.isChecked
-        darkSwitch.setOnCheckedChangeListener { _, checked ->
-            darkMode = checked
-            getSharedPreferences("avatar_settings", MODE_PRIVATE).edit {
-                    putBoolean("knockout/dark_mode", checked)
-            }
-            waterView?.visibility = if (checked) View.GONE else View.VISIBLE
-        }
-        settingsSheet.addGameControl("Dark Mode", darkSwitch)
-
-        val musicSwitch = SwitchCompat(this)
-        musicSwitch.isChecked = getSharedPreferences("avatar_settings", MODE_PRIVATE)
-            .getBoolean("global/music_enabled", true)
-
-        musicEnabled = musicSwitch.isChecked
-        musicSwitch.setOnCheckedChangeListener { _, checked ->
-            applyMusicEnabled(checked)
-        }
-
-        settingsSheet.addGameControl("Music", musicSwitch)
-
-        if (musicEnabled) {
-            startMusic()
-        }
-
-        applyMapButtonColors()
-        stylePowerHint(findViewById(R.id.knockoutPowerHintLabel))
-
-        val settingsBtn = findViewById<ImageButton>(R.id.knockoutSettingsButton)
-        settingsBtn?.apply {
-            visibility = View.VISIBLE
-            alpha = 0.8f
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            background = null
-            setPadding(dp(6f).toInt(), dp(6f).toInt(), dp(6f).toInt(), dp(6f).toInt())
-
-            val settingsBitmap = loadAssetBitmap("global/settings.png")
-            if (settingsBitmap != null) {
-                setImageBitmap(settingsBitmap)
-            } else {
-                OpenPigeonLog.w("KnockoutNative", "Missing asset: global/settings.png")
-            }
-
-            setOnClickListener {
-                settingsSheet.open()
-            }
-            bringToFront()
-        }
         findViewById<Button>(R.id.knockoutLaunchButton)?.setOnClickListener { launchCurrentAims() }
         findViewById<Button>(R.id.knockoutIntroButton)?.setOnClickListener { dismissIntroPopupAndEnableAiming() }
         surface.setOnTouchListener { _, event -> handleTouch(event) }
@@ -263,7 +284,8 @@ class KnockoutActivity : AppCompatActivity() {
         sessionId = intent.getStringExtra("SESSION") ?: ""
         GameSessionIPC(applicationContext) { ipc ->
             gameSessionIPC = ipc
-            val currentMessage = if (sessionId.isNotEmpty()) ipc.getCurrentMessage(sessionId) else emptyMap()
+            val currentMessage =
+                if (sessionId.isNotEmpty()) ipc.getCurrentMessage(sessionId) else emptyMap()
             if (currentMessage.isNotEmpty()) {
                 ipc.lockMsgHandle(sessionId)
                 ipc.setSuppressNotifications(sessionId, true)
@@ -277,7 +299,13 @@ class KnockoutActivity : AppCompatActivity() {
                 synchronized(this) { handleMessage(currentMessage) }
             } else {
                 synchronized(this) {
-                    handleMessage(mapOf("replay" to KnockoutReplayParser.emptyDefault(), "isYourTurn" to "true", "player" to "1"))
+                    handleMessage(
+                        mapOf(
+                            "replay" to KnockoutReplayParser.emptyDefault(),
+                            "isYourTurn" to "true",
+                            "player" to "1"
+                        )
+                    )
                 }
             }
         }
@@ -286,8 +314,7 @@ class KnockoutActivity : AppCompatActivity() {
                 if (!gameShownToPlayer && !closing && (currentBoard != null || pieces.isNotEmpty())) {
                     OpenPigeonLog.w(
                         "KnockoutNative",
-                        "Fallback reveal triggered. initialGameDataApplied=$initialGameDataApplied " +
-                                "currentBoard=${currentBoard != null} pieces=${pieces.size}"
+                        "Fallback reveal triggered. initialGameDataApplied=$initialGameDataApplied " + "currentBoard=${currentBoard != null} pieces=${pieces.size}"
                     )
 
                     markInitialGameDataApplied()
@@ -296,272 +323,23 @@ class KnockoutActivity : AppCompatActivity() {
         }, 1200L)
     }
 
-    private data class WavLoopData(
-        val pcm: ByteArray,
-        val sampleRate: Int,
-        val channelMask: Int,
-        val encoding: Int,
-        val frameCount: Int
-    ) {
-        override fun equals(other: Any?): Boolean {
-            if (this === other) return true
-            if (javaClass != other?.javaClass) return false
-
-            other as WavLoopData
-
-            if (sampleRate != other.sampleRate) return false
-            if (channelMask != other.channelMask) return false
-            if (encoding != other.encoding) return false
-            if (frameCount != other.frameCount) return false
-            if (!pcm.contentEquals(other.pcm)) return false
-
-            return true
-        }
-
-        override fun hashCode(): Int {
-            var result = sampleRate
-            result = 31 * result + channelMask
-            result = 31 * result + encoding
-            result = 31 * result + frameCount
-            result = 31 * result + pcm.contentHashCode()
-            return result
-        }
-    }
-
-    private fun currentMusicTrack(): String {
-        return "knockout/knockout.wav"
-    }
-
-    private fun applyMusicEnabled(enabled: Boolean) {
-        musicEnabled = enabled
-
-        getSharedPreferences("avatar_settings", MODE_PRIVATE)
-            .edit {
-            putBoolean("global/music_enabled", enabled)
-            }
-
-        if (enabled) {
-            startMusic()
-        } else {
-            stopMusic()
-        }
-    }
-
-    private fun startMusic() {
-        if (!musicEnabled || closing || musicTrack != null) return
-        playMusicTrack()
-    }
-
-    private fun playMusicTrack() {
-        releaseMusicPlayer()
-
-        if (!musicEnabled || closing) return
-
-        val trackPath = currentMusicTrack()
-        currentMusicTrackPath = trackPath
-
-        try {
-            val wav = loadPcm16Wav(trackPath)
-
-            val track = AudioTrack.Builder()
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_GAME)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
-                .setAudioFormat(
-                    AudioFormat.Builder()
-                        .setSampleRate(wav.sampleRate)
-                        .setChannelMask(wav.channelMask)
-                        .setEncoding(wav.encoding)
-                        .build()
-                )
-                .setBufferSizeInBytes(wav.pcm.size)
-                .setTransferMode(AudioTrack.MODE_STATIC)
-                .build()
-
-            track.write(wav.pcm, 0, wav.pcm.size)
-            track.setLoopPoints(0, wav.frameCount, -1)
-            track.setVolume(0.55f)
-
-            musicTrack = track
-            track.play()
-        } catch (e: Exception) {
-            OpenPigeonLog.e("Music", "Unable to play music track $trackPath", e)
-
-            musicEnabled = false
-            currentMusicTrackPath = null
-
-            getSharedPreferences("avatar_settings", MODE_PRIVATE)
-                .edit {
-                    putBoolean("global/music_enabled", false)
-                }
-        }
-    }
-
-    private fun pauseMusic() {
-        try {
-            musicTrack?.let { track ->
-                if (track.playState == AudioTrack.PLAYSTATE_PLAYING) {
-                    track.pause()
-                }
-            }
-        } catch (e: Exception) {
-            OpenPigeonLog.w("Music", "Unable to pause music", e)
-        }
-    }
-
-    private fun resumeMusic() {
-        if (!musicEnabled || closing) return
-
-        try {
-            val track = musicTrack
-
-            if (track == null) {
-                startMusic()
-            } else if (track.playState != AudioTrack.PLAYSTATE_PLAYING) {
-                track.play()
-            }
-        } catch (e: Exception) {
-            OpenPigeonLog.w("Music", "Unable to resume music, restarting", e)
-            releaseMusicPlayer()
-            startMusic()
-        }
-    }
-
-    private fun stopMusic() {
-        releaseMusicPlayer()
-    }
-
-    private fun releaseMusicPlayer() {
-        val track = musicTrack ?: return
-        musicTrack = null
-        currentMusicTrackPath = null
-
-        try {
-            track.pause()
-        } catch (_: Exception) {
-        }
-
-        track.release()
-    }
-
-    private fun loadPcm16Wav(path: String): WavLoopData {
-        val bytes = assets.open(path).use { it.readBytes() }
-
-        if (bytes.size < 44 || chunkName(bytes, 0) != "RIFF" || chunkName(bytes, 8) != "WAVE") {
-            throw IllegalArgumentException("Invalid WAV file: $path")
-        }
-
-        var offset = 12
-        var audioFormat = 0
-        var channelCount = 0
-        var sampleRate = 0
-        var bitsPerSample = 0
-        var dataStart = -1
-        var dataSize = 0
-
-        while (offset + 8 <= bytes.size) {
-            val name = chunkName(bytes, offset)
-            val size = readLeInt(bytes, offset + 4)
-            val start = offset + 8
-
-            if (start + size > bytes.size) break
-
-            when (name) {
-                "fmt " -> {
-                    audioFormat = readLeShort(bytes, start)
-                    channelCount = readLeShort(bytes, start + 2)
-                    sampleRate = readLeInt(bytes, start + 4)
-                    bitsPerSample = readLeShort(bytes, start + 14)
-                }
-
-                "data" -> {
-                    dataStart = start
-                    dataSize = size
-                }
-            }
-
-            offset = start + size + (size and 1)
-        }
-
-        if (audioFormat != 1 || bitsPerSample != 16 || channelCount !in 1..2 || dataStart < 0 || dataSize <= 0) {
-            throw IllegalArgumentException("WAV must be 16-bit PCM mono/stereo: $path")
-        }
-
-        val pcm = bytes.copyOfRange(dataStart, dataStart + dataSize)
-        val frameSize = channelCount * 2
-        val frameCount = pcm.size / frameSize
-        val channelMask = if (channelCount == 1) {
-            AudioFormat.CHANNEL_OUT_MONO
-        } else {
-            AudioFormat.CHANNEL_OUT_STEREO
-        }
-
-        return WavLoopData(
-            pcm = pcm,
-            sampleRate = sampleRate,
-            channelMask = channelMask,
-            encoding = AudioFormat.ENCODING_PCM_16BIT,
-            frameCount = frameCount
-        )
-    }
-
-    private fun readLeShort(bytes: ByteArray, offset: Int): Int {
-        return (bytes[offset].toInt() and 0xff) or
-                ((bytes[offset + 1].toInt() and 0xff) shl 8)
-    }
-
-    private fun readLeInt(bytes: ByteArray, offset: Int): Int {
-        return (bytes[offset].toInt() and 0xff) or
-                ((bytes[offset + 1].toInt() and 0xff) shl 8) or
-                ((bytes[offset + 2].toInt() and 0xff) shl 16) or
-                ((bytes[offset + 3].toInt() and 0xff) shl 24)
-    }
-
-    private fun chunkName(bytes: ByteArray, offset: Int): String {
-        return String(
-            byteArrayOf(
-                bytes[offset],
-                bytes[offset + 1],
-                bytes[offset + 2],
-                bytes[offset + 3]
-            )
-        )
-    }
-
     private fun updateKnockoutSettingsButtonPlacement() {
-        val button =
-            findViewById<ImageButton>(
-                R.id.knockoutSettingsButton
-            ) ?: return
+        val button = findViewById<ImageButton>(
+            R.id.knockoutSettingsButton
+        ) ?: return
 
-        val lp =
-            button.layoutParams as? FrameLayout.LayoutParams
-                ?: return
+        val lp = button.layoutParams as? FrameLayout.LayoutParams ?: return
 
-        val desiredBottomMargin =
-            knockoutBottomInsetPx +
-                    dp(10f).toInt()
+        val desiredBottomMargin = knockoutBottomInsetPx + dp(10f).toInt()
 
-        val desiredRightMargin =
-            dp(10f).toInt()
+        val desiredRightMargin = dp(10f).toInt()
 
-        if (
-            lp.gravity !=
-            (Gravity.BOTTOM or Gravity.END) ||
-            lp.bottomMargin != desiredBottomMargin ||
-            lp.rightMargin != desiredRightMargin
-        ) {
-            lp.gravity =
-                Gravity.BOTTOM or Gravity.END
+        if (lp.gravity != (Gravity.BOTTOM or Gravity.END) || lp.bottomMargin != desiredBottomMargin || lp.rightMargin != desiredRightMargin) {
+            lp.gravity = Gravity.BOTTOM or Gravity.END
 
-            lp.bottomMargin =
-                desiredBottomMargin
+            lp.bottomMargin = desiredBottomMargin
 
-            lp.rightMargin =
-                desiredRightMargin
+            lp.rightMargin = desiredRightMargin
 
             lp.topMargin = 0
 
@@ -572,10 +350,9 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun scheduleKnockoutBoardSafeAreaUpdate() {
-        val root =
-            findViewById<View>(
-                R.id.knockoutRoot
-            ) ?: return
+        val root = findViewById<View>(
+            R.id.knockoutRoot
+        ) ?: return
 
         root.post {
             if (!closing) {
@@ -585,35 +362,29 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun updateKnockoutBoardSafeArea() {
-        val root =
-            findViewById<View>(
-                R.id.knockoutRoot
-            ) ?: return
+        val root = findViewById<View>(
+            R.id.knockoutRoot
+        ) ?: return
 
-        val myAvatar =
-            findViewById<View>(
-                R.id.knockoutGameAvatarAnchor
-            )
+        val myAvatar = findViewById<View>(
+            R.id.knockoutGameAvatarAnchor
+        )
 
-        val opponentAvatar =
-            findViewById<View>(
-                R.id.knockoutOpponentAvatarAnchor
-            )
+        val opponentAvatar = findViewById<View>(
+            R.id.knockoutOpponentAvatarAnchor
+        )
 
-        val settingsButton =
-            findViewById<View>(
-                R.id.knockoutSettingsButton
-            )
+        val settingsButton = findViewById<View>(
+            R.id.knockoutSettingsButton
+        )
 
-        val powerHint =
-            findViewById<View>(
-                R.id.knockoutPowerHintLabel
-            )
+        val powerHint = findViewById<View>(
+            R.id.knockoutPowerHintLabel
+        )
 
-        val launchButton =
-            findViewById<View>(
-                R.id.knockoutLaunchButton
-            )
+        val launchButton = findViewById<View>(
+            R.id.knockoutLaunchButton
+        )
 
         if (root.height <= 0) {
             return
@@ -625,41 +396,27 @@ class KnockoutActivity : AppCompatActivity() {
         fun bottomRelativeToRoot(
             view: View?,
         ): Float {
-            if (
-                view == null ||
-                view.height <= 0
-            ) {
+            if (view == null || view.height <= 0) {
                 return 0f
             }
 
             val location = IntArray(2)
             view.getLocationOnScreen(location)
 
-            return (
-                    location[1] -
-                            rootLocation[1] +
-                            view.height
-                    ).toFloat()
+            return (location[1] - rootLocation[1] + view.height).toFloat()
         }
 
         fun topRelativeToRoot(
             view: View?,
         ): Float? {
-            if (
-                view == null ||
-                view.visibility != View.VISIBLE ||
-                view.height <= 0
-            ) {
+            if (view == null || view.visibility != View.VISIBLE || view.height <= 0) {
                 return null
             }
 
             val location = IntArray(2)
             view.getLocationOnScreen(location)
 
-            return (
-                    location[1] -
-                            rootLocation[1]
-                    ).toFloat()
+            return (location[1] - rootLocation[1]).toFloat()
         }
 
         val avatarBottom = maxOf(
@@ -668,37 +425,26 @@ class KnockoutActivity : AppCompatActivity() {
             dp(84f),
         )
 
-        knockoutBoardTopPx =
-            avatarBottom + dp(8f)
+        knockoutBoardTopPx = avatarBottom + dp(8f)
 
-        val bottomAboveSystemBar =
-            root.height.toFloat() -
-                    knockoutBottomInsetPx.toFloat() -
-                    dp(16f)
+        val bottomAboveSystemBar = root.height.toFloat() - knockoutBottomInsetPx.toFloat() - dp(16f)
 
-        val bottomCandidates =
-            mutableListOf(bottomAboveSystemBar)
+        val bottomCandidates = mutableListOf(bottomAboveSystemBar)
 
         topRelativeToRoot(settingsButton)?.let { top ->
-            bottomCandidates +=
-                top - dp(10f)
+            bottomCandidates += top - dp(10f)
         }
 
         topRelativeToRoot(powerHint)?.let { top ->
-            bottomCandidates +=
-                top - dp(12f)
+            bottomCandidates += top - dp(12f)
         }
 
         topRelativeToRoot(launchButton)?.let { top ->
-            bottomCandidates +=
-                top - dp(12f)
+            bottomCandidates += top - dp(12f)
         }
 
         knockoutBoardBottomPx =
-            (
-                    bottomCandidates.minOrNull()
-                        ?: bottomAboveSystemBar
-                    ).coerceAtLeast(
+            (bottomCandidates.minOrNull() ?: bottomAboveSystemBar).coerceAtLeast(
                     knockoutBoardTopPx + 1f
                 )
     }
@@ -708,18 +454,12 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     fun knockoutBoardSafeBottomPx(): Float {
-        val rootHeight =
-            findViewById<View>(
-                R.id.knockoutRoot
-            )?.height ?: 0
+        val rootHeight = findViewById<View>(
+            R.id.knockoutRoot
+        )?.height ?: 0
 
-        return knockoutBoardBottomPx
-            .takeIf { it > 0f }
-            ?: (
-                    rootHeight.toFloat() -
-                            knockoutBottomInsetPx.toFloat() -
-                            dp(16f)
-                    ).coerceAtLeast(
+        return knockoutBoardBottomPx.takeIf { it > 0f }
+            ?: (rootHeight.toFloat() - knockoutBottomInsetPx.toFloat() - dp(16f)).coerceAtLeast(
                     knockoutBoardSafeTopPx() + 1f
                 )
     }
@@ -727,8 +467,7 @@ class KnockoutActivity : AppCompatActivity() {
     private fun handleMessage(msg: Map<String, String>) {
         if (mode == Mode.Playing && msg["winner"].isNullOrBlank()) {
             OpenPigeonLog.w(
-                "KnockoutNative",
-                "Ignoring message update while native replay is playing"
+                "KnockoutNative", "Ignoring message update while native replay is playing"
             )
             return
         }
@@ -813,31 +552,25 @@ class KnockoutActivity : AppCompatActivity() {
         val chunks = value.chunked(2800)
         chunks.forEachIndexed { index, chunk ->
             OpenPigeonLog.i(
-                "KnockoutNative",
-                "$prefix [${index + 1}/${chunks.size}] $chunk"
+                "KnockoutNative", "$prefix [${index + 1}/${chunks.size}] $chunk"
             )
         }
     }
 
     private fun logIncomingGameData(msg: Map<String, String>) {
         val replay = msg["replay"].orEmpty()
-        val nonReplay = msg.entries
-            .filter { it.key != "replay" }
-            .sortedBy { it.key }
+        val nonReplay = msg.entries.filter { it.key != "replay" }.sortedBy { it.key }
             .joinToString(" | ") { "${it.key}=${it.value}" }
 
         OpenPigeonLog.i("KnockoutNative", "========== incoming game data ==========")
         logLong("incoming nonReplay", nonReplay)
 
         OpenPigeonLog.i(
-            "KnockoutNative",
-            "incoming replay length=${replay.length} isBlank=${replay.isBlank()}"
+            "KnockoutNative", "incoming replay length=${replay.length} isBlank=${replay.isBlank()}"
         )
         logLong("incoming replay raw", replay)
 
-        val rawTokens = replay
-            .split("|")
-            .filter { it.isNotBlank() }
+        val rawTokens = replay.split("|").filter { it.isNotBlank() }
 
         OpenPigeonLog.i("KnockoutNative", "incoming replay tokenCount=${rawTokens.size}")
 
@@ -846,14 +579,11 @@ class KnockoutActivity : AppCompatActivity() {
             val body = token.substringAfter(":", missingDelimiterValue = "")
 
             OpenPigeonLog.i(
-                "KnockoutNative",
-                "replay token[$tokenIndex] type=$type bodyLength=${body.length}"
+                "KnockoutNative", "replay token[$tokenIndex] type=$type bodyLength=${body.length}"
             )
 
             if (type == "board") {
-                val parts = body
-                    .split("#")
-                    .filter { it.isNotBlank() }
+                val parts = body.split("#").filter { it.isNotBlank() }
 
                 val explicitBoardIndex = parts.firstOrNull()?.toIntOrNull()
                 val pieceParts = if (explicitBoardIndex != null) {
@@ -871,8 +601,7 @@ class KnockoutActivity : AppCompatActivity() {
 
                 OpenPigeonLog.i(
                     "KnockoutNative",
-                    "board token[$tokenIndex] explicitBoardIndex=${explicitBoardIndex ?: "missing"} " +
-                            "rawPartCount=${parts.size} pieceCount=${pieceParts.size} p1=$p1Count p2=$p2Count"
+                    "board token[$tokenIndex] explicitBoardIndex=${explicitBoardIndex ?: "missing"} " + "rawPartCount=${parts.size} pieceCount=${pieceParts.size} p1=$p1Count p2=$p2Count"
                 )
 
                 if (pieceParts.size != 8) {
@@ -886,8 +615,7 @@ class KnockoutActivity : AppCompatActivity() {
                     val fields = piece.split(",")
                     OpenPigeonLog.i(
                         "KnockoutNative",
-                        "board token[$tokenIndex] piece[$pieceIndex] " +
-                                "fieldCount=${fields.size} raw=$piece"
+                        "board token[$tokenIndex] piece[$pieceIndex] " + "fieldCount=${fields.size} raw=$piece"
                     )
                 }
             }
@@ -917,7 +645,11 @@ class KnockoutActivity : AppCompatActivity() {
                 }
             }
         }.onFailure { error ->
-            OpenPigeonLog.e("KnockoutNative", "Replay parse failed while logging incoming game data", error)
+            OpenPigeonLog.e(
+                "KnockoutNative",
+                "Replay parse failed while logging incoming game data",
+                error
+            )
         }
 
         OpenPigeonLog.i("KnockoutNative", "======== end incoming game data ========")
@@ -930,13 +662,21 @@ class KnockoutActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+
         waterView?.onResume()
-        resumeMusic()
+
+        if (::gameMenu.isInitialized) {
+            gameMenu.onResume()
+        }
     }
 
     override fun onPause() {
-        pauseMusic()
+        if (::gameMenu.isInitialized) {
+            gameMenu.onPause()
+        }
+
         waterView?.onPause()
+
         super.onPause()
     }
 
@@ -989,9 +729,9 @@ class KnockoutActivity : AppCompatActivity() {
         val oppAvatarKey = if (player == 1) "avatar2" else "avatar1"
 
         msg[oppAvatarKey]?.takeIf { it.isNotBlank() }?.let { avatarStr ->
-            runOnUiThread {
-                settingsSheet.applyOpponentAvatarString(avatarStr)
-            }
+            gameMenu.sheet.applyOpponentAvatarString(
+                avatarStr,
+            )
         }
     }
 
@@ -1069,7 +809,8 @@ class KnockoutActivity : AppCompatActivity() {
 
         val boardIndexInTokens = pendingTokens.indexOfFirst { it is KnockoutReplayToken.BoardToken }
         if (boardIndexInTokens < 0) {
-            val fallback = currentBoard ?: KnockoutReplayParser.parse(KnockoutReplayParser.emptyDefault()).boards.first()
+            val fallback = currentBoard
+                ?: KnockoutReplayParser.parse(KnockoutReplayParser.emptyDefault()).boards.first()
             buildBoard(fallback)
             setModeForBoard(fallback)
             return
@@ -1124,26 +865,19 @@ class KnockoutActivity : AppCompatActivity() {
         val messagePlayer = lastMessage["player"]?.toIntOrNull()
 
         val isYourTurn =
-            lastMessage["isYourTurn"] == "true" ||
-                    lastMessage["isYourTurn"] == "1" ||
-                    lastMessage["isYourTurn"]?.equals("yes", ignoreCase = true) == true ||
-                    (
-                            lastMessage["isYourTurn"].isNullOrBlank() &&
-                                    messagePlayer != null &&
-                                    messagePlayer != player
-                            )
+            lastMessage["isYourTurn"] == "true" || lastMessage["isYourTurn"] == "1" || lastMessage["isYourTurn"]?.equals(
+                "yes",
+                ignoreCase = true
+            ) == true || (lastMessage["isYourTurn"].isNullOrBlank() && messagePlayer != null && messagePlayer != player)
 
         val joiningOpenSeat = isJoiningOpenSeat(lastMessage)
 
-        val canAim = (
-                missingPlayers.contains(player) &&
-                        (isYourTurn || introPopupDismissed || joiningOpenSeat)
-                )
+        val canAim =
+            (missingPlayers.contains(player) && (isYourTurn || introPopupDismissed || joiningOpenSeat))
 
         OpenPigeonLog.i(
             "KnockoutNative",
-            "setModeForBoard player=$player missing=$missingPlayers isYourTurn=$isYourTurn " +
-                    "introDismissed=$introPopupDismissed joiningOpenSeat=$joiningOpenSeat canAim=$canAim"
+            "setModeForBoard player=$player missing=$missingPlayers isYourTurn=$isYourTurn " + "introDismissed=$introPopupDismissed joiningOpenSeat=$joiningOpenSeat canAim=$canAim"
         )
 
         if (gateAimingForIntro) {
@@ -1178,7 +912,15 @@ class KnockoutActivity : AppCompatActivity() {
             board.pieces.forEachIndexed { idx, state ->
                 val piece = KnockoutPiece(idx, state.player, state, p1Bitmap, p2Bitmap)
                 pieces += piece
-                makeKnockoutPiece(table, state.x, state.y, state.rotation, idx, state.player, piece.buffer)
+                makeKnockoutPiece(
+                    table,
+                    state.x,
+                    state.y,
+                    state.rotation,
+                    idx,
+                    state.player,
+                    piece.buffer
+                )
             }
         }
     }
@@ -1205,10 +947,7 @@ class KnockoutActivity : AppCompatActivity() {
             root.animate().cancel()
             root.visibility = View.VISIBLE
 
-            root.animate()
-                .alpha(1f)
-                .setDuration(120L)
-                .start()
+            root.animate().alpha(1f).setDuration(120L).start()
         }
     }
 
@@ -1245,19 +984,13 @@ class KnockoutActivity : AppCompatActivity() {
             if (isPieceInKillZone(piece)) {
                 OpenPigeonLog.i(
                     "KnockoutNative",
-                    "KILL trace=${piece.traceId} player=${piece.player} " +
-                            "map=$mapMode x=${piece.x} y=${piece.y} board=$boardIndex " +
-                            "visualBoardIndex=$visualBoardIndex limit=${currentKillLimit()}"
+                    "KILL trace=${piece.traceId} player=${piece.player} " + "map=$mapMode x=${piece.x} y=${piece.y} board=$boardIndex " + "visualBoardIndex=$visualBoardIndex limit=${currentKillLimit()}"
                 )
 
                 piece.startKillAnimation(now)
 
                 moveKnockoutPiece(
-                    table,
-                    piece.traceId,
-                    10000f + piece.traceId * 100f,
-                    10000f,
-                    0f
+                    table, piece.traceId, 10000f + piece.traceId * 100f, 10000f, 0f
                 )
             }
         }
@@ -1270,17 +1003,14 @@ class KnockoutActivity : AppCompatActivity() {
         board.copy(pieces = board.pieces.map { it.copy(x = it.x * factor, y = it.y * factor) })
 
     private fun currentBoardScaleForKill(): Float {
-        return (1f - visualBoardIndex.coerceAtLeast(0f) * 0.1f)
-            .coerceAtLeast(0.3f)
+        return (1f - visualBoardIndex.coerceAtLeast(0f) * 0.1f).coerceAtLeast(0.3f)
     }
 
     private fun syncNativeMap() {
         if (closing || table == 0L) return
 
         setKnockoutMap(
-            table,
-            mapMode,
-            currentBoardScaleForKill()
+            table, mapMode, currentBoardScaleForKill()
         )
     }
 
@@ -1296,11 +1026,9 @@ class KnockoutActivity : AppCompatActivity() {
     private fun isPieceInKillZone(piece: KnockoutPiece): Boolean {
         val limit = currentKillLimit()
 
-        return piece.x < -limit ||
-                piece.x > limit ||
-                piece.y < -limit ||
-                piece.y > limit ||
-                isPieceInMap2CenterHole(piece)
+        return piece.x < -limit || piece.x > limit || piece.y < -limit || piece.y > limit || isPieceInMap2CenterHole(
+            piece
+        )
     }
 
     private fun currentMap2CenterHoleRadius(): Float {
@@ -1318,8 +1046,7 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun firePreparedBoard(
-        source: PlaySource,
-        fireStates: List<Pair<Int, KnockoutPieceState>>
+        source: PlaySource, fireStates: List<Pair<Int, KnockoutPieceState>>
     ) {
         if (closing || table == 0L) return
 
@@ -1365,8 +1092,7 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun revealArrowsThenFire(board: KnockoutBoard, source: PlaySource) {
-        val fireStates = board.pieces
-            .mapIndexedNotNull { idx, state ->
+        val fireStates = board.pieces.mapIndexedNotNull { idx, state ->
                 if (state.power > KnockoutConstants.READY_POWER_EPS) idx to state else null
             }
 
@@ -1462,17 +1188,20 @@ class KnockoutActivity : AppCompatActivity() {
     private fun launchCurrentAims() {
         if (isGameOver() || mode != Mode.Aiming || closing || table == 0L) return
 
-        val baseBoard = currentBoard
-            ?: KnockoutReplayParser.boardFromLivePieces(boardIndex, pieces, zeroPower = false)
+        val baseBoard = currentBoard ?: KnockoutReplayParser.boardFromLivePieces(
+            boardIndex,
+            pieces,
+            zeroPower = false
+        )
 
         val launchBoard = KnockoutReplayParser.applyLiveAimsToBoard(baseBoard, player, pieces)
         currentBoard = launchBoard
 
         OpenPigeonLog.i(
             "KnockoutNative",
-            "launchCurrentAims player=$player boardIndex=${launchBoard.index} " +
-                    "complete=${KnockoutReplayParser.isBoardComplete(launchBoard)} " +
-                    "stagedTokens=${localOutgoingTokens.size}"
+            "launchCurrentAims player=$player boardIndex=${launchBoard.index} " + "complete=${
+                KnockoutReplayParser.isBoardComplete(launchBoard)
+            } " + "stagedTokens=${localOutgoingTokens.size}"
         )
 
         if (!KnockoutReplayParser.isBoardComplete(launchBoard)) {
@@ -1498,7 +1227,8 @@ class KnockoutActivity : AppCompatActivity() {
         if (mode != Mode.Playing) return
 
         pieces.forEach { it.syncFromNative() }
-        val inferredPost = KnockoutReplayParser.boardFromLivePieces(boardIndex + 1, pieces, zeroPower = true)
+        val inferredPost =
+            KnockoutReplayParser.boardFromLivePieces(boardIndex + 1, pieces, zeroPower = true)
 
         when (playSource) {
             PlaySource.AutoReplay -> finishAutoReplayRound(inferredPost)
@@ -1521,8 +1251,7 @@ class KnockoutActivity : AppCompatActivity() {
 
         OpenPigeonLog.i(
             "KnockoutNative",
-            "finishAutoReplayRound firstQueued=${firstQueuedBoard != null} " +
-                    "hasAnotherQueued=$hasAnotherQueuedBoard inferredIndex=${inferredPost.index}"
+            "finishAutoReplayRound firstQueued=${firstQueuedBoard != null} " + "hasAnotherQueued=$hasAnotherQueuedBoard inferredIndex=${inferredPost.index}"
         )
 
         if (firstQueuedBoard != null && hasAnotherQueuedBoard) {
@@ -1614,8 +1343,7 @@ class KnockoutActivity : AppCompatActivity() {
 
         OpenPigeonLog.i(
             "KnockoutNative",
-            "finishLocalLaunchRound stagedTokens=${localOutgoingTokens.size} " +
-                    "postIndex=${postBoard.index} nextSetupPieces=${nextSetup.pieces.size}"
+            "finishLocalLaunchRound stagedTokens=${localOutgoingTokens.size} " + "postIndex=${postBoard.index} nextSetupPieces=${nextSetup.pieces.size}"
         )
 
         applyPostBoardAndShrink(nextSetup) {
@@ -1782,19 +1510,15 @@ class KnockoutActivity : AppCompatActivity() {
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                selectedPiece = pieces
-                    .filter { it.player == player && it.alive }
-                    .minByOrNull { p ->
+                selectedPiece = pieces.filter { it.player == player && it.alive }.minByOrNull { p ->
                         val dx = p.x - wx
                         val dy = p.y - wy
                         dx * dx + dy * dy
-                    }
-                    ?.takeIf { it.containsWorldPoint(wx, wy) }
+                    }?.takeIf { it.containsWorldPoint(wx, wy) }
 
                 OpenPigeonLog.i(
                     "KnockoutNative",
-                    "touch down world=($wx,$wy) selected=${selectedPiece?.traceId} " +
-                            "player=$player mine=${pieces.count { it.player == player && it.alive }}"
+                    "touch down world=($wx,$wy) selected=${selectedPiece?.traceId} " + "player=$player mine=${pieces.count { it.player == player && it.alive }}"
                 )
 
                 selectedPiece?.setAimFromWorld(wx, wy)
@@ -1814,7 +1538,11 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun currentBoardWithLiveAims(): KnockoutBoard {
-        val base = currentBoard ?: KnockoutReplayParser.boardFromLivePieces(boardIndex, pieces, zeroPower = false)
+        val base = currentBoard ?: KnockoutReplayParser.boardFromLivePieces(
+            boardIndex,
+            pieces,
+            zeroPower = false
+        )
         return KnockoutReplayParser.applyLiveAimsToBoard(base, player, pieces)
     }
 
@@ -1839,10 +1567,8 @@ class KnockoutActivity : AppCompatActivity() {
         }
 
         root.addView(
-            dim,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+            dim, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
 
@@ -1866,22 +1592,15 @@ class KnockoutActivity : AppCompatActivity() {
 
                 dim.bringToFront()
 
-                dim.animate()
-                    .alpha(1f)
-                    .setDuration(180L)
-                    .start()
+                dim.animate().alpha(1f).setDuration(180L).start()
             } else {
                 statusDimVisible = false
 
-                dim.animate()
-                    .alpha(0f)
-                    .setDuration(160L)
-                    .withEndAction {
+                dim.animate().alpha(0f).setDuration(160L).withEndAction {
                         if (!statusDimVisible) {
                             dim.visibility = View.GONE
                         }
-                    }
-                    .start()
+                    }.start()
             }
         }
     }
@@ -1891,15 +1610,14 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun winLossStateForBoard(board: KnockoutBoard): String {
-        val alivePlayers = board.pieces
-            .map { it.player }
-            .toSet()
+        val alivePlayers = board.pieces.map { it.player }.toSet()
 
         return when {
             alivePlayers.isEmpty() -> "0" // draw
             alivePlayers.size == 1 -> {
                 if (alivePlayers.first() == player) "1" else "-1"
             }
+
             else -> ""
         }
     }
@@ -1966,10 +1684,9 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun finishPendingReplayGameOverIfNeeded(board: KnockoutBoard): Boolean {
-        val state = pendingReplayWinLossState
-            .takeIf { it.isNotBlank() }
-            ?: winLossStateForBoard(board).takeIf { it.isNotBlank() }
-            ?: return false
+        val state = pendingReplayWinLossState.takeIf { it.isNotBlank() } ?: winLossStateForBoard(
+            board
+        ).takeIf { it.isNotBlank() } ?: return false
 
         pendingReplayWinLossState = ""
 
@@ -2000,14 +1717,12 @@ class KnockoutActivity : AppCompatActivity() {
             when (mode) {
                 Mode.Aiming -> {
                     val mine = pieces.filter { it.player == player && it.alive }
-                    val allMinePowered = mine.isNotEmpty() &&
-                            mine.all { it.power > KnockoutConstants.READY_POWER_EPS }
+                    val allMinePowered =
+                        mine.isNotEmpty() && mine.all { it.power > KnockoutConstants.READY_POWER_EPS }
 
                     val ready = allMinePowered && !gateAimingForIntro
-                    val showPowerHint = mine.isNotEmpty() &&
-                            !allMinePowered &&
-                            !gateAimingForIntro &&
-                            !sentWaitingSequenceActive
+                    val showPowerHint =
+                        mine.isNotEmpty() && !allMinePowered && !gateAimingForIntro && !sentWaitingSequenceActive
 
                     button.text = currentReadyActionText()
 
@@ -2050,9 +1765,7 @@ class KnockoutActivity : AppCompatActivity() {
 
     private fun stateLabelDp(value: Float): Int {
         return TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP,
-            value,
-            resources.displayMetrics
+            TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics
         ).toInt()
     }
 
@@ -2220,10 +1933,7 @@ class KnockoutActivity : AppCompatActivity() {
 
             val sentCheck = SpannableString("Sent ✔")
             sentCheck.setSpan(
-                ForegroundColorSpan(0xFF7257D8.toInt()),
-                5,
-                6,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                ForegroundColorSpan(0xFF7257D8.toInt()), 5, 6, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
             )
 
             label.text = sentCheck
@@ -2304,16 +2014,12 @@ class KnockoutActivity : AppCompatActivity() {
     private fun setPowerHintVisible(
         visible: Boolean,
     ) {
-        val label =
-            findViewById<TextView>(
-                R.id.knockoutPowerHintLabel
-            ) ?: return
+        val label = findViewById<TextView>(
+            R.id.knockoutPowerHintLabel
+        ) ?: return
 
         if (visible) {
-            if (
-                powerHintVisible &&
-                label.isVisible
-            ) {
+            if (powerHintVisible && label.isVisible) {
                 scheduleKnockoutBoardSafeAreaUpdate()
                 return
             }
@@ -2327,13 +2033,9 @@ class KnockoutActivity : AppCompatActivity() {
 
             scheduleKnockoutBoardSafeAreaUpdate()
 
-            label.animate()
-                .alpha(1f)
-                .setDuration(220L)
-                .withEndAction {
+            label.animate().alpha(1f).setDuration(220L).withEndAction {
                     scheduleKnockoutBoardSafeAreaUpdate()
-                }
-                .start()
+                }.start()
         } else {
             powerHintVisible = false
 
@@ -2370,35 +2072,25 @@ class KnockoutActivity : AppCompatActivity() {
                     return@post
                 }
 
-                val postedStartTranslation =
-                    if (button.height > 0) {
-                        button.height.toFloat() + dp(48f)
-                    } else {
-                        dp(96f)
-                    }
+                val postedStartTranslation = if (button.height > 0) {
+                    button.height.toFloat() + dp(48f)
+                } else {
+                    dp(96f)
+                }
 
-                button.translationY =
-                    postedStartTranslation
+                button.translationY = postedStartTranslation
 
                 button.alpha = 1f
 
                 scheduleKnockoutBoardSafeAreaUpdate()
 
-                button.animate()
-                    .translationY(0f)
-                    .alpha(1f)
-                    .setDuration(280L)
-                    .withEndAction {
+                button.animate().translationY(0f).alpha(1f).setDuration(280L).withEndAction {
                         scheduleKnockoutBoardSafeAreaUpdate()
-                    }
-                    .start()
+                    }.start()
             }
         } else if (button.isVisible) {
-            button.animate()
-                .translationY(button.height.toFloat() + dp(48f))
-                .alpha(0f)
-                .setDuration(220L)
-                .withEndAction {
+            button.animate().translationY(button.height.toFloat() + dp(48f)).alpha(0f)
+                .setDuration(220L).withEndAction {
                     if (!launchButtonVisible) {
                         button.visibility = View.GONE
                         button.translationY = 0f
@@ -2406,8 +2098,7 @@ class KnockoutActivity : AppCompatActivity() {
 
                         scheduleKnockoutBoardSafeAreaUpdate()
                     }
-                }
-                .start()
+                }.start()
         } else {
             button.visibility = View.GONE
             button.translationY = 0f
@@ -2429,12 +2120,7 @@ class KnockoutActivity : AppCompatActivity() {
             return
         }
 
-        if (
-            lastPlacementWidth == width &&
-            lastPlacementHeight == height &&
-            lastPlacementLaunchVisible == launchVisible &&
-            lastPlacementHintVisible == hintVisible
-        ) {
+        if (lastPlacementWidth == width && lastPlacementHeight == height && lastPlacementLaunchVisible == launchVisible && lastPlacementHintVisible == hintVisible) {
             return
         }
 
@@ -2447,20 +2133,11 @@ class KnockoutActivity : AppCompatActivity() {
             val button = findViewById<Button>(R.id.knockoutLaunchButton)
             val hint = findViewById<TextView>(R.id.knockoutPowerHintLabel)
 
-            val bottomMargin =
-                knockoutBottomInsetPx +
-                        dp(34f).toInt()
+            val bottomMargin = knockoutBottomInsetPx + dp(34f).toInt()
 
             if (button != null && button.isVisible) {
                 val lp = button.layoutParams as? FrameLayout.LayoutParams
-                if (
-                    lp != null &&
-                    (
-                            lp.gravity != (Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL) ||
-                                    lp.bottomMargin != bottomMargin ||
-                                    lp.topMargin != 0
-                            )
-                ) {
+                if (lp != null && (lp.gravity != (Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL) || lp.bottomMargin != bottomMargin || lp.topMargin != 0)) {
                     lp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
                     lp.bottomMargin = bottomMargin
                     lp.topMargin = 0
@@ -2472,14 +2149,7 @@ class KnockoutActivity : AppCompatActivity() {
 
             if (hint != null && hint.isVisible) {
                 val lp = hint.layoutParams as? FrameLayout.LayoutParams
-                if (
-                    lp != null &&
-                    (
-                            lp.gravity != (Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL) ||
-                                    lp.bottomMargin != bottomMargin ||
-                                    lp.topMargin != 0
-                            )
-                ) {
+                if (lp != null && (lp.gravity != (Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL) || lp.bottomMargin != bottomMargin || lp.topMargin != 0)) {
                     lp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
                     lp.bottomMargin = bottomMargin
                     lp.topMargin = 0
@@ -2610,12 +2280,8 @@ class KnockoutActivity : AppCompatActivity() {
             card.scaleY = 0f
             card.alpha = 1f
 
-            card.animate()
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(400L)
-                .setInterpolator(OvershootInterpolator(1.05f))
-                .start()
+            card.animate().scaleX(1f).scaleY(1f).setDuration(400L)
+                .setInterpolator(OvershootInterpolator(1.05f)).start()
         }
     }
 
@@ -2639,8 +2305,7 @@ class KnockoutActivity : AppCompatActivity() {
         hideIntroPopup()
 
         OpenPigeonLog.i(
-            "KnockoutNative",
-            "Intro dismissed. player=$player currentBoard=${currentBoard != null}"
+            "KnockoutNative", "Intro dismissed. player=$player currentBoard=${currentBoard != null}"
         )
 
         currentBoard?.let { board ->
@@ -2830,7 +2495,10 @@ class KnockoutActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         closing = true
-        stopMusic()
+
+        if (::gameMenu.isInitialized) {
+            gameMenu.destroy()
+        }
 
         runCatching {
             shrinkAnimator?.cancel()
@@ -2845,19 +2513,15 @@ class KnockoutActivity : AppCompatActivity() {
             showAllReplayArrows = false
             replayArrowAlpha = 0f
         }.onFailure {
-            OpenPigeonLog.w("KnockoutNative", "Animation cleanup failed during destroy", it)
+            OpenPigeonLog.w(
+                "KnockoutNative",
+                "Animation cleanup failed during destroy",
+                it,
+            )
         }
 
         if (::renderer.isInitialized) {
             renderer.shutdown()
-        }
-
-        runCatching {
-            if (::settingsSheet.isInitialized) {
-                settingsSheet.detach()
-            }
-        }.onFailure {
-            OpenPigeonLog.w("KnockoutNative", "SettingsSheet detach failed during destroy", it)
         }
 
         synchronized(this) {
@@ -2868,15 +2532,26 @@ class KnockoutActivity : AppCompatActivity() {
                 runCatching {
                     destroyKnockoutTable(old)
                 }.onFailure {
-                    OpenPigeonLog.w("KnockoutNative", "Native table destroy failed", it)
+                    OpenPigeonLog.w(
+                        "KnockoutNative",
+                        "Native table destroy failed",
+                        it,
+                    )
                 }
             }
         }
 
         runCatching {
-            gameSessionIPC?.setSuppressNotifications(sessionId, false)
+            gameSessionIPC?.setSuppressNotifications(
+                sessionId,
+                false,
+            )
         }.onFailure {
-            OpenPigeonLog.w("KnockoutNative", "Unable to unsuppress notifications during destroy", it)
+            OpenPigeonLog.w(
+                "KnockoutNative",
+                "Unable to unsuppress notifications during destroy",
+                it,
+            )
         }
 
         gameSessionIPC = null
