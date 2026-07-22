@@ -26,6 +26,9 @@ import com.openbubbles.openpigeon.ui.GameMenuController
 import com.openbubbles.openpigeon.ui.GameMenuPlacement
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
+import android.graphics.Color
+import android.graphics.Typeface
+import android.view.ViewGroup
 
 class ShuffleActivity : AppCompatActivity() {
     private var sessionId: String = ""
@@ -50,6 +53,29 @@ class ShuffleActivity : AppCompatActivity() {
     private lateinit var myAvatarAnchor: FrameLayout
     private lateinit var opponentAvatarAnchor: FrameLayout
     private lateinit var gameMenu: GameMenuController
+
+    private lateinit var spectatorLabel: TextView
+
+    private var spectatorMode = false
+
+    private var gameEnded = false
+
+    private var winLossState = ""
+
+    private var pendingWinLossState = ""
+
+    private var lastMessageWinner = ""
+
+    private var statusDimView: View? = null
+
+    @Volatile
+    private var statusDimVisible = false
+
+    private enum class StateLabelVisual {
+        Hidden, Waiting, SentWaiting, GameOver,
+    }
+
+    private var stateLabelVisual = StateLabelVisual.Hidden
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,10 +107,16 @@ class ShuffleActivity : AppCompatActivity() {
 
         renderer.onTopHudAlphaChanged = { alpha ->
             myAvatarAnchor.alpha = alpha
+
             opponentAvatarAnchor.alpha = alpha
+
+            if (::spectatorLabel.isInitialized) {
+                spectatorLabel.alpha = alpha
+            }
         }
 
         createStateLabel()
+        createSpectatorLabel()
         hideStateLabelNow()
         setupGameMenu()
         startGameSession()
@@ -107,7 +139,7 @@ class ShuffleActivity : AppCompatActivity() {
                 ),
                 RulesPopup.Section(
                     "Scoring",
-                    "After both players have used all four pucks, each puck scores the section containing most of that puck. A puck that is mostly outside the scoring board earns no points.",
+                    "After both players have used all four pucks, each puck scores the section containing most of that puck.",
                 ),
                 RulesPopup.Section(
                     "Board Types",
@@ -125,6 +157,11 @@ class ShuffleActivity : AppCompatActivity() {
                     enabled,
                 )
             },
+            onSettingsClosed = {
+                if (spectatorMode) {
+                    restoreSpectatorAvatarsAfterSettingsOpen()
+                }
+            },
         )
 
         gameMenu.sheet.attachGameAvatar(
@@ -134,6 +171,8 @@ class ShuffleActivity : AppCompatActivity() {
         gameMenu.sheet.attachOpponentAvatar(
             opponentAvatarAnchor,
         )
+
+        configureSettingsAvatarTarget()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -333,25 +372,42 @@ class ShuffleActivity : AppCompatActivity() {
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "applyGameData " + "mode=${data["mode"]} " + "map=${data["map"]} " + "replay=${
+            "applyGameData " + "mode=${data["mode"]} " + "map=${data["map"]} " + "winner=${data["winner"]} " + "replay=${
                 rawReplay.take(160)
             }",
         )
 
-        localPlayer = resolveLocalPlayer(
+        lastMessageWinner = data["winner"].orEmpty()
+
+        updateSpectatorMode(
             data,
         )
+
+        localPlayer = if (spectatorMode) {
+            1
+        } else {
+            resolveLocalPlayer(
+                data,
+            )
+        }
 
         renderer.setLocalPlayer(
             localPlayer,
         )
 
-        applyOpponentAvatarFromMessage(
-            data,
-        )
+        if (spectatorMode) {
+            applySpectatorAvatars(
+                data,
+            )
+        } else {
+            applyOpponentAvatarFromMessage(
+                data,
+            )
+        }
 
         myAvatarAnchor.bringToFront()
         opponentAvatarAnchor.bringToFront()
+
         if (::gameMenu.isInitialized) {
             gameMenu.bringToFront()
         }
@@ -364,26 +420,34 @@ class ShuffleActivity : AppCompatActivity() {
             val queuedRoundReplay = rawReplay.substring(
                 0,
                 markerIndex,
-            ).trim().trimEnd('|')
+            ).trim().trimEnd(
+                    '|',
+                )
 
             val postRoundReplay = rawReplay.substring(
                 markerIndex + REPLAY_QUEUE_MARKER.length,
-            ).trim().trimStart('|').ifBlank {
-                DEFAULT_REPLAY
-            }
+            ).trim().trimStart(
+                    '|',
+                ).ifBlank {
+                    DEFAULT_REPLAY
+                }
 
             val queuedReplayKey = buildString {
                 append(
                     data["id"].orEmpty(),
                 )
 
-                append("|")
+                append(
+                    "|",
+                )
 
                 append(
                     data["num"].orEmpty(),
                 )
 
-                append("|")
+                append(
+                    "|",
+                )
 
                 append(
                     rawReplay.hashCode(),
@@ -391,7 +455,9 @@ class ShuffleActivity : AppCompatActivity() {
             }
 
             val shouldPlayQueuedRound =
-                isYourTurn(data) && queuedRoundReplay.isNotBlank() && queuedReplayKey != lastPlayedQueuedReplayKey
+                queuedRoundReplay.isNotBlank() && queuedReplayKey != lastPlayedQueuedReplayKey && (spectatorMode || lastMessageWinner.isNotBlank() || isYourTurn(
+                    data,
+                ))
 
             val postRoundData = data.toMutableMap().apply {
                 put(
@@ -402,6 +468,10 @@ class ShuffleActivity : AppCompatActivity() {
 
             if (shouldPlayQueuedRound) {
                 lastPlayedQueuedReplayKey = queuedReplayKey
+
+                pendingWinLossState = localWinLossStateFromWinner(
+                    data["winner"],
+                )
 
                 val roundData = data.toMutableMap().apply {
                     put(
@@ -418,7 +488,7 @@ class ShuffleActivity : AppCompatActivity() {
 
                 OpenPigeonLog.i(
                     "ShuffleActivity",
-                    "Playing queued shuffle replay key=$queuedReplayKey " + "round=${
+                    "Playing queued shuffle replay " + "key=$queuedReplayKey " + "round=${
                         queuedRoundReplay.take(260)
                     } " + "post=${postRoundReplay.take(260)}",
                 )
@@ -426,13 +496,22 @@ class ShuffleActivity : AppCompatActivity() {
                 renderer.playRoundFromReplay(
                     roundReplay = queuedRoundReplay,
                 ) {
-                    finishPlaybackOrApplyQueuedMessage {
-                        lastMessage = postRoundData
+                    lastMessage = postRoundData
 
-                        renderer.setGameData(
-                            postRoundData,
-                        )
+                    lastMessageWinner = postRoundData["winner"].orEmpty()
 
+                    renderer.setGameData(
+                        postRoundData,
+                    )
+
+                    val forcedState = pendingWinLossState
+
+                    pendingWinLossState = ""
+
+                    handleRoundPlaybackFinished(
+                        completedByLocalTurn = false,
+                        forcedState = forcedState,
+                    ) {
                         applyTurnFlow(
                             postRoundData,
                         )
@@ -444,9 +523,27 @@ class ShuffleActivity : AppCompatActivity() {
 
             lastMessage = postRoundData
 
+            lastMessageWinner = postRoundData["winner"].orEmpty()
+
             renderer.setGameData(
                 postRoundData,
             )
+
+            val incomingWinnerState = localWinLossStateFromWinner(
+                postRoundData["winner"],
+            )
+
+            val finalState = incomingWinnerState.takeIf {
+                    it.isNotBlank()
+                } ?: currentScoreWinLossState()
+
+            if (finalState.isNotBlank()) {
+                markGameOver(
+                    finalState,
+                )
+
+                return
+            }
 
             applyTurnFlow(
                 postRoundData,
@@ -459,6 +556,22 @@ class ShuffleActivity : AppCompatActivity() {
             data,
         )
 
+        val incomingWinnerState = localWinLossStateFromWinner(
+            data["winner"],
+        )
+
+        val finalState = incomingWinnerState.takeIf {
+                it.isNotBlank()
+            } ?: currentScoreWinLossState()
+
+        if (finalState.isNotBlank()) {
+            markGameOver(
+                finalState,
+            )
+
+            return
+        }
+
         applyTurnFlow(
             data,
         )
@@ -467,13 +580,30 @@ class ShuffleActivity : AppCompatActivity() {
     private fun applyTurnFlow(
         data: Map<String, String>,
     ) {
+        if (isGameOver()) {
+            showGameOverLabel()
+            return
+        }
+
+        if (spectatorMode) {
+            hideStateLabelNow()
+
+            renderer.showSpectating()
+
+            applySpectatorAvatars(
+                data,
+            )
+
+            return
+        }
+
         val yourTurn = isYourTurn(
             data,
         )
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "applyTurnFlow localPlayer=$localPlayer yourTurn=$yourTurn " + "p1Shot=${
+            "applyTurnFlow " + "localPlayer=$localPlayer " + "yourTurn=$yourTurn " + "p1Shot=${
                 renderer.hasShotForPlayer(1)
             } " + "p2Shot=${renderer.hasShotForPlayer(2)}",
         )
@@ -492,7 +622,9 @@ class ShuffleActivity : AppCompatActivity() {
             renderer.playRoundFromReplay(
                 roundReplay = data["replay"] ?: DEFAULT_REPLAY,
             ) {
-                finishPlaybackOrApplyQueuedMessage {
+                handleRoundPlaybackFinished(
+                    completedByLocalTurn = false,
+                ) {
                     enableNextLocalAimAfterPlayback()
                 }
             }
@@ -516,6 +648,15 @@ class ShuffleActivity : AppCompatActivity() {
     private fun handleLocalLaunchReplay(
         stagedReplayValue: String,
     ) {
+        if (spectatorMode || isGameOver()) {
+            OpenPigeonLog.w(
+                "ShuffleActivity",
+                "Ignoring local launch while spectating or after game over",
+            )
+
+            return
+        }
+
         val stagedReplay = stagedReplayValue.trim()
 
         OpenPigeonLog.i(
@@ -554,7 +695,9 @@ class ShuffleActivity : AppCompatActivity() {
             renderer.playRoundFromReplay(
                 roundReplay = stagedReplay,
             ) {
-                finishPlaybackOrApplyQueuedMessage {
+                handleRoundPlaybackFinished(
+                    completedByLocalTurn = true,
+                ) {
                     enableNextLocalAimAfterPlayback()
                 }
             }
@@ -568,6 +711,22 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun enableNextLocalAimAfterPlayback() {
+        if (isGameOver()) {
+            return
+        }
+
+        if (spectatorMode) {
+            hideStateLabelNow()
+
+            renderer.showSpectating()
+
+            applySpectatorAvatars(
+                lastMessage,
+            )
+
+            return
+        }
+
         val currentBoard = renderer.prepareNextLocalAimAfterPlayback()
 
         lastMessage = lastMessage.toMutableMap().apply {
@@ -595,6 +754,10 @@ class ShuffleActivity : AppCompatActivity() {
     private fun sendReplayToOpponent(
         stagedReplay: String,
     ) {
+        if (spectatorMode || isGameOver()) {
+            return
+        }
+
         val currentMessage = try {
             if (sessionId.isNotBlank()) {
                 gameSessionIPC?.getCurrentMessage(sessionId).orEmpty()
@@ -636,10 +799,18 @@ class ShuffleActivity : AppCompatActivity() {
 
         val player2Id = (sourceMessage["player2"] ?: lastMessage["player2"]).orEmpty()
 
+        val resolvedMode = (sourceMessage["mode"] ?: lastMessage["mode"])?.toIntOrNull()?.coerceIn(
+                1,
+                3,
+            ) ?: 1
+
         val updates = mutableMapOf(
             "game" to "shuffle",
-            "mode" to (sourceMessage["mode"] ?: lastMessage["mode"] ?: "1"),
-            "map" to (sourceMessage["map"] ?: lastMessage["map"] ?: defaultMapForMode(1)),
+            "mode" to resolvedMode.toString(),
+
+            "map" to (sourceMessage["map"] ?: lastMessage["map"] ?: defaultMapForMode(
+                resolvedMode,
+            )),
             "player" to localPlayer.toString(),
             "num" to nextNum.toString(),
             "sender" to myId,
@@ -706,7 +877,579 @@ class ShuffleActivity : AppCompatActivity() {
         }
     }
 
+    private fun sendWinnerResultIfNeeded(
+        state: String,
+    ) {
+        if (spectatorMode || state.isBlank()) {
+            return
+        }
+
+        val ipc = gameSessionIPC
+
+        if (ipc == null || sessionId.isBlank()) {
+            OpenPigeonLog.w(
+                "ShuffleActivity",
+                "Winner not sent because IPC or session is unavailable",
+            )
+
+            return
+        }
+
+        try {
+            val current = ipc.getCurrentMessage(
+                sessionId,
+            ).ifEmpty {
+                lastMessage
+            }
+
+            if (current["winner"].orEmpty().isNotBlank()) {
+                OpenPigeonLog.i(
+                    "ShuffleActivity",
+                    "Winner already exists: ${current["winner"]}",
+                )
+
+                return
+            }
+
+            val myId = ipc.getSenderUUID(
+                sessionId,
+            ).takeIf {
+                    it.isNotBlank()
+                }.orEmpty()
+
+            if (myId.isBlank()) {
+                return
+            }
+
+            val resolvedMode = (current["mode"] ?: lastMessage["mode"])?.toIntOrNull()?.coerceIn(
+                    1,
+                    3,
+                ) ?: 1
+
+            val currentNum = current["num"]?.toIntOrNull() ?: 0
+
+            val cachedNum = lastMessage["num"]?.toIntOrNull() ?: 0
+
+            val finalReplay = renderer.completedRoundReplayForSend()
+
+            val outgoing = current.toMutableMap().apply {
+                put(
+                    "game",
+                    "shuffle",
+                )
+
+                put(
+                    "game_name",
+                    "Shuffleboard",
+                )
+
+                put(
+                    "mode",
+                    resolvedMode.toString(),
+                )
+
+                put(
+                    "map",
+                    current["map"] ?: lastMessage["map"] ?: defaultMapForMode(
+                        resolvedMode,
+                    ),
+                )
+
+                put(
+                    "player",
+                    localPlayer.toString(),
+                )
+
+                put(
+                    "num",
+                    (maxOf(
+                        currentNum,
+                        cachedNum,
+                    ) + 1).toString(),
+                )
+
+                put(
+                    "sender",
+                    myId,
+                )
+
+                put(
+                    "replay",
+                    finalReplay,
+                )
+
+                put(
+                    "winner",
+                    "$myId|${
+                        state.toIntOrNull()?.coerceIn(
+                                -1,
+                                1,
+                            ) ?: 0
+                    }",
+                )
+
+                put(
+                    if (localPlayer == 1) {
+                        "avatar1"
+                    } else {
+                        "avatar2"
+                    },
+                    AvatarView.buildAvatarString(),
+                )
+
+                if (localPlayer == 1) {
+                    put(
+                        "player1",
+                        myId,
+                    )
+                } else {
+                    put(
+                        "player2",
+                        myId,
+                    )
+                }
+
+                remove(
+                    "isYourTurn",
+                )
+            }
+
+            lastMessage = outgoing
+
+            lastMessageWinner = outgoing["winner"].orEmpty()
+
+            lastOutgoingReplay = finalReplay
+
+            ignoreNextOutgoingReplayEcho = true
+
+            OpenPigeonLog.i(
+                "ShuffleActivity",
+                "Sending Shuffleboard winner " + "winner=${outgoing["winner"]} " + "scores=${renderer.currentScores()} " + "replayLen=${finalReplay.length}",
+            )
+
+            ipc.updateSession(
+                outgoing,
+                sessionId,
+            ) {
+                OpenPigeonLog.i(
+                    "ShuffleActivity",
+                    "Shuffleboard winner update completed",
+                )
+            }
+        } catch (throwable: Throwable) {
+            OpenPigeonLog.e(
+                "ShuffleActivity",
+                "Unable to send Shuffleboard winner",
+                throwable,
+            )
+        }
+    }
+
+    private fun ensureStatusDimView(): View {
+        statusDimView?.let {
+            return it
+        }
+
+        val dim = View(
+            this,
+        ).apply {
+            setBackgroundColor(
+                Color.argb(
+                    115,
+                    0,
+                    0,
+                    0,
+                ),
+            )
+
+            alpha = 0f
+
+            visibility = View.GONE
+
+            isClickable = false
+
+            isFocusable = false
+        }
+
+        rootFrame.addView(
+            dim,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+
+        statusDimView = dim
+
+        return dim
+    }
+
+
+    private fun setStatusDimVisible(
+        visible: Boolean,
+    ) {
+        runOnUiThread {
+            val dim = ensureStatusDimView()
+
+            dim.animate().cancel()
+
+            if (visible) {
+                statusDimVisible = true
+
+                if (dim.visibility != View.VISIBLE) {
+                    dim.alpha = 0f
+
+                    dim.visibility = View.VISIBLE
+                }
+
+                dim.bringToFront()
+
+                dim.animate().alpha(
+                        1f,
+                    ).setDuration(
+                        180L,
+                    ).start()
+            } else {
+                statusDimVisible = false
+
+                dim.animate().alpha(
+                        0f,
+                    ).setDuration(
+                        160L,
+                    ).withEndAction {
+                        if (!statusDimVisible) {
+                            dim.visibility = View.GONE
+                        }
+                    }.start()
+            }
+        }
+    }
+
+
+    private fun isGameOver(): Boolean {
+        return gameEnded && winLossState.isNotBlank()
+    }
+
+
+    private fun winningPlayerFromWinner(
+        rawWinner: String?,
+    ): Int? {
+        val parts = rawWinner.orEmpty().split(
+                "|",
+                limit = 2,
+            )
+
+        if (parts.size != 2) {
+            return null
+        }
+
+        val senderId = parts[0]
+
+        val senderResult = parts[1].toIntOrNull()?.coerceIn(
+                -1,
+                1,
+            ) ?: return null
+
+        if (senderResult == 0) {
+            return 0
+        }
+
+        val senderPlayer = when (senderId) {
+            lastMessage["player1"] -> 1
+            lastMessage["player2"] -> 2
+            else -> return null
+        }
+
+        return if (senderResult > 0) {
+            senderPlayer
+        } else {
+            3 - senderPlayer
+        }
+    }
+
+
+    private fun localWinLossStateFromWinner(
+        rawWinner: String?,
+    ): String {
+        val winner = rawWinner.orEmpty()
+
+        if (winner.isBlank()) {
+            return ""
+        }
+
+        if (spectatorMode) {
+            return when (winningPlayerFromWinner(
+                winner,
+            )) {
+                1 -> "1"
+                2 -> "-1"
+                0 -> "0"
+                else -> ""
+            }
+        }
+
+        val parts = winner.split(
+            "|",
+            limit = 2,
+        )
+
+        if (parts.size != 2) {
+            return ""
+        }
+
+        val senderWinnerId = parts[0]
+
+        val senderState = parts[1].toIntOrNull()?.coerceIn(
+                -1,
+                1,
+            ) ?: return ""
+
+        val myId = localUserId(
+            lastMessage,
+        )
+
+        val localState = when {
+            senderState == 0 -> 0
+
+            myId.isNotBlank() && senderWinnerId == myId -> {
+                senderState
+            }
+
+            else -> {
+                -senderState
+            }
+        }
+
+        return localState.toString()
+    }
+
+
+    private fun gameOverText(): String {
+        if (spectatorMode) {
+            val winningPlayer = winningPlayerFromWinner(
+                lastMessageWinner,
+            ) ?: when (winLossState) {
+                "1" -> 1
+                "-1" -> 2
+                "0" -> 0
+                else -> null
+            }
+
+            return when (winningPlayer) {
+                1 -> "Player 1 Wins!"
+                2 -> "Player 2 Wins!"
+                else -> "Draw!"
+            }
+        }
+
+        return when (winLossState) {
+            "1" -> "You Win!"
+            "-1" -> "You Lose!"
+            "0" -> "Draw!"
+            else -> ""
+        }
+    }
+
+
+    private fun gameOverTextColor(): Int {
+        if (spectatorMode) {
+            val winningPlayer = winningPlayerFromWinner(
+                lastMessageWinner,
+            ) ?: when (winLossState) {
+                "1" -> 1
+                "-1" -> 2
+                "0" -> 0
+                else -> null
+            }
+
+            return when (winningPlayer) {
+                1, 2 -> {
+                    Color.rgb(
+                        255,
+                        214,
+                        0,
+                    )
+                }
+
+                else -> {
+                    Color.WHITE
+                }
+            }
+        }
+
+        return when (winLossState) {
+            "1" -> {
+                Color.rgb(
+                    255,
+                    214,
+                    0,
+                )
+            }
+
+            "-1" -> {
+                Color.rgb(
+                    255,
+                    51,
+                    51,
+                )
+            }
+
+            else -> {
+                Color.WHITE
+            }
+        }
+    }
+
+    private fun markGameOver(
+        state: String,
+    ) {
+        if (state.isBlank()) {
+            return
+        }
+
+        gameEnded = true
+
+        winLossState = state
+
+        pendingWinLossState = ""
+
+        renderer.showGameOver()
+
+        showGameOverLabel()
+    }
+
+
+    private fun showGameOverLabel() {
+        runOnUiThread {
+            if (!isGameOver()) {
+                return@runOnUiThread
+            }
+
+            stopStateLabelAnimation()
+
+            stateLabelVisual = StateLabelVisual.GameOver
+
+            resetStateLabelLayout(
+                stateLabel,
+            )
+
+            val text = gameOverText()
+
+            val labelWidth = measureStateLabelWidth(
+                stateLabel,
+                text,
+            )
+
+            val params = stateLabel.layoutParams
+
+            params.width = labelWidth
+
+            stateLabel.layoutParams = params
+
+            stateLabel.text = text
+
+            stateLabel.setTextColor(
+                gameOverTextColor(),
+            )
+
+            stateLabel.visibility = View.VISIBLE
+
+            setStatusDimVisible(
+                true,
+            )
+
+            stateLabel.bringToFront()
+        }
+    }
+
+    private fun currentScoreWinLossState(): String {
+        if (!renderer.hasGameEnded()) {
+            return ""
+        }
+
+        val scores = renderer.currentScores()
+
+        val player1Score = scores.first
+
+        val player2Score = scores.second
+
+        if (player1Score == player2Score) {
+            return "0"
+        }
+
+        val viewedPlayer = if (spectatorMode) {
+            1
+        } else {
+            localPlayer
+        }
+
+        val viewedScore = if (viewedPlayer == 1) {
+            player1Score
+        } else {
+            player2Score
+        }
+
+        val otherScore = if (viewedPlayer == 1) {
+            player2Score
+        } else {
+            player1Score
+        }
+
+        return if (viewedScore > otherScore) {
+            "1"
+        } else {
+            "-1"
+        }
+    }
+
+
+    private fun handleRoundPlaybackFinished(
+        completedByLocalTurn: Boolean,
+        forcedState: String = "",
+        onContinue: () -> Unit,
+    ) {
+        val finalState = forcedState.takeIf {
+                it.isNotBlank()
+            } ?: currentScoreWinLossState()
+
+        if (finalState.isNotBlank()) {
+            pendingMessageAfterPlayback = null
+
+            markGameOver(
+                finalState,
+            )
+
+            if (completedByLocalTurn && !spectatorMode) {
+                sendWinnerResultIfNeeded(
+                    finalState,
+                )
+            }
+
+            return
+        }
+
+        finishPlaybackOrApplyQueuedMessage {
+            if (spectatorMode) {
+                hideStateLabelNow()
+
+                renderer.showSpectating()
+
+                applySpectatorAvatars(
+                    lastMessage,
+                )
+
+                return@finishPlaybackOrApplyQueuedMessage
+            }
+
+            onContinue()
+        }
+    }
+
     private fun isYourTurn(data: Map<String, String>): Boolean {
+        if (spectatorMode) {
+            return false
+        }
+
         val raw = data["isYourTurn"]
 
         if (!raw.isNullOrBlank()) {
@@ -768,6 +1511,146 @@ class ShuffleActivity : AppCompatActivity() {
                 rightMargin = dp(10f).toInt()
                 topMargin = dp(40f).toInt()
             })
+    }
+
+    private fun updateSpectatorMode(
+        data: Map<String, String>,
+    ) {
+        val myId = localUserId(
+            data,
+        )
+
+        val player1Id = data["player1"].orEmpty()
+
+        val player2Id = data["player2"].orEmpty()
+
+        spectatorMode =
+            myId.isNotBlank() && player1Id.isNotBlank() && player2Id.isNotBlank() && myId != player1Id && myId != player2Id
+
+        renderer.setSpectatorMode(
+            spectatorMode,
+        )
+
+        spectatorLabel.visibility = if (spectatorMode) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+
+        if (spectatorMode) {
+            localPlayer = 1
+
+            applySpectatorAvatars(
+                data,
+            )
+
+            spectatorLabel.bringToFront()
+        }
+
+        configureSettingsAvatarTarget()
+
+        OpenPigeonLog.i(
+            "ShuffleActivity",
+            "updateSpectatorMode " + "spectator=$spectatorMode " + "myIdBlank=${myId.isBlank()} " + "p1Blank=${player1Id.isBlank()} " + "p2Blank=${player2Id.isBlank()}",
+        )
+    }
+
+
+    private fun findAvatarView(
+        view: View,
+    ): AvatarView? {
+        if (view is AvatarView) {
+            return view
+        }
+
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                val found = findAvatarView(
+                    view.getChildAt(
+                        index,
+                    ),
+                )
+
+                if (found != null) {
+                    return found
+                }
+            }
+        }
+
+        return null
+    }
+
+
+    private fun applyAvatarToAnchor(
+        anchor: FrameLayout,
+        avatarData: String,
+    ) {
+        val avatar = findAvatarView(
+            anchor,
+        ) ?: return
+
+        if (avatarData.isBlank()) {
+            avatar.showPlaceholder()
+        } else {
+            avatar.applyFromOpponentString(
+                avatarData,
+            )
+        }
+    }
+
+
+    private fun applySpectatorAvatars(
+        data: Map<String, String>,
+    ) {
+        if (!spectatorMode) {
+            return
+        }
+
+        applyAvatarToAnchor(
+            anchor = myAvatarAnchor,
+            avatarData = data["avatar1"].orEmpty(),
+        )
+
+        applyAvatarToAnchor(
+            anchor = opponentAvatarAnchor,
+            avatarData = data["avatar2"].orEmpty(),
+        )
+
+        myAvatarAnchor.bringToFront()
+        opponentAvatarAnchor.bringToFront()
+        spectatorLabel.bringToFront()
+    }
+
+
+    private fun configureSettingsAvatarTarget() {
+        if (!::gameMenu.isInitialized) {
+            return
+        }
+
+        gameMenu.sheet.setGameAvatarRefreshEnabled(
+            enabled = !spectatorMode,
+        )
+    }
+
+
+    private fun restoreSpectatorAvatarsAfterSettingsOpen() {
+        if (!spectatorMode || lastMessage.isEmpty()) {
+            return
+        }
+
+        myAvatarAnchor.post {
+            if (!spectatorMode || isFinishing || isDestroyed) {
+                return@post
+            }
+
+            gameMenu.sheet.setGameAvatarRefreshEnabled(
+                false,
+            )
+
+            applySpectatorAvatars(
+                lastMessage,
+            )
+        }
     }
 
     private fun applyOpponentAvatarFromMessage(
@@ -914,6 +1797,13 @@ class ShuffleActivity : AppCompatActivity() {
                 )
             }
         }
+        if (spectatorMode) {
+            restoreSpectatorAvatarsAfterSettingsOpen()
+        }
+
+        if (isGameOver()) {
+            showGameOverLabel()
+        }
     }
 
 
@@ -937,7 +1827,9 @@ class ShuffleActivity : AppCompatActivity() {
             }
         }
 
-        stopStateLabelAnimation()
+        if (!isGameOver()) {
+            stopStateLabelAnimation()
+        }
 
         super.onPause()
     }
@@ -956,7 +1848,7 @@ class ShuffleActivity : AppCompatActivity() {
             textSize = 15f
             gravity = Gravity.CENTER
             setTextColor(0xFFFFFFFF.toInt())
-            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            typeface = Typeface.DEFAULT_BOLD
             includeFontPadding = false
             setPadding(
                 stateLabelDp(14f), stateLabelDp(8f), stateLabelDp(14f), stateLabelDp(8f)
@@ -969,6 +1861,57 @@ class ShuffleActivity : AppCompatActivity() {
             stateLabel, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT, stateLabelDp(38f), Gravity.CENTER
             )
+        )
+    }
+
+    private fun createSpectatorLabel() {
+        spectatorLabel = TextView(
+            this,
+        ).apply {
+            text = "Spectating..."
+
+            visibility = View.GONE
+
+            setTextColor(
+                Color.WHITE,
+            )
+
+            textSize = 28f
+
+            gravity = Gravity.CENTER
+
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
+
+            typeface = Typeface.DEFAULT_BOLD
+
+            includeFontPadding = false
+
+            setShadowLayer(
+                3f,
+                0f,
+                dp(
+                    1.5f,
+                ),
+                Color.argb(
+                    150,
+                    0,
+                    0,
+                    0,
+                ),
+            )
+        }
+
+        rootFrame.addView(
+            spectatorLabel,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.CENTER_HORIZONTAL,
+            ).apply {
+                topMargin = dp(
+                    86f,
+                ).toInt()
+            },
         )
     }
 
@@ -1003,22 +1946,46 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun stopStateLabelAnimation() {
-        waitingDotsRunnable?.let { stateLabelHandler.removeCallbacks(it) }
-        stateLabelHandler.removeCallbacksAndMessages(null)
+        waitingDotsRunnable?.let {
+            stateLabelHandler.removeCallbacks(
+                it,
+            )
+        }
+
+        stateLabelHandler.removeCallbacksAndMessages(
+            null,
+        )
+
         waitingDotsRunnable = null
+
         stateLabelAnimator?.cancel()
+
         stateLabelAnimator = null
+
         sentWaitingSequenceActive = false
+
+        stateLabelVisual = StateLabelVisual.Hidden
     }
 
     private fun hideStateLabelNow() {
+        if (isGameOver()) {
+            showGameOverLabel()
+            return
+        }
+
         stopStateLabelAnimation()
 
-        if (::stateLabel.isInitialized) {
-            resetStateLabelLayout(stateLabel)
-            stateLabel.text = ""
-            stateLabel.visibility = View.GONE
-        }
+        resetStateLabelLayout(
+            stateLabel,
+        )
+
+        stateLabel.text = null
+
+        stateLabel.visibility = View.GONE
+
+        setStatusDimVisible(
+            false,
+        )
     }
 
     private fun startWaitingDots(label: TextView) {
@@ -1045,27 +2012,52 @@ class ShuffleActivity : AppCompatActivity() {
 
     private fun showWaitingLabelAnimated() {
         runOnUiThread {
+            if (spectatorMode || isGameOver()) {
+                if (isGameOver()) {
+                    showGameOverLabel()
+                }
+
+                return@runOnUiThread
+            }
+
+            if (stateLabelVisual == StateLabelVisual.Waiting) {
+                return@runOnUiThread
+            }
+
             stopStateLabelAnimation()
 
-            resetStateLabelLayout(stateLabel)
+            stateLabelVisual = StateLabelVisual.Waiting
+
+            resetStateLabelLayout(
+                stateLabel,
+            )
+
             stateLabel.bringToFront()
 
             val waitingWidth = measureStateLabelWidth(
-                stateLabel, "WAITING FOR OPPONENT..."
+                stateLabel,
+                "WAITING FOR OPPONENT...",
             )
 
             val params = stateLabel.layoutParams
+
             params.width = waitingWidth
+
             stateLabel.layoutParams = params
 
             stateLabel.visibility = View.VISIBLE
-            startWaitingDots(stateLabel)
+
+            startWaitingDots(
+                stateLabel,
+            )
 
             myAvatarAnchor.bringToFront()
             opponentAvatarAnchor.bringToFront()
+
             if (::gameMenu.isInitialized) {
                 gameMenu.bringToFront()
             }
+
             stateLabel.bringToFront()
         }
     }
@@ -1073,6 +2065,8 @@ class ShuffleActivity : AppCompatActivity() {
     private fun showSendingLabelImmediately() {
         runOnUiThread {
             stopStateLabelAnimation()
+            stateLabelVisual = StateLabelVisual.SentWaiting
+
             sentWaitingSequenceActive = true
 
             resetStateLabelLayout(stateLabel)
@@ -1093,6 +2087,8 @@ class ShuffleActivity : AppCompatActivity() {
 
     private fun showSentCheckThenWaitingAnimation() {
         runOnUiThread {
+            stateLabelVisual = StateLabelVisual.SentWaiting
+
             sentWaitingSequenceActive = true
 
             waitingDotsRunnable?.let { stateLabelHandler.removeCallbacks(it) }
@@ -1123,6 +2119,11 @@ class ShuffleActivity : AppCompatActivity() {
 
             stateLabelHandler.postDelayed({
                 if (!sentWaitingSequenceActive) return@postDelayed
+
+                if (isGameOver()) {
+                    showGameOverLabel()
+                    return@postDelayed
+                }
 
                 stateLabel.bringToFront()
 
