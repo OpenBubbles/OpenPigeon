@@ -1491,26 +1491,55 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun createAvatarHud() {
-        myAvatarAnchor = FrameLayout(this)
-        opponentAvatarAnchor = FrameLayout(this)
+        myAvatarAnchor = FrameLayout(
+            this,
+        )
 
-        val avatarSize = dp(46f).toInt()
+        opponentAvatarAnchor = FrameLayout(
+            this,
+        )
+
+        val avatarWidth = dp(
+            64f,
+        ).toInt()
+
+        val avatarHeight = dp(
+            46f,
+        ).toInt()
 
         rootFrame.addView(
-            myAvatarAnchor, FrameLayout.LayoutParams(
-                avatarSize, avatarSize, Gravity.TOP or Gravity.START
+            myAvatarAnchor,
+            FrameLayout.LayoutParams(
+                avatarWidth,
+                avatarHeight,
+                Gravity.TOP or Gravity.START,
             ).apply {
-                leftMargin = dp(10f).toInt()
-                topMargin = dp(40f).toInt()
-            })
+                leftMargin = dp(
+                    10f,
+                ).toInt()
+
+                topMargin = dp(
+                    40f,
+                ).toInt()
+            },
+        )
 
         rootFrame.addView(
-            opponentAvatarAnchor, FrameLayout.LayoutParams(
-                avatarSize, avatarSize, Gravity.TOP or Gravity.END
+            opponentAvatarAnchor,
+            FrameLayout.LayoutParams(
+                avatarWidth,
+                avatarHeight,
+                Gravity.TOP or Gravity.END,
             ).apply {
-                rightMargin = dp(10f).toInt()
-                topMargin = dp(40f).toInt()
-            })
+                rightMargin = dp(
+                    10f,
+                ).toInt()
+
+                topMargin = dp(
+                    40f,
+                ).toInt()
+            },
+        )
     }
 
     private fun updateSpectatorMode(

@@ -359,144 +359,79 @@ void ShuffleTable::addBumper() {
                           fixtureDef.friction, fixtureDef.restitution);
 }
 
-void ShuffleTable::makePuck(
-        float x,
-        float y,
-        float angle,
-        int traceId,
-        int player,
-        float* outputs
-) {
+void
+ShuffleTable::makePuck(float x, float y, float angle, int traceId, int player, float *outputs) {
     b2BodyDef bodyDef;
-    applyPuckBodyDefaults(
-            bodyDef
-    );
+    applyPuckBodyDefaults(bodyDef);
 
-    b2Body* body =
-            world.CreateBody(
-                    &bodyDef
-            );
+    b2Body *body = world.CreateBody(&bodyDef);
 
-    body->SetLinearDamping(
-            LINEAR_DAMPING
-    );
+    body->SetLinearDamping(LINEAR_DAMPING);
 
-    body->SetAngularDamping(
-            ANGULAR_DAMPING
-    );
+    body->SetAngularDamping(ANGULAR_DAMPING);
 
     b2CircleShape circle;
-    circle.m_radius =
-            PUCK_RADIUS;
+    circle.m_radius = PUCK_RADIUS;
 
     b2FixtureDef fixtureDef;
-    fixtureDef.shape =
-            &circle;
+    fixtureDef.shape = &circle;
 
-    fixtureDef.density =
-            PUCK_DENSITY;
+    fixtureDef.density = PUCK_DENSITY;
 
-    fixtureDef.friction =
-            PUCK_FRICTION;
+    fixtureDef.friction = PUCK_FRICTION;
 
-    fixtureDef.restitution =
-            PUCK_RESTITUTION;
+    fixtureDef.restitution = PUCK_RESTITUTION;
 
-    applyFilter(
-            fixtureDef
-    );
+    applyFilter(fixtureDef);
 
-    body->CreateFixture(
-            &fixtureDef
-    );
+    body->CreateFixture(&fixtureDef);
 
-    auto* puck =
-            new ShufflePuck(
-                    this,
-                    body,
-                    traceId,
-                    player,
-                    outputs
-            );
+    auto *puck = new ShufflePuck(this, body, traceId, player, outputs);
 
-    body->SetTransform(
-            b2Vec2(
-                    x,
-                    y
-            ),
-            angle
-    );
+    body->SetTransform(b2Vec2(x, y), angle);
 
-    body->SetAwake(
-            true
-    );
+    body->SetAwake(true);
 
     puck->updateInGameState();
     puck->writeOutputs();
 
-    pucks.push_back(
-            puck
-    );
+    pucks.push_back(puck);
 
-    shuffleNativeLogPrint(
-            ANDROID_LOG_INFO,
-            "ShuffleNative",
-            "SHUFFLE_NATIVE_PUCK_CREATED={"
-            "\"runId\":\"%s\","
-            "\"shotIndex\":%d,"
-            "\"frame\":%d,"
-            "\"traceId\":%d,"
-            "\"player\":%d,"
-            "\"position\":{\"x\":%.9f,\"y\":%.9f},"
-            "\"angle\":%.9f,"
-            "\"radius\":%.9f,"
-            "\"density\":%.9f,"
-            "\"friction\":%.9f,"
-            "\"restitution\":%.9f,"
-            "\"linearDamping\":%.9f,"
-            "\"angularDamping\":%.9f,"
-            "\"allowSleep\":%s,"
-            "\"fixedRotation\":%s,"
-            "\"bullet\":%s,"
-            "\"mass\":%.9f,"
-            "\"inertia\":%.9f,"
-            "\"ingame\":%s"
-            "}",
-            traceRunId.c_str(),
-            traceShotIndex,
-            traceFrame,
-            traceId,
-            player,
-            x,
-            y,
-            angle,
-            PUCK_RADIUS,
-            fixtureDef.density,
-            fixtureDef.friction,
-            fixtureDef.restitution,
+    shuffleNativeLogPrint(ANDROID_LOG_INFO, "ShuffleNative", "SHUFFLE_NATIVE_PUCK_CREATED={"
+                                                             "\"runId\":\"%s\","
+                                                             "\"shotIndex\":%d,"
+                                                             "\"frame\":%d,"
+                                                             "\"traceId\":%d,"
+                                                             "\"player\":%d,"
+                                                             "\"position\":{\"x\":%.9f,\"y\":%.9f},"
+                                                             "\"angle\":%.9f,"
+                                                             "\"radius\":%.9f,"
+                                                             "\"density\":%.9f,"
+                                                             "\"friction\":%.9f,"
+                                                             "\"restitution\":%.9f,"
+                                                             "\"linearDamping\":%.9f,"
+                                                             "\"angularDamping\":%.9f,"
+                                                             "\"allowSleep\":%s,"
+                                                             "\"fixedRotation\":%s,"
+                                                             "\"bullet\":%s,"
+                                                             "\"mass\":%.9f,"
+                                                             "\"inertia\":%.9f,"
+                                                             "\"ingame\":%s"
+                                                             "}", traceRunId.c_str(),
+                          traceShotIndex, traceFrame, traceId, player, x, y, angle, PUCK_RADIUS,
+                          fixtureDef.density, fixtureDef.friction, fixtureDef.restitution,
 
-            body->GetLinearDamping(),
-            body->GetAngularDamping(),
+                          body->GetLinearDamping(), body->GetAngularDamping(),
 
-            body->IsSleepingAllowed()
-            ? "true"
-            : "false",
+                          body->IsSleepingAllowed() ? "true" : "false",
 
-            body->IsFixedRotation()
-            ? "true"
-            : "false",
+                          body->IsFixedRotation() ? "true" : "false",
 
-            body->IsBullet()
-            ? "true"
-            : "false",
+                          body->IsBullet() ? "true" : "false",
 
-            body->GetMass(),
-            body->GetInertia(),
+                          body->GetMass(), body->GetInertia(),
 
-            puck->ingame
-            ? "true"
-            : "false"
-    );
+                          puck->ingame ? "true" : "false");
 }
 
 ShufflePuck *ShuffleTable::findPuck(int traceId) {

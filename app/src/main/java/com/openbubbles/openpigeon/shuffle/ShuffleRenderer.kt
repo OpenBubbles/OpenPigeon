@@ -141,6 +141,8 @@ class ShuffleRenderer @JvmOverloads constructor(
 
     private var wallIntroStartMs = 0L
     private var wallIntroActive = false
+    private var wallAnimationReversed = false
+    private var wallAnimationCompletion: (() -> Unit)? = null
 
     private val launchButtonRect = RectF()
     private var launchButtonProgress = 0f
@@ -235,8 +237,7 @@ class ShuffleRenderer @JvmOverloads constructor(
         showReplayArrows = false
         replayArrowAlpha = 0f
 
-        wallIntroActive = false
-        wallIntroStartMs = 0L
+        cancelWallAnimation()
 
         OpenPigeonLog.i(
             "ShuffleRenderer",
@@ -253,6 +254,40 @@ class ShuffleRenderer @JvmOverloads constructor(
     private fun stopOpponentPositionReveal() {
         opponentRevealStartMs = 0L
         opponentRevealEndMs = 0L
+    }
+
+    private fun startWallAnimation(
+        reversed: Boolean,
+        startAtMs: Long = System.currentTimeMillis(),
+        onFinished: (() -> Unit)? = null,
+    ) {
+        wallAnimationReversed = reversed
+        wallIntroStartMs = startAtMs
+        wallIntroActive = true
+        wallAnimationCompletion = onFinished
+
+        postInvalidateOnAnimation()
+    }
+
+    private fun cancelWallAnimation() {
+        wallIntroActive = false
+        wallIntroStartMs = 0L
+        wallAnimationReversed = false
+        wallAnimationCompletion = null
+    }
+
+    private fun finishWallExitAnimation() {
+        val completion = wallAnimationCompletion
+
+        cancelWallAnimation()
+
+        if (completion != null) {
+            post {
+                completion.invoke()
+            }
+        }
+
+        postInvalidateOnAnimation()
     }
 
     override fun onDraw(
@@ -465,12 +500,12 @@ class ShuffleRenderer @JvmOverloads constructor(
         }
 
         val boardSegments = normalized.split('|').map {
-                it.trim()
-            }.filter {
-                it.startsWith(
-                    "board:",
-                )
-            }
+            it.trim()
+        }.filter {
+            it.startsWith(
+                "board:",
+            )
+        }
 
         return (boardSegments.lastOrNull() ?: normalized).trimEnd('|')
     }
@@ -479,11 +514,11 @@ class ShuffleRenderer @JvmOverloads constructor(
         value: String,
     ): String {
         return value.hashCode().toUInt().toString(
-                radix = 16,
-            ).padStart(
-                length = 8,
-                padChar = '0',
-            )
+            radix = 16,
+        ).padStart(
+            length = 8,
+            padChar = '0',
+        )
     }
 
     private fun buildTracePuckArray(): JSONArray {
@@ -492,27 +527,27 @@ class ShuffleRenderer @JvmOverloads constructor(
         pucks.forEachIndexed { index, puck ->
             array.put(
                 JSONObject().put(
-                        "traceId",
-                        index,
-                    ).put(
-                        "player",
-                        puck.player,
-                    ).put(
-                        "x",
-                        puck.x,
-                    ).put(
-                        "y",
-                        puck.y,
-                    ).put(
-                        "bodyAngle",
-                        puck.bodyAngle,
-                    ).put(
-                        "shotAngle",
-                        puck.shotAngle,
-                    ).put(
-                        "shotDistance",
-                        puck.shotDistance,
-                    ),
+                    "traceId",
+                    index,
+                ).put(
+                    "player",
+                    puck.player,
+                ).put(
+                    "x",
+                    puck.x,
+                ).put(
+                    "y",
+                    puck.y,
+                ).put(
+                    "bodyAngle",
+                    puck.bodyAngle,
+                ).put(
+                    "shotAngle",
+                    puck.shotAngle,
+                ).put(
+                    "shotDistance",
+                    puck.shotDistance,
+                ),
             )
         }
 
@@ -565,9 +600,7 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         replayArrowAlpha = 0f
 
-        wallIntroActive = false
-
-        wallIntroStartMs = 0L
+        cancelWallAnimation()
 
         invalidate()
     }
@@ -779,8 +812,7 @@ class ShuffleRenderer @JvmOverloads constructor(
         showReplayArrows = false
         replayArrowAlpha = 0f
 
-        wallIntroActive = false
-        wallIntroStartMs = 0L
+        cancelWallAnimation()
 
         hasCueAim = false
         draggingCuePuck = false
@@ -826,8 +858,7 @@ class ShuffleRenderer @JvmOverloads constructor(
             0f,
         )
 
-        wallIntroActive = false
-        wallIntroStartMs = 0L
+        cancelWallAnimation()
 
         aimUiAlpha = 0f
         aimUiFadeStartMs = 0L
@@ -883,14 +914,20 @@ class ShuffleRenderer @JvmOverloads constructor(
         stopPushStickAnimation()
         stopScoreAnimation()
         stopOpponentPositionReveal()
-        setTopHudVisible(true)
+        setTopHudVisible(
+            true,
+        )
 
         hasCueAim = false
 
         draggingCuePuck = false
+
         draggingArrowHead = false
 
+        lastAimHapticStep = -1
+
         launchButtonPressed = false
+
         launchButtonProgress = 0f
 
         launchButtonRect.set(
@@ -900,14 +937,21 @@ class ShuffleRenderer @JvmOverloads constructor(
             0f,
         )
 
-        wallIntroActive = false
-        wallIntroStartMs = 0L
+        cancelWallAnimation()
 
         aimUiAlpha = 0f
+
         aimUiFadeStartMs = 0L
 
-        showReplayArrows = false
-        replayArrowAlpha = 0f
+        showReplayArrows = pucks.any { puck ->
+            puck.shotDistance > SHOT_DISTANCE_EPS
+        }
+
+        replayArrowAlpha = if (showReplayArrows) {
+            ARROW_MAX_ALPHA
+        } else {
+            0f
+        }
 
         invalidate()
     }
@@ -1237,6 +1281,7 @@ class ShuffleRenderer @JvmOverloads constructor(
     private fun destroyNativeTable() {
         stopPushStickAnimation()
         stopScoreAnimation()
+        cancelWallAnimation()
 
         if (nativeTablePtr != 0L) {
             ShuffleNativePhysics.clearShuffleTraceContext(
@@ -1458,23 +1503,27 @@ class ShuffleRenderer @JvmOverloads constructor(
             ),
         )
 
-        val avatarsize = dp(
+        val avatarWidth = dp(
+            64f,
+        )
+
+        val avatarHeight = dp(
             46f,
         )
 
         val avatarCenterY = dp(
             40f,
-        ) + avatarsize / 2f
+        ) + avatarHeight / 2f
 
         val leftTextX = dp(
             10f,
-        ) + avatarsize + dp(
+        ) + avatarWidth + dp(
             8f,
         )
 
         val rightTextX = w - dp(
             10f,
-        ) - avatarsize - dp(
+        ) - avatarWidth - dp(
             8f,
         )
 
@@ -2157,26 +2206,59 @@ class ShuffleRenderer @JvmOverloads constructor(
         canvas: Canvas,
         boardRect: RectF,
     ) {
-        if (!wallIntroActive && !nativeRunning) {
+        if (!wallIntroActive) {
             return
         }
 
         val now = System.currentTimeMillis()
 
-        if (wallIntroStartMs !in 1..now) {
+        if (wallIntroStartMs <= 0L || now < wallIntroStartMs) {
             postInvalidateOnAnimation()
             return
         }
 
-        val progress =
+        val rawProgress =
             ((now - wallIntroStartMs).toFloat() / WALL_INTRO_DURATION_MS.toFloat()).coerceIn(
                 0f,
                 1f,
             )
 
-        val easedProgress = 1f - ((1f - progress) * (1f - progress))
+        if (wallAnimationReversed && rawProgress >= WALL_EXIT_FADE_END_PROGRESS) {
+            finishWallExitAnimation()
+            return
+        }
+
+        val directedProgress = if (wallAnimationReversed) {
+            1f - rawProgress
+        } else {
+            rawProgress
+        }
+
+        val easedProgress = 1f - ((1f - directedProgress) * (1f - directedProgress))
 
         val scale = WALL_INTRO_START_SCALE + (1f - WALL_INTRO_START_SCALE) * easedProgress
+
+        val wallAlpha = if (wallAnimationReversed) {
+            val fadeProgress =
+                ((rawProgress - WALL_EXIT_FADE_START_PROGRESS) / (WALL_EXIT_FADE_END_PROGRESS - WALL_EXIT_FADE_START_PROGRESS)).coerceIn(
+                    0f,
+                    1f,
+                )
+
+            val easedFade = fadeProgress * fadeProgress * (3f - 2f * fadeProgress)
+
+            1f - easedFade
+        } else {
+            1f
+        }
+
+        if (wallAlpha <= 0.001f) {
+            if (wallAnimationReversed) {
+                finishWallExitAnimation()
+            }
+
+            return
+        }
 
         val outerRect = scaleRectAboutCenter(
             rect = boardRect,
@@ -2215,24 +2297,38 @@ class ShuffleRenderer @JvmOverloads constructor(
             )
         }
 
+        val previousFillAlpha = fillPaint.alpha
+
+        val previousLineAlpha = linePaint.alpha
+
+        val paintAlpha = (wallAlpha * 255f).toInt().coerceIn(
+            0,
+            255,
+        )
+
         fillPaint.shader = null
-        fillPaint.alpha = 255
+
         fillPaint.style = Paint.Style.FILL
+
         fillPaint.color = BOARD_WALL_COLOR
+
+        fillPaint.alpha = paintAlpha
 
         canvas.drawPath(
             wallPath,
             fillPaint,
         )
 
-        linePaint.alpha = 255
         linePaint.style = Paint.Style.STROKE
+
         linePaint.strokeWidth = size(
             WALL_LINE_WIDTH_GAME,
             boardRect,
         )
 
         linePaint.color = Color.WHITE
+
+        linePaint.alpha = paintAlpha
 
         canvas.drawRect(
             outerRect,
@@ -2244,7 +2340,11 @@ class ShuffleRenderer @JvmOverloads constructor(
             linePaint,
         )
 
-        if (progress < 1f) {
+        fillPaint.alpha = previousFillAlpha
+
+        linePaint.alpha = previousLineAlpha
+
+        if (wallAnimationReversed || rawProgress < 1f) {
             postInvalidateOnAnimation()
         }
     }
@@ -3245,14 +3345,30 @@ class ShuffleRenderer @JvmOverloads constructor(
         puck: ShufflePuck,
     ) {
         val isOnReadyRow = isPuckOnReadyRowForPlayer(
-            puck,
-            1,
+            puck = puck,
+            player = 1,
         ) || isPuckOnReadyRowForPlayer(
-            puck,
-            2,
+            puck = puck,
+            player = 2,
         )
 
-        if (isOnReadyRow && uiMode != ShuffleUiMode.Playing) {
+        val showReadyRowPuck = when (uiMode) {
+            ShuffleUiMode.Playing,
+            ShuffleUiMode.Waiting,
+            ShuffleUiMode.SentWaiting,
+                -> {
+                true
+            }
+
+            ShuffleUiMode.Aiming,
+            ShuffleUiMode.Spectating,
+            ShuffleUiMode.GameOver,
+                -> {
+                false
+            }
+        }
+
+        if (isOnReadyRow && !showReadyRowPuck) {
             return
         }
 
@@ -3268,7 +3384,9 @@ class ShuffleRenderer @JvmOverloads constructor(
             ),
             player = puck.player,
             rotation = puck.bodyAngle,
-            size = pucksize(boardRect),
+            size = pucksize(
+                boardRect,
+            ),
         )
     }
 
@@ -3776,18 +3894,18 @@ class ShuffleRenderer @JvmOverloads constructor(
         OpenPigeonLog.i(
             "ShuffleTrace",
             "SHUFFLE_ANDROID_INPUT=" + JSONObject().put(
-                    "replayHash",
-                    nativeTraceHash,
-                ).put(
-                    "input",
-                    nativeTraceInput,
-                ).put(
-                    "mode",
-                    layoutMode,
-                ).put(
-                    "pucks",
-                    buildTracePuckArray(),
-                ).toString(),
+                "replayHash",
+                nativeTraceHash,
+            ).put(
+                "input",
+                nativeTraceInput,
+            ).put(
+                "mode",
+                layoutMode,
+            ).put(
+                "pucks",
+                buildTracePuckArray(),
+            ).toString(),
         )
 
         currentRoundStartBoard = buildBoardSegment(
@@ -3867,8 +3985,7 @@ class ShuffleRenderer @JvmOverloads constructor(
             0f
         }
 
-        wallIntroActive = false
-        wallIntroStartMs = 0L
+        cancelWallAnimation()
 
         val revealDuration = (opponentRevealEndMs - opponentRevealStartMs).coerceAtLeast(
             0L,
@@ -3909,10 +4026,10 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         pushStickActive = pushStickStates.isNotEmpty()
 
-        wallIntroActive = true
-
-        wallIntroStartMs =
-            pushStartMs + STICK_PUSH_MOVE_DURATION_MS + STICK_PUSH_FADE_DURATION_MS + WALL_INTRO_AFTER_STICK_GAP_MS
+        startWallAnimation(
+            reversed = false,
+            startAtMs = pushStartMs + STICK_PUSH_MOVE_DURATION_MS + STICK_PUSH_FADE_DURATION_MS + WALL_INTRO_AFTER_STICK_GAP_MS,
+        )
 
         val tablePtr = ensureNativeTable()
 
@@ -3995,6 +4112,8 @@ class ShuffleRenderer @JvmOverloads constructor(
         if (firedCount == 0) {
             nativeRunning = false
 
+            cancelWallAnimation()
+
             stopPushStickAnimation()
             stopOpponentPositionReveal()
             setTopHudVisible(
@@ -4030,39 +4149,39 @@ class ShuffleRenderer @JvmOverloads constructor(
         OpenPigeonLog.i(
             "ShuffleTrace",
             "SHUFFLE_ANDROID_RUN_START=" + JSONObject().put(
-                    "runId",
-                    nativeTraceRunId,
-                ).put(
-                    "replayHash",
-                    nativeTraceHash,
-                ).put(
-                    "input",
-                    nativeTraceInput,
-                ).put(
-                    "mode",
-                    layoutMode,
-                ).put(
-                    "timeStep",
-                    1.0 / 60.0,
-                ).put(
-                    "velocityIterations",
-                    60,
-                ).put(
-                    "positionIterations",
-                    60,
-                ).put(
-                    "puckRadius",
-                    15.0,
-                ).put(
-                    "linearDamping",
-                    1.5,
-                ).put(
-                    "angularDamping",
-                    2.0,
-                ).put(
-                    "pucks",
-                    buildTracePuckArray(),
-                ).toString(),
+                "runId",
+                nativeTraceRunId,
+            ).put(
+                "replayHash",
+                nativeTraceHash,
+            ).put(
+                "input",
+                nativeTraceInput,
+            ).put(
+                "mode",
+                layoutMode,
+            ).put(
+                "timeStep",
+                1.0 / 60.0,
+            ).put(
+                "velocityIterations",
+                60,
+            ).put(
+                "positionIterations",
+                60,
+            ).put(
+                "puckRadius",
+                15.0,
+            ).put(
+                "linearDamping",
+                1.5,
+            ).put(
+                "angularDamping",
+                2.0,
+            ).put(
+                "pucks",
+                buildTracePuckArray(),
+            ).toString(),
         )
 
         nativeRunning = true
@@ -4147,10 +4266,9 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         nativeRunning = false
 
-        wallIntroActive = false
-
         stopPushStickAnimation()
         stopOpponentPositionReveal()
+
         orderSettledPucksMostRecentFirst()
 
         pendingReplayPrefix = if (currentRoundStartBoard.isNotBlank()) {
@@ -4196,9 +4314,11 @@ class ShuffleRenderer @JvmOverloads constructor(
             nativeTablePtr,
         )
 
+        val allPucksPlayed = haveAllPucksBeenPlayed()
+
         OpenPigeonLog.i(
             "ShuffleRenderer",
-            "Native shuffle stopped " + "runId=$completedRunId " + "replayHash=$completedReplayHash " + "frames=$completedFrameCount " + "allPlayed=${haveAllPucksBeenPlayed()} " + "pucks=${pucks.size} " + "prefixLen=${pendingReplayPrefix.length} " + "finalBoard=${
+            "Native shuffle stopped " + "runId=$completedRunId " + "replayHash=$completedReplayHash " + "frames=$completedFrameCount " + "allPlayed=$allPucksPlayed " + "pucks=${pucks.size} " + "prefixLen=${pendingReplayPrefix.length} " + "finalBoard=${
                 settledBoardForTrace.take(300)
             }",
         )
@@ -4211,24 +4331,35 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         nativeTraceFrame = 0
 
-        if (haveAllPucksBeenPlayed()) {
-            startScoreAnimation()
+        if (allPucksPlayed) {
+            startWallAnimation(
+                reversed = true,
+                onFinished = {
+                    startScoreAnimation()
+                },
+            )
+
             return
         }
-
-        setTopHudVisible(
-            true,
-        )
 
         val callback = nativeRoundFinished
 
         nativeRoundFinished = null
 
-        uiMode = ShuffleUiMode.Aiming
+        startWallAnimation(
+            reversed = true,
+            onFinished = {
+                setTopHudVisible(
+                    true,
+                )
 
-        callback?.invoke()
+                uiMode = ShuffleUiMode.Aiming
 
-        invalidate()
+                callback?.invoke()
+
+                invalidate()
+            },
+        )
     }
 
     private fun syncNativePucksFromOutputs() {
@@ -4784,8 +4915,7 @@ class ShuffleRenderer @JvmOverloads constructor(
         showReplayArrows = false
         replayArrowAlpha = 0f
 
-        wallIntroActive = false
-        wallIntroStartMs = 0L
+        cancelWallAnimation()
 
         OpenPigeonLog.i(
             "ShuffleRenderer",
@@ -5433,6 +5563,8 @@ class ShuffleRenderer @JvmOverloads constructor(
         private const val WALL_INTRO_AFTER_STICK_GAP_MS = 40L
         private const val WALL_INTRO_DURATION_MS = 520L
         private const val WALL_INTRO_START_SCALE = 1.50f
+        private const val WALL_EXIT_FADE_START_PROGRESS = 0.12f
+        private const val WALL_EXIT_FADE_END_PROGRESS = 0.58f
         private const val PUCK_RADIUS_GAME = 15f
         private const val NATIVE_TRACE_ENABLED = true
         private const val READY_PUCK_Y_TOLERANCE = 2f
