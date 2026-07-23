@@ -19,11 +19,28 @@ public:
     ~ShufflePuck();
 
     bool step();
-    void fire(float shootDirRadians, float dist);
-    void setTransform(float x, float y, float angle);
+
+    [[nodiscard]] bool isMoving() const;
+    void updateInGameState();
+    void stopSmallMotion() const;
+    void writeOutputs();
+
+    void fire(
+            float shootDirRadians,
+            float dist
+    ) const;
+
+    void setTransform(
+            float x,
+            float y,
+            float angle
+    );
 
     int traceId;
     int player;
+
+    bool ingame = false;
+
     b2Body* body;
     ShuffleTable* table;
 

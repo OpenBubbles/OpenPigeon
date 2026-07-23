@@ -1,90 +1,160 @@
 #include "ShufflePuck.h"
 #include "ShuffleTable.h"
+
 #include <cmath>
 
-static constexpr float SHOT_VELOCITY_SCALE = 1.55f;
-static constexpr float STOP_LINEAR_SPEED = 0.45f;
-static constexpr float STOP_ANGULAR_SPEED = 0.04f;
+namespace {
+    constexpr float SHOT_VELOCITY_SCALE = 1.55f;
 
-ShufflePuck::ShufflePuck(
-        ShuffleTable* table,
-        b2Body* body,
-        int traceId,
-        int player,
-        float* outputs
-)
-        : traceId(traceId),
-          player(player),
-          body(body),
-          table(table),
-          outputs(outputs),
+    constexpr float STOP_LINEAR_SPEED = 1.0f;
+
+    constexpr float STOP_ANGULAR_SPEED = 0.08f;
+
+    constexpr float BOARD_HALF_HEIGHT = 193.0f;
+}
+
+ShufflePuck::ShufflePuck(ShuffleTable *table, b2Body *body, int traceId, int player, float *outputs)
+        : traceId(traceId), player(player), body(body), table(table), outputs(outputs),
           data({ShuffleData::Type::Puck, this, player}) {
-    body->SetUserData(&data);
+    if (body) {
+        body->SetUserData(&data);
+    }
 }
 
 ShufflePuck::~ShufflePuck() {
     if (table && body) {
         table->destroyBody(body);
+
         body = nullptr;
     }
 }
 
-bool ShufflePuck::step() {
-    if (!body || !outputs) return false;
-
-    b2Vec2 vel = body->GetLinearVelocity();
-    float angularVelocity = body->GetAngularVelocity();
-
-    const float speed = vel.Length();
-    const bool linearMoving = speed > STOP_LINEAR_SPEED;
-    const bool angularMoving = std::fabs(angularVelocity) > STOP_ANGULAR_SPEED;
-
-    if (!linearMoving) {
-        body->SetLinearVelocity(b2Vec2_zero);
-        vel.SetZero();
+bool ShufflePuck::isMoving() const {
+    if (!body) {
+        return false;
     }
 
-    if (!angularMoving) {
-        body->SetAngularVelocity(0.0f);
-        angularVelocity = 0.0f;
-    }
+    const bool linearMoving = body->GetLinearVelocity().LengthSquared() > 0.0f;
 
-    const b2Vec2 pos = body->GetPosition();
+    const bool angularMoving = std::fabs(body->GetAngularVelocity()) > 0.0f;
 
-    outputs[0] = pos.x;
-    outputs[1] = pos.y;
-    outputs[2] = body->GetAngle();
-    outputs[3] = vel.x;
-    outputs[4] = vel.y;
-    outputs[5] = angularVelocity;
-    outputs[6] = static_cast<float>(player);
-    outputs[7] = static_cast<float>(traceId);
-
-    return linearMoving || angularMoving;
+    return (linearMoving || angularMoving);
 }
 
-void ShufflePuck::fire(float shootDirRadians, float dist) {
-    if (!body || dist <= 0.5f) return;
+void ShufflePuck::updateInGameState() {
+    if (!body || ingame) {
+        return;
+    }
 
-    const b2Vec2 velocity(
-            std::cos(shootDirRadians) * dist * SHOT_VELOCITY_SCALE,
-            std::sin(shootDirRadians) * dist * SHOT_VELOCITY_SCALE
+    const float y = body->GetPosition().y;
+
+    if (y > -BOARD_HALF_HEIGHT && y < BOARD_HALF_HEIGHT) {
+        ingame = true;
+    }
+}
+
+void ShufflePuck::stopSmallMotion() const {
+    if (!body) {
+        return;
+    }
+
+    const b2Vec2 linearVelocity = body->GetLinearVelocity();
+
+    if (linearVelocity.LengthSquared() < STOP_LINEAR_SPEED * STOP_LINEAR_SPEED) {
+        body->SetLinearVelocity(b2Vec2_zero);
+    }
+
+    const float angularVelocity = body->GetAngularVelocity();
+
+    if (std::fabs(angularVelocity) < STOP_ANGULAR_SPEED) {
+        body->SetAngularVelocity(0.0f);
+    }
+
+    const bool linearStopped = body->GetLinearVelocity().LengthSquared() == 0.0f;
+
+    const bool angularStopped = body->GetAngularVelocity() == 0.0f;
+
+    if (linearStopped && angularStopped) {
+        body->SetAwake(false);
+    }
+}
+
+void ShufflePuck::writeOutputs() {
+    if (!body || !outputs) {
+        return;
+    }
+
+    const b2Vec2 position = body->GetPosition();
+
+    const b2Vec2 velocity = body->GetLinearVelocity();
+
+    outputs[0] = position.x;
+
+    outputs[1] = position.y;
+
+    outputs[2] = body->GetAngle();
+
+    outputs[3] = velocity.x;
+
+    outputs[4] = velocity.y;
+
+    outputs[5] = body->GetAngularVelocity();
+
+    outputs[6] = static_cast<float>(
+            player
     );
 
-    const b2Vec2 pos = body->GetPosition();
+    outputs[7] = static_cast<float>(
+            traceId
+    );
+}
 
-    // iOS rotates the puck body to align with the shot direction before applying velocity.
-    body->SetTransform(pos, shootDirRadians + static_cast<float>(M_PI));
+bool ShufflePuck::step() {
+    if (!body) {
+        return false;
+    }
+
+    updateInGameState();
+    stopSmallMotion();
+    writeOutputs();
+
+    return isMoving();
+}
+
+void ShufflePuck::fire(float shootDirRadians, float dist) const {
+    if (!body || dist <= 0.5f) {
+        return;
+    }
+
+    const b2Vec2 velocity(std::cos(shootDirRadians) * dist * SHOT_VELOCITY_SCALE,
+
+                          std::sin(shootDirRadians) * dist * SHOT_VELOCITY_SCALE);
+
+    const b2Vec2 position = body->GetPosition();
+
+    body->SetTransform(position, shootDirRadians + static_cast<float>(
+            M_PI * 0.5
+    ));
 
     body->SetAwake(true);
+
     body->SetAngularVelocity(0.0f);
+
     body->SetLinearVelocity(velocity);
 }
 
 void ShufflePuck::setTransform(float x, float y, float angle) {
-    if (!body) return;
+    if (!body) {
+        return;
+    }
 
     body->SetTransform(b2Vec2(x, y), angle);
+
     body->SetLinearVelocity(b2Vec2_zero);
+
     body->SetAngularVelocity(0.0f);
+
+    ingame = y > -BOARD_HALF_HEIGHT && y < BOARD_HALF_HEIGHT;
+
+    writeOutputs();
 }

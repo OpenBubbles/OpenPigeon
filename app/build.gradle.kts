@@ -50,13 +50,13 @@ fun releaseDateCode(): Int {
 
 android {
     namespace = "com.openbubbles.openpigeon"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.openbubbles.openpigeon"
         minSdk = 26
         versionCode = releaseDateCode()
-        targetSdk = 35
+        targetSdk = 36
         versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

@@ -2,7 +2,9 @@
 #define OPENBUBBLES_SHUFFLE_TABLE_H
 
 #include <Box2D/Box2D.h>
+#include <string>
 #include <vector>
+
 #include "ShufflePuck.h"
 #include "ShuffleContactListener.h"
 #include "ShuffleData.h"
@@ -36,15 +38,31 @@ public:
             float dist
     );
 
-    void setMode(int mode);
+    void setMode(
+            int mode
+    );
 
     bool update();
+
     void refreshOutputs();
 
-    void destroyBody(b2Body* body);
+    void destroyBody(
+            b2Body* body
+    );
+
+    void setTraceContext(
+            const char* runId,
+            int shotIndex,
+            int frame,
+            const char* phase
+    );
+
+    void clearTraceContext();
 
 private:
-    ShufflePuck* findPuck(int traceId);
+    ShufflePuck* findPuck(
+            int traceId
+    );
 
     void clearStaticBodies();
     void rebuildStaticBodies();
@@ -65,6 +83,11 @@ private:
     std::vector<ShuffleData> staticData;
 
     int mode = 1;
+
+    std::string traceRunId;
+    int traceShotIndex = -1;
+    int traceFrame = -1;
+    std::string tracePhase;
 };
 
 #endif

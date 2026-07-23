@@ -1,6 +1,6 @@
 package com.openbubbles.openpigeon.wordhunt
 
-import android.annotation.SuppressLint
+import androidx.activity.addCallback
 import android.os.Bundle
 import android.os.CountDownTimer
 import androidx.activity.compose.setContent
@@ -18,7 +18,6 @@ import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
 import com.openbubbles.openpigeon.util.OpenPigeonLog
 import android.content.Context
-import android.util.TypedValue
 import android.widget.FrameLayout
 import com.openbubbles.openpigeon.ui.GameMenuController
 import com.openbubbles.openpigeon.ui.GameMenuPlacement
@@ -212,6 +211,10 @@ class WordHuntActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        onBackPressedDispatcher.addCallback(this) {
+            finish()
+        }
 
         enableEdgeToEdge()
         supportActionBar?.hide()
@@ -436,11 +439,6 @@ class WordHuntActivity : AppCompatActivity() {
             "opponent_avatar" to (msg["avatar$opponent"] ?: ""),
         )
         return scoreData
-    }
-
-    @SuppressLint("MissingSuperCall")
-    override fun onBackPressed() {
-        finish()
     }
 
     override fun onResume() {

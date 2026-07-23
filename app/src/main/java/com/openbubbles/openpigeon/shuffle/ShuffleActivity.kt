@@ -421,16 +421,16 @@ class ShuffleActivity : AppCompatActivity() {
                 0,
                 markerIndex,
             ).trim().trimEnd(
-                    '|',
-                )
+                '|',
+            )
 
             val postRoundReplay = rawReplay.substring(
                 markerIndex + REPLAY_QUEUE_MARKER.length,
             ).trim().trimStart(
-                    '|',
-                ).ifBlank {
-                    DEFAULT_REPLAY
-                }
+                '|',
+            ).ifBlank {
+                DEFAULT_REPLAY
+            }
 
             val queuedReplayKey = buildString {
                 append(
@@ -534,8 +534,8 @@ class ShuffleActivity : AppCompatActivity() {
             )
 
             val finalState = incomingWinnerState.takeIf {
-                    it.isNotBlank()
-                } ?: currentScoreWinLossState()
+                it.isNotBlank()
+            } ?: currentScoreWinLossState()
 
             if (finalState.isNotBlank()) {
                 markGameOver(
@@ -561,8 +561,8 @@ class ShuffleActivity : AppCompatActivity() {
         )
 
         val finalState = incomingWinnerState.takeIf {
-                it.isNotBlank()
-            } ?: currentScoreWinLossState()
+            it.isNotBlank()
+        } ?: currentScoreWinLossState()
 
         if (finalState.isNotBlank()) {
             markGameOver(
@@ -800,9 +800,9 @@ class ShuffleActivity : AppCompatActivity() {
         val player2Id = (sourceMessage["player2"] ?: lastMessage["player2"]).orEmpty()
 
         val resolvedMode = (sourceMessage["mode"] ?: lastMessage["mode"])?.toIntOrNull()?.coerceIn(
-                1,
-                3,
-            ) ?: 1
+            1,
+            3,
+        ) ?: 1
 
         val updates = mutableMapOf(
             "game" to "shuffle",
@@ -914,17 +914,17 @@ class ShuffleActivity : AppCompatActivity() {
             val myId = ipc.getSenderUUID(
                 sessionId,
             ).takeIf {
-                    it.isNotBlank()
-                }.orEmpty()
+                it.isNotBlank()
+            }.orEmpty()
 
             if (myId.isBlank()) {
                 return
             }
 
             val resolvedMode = (current["mode"] ?: lastMessage["mode"])?.toIntOrNull()?.coerceIn(
-                    1,
-                    3,
-                ) ?: 1
+                1,
+                3,
+            ) ?: 1
 
             val currentNum = current["num"]?.toIntOrNull() ?: 0
 
@@ -982,9 +982,9 @@ class ShuffleActivity : AppCompatActivity() {
                     "winner",
                     "$myId|${
                         state.toIntOrNull()?.coerceIn(
-                                -1,
-                                1,
-                            ) ?: 0
+                            -1,
+                            1,
+                        ) ?: 0
                     }",
                 )
 
@@ -1105,22 +1105,22 @@ class ShuffleActivity : AppCompatActivity() {
                 dim.bringToFront()
 
                 dim.animate().alpha(
-                        1f,
-                    ).setDuration(
-                        180L,
-                    ).start()
+                    1f,
+                ).setDuration(
+                    180L,
+                ).start()
             } else {
                 statusDimVisible = false
 
                 dim.animate().alpha(
-                        0f,
-                    ).setDuration(
-                        160L,
-                    ).withEndAction {
-                        if (!statusDimVisible) {
-                            dim.visibility = View.GONE
-                        }
-                    }.start()
+                    0f,
+                ).setDuration(
+                    160L,
+                ).withEndAction {
+                    if (!statusDimVisible) {
+                        dim.visibility = View.GONE
+                    }
+                }.start()
             }
         }
     }
@@ -1135,9 +1135,9 @@ class ShuffleActivity : AppCompatActivity() {
         rawWinner: String?,
     ): Int? {
         val parts = rawWinner.orEmpty().split(
-                "|",
-                limit = 2,
-            )
+            "|",
+            limit = 2,
+        )
 
         if (parts.size != 2) {
             return null
@@ -1146,9 +1146,9 @@ class ShuffleActivity : AppCompatActivity() {
         val senderId = parts[0]
 
         val senderResult = parts[1].toIntOrNull()?.coerceIn(
-                -1,
-                1,
-            ) ?: return null
+            -1,
+            1,
+        ) ?: return null
 
         if (senderResult == 0) {
             return 0
@@ -1200,9 +1200,9 @@ class ShuffleActivity : AppCompatActivity() {
         val senderWinnerId = parts[0]
 
         val senderState = parts[1].toIntOrNull()?.coerceIn(
-                -1,
-                1,
-            ) ?: return ""
+            -1,
+            1,
+        ) ?: return ""
 
         val myId = localUserId(
             lastMessage,
@@ -1409,8 +1409,8 @@ class ShuffleActivity : AppCompatActivity() {
         onContinue: () -> Unit,
     ) {
         val finalState = forcedState.takeIf {
-                it.isNotBlank()
-            } ?: currentScoreWinLossState()
+            it.isNotBlank()
+        } ?: currentScoreWinLossState()
 
         if (finalState.isNotBlank()) {
             pendingMessageAfterPlayback = null

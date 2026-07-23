@@ -94,4 +94,4 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
         android
         log
         Box2D
-        C++)
+        c++_shared)
