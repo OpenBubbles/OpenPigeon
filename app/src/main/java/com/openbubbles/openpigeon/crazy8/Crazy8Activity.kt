@@ -155,6 +155,8 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
+import androidx.compose.foundation.layout.requiredSize
+import com.openbubbles.openpigeon.settings.AvatarWinBurstOverlay
 
 class CrazyParticipant(
     name: String,
@@ -327,8 +329,8 @@ private fun buildCrazyGameFromSections(
     clockwise: Boolean,
 ): CrazyGame {
     val participantIds = participantIdsSection.split(",").mapNotNull {
-            it.toIntOrNull()
-        }
+        it.toIntOrNull()
+    }
 
     val gameParticipants = participantIds.mapNotNull { id ->
         allParticipants.firstOrNull {
@@ -422,9 +424,9 @@ class Crazy8Activity : ComponentActivity() {
         }
 
         val current = name ?: getPrefs().getString(
-                "name",
-                "",
-            ) ?: ""
+            "name",
+            "",
+        ) ?: ""
 
         gameMenu.sheet.setHeaderNameValue(
             current,
@@ -472,19 +474,19 @@ class Crazy8Activity : ComponentActivity() {
         gameMenu.sheet.configureHeaderNameField(
             enabled = true,
             value = name ?: getPrefs().getString(
-                    "name",
-                    "",
-                ) ?: "",
+                "name",
+                "",
+            ) ?: "",
             hint = "Player name",
         ) { rawName ->
             val newName = rawName.trim()
 
             getPrefs().edit {
-                    putString(
-                        "name",
-                        newName,
-                    )
-                }
+                putString(
+                    "name",
+                    newName,
+                )
+            }
 
             name = newName
         }
@@ -671,7 +673,8 @@ class Crazy8Activity : ComponentActivity() {
                                     name = thisName
                                     refreshSettingsSheetValues()
                                     joinRoom(currentRoom)
-                                }))
+                                })
+                        )
                         Button(onClick = {
                             prefs.edit().putString("name", thisName).apply()
                             name = thisName
@@ -962,6 +965,9 @@ class Crazy8Activity : ComponentActivity() {
     val participants = mutableStateListOf<CrazyParticipant>()
     var game by mutableStateOf<CrazyGame?>(null)
     var label by mutableStateOf<String?>(null)
+    var winnerParticipantId by mutableStateOf<Int?>(
+        null,
+    )
     var connected by mutableStateOf(false)
     var showLobbyChat by mutableStateOf(false)
     val lobbySpeechBubbles = mutableStateMapOf<Int, String>()
@@ -1045,9 +1051,9 @@ class Crazy8Activity : ComponentActivity() {
                         myId = message.getInt(1)
                         participants.clear()
                         participants.addAll(message.getString(0).split("|").map {
-                                val parts = it.split("&")
-                                parseParticipant(parts[0].toInt(), parts[1], parts[2] == "1")
-                            }.distinctBy { it.id })
+                            val parts = it.split("&")
+                            parseParticipant(parts[0].toInt(), parts[1], parts[2] == "1")
+                        }.distinctBy { it.id })
                         val currentPacked = legacyAvatarStringForCrazy8(name ?: "Player")
                         applyPackedIdentityUpdate(myId, currentPacked, includeSelf = true)
                         if (message.type == "game_list") {
@@ -1090,6 +1096,7 @@ class Crazy8Activity : ComponentActivity() {
                     }
 
                     "game_start" -> {
+                        winnerParticipantId = null
                         label = null
                         game = buildCrazyGameFromSections(
                             allParticipants = participants,
@@ -1134,14 +1141,26 @@ class Crazy8Activity : ComponentActivity() {
 
                                 moved.cardCount -= 1
                                 if (moved.cardCount == 0) {
+                                    winnerParticipantId = moved.id
+
                                     label = "${if (moved.isMe) "You" else moved.name} won!"
-                                    Handler(Looper.getMainLooper()).postDelayed({
-                                        for (participant in participants) {
-                                            participant.ready = false
-                                        }
-                                        this@Crazy8Activity.game = null
-                                        label = null
-                                    }, 6000)
+
+                                    Handler(
+                                        Looper.getMainLooper(),
+                                    ).postDelayed(
+                                        {
+                                            for (participant in participants) {
+                                                participant.ready = false
+                                            }
+
+                                            winnerParticipantId = null
+
+                                            this@Crazy8Activity.game = null
+
+                                            label = null
+                                        },
+                                        6000L,
+                                    )
                                 }
                             }
                             if (move.size == 1) {
@@ -1157,8 +1176,7 @@ class Crazy8Activity : ComponentActivity() {
                                     val firstDrawnCard = drawnCards.firstOrNull()
 
                                     if (firstDrawnCard != null && shouldAutoPlayDrawnCard(
-                                            firstDrawnCard,
-                                            game.card
+                                            firstDrawnCard, game.card
                                         )
                                     ) {
                                         if (firstDrawnCard.rank == 5) {
@@ -1893,7 +1911,8 @@ fun DirectionArrowOverlay(
                     y = with(density) { leftCenter.y.toDp() - arrowSize / 2 })
                 .size(arrowSize)
                 .rotate(leftRotation),
-            contentScale = ContentScale.Fit)
+            contentScale = ContentScale.Fit
+        )
 
         Image(
             painter = painterResource(id = R.drawable.crazyarrow),
@@ -1904,7 +1923,8 @@ fun DirectionArrowOverlay(
                     y = with(density) { rightCenter.y.toDp() - arrowSize / 2 })
                 .size(arrowSize)
                 .rotate(rightRotation),
-            contentScale = ContentScale.Fit)
+            contentScale = ContentScale.Fit
+        )
     }
 }
 
@@ -2159,6 +2179,7 @@ fun RenderGame(
     val doubleTapWindowMs = 260L
     val me = game.participants.find { it.isMe }
     val label = activity?.label
+    val winnerParticipantId = activity?.winnerParticipantId
     val textInput = remember { mutableStateOf("") }
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -2402,10 +2423,10 @@ fun RenderGame(
             drawInFlight = false
 
             val newKeys = handKeys.filter {
-                    it !in previousHandSnapshot
-                }.take(
-                    8,
-                )
+                it !in previousHandSnapshot
+            }.take(
+                8,
+            )
 
             for ((newIndex, targetKey) in newKeys.withIndex()) {
                 var targetCenter: Offset? = null
@@ -2519,19 +2540,19 @@ fun RenderGame(
             }
 
             val penaltyText = activity?.headFx?.takeIf {
-                    it.playerId == participant.id
-                }?.text?.takeIf {
-                    it.isNotBlank()
-                }
+                it.playerId == participant.id
+            }?.text?.takeIf {
+                it.isNotBlank()
+            }
 
             val animCount = when {
                 delta > 0 && penaltyText != null -> {
                     penaltyText.removePrefix(
-                            "+",
-                        ).toIntOrNull()?.coerceIn(
-                            1,
-                            8,
-                        ) ?: abs(
+                        "+",
+                    ).toIntOrNull()?.coerceIn(
+                        1,
+                        8,
+                    ) ?: abs(
                         delta,
                     ).coerceIn(
                         1,
@@ -2774,17 +2795,54 @@ fun RenderGame(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        RenderLobbyAvatar(
-                            avatarData = avatarFor(participant),
+                        Box(
                             modifier = Modifier
-                                .padding(top = 4.dp, bottom = 4.dp)
-                                .size(width = avatarWidth, height = avatarHeight)
+                                .padding(
+                                    top = 4.dp,
+                                    bottom = 4.dp,
+                                )
+                                .size(
+                                    width = avatarWidth,
+                                    height = avatarHeight,
+                                )
                                 .onGloballyPositioned { coords ->
-                                    avatarCenters.putCenterIfChanged(participant.id, coords)
-                                    turnAvatarCenters.putOffsetIfChanged(
-                                        participant.id, centerInBoard(coords)
+                                    avatarCenters.putCenterIfChanged(
+                                        participant.id,
+                                        coords,
                                     )
-                                })
+
+                                    turnAvatarCenters.putOffsetIfChanged(
+                                        participant.id,
+                                        centerInBoard(
+                                            coords,
+                                        ),
+                                    )
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            AvatarWinBurstOverlay(
+                                active = winnerParticipantId == participant.id,
+                                modifier = Modifier
+                                    .requiredSize(
+                                        width = 136.dp,
+                                        height = 108.dp,
+                                    )
+                                    .zIndex(
+                                        0f,
+                                    ),
+                            )
+
+                            RenderLobbyAvatar(
+                                avatarData = avatarFor(
+                                    participant,
+                                ),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .zIndex(
+                                        1f,
+                                    ),
+                            )
+                        }
 
                         Text(
                             participant.name,
@@ -2862,16 +2920,53 @@ fun RenderGame(
                 .zIndex(4f), horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (me != null) {
-                Box {
-                    RenderLobbyAvatar(
-                        avatarData = avatarFor(me),
+                Box(
+                    modifier = Modifier
+                        .padding(
+                            top = 4.dp,
+                            bottom = 4.dp,
+                        )
+                        .size(
+                            width = avatarWidth,
+                            height = avatarHeight,
+                        )
+                        .onGloballyPositioned { coords ->
+                            avatarCenters.putCenterIfChanged(
+                                me.id,
+                                coords,
+                            )
+
+                            turnAvatarCenters.putOffsetIfChanged(
+                                me.id,
+                                centerInBoard(
+                                    coords,
+                                ),
+                            )
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AvatarWinBurstOverlay(
+                        active = winnerParticipantId == me.id,
                         modifier = Modifier
-                            .padding(top = 4.dp, bottom = 4.dp)
-                            .size(width = avatarWidth, height = avatarHeight)
-                            .onGloballyPositioned { coords ->
-                                avatarCenters.putCenterIfChanged(me.id, coords)
-                                turnAvatarCenters.putOffsetIfChanged(me.id, centerInBoard(coords))
-                            })
+                            .requiredSize(
+                                width = 136.dp,
+                                height = 108.dp,
+                            )
+                            .zIndex(
+                                0f,
+                            ),
+                    )
+
+                    RenderLobbyAvatar(
+                        avatarData = avatarFor(
+                            me,
+                        ),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(
+                                1f,
+                            ),
+                    )
                 }
 
                 Text(
@@ -2930,8 +3025,8 @@ fun RenderGame(
                             0f
                         } else {
                             ((availableHeightPx - tileCardHeightPx) / (maxRowCount - 1)).coerceAtLeast(
-                                    10f
-                                )
+                                10f
+                            )
                         }
 
                         val rowStepPx = if (maxRowCount <= 1) {
@@ -3812,8 +3907,8 @@ fun RenderWaiting(
                             )
 
                             val bubbleText = activity?.lobbySpeechBubbles?.get(
-                                    participant.id,
-                                )
+                                participant.id,
+                            )
 
                             if (!bubbleText.isNullOrBlank()) {
                                 LobbyAvatarSpeechBubble(
@@ -4025,23 +4120,19 @@ private fun legacyCrazy8ToOpponentString(data: String): String {
 
     return "body,${v("b", "4")}" + "|eyes,${v("e", "0")}" + "|mouth,${v("m", "2")}" + "|acc,${
         v(
-            "a",
-            "0"
+            "a", "0"
         )
     }" + "|wins,${v("w", "0")}" + "|bg_color,${v("bg", "0.0,0.0,0.0")}" + "|body_color,${
         v(
-            "bc",
-            "0.0,0.0,0.0"
+            "bc", "0.0,0.0,0.0"
         )
     }" + "|glasses,${v("g", "0")}" + "|stache,${v("s", "0")}" + "|backdrop,${
         v(
-            "d",
-            "0"
+            "d", "0"
         )
     }" + "|hair,${v("h", "3")}" + "|clothes,${v("c", "2")}" + "|hair_color,${
         v(
-            "hc",
-            "0.0,0.0,0.0"
+            "hc", "0.0,0.0,0.0"
         )
     }" + "|clothes_color,${v("cc", "0.290639,0.935341,0.083265")}" + "|n,${v("n", "")}"
 }
@@ -4150,28 +4241,23 @@ private fun legacyAvatarStringForCrazy8(playerName: String): String {
 
     return "b,${v("body", "4")}`" + "e,${v("eyes", "0")}`" + "m,${v("mouth", "2")}`" + "a,${
         v(
-            "acc",
-            "0"
+            "acc", "0"
         )
     }`" + "w,${v("wins", "0")}`" + "bg,${
         color3(
-            "bg_color",
-            "0.0,0.0,0.0"
+            "bg_color", "0.0,0.0,0.0"
         )
     }`" + "bc,${color3("body_color", "0.0,0.0,0.0")}`" + "g,${
         v(
-            "glasses",
-            "0"
+            "glasses", "0"
         )
     }`" + "s,${v("stache", "0")}`" + "d,${v("backdrop", "0")}`" + "h,${
         v(
-            "hair",
-            "3"
+            "hair", "3"
         )
     }`" + "c,${v("clothes", "2")}`" + "hc,${
         color3(
-            "hair_color",
-            "0.000000,0.000000,0.000000"
+            "hair_color", "0.000000,0.000000,0.000000"
         )
     }`" + "cc,${color3("clothes_color", "0.290639,0.935341,0.083265")}`" + "n,$playerName"
 }

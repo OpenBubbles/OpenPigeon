@@ -28,6 +28,11 @@ import android.view.HapticFeedbackConstants
 import org.json.JSONArray
 import org.json.JSONObject
 import androidx.core.graphics.withClip
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
+import android.graphics.BlurMaskFilter
+import kotlin.math.ceil
+import androidx.core.graphics.createBitmap
 
 class ShuffleRenderer @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
@@ -84,6 +89,9 @@ class ShuffleRenderer @JvmOverloads constructor(
 
     private var aimUiAlpha = 0f
     private var aimUiFadeStartMs = 0L
+    private var bumperPulseStartMs = 0L
+
+    private val bumperVisualContacts = mutableSetOf<Int>()
 
     private var hasCueAim = false
     private var cueAimAngleRad = (-90.0).toRadiansFloat()
@@ -150,15 +158,33 @@ class ShuffleRenderer @JvmOverloads constructor(
 
     private var puck1Bitmap: Bitmap? = null
     private var puck2Bitmap: Bitmap? = null
-    private var puckShadowBitmap: Bitmap? = null
     private var stickBitmap: Bitmap? = null
     private var bumperBitmap: Bitmap? = null
-    private var bumperShadowBitmap: Bitmap? = null
+
+    private var circleShadowBitmap: Bitmap? = null
+    private var stickShadowBitmap: Bitmap? = null
+
+    private var boardShadowBitmap: Bitmap? = null
+    private var boardShadowCacheWidth = -1
+    private var boardShadowCacheHeight = -1
+
+    private var launchButtonShadowBitmap: Bitmap? = null
+    private var launchShadowCacheWidth = -1
+    private var launchShadowCacheHeight = -1
 
     private val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         isFilterBitmap = true
         isDither = true
     }
+
+    private val shadowBitmapPaint = Paint(
+        Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG,
+    )
+
+    private val stickShadowColorFilter = PorterDuffColorFilter(
+        Color.BLACK,
+        PorterDuff.Mode.SRC_IN,
+    )
 
     private val stickPaint = Paint(
         Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG,
@@ -185,7 +211,270 @@ class ShuffleRenderer @JvmOverloads constructor(
         parseReplay(DEFAULT_REPLAY)
     }
 
+    private fun createCircleShadowBitmap(): Bitmap {
+        val circleDiameter = 100
+
+        val blurRadius = 12f
+
+        val padding = ceil(
+            blurRadius * 2f,
+        ).toInt()
+
+        val bitmapSize = circleDiameter + padding * 2
+
+        val bitmap = createBitmap(bitmapSize, bitmapSize)
+
+        val bitmapCanvas = Canvas(
+            bitmap,
+        )
+
+        val paint = Paint(
+            Paint.ANTI_ALIAS_FLAG,
+        ).apply {
+            style = Paint.Style.FILL
+
+            color = Color.argb(
+                SHADOW_ALPHA,
+                0,
+                0,
+                0,
+            )
+
+            maskFilter = BlurMaskFilter(
+                blurRadius,
+                BlurMaskFilter.Blur.NORMAL,
+            )
+        }
+
+        bitmapCanvas.drawCircle(
+            bitmapSize / 2f,
+            bitmapSize / 2f,
+            circleDiameter / 2f,
+            paint,
+        )
+
+        return bitmap
+    }
+
+    private fun getCircleShadowBitmap(): Bitmap {
+        val existing = circleShadowBitmap
+
+        if (existing != null && !existing.isRecycled) {
+            return existing
+        }
+
+        return createCircleShadowBitmap().also { bitmap ->
+            circleShadowBitmap = bitmap
+        }
+    }
+
+    private fun createRoundedRectShadowBitmap(
+        shapeWidth: Int,
+        shapeHeight: Int,
+        cornerRadius: Float,
+        blurRadius: Float,
+        alpha: Int,
+    ): Bitmap {
+        val safeWidth = shapeWidth.coerceAtLeast(
+            1,
+        )
+
+        val safeHeight = shapeHeight.coerceAtLeast(
+            1,
+        )
+
+        val safeBlur = blurRadius.coerceAtLeast(
+            0.5f,
+        )
+
+        val padding = ceil(
+            safeBlur * 2f,
+        ).toInt()
+
+        val bitmap = createBitmap(
+            safeWidth + padding * 2,
+            safeHeight + padding * 2,
+        )
+
+        val bitmapCanvas = Canvas(
+            bitmap,
+        )
+
+        val paint = Paint(
+            Paint.ANTI_ALIAS_FLAG,
+        ).apply {
+            style = Paint.Style.FILL
+
+            color = Color.argb(
+                alpha.coerceIn(
+                    0,
+                    255,
+                ),
+                0,
+                0,
+                0,
+            )
+
+            maskFilter = BlurMaskFilter(
+                safeBlur,
+                BlurMaskFilter.Blur.NORMAL,
+            )
+        }
+
+        bitmapCanvas.drawRoundRect(
+            RectF(
+                padding.toFloat(),
+                padding.toFloat(),
+                padding.toFloat() + safeWidth,
+                padding.toFloat() + safeHeight,
+            ),
+            cornerRadius,
+            cornerRadius,
+            paint,
+        )
+
+        return bitmap
+    }
+
+    private fun ensureBoardShadowBitmap(
+        shapeWidth: Int,
+        shapeHeight: Int,
+        cornerRadius: Float,
+        blurRadius: Float,
+    ): Bitmap {
+        val cached = boardShadowBitmap
+
+        if (cached != null && !cached.isRecycled && boardShadowCacheWidth == shapeWidth && boardShadowCacheHeight == shapeHeight) {
+            return cached
+        }
+
+        boardShadowBitmap?.recycle()
+
+        boardShadowCacheWidth = shapeWidth
+
+        boardShadowCacheHeight = shapeHeight
+
+        return createRoundedRectShadowBitmap(
+            shapeWidth = shapeWidth,
+            shapeHeight = shapeHeight,
+            cornerRadius = cornerRadius,
+            blurRadius = blurRadius,
+            alpha = SHADOW_ALPHA,
+        ).also { bitmap ->
+            boardShadowBitmap = bitmap
+        }
+    }
+
+    private fun ensureLaunchButtonShadowBitmap(
+        shapeWidth: Int,
+        shapeHeight: Int,
+        cornerRadius: Float,
+        blurRadius: Float,
+    ): Bitmap {
+        val cached = launchButtonShadowBitmap
+
+        if (cached != null && !cached.isRecycled && launchShadowCacheWidth == shapeWidth && launchShadowCacheHeight == shapeHeight) {
+            return cached
+        }
+
+        launchButtonShadowBitmap?.recycle()
+
+        launchShadowCacheWidth = shapeWidth
+
+        launchShadowCacheHeight = shapeHeight
+
+        return createRoundedRectShadowBitmap(
+            shapeWidth = shapeWidth,
+            shapeHeight = shapeHeight,
+            cornerRadius = cornerRadius,
+            blurRadius = blurRadius,
+            alpha = SHADOW_ALPHA,
+        ).also { bitmap ->
+            launchButtonShadowBitmap = bitmap
+        }
+    }
+
+    private fun createStickShadowBitmap(
+        source: Bitmap,
+    ): Bitmap {
+        val blurRadius =
+            (source.width.toFloat() * STICK_SHADOW_BLUR_GAME / STICK_WIDTH_GAME).coerceAtLeast(
+                1f,
+            )
+
+        val padding = ceil(
+            blurRadius * 2f,
+        ).toInt()
+
+        val bitmap = createBitmap(
+            source.width + padding * 2,
+            source.height + padding * 2,
+        )
+
+        val bitmapCanvas = Canvas(
+            bitmap,
+        )
+
+        val paint = Paint(
+            Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG,
+        ).apply {
+            colorFilter = stickShadowColorFilter
+
+            maskFilter = BlurMaskFilter(
+                blurRadius,
+                BlurMaskFilter.Blur.NORMAL,
+            )
+        }
+
+        bitmapCanvas.drawBitmap(
+            source,
+            padding.toFloat(),
+            padding.toFloat(),
+            paint,
+        )
+
+        return bitmap
+    }
+
+    private fun drawCachedCircleShadow(
+        canvas: Canvas,
+        centerX: Float,
+        centerY: Float,
+        circleDiameter: Float,
+        blurRadius: Float,
+        alpha: Float = 1f,
+    ) {
+        val bitmap = getCircleShadowBitmap()
+
+        val totalSize = circleDiameter + blurRadius * 4f
+
+        val previousAlpha = shadowBitmapPaint.alpha
+
+        shadowBitmapPaint.alpha = (255f * alpha.coerceIn(
+            0f,
+            1f,
+        )).toInt().coerceIn(
+            0,
+            255,
+        )
+
+        canvas.drawBitmap(
+            bitmap,
+            null,
+            RectF(
+                centerX - totalSize / 2f,
+                centerY - totalSize / 2f,
+                centerX + totalSize / 2f,
+                centerY + totalSize / 2f,
+            ),
+            shadowBitmapPaint,
+        )
+
+        shadowBitmapPaint.alpha = previousAlpha
+    }
+
     fun setGameData(data: Map<String, String>) {
+        resetBumperVisualState()
         mode = data["mode"]?.toIntOrNull()?.coerceIn(1, 3) ?: 1
         currentPlayer = data["player"]?.toIntOrNull()?.coerceIn(1, 2) ?: 1
         replay = data["replay"] ?: DEFAULT_REPLAY
@@ -245,6 +534,100 @@ class ShuffleRenderer @JvmOverloads constructor(
         )
 
         invalidate()
+    }
+
+    private fun resetBumperVisualState() {
+        bumperPulseStartMs = 0L
+
+        bumperVisualContacts.clear()
+    }
+
+    private fun updateBumperVisualContact(
+        traceId: Int,
+        x: Float,
+        y: Float,
+    ) {
+        if (layoutMode != 2 || !nativeRunning) {
+            bumperVisualContacts.remove(
+                traceId,
+            )
+
+            return
+        }
+
+        val distanceSquared = x * x + y * y
+
+        val enterRadiusSquared = BUMPER_VISUAL_ENTER_RADIUS_GAME * BUMPER_VISUAL_ENTER_RADIUS_GAME
+
+        val exitRadiusSquared = BUMPER_VISUAL_EXIT_RADIUS_GAME * BUMPER_VISUAL_EXIT_RADIUS_GAME
+
+        when {
+            distanceSquared <= enterRadiusSquared -> {
+                if (bumperVisualContacts.add(
+                        traceId,
+                    )
+                ) {
+                    bumperPulseStartMs = System.currentTimeMillis()
+
+                    postInvalidateOnAnimation()
+                }
+            }
+
+            distanceSquared >= exitRadiusSquared -> {
+                bumperVisualContacts.remove(
+                    traceId,
+                )
+            }
+        }
+    }
+
+    private fun smoothStep(
+        value: Float,
+    ): Float {
+        val clamped = value.coerceIn(
+            0f,
+            1f,
+        )
+
+        return clamped * clamped * (3f - 2f * clamped)
+    }
+
+    private fun bumperPulseScale(
+        now: Long = System.currentTimeMillis(),
+    ): Float {
+        if (bumperPulseStartMs <= 0L) {
+            return 1f
+        }
+
+        val progress =
+            ((now - bumperPulseStartMs).toFloat() / BUMPER_PULSE_DURATION_MS.toFloat()).coerceIn(
+                0f,
+                1f,
+            )
+
+        if (progress >= 1f) {
+            bumperPulseStartMs = 0L
+
+            return 1f
+        }
+
+        val scale = if (progress < BUMPER_PULSE_GROW_PORTION) {
+            val growProgress = smoothStep(
+                progress / BUMPER_PULSE_GROW_PORTION,
+            )
+
+            1f + (BUMPER_PULSE_MAX_SCALE - 1f) * growProgress
+        } else {
+            val shrinkProgress = smoothStep(
+                (progress - BUMPER_PULSE_GROW_PORTION) / (1f - BUMPER_PULSE_GROW_PORTION),
+            )
+
+            BUMPER_PULSE_MAX_SCALE - (BUMPER_PULSE_MAX_SCALE - 1f) * shrinkProgress
+        }
+
+        postInvalidateOnAnimation()
+
+        return scale
     }
 
     private fun Double.toRadiansFloat(): Float {
@@ -558,6 +941,8 @@ class ShuffleRenderer @JvmOverloads constructor(
     private fun showPassiveMode(
         targetMode: ShuffleUiMode,
     ) {
+        resetBumperVisualState()
+
         uiMode = targetMode
 
         pendingRoundStartRunnable?.let {
@@ -1279,6 +1664,7 @@ class ShuffleRenderer @JvmOverloads constructor(
     }
 
     private fun destroyNativeTable() {
+        resetBumperVisualState()
         stopPushStickAnimation()
         stopScoreAnimation()
         cancelWallAnimation()
@@ -1624,6 +2010,11 @@ class ShuffleRenderer @JvmOverloads constructor(
             h,
         )
 
+        drawBoardShadow(
+            canvas,
+            boardRect,
+        )
+
         drawBoard(
             canvas,
             boardRect,
@@ -1641,7 +2032,7 @@ class ShuffleRenderer @JvmOverloads constructor(
             boardRect,
         )
 
-        drawPushSticks(
+        drawReplayShotArrows(
             canvas,
             boardRect,
         )
@@ -1653,18 +2044,27 @@ class ShuffleRenderer @JvmOverloads constructor(
             )
         } else {
             for (puck in pucks) {
+                drawReplayPuckShadow(
+                    canvas = canvas,
+                    boardRect = boardRect,
+                    puck = puck,
+                )
+            }
+
+            drawPushSticks(
+                canvas,
+                boardRect,
+            )
+
+            for (puck in pucks) {
                 drawReplayPuck(
-                    canvas,
-                    boardRect,
-                    puck,
+                    canvas = canvas,
+                    boardRect = boardRect,
+                    puck = puck,
+                    drawShadow = false,
                 )
             }
         }
-
-        drawReplayShotArrows(
-            canvas,
-            boardRect,
-        )
 
         if (scoreAnimationActive) {
             drawScoringLabels(
@@ -1684,6 +2084,79 @@ class ShuffleRenderer @JvmOverloads constructor(
                 canvas = canvas,
                 boardRect = boardRect,
                 alpha = aimUiAlpha,
+            )
+        }
+    }
+
+    private fun drawBoardShadow(
+        canvas: Canvas,
+        boardRect: RectF,
+    ) {
+        val inset = size(
+            BOARD_SHADOW_INSET_GAME,
+            boardRect,
+        )
+
+        val offsetX = size(
+            BOARD_SHADOW_OFFSET_X_GAME,
+            boardRect,
+        )
+
+        val offsetY = size(
+            BOARD_SHADOW_OFFSET_Y_GAME,
+            boardRect,
+        )
+
+        val blur = size(
+            SHADOW_BLUR_GAME,
+            boardRect,
+        )
+
+        val cornerRadius = size(
+            3f,
+            boardRect,
+        )
+
+        val shapeWidth = (boardRect.width() - inset * 2f).toInt().coerceAtLeast(
+            1,
+        )
+
+        val shapeHeight = (boardRect.height() - inset * 2f).toInt().coerceAtLeast(
+            1,
+        )
+
+        val bitmap = ensureBoardShadowBitmap(
+            shapeWidth = shapeWidth,
+            shapeHeight = shapeHeight,
+            cornerRadius = cornerRadius,
+            blurRadius = blur,
+        )
+
+        val padding = ceil(
+            blur * 2f,
+        ).toInt()
+
+        val shadowLeft = boardRect.left + inset + offsetX - padding
+
+        val shadowTop = boardRect.top + inset + offsetY - padding
+
+        canvas.withClip(
+            boardRect.left + size(
+                1.2f,
+                boardRect,
+            ),
+            boardRect.top + size(
+                1.2f,
+                boardRect,
+            ),
+            boardRect.right + blur,
+            boardRect.bottom + blur,
+        ) {
+            drawBitmap(
+                bitmap,
+                shadowLeft,
+                shadowTop,
+                shadowBitmapPaint,
             )
         }
     }
@@ -1923,6 +2396,8 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         val stick = stickBitmap ?: return
 
+        val cachedStickShadow = stickShadowBitmap
+
         val isPushPhase = pushStickPushStartMs > 0L
 
         val backwardOffset: Float
@@ -1946,7 +2421,7 @@ class ShuffleRenderer @JvmOverloads constructor(
             ) * (1f - approachEase)
 
             pushTravelGame = 0f
-            stickAlpha = 0.96f
+            stickAlpha = STICK_BASE_ALPHA
         } else {
             val pushElapsed = (now - pushStickPushStartMs).coerceAtLeast(0L)
 
@@ -1977,7 +2452,7 @@ class ShuffleRenderer @JvmOverloads constructor(
 
             backwardOffset = 0f
 
-            stickAlpha = 0.96f * (1f - fadeEase)
+            stickAlpha = STICK_BASE_ALPHA * (1f - fadeEase)
         }
 
         val stickWidth = size(
@@ -1990,11 +2465,6 @@ class ShuffleRenderer @JvmOverloads constructor(
         val forkForwardOffset = size(
             STICK_FORK_FORWARD_OFFSET_GAME,
             boardRect,
-        )
-
-        stickPaint.alpha = (255f * stickAlpha).toInt().coerceIn(
-            0,
-            255,
         )
 
         for (state in pushStickStates) {
@@ -2054,11 +2524,70 @@ class ShuffleRenderer @JvmOverloads constructor(
                 anchorY + stickHeight / 2f,
             )
 
+            val stickPaintAlpha = (255f * stickAlpha).toInt().coerceIn(
+                0,
+                255,
+            )
+
+            val shadowDestination = cachedStickShadow?.let { shadow ->
+                val sourceScaleX = stickWidth / stick.width.toFloat()
+
+                val sourceScaleY = stickHeight / stick.height.toFloat()
+
+                val shadowPaddingX = (shadow.width - stick.width) * 0.5f * sourceScaleX
+
+                val shadowPaddingY = (shadow.height - stick.height) * 0.5f * sourceScaleY
+
+                RectF(
+                    destination.left - shadowPaddingX + size(
+                        STICK_SHADOW_OFFSET_X_GAME,
+                        boardRect,
+                    ),
+                    destination.top - shadowPaddingY + size(
+                        STICK_SHADOW_OFFSET_Y_GAME,
+                        boardRect,
+                    ),
+                    destination.right + shadowPaddingX + size(
+                        STICK_SHADOW_OFFSET_X_GAME,
+                        boardRect,
+                    ),
+                    destination.bottom + shadowPaddingY + size(
+                        STICK_SHADOW_OFFSET_Y_GAME,
+                        boardRect,
+                    ),
+                )
+            }
+
             canvas.withRotation(
                 degrees = angleDegrees,
                 pivotX = anchorX,
                 pivotY = anchorY,
             ) {
+                if (cachedStickShadow != null && shadowDestination != null) {
+                    val previousShadowAlpha = shadowBitmapPaint.alpha
+
+                    val shadowFade = (stickAlpha / STICK_BASE_ALPHA).coerceIn(
+                        0f,
+                        1f,
+                    )
+
+                    shadowBitmapPaint.alpha = (SHADOW_ALPHA * shadowFade).toInt().coerceIn(
+                        0,
+                        255,
+                    )
+
+                    drawBitmap(
+                        cachedStickShadow,
+                        null,
+                        shadowDestination,
+                        shadowBitmapPaint,
+                    )
+
+                    shadowBitmapPaint.alpha = previousShadowAlpha
+                }
+
+                stickPaint.alpha = stickPaintAlpha
+
                 drawBitmap(
                     stick,
                     null,
@@ -2212,7 +2741,7 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         val now = System.currentTimeMillis()
 
-        if (wallIntroStartMs <= 0L || now < wallIntroStartMs) {
+        if (wallIntroStartMs !in 1..now) {
             postInvalidateOnAnimation()
             return
         }
@@ -2361,43 +2890,120 @@ class ShuffleRenderer @JvmOverloads constructor(
     }
 
     private fun drawMode2Bumper(
-        canvas: Canvas, boardRect: RectF
+        canvas: Canvas,
+        boardRect: RectF,
     ) {
         val cx = boardRect.centerX()
+
         val cy = boardRect.centerY()
 
-        val bumpersize = size(53f, boardRect)
-        val shadowsize = size(56f, boardRect)
+        val pulseScale = bumperPulseScale()
 
-        val shadowRect = RectF(
-            cx - shadowsize / 2f,
-            cy - shadowsize / 2f + size(1.5f, boardRect),
-            cx + shadowsize / 2f,
-            cy + shadowsize / 2f + size(1.5f, boardRect)
+        val bumperSize = size(
+            53f,
+            boardRect,
+        ) * pulseScale
+
+        val shadowPulseScale = 1f + (pulseScale - 1f) * 0.5f
+
+        val shadowDiameter = size(
+            54f,
+            boardRect,
+        ) * shadowPulseScale
+
+        val shadowOffsetX = size(
+            0.8f,
+            boardRect,
+        )
+
+        val shadowOffsetY = size(
+            3.8f,
+            boardRect,
+        )
+
+        val blurRadius = size(
+            4.8f,
+            boardRect,
+        )
+
+        drawCachedCircleShadow(
+            canvas = canvas,
+            centerX = cx + shadowOffsetX,
+            centerY = cy + shadowOffsetY,
+            circleDiameter = shadowDiameter,
+            blurRadius = blurRadius,
         )
 
         val bumperRect = RectF(
-            cx - bumpersize / 2f, cy - bumpersize / 2f, cx + bumpersize / 2f, cy + bumpersize / 2f
+            cx - bumperSize / 2f,
+            cy - bumperSize / 2f,
+            cx + bumperSize / 2f,
+            cy + bumperSize / 2f,
         )
 
-        val shadow = bumperShadowBitmap
         val bumper = bumperBitmap
 
-        if (shadow != null) {
-            canvas.drawBitmap(shadow, null, shadowRect, imagePaint)
+        if (bumper != null) {
+            canvas.drawBitmap(
+                bumper,
+                null,
+                bumperRect,
+                imagePaint,
+            )
         } else {
+            fillPaint.shader = null
+
+            fillPaint.alpha = 255
+
             fillPaint.style = Paint.Style.FILL
-            fillPaint.color = Color.argb(65, 0, 0, 0)
-            canvas.drawCircle(cx, cy + size(1.5f, boardRect), shadowsize / 2f, fillPaint)
+
+            fillPaint.color = Color.rgb(
+                215,
+                215,
+                215,
+            )
+
+            canvas.drawCircle(
+                cx,
+                cy,
+                bumperSize / 2f,
+                fillPaint,
+            )
+        }
+    }
+
+    private fun drawProceduralPuckShadow(
+        canvas: Canvas,
+        cx: Float,
+        cy: Float,
+        puckSize: Float,
+        alpha: Float,
+    ) {
+        val clampedAlpha = alpha.coerceIn(
+            0f,
+            1f,
+        )
+
+        if (clampedAlpha <= 0.001f) {
+            return
         }
 
-        if (bumper != null) {
-            canvas.drawBitmap(bumper, null, bumperRect, imagePaint)
-        } else {
-            fillPaint.style = Paint.Style.FILL
-            fillPaint.color = Color.rgb(215, 215, 215)
-            canvas.drawCircle(cx, cy, bumpersize / 2f, fillPaint)
-        }
+        val shadowDiameter = puckSize * 0.84f
+
+        val shadowOffsetX = puckSize * 0.035f
+
+        val shadowOffsetY = puckSize * 0.16f
+
+        val blurRadius = puckSize * (SHADOW_BLUR_GAME / PUCK_DIAMETER_GAME)
+
+        drawCachedCircleShadow(
+            canvas = canvas,
+            centerX = cx + shadowOffsetX,
+            centerY = cy + shadowOffsetY,
+            circleDiameter = shadowDiameter,
+            blurRadius = blurRadius,
+            alpha = clampedAlpha,
+        )
     }
 
     private fun drawOpponentReadyPuck(
@@ -2622,27 +3228,10 @@ class ShuffleRenderer @JvmOverloads constructor(
             player,
         )
 
-        val shadowColor = if (player == 1) {
-            Color.BLACK
-        } else {
-            Color.WHITE
-        }
-
         val visualAlpha = (255f * alpha).toInt().coerceIn(
             0,
             255,
         )
-
-        val shadowAlpha = (if (player == 1) {
-            80f * alpha
-        } else {
-            115f * alpha
-        }).toInt().coerceIn(
-            0,
-            255,
-        )
-
-        val startOffset = 0f
 
         val requestedLength = size(
             distance.coerceIn(
@@ -2680,15 +3269,15 @@ class ShuffleRenderer @JvmOverloads constructor(
             boardRect,
         )
 
-        val cosA = cos(angle)
+        val cosA = cos(
+            angle,
+        )
 
-        val sinA = sin(angle)
+        val sinA = sin(
+            angle,
+        )
 
         val normalX = -sinA
-
-        val startX = cueX + cosA * startOffset
-
-        val startY = cueY + sinA * startOffset
 
         val tipX = cueX + cosA * requestedLength
 
@@ -2700,8 +3289,8 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         val arrowPath = Path().apply {
             moveTo(
-                startX + normalX * shaftHalfWidth,
-                startY + cosA * shaftHalfWidth,
+                cueX + normalX * shaftHalfWidth,
+                cueY + cosA * shaftHalfWidth,
             )
 
             lineTo(
@@ -2730,81 +3319,67 @@ class ShuffleRenderer @JvmOverloads constructor(
             )
 
             lineTo(
-                startX - normalX * shaftHalfWidth,
-                startY - cosA * shaftHalfWidth,
+                cueX - normalX * shaftHalfWidth,
+                cueY - cosA * shaftHalfWidth,
             )
 
             close()
         }
 
-        val shadowOffset = size(
-            1.5f,
-            boardRect,
-        )
-
-        val shadowPath = Path().apply {
-            moveTo(
-                startX + normalX * shaftHalfWidth + shadowOffset,
-                startY + cosA * shaftHalfWidth + shadowOffset,
-            )
-
-            lineTo(
-                headBackX + normalX * shaftHalfWidth + shadowOffset,
-                headBackY + cosA * shaftHalfWidth + shadowOffset,
-            )
-
-            lineTo(
-                headBackX + normalX * headHalfWidth + shadowOffset,
-                headBackY + cosA * headHalfWidth + shadowOffset,
-            )
-
-            lineTo(
-                tipX + shadowOffset,
-                tipY + shadowOffset,
-            )
-
-            lineTo(
-                headBackX - normalX * headHalfWidth + shadowOffset,
-                headBackY - cosA * headHalfWidth + shadowOffset,
-            )
-
-            lineTo(
-                headBackX - normalX * shaftHalfWidth + shadowOffset,
-                headBackY - cosA * shaftHalfWidth + shadowOffset,
-            )
-
-            lineTo(
-                startX - normalX * shaftHalfWidth + shadowOffset,
-                startY - cosA * shaftHalfWidth + shadowOffset,
-            )
-
-            close()
-        }
+        fillPaint.shader = null
 
         fillPaint.style = Paint.Style.FILL
 
         fillPaint.color = Color.argb(
-            shadowAlpha,
-            Color.red(shadowColor),
-            Color.green(shadowColor),
-            Color.blue(shadowColor),
-        )
-
-        canvas.drawPath(
-            shadowPath,
-            fillPaint,
-        )
-
-        fillPaint.color = Color.argb(
             visualAlpha,
-            Color.red(arrowColor),
-            Color.green(arrowColor),
-            Color.blue(arrowColor),
+            Color.red(
+                arrowColor,
+            ),
+            Color.green(
+                arrowColor,
+            ),
+            Color.blue(
+                arrowColor,
+            ),
         )
 
         canvas.drawPath(
             arrowPath,
             fillPaint,
+        )
+    }
+
+    private fun darkenColor(
+        color: Int,
+        factor: Float,
+    ): Int {
+        val clampedFactor = factor.coerceIn(
+            0f,
+            1f,
+        )
+
+        return Color.argb(
+            Color.alpha(
+                color,
+            ),
+            (Color.red(
+                color,
+            ) * clampedFactor).toInt().coerceIn(
+                0,
+                255,
+            ),
+            (Color.green(
+                color,
+            ) * clampedFactor).toInt().coerceIn(
+                0,
+                255,
+            ),
+            (Color.blue(
+                color,
+            ) * clampedFactor).toInt().coerceIn(
+                0,
+                255,
+            ),
         )
     }
 
@@ -3339,11 +3914,9 @@ class ShuffleRenderer @JvmOverloads constructor(
         }
     }
 
-    private fun drawReplayPuck(
-        canvas: Canvas,
-        boardRect: RectF,
+    private fun shouldDrawReplayPuck(
         puck: ShufflePuck,
-    ) {
+    ): Boolean {
         val isOnReadyRow = isPuckOnReadyRowForPlayer(
             puck = puck,
             player = 1,
@@ -3352,23 +3925,54 @@ class ShuffleRenderer @JvmOverloads constructor(
             player = 2,
         )
 
-        val showReadyRowPuck = when (uiMode) {
-            ShuffleUiMode.Playing,
-            ShuffleUiMode.Waiting,
-            ShuffleUiMode.SentWaiting,
-                -> {
+        if (!isOnReadyRow) {
+            return true
+        }
+
+        return when (uiMode) {
+            ShuffleUiMode.Playing, ShuffleUiMode.Waiting, ShuffleUiMode.SentWaiting -> {
                 true
             }
 
-            ShuffleUiMode.Aiming,
-            ShuffleUiMode.Spectating,
-            ShuffleUiMode.GameOver,
-                -> {
+            ShuffleUiMode.Aiming, ShuffleUiMode.Spectating, ShuffleUiMode.GameOver -> {
                 false
             }
         }
+    }
 
-        if (isOnReadyRow && !showReadyRowPuck) {
+    private fun drawReplayPuckShadow(
+        canvas: Canvas,
+        boardRect: RectF,
+        puck: ShufflePuck,
+    ) {
+        if (!shouldDrawReplayPuck(puck)) {
+            return
+        }
+
+        drawProceduralPuckShadow(
+            canvas = canvas,
+            cx = puckVisualScreenX(
+                puck,
+                boardRect,
+            ),
+            cy = puckVisualScreenY(
+                puck,
+                boardRect,
+            ),
+            puckSize = pucksize(
+                boardRect,
+            ),
+            alpha = 1f,
+        )
+    }
+
+    private fun drawReplayPuck(
+        canvas: Canvas,
+        boardRect: RectF,
+        puck: ShufflePuck,
+        drawShadow: Boolean = true,
+    ) {
+        if (!shouldDrawReplayPuck(puck)) {
             return
         }
 
@@ -3387,6 +3991,7 @@ class ShuffleRenderer @JvmOverloads constructor(
             size = pucksize(
                 boardRect,
             ),
+            drawShadow = drawShadow,
         )
     }
 
@@ -3398,6 +4003,7 @@ class ShuffleRenderer @JvmOverloads constructor(
         rotation: Float,
         size: Float,
         alpha: Float = 1f,
+        drawShadow: Boolean = true,
     ) {
         val clampedAlpha = alpha.coerceIn(
             0f,
@@ -3412,6 +4018,16 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         val previousFillAlpha = fillPaint.alpha
 
+        if (drawShadow) {
+            drawProceduralPuckShadow(
+                canvas = canvas,
+                cx = cx,
+                cy = cy,
+                puckSize = size,
+                alpha = clampedAlpha,
+            )
+        }
+
         val paintAlpha = (clampedAlpha * 255f).toInt().coerceIn(
             0,
             255,
@@ -3420,42 +4036,6 @@ class ShuffleRenderer @JvmOverloads constructor(
         imagePaint.alpha = paintAlpha
 
         fillPaint.alpha = paintAlpha
-
-        val shadowsize = size * 1.25f
-
-        val shadow = puckShadowBitmap
-
-        val shadowRect = RectF(
-            cx - shadowsize / 2f,
-            cy - shadowsize / 2f + dp(2f),
-            cx + shadowsize / 2f,
-            cy + shadowsize / 2f + dp(2f),
-        )
-
-        if (shadow != null) {
-            canvas.drawBitmap(
-                shadow,
-                null,
-                shadowRect,
-                imagePaint,
-            )
-        } else {
-            fillPaint.style = Paint.Style.FILL
-
-            fillPaint.color = Color.argb(
-                65,
-                0,
-                0,
-                0,
-            )
-
-            canvas.drawCircle(
-                cx + dp(1f),
-                cy + dp(2f),
-                shadowsize / 2f,
-                fillPaint,
-            )
-        }
 
         val bitmap = if (player == 1) {
             puck1Bitmap
@@ -3667,11 +4247,17 @@ class ShuffleRenderer @JvmOverloads constructor(
             return
         }
 
-        val buttonWidth = dp(148f)
+        val buttonWidth = dp(
+            148f,
+        )
 
-        val buttonHeight = dp(42f)
+        val buttonHeight = dp(
+            42f,
+        )
 
-        val cornerRadius = dp(10f)
+        val cornerRadius = dp(
+            10f,
+        )
 
         val hiddenCenterY = h + buttonHeight
 
@@ -3692,46 +4278,6 @@ class ShuffleRenderer @JvmOverloads constructor(
             bottom,
         )
 
-        fillPaint.style = Paint.Style.FILL
-
-        fillPaint.color = Color.argb(
-            28,
-            0,
-            0,
-            0,
-        )
-
-        canvas.drawRoundRect(
-            RectF(
-                left - dp(2f),
-                top + dp(3f),
-                right + dp(2f),
-                bottom + dp(7f),
-            ),
-            cornerRadius + dp(2f),
-            cornerRadius + dp(2f),
-            fillPaint,
-        )
-
-        fillPaint.color = Color.argb(
-            65,
-            0,
-            0,
-            0,
-        )
-
-        canvas.drawRoundRect(
-            RectF(
-                left,
-                top + dp(2f),
-                right,
-                bottom + dp(4f),
-            ),
-            cornerRadius,
-            cornerRadius,
-            fillPaint,
-        )
-
         val normalButtonColor = playerArrowColor(
             localPlayer,
         )
@@ -3750,11 +4296,86 @@ class ShuffleRenderer @JvmOverloads constructor(
             )
         }
 
-        fillPaint.color = if (launchButtonPressed) {
+        val buttonFaceColor = if (launchButtonPressed) {
             pressedButtonColor
         } else {
             normalButtonColor
         }
+
+        val buttonEdgeColor = darkenColor(
+            color = buttonFaceColor,
+            factor = if (localPlayer == 1) {
+                0.64f
+            } else {
+                0.42f
+            },
+        )
+
+        fillPaint.shader = null
+
+        fillPaint.alpha = 255
+
+        fillPaint.style = Paint.Style.FILL
+
+        val launchShadowBlur = dp(
+            5f,
+        )
+
+        val launchShadowShapeWidth = (buttonWidth + dp(
+            2f,
+        )).toInt().coerceAtLeast(
+            1,
+        )
+
+        val launchShadowShapeHeight = (buttonHeight + dp(
+            3f,
+        )).toInt().coerceAtLeast(
+            1,
+        )
+
+        val launchShadowBitmap = ensureLaunchButtonShadowBitmap(
+            shapeWidth = launchShadowShapeWidth,
+            shapeHeight = launchShadowShapeHeight,
+            cornerRadius = cornerRadius + dp(
+                1f,
+            ),
+            blurRadius = launchShadowBlur,
+        )
+
+        val launchShadowPadding = ceil(
+            launchShadowBlur * 2f,
+        ).toInt()
+
+        canvas.drawBitmap(
+            launchShadowBitmap,
+            left - dp(
+                1f,
+            ) - launchShadowPadding,
+            top + dp(
+                4f,
+            ) - launchShadowPadding,
+            shadowBitmapPaint,
+        )
+
+        fillPaint.color = buttonEdgeColor
+
+        canvas.drawRoundRect(
+            RectF(
+                left,
+                top + dp(
+                    3f,
+                ),
+                right,
+                bottom + dp(
+                    5f,
+                ),
+            ),
+            cornerRadius,
+            cornerRadius,
+            fillPaint,
+        )
+
+        fillPaint.color = buttonFaceColor
 
         canvas.drawRoundRect(
             launchButtonRect,
@@ -3763,9 +4384,13 @@ class ShuffleRenderer @JvmOverloads constructor(
             fillPaint,
         )
 
+        linePaint.alpha = 255
+
         linePaint.style = Paint.Style.STROKE
 
-        linePaint.strokeWidth = dp(1.2f)
+        linePaint.strokeWidth = dp(
+            1.2f,
+        )
 
         linePaint.color = if (localPlayer == 1) {
             Color.argb(
@@ -3794,7 +4419,9 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         textPaint.typeface = android.graphics.Typeface.DEFAULT_BOLD
 
-        textPaint.textSize = dp(18f)
+        textPaint.textSize = dp(
+            18f,
+        )
 
         textPaint.color = if (localPlayer == 1) {
             Color.rgb(
@@ -3867,6 +4494,7 @@ class ShuffleRenderer @JvmOverloads constructor(
         roundReplay: String,
         onFinished: () -> Unit,
     ) {
+        resetBumperVisualState()
         pendingRoundStartRunnable?.let {
             removeCallbacks(it)
         }
@@ -4014,6 +4642,7 @@ class ShuffleRenderer @JvmOverloads constructor(
     }
 
     private fun startNativeRoundFromCurrentPucks() {
+        resetBumperVisualState()
         showReplayArrows = false
 
         replayArrowAlpha = 0f
@@ -4290,24 +4919,24 @@ class ShuffleRenderer @JvmOverloads constructor(
         OpenPigeonLog.i(
             "ShuffleTrace",
             "SHUFFLE_ANDROID_RUN_END=" + JSONObject().put(
-                    "runId",
-                    completedRunId,
-                ).put(
-                    "replayHash",
-                    completedReplayHash,
-                ).put(
-                    "frames",
-                    completedFrameCount,
-                ).put(
-                    "input",
-                    completedTraceInput,
-                ).put(
-                    "finalBoard",
-                    settledBoardForTrace,
-                ).put(
-                    "pucks",
-                    finalNativePucksForTrace,
-                ).toString(),
+                "runId",
+                completedRunId,
+            ).put(
+                "replayHash",
+                completedReplayHash,
+            ).put(
+                "frames",
+                completedFrameCount,
+            ).put(
+                "input",
+                completedTraceInput,
+            ).put(
+                "finalBoard",
+                settledBoardForTrace,
+            ).put(
+                "pucks",
+                finalNativePucksForTrace,
+            ).toString(),
         )
 
         ShuffleNativePhysics.clearShuffleTraceContext(
@@ -4378,6 +5007,12 @@ class ShuffleRenderer @JvmOverloads constructor(
             val vx = floats.get(3)
             val vy = floats.get(4)
             val player = floats.get(6).toInt().coerceIn(1, 2)
+
+            updateBumperVisualContact(
+                traceId = slot.traceId,
+                x = x,
+                y = y,
+            )
 
             updated.add(
                 ShufflePuck(
@@ -5281,8 +5916,13 @@ class ShuffleRenderer @JvmOverloads constructor(
         return points * sceneScale(boardRect)
     }
 
-    private fun pucksize(boardRect: RectF): Float {
-        return size(32f, boardRect)
+    private fun pucksize(
+        boardRect: RectF,
+    ): Float {
+        return size(
+            PUCK_DIAMETER_GAME,
+            boardRect,
+        )
     }
 
     private fun readyPuckScreenY(
@@ -5311,7 +5951,6 @@ class ShuffleRenderer @JvmOverloads constructor(
             boardRect = boardRect,
         )
     }
-
 
     private fun bottomOutOfPlayPuckY(
         boardRect: RectF,
@@ -5377,41 +6016,39 @@ class ShuffleRenderer @JvmOverloads constructor(
 
     private fun loadAssets() {
         puck1Bitmap = loadAssetBitmap(
-            "shuffle/shuffle_puck1_Normal@3x.png",
-            "shuffle_puck1_Normal@3x.png",
+            "shuffle/puck1.png",
+            "puck1.png",
         )
 
         puck2Bitmap = loadAssetBitmap(
-            "shuffle/shuffle_puck2_Normal@3x.png",
-            "shuffle_puck2_Normal@3x.png",
-        )
-
-        puckShadowBitmap = loadAssetBitmap(
-            "shuffle/shuffle_puck_shadow_Normal@3x.png",
-            "shuffle_puck_shadow_Normal@3x.png",
+            "shuffle/puck2.png",
+            "puck2.png",
         )
 
         bumperBitmap = loadAssetBitmap(
-            "shuffle/shuffle_bumper_Normal@3x.png",
-            "shuffle_bumper_Normal@3x.png",
-        )
-
-        bumperShadowBitmap = loadAssetBitmap(
-            "shuffle/shuffle_bumper_shadow_Normal@3x.png",
-            "shuffle_bumper_shadow_Normal@3x.png",
+            "shuffle/bumper.png",
+            "bumper.png",
         )
 
         val loadedStick = loadAssetBitmap(
-            "shuffle/shuffle_stick_Normal@3x.png",
-            "shuffle_stick_Normal@3x.png",
+            "shuffle/stick.png",
+            "stick.png",
         )
 
-        stickBitmap = if (loadedStick != null) {
-            sanitizeStickBitmap(
+        if (loadedStick != null) {
+            val sanitizedStick = sanitizeStickBitmap(
                 loadedStick,
             )
+
+            stickBitmap = sanitizedStick
+
+            stickShadowBitmap = createStickShadowBitmap(
+                sanitizedStick,
+            )
         } else {
-            null
+            stickBitmap = null
+
+            stickShadowBitmap = null
         }
     }
 
@@ -5539,14 +6176,39 @@ class ShuffleRenderer @JvmOverloads constructor(
         private const val BOTTOM_CONTROL_SIZE_DP = 48f
 
         private const val BOTTOM_CONTROL_BOTTOM_MARGIN_DP = 16f
+        private const val BUMPER_VISUAL_ENTER_RADIUS_GAME = 41.10f
+
+        private const val BUMPER_VISUAL_EXIT_RADIUS_GAME = 43.0f
+
+        private const val BUMPER_PULSE_DURATION_MS = 150L
+
+        private const val BUMPER_PULSE_GROW_PORTION = 0.36f
+
+        private const val BUMPER_PULSE_MAX_SCALE = 1.075f
 
         //  ready puck movement/selection constants from ShuffleScene touch handling.
         private const val READY_PUCK_X_LIMIT = 159f
         private const val READY_PUCK_PICK_RADIUS = 35f
         private const val READY_PUCK_PLAYER1_Y = -215f
+
         private const val READY_PUCK_PLAYER2_Y = 215f
+
         private const val SHOT_DISTANCE_EPS = 0.001f
+
         private const val ARROW_MAX_ALPHA = 0.80f
+
+        private const val SHADOW_ALPHA = 90
+
+        private const val SHADOW_BLUR_GAME = 3.2f
+
+        private const val PUCK_DIAMETER_GAME = 32f
+
+        private const val BOARD_SHADOW_INSET_GAME = 10f
+
+        private const val BOARD_SHADOW_OFFSET_X_GAME = 0f
+
+        private const val BOARD_SHADOW_OFFSET_Y_GAME = 1.8f
+
         private const val STICK_APPROACH_DURATION_MS = 1000L
         private const val STICK_CONTACT_HOLD_DURATION_MS = 500L
         private const val STICK_PUSH_MOVE_DURATION_MS = 150L
@@ -5558,7 +6220,14 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         private const val STICK_WIDTH_GAME = 240f
         private const val STICK_START_OFFSET_GAME = 36f
-        private const val STICK_FORK_FORWARD_OFFSET_GAME = 2f
+        private const val STICK_FORK_FORWARD_OFFSET_GAME = -2f
+        private const val STICK_SHADOW_OFFSET_X_GAME = -3f
+
+        private const val STICK_SHADOW_OFFSET_Y_GAME = 0f
+
+        private const val STICK_SHADOW_BLUR_GAME = SHADOW_BLUR_GAME
+
+        private const val STICK_BASE_ALPHA = 0.96f
         private const val OPPONENT_POSITION_REVEAL_DURATION_MS = 420L
         private const val WALL_INTRO_AFTER_STICK_GAP_MS = 40L
         private const val WALL_INTRO_DURATION_MS = 520L

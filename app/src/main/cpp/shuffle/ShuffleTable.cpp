@@ -36,7 +36,7 @@ namespace {
 
     constexpr float WALL_RESTITUTION = 0.75f;
 
-    constexpr float BUMPER_RADIUS = 26.5f;
+    constexpr float BUMPER_RADIUS = 26.0f;
 
     constexpr float BUMPER_DENSITY = 1.0f;
 

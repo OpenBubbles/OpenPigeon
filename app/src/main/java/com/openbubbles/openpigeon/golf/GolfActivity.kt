@@ -45,6 +45,7 @@ import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import com.openbubbles.openpigeon.ui.GameMenuController
 import com.openbubbles.openpigeon.ui.GameMenuPlacement
+import com.openbubbles.openpigeon.settings.AvatarWinBurstController
 
 @SuppressLint("SetTextI18n")
 class GolfActivity : AppCompatActivity() {
@@ -90,6 +91,7 @@ class GolfActivity : AppCompatActivity() {
 
     private lateinit var gameAvatarAnchor: FrameLayout
     private lateinit var oppAvatarAnchor: FrameLayout
+    private lateinit var avatarWinBurstController: AvatarWinBurstController
     private lateinit var localAvatarYouLabel: TextView
     private lateinit var spectatorLabel: TextView
 
@@ -476,6 +478,12 @@ class GolfActivity : AppCompatActivity() {
 
         gameMenu.sheet.attachOpponentAvatar(
             oppAvatarAnchor,
+        )
+
+        avatarWinBurstController = AvatarWinBurstController(
+            root = root,
+            localAnchor = gameAvatarAnchor,
+            opponentAnchor = oppAvatarAnchor,
         )
 
         configureSettingsAvatarTarget()
@@ -1150,6 +1158,9 @@ class GolfActivity : AppCompatActivity() {
 
     private fun hideGameOverLabel() {
         gameOverShown = false
+        if (::avatarWinBurstController.isInitialized) {
+            avatarWinBurstController.clear()
+        }
 
         if (!::gameOverLabel.isInitialized) return
 
@@ -1180,6 +1191,12 @@ class GolfActivity : AppCompatActivity() {
         gameOverLabel.scaleX = 0.88f
         gameOverLabel.scaleY = 0.88f
         gameOverLabel.visibility = View.VISIBLE
+        if (::avatarWinBurstController.isInitialized) {
+            avatarWinBurstController.show(
+                result = result,
+                label = gameOverLabel,
+            )
+        }
         gameOverLabel.bringToFront()
 
         gameOverLabel.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(260L)
@@ -4847,6 +4864,10 @@ class GolfActivity : AppCompatActivity() {
             } else {
                 stopStateLabelAnimation()
             }
+        }
+
+        if (::avatarWinBurstController.isInitialized) {
+            avatarWinBurstController.destroy()
         }
 
         if (::gameMenu.isInitialized) {

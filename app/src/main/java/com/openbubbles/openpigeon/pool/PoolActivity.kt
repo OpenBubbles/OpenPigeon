@@ -70,6 +70,7 @@ import com.openbubbles.openpigeon.ui.GameMenuController
 import com.openbubbles.openpigeon.ui.GameMenuPlacement
 import androidx.core.graphics.withSave
 import kotlin.math.exp
+import com.openbubbles.openpigeon.settings.AvatarWinBurstController
 
 
 class PoolActivity : AppCompatActivity() {
@@ -167,6 +168,7 @@ class PoolActivity : AppCompatActivity() {
 
     private lateinit var gameAvatarAnchor: FrameLayout
     private lateinit var oppAvatarAnchor: FrameLayout
+    private lateinit var avatarWinBurstController: AvatarWinBurstController
 
     fun isPoolDarkModeEnabled(): Boolean {
         return darkMode
@@ -506,6 +508,35 @@ class PoolActivity : AppCompatActivity() {
         showGameOverLabel()
     }
 
+    private fun avatarWinBurstResult(): Int? {
+        if (spectatorMode) {
+            return when (winningPlayerFromWinner(
+                lastMessageWinner,
+            )) {
+                1 -> {
+                    1
+                }
+
+                2 -> {
+                    -1
+                }
+
+                0 -> {
+                    0
+                }
+
+                else -> {
+                    null
+                }
+            }
+        }
+
+        return winLossState.toIntOrNull()?.coerceIn(
+                -1,
+                1,
+            )
+    }
+
     private fun showGameOverLabel() {
         runOnUiThread {
             if (!isGameOver()) return@runOnUiThread
@@ -527,7 +558,20 @@ class PoolActivity : AppCompatActivity() {
             label.setTextColor(gameOverTextColor())
             label.visibility = View.VISIBLE
 
-            setStatusDimVisible(true)
+            setStatusDimVisible(
+                true,
+            )
+
+            avatarWinBurstResult()?.let { result ->
+                if (::avatarWinBurstController.isInitialized) {
+                    avatarWinBurstController.show(
+                        result = result,
+                        dimView = statusDimView,
+                        label = label,
+                    )
+                }
+            }
+
             label.bringToFront()
         }
     }
@@ -562,6 +606,9 @@ class PoolActivity : AppCompatActivity() {
         resetStateLabelLayout(label)
         label.text = null
         label.visibility = View.GONE
+        if (::avatarWinBurstController.isInitialized) {
+            avatarWinBurstController.clear()
+        }
         setStatusDimVisible(false)
     }
 
@@ -1113,6 +1160,14 @@ class PoolActivity : AppCompatActivity() {
             oppAvatarAnchor,
         )
 
+        avatarWinBurstController = AvatarWinBurstController(
+            root = findViewById(
+                R.id.poolRoot,
+            ),
+            localAnchor = gameAvatarAnchor,
+            opponentAnchor = oppAvatarAnchor,
+        )
+
         configureSettingsAvatarTarget()
 
         val cueView = findViewById<FrameLayout>(R.id.cueView)
@@ -1410,6 +1465,10 @@ class PoolActivity : AppCompatActivity() {
 
         if (::renderer.isInitialized) {
             renderer.running = false
+        }
+
+        if (::avatarWinBurstController.isInitialized) {
+            avatarWinBurstController.destroy()
         }
 
         if (::gameMenu.isInitialized) {
@@ -3555,6 +3614,9 @@ class PoolActivity : AppCompatActivity() {
         gameEnded = false
         winLossState = ""
         pendingWinLossState = ""
+        if (::avatarWinBurstController.isInitialized) {
+            avatarWinBurstController.clear()
+        }
         stateLabelVisual = StateLabelVisual.Hidden
         setStatusDimVisible(false)
         clearBalls(table)

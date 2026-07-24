@@ -46,6 +46,8 @@ import androidx.core.view.WindowInsetsCompat
 import com.openbubbles.openpigeon.ui.GameMenuController
 import com.openbubbles.openpigeon.ui.GameMenuPlacement
 import com.openbubbles.openpigeon.ui.RulesPopup
+import com.openbubbles.openpigeon.settings.AvatarWinBurstController
+
 
 class KnockoutActivity : AppCompatActivity() {
     enum class Mode { Disabled, Aiming, Playing }
@@ -55,8 +57,11 @@ class KnockoutActivity : AppCompatActivity() {
     var gameSessionIPC: GameSessionIPC? = null
     private lateinit var gameMenu: GameMenuController
 
+    private lateinit var avatarWinBurstController: AvatarWinBurstController
+
     var table: Long = 0L
     var closing = false
+
     @Volatile
     var mode = Mode.Disabled
     var player = 1
@@ -65,8 +70,10 @@ class KnockoutActivity : AppCompatActivity() {
     var player2Id = ""
     var mapMode = 1
     var boardIndex = 0
+
     @Volatile
     var visualBoardIndex = 0f
+
     @Volatile
     var darkMode = false
 
@@ -86,41 +93,57 @@ class KnockoutActivity : AppCompatActivity() {
     private var shrinkAnimator: ValueAnimator? = null
 
     private var introPopupDismissed = false
+
     @Volatile
     private var gateAimingForIntro = false
+
     @Volatile
     private var launchButtonVisible = false
+
     @Volatile
     var showAllReplayArrows = false
+
     @Volatile
     var replayArrowAlpha = 1f
+
     @Volatile
     private var lastPlacementWidth = -1
+
     @Volatile
     private var lastPlacementHeight = -1
+
     @Volatile
     private var lastPlacementLaunchVisible = false
+
     @Volatile
     private var lastPlacementHintVisible = false
+
     @Volatile
     private var gameEnded = false
+
     @Volatile
     private var winLossState = ""
+
     @Volatile
     private var pendingReplayWinLossState = ""
+
     @Volatile
     private var initialGameDataApplied = false
+
     @Volatile
     private var gameShownToPlayer = false
 
     @Volatile
     private var knockoutBoardTopPx = 0f
+
     @Volatile
     private var knockoutBoardBottomPx = 0f
+
     @Volatile
     private var knockoutBottomInsetPx = 0
 
     private var statusDimView: View? = null
+
     @Volatile
     private var statusDimVisible = false
 
@@ -134,6 +157,7 @@ class KnockoutActivity : AppCompatActivity() {
 
     private var lastOutgoingReplay: String? = null
     private var ignoreNextOutgoingReplayEcho = false
+
     @Volatile
     private var powerHintVisible = false
 
@@ -272,6 +296,16 @@ class KnockoutActivity : AppCompatActivity() {
 
         gameMenu.sheet.attachOpponentAvatar(
             findViewById(
+                R.id.knockoutOpponentAvatarAnchor,
+            ),
+        )
+
+        avatarWinBurstController = AvatarWinBurstController(
+            root = rootFrame,
+            localAnchor = findViewById(
+                R.id.knockoutGameAvatarAnchor,
+            ),
+            opponentAnchor = findViewById(
                 R.id.knockoutOpponentAvatarAnchor,
             ),
         )
@@ -445,8 +479,8 @@ class KnockoutActivity : AppCompatActivity() {
 
         knockoutBoardBottomPx =
             (bottomCandidates.minOrNull() ?: bottomAboveSystemBar).coerceAtLeast(
-                    knockoutBoardTopPx + 1f
-                )
+                knockoutBoardTopPx + 1f
+            )
     }
 
     fun knockoutBoardSafeTopPx(): Float {
@@ -460,8 +494,8 @@ class KnockoutActivity : AppCompatActivity() {
 
         return knockoutBoardBottomPx.takeIf { it > 0f }
             ?: (rootHeight.toFloat() - knockoutBottomInsetPx.toFloat() - dp(16f)).coerceAtLeast(
-                    knockoutBoardSafeTopPx() + 1f
-                )
+                knockoutBoardSafeTopPx() + 1f
+            )
     }
 
     private fun handleMessage(msg: Map<String, String>) {
@@ -646,9 +680,7 @@ class KnockoutActivity : AppCompatActivity() {
             }
         }.onFailure { error ->
             OpenPigeonLog.e(
-                "KnockoutNative",
-                "Replay parse failed while logging incoming game data",
-                error
+                "KnockoutNative", "Replay parse failed while logging incoming game data", error
             )
         }
 
@@ -866,8 +898,7 @@ class KnockoutActivity : AppCompatActivity() {
 
         val isYourTurn =
             lastMessage["isYourTurn"] == "true" || lastMessage["isYourTurn"] == "1" || lastMessage["isYourTurn"]?.equals(
-                "yes",
-                ignoreCase = true
+                "yes", ignoreCase = true
             ) == true || (lastMessage["isYourTurn"].isNullOrBlank() && messagePlayer != null && messagePlayer != player)
 
         val joiningOpenSeat = isJoiningOpenSeat(lastMessage)
@@ -913,13 +944,7 @@ class KnockoutActivity : AppCompatActivity() {
                 val piece = KnockoutPiece(idx, state.player, state, p1Bitmap, p2Bitmap)
                 pieces += piece
                 makeKnockoutPiece(
-                    table,
-                    state.x,
-                    state.y,
-                    state.rotation,
-                    idx,
-                    state.player,
-                    piece.buffer
+                    table, state.x, state.y, state.rotation, idx, state.player, piece.buffer
                 )
             }
         }
@@ -1093,8 +1118,8 @@ class KnockoutActivity : AppCompatActivity() {
 
     private fun revealArrowsThenFire(board: KnockoutBoard, source: PlaySource) {
         val fireStates = board.pieces.mapIndexedNotNull { idx, state ->
-                if (state.power > KnockoutConstants.READY_POWER_EPS) idx to state else null
-            }
+            if (state.power > KnockoutConstants.READY_POWER_EPS) idx to state else null
+        }
 
         if (fireStates.isEmpty()) {
             showAllReplayArrows = false
@@ -1189,9 +1214,7 @@ class KnockoutActivity : AppCompatActivity() {
         if (isGameOver() || mode != Mode.Aiming || closing || table == 0L) return
 
         val baseBoard = currentBoard ?: KnockoutReplayParser.boardFromLivePieces(
-            boardIndex,
-            pieces,
-            zeroPower = false
+            boardIndex, pieces, zeroPower = false
         )
 
         val launchBoard = KnockoutReplayParser.applyLiveAimsToBoard(baseBoard, player, pieces)
@@ -1511,10 +1534,10 @@ class KnockoutActivity : AppCompatActivity() {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 selectedPiece = pieces.filter { it.player == player && it.alive }.minByOrNull { p ->
-                        val dx = p.x - wx
-                        val dy = p.y - wy
-                        dx * dx + dy * dy
-                    }?.takeIf { it.containsWorldPoint(wx, wy) }
+                    val dx = p.x - wx
+                    val dy = p.y - wy
+                    dx * dx + dy * dy
+                }?.takeIf { it.containsWorldPoint(wx, wy) }
 
                 OpenPigeonLog.i(
                     "KnockoutNative",
@@ -1539,9 +1562,7 @@ class KnockoutActivity : AppCompatActivity() {
 
     private fun currentBoardWithLiveAims(): KnockoutBoard {
         val base = currentBoard ?: KnockoutReplayParser.boardFromLivePieces(
-            boardIndex,
-            pieces,
-            zeroPower = false
+            boardIndex, pieces, zeroPower = false
         )
         return KnockoutReplayParser.applyLiveAimsToBoard(base, player, pieces)
     }
@@ -1597,10 +1618,10 @@ class KnockoutActivity : AppCompatActivity() {
                 statusDimVisible = false
 
                 dim.animate().alpha(0f).setDuration(160L).withEndAction {
-                        if (!statusDimVisible) {
-                            dim.visibility = View.GONE
-                        }
-                    }.start()
+                    if (!statusDimVisible) {
+                        dim.visibility = View.GONE
+                    }
+                }.start()
             }
         }
     }
@@ -1678,7 +1699,23 @@ class KnockoutActivity : AppCompatActivity() {
             label.setTextColor(gameOverTextColor())
             label.visibility = View.VISIBLE
 
-            setStatusDimVisible(true)
+            setStatusDimVisible(
+                true,
+            )
+
+            winLossState.toIntOrNull()?.coerceIn(
+                    -1,
+                    1,
+                )?.let { result ->
+                    if (::avatarWinBurstController.isInitialized) {
+                        avatarWinBurstController.show(
+                            result = result,
+                            dimView = statusDimView,
+                            label = label,
+                        )
+                    }
+                }
+
             label.bringToFront()
         }
     }
@@ -1820,6 +1857,10 @@ class KnockoutActivity : AppCompatActivity() {
     private fun hideStateLabelNow() {
         if (stateLabelVisual == StateLabelVisual.GameOver && isGameOver()) {
             return
+        }
+
+        if (::avatarWinBurstController.isInitialized) {
+            avatarWinBurstController.clear()
         }
 
         stopStateLabelAnimation()
@@ -2034,8 +2075,8 @@ class KnockoutActivity : AppCompatActivity() {
             scheduleKnockoutBoardSafeAreaUpdate()
 
             label.animate().alpha(1f).setDuration(220L).withEndAction {
-                    scheduleKnockoutBoardSafeAreaUpdate()
-                }.start()
+                scheduleKnockoutBoardSafeAreaUpdate()
+            }.start()
         } else {
             powerHintVisible = false
 
@@ -2085,8 +2126,8 @@ class KnockoutActivity : AppCompatActivity() {
                 scheduleKnockoutBoardSafeAreaUpdate()
 
                 button.animate().translationY(0f).alpha(1f).setDuration(280L).withEndAction {
-                        scheduleKnockoutBoardSafeAreaUpdate()
-                    }.start()
+                    scheduleKnockoutBoardSafeAreaUpdate()
+                }.start()
             }
         } else if (button.isVisible) {
             button.animate().translationY(button.height.toFloat() + dp(48f)).alpha(0f)
@@ -2495,6 +2536,10 @@ class KnockoutActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         closing = true
+
+        if (::avatarWinBurstController.isInitialized) {
+            avatarWinBurstController.destroy()
+        }
 
         if (::gameMenu.isInitialized) {
             gameMenu.destroy()

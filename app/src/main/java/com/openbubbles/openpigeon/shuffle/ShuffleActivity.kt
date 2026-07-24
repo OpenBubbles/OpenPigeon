@@ -24,6 +24,7 @@ import android.widget.FrameLayout
 import com.openbubbles.openpigeon.ui.RulesPopup
 import com.openbubbles.openpigeon.ui.GameMenuController
 import com.openbubbles.openpigeon.ui.GameMenuPlacement
+import com.openbubbles.openpigeon.settings.AvatarWinBurstController
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import android.graphics.Color
@@ -49,9 +50,13 @@ class ShuffleActivity : AppCompatActivity() {
 
     private lateinit var rootFrame: FrameLayout
     private lateinit var renderer: ShuffleRenderer
-
+    private var rendererHasInitialData = false
     private lateinit var myAvatarAnchor: FrameLayout
     private lateinit var opponentAvatarAnchor: FrameLayout
+
+    private lateinit var avatarWinBurstController:
+            AvatarWinBurstController
+
     private lateinit var gameMenu: GameMenuController
 
     private lateinit var spectatorLabel: TextView
@@ -84,23 +89,40 @@ class ShuffleActivity : AppCompatActivity() {
         supportActionBar?.hide()
         enableEdgeToEdge()
 
-        rootFrame = FrameLayout(this)
-        setContentView(rootFrame)
+        rootFrame = FrameLayout(
+            this,
+        ).apply {
+            clipChildren = false
+
+            clipToPadding = false
+        }
+
+        setContentView(
+            rootFrame,
+        )
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content)) { _, insets ->
             insets
         }
 
-        renderer = ShuffleRenderer(this).apply {
+        renderer = ShuffleRenderer(
+            this,
+        ).apply {
+            visibility = View.INVISIBLE
+
             onLaunchReplayReady = { stagedReplay ->
-                handleLocalLaunchReplay(stagedReplay)
+                handleLocalLaunchReplay(
+                    stagedReplay,
+                )
             }
         }
 
         rootFrame.addView(
-            renderer, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
-            )
+            renderer,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
         )
 
         createAvatarHud()
@@ -172,6 +194,16 @@ class ShuffleActivity : AppCompatActivity() {
             opponentAvatarAnchor,
         )
 
+        avatarWinBurstController =
+            AvatarWinBurstController(
+                root =
+                    rootFrame,
+                localAnchor =
+                    myAvatarAnchor,
+                opponentAnchor =
+                    opponentAvatarAnchor,
+            )
+
         configureSettingsAvatarTarget()
     }
 
@@ -206,18 +238,23 @@ class ShuffleActivity : AppCompatActivity() {
             } " + "dataUri=${intent.data} directKeys=${directData.keys.sorted()} " + "directMode=${directData["mode"]} directMap=${directData["map"]}"
         )
 
-        if (directData.isNotEmpty() && hasUsableShuffleData(directData)) {
-            handleMessage(directData)
-        }
-
         if (sessionId.isBlank()) {
-            if (directData.isEmpty()) {
+            if (hasUsableShuffleData(
+                    directData,
+                )
+            ) {
+                handleMessage(
+                    directData,
+                )
+            } else {
                 OpenPigeonLog.w(
                     "ShuffleActivity",
-                    "No SESSION and no direct shuffle data; showing local fallback"
+                    "No SESSION and no complete direct shuffle data; showing local fallback",
                 )
 
-                handleMessage(defaultLocalMessage())
+                handleMessage(
+                    defaultLocalMessage(),
+                )
             }
 
             return
@@ -277,11 +314,23 @@ class ShuffleActivity : AppCompatActivity() {
             } else {
                 runOnUiThread {
                     if (lastMessage.isEmpty()) {
+                        val fallbackMessage = if (hasUsableShuffleData(
+                                directData,
+                            )
+                        ) {
+                            directData
+                        } else {
+                            defaultLocalMessage()
+                        }
+
                         OpenPigeonLog.w(
-                            "ShuffleActivity", "IPC currentMessage empty; showing local fallback"
+                            "ShuffleActivity",
+                            "IPC currentMessage empty; applying direct-data or local fallback",
                         )
 
-                        handleMessage(defaultLocalMessage())
+                        handleMessage(
+                            fallbackMessage,
+                        )
                     }
                 }
             }
@@ -365,6 +414,22 @@ class ShuffleActivity : AppCompatActivity() {
         onNoQueuedMessage()
     }
 
+    private fun applyRendererGameData(
+        data: Map<String, String>,
+    ) {
+        renderer.setGameData(
+            data,
+        )
+
+        if (!rendererHasInitialData) {
+            rendererHasInitialData =
+                true
+
+            renderer.visibility =
+                View.VISIBLE
+        }
+    }
+
     private fun applyGameData(
         data: Map<String, String>,
     ) {
@@ -378,6 +443,10 @@ class ShuffleActivity : AppCompatActivity() {
         )
 
         lastMessageWinner = data["winner"].orEmpty()
+
+        if (lastMessageWinner.isBlank()) {
+            clearGameOverPresentation()
+        }
 
         updateSpectatorMode(
             data,
@@ -480,7 +549,7 @@ class ShuffleActivity : AppCompatActivity() {
                     )
                 }
 
-                renderer.setGameData(
+                applyRendererGameData(
                     roundData,
                 )
 
@@ -500,7 +569,7 @@ class ShuffleActivity : AppCompatActivity() {
 
                     lastMessageWinner = postRoundData["winner"].orEmpty()
 
-                    renderer.setGameData(
+                    applyRendererGameData(
                         postRoundData,
                     )
 
@@ -525,7 +594,7 @@ class ShuffleActivity : AppCompatActivity() {
 
             lastMessageWinner = postRoundData["winner"].orEmpty()
 
-            renderer.setGameData(
+            applyRendererGameData(
                 postRoundData,
             )
 
@@ -545,6 +614,8 @@ class ShuffleActivity : AppCompatActivity() {
                 return
             }
 
+            clearGameOverPresentation()
+
             applyTurnFlow(
                 postRoundData,
             )
@@ -552,7 +623,7 @@ class ShuffleActivity : AppCompatActivity() {
             return
         }
 
-        renderer.setGameData(
+        applyRendererGameData(
             data,
         )
 
@@ -571,6 +642,8 @@ class ShuffleActivity : AppCompatActivity() {
 
             return
         }
+
+        clearGameOverPresentation()
 
         applyTurnFlow(
             data,
@@ -1358,6 +1431,25 @@ class ShuffleActivity : AppCompatActivity() {
                 true,
             )
 
+            winLossState
+                .toIntOrNull()
+                ?.coerceIn(
+                    -1,
+                    1,
+                )
+                ?.let { result ->
+                    if (::avatarWinBurstController.isInitialized) {
+                        avatarWinBurstController.show(
+                            result =
+                                result,
+                            dimView =
+                                statusDimView,
+                            label =
+                                stateLabel,
+                        )
+                    }
+                }
+
             stateLabel.bringToFront()
         }
     }
@@ -1493,11 +1585,19 @@ class ShuffleActivity : AppCompatActivity() {
     private fun createAvatarHud() {
         myAvatarAnchor = FrameLayout(
             this,
-        )
+        ).apply {
+            clipChildren = false
+
+            clipToPadding = false
+        }
 
         opponentAvatarAnchor = FrameLayout(
             this,
-        )
+        ).apply {
+            clipChildren = false
+
+            clipToPadding = false
+        }
 
         val avatarWidth = dp(
             64f,
@@ -1540,6 +1640,27 @@ class ShuffleActivity : AppCompatActivity() {
                 ).toInt()
             },
         )
+    }
+
+    private fun clearGameOverPresentation() {
+        gameEnded =
+            false
+
+        winLossState =
+            ""
+
+        pendingWinLossState =
+            ""
+
+        if (::avatarWinBurstController.isInitialized) {
+            avatarWinBurstController.clear()
+        }
+
+        if (statusDimView != null) {
+            setStatusDimVisible(
+                false,
+            )
+        }
     }
 
     private fun updateSpectatorMode(
@@ -1774,8 +1895,39 @@ class ShuffleActivity : AppCompatActivity() {
         }
     }
 
-    private fun hasUsableShuffleData(data: Map<String, String>): Boolean {
-        return data["mode"] != null || data["map"] != null || data["replay"] != null
+    private fun hasUsableShuffleData(
+        data: Map<String, String>,
+    ): Boolean {
+        val resolvedMode = data["mode"]?.toIntOrNull()?.takeIf { mode ->
+                mode in 1..3
+            } ?: return false
+
+        val expectedMapCount = when (resolvedMode) {
+            1 -> 12
+            2 -> 16
+            3 -> 21
+            else -> return false
+        }
+
+        val mapCount = data["map"]?.trim()?.removePrefix(
+                "[",
+            )?.removeSuffix(
+                "]",
+            )?.split(
+                ",",
+            )?.count { value ->
+                value.trim().toIntOrNull() != null
+            } ?: 0
+
+        if (mapCount != expectedMapCount) {
+            return false
+        }
+
+        val replay = data["replay"]?.trim().orEmpty()
+
+        return replay.contains(
+            "board:",
+        )
     }
 
     private fun messageSummary(message: Map<String, String>): String {
@@ -1865,6 +2017,10 @@ class ShuffleActivity : AppCompatActivity() {
 
 
     override fun onDestroy() {
+        if (::avatarWinBurstController.isInitialized) {
+            avatarWinBurstController.destroy()
+        }
+
         if (::gameMenu.isInitialized) {
             gameMenu.destroy()
         }

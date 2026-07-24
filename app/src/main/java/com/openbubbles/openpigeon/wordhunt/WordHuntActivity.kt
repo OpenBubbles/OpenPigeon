@@ -56,9 +56,7 @@ class WordHuntActivity : AppCompatActivity() {
     }
 
     enum class GameMode(
-        val gridSize: Int,
-        val invalidPositions: List<Pair<Int, Int>>,
-        val drawable: Int
+        val gridSize: Int, val invalidPositions: List<Pair<Int, Int>>, val drawable: Int
     ) {
         MODE1(4, emptyList(), R.drawable.wordhunt_board_mode1), MODE2(
             5, listOf(
@@ -244,8 +242,7 @@ class WordHuntActivity : AppCompatActivity() {
             this.gameSessionIPC = gameSessionIPC
             currentMessage = gameSessionIPC.getCurrentMessage(sessionId)
             OpenPigeonLog.i(
-                "WordHunt",
-                "currentMessage loaded keys=${currentMessage.keys.sorted()}"
+                "WordHunt", "currentMessage loaded keys=${currentMessage.keys.sorted()}"
             )
 
             if (currentMessage.isNotEmpty()) {
@@ -392,12 +389,12 @@ class WordHuntActivity : AppCompatActivity() {
         )
 
         currentMessage["lang"]?.takeIf { it.isNotBlank() }?.let { languageCode ->
-                updates["lang"] = languageCode
-            }
+            updates["lang"] = languageCode
+        }
 
         currentMessage["subcaption"]?.takeIf { it.isNotBlank() }?.let { subcaption ->
-                updates["subcaption"] = subcaption
-            }
+            updates["subcaption"] = subcaption
+        }
 
         if (!score2.isNullOrBlank() || !score1.isNullOrBlank()) {
             updates["winner"] = "${gameSessionIPC!!.getSenderUUID(sessionId)}|${
@@ -421,24 +418,70 @@ class WordHuntActivity : AppCompatActivity() {
         }
     }
 
-    private fun getScoreData(msg: Map<String, String>): MutableMap<String, String> {
-        val scores = arrayOf(msg["score1"], msg["score2"])
-
-        val client = if (msg["player1"] == gameSessionIPC!!.getSenderUUID(sessionId)) 1 else 2
-        val opponent = if (client - 1 == 0) 2 else 1
-
-        val scoreData = mutableMapOf(
-            "score1" to (scores[client - 1] ?: gameState.score.toString()),
-            "score2" to (scores[opponent - 1] ?: "????"),
-            "words1" to (msg["words$client"] ?: gameState.wordCount.toString()),
-            "words2" to (msg["words$opponent"] ?: ""),
-            "words_list1" to (msg["words_list$client"] ?: gameState.sortedWords()
-                .joinToString("|")),
-            "words_list2" to (msg["words_list$opponent"] ?: ""),
-            // Opponent avatar string so the score screen can display it
-            "opponent_avatar" to (msg["avatar$opponent"] ?: ""),
+    private fun getScoreData(
+        msg: Map<String, String>,
+    ): MutableMap<String, String> {
+        val scores = arrayOf(
+            msg["score1"],
+            msg["score2"],
         )
-        return scoreData
+
+        val client = if (msg["player1"] == gameSessionIPC!!.getSenderUUID(
+                sessionId,
+            )
+        ) {
+            1
+        } else {
+            2
+        }
+
+        val opponent = if (client == 1) {
+            2
+        } else {
+            1
+        }
+
+        val localScore = scores[client - 1] ?: gameState.score.toString()
+
+        val opponentScore = scores[opponent - 1]
+
+        val winnerSlot = opponentScore?.toIntOrNull()?.let { parsedOpponentScore ->
+                val parsedLocalScore = localScore.toIntOrNull() ?: 0
+
+                when {
+                    parsedLocalScore > parsedOpponentScore -> {
+                        "local"
+                    }
+
+                    parsedLocalScore < parsedOpponentScore -> {
+                        "opponent"
+                    }
+
+                    else -> {
+                        "draw"
+                    }
+                }
+            }.orEmpty()
+
+        return mutableMapOf(
+            "score1" to localScore,
+
+            "score2" to (opponentScore ?: "????"),
+
+            "words1" to (msg["words$client"] ?: gameState.wordCount.toString()),
+
+            "words2" to msg["words$opponent"].orEmpty(),
+
+            "words_list1" to (msg["words_list$client"] ?: gameState.sortedWords().joinToString(
+                    "|",
+                )),
+
+            "words_list2" to msg["words_list$opponent"].orEmpty(),
+
+            "opponent_avatar" to msg["avatar$opponent"].orEmpty(),
+
+            "winner_slot" to winnerSlot,
+        )
     }
 
     override fun onResume() {
