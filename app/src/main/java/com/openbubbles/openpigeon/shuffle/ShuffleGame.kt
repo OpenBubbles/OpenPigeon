@@ -28,10 +28,13 @@ import androidx.glance.text.TextAlign
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
+import androidx.glance.color.ColorProvider
 import com.openbubbles.openpigeon.ConfigureCallback
+import android.graphics.Bitmap
+import com.openbubbles.openpigeon.DynamicPreviewGame
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 
-class ShuffleGame : Game {
+class ShuffleGame : Game, DynamicPreviewGame {
     override fun getVersion(): String {
         return "0"
     }
@@ -76,7 +79,8 @@ class ShuffleGame : Game {
                 text = "Game Mode",
                 style = TextStyle(
                     color = ColorProvider(
-                        Color.Gray,
+                        day = Color.Gray,
+                        night = Color.Gray,
                     ),
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
@@ -101,6 +105,14 @@ class ShuffleGame : Game {
 
                     val selected = mapMode == boardValue
 
+                    val labelColor = if (selected) {
+                        Color.White
+                    } else {
+                        Color(
+                            0xFF9A9A9A,
+                        )
+                    }
+
                     Column(
                         modifier = GlanceModifier.defaultWeight().padding(
                             horizontal = 6.dp,
@@ -111,13 +123,8 @@ class ShuffleGame : Game {
                             modifier = GlanceModifier.fillMaxWidth(),
                             style = TextStyle(
                                 color = ColorProvider(
-                                    if (selected) {
-                                        Color.White
-                                    } else {
-                                        Color(
-                                            0xFF9A9A9A,
-                                        )
-                                    },
+                                    day = labelColor,
+                                    night = labelColor,
                                 ),
                                 fontWeight = if (selected) {
                                     FontWeight.Bold
@@ -293,6 +300,185 @@ class ShuffleGame : Game {
         return ""
     }
 
+    override fun gamePreviewBitmap(
+        context: Context,
+        message: Map<String, String>,
+    ): Bitmap? {
+        return buildPreview(
+            context = context,
+            message = message,
+            targetWidthPx = 320,
+            targetHeightPx = 480,
+        )
+    }
+
+    override fun gamePreviewBitmap(
+        context: Context,
+        message: Map<String, String>,
+        targetWidthPx: Int,
+        targetHeightPx: Int,
+    ): Bitmap? {
+        return buildPreview(
+            context = context,
+            message = message,
+            targetWidthPx = targetWidthPx,
+            targetHeightPx = targetHeightPx,
+        )
+    }
+
+    private fun buildPreview(
+        context: Context,
+        message: Map<String, String>,
+        targetWidthPx: Int,
+        targetHeightPx: Int,
+    ): Bitmap? {
+        return try {
+            val board = extractLatestBoard(
+                message["replay"],
+            ) ?: defaultPreviewBoard()
+
+            val resolvedMapMode = resolveMapMode(
+                message,
+            )
+
+            val previewMapScores = parsePreviewMapScores(
+                rawMap = message["map"],
+                mode = resolvedMapMode,
+            )
+
+            ShufflePreviewRenderer.render(
+                context = context,
+                board = board,
+                mapMode = resolvedMapMode,
+                mapScores = previewMapScores,
+                targetWidthPx = targetWidthPx,
+                targetHeightPx = targetHeightPx,
+                gameFinished = message["winner"].orEmpty().isNotBlank(),
+            )
+        } catch (exception: Exception) {
+            OpenPigeonLog.w(
+                "ShuffleGame",
+                "Failed to build Shuffle preview, " + "size=${targetWidthPx}x${targetHeightPx}",
+                exception,
+            )
+
+            null
+        }
+    }
+
+    private fun extractLatestBoard(
+        replayValue: String?,
+    ): ShufflePreviewBoard? {
+        if (replayValue.isNullOrBlank()) {
+            return null
+        }
+
+        val latestBoardSegment = replayValue.split(
+            "|",
+        ).asReversed().map { segment ->
+            segment.trim()
+        }.firstOrNull { segment ->
+            segment.startsWith(
+                "board:",
+            )
+        } ?: return null
+
+        val payload = latestBoardSegment.removePrefix(
+            "board:",
+        )
+
+        val parts = payload.split(
+            "#",
+        )
+
+        val pucks = parts.drop(
+            1,
+        ).mapNotNull { entry: String ->
+            val trimmedEntry = entry.trim()
+
+            if (trimmedEntry.isBlank()) {
+                return@mapNotNull null
+            }
+
+            val values = trimmedEntry.split(
+                ",",
+            )
+
+            if (values.size < 3) {
+                return@mapNotNull null
+            }
+
+            val x = values[0].toFloatOrNull() ?: return@mapNotNull null
+
+            val y = values[1].toFloatOrNull() ?: return@mapNotNull null
+
+            val player = values[2].toIntOrNull()?.coerceIn(
+                1,
+                2,
+            ) ?: return@mapNotNull null
+
+            val rotation = values.getOrNull(
+                3,
+            )?.toFloatOrNull() ?: 0f
+
+            ShufflePreviewPuck(
+                x = x,
+                y = y,
+                player = player,
+                rotation = rotation,
+            )
+        }
+
+        return ShufflePreviewBoard(
+            pucks = pucks,
+        )
+    }
+
+    private fun defaultPreviewBoard(): ShufflePreviewBoard {
+        return ShufflePreviewBoard(
+            pucks = listOf(
+                ShufflePreviewPuck(
+                    x = 0f,
+                    y = -215f,
+                    player = 1,
+                ),
+                ShufflePreviewPuck(
+                    x = 0f,
+                    y = 215f,
+                    player = 2,
+                ),
+            ),
+        )
+    }
+
+    private fun parsePreviewMapScores(
+        rawMap: String?,
+        mode: Int,
+    ): List<Int> {
+        val expectedCount = when (mode) {
+            1 -> 12
+            2 -> 16
+            3 -> 21
+            else -> 12
+        }
+
+        val parsed = rawMap?.trim()?.removePrefix(
+            "[",
+        )?.removeSuffix(
+            "]",
+        )?.split(
+            ",",
+        )?.mapNotNull { value ->
+            value.trim().toIntOrNull()
+        }.orEmpty()
+
+        return if (parsed.size == expectedCount) {
+            parsed
+        } else {
+            emptyList()
+        }
+    }
+
     private fun generateMapForMode(mode: Int): String {
         return when (mode) {
             1 -> generateRandomMap(MODE_1_SCORE_POOL, 12)
@@ -322,8 +508,5 @@ class ShuffleGame : Game {
         private val MODE_3_SCORE_POOL = listOf(
             2, 3, 4, 5, 6, 7, 8, 10
         )
-
-        private const val DEFAULT_REPLAY =
-            "board:0,0#" + "0.000000,-215.000000,1,0.000000,0.000000,0.000000#" + "0.000000,215.000000,2,0.000000,0.000000,0.000000#"
     }
 }

@@ -54,8 +54,7 @@ class ShuffleActivity : AppCompatActivity() {
     private lateinit var myAvatarAnchor: FrameLayout
     private lateinit var opponentAvatarAnchor: FrameLayout
 
-    private lateinit var avatarWinBurstController:
-            AvatarWinBurstController
+    private lateinit var avatarWinBurstController: AvatarWinBurstController
 
     private lateinit var gameMenu: GameMenuController
 
@@ -173,7 +172,7 @@ class ShuffleActivity : AppCompatActivity() {
                 ),
             ),
             musicAssetPath = MUSIC_TRACK_PATH,
-            placement = GameMenuPlacement.BOTTOM_START,
+            placement = GameMenuPlacement.BOTTOM_END,
             onDarkModeChanged = { enabled ->
                 renderer.setDarkMode(
                     enabled,
@@ -194,15 +193,11 @@ class ShuffleActivity : AppCompatActivity() {
             opponentAvatarAnchor,
         )
 
-        avatarWinBurstController =
-            AvatarWinBurstController(
-                root =
-                    rootFrame,
-                localAnchor =
-                    myAvatarAnchor,
-                opponentAnchor =
-                    opponentAvatarAnchor,
-            )
+        avatarWinBurstController = AvatarWinBurstController(
+            root = rootFrame,
+            localAnchor = myAvatarAnchor,
+            opponentAnchor = opponentAvatarAnchor,
+        )
 
         configureSettingsAvatarTarget()
     }
@@ -422,11 +417,9 @@ class ShuffleActivity : AppCompatActivity() {
         )
 
         if (!rendererHasInitialData) {
-            rendererHasInitialData =
-                true
+            rendererHasInitialData = true
 
-            renderer.visibility =
-                View.VISIBLE
+            renderer.visibility = View.VISIBLE
         }
     }
 
@@ -1431,24 +1424,18 @@ class ShuffleActivity : AppCompatActivity() {
                 true,
             )
 
-            winLossState
-                .toIntOrNull()
-                ?.coerceIn(
-                    -1,
-                    1,
-                )
-                ?.let { result ->
-                    if (::avatarWinBurstController.isInitialized) {
-                        avatarWinBurstController.show(
-                            result =
-                                result,
-                            dimView =
-                                statusDimView,
-                            label =
-                                stateLabel,
-                        )
-                    }
+            winLossState.toIntOrNull()?.coerceIn(
+                -1,
+                1,
+            )?.let { result ->
+                if (::avatarWinBurstController.isInitialized) {
+                    avatarWinBurstController.show(
+                        result = result,
+                        dimView = statusDimView,
+                        label = stateLabel,
+                    )
                 }
+            }
 
             stateLabel.bringToFront()
         }
@@ -1643,14 +1630,11 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun clearGameOverPresentation() {
-        gameEnded =
-            false
+        gameEnded = false
 
-        winLossState =
-            ""
+        winLossState = ""
 
-        pendingWinLossState =
-            ""
+        pendingWinLossState = ""
 
         if (::avatarWinBurstController.isInitialized) {
             avatarWinBurstController.clear()
@@ -1899,8 +1883,8 @@ class ShuffleActivity : AppCompatActivity() {
         data: Map<String, String>,
     ): Boolean {
         val resolvedMode = data["mode"]?.toIntOrNull()?.takeIf { mode ->
-                mode in 1..3
-            } ?: return false
+            mode in 1..3
+        } ?: return false
 
         val expectedMapCount = when (resolvedMode) {
             1 -> 12
@@ -1910,14 +1894,14 @@ class ShuffleActivity : AppCompatActivity() {
         }
 
         val mapCount = data["map"]?.trim()?.removePrefix(
-                "[",
-            )?.removeSuffix(
-                "]",
-            )?.split(
-                ",",
-            )?.count { value ->
-                value.trim().toIntOrNull() != null
-            } ?: 0
+            "[",
+        )?.removeSuffix(
+            "]",
+        )?.split(
+            ",",
+        )?.count { value ->
+            value.trim().toIntOrNull() != null
+        } ?: 0
 
         if (mapCount != expectedMapCount) {
             return false
