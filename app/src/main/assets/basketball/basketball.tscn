@@ -168,6 +168,7 @@ data = PackedVector3Array(-0.494, 0.307, 0.0145, 0.494, 0.307, 0.0145, -0.494, -
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_ios_guide"]
 friction = 0.5
+bounce = 0.5
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_j8ag5"]
 margin = 0.004
@@ -990,6 +991,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere1" unique_id=1741454485]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1005,6 +1007,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere2" unique_id=814192688]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1020,6 +1023,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere3" unique_id=1727608702]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1035,6 +1039,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere4" unique_id=358973664]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1050,6 +1055,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere5" unique_id=853838463]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1065,6 +1071,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere6" unique_id=776442072]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1080,6 +1087,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere7" unique_id=1430065851]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1095,6 +1103,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere8" unique_id=466521601]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1110,6 +1119,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere9" unique_id=266470025]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1125,6 +1135,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_guide")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere10" unique_id=650249604]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1140,6 +1151,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere11" unique_id=1088174204]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1154,6 +1166,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere12" unique_id=717744055]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1168,6 +1181,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere13" unique_id=1835700991]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1182,6 +1196,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere14" unique_id=1394586947]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1196,6 +1211,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere15" unique_id=1555650469]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1210,6 +1226,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere16" unique_id=705174531]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1224,6 +1241,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere17" unique_id=1374515315]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24
@@ -1238,6 +1256,7 @@ physics_material_override = SubResource("PhysicsMaterial_ios_rim")
 shape = SubResource("SphereShape3D_j8ag5")
 
 [node name="CSGSphere3D" type="CSGSphere3D" parent="MovingHoopRoot/hoop_collision_moving/HoopCollisionSphere18" unique_id=1430031992]
+visible = false
 radius = 0.012
 radial_segments = 24
 rings = 24

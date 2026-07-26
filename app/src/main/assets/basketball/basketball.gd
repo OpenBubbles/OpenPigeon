@@ -18,11 +18,6 @@ func _replay_shot_count(value) -> int:
 		return 0
 	return String(value).split("|", false).size()
 
-func _replay_len(value) -> int:
-	if value == null:
-		return 0
-	return String(value).length()
-
 func _score_summary() -> String:
 	return "my=%d opp=%d score1=%s score2=%s skip1=%s skip2=%s" % [
 		myScore,
@@ -58,10 +53,6 @@ var hoop_time: int = 0
 var _hoop_acc: float = 0.0
 var hoop_center_tween: Tween
 
-const HOOP_AMPLITUDE := 1.0
-const HOOP_PERIOD_FRAMES := 510.0
-const HOOP_QUARTER_FRAMES := 127.5
-const HOOP_THREE_QUARTER_FRAMES := 382.5
 const SCORE_RADIUS_X := 0.32
 const SCORE_RADIUS_Z := 0.26
 const SCORE_MIN_DOWN_VELOCITY := -0.05
@@ -79,6 +70,7 @@ var sent_tween: Tween
 var allow_waiting_from_loaded_data: bool = false
 var loaded_has_winner: bool = false
 var winner_sent: bool = false
+var _loaded_replay_key: String = ""
 var _score_run_id: int = 0
 var _scored_shot_keys: Dictionary = {}
 var _last_score_msec_by_player: Dictionary = {}
@@ -114,6 +106,9 @@ var myReplay = ""
 
 var isWaiting = false
 var receivedMessage = null
+var drag_start_pos: Vector2 = Vector2.ZERO
+var dragging: bool = false
+var my_player: Variant = null
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
@@ -178,17 +173,21 @@ func _set_collision_shapes_enabled(root: Node, enabled: bool) -> void:
 			child.disabled = not enabled
 		_set_collision_shapes_enabled(child, enabled)
 
-func _hard_hoop_x_from_tick(tick: int) -> float:
-	var t: int = tick % 480
+func _set_collision_debug_meshes_visible(
+	root: Node,
+	visible_value: bool,
+) -> void:
+	if not is_instance_valid(root):
+		return
 
-	if t < 120:
-		return float(t) / 120.0
-	elif t < 240:
-		return 1.0 - float(t - 120) / 120.0
-	elif t < 360:
-		return -float(t - 240) / 120.0
+	for child in root.get_children():
+		if child is CSGSphere3D:
+			child.visible = visible_value
 
-	return -1.0 + float(t - 360) / 120.0
+		_set_collision_debug_meshes_visible(
+			child,
+			visible_value,
+		)
 
 func _set_moving_hoop_x(x_pos: float) -> void:
 	if not is_instance_valid(moving_hoop_root):
@@ -211,474 +210,1314 @@ func _apply_basketball_mode() -> void:
 	moving_net.visible = hard_mode
 	moving_pole.visible = hard_mode
 
+	# Collision geometry must never be rendered.
+	_set_collision_debug_meshes_visible(
+		static_hoop_collision,
+		false,
+	)
+
+	_set_collision_debug_meshes_visible(
+		moving_hoop_collision,
+		false,
+	)
+
 	if not hard_mode:
 		hoop_time = 0
 		_hoop_acc = 0.0
+
 		if hoop_center_tween and hoop_center_tween.is_running():
 			hoop_center_tween.kill()
+
 		if is_instance_valid(moving_hoop_root):
-			_set_moving_hoop_x(0.0)
-			
-	_set_collision_shapes_enabled(static_hoop_collision, not hard_mode)
-	_set_collision_shapes_enabled(static_backboard, not hard_mode)
+			_set_moving_hoop_x(
+				0.0,
+			)
 
-	_set_collision_shapes_enabled(moving_hoop_collision, hard_mode)
-	_set_collision_shapes_enabled(moving_backboard, hard_mode)
+	_set_collision_shapes_enabled(
+		static_hoop_collision,
+		not hard_mode,
+	)
 
-func getReplay(player_num: int):
-	if player_num == 1:
-		if turnNum <= 3:
-			return replay
-		return replay3
-	if player_num == 2:
-		if turnNum <= 3:
-			return replay2
-		return replay4
-	push_error("Invalid player_num in getReplay(): " + str(player_num))
-	return null
-		
-var drag_start_pos = Vector2.ZERO
-var dragging = false
+	_set_collision_shapes_enabled(
+		static_backboard,
+		not hard_mode,
+	)
 
-func _is_touch_on_current_ball(screen_pos: Vector2) -> bool:
-	if player == null or currentBall[player] == null:
-		return false
+	_set_collision_shapes_enabled(
+		moving_hoop_collision,
+		hard_mode,
+	)
 
-	var camera := get_viewport().get_camera_3d()
-	if camera == null:
-		return false
+	_set_collision_shapes_enabled(
+		moving_backboard,
+		hard_mode,
+	)
 
-	var ball_screen_pos := camera.unproject_position(currentBall[player].global_position)
-	var buffer := 120.0
-
-	return screen_pos.distance_to(ball_screen_pos) <= buffer
-
-func _input(event: InputEvent) -> void:
+func _input(
+	event: InputEvent,
+) -> void:
 	if spectator_mode:
 		return
-	if player != null and gamePlaying and event is InputEventMouseButton and currentBall[player] != null:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			if event.pressed:
-				if not _is_touch_on_current_ball(event.position):
-					return
-				
-				dbg(["drag_start pos=", event.position, " player=", player, " ball=", currentBall[player].name])
 
-				drag_start_pos = event.position
-				dragging = true
-			else:
-				if dragging:
-					var drag_end_pos = event.position
-					var delta = drag_end_pos - drag_start_pos
+	var mouse_event: InputEventMouseButton = (
+		event as InputEventMouseButton
+	)
 
-					if delta.length() < MIN_DRAG_DISTANCE:
-						dbg(["drag_cancelled len=", delta.length()])
-						dragging = false
-						return
+	if mouse_event == null:
+		return
 
-					var x_delta_lerp = interpolate_x_delta(delta.x)
+	if player == null or not gamePlaying:
+		return
 
-					OpLog.i(LOG_TAG, [
-						"shot_release player=", player,
-						" drag=", delta,
-						" dragLen=", delta.length(),
-						" xDelta=", x_delta_lerp,
-						" elapsed=", elapsedTime,
-						" shotNum=", ballNum[player] - 1
-					])
+	if mouse_event.button_index != MOUSE_BUTTON_LEFT:
+		return
 
-					currentBall[player].shoot(x_delta_lerp)
-					currentBall[player] = null
-					dragging = false
+	var local_player_num: int = int(
+		player,
+	)
 
-					await get_tree().create_timer(0.25).timeout
+	var active_ball: BasketballBall = (
+		currentBall.get(
+			local_player_num,
+		) as BasketballBall
+	)
 
-					if gamePlaying:
-						spawnBall(player)
+	if not is_instance_valid(active_ball):
+		return
 
-func interpolate_x_delta(value: float) -> float:
-	var t = inverse_lerp(-200.0, 200.0, value)
-	return lerp(-1, 1, t)
+	if mouse_event.pressed:
+		var camera: Camera3D = (
+			get_viewport().get_camera_3d()
+		)
 
-func playReplay(player_num: int, replay_str: String) -> float:
+		if camera == null:
+			return
+
+		var ball_screen_pos: Vector2 = (
+			camera.unproject_position(
+				active_ball.global_position,
+			)
+		)
+
+		var touch_distance: float = (
+			mouse_event.position.distance_to(
+				ball_screen_pos,
+			)
+		)
+
+		if touch_distance > 120.0:
+			return
+
+		dbg(
+			[
+				"drag_start pos=",
+				mouse_event.position,
+				" player=",
+				local_player_num,
+				" ball=",
+				active_ball.name,
+			],
+		)
+
+		drag_start_pos = mouse_event.position
+		dragging = true
+		return
+
+	if not dragging:
+		return
+
+	var drag_end_pos: Vector2 = (
+		mouse_event.position
+	)
+
+	var drag_delta: Vector2 = (
+		drag_end_pos -
+		drag_start_pos
+	)
+
+	var drag_distance: float = (
+		drag_delta.length()
+	)
+
+	dragging = false
+
+	if drag_distance < MIN_DRAG_DISTANCE:
+		dbg(
+			[
+				"drag_cancelled len=",
+				drag_distance,
+			],
+		)
+
+		return
+
+	var interpolation_amount: float = inverse_lerp(
+		-200.0,
+		200.0,
+		drag_delta.x,
+	)
+
+	var x_delta_lerp: float = lerpf(
+		-1.0,
+		1.0,
+		interpolation_amount,
+	)
+
+	var shot_number: int = (
+		int(
+			ballNum.get(
+				local_player_num,
+				1,
+			),
+		) -
+		1
+	)
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"shot_release player=",
+			local_player_num,
+			" drag=",
+			drag_delta,
+			" dragLen=",
+			drag_distance,
+			" xDelta=",
+			x_delta_lerp,
+			" elapsed=",
+			elapsedTime,
+			" shotNum=",
+			shot_number,
+		],
+	)
+
+	active_ball.shoot(
+		x_delta_lerp,
+	)
+
+	if (
+		currentBall.get(
+			local_player_num,
+		) ==
+		active_ball
+	):
+		currentBall[local_player_num] = null
+
+	await get_tree().create_timer(
+		0.25,
+	).timeout
+
+	if (
+		gamePlaying and
+		player != null and
+		int(player) == local_player_num
+	):
+		spawnBall(
+			local_player_num,
+		)
+
+func playReplay(
+	player_num: int,
+	replay_str: String,
+) -> float:
 	replayPlaying = true
-	OpLog.i(LOG_TAG, [
-		"play_replay_start player=", player_num,
-		" shots=", _replay_shot_count(replay_str),
-		" raw=", replay_str
-	])
-	var replayShots = replay_str.split('|')
-	var replayBallNum = 0
-	var last_time_delay: float = 0.0
 
-	for shot in replayShots:
-		var shotSplit = shot.split(',')
-		if shotSplit.size() < 4:
-			OpLog.w(LOG_TAG, ["play_replay malformed shot=", shot])
+	var parsed_shots: Array[Dictionary] = []
+
+	for raw_shot in replay_str.split(
+		"|",
+		false,
+	):
+		var shot_text := String(
+			raw_shot,
+		).strip_edges()
+
+		if shot_text.is_empty():
 			continue
 
-		var timeDelay: float = float(shotSplit[0]) / 60.0
-		var x_delta: float = float(shotSplit[1])
-		var did_go_in: bool = bool(int(shotSplit[3]))
-		dbg([
-			"play_replay_schedule player=", player_num,
-			" delay=", timeDelay,
-			" x=", x_delta,
-			" didGoIn=", did_go_in
-		])
-		last_time_delay = max(last_time_delay, timeDelay)
-		
-		var shotTimer = Timer.new()
-		replayTimers.append(shotTimer)
-		self.add_child(shotTimer)
-		shotTimer.one_shot = true
-		shotTimer.timeout.connect(func():
-			if currentBall[player_num] != null:
-				currentBall[player_num].shoot(x_delta)
+		var shot_parts := shot_text.split(
+			",",
+			false,
 		)
-		shotTimer.set_wait_time(timeDelay)
-		shotTimer.start()
-		
-		if replayBallNum + 1 < len(replayShots):
-			var timer = Timer.new()
-			replayTimers.append(timer)
-			self.add_child(timer)
-			timer.one_shot = true
-			timer.timeout.connect(func(): spawnBall(player_num, did_go_in))
-			timer.set_wait_time(timeDelay + 0.1)
-			timer.start()
-			
-		replayBallNum += 1
 
-	OpLog.i(LOG_TAG, ["play_replay_scheduled player=", player_num, " lastDelay=", last_time_delay])
-	return last_time_delay
-	
-func _schedule_replay_auto_finish(delay_seconds: float) -> void:
-	if replayEndTimer != null and is_instance_valid(replayEndTimer):
-		replayEndTimer.stop()
-		replayEndTimer.queue_free()
+		if shot_parts.size() < 4:
+			OpLog.w(
+				LOG_TAG,
+				[
+					"play_replay malformed shot=",
+					shot_text,
+				],
+			)
 
-	replayEndTimer = Timer.new()
-	replayTimers.append(replayEndTimer)
-	add_child(replayEndTimer)
-	replayEndTimer.one_shot = true
-	replayEndTimer.timeout.connect(func():
-		if replayPlaying:
-			_finish_replay(true)
+			continue
+
+		parsed_shots.append(
+			{
+				"time": maxf(
+					float(int(shot_parts[0])) / 60.0,
+					0.0,
+				),
+				"x_delta": float(shot_parts[1]),
+				"did_go_in": int(shot_parts[3]) != 0,
+			},
+		)
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"play_replay_start player=",
+			player_num,
+			" shots=",
+			parsed_shots.size(),
+			" raw=",
+			replay_str,
+		],
 	)
-	replayEndTimer.wait_time = max(delay_seconds + 2.5, 1.0)
-	replayEndTimer.start()
 
-func _finish_replay(finalize_scores: bool = true) -> void:
-	OpLog.i(LOG_TAG, [
-		"finish_replay_start finalize=", finalize_scores,
-		" turnNum=", turnNum,
-		" replayFinished=", replayFinished,
-		" ", _score_summary()
-	])
+	if parsed_shots.is_empty():
+		return 0.0
+
+	var first_result := bool(
+		parsed_shots[0]["did_go_in"],
+	)
+
+	var first_ball: BasketballBall = currentBall.get(
+		player_num,
+	)
+
+	if is_instance_valid(first_ball):
+		first_ball.set_didGoInReplay(
+			first_result,
+		)
+	else:
+		spawnBall(
+			player_num,
+			first_result,
+		)
+
+	var last_time_delay := 0.0
+
+	for shot_index in range(
+		parsed_shots.size(),
+	):
+		var shot_data: Dictionary = parsed_shots[shot_index]
+
+		var scheduled_player := player_num
+		var scheduled_time := float(
+			shot_data["time"],
+		)
+		var scheduled_x := float(
+			shot_data["x_delta"],
+		)
+
+		last_time_delay = maxf(
+			last_time_delay,
+			scheduled_time,
+		)
+
+		var shot_timer := Timer.new()
+
+		replayTimers.append(
+			shot_timer,
+		)
+
+		add_child(
+			shot_timer,
+		)
+
+		shot_timer.one_shot = true
+
+		shot_timer.timeout.connect(
+			func() -> void:
+				if not replayPlaying:
+					return
+
+				var replay_ball: BasketballBall = currentBall.get(
+					scheduled_player,
+				)
+
+				if not is_instance_valid(replay_ball):
+					OpLog.w(
+						LOG_TAG,
+						[
+							"replay_shot_missing_ball player=",
+							scheduled_player,
+							" x=",
+							scheduled_x,
+						],
+					)
+
+					return
+
+				replay_ball.shoot(
+					scheduled_x,
+				)
+
+				if currentBall.get(scheduled_player) == replay_ball:
+					currentBall[scheduled_player] = null
+		)
+
+		shot_timer.wait_time = scheduled_time
+		shot_timer.start()
+
+		var next_index := shot_index + 1
+
+		if next_index < parsed_shots.size():
+			var next_result := bool(
+				parsed_shots[next_index]["did_go_in"],
+			)
+
+			var spawn_player := player_num
+			var spawn_result := next_result
+			var spawn_delay := scheduled_time + 0.1
+
+			var spawn_timer := Timer.new()
+
+			replayTimers.append(
+				spawn_timer,
+			)
+
+			add_child(
+				spawn_timer,
+			)
+
+			spawn_timer.one_shot = true
+
+			spawn_timer.timeout.connect(
+				func() -> void:
+					if replayPlaying:
+						spawnBall(
+							spawn_player,
+							spawn_result,
+						)
+			)
+
+			spawn_timer.wait_time = spawn_delay
+			spawn_timer.start()
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"play_replay_scheduled player=",
+			player_num,
+			" lastDelay=",
+			last_time_delay,
+		],
+	)
+
+	return last_time_delay
+
+func _finish_replay(
+	finalize_scores: bool = true,
+) -> void:
+	OpLog.i(
+		LOG_TAG,
+		[
+			"finish_replay_start finalize=",
+			finalize_scores,
+			" turnNum=",
+			turnNum,
+			" replayFinished=",
+			replayFinished,
+			" ",
+			_score_summary(),
+		],
+	)
+
 	for timer in replayTimers:
 		if is_instance_valid(timer):
 			timer.stop()
 			timer.queue_free()
+
 	replayTimers.clear()
 	replayEndTimer = null
 
 	clearBalls()
 
 	if finalize_scores:
-		if turnNum == 3:
-			setScore(1, score1)
-			setScore(2, score2)
-			isTurn = true
-		elif turnNum >= 5:
-			setScore(1, skip_score1)
-			setScore(2, skip_score2)
-			game_over = true
-			isTurn = not spectator_mode
-			showWinner()
+		if turnNum != null and int(turnNum) <= 3:
+			setScore(
+				1,
+				int(score1 if score1 != null else 0),
+			)
+
+			setScore(
+				2,
+				int(score2 if score2 != null else 0),
+			)
+		elif turnNum != null and int(turnNum) >= 5:
+			setScore(
+				1,
+				int(skip_score1 if skip_score1 != null else 0),
+			)
+
+			setScore(
+				2,
+				int(skip_score2 if skip_score2 != null else 0),
+			)
 
 	timeRemainingLabel.text = "00:00"
 
 	if is_instance_valid(round_container):
 		round_container.visible = false
+
 	if is_instance_valid(skip_button):
 		skip_button.visible = false
 
 	replayPlaying = false
 	replayFinished = true
 	elapsedTime = 0.0
+
 	stop_waiting_animation()
-	
-	OpLog.i(LOG_TAG, [
-		"finish_replay_done gameOver=", game_over,
-		" turn=", isTurn,
-		" replayFinished=", replayFinished,
-		" ", _score_summary()
-	])
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"finish_replay_done gameOver=",
+			game_over,
+			" turn=",
+			isTurn,
+			" replayFinished=",
+			replayFinished,
+			" ",
+			_score_summary(),
+		],
+	)
 
 	refresh_ui_state()
 
-func _get_active_hoop_collision_root() -> Node3D:
-	if game_mode == "h" and is_instance_valid(moving_hoop_collision):
-		return moving_hoop_collision
-	return static_hoop_collision
-
-func _get_active_hoop_center() -> Vector3:
-	var root := _get_active_hoop_collision_root()
-	if not is_instance_valid(root):
-		return Vector3.ZERO
-
-	var total := Vector3.ZERO
-	var count := 0
-
-	for child in root.get_children():
-		if child is Node3D and child.name.begins_with("HoopCollisionSphere"):
-			total += (child as Node3D).global_position
-			count += 1
-
-	if count <= 0:
-		return root.global_position
-
-	return total / float(count)
-
-func _check_ball_score_crossing(ball: BasketballBall) -> void:
+func _check_ball_score_crossing(
+	ball: BasketballBall,
+) -> void:
 	if not is_instance_valid(ball):
 		return
 
-	if not gamePlaying or replayPlaying:
+	if not gamePlaying and not replayPlaying:
 		return
 
-	if ball.get_meta("score_counted", false):
+	if ball.get_meta(
+		"score_counted",
+		false,
+	):
 		return
 
-	var ball_run_id: int = int(ball.get_meta("score_run_id", -1))
+	var ball_run_id := int(
+		ball.get_meta(
+			"score_run_id",
+			-1,
+		),
+	)
+
 	if ball_run_id != _score_run_id:
-		ball.set_meta("score_counted", true)
+		ball.set_meta(
+			"score_counted",
+			true,
+		)
+
 		return
 
-	var shot_key: String = String(ball.get_meta("score_key", ""))
-	if shot_key == "" or _scored_shot_keys.has(shot_key):
-		ball.set_meta("score_counted", true)
+	var shot_key := String(
+		ball.get_meta(
+			"score_key",
+			"",
+		),
+	)
+
+	if shot_key.is_empty() or _scored_shot_keys.has(shot_key):
+		ball.set_meta(
+			"score_counted",
+			true,
+		)
+
 		return
 
-	var prev_meta = ball.get_meta("last_score_pos", ball.global_position)
-	var prev_pos: Vector3 = prev_meta if prev_meta is Vector3 else ball.global_position
-	var curr_pos: Vector3 = ball.global_position
-	ball.set_meta("last_score_pos", curr_pos)
+	var previous_value = ball.get_meta(
+		"last_score_pos",
+		ball.global_position,
+	)
 
-	var hoop_center: Vector3 = _get_active_hoop_center()
+	var previous_position: Vector3 = (
+		previous_value
+		if previous_value is Vector3
+		else ball.global_position
+	)
 
-	if prev_pos.y <= hoop_center.y:
+	var current_position := ball.global_position
+
+	ball.set_meta(
+		"last_score_pos",
+		current_position,
+	)
+
+	var hoop_root: Node3D = (
+		moving_hoop_collision
+		if (
+			game_mode == "h" and
+			is_instance_valid(moving_hoop_collision)
+		)
+		else static_hoop_collision
+	)
+
+	if not is_instance_valid(hoop_root):
 		return
-	if curr_pos.y > hoop_center.y:
+
+	var hoop_center := hoop_root.global_position
+	var hoop_position_total := Vector3.ZERO
+	var hoop_position_count := 0
+
+	for child in hoop_root.get_children():
+		if (
+			child is Node3D and
+			child.name.begins_with("HoopCollisionSphere")
+		):
+			hoop_position_total += (child as Node3D).global_position
+			hoop_position_count += 1
+
+	if hoop_position_count > 0:
+		hoop_center = (
+			hoop_position_total /
+			float(hoop_position_count)
+		)
+
+	if previous_position.y <= hoop_center.y:
 		return
+
+	if current_position.y > hoop_center.y:
+		return
+
 	if ball.linear_velocity.y > SCORE_MIN_DOWN_VELOCITY:
 		return
 
-	var y_span: float = prev_pos.y - curr_pos.y
+	var y_span := previous_position.y - current_position.y
+
 	if absf(y_span) < 0.0001:
 		return
 
-	var cross_t: float = clampf((prev_pos.y - hoop_center.y) / y_span, 0.0, 1.0)
-	var cross_pos: Vector3 = prev_pos.lerp(curr_pos, cross_t)
+	var crossing_fraction := clampf(
+		(
+			previous_position.y -
+			hoop_center.y
+		) /
+		y_span,
+		0.0,
+		1.0,
+	)
 
-	var dx: float = absf(cross_pos.x - hoop_center.x)
-	var dz: float = absf(cross_pos.z - hoop_center.z)
+	var crossing_position := previous_position.lerp(
+		current_position,
+		crossing_fraction,
+	)
 
-	if dx <= SCORE_RADIUS_X and dz <= SCORE_RADIUS_Z:
-		ball.set_meta("score_counted", true)
-		_scored_shot_keys[shot_key] = true
+	var dx := absf(
+		crossing_position.x -
+		hoop_center.x,
+	)
 
-		var ball_player: int = int(ball.get_meta("player_num", 0))
-		if ball_player != 0:
-			OpLog.i(LOG_TAG, [
-				"score_crossing player=", ball_player,
-				" shotKey=", shot_key,
-				" crossPos=", cross_pos,
-				" hoop=", hoop_center,
-				" dx=", dx,
-				" dz=", dz,
-				" vel=", ball.linear_velocity
-			])
-			incrementScore(ball_player)
+	var dz := absf(
+		crossing_position.z -
+		hoop_center.z,
+	)
+
+	if dx > SCORE_RADIUS_X or dz > SCORE_RADIUS_Z:
+		return
+
+	ball.set_meta(
+		"score_counted",
+		true,
+	)
+
+	_scored_shot_keys[shot_key] = true
+
+	if replayPlaying and ball.didGoInReplay == false:
+		OpLog.w(
+			LOG_TAG,
+			[
+				"replay_actual_crossing_ignored expectedMiss player=",
+				ball.player,
+				" key=",
+				shot_key,
+			],
+		)
+
+		return
+
+	ball.didGoIn = true
+
+	var ball_player := int(
+		ball.get_meta(
+			"player_num",
+			0,
+		),
+	)
+
+	if ball_player == 0:
+		return
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"score_crossing player=",
+			ball_player,
+			" shotKey=",
+			shot_key,
+			" crossPos=",
+			crossing_position,
+			" hoop=",
+			hoop_center,
+			" dx=",
+			dx,
+			" dz=",
+			dz,
+			" replayExpected=",
+			str(ball.didGoInReplay),
+			" vel=",
+			ball.linear_velocity,
+		],
+	)
+
+	incrementScore(
+		ball_player,
+	)
 
 func skipReplay():
 	OpLog.i(LOG_TAG, ["skip_replay pressed turnNum=", turnNum])
 	_finish_replay(true)
 
+func _display_score_for_player(
+	player_num: int,
+) -> int:
+	var round_one_score := 0
+	var round_two_score := 0
+	var round_two_replay = null
+
+	if player_num == 1:
+		round_one_score = int(
+			score1 if score1 != null else 0,
+		)
+
+		round_two_score = int(
+			skip_score1 if skip_score1 != null else round_one_score,
+		)
+
+		round_two_replay = replay3
+	else:
+		round_one_score = int(
+			score2 if score2 != null else 0,
+		)
+
+		round_two_score = int(
+			skip_score2 if skip_score2 != null else round_one_score,
+		)
+
+		round_two_replay = replay4
+
+	if turnNum == null or int(turnNum) < 4:
+		return round_one_score
+
+	if int(turnNum) >= 5:
+		return round_two_score
+
+	# An empty replay is still a submitted round with zero shots.
+	if round_two_replay != null:
+		return round_two_score
+
+	return round_one_score
+
 func refresh_ui_state() -> void:
 	if gamePlaying or replayPlaying:
-		dbg(["refresh_ui blocked gamePlaying=", gamePlaying, " replayPlaying=", replayPlaying])
 		round_container.visible = false
+		skip_button.visible = false
 		return
 
-	var other_player: int = 2 if player == 1 else 1
+	var current_turn := int(
+		turnNum if turnNum != null else 1,
+	)
 
-	if turnNum != null and turnNum >= 3 and replayFinished == false:
-		var r_self = getReplay(player)
-		var r_other = getReplay(other_player)
+	var replay_player1 = null
+	var replay_player2 = null
+	var replay_round := 0
 
-		if spectator_mode:
-			r_self = getReplay(1)
-			r_other = getReplay(2)
+	if current_turn == 3:
+		replay_player1 = replay
+		replay_player2 = replay2
+		replay_round = 1
+	elif current_turn >= 5:
+		replay_player1 = replay3
+		replay_player2 = replay4
+		replay_round = 2
 
-		if not isNullOrEmpty(r_self) and not isNullOrEmpty(r_other):
-			OpLog.i(LOG_TAG, [
-				"refresh_ui start_replay turnNum=", turnNum,
-				" spectator=", spectator_mode,
-				" selfShots=", _replay_shot_count(r_self),
-				" otherShots=", _replay_shot_count(r_other)
-			])
-			stop_waiting_animation()
-			round_container.visible = false
+	var has_complete_replay := (
+		replay_round > 0 and
+		replay_player1 != null and
+		replay_player2 != null
+	)
 
-			ballNum = {1: 1, 2: 1}
+	var current_replay_key := ""
 
-			if turnNum >= 5:
-				dbg("refresh_ui replay round2/final scores")
-				setScore(1, score1)
-				setScore(2, score2)
+	if has_complete_replay:
+		current_replay_key = (
+			str(replay_round) +
+			"|" +
+			String(replay_player1) +
+			"|" +
+			String(replay_player2)
+		)
+
+	var replay_loaded_from_data := (
+		not current_replay_key.is_empty() and
+		current_replay_key == _loaded_replay_key
+	)
+
+	#
+	# A completed round is always replayed before the next turn or
+	# final winner state is evaluated. _loaded_replay_key changes only
+	# when returned or reopened game data is loaded, so a just-sent
+	# local replay pair remains in the waiting state.
+	#
+	if replay_loaded_from_data and not replayFinished:
+		OpLog.i(
+			LOG_TAG,
+			[
+				"refresh_ui start_completed_replay round=",
+				replay_round,
+				" turnNum=",
+				current_turn,
+				" isTurn=",
+				isTurn,
+				" spectator=",
+				spectator_mode,
+				" p1Shots=",
+				_replay_shot_count(replay_player1),
+				" p2Shots=",
+				_replay_shot_count(replay_player2),
+			],
+		)
+
+		stop_waiting_animation()
+
+		if is_instance_valid(winner_label):
+			winner_label.visible = false
+
+		round_container.visible = false
+		skip_button.visible = true
+
+		ballNum = {
+			1: 1,
+			2: 1,
+		}
+
+		_score_run_id += 1
+		_scored_shot_keys.clear()
+		_last_score_msec_by_player.clear()
+
+		if replay_round == 1:
+			setScore(
+				1,
+				0,
+			)
+
+			setScore(
+				2,
+				0,
+			)
+		else:
+			setScore(
+				1,
+				int(score1 if score1 != null else 0),
+			)
+
+			setScore(
+				2,
+				int(score2 if score2 != null else 0),
+			)
+
+		hoop_time = 0
+		_hoop_acc = 0.0
+		elapsedTime = 0.0
+		replayPlaying = true
+
+		if (
+			hoop_center_tween and
+			hoop_center_tween.is_running()
+		):
+			hoop_center_tween.kill()
+
+		if is_instance_valid(moving_hoop_root):
+			_set_moving_hoop_x(
+				0.0,
+			)
+
+		clearBalls()
+
+		spawnBall(
+			1,
+		)
+
+		spawnBall(
+			2,
+		)
+
+		var replay1_end := playReplay(
+			1,
+			String(replay_player1),
+		)
+
+		var replay2_end := playReplay(
+			2,
+			String(replay_player2),
+		)
+
+		if (
+			replayEndTimer != null and
+			is_instance_valid(replayEndTimer)
+		):
+			replayEndTimer.stop()
+			replayEndTimer.queue_free()
+
+		replayEndTimer = Timer.new()
+
+		replayTimers.append(
+			replayEndTimer,
+		)
+
+		add_child(
+			replayEndTimer,
+		)
+
+		replayEndTimer.one_shot = true
+
+		replayEndTimer.timeout.connect(
+			func() -> void:
+				if replayPlaying:
+					_finish_replay(
+						true,
+					)
+		)
+
+		replayEndTimer.wait_time = maxf(
+			maxf(
+				replay1_end,
+				replay2_end,
+			) + 2.5,
+			1.0,
+		)
+
+		replayEndTimer.start()
+		return
+
+	#
+	# Final win/loss is shown only after the round-two replay.
+	#
+	if (
+		current_turn >= 5 and
+		replay_loaded_from_data and
+		replayFinished
+	):
+		stop_waiting_animation()
+
+		round_container.visible = false
+		skip_button.visible = false
+		waiting_blur.visible = false
+
+		setScore(
+			1,
+			int(skip_score1 if skip_score1 != null else 0),
+		)
+
+		setScore(
+			2,
+			int(skip_score2 if skip_score2 != null else 0),
+		)
+
+		game_over = true
+		showWinner()
+
+		#
+		# Older or cross-platform final data may not include winner.
+		# Add it once after the final replay. Existing winner data is
+		# never sent again.
+		#
+		if (
+			not spectator_mode and
+			not loaded_has_winner and
+			not winner_sent and
+			not isNullOrEmpty(my_player)
+		):
+			var win_value := 0
+
+			if myScore > oppScore:
+				win_value = 1
+			elif myScore < oppScore:
+				win_value = -1
+
+			var winner_data: Dictionary = {
+				"game": "basketball",
+				"player": str(player),
+				"mode": game_mode,
+				"round": "2",
+				"seed": str(
+					game_seed if game_seed != null else 0,
+				),
+				"seed2": str(
+					seed2 if seed2 != null else 0,
+				),
+				"score1": str(
+					score1 if score1 != null else 0,
+				),
+				"score2": str(
+					score2 if score2 != null else 0,
+				),
+				"skip_score1": str(
+					skip_score1 if skip_score1 != null else 0,
+				),
+				"skip_score2": str(
+					skip_score2 if skip_score2 != null else 0,
+				),
+				"replay": str(
+					replay if replay != null else "",
+				),
+				"replay2": str(
+					replay2 if replay2 != null else "",
+				),
+				"replay3": str(
+					replay3 if replay3 != null else "",
+				),
+				"replay4": str(
+					replay4 if replay4 != null else "",
+				),
+				"winner": (
+					str(my_player) +
+					"|" +
+					str(win_value)
+				),
+			}
+
+			var local_player_id_key := (
+				"player1"
+				if player == 1
+				else "player2"
+			)
+
+			winner_data[local_player_id_key] = str(
+				my_player,
+			)
+
+			var avatar_key := (
+				"avatar1"
+				if player == 1
+				else "avatar2"
+			)
+
+			if (
+				is_instance_valid(player_avatar_display) and
+				player_avatar_display.has_method(
+					"get_avatar_data_string",
+				)
+			):
+				winner_data[avatar_key] = (
+					player_avatar_display.get_avatar_data_string()
+				)
+
+			winner_sent = true
+			loaded_has_winner = true
+
+			var serialized_winner_data := JSON.stringify(
+				winner_data,
+			)
+
+			OpLog.event(
+				LOG_TAG,
+				[
+					"send_missing_winner winner=",
+					winner_data["winner"],
+					" raw=",
+					serialized_winner_data,
+				],
+			)
+
+			appPlugin = Engine.get_singleton(
+				"AppPlugin",
+			)
+
+			if appPlugin:
+				appPlugin.updateGameData(
+					serialized_winner_data,
+				)
 			else:
-				dbg("refresh_ui replay round1 scores")
-				setScore(1, 0)
-				setScore(2, 0)
+				OpLog.w(
+					LOG_TAG,
+					[
+						"missing_winner_not_sent AppPlugin unavailable raw=",
+						serialized_winner_data,
+					],
+				)
 
-			hoop_time = 0
-			_hoop_acc = 0.0
-			elapsedTime = 0.0
-			if hoop_center_tween and hoop_center_tween.is_running():
-				hoop_center_tween.kill()
-			if is_instance_valid(moving_hoop_root):
-				_set_moving_hoop_x(0.0)
+		return
 
-			clearBalls()
-			spawnBall(1)
-			spawnBall(2)
-			dbg("refresh_ui replay timers starting")
-			var replay1_end: float = playReplay(1, r_self if spectator_mode else getReplay(1))
-			var replay2_end: float = playReplay(2, r_other if spectator_mode else getReplay(2))
-			_schedule_replay_auto_finish(max(replay1_end, replay2_end))
+	#
+	# If a completed round has replayed, decide whether this user gets
+	# the next round or waits for the opponent.
+	#
+	if current_turn == 3 and replay_loaded_from_data and replayFinished:
+		setScore(
+			1,
+			int(score1 if score1 != null else 0),
+		)
 
-			skip_button.visible = true
-			return
+		setScore(
+			2,
+			int(score2 if score2 != null else 0),
+		)
 
-		if not isNullOrEmpty(r_self) and isNullOrEmpty(r_other):
-			OpLog.i(LOG_TAG, [
-				"refresh_ui waiting_for_opponent_replay turnNum=", turnNum,
-				" selfShots=", _replay_shot_count(r_self)
-			])
+		if isTurn == true and not spectator_mode:
+			stop_waiting_animation()
+
+			waiting_blur.visible = true
+			round_label.text = "Round 2"
+			round_container.visible = true
+			skip_button.visible = false
+
+			OpLog.i(
+				LOG_TAG,
+				[
+					"round_ready round=2 turnNum=",
+					current_turn,
+					" ",
+					_score_summary(),
+				],
+			)
+		else:
 			round_container.visible = false
 			skip_button.visible = false
 
-			if turnNum >= 4:
-				setScore(1, skip_score1 if skip_score1 != null else 0)
-				setScore(2, skip_score2 if skip_score2 != null else 0)
-			else:
-				setScore(1, score1 if score1 != null else 0)
-				setScore(2, score2 if score2 != null else 0)
-
-			if allow_waiting_from_loaded_data:
+			if not spectator_mode:
 				start_waiting_animation()
 
-			return
+		return
 
-		OpLog.i(LOG_TAG, ["refresh_ui opponent_missing_allow_play turnNum=", turnNum])
-		stop_waiting_animation()
-
-	if isTurn == false:
-		OpLog.i(LOG_TAG, ["refresh_ui wait turn=false turnNum=", turnNum, " spectator=", spectator_mode])
+	#
+	# Turn 3 represents the completed first round. Do not expose round
+	# 2 until the complete replay pair has arrived through game data
+	# and has been played.
+	#
+	if current_turn == 3 and not replay_loaded_from_data:
 		round_container.visible = false
 		skip_button.visible = false
 
-		if turnNum != null:
-			if turnNum >= 4:
-				setScore(1, skip_score1 if skip_score1 != null else 0)
-				setScore(2, skip_score2 if skip_score2 != null else 0)
-			else:
-				setScore(1, score1 if score1 != null else 0)
-				setScore(2, score2 if score2 != null else 0)
+		setScore(
+			1,
+			_display_score_for_player(1),
+		)
+
+		setScore(
+			2,
+			_display_score_for_player(2),
+		)
 
 		if not spectator_mode and allow_waiting_from_loaded_data:
 			start_waiting_animation()
+
 		return
 
-	OpLog.i(LOG_TAG, ["refresh_ui turn=true turnNum=", turnNum, " spectator=", spectator_mode])
-	stop_waiting_animation()
+	#
+	# A final state without both round-two replays must wait instead of
+	# jumping directly to win/loss.
+	#
+	if current_turn >= 5 and not replay_loaded_from_data:
+		round_container.visible = false
+		skip_button.visible = false
 
-	if turnNum >= 3:
-		dbg(["refresh_ui turn>=3 turnNum=", turnNum])
+		setScore(
+			1,
+			_display_score_for_player(1),
+		)
 
-		if spectator_mode:
+		setScore(
+			2,
+			_display_score_for_player(2),
+		)
+
+		if not spectator_mode and allow_waiting_from_loaded_data:
+			start_waiting_animation()
+
+		return
+
+	#
+	# Turn 4 means one round-two result exists and the other player may
+	# now play round 2. No replay occurs until both round-two results
+	# are available.
+	#
+	if current_turn == 4:
+		setScore(
+			1,
+			_display_score_for_player(1),
+		)
+
+		setScore(
+			2,
+			_display_score_for_player(2),
+		)
+
+		if isTurn == true and not spectator_mode:
+			stop_waiting_animation()
+
+			waiting_blur.visible = true
+			round_label.text = "Round 2"
+			round_container.visible = true
+			skip_button.visible = false
+		else:
 			round_container.visible = false
-			waiting_blur.visible = false
-			return
+			skip_button.visible = false
 
-		if turnNum >= 5:
-			game_over = true
-			showWinner()
-			return
+			if not spectator_mode and allow_waiting_from_loaded_data:
+				start_waiting_animation()
 
-		setScore(1, score1)
-		setScore(2, score2)
+		return
+
+	#
+	# Before a completed round is available, show the active round only
+	# when it is this user's turn.
+	#
+	if isTurn == true and not spectator_mode:
+		stop_waiting_animation()
+
+		round_label.text = (
+			"Round 2"
+			if current_turn >= 3
+			else "Round 1"
+		)
 
 		waiting_blur.visible = true
-		round_label.text = "Round 2"
-		OpLog.i(LOG_TAG, ["round_ready round=2 ", _score_summary()])
 		round_container.visible = true
+		skip_button.visible = false
 		return
 
-	round_label.text = "Round 1"
-	waiting_blur.visible = true
-	OpLog.i(LOG_TAG, ["round_ready round=1 ", _score_summary()])
-	round_container.visible = true
+	round_container.visible = false
+	skip_button.visible = false
 
-func spawnBall(player_num: int, didGoInReplay = null) -> BasketballBall:
+	if current_turn >= 1:
+		setScore(
+			1,
+			_display_score_for_player(1),
+		)
+
+		setScore(
+			2,
+			_display_score_for_player(2),
+		)
+
+	if not spectator_mode and allow_waiting_from_loaded_data:
+		start_waiting_animation()
+
+func spawnBall(
+	player_num: int,
+	didGoInReplay = null,
+) -> BasketballBall:
 	if appPlugin != null:
-		if (turnNum < 3) or (didGoInReplay != null and turnNum == 3):
-			appPlugin.srand48(player_num, game_seed)
+		var use_round_one_seed := false
+
+		if replayPlaying:
+			use_round_one_seed = (
+				turnNum != null and
+				int(turnNum) <= 3
+			)
 		else:
-			appPlugin.srand48(player_num, seed2)
+			use_round_one_seed = (
+				turnNum == null or
+				int(turnNum) < 3
+			)
+
+		appPlugin.srand48(
+			player_num,
+			game_seed if use_round_one_seed else seed2,
+		)
 	else:
 		randomize()
 
 	if ballNum[player_num] >= 1:
 		var i: int = ballNum[player_num]
+
 		while true:
 			if appPlugin != null:
-				appPlugin.drand48(player_num)
+				appPlugin.drand48(
+					player_num,
+				)
 			else:
 				randf()
+
 			if i == 1:
 				break
+
 			i -= 1
 
-	var new_ball: BasketballBall = get_node("Ball").duplicate()
-	var ball_mesh: MeshInstance3D = new_ball.get_child(1)
+	var new_ball: BasketballBall = get_node(
+		"Ball",
+	).duplicate()
 
-	var roll_source: float = appPlugin.drand48(player_num) if appPlugin != null else randf()
-	var pitch_source: float = appPlugin.drand48(player_num) if appPlugin != null else randf()
-	var yaw_source: float = appPlugin.drand48(player_num) if appPlugin != null else randf()
+	var ball_mesh: MeshInstance3D = new_ball.get_child(
+		1,
+	)
 
-	var roll: float = roll_source * 8.0 + -9.0
+	var roll_source: float = (
+		appPlugin.drand48(player_num)
+		if appPlugin != null
+		else randf()
+	)
+
+	var pitch_source: float = (
+		appPlugin.drand48(player_num)
+		if appPlugin != null
+		else randf()
+	)
+
+	var yaw_source: float = (
+		appPlugin.drand48(player_num)
+		if appPlugin != null
+		else randf()
+	)
+
+	var roll: float = roll_source * 8.0 - 9.0
 	var pitch: float = pitch_source * 20.0 + 70.0
-	var yaw: float = yaw_source * 10.0 + -5.0
+	var yaw: float = yaw_source * 10.0 - 5.0
 
-	var x_rand: float = appPlugin.drand48(player_num) if appPlugin != null else randf()
-	var x_pos: float = x_rand * 0.66 + -0.33
+	var x_rand: float = (
+		appPlugin.drand48(player_num)
+		if appPlugin != null
+		else randf()
+	)
+
+	var x_pos: float = x_rand * 0.66 - 0.33
+
 	if player_num == 2:
-		x_pos *= -1
+		x_pos *= -1.0
 
-	new_ball.set_player(player_num)
+	new_ball.set_player(
+		player_num,
+	)
 
 	if didGoInReplay != null:
-		new_ball.set_didGoInReplay(didGoInReplay)
+		new_ball.set_didGoInReplay(
+			didGoInReplay,
+		)
 
 	new_ball.collision_layer = player_num
 	new_ball.collision_mask = player_num
 
-	new_ball.rotation = Vector3(roll, pitch, yaw)
-	new_ball.position = Vector3(x_pos, -0.45, -1)
-	new_ball.get_child(0).disabled = false
+	new_ball.rotation = Vector3(
+		roll,
+		pitch,
+		yaw,
+	)
+
+	new_ball.position = Vector3(
+		x_pos,
+		-0.45,
+		-1.0,
+	)
+
+	new_ball.get_child(
+		0,
+	).disabled = false
 
 	new_ball.axis_lock_angular_x = true
 	new_ball.axis_lock_angular_y = true
@@ -690,210 +1529,706 @@ func spawnBall(player_num: int, didGoInReplay = null) -> BasketballBall:
 	new_ball.visible = true
 
 	if player_num != player:
-		ball_mesh.material_override = ball_mesh.material_override.duplicate()
-		ball_mesh.material_override.albedo_color = Color(1, 1, 1, 0.75)
+		ball_mesh.material_override = (
+			ball_mesh.material_override.duplicate()
+		)
 
-	var shot_num: int = int(ballNum[player_num])
-	new_ball.name = "Ball_P" + str(player_num) + "_" + str(shot_num)
+		ball_mesh.material_override.albedo_color = Color(
+			1.0,
+			1.0,
+			1.0,
+			0.75,
+		)
 
-	add_child(new_ball)
-	new_ball.set_meta("player_num", player_num)
-	new_ball.set_meta("shot_num", shot_num)
-	new_ball.set_meta("score_run_id", _score_run_id)
-	new_ball.set_meta("score_key", "%d:%d:%d" % [_score_run_id, player_num, shot_num])
-	new_ball.set_meta("score_counted", false)
-	new_ball.set_meta("last_score_pos", new_ball.global_position)
+	var shot_num: int = int(
+		ballNum[player_num],
+	)
+
+	new_ball.name = (
+		"Ball_P" +
+		str(player_num) +
+		"_" +
+		str(shot_num)
+	)
+
+	add_child(
+		new_ball,
+	)
+
+	new_ball.set_meta(
+		"player_num",
+		player_num,
+	)
+
+	new_ball.set_meta(
+		"shot_num",
+		shot_num,
+	)
+
+	new_ball.set_meta(
+		"score_run_id",
+		_score_run_id,
+	)
+
+	new_ball.set_meta(
+		"score_key",
+		"%d:%d:%d" % [
+			_score_run_id,
+			player_num,
+			shot_num,
+		],
+	)
+
+	new_ball.set_meta(
+		"score_counted",
+		false,
+	)
+
+	new_ball.set_meta(
+		"last_score_pos",
+		new_ball.global_position,
+	)
 
 	ballNum[player_num] += 1
 	currentBall[player_num] = new_ball
-	dbg([
-		"spawn_ball player=", player_num,
-		" shotNum=", shot_num,
-		" replayResult=", str(didGoInReplay),
-		" pos=", new_ball.position,
-		" rot=", new_ball.rotation,
-		" runId=", _score_run_id,
-		" key=", new_ball.get_meta("score_key")
-	])
+
+	dbg(
+		[
+			"spawn_ball player=",
+			player_num,
+			" shotNum=",
+			shot_num,
+			" replayResult=",
+			str(didGoInReplay),
+			" pos=",
+			new_ball.position,
+			" rot=",
+			new_ball.rotation,
+			" runId=",
+			_score_run_id,
+			" key=",
+			new_ball.get_meta("score_key"),
+		],
+	)
+
 	return new_ball
 
-var my_player
-func _set_game_data(new_replay: String, saved: bool = false):
-	OpLog.event(LOG_TAG, ["set_game_data_in saved=", saved, " raw=", new_replay])
+func _set_game_data(
+	new_replay: String,
+	saved: bool = false,
+) -> void:
+	OpLog.event(
+		LOG_TAG,
+		[
+			"set_game_data_in saved=",
+			saved,
+			" raw=",
+			new_replay,
+		],
+	)
 
-	var parsed = JSON.parse_string(new_replay)
+	var parsed = JSON.parse_string(
+		new_replay,
+	)
+
 	if typeof(parsed) != TYPE_DICTIONARY:
-		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", new_replay])
+		OpLog.e(
+			LOG_TAG,
+			[
+				"set_game_data invalid JSON raw=",
+				new_replay,
+			],
+		)
+
 		return
 
-	dbg(["set_game_data parsed=", parsed])
-	loaded_has_winner = parsed.has("winner") and not isNullOrEmpty(str(parsed["winner"]))
-	winner_sent = loaded_has_winner
-	
-	game_mode = str(parsed.get("mode", "n"))
-	_apply_basketball_mode()
-	
-	if gamePlaying == true:
-		OpLog.i(LOG_TAG, ["set_game_data deferred because gamePlaying=true rawLen=", new_replay.length()])
+	if gamePlaying or replayPlaying:
+		OpLog.i(
+			LOG_TAG,
+			[
+				"set_game_data deferred activeRound=",
+				gamePlaying,
+				" replayPlaying=",
+				replayPlaying,
+				" rawLen=",
+				new_replay.length(),
+			],
+		)
+
 		receivedMessage = new_replay
 		return
-	
-	turnNum = int(parsed["num"])
-	isTurn = parsed["isYourTurn"]
-	player = int(parsed["player"])
-	OpLog.i(LOG_TAG, [
-		"set_game_data parsed_initial turnNum=", turnNum,
-		" isTurn=", isTurn,
-		" payloadPlayer=", player,
-		" mode=", game_mode,
-		" saved=", saved
-	])
 
-	# Round 1 needs to be playable by both the sender and receiver.
-	# After round 1, keep the original opponent/player flip behavior.
-	if turnNum == 1:
-		isTurn = true
-	elif isTurn:
-		player = 2 if player == 1 else 1
+	loaded_has_winner = (
+		parsed.has("winner") and
+		not isNullOrEmpty(
+			str(parsed["winner"]),
+		)
+	)
 
-	stop_waiting_animation()
+	winner_sent = loaded_has_winner
 
-	OpLog.i(LOG_TAG, ["player_resolve player=", player, " isTurn=", isTurn, " turnNum=", turnNum])
-	my_player = parsed.get("myPlayerId", null)
-	
-	var player1_id := str(parsed.get("player1", ""))
-	var player2_id := str(parsed.get("player2", ""))
-	var my_player_id := str(my_player)
+	game_mode = str(
+		parsed.get(
+			"mode",
+			game_mode,
+		),
+	)
+
+	_apply_basketball_mode()
+
+	if parsed.has("num"):
+		turnNum = int(
+			parsed["num"],
+		)
+	elif turnNum == null:
+		turnNum = 1
+
+	isTurn = bool(
+		parsed.get(
+			"isYourTurn",
+			false,
+		),
+	)
+
+	var payload_player := int(
+		parsed.get(
+			"player",
+			1,
+		),
+	)
+
+	my_player = parsed.get(
+		"myPlayerId",
+		my_player,
+	)
+
+	var player1_id := str(
+		parsed.get(
+			"player1",
+			"",
+		),
+	)
+
+	var player2_id := str(
+		parsed.get(
+			"player2",
+			"",
+		),
+	)
+
+	var my_player_id := str(
+		my_player if my_player != null else "",
+	)
 
 	spectator_mode = false
-	if my_player_id != "" and player1_id != "" and player2_id != "":
-		if my_player_id != player1_id and my_player_id != player2_id:
-			spectator_mode = true
+
+	if (
+		not my_player_id.is_empty() and
+		not player1_id.is_empty() and
+		not player2_id.is_empty()
+	):
+		spectator_mode = (
+			my_player_id != player1_id and
+			my_player_id != player2_id
+		)
 
 	if spectator_mode:
 		player = 1
 		isTurn = false
 		gamePlaying = false
-		OpLog.i(LOG_TAG, "spectator_mode=true")
+
 		if is_instance_valid(spectator_label):
 			spectator_label.show()
 	else:
+		var resolved_player := payload_player
+
+		if not my_player_id.is_empty():
+			if (
+				not player1_id.is_empty() and
+				my_player_id == player1_id
+			):
+				resolved_player = 1
+			elif (
+				not player2_id.is_empty() and
+				my_player_id == player2_id
+			):
+				resolved_player = 2
+			elif (
+				player1_id.is_empty() and
+				not player2_id.is_empty() and
+				my_player_id != player2_id
+			):
+				resolved_player = 1
+			elif (
+				player2_id.is_empty() and
+				not player1_id.is_empty() and
+				my_player_id != player1_id
+			):
+				resolved_player = 2
+			elif isTurn:
+				resolved_player = (
+					2
+					if payload_player == 1
+					else 1
+				)
+		elif isTurn:
+			resolved_player = (
+				2
+				if payload_player == 1
+				else 1
+			)
+
+		player = resolved_player
+
 		if is_instance_valid(spectator_label):
 			spectator_label.hide()
 
-	if spectator_mode:
-		if parsed.has("avatar1") and is_instance_valid(player_avatar_display):
-			var p1_data: Dictionary = GameUtils._parse_avatar_string(str(parsed["avatar1"]))
-			player_avatar_display.call_deferred("update_avatar_from_data", p1_data)
-		if parsed.has("avatar2") and is_instance_valid(opp_avatar_display):
-			var p2_data: Dictionary = GameUtils._parse_avatar_string(str(parsed["avatar2"]))
-			opp_avatar_display.call_deferred("update_avatar_from_data", p2_data)
-	else:
-		var opponent_avatar_key := "avatar2" if player == 1 else "avatar1"
-		if parsed.has(opponent_avatar_key):
-			var avatar_string: String = str(parsed[opponent_avatar_key])
-			var opponent_data: Dictionary = GameUtils._parse_avatar_string(avatar_string)
-			if is_instance_valid(opp_avatar_display):
-				opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+	stop_waiting_animation()
 
-	if saved:
-		if player == 1:
-			score2 = int(parsed["score2"])
-			skip_score2 = int(parsed["skip_score2"])
-			replay2 = parsed["replay2"] if "replay2" in parsed else null
-			replay4 = parsed["replay4"] if "replay4" in parsed else null
-		else:
-			score1 = int(parsed["score1"])
-			skip_score1 = int(parsed["skip_score1"])
-			replay = parsed["replay"] if "replay" in parsed else null
-			replay3 = parsed["replay3"] if "replay3" in parsed else null
+	OpLog.i(
+		LOG_TAG,
+		[
+			"player_resolve payloadPlayer=",
+			payload_player,
+			" localPlayer=",
+			player,
+			" isTurn=",
+			isTurn,
+			" turnNum=",
+			turnNum,
+			" myId=",
+			my_player_id,
+			" player1Id=",
+			player1_id,
+			" player2Id=",
+			player2_id,
+		],
+	)
+
+	if spectator_mode:
+		if (
+			parsed.has("avatar1") and
+			is_instance_valid(player_avatar_display)
+		):
+			var player1_avatar_data: Dictionary = (
+				GameUtils._parse_avatar_string(
+					str(parsed["avatar1"]),
+				)
+			)
+
+			player_avatar_display.call_deferred(
+				"update_avatar_from_data",
+				player1_avatar_data,
+			)
+
+		if (
+			parsed.has("avatar2") and
+			is_instance_valid(opp_avatar_display)
+		):
+			var player2_avatar_data: Dictionary = (
+				GameUtils._parse_avatar_string(
+					str(parsed["avatar2"]),
+				)
+			)
+
+			opp_avatar_display.call_deferred(
+				"update_avatar_from_data",
+				player2_avatar_data,
+			)
 	else:
-		game_seed = int(parsed["seed"])
-		seed2 = int(parsed["seed2"])
-		score1 = int(parsed["score1"])
-		score2 = int(parsed["score2"])
-		skip_score1 = int(parsed["skip_score1"])
-		skip_score2 = int(parsed["skip_score2"])
-		replay = parsed["replay"] if "replay" in parsed else null
-		replay2 = parsed["replay2"] if "replay2" in parsed else null
-		replay3 = parsed["replay3"] if "replay3" in parsed else null
-		replay4 = parsed["replay4"] if "replay4" in parsed else null
-	
+		var opponent_avatar_key := (
+			"avatar2"
+			if player == 1
+			else "avatar1"
+		)
+
+		if (
+			parsed.has(opponent_avatar_key) and
+			is_instance_valid(opp_avatar_display)
+		):
+			var opponent_avatar_data: Dictionary = (
+				GameUtils._parse_avatar_string(
+					str(parsed[opponent_avatar_key]),
+				)
+			)
+
+			opp_avatar_display.call_deferred(
+				"update_avatar_from_data",
+				opponent_avatar_data,
+			)
+
+	if parsed.has("seed"):
+		game_seed = int(
+			parsed["seed"],
+		)
+
+	if parsed.has("seed2"):
+		seed2 = int(
+			parsed["seed2"],
+		)
+
+	if parsed.has("score1"):
+		score1 = int(
+			parsed["score1"],
+		)
+
+	if parsed.has("score2"):
+		score2 = int(
+			parsed["score2"],
+		)
+
+	if parsed.has("skip_score1"):
+		skip_score1 = int(
+			parsed["skip_score1"],
+		)
+
+	if parsed.has("skip_score2"):
+		skip_score2 = int(
+			parsed["skip_score2"],
+		)
+
+	if parsed.has("replay"):
+		replay = parsed["replay"]
+
+	if parsed.has("replay2"):
+		replay2 = parsed["replay2"]
+
+	if parsed.has("replay3"):
+		replay3 = parsed["replay3"]
+
+	if parsed.has("replay4"):
+		replay4 = parsed["replay4"]
+
+	#
+	# A fresh complete replay pair must play even when isYourTurn is
+	# false. The replay key prevents duplicate delivery of the same
+	# message from replaying again during the same open session.
+	#
+	var incoming_replay_key := ""
+
+	if (
+		turnNum != null and
+		int(turnNum) == 3 and
+		replay != null and
+		replay2 != null
+	):
+		incoming_replay_key = (
+			"1|" +
+			String(replay) +
+			"|" +
+			String(replay2)
+		)
+	elif (
+		turnNum != null and
+		int(turnNum) >= 5 and
+		replay3 != null and
+		replay4 != null
+	):
+		incoming_replay_key = (
+			"2|" +
+			String(replay3) +
+			"|" +
+			String(replay4)
+		)
+
+	if (
+		not incoming_replay_key.is_empty() and
+		incoming_replay_key != _loaded_replay_key
+	):
+		_loaded_replay_key = incoming_replay_key
+		replayFinished = false
+		game_over = false
+
+		if is_instance_valid(winner_label):
+			winner_label.visible = false
+
+		OpLog.i(
+			LOG_TAG,
+			[
+				"new_completed_replay_pair keyLength=",
+				incoming_replay_key.length(),
+				" turnNum=",
+				turnNum,
+			],
+		)
+
 	receivedMessage = null
 	gameDataSet = true
-	
-	if turnNum >= 5:
-		if isNullOrEmpty(replay3) and not isNullOrEmpty(replay):
-			replay3 = replay
-		if isNullOrEmpty(replay4) and not isNullOrEmpty(replay2):
-			replay4 = replay2
-	
-	OpLog.i(LOG_TAG, [
-		"set_game_data_done turnNum=", turnNum,
-		" player=", player,
-		" isTurn=", isTurn,
-		" spectator=", spectator_mode,
-		" mode=", game_mode,
-		" seed=", str(game_seed),
-		" seed2=", str(seed2),
-		" replay1Shots=", _replay_shot_count(replay),
-		" replay2Shots=", _replay_shot_count(replay2),
-		" replay3Shots=", _replay_shot_count(replay3),
-		" replay4Shots=", _replay_shot_count(replay4),
-		" loadedWinner=", loaded_has_winner,
-		" ", _score_summary()
-	])
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"set_game_data_done turnNum=",
+			turnNum,
+			" payloadPlayer=",
+			payload_player,
+			" localPlayer=",
+			player,
+			" isTurn=",
+			isTurn,
+			" spectator=",
+			spectator_mode,
+			" mode=",
+			game_mode,
+			" replayFinished=",
+			replayFinished,
+			" loadedWinner=",
+			loaded_has_winner,
+			" replay1Shots=",
+			_replay_shot_count(replay),
+			" replay2Shots=",
+			_replay_shot_count(replay2),
+			" replay3Shots=",
+			_replay_shot_count(replay3),
+			" replay4Shots=",
+			_replay_shot_count(replay4),
+			" ",
+			_score_summary(),
+		],
+	)
 
 	if not saved:
 		allow_waiting_from_loaded_data = true
+
 		refresh_ui_state()
+
 		allow_waiting_from_loaded_data = false
 
-func sendGameData() -> void:
-	turnNum += 1
-	var scoreKey: String
-	var replayKey: String
-	if turnNum <= 3:
-		scoreKey = "score2" if player == 2 else "score1"
-		replayKey = "replay2" if player == 2 else "replay"
+func sendGameData(
+	completed_score: int,
+	completed_replay_value: String,
+) -> void:
+	var completed_turn := int(
+		turnNum,
+	)
+
+	var outgoing_replay := completed_replay_value.strip_edges()
+
+	while outgoing_replay.ends_with("|"):
+		outgoing_replay = outgoing_replay.left(
+			outgoing_replay.length() - 1,
+		)
+
+	var next_turn := completed_turn + 1
+	var is_round_one := next_turn <= 3
+
+	var score_key := (
+		"score1"
+		if player == 1
+		else "score2"
+	)
+
+	var replay_key := (
+		"replay"
+		if player == 1
+		else "replay2"
+	)
+
+	if not is_round_one:
+		score_key = (
+			"skip_score1"
+			if player == 1
+			else "skip_score2"
+		)
+
+		replay_key = (
+			"replay3"
+			if player == 1
+			else "replay4"
+		)
+
+	#
+	# Store the completed local result directly in its correct player
+	# and round slot.
+	#
+	if player == 1:
+		if is_round_one:
+			score1 = completed_score
+			replay = outgoing_replay
+		else:
+			skip_score1 = completed_score
+			replay3 = outgoing_replay
 	else:
-		scoreKey = "skip_score2" if player == 2 else "skip_score1"
-		replayKey = "replay4" if player == 2 else "replay3"
-		
-	var gameData = {
-		scoreKey: str(myScore),
-		replayKey: myReplay.substr(0, len(myReplay)-1),
-		"round": "1" if turnNum+1 <= 3 else "2"
+		if is_round_one:
+			score2 = completed_score
+			replay2 = outgoing_replay
+		else:
+			skip_score2 = completed_score
+			replay4 = outgoing_replay
+
+	turnNum = next_turn
+
+	var game_data: Dictionary = {
+		"game": "basketball",
+		"player": str(player),
+		"mode": game_mode,
+		"seed": str(
+			game_seed if game_seed != null else 0,
+		),
+		"seed2": str(
+			seed2 if seed2 != null else 0,
+		),
+		"round": "1" if is_round_one else "2",
+		"score1": str(
+			score1 if score1 != null else 0,
+		),
+		"score2": str(
+			score2 if score2 != null else 0,
+		),
+		"skip_score1": str(
+			skip_score1 if skip_score1 != null else 0,
+		),
+		"skip_score2": str(
+			skip_score2 if skip_score2 != null else 0,
+		),
 	}
-	
-	if turnNum >= 5:
-		var oppFinalScore : int = skip_score1 if player == 2 else skip_score2
-		var winNum = 1 if myScore > oppFinalScore else (-1 if myScore < oppFinalScore else 0)
-		gameData["winner"] = str(my_player) + "|" + str(winNum)
-		OpLog.i(LOG_TAG, ["winner_payload myScore=", myScore, " oppFinalScore=", oppFinalScore, " winNum=", winNum])
-	if game_over:
-		stop_waiting_animation()
-		showWinner()
-	else:
-		play_sent_animation()
-	var avatar_key := ("avatar1" if player == 1 else "avatar2")
-	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
-		gameData[avatar_key] = player_avatar_display.get_avatar_data_string()
-	var game_data = JSON.stringify(gameData)
-	OpLog.event(LOG_TAG, [
-		"send_game_out turnNum=", turnNum,
-		" scoreKey=", scoreKey,
-		" replayKey=", replayKey,
-		" myReplayShots=", _replay_shot_count(myReplay),
-		" winner=", str(gameData.get("winner", "")),
-		" ", _score_summary(),
-		" raw=", game_data
-	])
-	appPlugin = Engine.get_singleton("AppPlugin")
+
+	# Include the completed replay even when it contains zero shots.
+	game_data[replay_key] = outgoing_replay
+
+	if replay != null:
+		game_data["replay"] = str(replay)
+
+	if replay2 != null:
+		game_data["replay2"] = str(replay2)
+
+	if replay3 != null:
+		game_data["replay3"] = str(replay3)
+
+	if replay4 != null:
+		game_data["replay4"] = str(replay4)
+
+	if not isNullOrEmpty(my_player):
+		var local_player_id_key := (
+			"player1"
+			if player == 1
+			else "player2"
+		)
+
+		game_data[local_player_id_key] = str(
+			my_player,
+		)
+
+	var avatar_key := (
+		"avatar1"
+		if player == 1
+		else "avatar2"
+	)
+
+	if (
+		is_instance_valid(player_avatar_display) and
+		player_avatar_display.has_method(
+			"get_avatar_data_string",
+		)
+	):
+		game_data[avatar_key] = (
+			player_avatar_display.get_avatar_data_string()
+		)
+
+	#
+	# The final sender may include winner in the final payload. The UI
+	# still waits for returned/reopened data, plays the final replay,
+	# and only then shows win/loss.
+	#
+	if next_turn >= 5 and not isNullOrEmpty(my_player):
+		var opponent_final_score := int(
+			skip_score2
+			if player == 1 and skip_score2 != null
+			else (
+				skip_score1
+				if player == 2 and skip_score1 != null
+				else 0
+			),
+		)
+
+		var win_value := 0
+
+		if completed_score > opponent_final_score:
+			win_value = 1
+		elif completed_score < opponent_final_score:
+			win_value = -1
+
+		game_data["winner"] = (
+			str(my_player) +
+			"|" +
+			str(win_value)
+		)
+
+		winner_sent = true
+		loaded_has_winner = true
+
+	#
+	# A completed pair created by this local send is not replayed yet.
+	# _loaded_replay_key is updated only by _set_game_data(), so the
+	# replay begins when the message returns or the game is reopened.
+	#
+	var local_pair_complete := false
+
+	if next_turn == 3:
+		local_pair_complete = (
+			replay != null and
+			replay2 != null
+		)
+	elif next_turn >= 5:
+		local_pair_complete = (
+			replay3 != null and
+			replay4 != null
+		)
+
+	game_over = false
+
+	if is_instance_valid(winner_label):
+		winner_label.visible = false
+
+	play_sent_animation()
+
+	var serialized_game_data := JSON.stringify(
+		game_data,
+	)
+
+	OpLog.event(
+		LOG_TAG,
+		[
+			"send_game_out turnNum=",
+			turnNum,
+			" localPlayer=",
+			player,
+			" scoreKey=",
+			score_key,
+			" replayKey=",
+			replay_key,
+			" replayShots=",
+			_replay_shot_count(outgoing_replay),
+			" pairComplete=",
+			local_pair_complete,
+			" winner=",
+			str(
+				game_data.get(
+					"winner",
+					"",
+				),
+			),
+			" raw=",
+			serialized_game_data,
+		],
+	)
+
+	appPlugin = Engine.get_singleton(
+		"AppPlugin",
+	)
+
 	if appPlugin:
-		appPlugin.updateGameData(game_data)
+		appPlugin.updateGameData(
+			serialized_game_data,
+		)
 	else:
-		OpLog.w(LOG_TAG, ["AppPlugin not connected; payload not sent raw=", game_data])
+		OpLog.w(
+			LOG_TAG,
+			[
+				"AppPlugin not connected; payload not sent raw=",
+				serialized_game_data,
+			],
+		)
 
 func start_button_pressed():
 	if spectator_mode:
@@ -904,31 +2239,74 @@ func start_button_pressed():
 	startGame()
 
 func startGame() -> void:
-	OpLog.i(LOG_TAG, [
-		"start_game player=", player,
-		" turnNum=", turnNum,
-		" mode=", game_mode,
-		" runId=", _score_run_id + 1
-	])
-	ballNum = {1: 1, 2: 1}
+	OpLog.i(
+		LOG_TAG,
+		[
+			"start_game player=",
+			player,
+			" turnNum=",
+			turnNum,
+			" mode=",
+			game_mode,
+			" runId=",
+			_score_run_id + 1,
+		],
+	)
+
+	if is_instance_valid(winner_label):
+		winner_label.visible = false
+
+	game_over = false
+
+	ballNum = {
+		1: 1,
+		2: 1,
+	}
+
 	_score_run_id += 1
 	_scored_shot_keys.clear()
 	_last_score_msec_by_player.clear()
+
 	myReplay = ""
 	elapsedTime = 0.0
 	gamePlaying = true
 	replayPlaying = false
 	replayFinished = false
 	receivedMessage = null
+
+	for timer in replayTimers:
+		if is_instance_valid(timer):
+			timer.stop()
+			timer.queue_free()
+
 	replayTimers.clear()
+	replayEndTimer = null
+
 	hoop_time = 0
 	_hoop_acc = 0.0
-	if hoop_center_tween and hoop_center_tween.is_running():
+
+	if (
+		hoop_center_tween and
+		hoop_center_tween.is_running()
+	):
 		hoop_center_tween.kill()
+
 	if is_instance_valid(moving_hoop_root):
-		_set_moving_hoop_x(0.0)
-	spawnBall(player)
-	OpLog.i(LOG_TAG, ["start_game_done ", _score_summary()])
+		_set_moving_hoop_x(
+			0.0,
+		)
+
+	spawnBall(
+		player,
+	)
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"start_game_done ",
+			_score_summary(),
+		],
+	)
 
 func _haptic_explosion(strength: float = 0.35, duration_ms: int = 22) -> void:
 	if not (OS.has_feature("android") or OS.has_feature("ios")):
@@ -987,80 +2365,257 @@ func clearBalls() -> void:
 	currentBall[2] = null
 	dbg(["clear_balls count=", cleared])
 
-func _physics_process(delta: float) -> void:
-	if game_mode == "h" and is_instance_valid(moving_hoop_root):
-		if gamePlaying or replayPlaying:
-			if hoop_center_tween and hoop_center_tween.is_running():
-				hoop_center_tween.kill()
+func _physics_process(
+	delta: float,
+) -> void:
+	if (
+		game_mode == "h" and
+		is_instance_valid(moving_hoop_root) and
+		(gamePlaying or replayPlaying)
+	):
+		if (
+			hoop_center_tween and
+			hoop_center_tween.is_running()
+		):
+			hoop_center_tween.kill()
 
-			_hoop_acc += delta * 60.0
+		_hoop_acc += delta * 60.0
 
-			while _hoop_acc >= 1.0:
-				hoop_time += 1
-				_hoop_acc -= 1.0
+		while _hoop_acc >= 1.0:
+			hoop_time += 1
+			_hoop_acc -= 1.0
 
-			_set_moving_hoop_x(_hard_hoop_x_from_tick(hoop_time))
+		var movement_tick := hoop_time % 480
+		var hoop_x := 0.0
 
-	if gamePlaying:
+		if movement_tick < 120:
+			hoop_x = float(movement_tick) / 120.0
+		elif movement_tick < 240:
+			hoop_x = (
+				1.0 -
+				float(movement_tick - 120) / 120.0
+			)
+		elif movement_tick < 360:
+			hoop_x = (
+				-float(movement_tick - 240) /
+				120.0
+			)
+		else:
+			hoop_x = (
+				-1.0 +
+				float(movement_tick - 360) /
+				120.0
+			)
+
+		_set_moving_hoop_x(
+			hoop_x,
+		)
+
+	if gamePlaying or replayPlaying:
 		for node in get_children():
-			if node is BasketballBall and node.name.begins_with("Ball_P"):
-				_check_ball_score_crossing(node)
+			if (
+				node is BasketballBall and
+				node.name.begins_with("Ball_P")
+			):
+				_check_ball_score_crossing(
+					node,
+				)
 
-func _process(delta: float) -> void:
-	if game_mode == "h" and is_instance_valid(moving_hoop_root):
+func _process(
+	delta: float,
+) -> void:
+	if (
+		game_mode == "h" and
+		is_instance_valid(moving_hoop_root)
+	):
 		if not gamePlaying and not replayPlaying:
 			hoop_time = 0
 			_hoop_acc = 0.0
 
-			if abs(moving_hoop_root.position.x) > 0.001:
-				if hoop_center_tween == null or not hoop_center_tween.is_running():
+			if absf(
+				moving_hoop_root.position.x,
+			) > 0.001:
+				if (
+					hoop_center_tween == null or
+					not hoop_center_tween.is_running()
+				):
 					hoop_center_tween = create_tween()
+
 					hoop_center_tween.tween_property(
 						moving_hoop_root,
 						"position:x",
 						0.0,
-						0.35
+						0.35,
 					)
 			else:
-				_set_moving_hoop_x(0.0)
-	
-	if gamePlaying or replayPlaying:
-		elapsedTime += delta
-		timeRemainingLabel.text = "00:" + str(int(ceil(45.0 - elapsedTime))).pad_zeros(2)
-		if int(ceil(45.0 - elapsedTime)) <= 0:
-			elapsedTime = 0.0
-			gamePlaying = false
-			var wasReplayPlaying = replayPlaying
-			replayPlaying = false
-			await get_tree().create_timer(3).timeout
-			
-			if receivedMessage != null:
-				OpLog.i(LOG_TAG, "applying_deferred_message_after_game")
-				_set_game_data(receivedMessage, true)
-			
-			if wasReplayPlaying == false:
-				OpLog.i(LOG_TAG, ["game_timer_done sending_data turnNum=", turnNum, " ", _score_summary()])
-				sendGameData()
-				if player == 1:
-					if turnNum <= 3:
-						score1 = myScore
-						replay = myReplay
-					skip_score1 = myScore
-					replay3 = myReplay
-				if player == 2:
-					if turnNum <= 3:
-						score2 = myScore
-						replay2 = myReplay
-					skip_score2 = myScore
-					replay4 = myReplay
-			else:
-				_finish_replay(true)
-				return
-				
-			clearBalls()
-			isTurn = false			
-			OpLog.i(LOG_TAG, ["game_round_done ready_up turnNum=", turnNum, " ", _score_summary()])
-			refresh_ui_state()
+				_set_moving_hoop_x(
+					0.0,
+				)
+
+	if not gamePlaying and not replayPlaying:
+		return
+
+	elapsedTime += delta
+
+	var remaining_seconds := int(
+		ceil(
+			45.0 -
+			elapsedTime,
+		),
+	)
+
+	timeRemainingLabel.text = (
+		"00:" +
+		str(
+			maxi(
+				remaining_seconds,
+				0,
+			),
+		).pad_zeros(2)
+	)
+
+	if remaining_seconds > 0:
+		return
+
+	elapsedTime = 0.0
+
+	var was_replay_playing : bool = replayPlaying
+
+	gamePlaying = false
+	replayPlaying = false
+
+	await get_tree().create_timer(
+		3.0,
+	).timeout
+
+	if was_replay_playing:
+		_finish_replay(
+			true,
+		)
+
+		return
+
+	#
+	# Snapshot the completed local result before any returned or
+	# deferred game message changes the state.
+	#
+	var completed_player := int(
+		player,
+	)
+
+	var completed_turn := int(
+		turnNum,
+	)
+
+	var completed_score := int(
+		myScore,
+	)
+
+	var completed_replay := String(
+		myReplay,
+	)
+
+	while completed_replay.ends_with("|"):
+		completed_replay = completed_replay.left(
+			completed_replay.length() - 1,
+		)
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"game_timer_done sending_data completedPlayer=",
+			completed_player,
+			" completedTurn=",
+			completed_turn,
+			" score=",
+			completed_score,
+			" replayShots=",
+			_replay_shot_count(completed_replay),
+		],
+	)
+
+	#
+	# We are waiting as soon as the local result is sent.
+	# Do this before sendGameData() starts the Sent animation.
+	#
+	isTurn = false
+
+	sendGameData(
+		completed_score,
+		completed_replay,
+	)
+
+	clearBalls()
+
+	round_container.visible = false
+	skip_button.visible = false
+
+	#
+	# A message received during gameplay is applied only after the local
+	# result has safely been sent.
+	#
+	var deferred_message = receivedMessage
+
+	receivedMessage = null
+
+	if deferred_message != null:
+		var deferred_parsed = JSON.parse_string(
+			String(
+				deferred_message,
+			),
+		)
+
+		var deferred_turn := -1
+
+		if deferred_parsed is Dictionary:
+			deferred_turn = int(
+				deferred_parsed.get(
+					"num",
+					-1,
+				),
+			)
+
+		if deferred_turn >= int(turnNum):
+			OpLog.i(
+				LOG_TAG,
+				[
+					"applying_deferred_message_after_send num=",
+					deferred_turn,
+				],
+			)
+
+			_set_game_data(
+				String(
+					deferred_message,
+				),
+				true,
+			)
+		else:
+			OpLog.w(
+				LOG_TAG,
+				[
+					"ignoring_stale_deferred_message deferredNum=",
+					deferred_turn,
+					" currentNum=",
+					turnNum,
+				],
+			)
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"game_round_done localPlayer=",
+			completed_player,
+			" isTurn=",
+			isTurn,
+			" turnNum=",
+			turnNum,
+			" ",
+			_score_summary(),
+		],
+	)
+
+	refresh_ui_state()
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
