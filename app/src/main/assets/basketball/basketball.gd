@@ -90,17 +90,22 @@ func _can_local_player_play_current_round() -> bool:
 
 	return false
 
-@onready var opp_avatar_display = %OppAvatarDisplay
-@onready var player_avatar_display = %PlayerAvatarDisplay
+@onready var opp_avatar_display: TextureButton = %OppAvatarDisplay
+@onready var player_avatar_display: TextureButton = %PlayerAvatarDisplay
 @onready var winner_label: Label = %WinLossLabel
 @onready var sent_label: Label = %SentLabel
 @onready var spectator_label: Label = %SpecLabel
+@onready var waiting_status_label: Label = %waitingLabel
 @onready var start_button: Button = %StartButton
 @onready var skip_button: TextureButton = %SkipButton
 @onready var round_container: PanelContainer = %RoundUI
 @onready var round_label: Label = %RoundLabel
 @onready var game_camera: Camera3D = %Camera3D
 @onready var round_goal_label: Label = %GoalLabel
+@onready var round_content_margin: MarginContainer = %RoundMarginContainer
+@onready var round_content_vbox: VBoxContainer = %RoundVBoxContainer
+@onready var you_label: Label = %YouLabel
+@onready var opponent_label_spacer: Control = %OppLabelSpacer
 @onready var static_backboard: MeshInstance3D = %backboard
 @onready var static_hoop_collision: Node3D = %hoop_collision
 @onready var static_net: MeshInstance3D = %net
@@ -133,10 +138,60 @@ const LAST_REAL_RIM_SPHERE := 18
 const IOS_MOVING_NET_Y := 0.843138
 const IOS_MOVING_NET_Z := -3.529706
 
-const ROUND_CARD_WIDTH_RATIO := 0.80
+const ROUND_CARD_SIZE_RATIO := 0.80
+const ROUND_CARD_REFERENCE_WIDTH := 518.4
+
+const ROUND_CARD_MIN_CONTENT_SCALE := 0.75
+const ROUND_CARD_MAX_CONTENT_SCALE := 1.80
+
+const ROUND_BASE_HORIZONTAL_MARGIN := 24.0
+const ROUND_BASE_VERTICAL_MARGIN := 20.0
+const ROUND_BASE_SEPARATION := 40.0
+
+const ROUND_BASE_TITLE_FONT_SIZE := 60.0
+const ROUND_BASE_GOAL_FONT_SIZE := 24.0
+const ROUND_BASE_BUTTON_FONT_SIZE := 28.0
+
+const ROUND_BASE_BUTTON_WIDTH := 100.0
+const ROUND_BASE_BUTTON_HEIGHT := 33.0
+
+const BASE_AVATAR_SIZE := Vector2(
+	96.0,
+	90.0,
+)
+
+const BASE_YOU_LABEL_FONT_SIZE := 18.0
+const BASE_OPP_LABEL_SPACER_HEIGHT := 26.0
+
+const LANDSCAPE_AVATAR_MIN_SCALE := 2.05
+const LANDSCAPE_AVATAR_MAX_SCALE := 2.35
+
+const BASE_STATUS_LABEL_FONT_SIZE := 25.0
+const BASE_SPECTATOR_LABEL_FONT_SIZE := 50.0
+
+const BASE_STATUS_EXPAND_HORIZONTAL := 20.0
+const BASE_STATUS_EXPAND_VERTICAL := 10.0
+const BASE_STATUS_CORNER_RADIUS := 8.0
+
+const BASE_WAITING_HALF_WIDTH := 163.0
+const BASE_WAITING_HALF_HEIGHT := 17.5
+
+const BASE_SPECTATOR_HALF_WIDTH := 324.0
+const BASE_SPECTATOR_HEIGHT := 220.0
+
+const LANDSCAPE_OVERLAY_MIN_SCALE := 1.35
+const LANDSCAPE_OVERLAY_MAX_SCALE := 1.65
+
+var _skip_button_base_size: Vector2 = Vector2.ZERO
 
 var _responsive_layout_pending: bool = false
 var _last_viewport_size: Vector2 = Vector2.ZERO
+var _round_card_resources_prepared: bool = false
+
+var _avatar_layout_generation: int = 0
+var _current_avatar_scale: float = 1.0
+
+const WIN_BURST_WRAPPER_NAME := "ResponsiveWinBurstWrapper"
 
 const REPLAY_FRAME_RATE := 60.0
 const REPLAY_SPAWN_DELAY_TICKS := 10
@@ -257,7 +312,137 @@ func _on_game_ready() -> void:
 
 	refresh_ui_state()
 
+func _configure_avatar_rendering(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(
+		avatar_button,
+	):
+		return
+		
+	avatar_button.clip_contents = false
+
+	var internal_viewport: SubViewport = (
+		avatar_button.get_node_or_null(
+			"SubViewportContainer/SubViewport",
+		)
+		as SubViewport
+	)
+
+	if internal_viewport != null:
+		internal_viewport.render_target_update_mode = (
+			SubViewport.UPDATE_ALWAYS
+		)
+
+	var internal_preview: SubViewportContainer = (
+		avatar_button.get_node_or_null(
+			"SubViewportContainer",
+		)
+		as SubViewportContainer
+	)
+
+	if internal_preview != null:
+		internal_preview.mouse_filter = (
+			Control.MOUSE_FILTER_IGNORE
+		)
+
+		internal_preview.visible = false
+
+func _prepare_round_card_resources() -> void:
+	if _round_card_resources_prepared:
+		return
+
+	if (
+		is_instance_valid(round_label) and
+		round_label.label_settings != null
+	):
+		var title_settings: LabelSettings = (
+			round_label.label_settings.duplicate()
+			as LabelSettings
+		)
+
+		if title_settings != null:
+			round_label.label_settings = title_settings
+
+	if (
+		is_instance_valid(round_goal_label) and
+		round_goal_label.label_settings != null
+	):
+		var goal_settings: LabelSettings = (
+			round_goal_label.label_settings.duplicate()
+			as LabelSettings
+		)
+
+		if goal_settings != null:
+			round_goal_label.label_settings = goal_settings
+
+	var status_labels: Array[Label] = [
+		winner_label,
+		sent_label,
+		waiting_status_label,
+	]
+
+	for status_label in status_labels:
+		if not is_instance_valid(
+			status_label,
+		):
+			continue
+
+		var current_style: StyleBox = (
+			status_label.get_theme_stylebox(
+				"normal",
+			)
+		)
+
+		if current_style == null:
+			continue
+
+		var duplicated_style: StyleBox = (
+			current_style.duplicate()
+			as StyleBox
+		)
+
+		if duplicated_style != null:
+			status_label.add_theme_stylebox_override(
+				"normal",
+				duplicated_style,
+			)
+
+	if is_instance_valid(
+		skip_button,
+	):
+		if skip_button.texture_normal != null:
+			_skip_button_base_size = (
+				skip_button.texture_normal.get_size()
+			)
+
+		if (
+			_skip_button_base_size.x <= 0.0 or
+			_skip_button_base_size.y <= 0.0
+		):
+			_skip_button_base_size = Vector2(
+				64.0,
+				64.0,
+			)
+
+		skip_button.ignore_texture_size = true
+		skip_button.stretch_mode = (
+			TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+		)
+
+	_configure_avatar_rendering(
+		player_avatar_display,
+	)
+
+	_configure_avatar_rendering(
+		opp_avatar_display,
+	)
+
+	_round_card_resources_prepared = true
+
 func _initialize_responsive_layout() -> void:
+	_prepare_round_card_resources()
+
 	var viewport := get_viewport()
 
 	if viewport == null:
@@ -286,6 +471,612 @@ func _schedule_responsive_layout() -> void:
 	call_deferred(
 		"_apply_responsive_layout",
 	)
+
+func _apply_round_card_content_scale(
+	content_scale: float,
+	card_width: float,
+	is_portrait: bool,
+) -> void:
+	var horizontal_margin := maxi(
+		roundi(
+			ROUND_BASE_HORIZONTAL_MARGIN *
+			content_scale
+		),
+		1,
+	)
+
+	var vertical_margin := maxi(
+		roundi(
+			ROUND_BASE_VERTICAL_MARGIN *
+			content_scale
+		),
+		1,
+	)
+
+	var content_separation := maxi(
+		roundi(
+			ROUND_BASE_SEPARATION *
+			content_scale
+		),
+		1,
+	)
+
+	if is_instance_valid(
+		round_content_margin,
+	):
+		round_content_margin.add_theme_constant_override(
+			"margin_left",
+			horizontal_margin,
+		)
+
+		round_content_margin.add_theme_constant_override(
+			"margin_right",
+			horizontal_margin,
+		)
+
+		round_content_margin.add_theme_constant_override(
+			"margin_top",
+			vertical_margin,
+		)
+
+		round_content_margin.add_theme_constant_override(
+			"margin_bottom",
+			vertical_margin,
+		)
+
+	if is_instance_valid(
+		round_content_vbox,
+	):
+		round_content_vbox.add_theme_constant_override(
+			"separation",
+			content_separation,
+		)
+
+		round_content_vbox.alignment = (
+			BoxContainer.ALIGNMENT_BEGIN
+			if is_portrait
+			else BoxContainer.ALIGNMENT_CENTER
+		)
+
+	if (
+		is_instance_valid(round_label) and
+		round_label.label_settings != null
+	):
+		round_label.label_settings.font_size = maxi(
+			roundi(
+				ROUND_BASE_TITLE_FONT_SIZE *
+				content_scale
+			),
+			1,
+		)
+
+	if is_instance_valid(
+		round_goal_label,
+	):
+		var goal_font_size := maxi(
+			roundi(
+				ROUND_BASE_GOAL_FONT_SIZE *
+					content_scale
+			),
+			1,
+		)
+
+		if round_goal_label.label_settings != null:
+			round_goal_label.label_settings.font_size = (
+				goal_font_size
+			)
+
+		round_goal_label.add_theme_font_size_override(
+			"font_size",
+			goal_font_size,
+		)
+
+		var goal_width := maxf(
+			card_width -
+				float(
+					horizontal_margin *
+					2
+				),
+			1.0,
+		)
+
+		round_goal_label.custom_minimum_size = Vector2(
+			goal_width,
+			0.0,
+		)
+
+	if is_instance_valid(
+		start_button,
+	):
+		start_button.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					ROUND_BASE_BUTTON_FONT_SIZE *
+						content_scale
+				),
+				1,
+			),
+		)
+
+		start_button.custom_minimum_size = Vector2(
+			ROUND_BASE_BUTTON_WIDTH *
+				content_scale,
+			ROUND_BASE_BUTTON_HEIGHT *
+				content_scale,
+		)
+
+	if is_instance_valid(
+		round_content_vbox,
+	):
+		round_content_vbox.queue_sort()
+
+	if is_instance_valid(
+		round_content_margin,
+	):
+		round_content_margin.queue_sort()
+
+func _remove_win_burst_proxy(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(
+		avatar_button,
+	):
+		return
+
+	var existing_proxy: Node = (
+		avatar_button.get_node_or_null(
+			WIN_BURST_WRAPPER_NAME,
+		)
+	)
+
+	if existing_proxy == null:
+		return
+
+	avatar_button.remove_child(
+		existing_proxy,
+	)
+
+	existing_proxy.queue_free()
+
+
+func _clear_all_win_burst_proxies() -> void:
+	_remove_win_burst_proxy(
+		player_avatar_display,
+	)
+
+	_remove_win_burst_proxy(
+		opp_avatar_display,
+	)
+
+
+func _create_win_burst_target(
+	avatar_button: TextureButton,
+	avatar_scale: float,
+) -> TextureButton:
+	if not is_instance_valid(
+		avatar_button,
+	):
+		return null
+
+	_remove_win_burst_proxy(
+		avatar_button,
+	)
+
+	var burst_wrapper := Control.new()
+
+	burst_wrapper.name = (
+		WIN_BURST_WRAPPER_NAME
+	)
+
+	burst_wrapper.mouse_filter = (
+		Control.MOUSE_FILTER_IGNORE
+	)
+
+	burst_wrapper.show_behind_parent = true
+	burst_wrapper.clip_contents = false
+
+	avatar_button.add_child(
+		burst_wrapper,
+	)
+
+	burst_wrapper.size = BASE_AVATAR_SIZE
+
+	burst_wrapper.pivot_offset = (
+		BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	burst_wrapper.position = (
+		avatar_button.size *
+			0.5 -
+		BASE_AVATAR_SIZE *
+			0.5
+	)
+
+	burst_wrapper.scale = Vector2(
+		avatar_scale,
+		avatar_scale,
+	)
+
+	var burst_target := TextureButton.new()
+
+	burst_target.name = "BurstTarget"
+
+	burst_target.mouse_filter = (
+		Control.MOUSE_FILTER_IGNORE
+	)
+
+	burst_target.ignore_texture_size = true
+	burst_target.clip_contents = false
+	burst_target.size = BASE_AVATAR_SIZE
+
+	burst_target.pivot_offset = (
+		BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	burst_wrapper.add_child(
+		burst_target,
+	)
+
+	return burst_target
+
+
+func _show_win_burst_for_avatar(
+	avatar_button: TextureButton,
+) -> void:
+	var burst_target := (
+		_create_win_burst_target(
+			avatar_button,
+			_current_avatar_scale,
+		)
+	)
+
+	if not is_instance_valid(
+		burst_target,
+	):
+		return
+
+	GameUtils._show_win_burst(
+		burst_target,
+	)
+
+func _apply_avatar_responsive_layout(
+	content_scale: float,
+	is_portrait: bool,
+	viewport_size: Vector2,
+) -> void:
+	var avatar_scale := 1.0
+
+	if not is_portrait:
+		var landscape_aspect := (
+			viewport_size.x /
+			maxf(
+				viewport_size.y,
+				1.0,
+			)
+		)
+
+		avatar_scale = clampf(
+			maxf(
+				content_scale,
+				landscape_aspect,
+			),
+			LANDSCAPE_AVATAR_MIN_SCALE,
+			LANDSCAPE_AVATAR_MAX_SCALE,
+		)
+
+	_current_avatar_scale = avatar_scale
+
+	_clear_all_win_burst_proxies()
+
+	var avatar_size := (
+		BASE_AVATAR_SIZE *
+		avatar_scale
+	)
+
+	var avatar_buttons: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatar_buttons:
+		if not is_instance_valid(
+			avatar_button,
+		):
+			continue
+
+		_configure_avatar_rendering(
+			avatar_button,
+		)
+
+		avatar_button.scale = Vector2.ONE
+
+		avatar_button.custom_minimum_size = (
+			avatar_size
+		)
+
+		avatar_button.ignore_texture_size = true
+		avatar_button.stretch_mode = (
+			TextureButton.STRETCH_SCALE
+		)
+
+		avatar_button.queue_redraw()
+
+		var avatar_parent := (
+			avatar_button.get_parent()
+			as Container
+		)
+
+		if avatar_parent != null:
+			avatar_parent.queue_sort()
+
+	if is_instance_valid(
+		you_label,
+	):
+		you_label.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					BASE_YOU_LABEL_FONT_SIZE *
+					avatar_scale
+				),
+				1,
+			),
+		)
+
+	if is_instance_valid(
+		opponent_label_spacer,
+	):
+		opponent_label_spacer.custom_minimum_size = Vector2(
+			0.0,
+			BASE_OPP_LABEL_SPACER_HEIGHT *
+				avatar_scale,
+		)
+
+	_avatar_layout_generation += 1
+
+	call_deferred(
+		"_finalize_avatar_responsive_layout",
+		_avatar_layout_generation,
+	)
+
+func _finalize_avatar_responsive_layout(
+	layout_generation: int,
+) -> void:
+	await get_tree().process_frame
+
+	if (
+		not is_inside_tree() or
+		layout_generation !=
+			_avatar_layout_generation
+	):
+		return
+
+	var avatar_buttons: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatar_buttons:
+		if not is_instance_valid(
+			avatar_button,
+		):
+			continue
+
+		var avatar_parent := (
+			avatar_button.get_parent()
+			as Container
+		)
+
+		if avatar_parent != null:
+			avatar_parent.queue_sort()
+
+	await get_tree().process_frame
+
+	if (
+		not is_inside_tree() or
+		layout_generation !=
+			_avatar_layout_generation
+	):
+		return
+
+	for avatar_button in avatar_buttons:
+		if not is_instance_valid(
+			avatar_button,
+		):
+			continue
+
+		avatar_button.scale = Vector2.ONE
+
+		avatar_button.pivot_offset = (
+			avatar_button.size *
+			0.5
+		)
+
+		avatar_button.queue_redraw()
+
+	_clear_all_win_burst_proxies()
+
+	if (
+		is_instance_valid(
+			winner_label,
+		) and
+		winner_label.visible
+	):
+		_show_current_winner_burst()
+
+func _apply_status_label_scale(
+	label: Label,
+	base_font_size: float,
+	overlay_scale: float,
+) -> void:
+	if not is_instance_valid(
+		label,
+	):
+		return
+
+	label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				base_font_size *
+					overlay_scale
+			),
+			1,
+		),
+	)
+
+	var normal_style := (
+		label.get_theme_stylebox(
+			"normal",
+		)
+	)
+
+	if normal_style is StyleBoxFlat:
+		var flat_style := (
+			normal_style as StyleBoxFlat
+		)
+
+		flat_style.expand_margin_left = (
+			BASE_STATUS_EXPAND_HORIZONTAL *
+			overlay_scale
+		)
+
+		flat_style.expand_margin_right = (
+			BASE_STATUS_EXPAND_HORIZONTAL *
+			overlay_scale
+		)
+
+		flat_style.expand_margin_top = (
+			BASE_STATUS_EXPAND_VERTICAL *
+			overlay_scale
+		)
+
+		flat_style.expand_margin_bottom = (
+			BASE_STATUS_EXPAND_VERTICAL *
+			overlay_scale
+		)
+
+		var radius := maxi(
+			roundi(
+				BASE_STATUS_CORNER_RADIUS *
+					overlay_scale
+			),
+			1,
+		)
+
+		flat_style.corner_radius_top_left = radius
+		flat_style.corner_radius_top_right = radius
+		flat_style.corner_radius_bottom_left = radius
+		flat_style.corner_radius_bottom_right = radius
+
+func _apply_game_overlay_responsive_layout(
+	content_scale: float,
+	is_portrait: bool,
+) -> void:
+	var overlay_scale := 1.0
+
+	if not is_portrait:
+		overlay_scale = clampf(
+			content_scale,
+			LANDSCAPE_OVERLAY_MIN_SCALE,
+			LANDSCAPE_OVERLAY_MAX_SCALE,
+		)
+
+	_apply_status_label_scale(
+		winner_label,
+		BASE_STATUS_LABEL_FONT_SIZE,
+		overlay_scale,
+	)
+
+	_apply_status_label_scale(
+		sent_label,
+		BASE_STATUS_LABEL_FONT_SIZE,
+		overlay_scale,
+	)
+
+	_apply_status_label_scale(
+		waiting_status_label,
+		BASE_STATUS_LABEL_FONT_SIZE,
+		overlay_scale,
+	)
+
+	if is_instance_valid(
+		waiting_status_label,
+	):
+		waiting_status_label.offset_left = (
+			-BASE_WAITING_HALF_WIDTH *
+			overlay_scale
+		)
+
+		waiting_status_label.offset_right = (
+			BASE_WAITING_HALF_WIDTH *
+			overlay_scale
+		)
+
+		waiting_status_label.offset_top = (
+			-BASE_WAITING_HALF_HEIGHT *
+			overlay_scale
+		)
+
+		waiting_status_label.offset_bottom = (
+			BASE_WAITING_HALF_HEIGHT *
+			overlay_scale
+		)
+
+	if is_instance_valid(
+		spectator_label,
+	):
+		spectator_label.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					BASE_SPECTATOR_LABEL_FONT_SIZE *
+						overlay_scale
+				),
+				1,
+			),
+		)
+
+		spectator_label.offset_left = (
+			-BASE_SPECTATOR_HALF_WIDTH *
+			overlay_scale
+		)
+
+		spectator_label.offset_right = (
+			BASE_SPECTATOR_HALF_WIDTH *
+			overlay_scale
+		)
+
+		spectator_label.offset_bottom = (
+			BASE_SPECTATOR_HEIGHT *
+			overlay_scale
+		)
+
+	if is_instance_valid(
+		skip_button,
+	):
+		skip_button.ignore_texture_size = true
+		skip_button.stretch_mode = (
+			TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+		)
+
+		skip_button.custom_minimum_size = (
+			_skip_button_base_size *
+			overlay_scale
+		)
+
+		skip_button.queue_redraw()
+
+		var skip_parent := (
+			skip_button.get_parent()
+			as Container
+		)
+
+		if skip_parent != null:
+			skip_parent.queue_sort()
 
 func _apply_responsive_layout() -> void:
 	_responsive_layout_pending = false
@@ -322,64 +1113,166 @@ func _apply_responsive_layout() -> void:
 			Camera3D.KEEP_HEIGHT
 		)
 
-	if is_instance_valid(
+	if not is_instance_valid(
 		round_container,
 	):
-		var card_width := floorf(
+		return
+
+	var is_portrait := (
+		viewport_size.y >=
+		viewport_size.x
+	)
+
+	var card_width: float
+	var card_height: float
+
+	if is_portrait:
+		card_width = floorf(
 			viewport_size.x *
-			ROUND_CARD_WIDTH_RATIO,
+			ROUND_CARD_SIZE_RATIO
 		)
 
-		round_container.custom_minimum_size = Vector2(
-			card_width,
-			0.0,
+		card_height = 0.0
+	else:
+		card_height = floorf(
+			viewport_size.y *
+			ROUND_CARD_SIZE_RATIO
 		)
 
-		var card_parent := (
-			round_container.get_parent()
-			as Container
-		)
+		card_width = card_height
 
-		if card_parent != null:
-			card_parent.queue_sort()
+	round_container.custom_minimum_size = Vector2(
+		card_width,
+		card_height,
+	)
+
+	var content_scale := clampf(
+		card_width /
+			ROUND_CARD_REFERENCE_WIDTH,
+		ROUND_CARD_MIN_CONTENT_SCALE,
+		ROUND_CARD_MAX_CONTENT_SCALE,
+	)
+
+	_apply_round_card_content_scale(
+		content_scale,
+		card_width,
+		is_portrait,
+	)
+
+	_apply_avatar_responsive_layout(
+		content_scale,
+		is_portrait,
+		viewport_size,
+	)
+
+	_apply_game_overlay_responsive_layout(
+		content_scale,
+		is_portrait,
+	)
+
+	round_container.queue_sort()
+
+	var card_parent := (
+		round_container.get_parent()
+		as Container
+	)
+
+	if card_parent != null:
+		card_parent.queue_sort()
 
 	OpLog.i(
 		LOG_TAG,
 		[
 			"responsive_layout viewport=",
 			viewport_size,
-			" roundCardWidth=",
-			round_container.custom_minimum_size.x
-				if is_instance_valid(
-					round_container,
-				)
-				else -1.0,
-			" landscape=",
-			viewport_size.x >
-				viewport_size.y,
+			" cardSize=",
+			Vector2(
+				card_width,
+				card_height,
+			),
+			" contentScale=",
+			content_scale,
+			" portrait=",
+			is_portrait,
 		],
 	)
 
-func showWinner():
+func _show_current_winner_burst() -> void:
+	_clear_all_win_burst_proxies()
+
 	if myScore == oppScore:
-		winner_label.set_text("DRAW!")
-		GameUtils._show_win_burst(player_avatar_display)
-		GameUtils._show_win_burst(opp_avatar_display)
+		_show_win_burst_for_avatar(
+			player_avatar_display,
+		)
+
+		_show_win_burst_for_avatar(
+			opp_avatar_display,
+		)
+
+		return
+
+	var winning_avatar: TextureButton = (
+		player_avatar_display
+		if myScore > oppScore
+		else opp_avatar_display
+	)
+
+	_show_win_burst_for_avatar(
+		winning_avatar,
+	)
+
+func showWinner() -> void:
+	if myScore == oppScore:
+		winner_label.set_text(
+			"DRAW!",
+		)
+
+		winner_label.add_theme_color_override(
+			"font_color",
+			Color.WHITE,
+		)
+
 	elif myScore > oppScore:
 		if spectator_mode:
-			winner_label.set_text("PLAYER 1 WINS!")
+			winner_label.set_text(
+				"PLAYER 1 WINS!",
+			)
 		else:
-			winner_label.set_text("YOU WIN!")
-		winner_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-		GameUtils._show_win_burst(player_avatar_display)
+			winner_label.set_text(
+				"YOU WIN!",
+			)
+
+		winner_label.add_theme_color_override(
+			"font_color",
+			Color(
+				1.0,
+				0.84,
+				0.0,
+			),
+		)
+
 	else:
 		if spectator_mode:
-			winner_label.set_text("PLAYER 2 WINS!")
+			winner_label.set_text(
+				"PLAYER 2 WINS!",
+			)
 		else:
-			winner_label.set_text("YOU LOSE!")
-		winner_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
-		GameUtils._show_win_burst(opp_avatar_display)
+			winner_label.set_text(
+				"YOU LOSE!",
+			)
+
+		winner_label.add_theme_color_override(
+			"font_color",
+			Color(
+				1.0,
+				0.2,
+				0.2,
+			),
+		)
+
 	winner_label.visible = true
+
+	_show_current_winner_burst()
 
 func _set_collision_shapes_enabled(
 	root: Node,
@@ -1725,6 +2618,8 @@ func refresh_ui_state() -> void:
 
 		if is_instance_valid(winner_label):
 			winner_label.visible = false
+			
+		_clear_all_win_burst_proxies()
 
 		round_container.visible = false
 		skip_button.visible = true
@@ -2672,6 +3567,8 @@ func _set_game_data(
 
 		if is_instance_valid(winner_label):
 			winner_label.visible = false
+			
+		_clear_all_win_burst_proxies()
 
 		OpLog.i(
 			LOG_TAG,
@@ -2919,6 +3816,8 @@ func sendGameData(
 
 	if is_instance_valid(winner_label):
 		winner_label.visible = false
+		
+	_clear_all_win_burst_proxies()
 
 	play_sent_animation()
 
@@ -3028,6 +3927,8 @@ func startGame() -> void:
 
 	if is_instance_valid(winner_label):
 		winner_label.visible = false
+		
+	_clear_all_win_burst_proxies()
 
 	game_over = false
 

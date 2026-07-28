@@ -300,18 +300,21 @@ z_index = 1
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_0e03b")
 
-[node name="MarginContainer" type="MarginContainer" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI" unique_id=806331448]
+[node name="RoundMarginContainer" type="MarginContainer" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI" unique_id=806331448]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/margin_left = 24
 theme_override_constants/margin_top = 30
 theme_override_constants/margin_right = 24
 theme_override_constants/margin_bottom = 30
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer" unique_id=323345205]
+[node name="RoundVBoxContainer" type="VBoxContainer" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/RoundMarginContainer" unique_id=323345205]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 40
+alignment = 1
 
-[node name="RoundLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer/VBoxContainer" unique_id=1274204673]
+[node name="RoundLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/RoundMarginContainer/RoundVBoxContainer" unique_id=1274204673]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
@@ -319,7 +322,8 @@ size_flags_vertical = 0
 text = "Round 1"
 label_settings = SubResource("LabelSettings_lrgjq")
 
-[node name="GoalLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer/VBoxContainer" unique_id=237767714]
+[node name="GoalLabel" type="Label" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/RoundMarginContainer/RoundVBoxContainer" unique_id=237767714]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(1, 0)
 layout_mode = 2
 size_flags_horizontal = 3
@@ -331,7 +335,7 @@ horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 2
 
-[node name="StartButton" type="Button" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/MarginContainer/VBoxContainer" unique_id=2034094030]
+[node name="StartButton" type="Button" parent="MainOverlay/MarginContainer/CenterContainer/RoundUI/RoundMarginContainer/RoundVBoxContainer" unique_id=2034094030]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(100, 33)
 layout_mode = 2
@@ -376,9 +380,11 @@ texture_normal = SubResource("ViewportTexture_diu2m")
 texture_pressed = SubResource("ViewportTexture_ofxhw")
 texture_hover = SubResource("ViewportTexture_3ufe5")
 ignore_texture_size = true
+stretch_mode = 0
 is_display_only = true
 
 [node name="YouLabel" type="Label" parent="MainOverlay/MarginContainer/TopHBoxContainer/YouContainer" unique_id=1613717902]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
@@ -405,10 +411,12 @@ texture_normal = SubResource("ViewportTexture_yj865")
 texture_pressed = SubResource("ViewportTexture_0odob")
 texture_hover = SubResource("ViewportTexture_u7o17")
 ignore_texture_size = true
+stretch_mode = 0
 is_display_only = true
 controlled_by_data = true
 
-[node name="Control" type="Control" parent="MainOverlay/MarginContainer/TopHBoxContainer/OppContainer" unique_id=1939412001]
+[node name="OppLabelSpacer" type="Control" parent="MainOverlay/MarginContainer/TopHBoxContainer/OppContainer" unique_id=1939412001]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
 
@@ -453,10 +461,14 @@ vertical_alignment = 1
 
 [node name="SpecLabel" type="Label" parent="MainOverlay" unique_id=1981103108]
 unique_name_in_owner = true
-layout_mode = 0
-offset_top = 129.0
-offset_right = 648.0
-offset_bottom = 349.0
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -324.0
+offset_right = 324.0
+offset_bottom = 220.0
+grow_horizontal = 2
 size_flags_vertical = 0
 theme_override_font_sizes/font_size = 50
 text = "Spectating..."
