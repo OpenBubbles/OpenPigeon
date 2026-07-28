@@ -39,7 +39,9 @@
             android:name=".godot.GodotGameActivity"
             android:exported="false"
             android:process=":godot"
-            android:launchMode="singleTop"/>
+            android:launchMode="singleTop"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density" />
         <activity
             android:name=".wordhunt.WordHuntActivity"
             android:exported="false"

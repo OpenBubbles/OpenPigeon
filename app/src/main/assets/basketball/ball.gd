@@ -3,173 +3,338 @@ class_name BasketballBall
 
 const LOG_TAG := "BasketballBall"
 const DEBUG_BASKETBALL_BALL := false
+const SHOT_Y_VELOCITY := 6.5
+const SHOT_Z_VELOCITY := -2.499991
+const REPLAY_STEP_SECONDS := 0.01666
+const REPLAY_GRAVITY_PER_STEP := 0.163268
+const REPLAY_PRE_SIM_STEPS := 52
+const LIVE_BALL_LIFETIME_SECONDS := 2.5
+const REPLAY_BALL_LIFETIME_SECONDS := 5.52
+
+var didGoInReplay = null
+var player = null
+var shotAt := 0.0
+var shotX := 0.0
+var didHitHoop := false
+var didGoIn := false
+var BasketballGame: basketball
+var replay_manual_simulating := false
+var replay_manual_steps := 0
+var replay_velocity := Vector3.ZERO
 
 func dbg(parts: Variant) -> void:
 	if DEBUG_BASKETBALL_BALL:
-		OpLog.d(LOG_TAG, parts)
-
-var didGoInReplay = null
-
-var player = null
-var shotAt = 0.0
-var shotX = 0.0
-var didHitHoop = false
-var didGoIn = false
-var BasketballGame: basketball
+		OpLog.d(
+			LOG_TAG,
+			parts,
+		)
 
 func _ready() -> void:
-	self.contact_monitor = true
-	self.max_contacts_reported = 10
-	self.BasketballGame = get_parent()
-	
-	self.can_sleep = false
-	self.sleeping = false
+	contact_monitor = true
+	max_contacts_reported = 10
 
-func _process(delta: float) -> void:
-	if self.name != "Ball" and self.BasketballGame.replayPlaying == false and self.BasketballGame.replayFinished == true:
-		queue_free()
-	
-func _physics_process(
+	BasketballGame = get_parent()
+
+	can_sleep = false
+	sleeping = false
+
+	if not body_entered.is_connected(
+		_on_body_entered,
+	):
+		body_entered.connect(
+			_on_body_entered,
+		)
+
+func _process(
 	_delta: float,
 ) -> void:
-	for node in get_colliding_bodies():
-		if not String(node.name).contains(
+	if (
+		name != "Ball" and
+		BasketballGame.replayPlaying == false and
+		BasketballGame.replayFinished == true
+	):
+		queue_free()
+
+func _on_body_entered(
+	body: Node,
+) -> void:
+	var body_name := String(
+		body.name,
+	)
+
+	if not body_name.begins_with(
+		"HoopCollisionSphere",
+	):
+		return
+
+	var sphere_number := int(
+		body_name.trim_prefix(
 			"HoopCollisionSphere",
-		):
-			continue
+		),
+	)
 
-		var is_upper_rim_contact := node.global_position.y >= 0.95
+	if (
+		sphere_number <
+			basketball.FIRST_REAL_RIM_SPHERE or
+		sphere_number >
+			basketball.LAST_REAL_RIM_SPHERE
+	):
+		return
 
-		if is_upper_rim_contact:
-			physics_material_override.bounce = 0.2
+	didHitHoop = true
 
-			if didGoInReplay == true:
-				var x_nudge := 0.0
+	OpLog.i(
+		LOG_TAG,
+		[
+			"rim_contact body=",
+			body_name,
+			" sphere=",
+			sphere_number,
+			" pos=",
+			global_position,
+			" velocity=",
+			linear_velocity,
+			" didGoIn=",
+			didGoIn,
+		],
+	)
 
-				if position.x > 0.0:
-					x_nudge = -1.5
-				elif position.x < 0.0:
-					x_nudge = 1.5
-
-				linear_velocity = Vector3(
-					x_nudge,
-					-2.5,
-					0.0,
-				)
-
-			didHitHoop = true
-
-			dbg(
-				[
-					"upper_hoop_contact player=",
-					player,
-					" pos=",
-					position,
-					" vel=",
-					linear_velocity,
-					" replay=",
-					str(didGoInReplay),
-				],
-			)
-
-			continue
-
-		physics_material_override.bounce = 0.6
-
-		linear_velocity = Vector3(
-			0.0,
-			-2.5,
-			0.0,
-		)
-
-		didHitHoop = true
-
-		dbg(
-			[
-				"lower_hoop_contact player=",
-				player,
-				" pos=",
-				position,
-				" vel=",
-				linear_velocity,
-				" replay=",
-				str(didGoInReplay),
-			],
-		)
-
-func set_player(player_num: int):
+func set_player(
+	player_num: int,
+) -> void:
 	player = player_num
 
-func set_didGoInReplay(val: bool):
-	didGoInReplay = val
+func set_didGoInReplay(
+	value: bool,
+) -> void:
+	didGoInReplay = value
 
-func shoot(x_delta: float) -> void:
+func shoot(
+	target_x: float,
+) -> void:
 	shotAt = BasketballGame.elapsedTime
-	shotX = x_delta
-	var x_force: float = self.position.x + shotX
-	var raw_x_force: float = x_force
-	
-	if player != BasketballGame.player:
-		x_force *= -1
-		
-	OpLog.i(LOG_TAG, [
-		"shoot player=", player,
-		" localPlayer=", BasketballGame.player,
-		" shotAt=", shotAt,
-		" shotX=", shotX,
-		" rawXForce=", raw_x_force,
-		" finalXForce=", x_force,
-		" pos=", position
-	])
 
-	self.axis_lock_angular_x = false
-	self.axis_lock_angular_y = false
-	self.axis_lock_angular_z = false
+	shotX = BasketballGame.get_saved_replay_x(
+		target_x,
+	)
 
-	self.freeze = false
-	self.sleeping = false
-	self.linear_velocity = Vector3.ZERO
-	self.angular_velocity = Vector3.ZERO
+	var x_velocity := (
+		target_x -
+		position.x
+	)
 
-	self.apply_impulse(Vector3(x_force, 6.50, -2.5))
-	self.apply_torque_impulse(Vector3(-0.02, 0, 0))
-	
-	var timer = Timer.new()
-	self.add_child(timer)
-	timer.timeout.connect(despawn)
-	timer.set_wait_time(2.5)
-	timer.start()
+	OpLog.i(
+		LOG_TAG,
+		[
+			"shoot player=",
+			player,
+			" targetX=",
+			target_x,
+			" savedReplayX=",
+			shotX,
+			" velocityX=",
+			x_velocity,
+			" pos=",
+			position,
+		],
+	)
 
-func despawn() -> void:
-	# Replay data remains authoritative. If a replay shot was saved as
-	# successful but physics failed to cross the scoring plane, award
-	# it here as a replay failsafe.
-	if didGoInReplay == true and not didGoIn:
-		OpLog.w(
-			LOG_TAG,
-			[
-				"despawn_replay_score_failsafe player=",
-				player,
-				" shotAt=",
-				shotAt,
-				" shotX=",
-				shotX,
-				" pos=",
-				position,
-			],
-		)
+	_start_dynamic_shot(
+		Vector3(
+			x_velocity,
+			SHOT_Y_VELOCITY,
+			SHOT_Z_VELOCITY,
+		),
+		true,
+	)
 
-		didGoIn = true
+	_start_despawn_timer(
+		LIVE_BALL_LIFETIME_SECONDS,
+	)
 
-		set_meta(
-			"score_counted",
+func begin_replay_shot(
+	x_velocity: float,
+	saved_replay_x: float,
+	expected_score: bool,
+	manual_pre_simulation: bool,
+) -> void:
+	shotAt = BasketballGame.elapsedTime
+	shotX = saved_replay_x
+
+	didGoInReplay = expected_score
+	didGoIn = false
+	didHitHoop = false
+
+	var launch_velocity := Vector3(
+		x_velocity,
+		SHOT_Y_VELOCITY,
+		SHOT_Z_VELOCITY,
+	)
+
+	if manual_pre_simulation:
+		replay_manual_simulating = true
+		replay_manual_steps = 0
+		replay_velocity = launch_velocity
+
+		axis_lock_angular_x = true
+		axis_lock_angular_y = true
+		axis_lock_angular_z = true
+
+		angular_velocity = Vector3.ZERO
+		linear_velocity = Vector3.ZERO
+		collision_layer = 0
+		collision_mask = 0
+
+		freeze = true
+		sleeping = false
+	else:
+		_start_dynamic_shot(
+			launch_velocity,
 			true,
 		)
 
-		BasketballGame.incrementScore(
+	_start_despawn_timer(
+		REPLAY_BALL_LIFETIME_SECONDS,
+	)
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"replay_shot player=",
 			player,
+			" expected=",
+			expected_score,
+			" savedReplayX=",
+			saved_replay_x,
+			" velocity=",
+			launch_velocity,
+			" manual=",
+			manual_pre_simulation,
+			" pos=",
+			position,
+		],
+	)
+
+func step_replay_pre_simulation() -> void:
+	if not replay_manual_simulating:
+		return
+
+	if replay_manual_steps >= REPLAY_PRE_SIM_STEPS:
+		_finish_replay_pre_simulation()
+		return
+
+	replay_velocity.y -= REPLAY_GRAVITY_PER_STEP
+
+	position += (
+		replay_velocity *
+		REPLAY_STEP_SECONDS
+	)
+
+	replay_manual_steps += 1
+
+func _finish_replay_pre_simulation() -> void:
+	replay_manual_simulating = false
+
+	collision_layer = int(
+		player,
+	)
+
+	collision_mask = int(
+		player,
+	)
+
+	axis_lock_angular_x = false
+	axis_lock_angular_y = false
+	axis_lock_angular_z = false
+
+	freeze = false
+	sleeping = false
+
+	linear_velocity = replay_velocity
+	angular_velocity = Vector3.ZERO
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"replay_sim_finished player=",
+			player,
+			" steps=",
+			replay_manual_steps,
+			" pos=",
+			position,
+			" velocity=",
+			linear_velocity,
+		],
+	)
+
+func _start_dynamic_shot(
+	launch_velocity: Vector3,
+	apply_rotation: bool,
+) -> void:
+	replay_manual_simulating = false
+	replay_manual_steps = 0
+	replay_velocity = Vector3.ZERO
+
+	collision_layer = int(
+		player,
+	)
+
+	collision_mask = int(
+		player,
+	)
+
+	axis_lock_angular_x = false
+	axis_lock_angular_y = false
+	axis_lock_angular_z = false
+
+	freeze = false
+	sleeping = false
+
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+
+	apply_impulse(
+		launch_velocity,
+	)
+
+	if apply_rotation:
+		apply_torque_impulse(
+			Vector3(
+				-0.02,
+				0.0,
+				0.0,
+			),
 		)
 
+func _start_despawn_timer(
+	wait_seconds: float,
+) -> void:
+	if has_meta(
+		"despawn_timer_started",
+	):
+		return
+
+	set_meta(
+		"despawn_timer_started",
+		true,
+	)
+
+	var timer := Timer.new()
+
+	add_child(
+		timer,
+	)
+
+	timer.one_shot = true
+	timer.wait_time = wait_seconds
+
+	timer.timeout.connect(
+		despawn,
+	)
+
+	timer.start()
+
+func despawn() -> void:
 	if didGoInReplay == null:
 		var replay_entry := (
 			str(
@@ -181,13 +346,13 @@ func despawn() -> void:
 			"," +
 			str(
 				"%0.3f" %
-				shotX,
+					shotX,
 			) +
 			",0," +
 			str(
 				1
-				if didGoIn
-				else 0,
+					if didGoIn
+					else 0,
 			)
 		)
 
@@ -221,7 +386,12 @@ func despawn() -> void:
 			],
 		)
 
-	if BasketballGame.currentBall.get(player) == self:
+	if (
+		BasketballGame.currentBall.get(
+			player,
+		) ==
+		self
+	):
 		BasketballGame.currentBall[player] = null
 
 	queue_free()

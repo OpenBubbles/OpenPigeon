@@ -4,7 +4,15 @@ class_name basketball
 var elapsedTime: float = 0.0
 
 const MUSIC_STREAM := preload("res://global/audio/basketball.ogg")
-const MIN_DRAG_DISTANCE := 30.0
+const IOS_DRAG_RELEASE_DISTANCE := 65.0
+const IOS_DRAG_RELEASE_SPEED := 20.0
+const IOS_NORMAL_AIM_ASSIST := 0.25
+
+const IOS_AIM_REFERENCE := Vector3(
+	0.0,
+	1.05,
+	-3.5,
+)
 
 const LOG_TAG := "Basketball"
 const DEBUG_BASKETBALL := false
@@ -27,6 +35,60 @@ func _score_summary() -> String:
 		str(skip_score1),
 		str(skip_score2)
 	]
+	
+func _has_player_submitted_round(
+	player_num: int,
+	round_num: int,
+) -> bool:
+	if round_num == 1:
+		if player_num == 1:
+			return replay != null
+
+		return replay2 != null
+
+	if player_num == 1:
+		return replay3 != null
+
+	return replay4 != null
+
+
+func _can_local_player_play_current_round() -> bool:
+	if spectator_mode:
+		return false
+
+	if player == null:
+		return false
+
+	var current_turn := int(
+		turnNum if turnNum != null else 1,
+	)
+
+	var local_player_num := int(
+		player,
+	)
+
+	if current_turn <= 2:
+		return not _has_player_submitted_round(
+			local_player_num,
+			1,
+		)
+
+	if current_turn == 3:
+		return (
+			replayFinished and
+			not _has_player_submitted_round(
+				local_player_num,
+				2,
+			)
+		)
+
+	if current_turn == 4:
+		return not _has_player_submitted_round(
+			local_player_num,
+			2,
+		)
+
+	return false
 
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var player_avatar_display = %PlayerAvatarDisplay
@@ -37,29 +99,66 @@ func _score_summary() -> String:
 @onready var skip_button: TextureButton = %SkipButton
 @onready var round_container: PanelContainer = %RoundUI
 @onready var round_label: Label = %RoundLabel
-
+@onready var game_camera: Camera3D = %Camera3D
+@onready var round_goal_label: Label = %GoalLabel
 @onready var static_backboard: MeshInstance3D = %backboard
 @onready var static_hoop_collision: Node3D = %hoop_collision
 @onready var static_net: MeshInstance3D = %net
 @onready var static_pole: Node3D = %pole
+@onready var static_net_collision_point: Marker3D = %StaticNetCollisionPoint
 
 @onready var moving_hoop_root: Node3D = %MovingHoopRoot
 @onready var moving_backboard: Node3D = %backboard_moving
 @onready var moving_hoop_collision: Node3D = %hoop_collision_moving
 @onready var moving_net: Node3D = %net_moving
 @onready var moving_pole: Node3D = %pole_moving
+@onready var moving_net_collision_point: Marker3D = %MovingNetCollisionPoint
 
 var hoop_time: int = 0
 var _hoop_acc: float = 0.0
 var hoop_center_tween: Tween
 
-const SCORE_RADIUS_X := 0.32
-const SCORE_RADIUS_Z := 0.26
-const SCORE_MIN_DOWN_VELOCITY := -0.05
-const SCORE_DUPLICATE_LOCK_MS := 300
+var _moving_hoop_x: float = 0.0
+
+var _moving_hoop_physics_initialized: bool = false
+
+var _moving_hoop_physics_bodies: Array[AnimatableBody3D] = []
+
+var _moving_hoop_base_transforms: Dictionary = {}
+
+const SCORE_RADIUS := 0.15
+const FIRST_REAL_RIM_SPHERE := 11
+const LAST_REAL_RIM_SPHERE := 18
+
+const IOS_MOVING_NET_Y := 0.843138
+const IOS_MOVING_NET_Z := -3.529706
+
+const ROUND_CARD_WIDTH_RATIO := 0.80
+
+var _responsive_layout_pending: bool = false
+var _last_viewport_size: Vector2 = Vector2.ZERO
+
+const REPLAY_FRAME_RATE := 60.0
+const REPLAY_SPAWN_DELAY_TICKS := 10
+const REPLAY_LOOKAHEAD_TICKS := 60
+
+const REPLAY_MIN_MISS_CORRECTION := 0.16
+const REPLAY_MISS_MULTIPLIER := 1.5
 
 var replayTimers: Array[Timer] = []
 var replayEndTimer: Timer = null
+
+var _replay_tick := 0
+
+var _replay_shots: Dictionary = {
+	1: [],
+	2: [],
+}
+
+var _replay_spawn_tick: Dictionary = {
+	1: -1,
+	2: -1,
+}
 var replayPlaying = false
 var replayFinished = false
 var gamePlaying = false
@@ -73,7 +172,6 @@ var winner_sent: bool = false
 var _loaded_replay_key: String = ""
 var _score_run_id: int = 0
 var _scored_shot_keys: Dictionary = {}
-var _last_score_msec_by_player: Dictionary = {}
 
 var replay = null
 var replay2 = null
@@ -107,7 +205,11 @@ var myReplay = ""
 var isWaiting = false
 var receivedMessage = null
 var drag_start_pos: Vector2 = Vector2.ZERO
+var drag_previous_pos: Vector2 = Vector2.ZERO
+var drag_smoothed_speed: float = 0.0
 var dragging: bool = false
+var active_drag_touch_index: int = -1
+
 var my_player: Variant = null
 
 func _get_music_stream() -> AudioStream:
@@ -117,7 +219,19 @@ func _get_dev_data() -> String:
 	return '{"isYourTurn": true, "myPlayerId": "9a6e234c-2244-4621-a08f-38acd277a2e0", "skip_score1": "18", "skip_score2": "46", "player": "2", "score1": "18", "score2": "23", "sender": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "avatar2": "body,3|eyes,6|mouth,3|acc,0|wins,0|bg_color,0.933333,0.407843,0.647059|body_color,0.968627,0.811765,0.333333|glasses,0|stache,0|backdrop,0|hair,0|clothes,2|hair_color,0.505882,0.725490,0.254902|clothes_color,0.686657,0.686657,0.686657", "player2": "AA3B9A3D-4EA9-41ED-AC35-395DBBC9AEA0XBHDAb", "id": "G4m1HA79uZDuAtHY", "ios": "26.1", "num": "1", "game": "basketball", "mode": "h", "seed": "-1417153476", "tver": "5", "build": "28R", "round": "1", "seed2": "-16614620", "start": "", "version": "5", "caption": "Lets play Basketball!", "game_name": "Basketball", "replay": "60,0.264,0,0"}'
 
 func _on_game_ready() -> void:
-	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
+	OpLog.game_opened(
+		LOG_TAG,
+		[
+			"localMode=",
+			appPlugin == null,
+			" uuid=",
+			my_uuid,
+		],
+	)
+
+	_initialize_moving_hoop_physics()
+	_initialize_responsive_layout()
+
 	if not _ui_initialized:
 		_ui_initialized = true
 
@@ -143,6 +257,109 @@ func _on_game_ready() -> void:
 
 	refresh_ui_state()
 
+func _initialize_responsive_layout() -> void:
+	var viewport := get_viewport()
+
+	if viewport == null:
+		return
+
+	if not viewport.size_changed.is_connected(
+		_on_viewport_size_changed,
+	):
+		viewport.size_changed.connect(
+			_on_viewport_size_changed,
+		)
+
+	_schedule_responsive_layout()
+
+func _on_viewport_size_changed() -> void:
+	_cancel_ball_drag()
+
+	_schedule_responsive_layout()
+
+func _schedule_responsive_layout() -> void:
+	if _responsive_layout_pending:
+		return
+
+	_responsive_layout_pending = true
+
+	call_deferred(
+		"_apply_responsive_layout",
+	)
+
+func _apply_responsive_layout() -> void:
+	_responsive_layout_pending = false
+
+	if not is_inside_tree():
+		return
+
+	var viewport := get_viewport()
+
+	if viewport == null:
+		return
+
+	var viewport_size := (
+		viewport.get_visible_rect().size
+	)
+
+	if (
+		viewport_size.x <= 1.0 or
+		viewport_size.y <= 1.0
+	):
+		return
+
+	if viewport_size.is_equal_approx(
+		_last_viewport_size,
+	):
+		return
+
+	_last_viewport_size = viewport_size
+
+	if is_instance_valid(
+		game_camera,
+	):
+		game_camera.keep_aspect = (
+			Camera3D.KEEP_HEIGHT
+		)
+
+	if is_instance_valid(
+		round_container,
+	):
+		var card_width := floorf(
+			viewport_size.x *
+			ROUND_CARD_WIDTH_RATIO,
+		)
+
+		round_container.custom_minimum_size = Vector2(
+			card_width,
+			0.0,
+		)
+
+		var card_parent := (
+			round_container.get_parent()
+			as Container
+		)
+
+		if card_parent != null:
+			card_parent.queue_sort()
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"responsive_layout viewport=",
+			viewport_size,
+			" roundCardWidth=",
+			round_container.custom_minimum_size.x
+				if is_instance_valid(
+					round_container,
+				)
+				else -1.0,
+			" landscape=",
+			viewport_size.x >
+				viewport_size.y,
+		],
+	)
+
 func showWinner():
 	if myScore == oppScore:
 		winner_label.set_text("DRAW!")
@@ -164,15 +381,31 @@ func showWinner():
 		GameUtils._show_win_burst(opp_avatar_display)
 	winner_label.visible = true
 
-func _set_collision_shapes_enabled(root: Node, enabled: bool) -> void:
+func _set_collision_shapes_enabled(
+	root: Node,
+	enabled: bool,
+) -> void:
 	if not is_instance_valid(root):
 		return
 
 	for child in root.get_children():
 		if child is CollisionShape3D:
 			child.disabled = not enabled
-		_set_collision_shapes_enabled(child, enabled)
 
+		_set_collision_shapes_enabled(
+			child,
+			enabled,
+		)
+
+func _set_hoop_collision_shapes_enabled(
+	root: Node,
+	enabled: bool,
+) -> void:
+	_set_collision_shapes_enabled(
+		root,
+		enabled,
+	)
+	
 func _set_collision_debug_meshes_visible(
 	root: Node,
 	visible_value: bool,
@@ -189,12 +422,359 @@ func _set_collision_debug_meshes_visible(
 			visible_value,
 		)
 
-func _set_moving_hoop_x(x_pos: float) -> void:
-	if not is_instance_valid(moving_hoop_root):
+func _collect_moving_hoop_physics_bodies(
+	root: Node,
+) -> void:
+	if not is_instance_valid(
+		root,
+	):
 		return
+
+	for child in root.get_children():
+		if child is AnimatableBody3D:
+			_moving_hoop_physics_bodies.append(
+				child as AnimatableBody3D,
+			)
+
+		_collect_moving_hoop_physics_bodies(
+			child,
+		)
+
+
+func _initialize_moving_hoop_physics() -> void:
+	if _moving_hoop_physics_initialized:
+		return
+
+	if not is_instance_valid(
+		moving_hoop_root,
+	):
+		return
+
+	var current_root_x := (
+		moving_hoop_root.position.x
+	)
+
+	moving_hoop_root.force_update_transform()
+
+	_moving_hoop_physics_bodies.clear()
+	_moving_hoop_base_transforms.clear()
+
+	_collect_moving_hoop_physics_bodies(
+		moving_hoop_root,
+	)
+
+	for body in _moving_hoop_physics_bodies:
+		if not is_instance_valid(
+			body,
+		):
+			continue
+
+		var current_transform := (
+			body.global_transform
+		)
+
+		var base_transform := (
+			current_transform
+		)
+
+		base_transform.origin.x -= (
+			current_root_x
+		)
+
+		body.top_level = true
+		body.sync_to_physics = true
+		body.global_transform = current_transform
+
+		_moving_hoop_base_transforms[
+			body.get_instance_id()
+		] = base_transform
+
+	_moving_hoop_physics_initialized = true
+
+	_set_moving_hoop_x(
+		current_root_x,
+	)
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"moving_hoop_physics_initialized bodies=",
+			_moving_hoop_physics_bodies.size(),
+			" rootX=",
+			current_root_x,
+		],
+	)
+
+
+func _set_moving_hoop_x(
+	x_pos: float,
+) -> void:
+	if not is_instance_valid(
+		moving_hoop_root,
+	):
+		return
+
+	_moving_hoop_x = x_pos
 
 	moving_hoop_root.position.x = x_pos
 	moving_hoop_root.force_update_transform()
+
+	if not _moving_hoop_physics_initialized:
+		return
+
+	for body in _moving_hoop_physics_bodies:
+		if not is_instance_valid(
+			body,
+		):
+			continue
+
+		var body_id := (
+			body.get_instance_id()
+		)
+
+		if not _moving_hoop_base_transforms.has(
+			body_id,
+		):
+			continue
+
+		var base_transform: Transform3D = (
+			_moving_hoop_base_transforms[
+				body_id
+			]
+		)
+
+		var moved_transform := (
+			base_transform
+		)
+
+		moved_transform.origin.x = (
+			base_transform.origin.x +
+			x_pos
+		)
+
+		body.global_transform = moved_transform
+		body.force_update_transform()
+
+func _hoop_x_at_tick(
+	tick: int,
+) -> float:
+	var movement_tick := posmod(
+		tick,
+		480,
+	)
+
+	if movement_tick < 120:
+		return (
+			float(movement_tick) /
+			120.0
+		)
+
+	if movement_tick < 240:
+		return (
+			1.0 -
+			float(
+				movement_tick - 120,
+			) /
+			120.0
+		)
+
+	if movement_tick < 360:
+		return (
+			-float(
+				movement_tick - 240,
+			) /
+			120.0
+		)
+
+	return (
+		-1.0 +
+		float(
+			movement_tick - 360,
+		) /
+		120.0
+	)
+
+func get_saved_replay_x(
+	target_x: float,
+) -> float:
+	if game_mode == "h":
+		return (
+			_hoop_x_at_tick(
+				hoop_time +
+					REPLAY_LOOKAHEAD_TICKS,
+			) -
+			target_x
+		)
+
+	return -target_x
+
+func _reset_replay_scheduler() -> void:
+	_replay_tick = 0
+
+	_replay_shots[1] = []
+	_replay_shots[2] = []
+
+	_replay_spawn_tick[1] = -1
+	_replay_spawn_tick[2] = -1
+
+func _calculate_replay_x_velocity(
+	ball: BasketballBall,
+	saved_replay_x: float,
+	did_go_in: bool,
+) -> float:
+	var predicted_hoop_x := 0.0
+
+	if game_mode == "h":
+		predicted_hoop_x = _hoop_x_at_tick(
+			_replay_tick +
+				REPLAY_LOOKAHEAD_TICKS,
+		)
+
+	var center_velocity := (
+		predicted_hoop_x -
+		ball.position.x
+	)
+
+	if did_go_in:
+		return center_velocity
+
+	var correction := saved_replay_x
+
+	if absf(
+		correction,
+	) < REPLAY_MIN_MISS_CORRECTION:
+		correction = (
+			-REPLAY_MIN_MISS_CORRECTION
+			if correction < 0.0
+			else REPLAY_MIN_MISS_CORRECTION
+		)
+
+	return (
+		center_velocity -
+		correction *
+			REPLAY_MISS_MULTIPLIER
+	)
+
+func _advance_replay_frame() -> void:
+	_replay_tick += 1
+
+	for player_num in [1, 2]:
+		var shots: Array = _replay_shots.get(
+			player_num,
+			[],
+		)
+
+		if shots.is_empty():
+			continue
+
+		var scheduled_spawn_tick := int(
+			_replay_spawn_tick.get(
+				player_num,
+				-1,
+			),
+		)
+
+		if (
+			not is_instance_valid(
+				currentBall.get(
+					player_num,
+				),
+			) and
+			scheduled_spawn_tick >= 0 and
+			_replay_tick >= scheduled_spawn_tick
+		):
+			spawnBall(
+				player_num,
+				bool(
+					shots[0][
+						"did_go_in"
+					],
+				),
+			)
+
+			_replay_spawn_tick[player_num] = -1
+
+		var next_shot: Dictionary = shots[0]
+
+		if (
+			int(
+				next_shot[
+					"time_tick"
+				],
+			) >
+			_replay_tick
+		):
+			continue
+
+		var replay_ball := currentBall.get(
+			player_num,
+		) as BasketballBall
+
+		if not is_instance_valid(
+			replay_ball,
+		):
+			replay_ball = spawnBall(
+				player_num,
+				bool(
+					next_shot[
+						"did_go_in"
+					],
+				),
+			)
+
+		var saved_replay_x := float(
+			next_shot[
+				"saved_replay_x"
+			],
+		)
+
+		var did_go_in := bool(
+			next_shot[
+				"did_go_in"
+			],
+		)
+
+		var replay_x_velocity := (
+			_calculate_replay_x_velocity(
+				replay_ball,
+				saved_replay_x,
+				did_go_in,
+			)
+		)
+
+		replay_ball.begin_replay_shot(
+			replay_x_velocity,
+			saved_replay_x,
+			did_go_in,
+			game_mode == "h",
+		)
+
+		if (
+			currentBall.get(
+				player_num,
+			) ==
+			replay_ball
+		):
+			currentBall[player_num] = null
+
+		shots.pop_front()
+
+		if not shots.is_empty():
+			_replay_spawn_tick[player_num] = (
+				_replay_tick +
+				REPLAY_SPAWN_DELAY_TICKS
+			)
+		else:
+			_replay_spawn_tick[player_num] = -1
+
+	for child in get_children():
+		if (
+			child is BasketballBall and
+			(child as BasketballBall).replay_manual_simulating
+		):
+			(
+				child as BasketballBall
+			).step_replay_pre_simulation()
 
 func _apply_basketball_mode() -> void:
 	var hard_mode := game_mode == "h"
@@ -210,7 +790,6 @@ func _apply_basketball_mode() -> void:
 	moving_net.visible = hard_mode
 	moving_pole.visible = hard_mode
 
-	# Collision geometry must never be rendered.
 	_set_collision_debug_meshes_visible(
 		static_hoop_collision,
 		false,
@@ -233,7 +812,7 @@ func _apply_basketball_mode() -> void:
 				0.0,
 			)
 
-	_set_collision_shapes_enabled(
+	_set_hoop_collision_shapes_enabled(
 		static_hoop_collision,
 		not hard_mode,
 	)
@@ -243,7 +822,7 @@ func _apply_basketball_mode() -> void:
 		not hard_mode,
 	)
 
-	_set_collision_shapes_enabled(
+	_set_hoop_collision_shapes_enabled(
 		moving_hoop_collision,
 		hard_mode,
 	)
@@ -253,117 +832,172 @@ func _apply_basketball_mode() -> void:
 		hard_mode,
 	)
 
-func _input(
-	event: InputEvent,
-) -> void:
+func _get_local_active_ball() -> BasketballBall:
 	if spectator_mode:
-		return
+		return null
 
-	var mouse_event: InputEventMouseButton = (
-		event as InputEventMouseButton
+	if player == null:
+		return null
+
+	if not gamePlaying:
+		return null
+
+	return currentBall.get(
+		int(player),
+		null,
+	) as BasketballBall
+
+
+func _begin_ball_drag(
+	screen_position: Vector2,
+) -> bool:
+	var active_ball := _get_local_active_ball()
+
+	if not is_instance_valid(
+		active_ball,
+	):
+		return false
+
+	var camera := get_viewport().get_camera_3d()
+
+	if camera == null:
+		return false
+
+	var ball_screen_position := (
+		camera.unproject_position(
+			active_ball.global_position,
+		)
 	)
 
-	if mouse_event == null:
-		return
+	if (
+		screen_position.distance_to(
+			ball_screen_position,
+		) >
+		120.0
+	):
+		return false
 
-	if player == null or not gamePlaying:
-		return
+	drag_start_pos = screen_position
+	drag_previous_pos = screen_position
+	drag_smoothed_speed = 0.0
+	dragging = true
 
-	if mouse_event.button_index != MOUSE_BUTTON_LEFT:
-		return
-
-	var local_player_num: int = int(
-		player,
+	OpLog.i(
+		LOG_TAG,
+		[
+			"drag_started player=",
+			player,
+			" screen=",
+			screen_position,
+			" ball=",
+			active_ball.global_position,
+		],
 	)
 
-	var active_ball: BasketballBall = (
-		currentBall.get(
-			local_player_num,
-		) as BasketballBall
-	)
+	return true
 
-	if not is_instance_valid(active_ball):
-		return
 
-	if mouse_event.pressed:
-		var camera: Camera3D = (
-			get_viewport().get_camera_3d()
-		)
+func _cancel_ball_drag() -> void:
+	dragging = false
+	drag_smoothed_speed = 0.0
+	active_drag_touch_index = -1
 
-		if camera == null:
-			return
 
-		var ball_screen_pos: Vector2 = (
-			camera.unproject_position(
-				active_ball.global_position,
-			)
-		)
-
-		var touch_distance: float = (
-			mouse_event.position.distance_to(
-				ball_screen_pos,
-			)
-		)
-
-		if touch_distance > 120.0:
-			return
-
-		dbg(
-			[
-				"drag_start pos=",
-				mouse_event.position,
-				" player=",
-				local_player_num,
-				" ball=",
-				active_ball.name,
-			],
-		)
-
-		drag_start_pos = mouse_event.position
-		dragging = true
-		return
-
-	if not dragging:
-		return
-
-	var drag_end_pos: Vector2 = (
-		mouse_event.position
-	)
-
-	var drag_delta: Vector2 = (
-		drag_end_pos -
+func _calculate_ios_target_x(
+	camera: Camera3D,
+	drag_end_position: Vector2,
+) -> float:
+	var drag_direction := (
+		drag_end_position -
 		drag_start_pos
 	)
 
-	var drag_distance: float = (
-		drag_delta.length()
+	if absf(
+		drag_direction.y,
+	) < 0.001:
+		return 0.0
+
+	var reference_screen_position := (
+		camera.unproject_position(
+			IOS_AIM_REFERENCE,
+		)
 	)
 
-	dragging = false
+	var extension_amount := (
+		(
+			reference_screen_position.y -
+			drag_start_pos.y
+		) /
+		drag_direction.y
+	)
 
-	if drag_distance < MIN_DRAG_DISTANCE:
-		dbg(
-			[
-				"drag_cancelled len=",
-				drag_distance,
-			],
+	var target_screen_position := Vector2(
+		drag_start_pos.x +
+			drag_direction.x *
+			extension_amount,
+		reference_screen_position.y,
+	)
+
+	var camera_space_reference := (
+		camera.global_transform.affine_inverse() *
+		IOS_AIM_REFERENCE
+	)
+
+	var reference_depth := (
+		-camera_space_reference.z
+	)
+
+	var target_world_position := (
+		camera.project_position(
+			target_screen_position,
+			reference_depth,
+		)
+	)
+
+	var raw_target_x := (
+		target_world_position.x
+	)
+
+	if game_mode == "n":
+		var hoop_center_x := (
+			static_net_collision_point.global_position.x
 		)
 
+		return lerpf(
+			raw_target_x,
+			hoop_center_x,
+			IOS_NORMAL_AIM_ASSIST,
+		)
+
+	return raw_target_x
+
+
+func _launch_ball_from_drag(
+	active_ball: BasketballBall,
+	drag_end_position: Vector2,
+) -> void:
+	if not is_instance_valid(
+		active_ball,
+	):
+		_cancel_ball_drag()
 		return
 
-	var interpolation_amount: float = inverse_lerp(
-		-200.0,
-		200.0,
-		drag_delta.x,
+	var camera := get_viewport().get_camera_3d()
+
+	if camera == null:
+		_cancel_ball_drag()
+		return
+
+	var local_player_num := int(
+		player,
 	)
 
-	var x_delta_lerp: float = lerpf(
-		-1.0,
-		1.0,
-		interpolation_amount,
+	var target_x := _calculate_ios_target_x(
+		camera,
+		drag_end_position,
 	)
 
-	var shot_number: int = (
+	var shot_number := (
 		int(
 			ballNum.get(
 				local_player_num,
@@ -373,26 +1007,35 @@ func _input(
 		1
 	)
 
+	dragging = false
+	active_drag_touch_index = -1
+
 	OpLog.i(
 		LOG_TAG,
 		[
-			"shot_release player=",
+			"ios_shot_release player=",
 			local_player_num,
-			" drag=",
-			drag_delta,
-			" dragLen=",
-			drag_distance,
-			" xDelta=",
-			x_delta_lerp,
-			" elapsed=",
-			elapsedTime,
+			" start=",
+			drag_start_pos,
+			" end=",
+			drag_end_position,
+			" distance=",
+			drag_start_pos.distance_to(
+				drag_end_position,
+			),
+			" speed=",
+			drag_smoothed_speed,
+			" targetX=",
+			target_x,
+			" ballX=",
+			active_ball.global_position.x,
 			" shotNum=",
 			shot_number,
 		],
 	)
 
 	active_ball.shoot(
-		x_delta_lerp,
+		target_x,
 	)
 
 	if (
@@ -404,16 +1047,176 @@ func _input(
 		currentBall[local_player_num] = null
 
 	await get_tree().create_timer(
-		0.25,
+		20.0 /
+			REPLAY_FRAME_RATE,
 	).timeout
 
 	if (
 		gamePlaying and
 		player != null and
-		int(player) == local_player_num
+		int(player) ==
+			local_player_num and
+		not is_instance_valid(
+			currentBall.get(
+				local_player_num,
+			),
+		)
 	):
 		spawnBall(
 			local_player_num,
+		)
+
+
+func _update_ball_drag(
+	screen_position: Vector2,
+) -> void:
+	if not dragging:
+		return
+
+	var active_ball := _get_local_active_ball()
+
+	if not is_instance_valid(
+		active_ball,
+	):
+		_cancel_ball_drag()
+		return
+
+	var movement_distance := (
+		screen_position.distance_to(
+			drag_previous_pos,
+		)
+	)
+
+	drag_smoothed_speed = (
+		drag_smoothed_speed +
+		movement_distance
+	) * 0.5
+
+	drag_previous_pos = screen_position
+
+	var total_distance := (
+		screen_position.distance_to(
+			drag_start_pos,
+		)
+	)
+
+	var upward_distance := (
+		drag_start_pos.y -
+		screen_position.y
+	)
+
+	if total_distance <= IOS_DRAG_RELEASE_DISTANCE:
+		return
+
+	if drag_smoothed_speed <= IOS_DRAG_RELEASE_SPEED:
+		return
+
+	if upward_distance <= 0.0:
+		return
+
+	_launch_ball_from_drag(
+		active_ball,
+		screen_position,
+	)
+
+
+func _input(
+	event: InputEvent,
+) -> void:
+	if spectator_mode:
+		return
+
+	if event is InputEventScreenTouch:
+		var touch_event := (
+			event as InputEventScreenTouch
+		)
+
+		if touch_event.pressed:
+			if not dragging:
+				if _begin_ball_drag(
+					touch_event.position,
+				):
+					active_drag_touch_index = (
+						touch_event.index
+					)
+
+			return
+
+		if (
+			dragging and
+			active_drag_touch_index ==
+				touch_event.index
+		):
+			_update_ball_drag(
+				touch_event.position,
+			)
+
+			if dragging:
+				_cancel_ball_drag()
+
+		return
+
+	if event is InputEventScreenDrag:
+		var drag_event := (
+			event as InputEventScreenDrag
+		)
+
+		if (
+			dragging and
+			active_drag_touch_index ==
+				drag_event.index
+		):
+			_update_ball_drag(
+				drag_event.position,
+			)
+
+		return
+
+	if event is InputEventMouseButton:
+		var mouse_button := (
+			event as InputEventMouseButton
+		)
+
+		if (
+			mouse_button.button_index !=
+			MOUSE_BUTTON_LEFT
+		):
+			return
+
+		if active_drag_touch_index >= 0:
+			return
+
+		if mouse_button.pressed:
+			if not dragging:
+				_begin_ball_drag(
+					mouse_button.position,
+				)
+
+			return
+
+		if dragging:
+			_update_ball_drag(
+				mouse_button.position,
+			)
+
+			if dragging:
+				_cancel_ball_drag()
+
+		return
+
+	if event is InputEventMouseMotion:
+		if active_drag_touch_index >= 0:
+			return
+
+		if not dragging:
+			return
+
+		var mouse_motion := (
+			event as InputEventMouseMotion
+		)
+
+		_update_ball_drag(
+			mouse_motion.position,
 		)
 
 func playReplay(
@@ -422,7 +1225,8 @@ func playReplay(
 ) -> float:
 	replayPlaying = true
 
-	var parsed_shots: Array[Dictionary] = []
+	var parsed_shots: Array = []
+	var last_shot_tick := 0
 
 	for raw_shot in replay_str.split(
 		"|",
@@ -451,161 +1255,112 @@ func playReplay(
 
 			continue
 
+		var shot_tick := maxi(
+			int(
+				shot_parts[0],
+			),
+			0,
+		)
+
+		last_shot_tick = maxi(
+			last_shot_tick,
+			shot_tick,
+		)
+
 		parsed_shots.append(
 			{
-				"time": maxf(
-					float(int(shot_parts[0])) / 60.0,
-					0.0,
+				"time_tick": shot_tick,
+				"saved_replay_x": float(
+					shot_parts[1],
 				),
-				"x_delta": float(shot_parts[1]),
-				"did_go_in": int(shot_parts[3]) != 0,
+				"did_go_in": (
+					int(
+						shot_parts[3],
+					) !=
+					0
+				),
 			},
 		)
+
+	parsed_shots.sort_custom(
+		func(
+			a: Dictionary,
+			b: Dictionary,
+		) -> bool:
+			return (
+				int(
+					a["time_tick"],
+				) <
+				int(
+					b["time_tick"],
+				)
+			)
+	)
+
+	_replay_shots[player_num] = parsed_shots
+	_replay_spawn_tick[player_num] = -1
 
 	OpLog.i(
 		LOG_TAG,
 		[
-			"play_replay_start player=",
+			"play_replay_loaded player=",
 			player_num,
 			" shots=",
 			parsed_shots.size(),
-			" raw=",
-			replay_str,
+			" lastTick=",
+			last_shot_tick,
 		],
 	)
 
 	if parsed_shots.is_empty():
+		var unused_ball := currentBall.get(
+			player_num,
+		) as BasketballBall
+
+		if is_instance_valid(
+			unused_ball,
+		):
+			unused_ball.set_meta(
+				"score_counted",
+				true,
+			)
+
+			unused_ball.queue_free()
+
+		currentBall[player_num] = null
+
 		return 0.0
 
-	var first_result := bool(
-		parsed_shots[0]["did_go_in"],
-	)
-
-	var first_ball: BasketballBall = currentBall.get(
+	var first_ball := currentBall.get(
 		player_num,
-	)
+	) as BasketballBall
 
-	if is_instance_valid(first_ball):
+	if is_instance_valid(
+		first_ball,
+	):
 		first_ball.set_didGoInReplay(
-			first_result,
+			bool(
+				parsed_shots[0][
+					"did_go_in"
+				],
+			),
 		)
 	else:
 		spawnBall(
 			player_num,
-			first_result,
+			bool(
+				parsed_shots[0][
+					"did_go_in"
+				],
+			),
 		)
 
-	var last_time_delay := 0.0
-
-	for shot_index in range(
-		parsed_shots.size(),
-	):
-		var shot_data: Dictionary = parsed_shots[shot_index]
-
-		var scheduled_player := player_num
-		var scheduled_time := float(
-			shot_data["time"],
-		)
-		var scheduled_x := float(
-			shot_data["x_delta"],
-		)
-
-		last_time_delay = maxf(
-			last_time_delay,
-			scheduled_time,
-		)
-
-		var shot_timer := Timer.new()
-
-		replayTimers.append(
-			shot_timer,
-		)
-
-		add_child(
-			shot_timer,
-		)
-
-		shot_timer.one_shot = true
-
-		shot_timer.timeout.connect(
-			func() -> void:
-				if not replayPlaying:
-					return
-
-				var replay_ball: BasketballBall = currentBall.get(
-					scheduled_player,
-				)
-
-				if not is_instance_valid(replay_ball):
-					OpLog.w(
-						LOG_TAG,
-						[
-							"replay_shot_missing_ball player=",
-							scheduled_player,
-							" x=",
-							scheduled_x,
-						],
-					)
-
-					return
-
-				replay_ball.shoot(
-					scheduled_x,
-				)
-
-				if currentBall.get(scheduled_player) == replay_ball:
-					currentBall[scheduled_player] = null
-		)
-
-		shot_timer.wait_time = scheduled_time
-		shot_timer.start()
-
-		var next_index := shot_index + 1
-
-		if next_index < parsed_shots.size():
-			var next_result := bool(
-				parsed_shots[next_index]["did_go_in"],
-			)
-
-			var spawn_player := player_num
-			var spawn_result := next_result
-			var spawn_delay := scheduled_time + 0.1
-
-			var spawn_timer := Timer.new()
-
-			replayTimers.append(
-				spawn_timer,
-			)
-
-			add_child(
-				spawn_timer,
-			)
-
-			spawn_timer.one_shot = true
-
-			spawn_timer.timeout.connect(
-				func() -> void:
-					if replayPlaying:
-						spawnBall(
-							spawn_player,
-							spawn_result,
-						)
-			)
-
-			spawn_timer.wait_time = spawn_delay
-			spawn_timer.start()
-
-	OpLog.i(
-		LOG_TAG,
-		[
-			"play_replay_scheduled player=",
-			player_num,
-			" lastDelay=",
-			last_time_delay,
-		],
+	return (
+		float(
+			last_shot_tick,
+		) /
+		REPLAY_FRAME_RATE
 	)
-
-	return last_time_delay
 
 func _finish_replay(
 	finalize_scores: bool = true,
@@ -631,6 +1386,7 @@ func _finish_replay(
 
 	replayTimers.clear()
 	replayEndTimer = null
+	_reset_replay_scheduler()
 
 	clearBalls()
 
@@ -689,7 +1445,9 @@ func _finish_replay(
 func _check_ball_score_crossing(
 	ball: BasketballBall,
 ) -> void:
-	if not is_instance_valid(ball):
+	if not is_instance_valid(
+		ball,
+	):
 		return
 
 	if not gamePlaying and not replayPlaying:
@@ -723,7 +1481,12 @@ func _check_ball_score_crossing(
 		),
 	)
 
-	if shot_key.is_empty() or _scored_shot_keys.has(shot_key):
+	if (
+		shot_key.is_empty() or
+		_scored_shot_keys.has(
+			shot_key,
+		)
+	):
 		ball.set_meta(
 			"score_counted",
 			true,
@@ -731,94 +1494,34 @@ func _check_ball_score_crossing(
 
 		return
 
-	var previous_value = ball.get_meta(
-		"last_score_pos",
-		ball.global_position,
-	)
+	var score_position: Vector3
 
-	var previous_position: Vector3 = (
-		previous_value
-		if previous_value is Vector3
-		else ball.global_position
-	)
-
-	var current_position := ball.global_position
-
-	ball.set_meta(
-		"last_score_pos",
-		current_position,
-	)
-
-	var hoop_root: Node3D = (
-		moving_hoop_collision
-		if (
-			game_mode == "h" and
-			is_instance_valid(moving_hoop_collision)
+	if game_mode == "h":
+		score_position = Vector3(
+			_moving_hoop_x,
+			IOS_MOVING_NET_Y,
+			IOS_MOVING_NET_Z,
 		)
-		else static_hoop_collision
-	)
-
-	if not is_instance_valid(hoop_root):
-		return
-
-	var hoop_center := hoop_root.global_position
-	var hoop_position_total := Vector3.ZERO
-	var hoop_position_count := 0
-
-	for child in hoop_root.get_children():
-		if (
-			child is Node3D and
-			child.name.begins_with("HoopCollisionSphere")
+	else:
+		if not is_instance_valid(
+			static_net_collision_point,
 		):
-			hoop_position_total += (child as Node3D).global_position
-			hoop_position_count += 1
+			return
 
-	if hoop_position_count > 0:
-		hoop_center = (
-			hoop_position_total /
-			float(hoop_position_count)
+		score_position = (
+			static_net_collision_point.global_position
 		)
 
-	if previous_position.y <= hoop_center.y:
-		return
-
-	if current_position.y > hoop_center.y:
-		return
-
-	if ball.linear_velocity.y > SCORE_MIN_DOWN_VELOCITY:
-		return
-
-	var y_span := previous_position.y - current_position.y
-
-	if absf(y_span) < 0.0001:
-		return
-
-	var crossing_fraction := clampf(
-		(
-			previous_position.y -
-			hoop_center.y
-		) /
-		y_span,
-		0.0,
-		1.0,
+	var score_delta := (
+		ball.global_position -
+		score_position
 	)
 
-	var crossing_position := previous_position.lerp(
-		current_position,
-		crossing_fraction,
+	var net_distance := (
+		score_delta.length()
 	)
 
-	var dx := absf(
-		crossing_position.x -
-		hoop_center.x,
-	)
-
-	var dz := absf(
-		crossing_position.z -
-		hoop_center.z,
-	)
-
-	if dx > SCORE_RADIUS_X or dz > SCORE_RADIUS_Z:
+	if net_distance >= SCORE_RADIUS:
 		return
 
 	ball.set_meta(
@@ -828,14 +1531,19 @@ func _check_ball_score_crossing(
 
 	_scored_shot_keys[shot_key] = true
 
-	if replayPlaying and ball.didGoInReplay == false:
+	if (
+		replayPlaying and
+		ball.didGoInReplay == false
+	):
 		OpLog.w(
 			LOG_TAG,
 			[
-				"replay_actual_crossing_ignored expectedMiss player=",
+				"replay_net_entry_ignored expectedMiss player=",
 				ball.player,
 				" key=",
 				shot_key,
+				" distance=",
+				net_distance,
 			],
 		)
 
@@ -856,22 +1564,29 @@ func _check_ball_score_crossing(
 	OpLog.i(
 		LOG_TAG,
 		[
-			"score_crossing player=",
+			"score_net_distance player=",
 			ball_player,
 			" shotKey=",
 			shot_key,
-			" crossPos=",
-			crossing_position,
-			" hoop=",
-			hoop_center,
-			" dx=",
-			dx,
-			" dz=",
-			dz,
+			" ball=",
+			ball.global_position,
+			" net=",
+			score_position,
+			" delta=",
+			score_delta,
+			" horizontalDistance=",
+			Vector2(
+				score_delta.x,
+				score_delta.z,
+			).length(),
+			" distance=",
+			net_distance,
+			" hoopX=",
+			_moving_hoop_x,
 			" replayExpected=",
-			str(ball.didGoInReplay),
-			" vel=",
-			ball.linear_velocity,
+			str(
+				ball.didGoInReplay,
+			),
 		],
 	)
 
@@ -917,7 +1632,6 @@ func _display_score_for_player(
 	if int(turnNum) >= 5:
 		return round_two_score
 
-	# An empty replay is still a submitted round with zero shots.
 	if round_two_replay != null:
 		return round_two_score
 
@@ -931,6 +1645,26 @@ func refresh_ui_state() -> void:
 
 	var current_turn := int(
 		turnNum if turnNum != null else 1,
+	)
+
+	var local_can_play := (
+		_can_local_player_play_current_round()
+	)
+
+	isTurn = local_can_play
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"refresh_ui eligibility player=",
+			player,
+			" turnNum=",
+			current_turn,
+			" canPlay=",
+			local_can_play,
+			" replayFinished=",
+			replayFinished,
+		],
 	)
 
 	var replay_player1 = null
@@ -968,12 +1702,6 @@ func refresh_ui_state() -> void:
 		current_replay_key == _loaded_replay_key
 	)
 
-	#
-	# A completed round is always replayed before the next turn or
-	# final winner state is evaluated. _loaded_replay_key changes only
-	# when returned or reopened game data is loaded, so a just-sent
-	# local replay pair remains in the waiting state.
-	#
 	if replay_loaded_from_data and not replayFinished:
 		OpLog.i(
 			LOG_TAG,
@@ -1008,8 +1736,7 @@ func refresh_ui_state() -> void:
 
 		_score_run_id += 1
 		_scored_shot_keys.clear()
-		_last_score_msec_by_player.clear()
-
+		
 		if replay_round == 1:
 			setScore(
 				1,
@@ -1048,6 +1775,7 @@ func refresh_ui_state() -> void:
 			)
 
 		clearBalls()
+		_reset_replay_scheduler()
 
 		spawnBall(
 			1,
@@ -1098,16 +1826,13 @@ func refresh_ui_state() -> void:
 			maxf(
 				replay1_end,
 				replay2_end,
-			) + 2.5,
+			) + 5.6,
 			1.0,
 		)
 
 		replayEndTimer.start()
 		return
 
-	#
-	# Final win/loss is shown only after the round-two replay.
-	#
 	if (
 		current_turn >= 5 and
 		replay_loaded_from_data and
@@ -1132,11 +1857,6 @@ func refresh_ui_state() -> void:
 		game_over = true
 		showWinner()
 
-		#
-		# Older or cross-platform final data may not include winner.
-		# Add it once after the final replay. Existing winner data is
-		# never sent again.
-		#
 		if (
 			not spectator_mode and
 			not loaded_has_winner and
@@ -1254,10 +1974,6 @@ func refresh_ui_state() -> void:
 
 		return
 
-	#
-	# If a completed round has replayed, decide whether this user gets
-	# the next round or waits for the opponent.
-	#
 	if current_turn == 3 and replay_loaded_from_data and replayFinished:
 		setScore(
 			1,
@@ -1269,7 +1985,7 @@ func refresh_ui_state() -> void:
 			int(score2 if score2 != null else 0),
 		)
 
-		if isTurn == true and not spectator_mode:
+		if local_can_play:
 			stop_waiting_animation()
 
 			waiting_blur.visible = true
@@ -1295,11 +2011,6 @@ func refresh_ui_state() -> void:
 
 		return
 
-	#
-	# Turn 3 represents the completed first round. Do not expose round
-	# 2 until the complete replay pair has arrived through game data
-	# and has been played.
-	#
 	if current_turn == 3 and not replay_loaded_from_data:
 		round_container.visible = false
 		skip_button.visible = false
@@ -1319,10 +2030,6 @@ func refresh_ui_state() -> void:
 
 		return
 
-	#
-	# A final state without both round-two replays must wait instead of
-	# jumping directly to win/loss.
-	#
 	if current_turn >= 5 and not replay_loaded_from_data:
 		round_container.visible = false
 		skip_button.visible = false
@@ -1342,11 +2049,6 @@ func refresh_ui_state() -> void:
 
 		return
 
-	#
-	# Turn 4 means one round-two result exists and the other player may
-	# now play round 2. No replay occurs until both round-two results
-	# are available.
-	#
 	if current_turn == 4:
 		setScore(
 			1,
@@ -1358,7 +2060,7 @@ func refresh_ui_state() -> void:
 			_display_score_for_player(2),
 		)
 
-		if isTurn == true and not spectator_mode:
+		if local_can_play:
 			stop_waiting_animation()
 
 			waiting_blur.visible = true
@@ -1374,11 +2076,7 @@ func refresh_ui_state() -> void:
 
 		return
 
-	#
-	# Before a completed round is available, show the active round only
-	# when it is this user's turn.
-	#
-	if isTurn == true and not spectator_mode:
+	if local_can_play:
 		stop_waiting_animation()
 
 		round_label.text = (
@@ -1584,11 +2282,6 @@ func spawnBall(
 		false,
 	)
 
-	new_ball.set_meta(
-		"last_score_pos",
-		new_ball.global_position,
-	)
-
 	ballNum[player_num] += 1
 	currentBall[player_num] = new_ball
 
@@ -1683,12 +2376,14 @@ func _set_game_data(
 	elif turnNum == null:
 		turnNum = 1
 
-	isTurn = bool(
+	var payload_is_your_turn := bool(
 		parsed.get(
 			"isYourTurn",
 			false,
 		),
 	)
+
+	isTurn = payload_is_your_turn
 
 	var payload_player := int(
 		parsed.get(
@@ -1792,8 +2487,8 @@ func _set_game_data(
 			payload_player,
 			" localPlayer=",
 			player,
-			" isTurn=",
-			isTurn,
+			" payloadIsYourTurn=",
+			payload_is_your_turn,
 			" turnNum=",
 			turnNum,
 			" myId=",
@@ -1887,23 +2582,59 @@ func _set_game_data(
 			parsed["skip_score2"],
 		)
 
-	if parsed.has("replay"):
-		replay = parsed["replay"]
+	replay = (
+		parsed["replay"]
+		if parsed.has("replay")
+		else null
+	)
 
-	if parsed.has("replay2"):
-		replay2 = parsed["replay2"]
+	replay2 = (
+		parsed["replay2"]
+		if parsed.has("replay2")
+		else null
+	)
 
-	if parsed.has("replay3"):
-		replay3 = parsed["replay3"]
+	replay3 = (
+		parsed["replay3"]
+		if parsed.has("replay3")
+		else null
+	)
 
-	if parsed.has("replay4"):
-		replay4 = parsed["replay4"]
+	replay4 = (
+		parsed["replay4"]
+		if parsed.has("replay4")
+		else null
+	)
 
-	#
-	# A fresh complete replay pair must play even when isYourTurn is
-	# false. The replay key prevents duplicate delivery of the same
-	# message from replaying again during the same open session.
-	#
+	var normalized_turn := int(
+		turnNum if turnNum != null else 1,
+	)
+
+	if normalized_turn <= 1:
+		replay = null
+		replay2 = null
+		replay3 = null
+		replay4 = null
+
+	elif normalized_turn == 2:
+		if payload_player == 1:
+			replay2 = null
+		else:
+			replay = null
+
+		replay3 = null
+		replay4 = null
+
+	elif normalized_turn == 3:
+		replay3 = null
+		replay4 = null
+
+	elif normalized_turn == 4:
+		if payload_player == 1:
+			replay4 = null
+		else:
+			replay3 = null
+
 	var incoming_replay_key := ""
 
 	if (
@@ -1951,6 +2682,30 @@ func _set_game_data(
 				turnNum,
 			],
 		)
+		
+	isTurn = _can_local_player_play_current_round()
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"local_play_eligibility player=",
+			player,
+			" turnNum=",
+			turnNum,
+			" canPlay=",
+			isTurn,
+			" replay1Set=",
+			replay != null,
+			" replay2Set=",
+			replay2 != null,
+			" replay3Set=",
+			replay3 != null,
+			" replay4Set=",
+			replay4 != null,
+			" replayFinished=",
+			replayFinished,
+		],
+	)
 
 	receivedMessage = null
 	gameDataSet = true
@@ -2037,10 +2792,6 @@ func sendGameData(
 			else "replay4"
 		)
 
-	#
-	# Store the completed local result directly in its correct player
-	# and round slot.
-	#
 	if player == 1:
 		if is_round_one:
 			score1 = completed_score
@@ -2083,7 +2834,6 @@ func sendGameData(
 		),
 	}
 
-	# Include the completed replay even when it contains zero shots.
 	game_data[replay_key] = outgoing_replay
 
 	if replay != null:
@@ -2125,11 +2875,6 @@ func sendGameData(
 			player_avatar_display.get_avatar_data_string()
 		)
 
-	#
-	# The final sender may include winner in the final payload. The UI
-	# still waits for returned/reopened data, plays the final replay,
-	# and only then shows win/loss.
-	#
 	if next_turn >= 5 and not isNullOrEmpty(my_player):
 		var opponent_final_score := int(
 			skip_score2
@@ -2157,11 +2902,6 @@ func sendGameData(
 		winner_sent = true
 		loaded_has_winner = true
 
-	#
-	# A completed pair created by this local send is not replayed yet.
-	# _loaded_replay_key is updated only by _set_game_data(), so the
-	# replay begins when the message returns or the game is reopened.
-	#
 	var local_pair_complete := false
 
 	if next_turn == 3:
@@ -2230,12 +2970,45 @@ func sendGameData(
 			],
 		)
 
-func start_button_pressed():
+func start_button_pressed() -> void:
 	if spectator_mode:
 		return
+
+	if not _can_local_player_play_current_round():
+		OpLog.w(
+			LOG_TAG,
+			[
+				"start_pressed_blocked player=",
+				player,
+				" turnNum=",
+				turnNum,
+				" replay1Set=",
+				replay != null,
+				" replay2Set=",
+				replay2 != null,
+				" replay3Set=",
+				replay3 != null,
+				" replay4Set=",
+				replay4 != null,
+			],
+		)
+
+		refresh_ui_state()
+		return
+
 	round_container.visible = false
 	waiting_blur.visible = false
-	OpLog.i(LOG_TAG, ["start_pressed turnNum=", turnNum, " player=", player])
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"start_pressed turnNum=",
+			turnNum,
+			" player=",
+			player,
+		],
+	)
+
 	startGame()
 
 func startGame() -> void:
@@ -2265,7 +3038,6 @@ func startGame() -> void:
 
 	_score_run_id += 1
 	_scored_shot_keys.clear()
-	_last_score_msec_by_player.clear()
 
 	myReplay = ""
 	elapsedTime = 0.0
@@ -2281,6 +3053,7 @@ func startGame() -> void:
 
 	replayTimers.clear()
 	replayEndTimer = null
+	_reset_replay_scheduler()
 
 	hoop_time = 0
 	_hoop_acc = 0.0
@@ -2315,24 +3088,37 @@ func _haptic_explosion(strength: float = 0.35, duration_ms: int = 22) -> void:
 	strength = clampf(strength, 0.0, 1.0)
 	Input.vibrate_handheld(duration_ms, strength)
 
-func incrementScore(player_num: int) -> void:
-	var now_ms: int = Time.get_ticks_msec()
-	var last_ms: int = int(_last_score_msec_by_player.get(player_num, -1000000))
-
-	if now_ms - last_ms < SCORE_DUPLICATE_LOCK_MS:
-		OpLog.w(LOG_TAG, ["score_duplicate_ignored player=", player_num, " deltaMs=", now_ms - last_ms])
-		return
-
-	_last_score_msec_by_player[player_num] = now_ms
-
+func incrementScore(
+	player_num: int,
+) -> void:
 	if player_num == player:
 		myScore += 1
-		youScoreLabel.text = str(myScore).pad_zeros(2)
+
+		youScoreLabel.text = str(
+			myScore,
+		).pad_zeros(
+			2,
+		)
+
 		_haptic_explosion()
 	else:
 		oppScore += 1
-		oppScoreLabel.text = str(oppScore).pad_zeros(2)
-	OpLog.i(LOG_TAG, ["score_increment player=", player_num, " ", _score_summary()])
+
+		oppScoreLabel.text = str(
+			oppScore,
+		).pad_zeros(
+			2,
+		)
+
+	OpLog.i(
+		LOG_TAG,
+		[
+			"score_increment player=",
+			player_num,
+			" ",
+			_score_summary(),
+		],
+	)
 
 func setScore(player_num: int, score: int) -> void:
 	dbg(["set_score player=", player_num, " score=", score])
@@ -2368,89 +3154,83 @@ func clearBalls() -> void:
 func _physics_process(
 	delta: float,
 ) -> void:
-	if (
-		game_mode == "h" and
-		is_instance_valid(moving_hoop_root) and
-		(gamePlaying or replayPlaying)
-	):
+	if not gamePlaying and not replayPlaying:
+		return
+
+	_hoop_acc += (
+		delta *
+		REPLAY_FRAME_RATE
+	)
+
+	while _hoop_acc >= 1.0:
+		hoop_time += 1
+		_hoop_acc -= 1.0
+
 		if (
-			hoop_center_tween and
-			hoop_center_tween.is_running()
+			game_mode == "h" and
+			is_instance_valid(
+				moving_hoop_root,
+			)
 		):
-			hoop_center_tween.kill()
-
-		_hoop_acc += delta * 60.0
-
-		while _hoop_acc >= 1.0:
-			hoop_time += 1
-			_hoop_acc -= 1.0
-
-		var movement_tick := hoop_time % 480
-		var hoop_x := 0.0
-
-		if movement_tick < 120:
-			hoop_x = float(movement_tick) / 120.0
-		elif movement_tick < 240:
-			hoop_x = (
-				1.0 -
-				float(movement_tick - 120) / 120.0
-			)
-		elif movement_tick < 360:
-			hoop_x = (
-				-float(movement_tick - 240) /
-				120.0
-			)
-		else:
-			hoop_x = (
-				-1.0 +
-				float(movement_tick - 360) /
-				120.0
+			_set_moving_hoop_x(
+				_hoop_x_at_tick(
+					hoop_time,
+				),
 			)
 
-		_set_moving_hoop_x(
-			hoop_x,
-		)
+		if replayPlaying:
+			_advance_replay_frame()
 
-	if gamePlaying or replayPlaying:
-		for node in get_children():
-			if (
-				node is BasketballBall and
-				node.name.begins_with("Ball_P")
-			):
-				_check_ball_score_crossing(
-					node,
-				)
+	for node in get_children():
+		if (
+			node is BasketballBall and
+			node.name.begins_with(
+				"Ball_P",
+			)
+		):
+			_check_ball_score_crossing(
+				node as BasketballBall,
+			)
 
 func _process(
 	delta: float,
 ) -> void:
+	if not is_inside_tree():
+		return
+
+	if (
+		(gamePlaying or replayPlaying) and
+		not is_instance_valid(
+			timeRemainingLabel,
+		)
+	):
+		return
+		
 	if (
 		game_mode == "h" and
-		is_instance_valid(moving_hoop_root)
+		is_instance_valid(
+			moving_hoop_root,
+		) and
+		not gamePlaying and
+		not replayPlaying
 	):
-		if not gamePlaying and not replayPlaying:
-			hoop_time = 0
-			_hoop_acc = 0.0
+		hoop_time = 0
+		_hoop_acc = 0.0
 
-			if absf(
-				moving_hoop_root.position.x,
-			) > 0.001:
-				if (
-					hoop_center_tween == null or
-					not hoop_center_tween.is_running()
-				):
-					hoop_center_tween = create_tween()
+		var centered_x := lerpf(
+			moving_hoop_root.position.x,
+			0.0,
+			0.04,
+		)
 
-					hoop_center_tween.tween_property(
-						moving_hoop_root,
-						"position:x",
-						0.0,
-						0.35,
-					)
-			else:
-				_set_moving_hoop_x(
-					0.0,
-				)
+		if absf(
+			centered_x,
+		) < 0.001:
+			centered_x = 0.0
+
+		_set_moving_hoop_x(
+			centered_x,
+		)
 
 	if not gamePlaying and not replayPlaying:
 		return
@@ -2477,28 +3257,18 @@ func _process(
 	if remaining_seconds > 0:
 		return
 
+	timeRemainingLabel.text = "00:00"
+
+	if replayPlaying:
+		return
+
 	elapsedTime = 0.0
-
-	var was_replay_playing : bool = replayPlaying
-
 	gamePlaying = false
-	replayPlaying = false
 
 	await get_tree().create_timer(
 		3.0,
 	).timeout
 
-	if was_replay_playing:
-		_finish_replay(
-			true,
-		)
-
-		return
-
-	#
-	# Snapshot the completed local result before any returned or
-	# deferred game message changes the state.
-	#
 	var completed_player := int(
 		player,
 	)
@@ -2534,10 +3304,6 @@ func _process(
 		],
 	)
 
-	#
-	# We are waiting as soon as the local result is sent.
-	# Do this before sendGameData() starts the Sent animation.
-	#
 	isTurn = false
 
 	sendGameData(
@@ -2550,10 +3316,6 @@ func _process(
 	round_container.visible = false
 	skip_button.visible = false
 
-	#
-	# A message received during gameplay is applied only after the local
-	# result has safely been sent.
-	#
 	var deferred_message = receivedMessage
 
 	receivedMessage = null
