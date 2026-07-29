@@ -1105,41 +1105,67 @@ func _set_game_data(new_replay: String) -> void:
 	var p2_id: String = String(data.get("player2", ""))
  
 	var my_side := 0
+	var opponent_avatar_key := ""
+
 	if my_player != "" and p1_id != "" and p2_id != "":
 		if my_player == p1_id:
 			my_side = 1
+			opponent_avatar_key = "avatar2"
 		elif my_player == p2_id:
 			my_side = 2
+			opponent_avatar_key = "avatar1"
 		else:
 			my_side = 0
 	else:
-		if data_sender == 1:
-			my_side = 2
-		elif data_sender == 2:
+		if isTurn:
 			my_side = 1
+			opponent_avatar_key = "avatar2"
 		else:
-			my_side = 0
+			my_side = 2
+			opponent_avatar_key = "avatar1"
 
-	spectator_mode = (my_side == 0)
-	if spectator_mode:
-		if is_instance_valid(spec_label):
-			spec_label.visible = true
-		if is_instance_valid(you_label):
-			you_label.modulate.a = 0.0
-
+	spectator_mode = my_side == 0
 	player = my_side
 
-	var opponent_avatar_key := ""
-	if player == 1:
-		opponent_avatar_key = "avatar2"
-	elif player == 2:
-		opponent_avatar_key = "avatar1"
+	if is_instance_valid(spec_label):
+		spec_label.visible = spectator_mode
 
-	if opponent_avatar_key != "" and data.has(opponent_avatar_key):
-		var avatar_string: String = String(data[opponent_avatar_key])
-		var opponent_data: Dictionary = GameUtils._parse_avatar_string(avatar_string)
-		if is_instance_valid(opp_avatar_display):
-			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+	if is_instance_valid(you_label):
+		you_label.modulate.a = 0.0 if spectator_mode else 1.0
+
+	if spectator_mode:
+		if data.has("avatar1") and is_instance_valid(player_avatar_display):
+			player_avatar_display.call_deferred(
+				"update_avatar_from_data",
+				GameUtils._parse_avatar_string(
+					String(data["avatar1"])
+				)
+			)
+
+		if data.has("avatar2") and is_instance_valid(opp_avatar_display):
+			opp_avatar_display.call_deferred(
+				"update_avatar_from_data",
+				GameUtils._parse_avatar_string(
+					String(data["avatar2"])
+				)
+			)
+	else:
+		if opponent_avatar_key != "" and data.has(opponent_avatar_key):
+			var avatar_string: String = String(
+				data[opponent_avatar_key]
+			)
+
+			var opponent_data: Dictionary = (
+				GameUtils._parse_avatar_string(
+					avatar_string
+				)
+			)
+
+			if is_instance_valid(opp_avatar_display):
+				opp_avatar_display.call_deferred(
+					"update_avatar_from_data",
+					opponent_data
+				)
 
 	waitingForOpponent = not isTurn
 	OpLog.i(LOG_TAG, ["set_game_data parsed turn=", isTurn, " player=", player, " sender=", data_sender, " spectator=", spectator_mode, " mode=", mode, " replayLen=", replay.length(), " boards=", replay.count("board:"), " moves=", replay.count("move:") + replay.count("attack:")])

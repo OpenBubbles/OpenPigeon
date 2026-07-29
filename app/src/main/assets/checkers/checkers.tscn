@@ -63,6 +63,7 @@ texture = ExtResource("7_736no")
 
 [sub_resource type="SystemFont" id="SystemFont_3w330"]
 font_weight = 600
+subpixel_positioning = 0
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cs52g"]
 bg_color = Color(0.129412, 0.282353, 0.686275, 1)

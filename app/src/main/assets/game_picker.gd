@@ -8,7 +8,7 @@ var games: Dictionary = {
 	"sea": "res://battleship/battleship.tscn",
 	"darts": "res://darts/DartsScene.tscn",
 	"beer": "res://pong/cuppong.scn",
-	"archery": "res://archery/archery.tscn",
+	"archery": "res://archery/archery.scn",
 	"reversi": "res://reversi/reversi.tscn",
 	"fill": "res://fill/fill.tscn",
 	"mancala": "res://mancala/mancala.tscn",

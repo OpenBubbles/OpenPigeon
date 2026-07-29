@@ -73,7 +73,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.requiredSize
-import com.openbubbles.openpigeon.settings.AvatarWinBurstOverlay
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.ui.geometry.Offset
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 class GameUI {
     private lateinit var tilePositions: Array<Array<TilePosition>>
@@ -104,8 +112,9 @@ class GameUI {
         navController: NavHostController,
         startDestination: String,
         gameState: WordHuntGameState,
+        spectatorMode: Boolean,
         onGameStart: () -> Unit,
-        score: () -> MutableMap<String, String>
+        score: () -> MutableMap<String, String>,
     ) {
         Box(
             modifier = Modifier.fillMaxSize()
@@ -185,7 +194,8 @@ class GameUI {
                     )
                 }) {
                     ScoreScreen(
-                        score = score
+                        score = score,
+                        spectatorMode = spectatorMode,
                     )
                 }
             }
@@ -372,6 +382,18 @@ class GameUI {
     ) {
         var displayedScore by remember { mutableIntStateOf(gameState.score) }
 
+        val formattedScore = displayedScore.toString().padStart(
+                4,
+                '0',
+            )
+
+        val scoreFontSize = when {
+            formattedScore.length >= 7 -> 18.sp
+            formattedScore.length == 6 -> 20.sp
+            formattedScore.length == 5 -> 22.sp
+            else -> 26.sp
+        }
+
         LaunchedEffect(gameState.score) {
             val target = gameState.score
             if (displayedScore == target) return@LaunchedEffect
@@ -433,8 +455,16 @@ class GameUI {
                     )
 
                     Column(
-                        modifier = Modifier.padding(start = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy((-2).dp)
+                        modifier = Modifier
+                            .padding(
+                                start = 10.dp,
+                            )
+                            .weight(
+                                1f,
+                            ),
+                        verticalArrangement = Arrangement.spacedBy(
+                            (-2).dp,
+                        ),
                     ) {
                         Text(
                             text = "WORDS: ${gameState.wordCount}",
@@ -445,12 +475,14 @@ class GameUI {
                         )
 
                         Text(
-                            text = "SCORE: ${displayedScore.toString().padStart(4, '0')}",
+                            text = "SCORE: $formattedScore",
                             fontFamily = interFamily,
                             fontWeight = FontWeight.Black,
-                            fontSize = 26.sp,
+                            fontSize = scoreFontSize,
                             color = Color.Black,
-                            maxLines = 1
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
@@ -552,8 +584,7 @@ class GameUI {
                     })
             Column(
                 verticalArrangement = Arrangement.spacedBy(
-                    (30 / gameState.mode.gridSize).dp,
-                    Alignment.Top
+                    (30 / gameState.mode.gridSize).dp, Alignment.Top
                 ), modifier = Modifier
                     .padding(14.dp)
                     .fillMaxSize()
@@ -570,7 +601,7 @@ class GameUI {
 
             Box(
                 modifier = Modifier
-                    .size(335.dp) // TODO: fix this to be adaptive
+                    .size(335.dp)
                     .align(Alignment.Center)
             ) {
                 val size = LocalDensity.current.run { 335.dp.toPx() }
@@ -613,12 +644,8 @@ class GameUI {
                             val y = (pos.first + 0.5f) * tileSize
                             lineTo(x, y)
                         }
-                    },
-                    color = pathColor,
-                    style = Stroke(
-                        width = strokeWidth,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round
+                    }, color = pathColor, style = Stroke(
+                        width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round
                     )
                 )
             }
@@ -634,8 +661,7 @@ class GameUI {
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(
-                (30 / gameState.mode.gridSize).dp,
-                Alignment.Start
+                (30 / gameState.mode.gridSize).dp, Alignment.Start
             ), verticalAlignment = Alignment.CenterVertically, modifier = modifier.fillMaxSize()
         ) {
             repeat(gameState.mode.gridSize) { col ->
@@ -748,75 +774,166 @@ class GameUI {
 
     @Composable
     fun ScoreScreen(
-        modifier: Modifier = Modifier, score: () -> MutableMap<String, String>
+        modifier: Modifier = Modifier,
+        score: () -> MutableMap<String, String>,
+        spectatorMode: Boolean = false,
     ) {
         val scoreData = score()
 
         val winnerSlot = scoreData["winner_slot"].orEmpty()
 
+        val parsedScore1 = scoreData["score1"]?.toIntOrNull()
+
+        val parsedScore2 = scoreData["score2"]?.toIntOrNull()
+
+        val bothPlayersFinished =
+            (!scoreData["words1"].isNullOrBlank() && !scoreData["words2"].isNullOrBlank() && parsedScore1 != null && parsedScore2 != null)
+
         BoxWithConstraints(
             modifier = modifier.fillMaxSize(),
         ) {
             val screenWidth = maxWidth
-
             val screenHeight = maxHeight
-            if (!scoreData["words2"].isNullOrBlank()) {
-                var text = "DRAW!"
-                var bgColor = Color.White
-                var textColor = Color.Black
 
-                if (scoreData["score1"]!!.toInt() > scoreData["score2"]!!.toInt()) {
-                    text = "YOU WON!"
-                    bgColor = Color(0xffffe535)
-                    textColor = Color.Black
-                } else if (scoreData["score1"]!!.toInt() < scoreData["score2"]!!.toInt()) {
-                    text = "YOU LOST!"
-                    bgColor = Color.Black
-                    textColor = Color(0xffea5860)
+            if (spectatorMode) {
+                Text(
+                    text = "Spectating...",
+                    color = Color.White,
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .align(
+                            Alignment.TopCenter,
+                        )
+                        .padding(
+                            top = 30.dp,
+                        )
+                        .zIndex(
+                            3f,
+                        ),
+                )
+            }
+
+            if (bothPlayersFinished) {
+                val (
+                    text,
+                    bgColor,
+                    textColor,
+                ) = when {
+                    parsedScore1 > parsedScore2 -> {
+                        Triple(
+                            if (spectatorMode) {
+                                "PLAYER 1 WINS!"
+                            } else {
+                                "YOU WON!"
+                            },
+                            Color(
+                                0xFFFFE535,
+                            ),
+                            Color.Black,
+                        )
+                    }
+
+                    parsedScore1 < parsedScore2 -> {
+                        Triple(
+                            if (spectatorMode) {
+                                "PLAYER 2 WINS!"
+                            } else {
+                                "YOU LOST!"
+                            },
+                            Color.Black,
+                            Color(
+                                0xFFEA5860,
+                            ),
+                        )
+                    }
+
+                    else -> {
+                        Triple(
+                            "DRAW!",
+                            Color.White,
+                            Color.Black,
+                        )
+                    }
                 }
 
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 50.dp)
-                        .padding(horizontal = 3.dp)
-                        .shadow(10.dp)
-                        .background(
-                            bgColor, shape = RoundedCornerShape(5.dp)
+                        .align(
+                            Alignment.TopCenter,
                         )
+                        .padding(
+                            top = if (spectatorMode) {
+                                68.dp
+                            } else {
+                                50.dp
+                            },
+                        )
+                        .padding(
+                            horizontal = 3.dp,
+                        )
+                        .shadow(
+                            10.dp,
+                        )
+                        .background(
+                            bgColor,
+                            shape = RoundedCornerShape(
+                                5.dp,
+                            ),
+                        )
+                        .zIndex(
+                            2f,
+                        ),
                 ) {
                     Text(
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.padding(
+                            8.dp,
+                        ),
                         text = text,
                         color = textColor,
                         fontSize = 16.sp,
                         fontFamily = interFamily,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                 }
             }
 
             Column(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
             ) {
-                val wordList1 =
-                    scoreData["words_list1"]?.takeIf { it.isNotBlank() }?.split("|") ?: emptyList()
+                val wordList1 = scoreData["words_list1"]?.takeIf {
+                    it.isNotBlank()
+                }?.split(
+                    "|",
+                ) ?: emptyList()
 
-                val wordList2 =
-                    scoreData["words_list2"]?.takeIf { it.isNotBlank() }?.split("|") ?: emptyList()
+                val wordList2 = scoreData["words_list2"]?.takeIf {
+                    it.isNotBlank()
+                }?.split(
+                    "|",
+                ) ?: emptyList()
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(
+                        24.dp,
+                    ),
                     verticalAlignment = Alignment.Top,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
+                        .weight(
+                            1f,
+                        )
                         .padding(
                             start = screenWidth * 0.03f,
                             end = screenWidth * 0.03f,
-                            top = 95.dp,
-                            bottom = 93.dp
-                        )
+                            top = if (spectatorMode) {
+                                120.dp
+                            } else {
+                                95.dp
+                            },
+                            bottom = 93.dp,
+                        ),
                 ) {
                     PlayerColumn(
                         words = scoreData["words1"],
@@ -827,8 +944,18 @@ class GameUI {
                             1f,
                         ),
                         screenHeight = screenHeight,
-                        avatarString = null,
-                        showWinBurst = winnerSlot == "local" || winnerSlot == "draw",
+                        avatarString = if (spectatorMode) {
+                            scoreData["avatar1"]
+                        } else {
+                            null
+                        },
+                        useLocalAvatar = !spectatorMode,
+                        playerLabel = if (spectatorMode) {
+                            "Player 1"
+                        } else {
+                            "You"
+                        },
+                        showWinBurst = (bothPlayersFinished && (winnerSlot == "local" || winnerSlot == "draw")),
                     )
 
                     PlayerColumn(
@@ -840,43 +967,88 @@ class GameUI {
                             1f,
                         ),
                         screenHeight = screenHeight,
-                        avatarString = scoreData["opponent_avatar"],
-                        showWinBurst = winnerSlot == "opponent" || winnerSlot == "draw",
+                        avatarString = if (spectatorMode) {
+                            scoreData["avatar2"]
+                        } else {
+                            scoreData["opponent_avatar"]
+                        },
+                        useLocalAvatar = false,
+                        playerLabel = if (spectatorMode) {
+                            "Player 2"
+                        } else {
+                            ""
+                        },
+                        showWinBurst = (bothPlayersFinished && (winnerSlot == "opponent" || winnerSlot == "draw")),
                     )
                 }
 
-                val dotCount = remember { mutableIntStateOf(1) }
+                val dotCount = remember {
+                    mutableIntStateOf(
+                        1,
+                    )
+                }
 
                 LaunchedEffect(Unit) {
                     while (true) {
-                        dotCount.intValue = dotCount.intValue % 3 + 1
+                        dotCount.intValue = (dotCount.intValue % 3 + 1)
+
                         delay(
                             500.milliseconds,
                         )
                     }
                 }
 
-                val dots = ".".repeat(dotCount.intValue)
-                val isWaiting = scoreData["words2"].isNullOrBlank()
+                val dots = ".".repeat(
+                    dotCount.intValue,
+                )
+
+                val isWaiting = if (spectatorMode) {
+                    (scoreData["words1"].isNullOrBlank() || scoreData["words2"].isNullOrBlank())
+                } else {
+                    scoreData["words2"].isNullOrBlank()
+                }
 
                 Box(
                     modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(bottom = 20.dp)
-                        .background(
-                            if (isWaiting) Color(0xD2222E1F) else Color.Transparent,
-                            shape = RoundedCornerShape(5.dp)
+                        .align(
+                            Alignment.CenterHorizontally,
                         )
-                        .width(260.dp)
-                        .padding(8.dp), contentAlignment = Alignment.Center
+                        .padding(
+                            bottom = 20.dp,
+                        )
+                        .background(
+                            if (isWaiting) {
+                                Color(
+                                    0xD2222E1F,
+                                )
+                            } else {
+                                Color.Transparent
+                            },
+                            shape = RoundedCornerShape(
+                                5.dp,
+                            ),
+                        )
+                        .width(
+                            260.dp,
+                        )
+                        .padding(
+                            8.dp,
+                        ),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        modifier = Modifier.padding(8.dp),
+                        modifier = Modifier.padding(
+                            8.dp,
+                        ),
                         text = "WAITING FOR OPPONENT$dots",
-                        color = if (isWaiting) Color.White else Color.Transparent,
+                        color = if (isWaiting) {
+                            Color.White
+                        } else {
+                            Color.Transparent
+                        },
                         fontSize = 13.sp,
                         fontFamily = fivoSansFamily,
-                        fontWeight = FontWeight.ExtraBold
+                        fontWeight = FontWeight.ExtraBold,
                     )
                 }
             }
@@ -912,6 +1084,111 @@ class GameUI {
         )
     }
 
+    @Composable
+    private fun AvatarWinBurstOverlay(
+        active: Boolean,
+        modifier: Modifier = Modifier,
+    ) {
+        if (!active) {
+            return
+        }
+
+        val transition = rememberInfiniteTransition(
+            label = "avatar_win_burst",
+        )
+
+        val rotation by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(
+                    durationMillis = 6000,
+                    easing = LinearEasing,
+                ),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "avatar_win_burst_rotation",
+        )
+
+        val pulse by transition.animateFloat(
+            initialValue = 0.94f,
+            targetValue = 1.06f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(
+                    durationMillis = 700,
+                ),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "avatar_win_burst_pulse",
+        )
+
+        Canvas(
+            modifier = modifier.graphicsLayer {
+                rotationZ = rotation
+                scaleX = pulse
+                scaleY = pulse
+            },
+        ) {
+            val burstRadius = min(
+                size.width,
+                size.height,
+            ) * 0.48f
+
+            val innerRadius = burstRadius * 0.48f
+            val rayCount = 16
+            val rayWidth = maxOf(
+                3f,
+                burstRadius * 0.075f,
+            )
+
+            repeat(rayCount) { index ->
+                val angle = (index.toFloat() / rayCount.toFloat() * 2f * PI.toFloat())
+
+                val directionX = cos(
+                    angle,
+                )
+
+                val directionY = sin(
+                    angle,
+                )
+
+                val start = Offset(
+                    x = center.x + directionX * innerRadius,
+                    y = center.y + directionY * innerRadius,
+                )
+
+                val end = Offset(
+                    x = center.x + directionX * burstRadius,
+                    y = center.y + directionY * burstRadius,
+                )
+
+                drawLine(
+                    color = if (index % 2 == 0) {
+                        Color(
+                            0xFFFFE535,
+                        )
+                    } else {
+                        Color(
+                            0xFFFFF2A3,
+                        )
+                    },
+                    start = start,
+                    end = end,
+                    strokeWidth = rayWidth,
+                    cap = StrokeCap.Round,
+                )
+            }
+
+            drawCircle(
+                color = Color(
+                    0x44FFE535,
+                ),
+                radius = innerRadius,
+                center = center,
+            )
+        }
+    }
+
     @OptIn(ExperimentalTextApi::class)
     @Composable
     fun PlayerColumn(
@@ -922,6 +1199,8 @@ class GameUI {
         modifier: Modifier,
         screenHeight: Dp,
         avatarString: String? = null,
+        useLocalAvatar: Boolean = false,
+        playerLabel: String = "",
         showWinBurst: Boolean = false,
     ) {
         Column(
@@ -945,24 +1224,20 @@ class GameUI {
                 ),
             ) {
                 Text(
-                    text = if (isLeft) {
-                        "You"
-                    } else {
+                    text = if (playerLabel.isBlank()) {
                         " "
-                    },
-                    color = if (isLeft) {
-                        Color.Black
                     } else {
+                        playerLabel
+                    },
+                    color = if (playerLabel.isBlank()) {
                         Color.Transparent
+                    } else {
+                        Color.Black
                     },
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                 )
 
-                /*
-                 * The burst is intentionally larger than the avatar.
-                 * Box does not clip its children by default.
-                 */
                 Box(
                     modifier = Modifier.size(
                         width = 80.dp,
@@ -982,7 +1257,7 @@ class GameUI {
                             ),
                     )
 
-                    if (isLeft) {
+                    if (useLocalAvatar) {
                         androidx.compose.ui.viewinterop.AndroidView(
                             factory = { context ->
                                 com.openbubbles.openpigeon.settings.AvatarView(
@@ -1385,6 +1660,13 @@ class GameUI {
         )
 
         fun getScore() = score
-        ScoreScreen(Modifier) { getScore() }
+
+        ScoreScreen(
+            modifier = Modifier,
+            score = {
+                getScore()
+            },
+            spectatorMode = false,
+        )
     }
 }

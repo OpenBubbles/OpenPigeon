@@ -32,23 +32,20 @@ class AboutActivity : Activity() {
     }
 
     private fun showAboutDialog(currentYear: Int, versionText: String) {
-        MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
-            .setTitle("OpenPigeon")
-            .setMessage(buildAboutMessage(currentYear, versionText))
+        MaterialAlertDialogBuilder(
+            this,
+            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
+        ).setTitle("OpenPigeon").setMessage(buildAboutMessage(currentYear, versionText))
             .setPositiveButton("Done") { _, _ ->
                 finishAndRemoveTask()
-            }
-            .setNegativeButton("More…") { _, _ ->
+            }.setNegativeButton("More…") { _, _ ->
                 showMoreOptions(currentYear, versionText)
-            }
-            .setNeutralButton("GitHub") { _, _ ->
+            }.setNeutralButton("GitHub") { _, _ ->
                 val intent = Intent(Intent.ACTION_VIEW)
                 intent.data = "https://github.com/OpenBubbles/OpenPigeon".toUri()
                 startActivity(intent)
                 finishAndRemoveTask()
-            }
-            .setCancelable(false)
-            .show()
+            }.setCancelable(false).show()
     }
 
     private fun showMoreOptions(currentYear: Int, versionText: String) {
@@ -62,37 +59,61 @@ class AboutActivity : Activity() {
             "Back"
         )
 
-        MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
-            .setTitle("More options")
-            .setItems(options) { _, which ->
+        MaterialAlertDialogBuilder(
+            this,
+            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
+        ).setTitle("More options").setItems(options) { _, which ->
                 when (which) {
                     0 -> showAttributions()
                     1 -> confirmDiagnosticReport(currentYear, versionText)
-                    2 -> confirmReset("Reset stats?", "This will clear your win counts for all games. This cannot be undone.", currentYear, versionText) {
+                    2 -> confirmReset(
+                        "Reset stats?",
+                        "This will clear your win counts for all games. This cannot be undone.",
+                        currentYear,
+                        versionText
+                    ) {
                         resetStats(); showAboutDialog(currentYear, versionText)
                     }
-                    3 -> confirmReset("Reset avatar?", "This will reset your avatar to defaults. This cannot be undone.", currentYear, versionText) {
+
+                    3 -> confirmReset(
+                        "Reset avatar?",
+                        "This will reset your avatar to defaults. This cannot be undone.",
+                        currentYear,
+                        versionText
+                    ) {
                         resetAvatar(); showAboutDialog(currentYear, versionText)
                     }
-                    4 -> confirmReset("Reset tutorial?", "The welcome tutorial will appear again next time you open the game picker.", currentYear, versionText) {
+
+                    4 -> confirmReset(
+                        "Reset tutorial?",
+                        "The welcome tutorial will appear again next time you open the game picker.",
+                        currentYear,
+                        versionText
+                    ) {
                         resetTutorial(); showAboutDialog(currentYear, versionText)
                     }
-                    5 -> confirmReset("Reset everything?", "This will clear your stats, avatar, and tutorial state. This cannot be undone.", currentYear, versionText) {
+
+                    5 -> confirmReset(
+                        "Reset everything?",
+                        "This will clear your stats, avatar, and tutorial state. This cannot be undone.",
+                        currentYear,
+                        versionText
+                    ) {
                         resetStats(); resetAvatar(); resetTutorial()
                         showAboutDialog(currentYear, versionText)
                     }
+
                     6 -> showAboutDialog(currentYear, versionText)
                 }
-            }
-            .setCancelable(true)
-            .setOnCancelListener { showAboutDialog(currentYear, versionText) }
+            }.setCancelable(true).setOnCancelListener { showAboutDialog(currentYear, versionText) }
             .show()
     }
 
     private fun confirmDiagnosticReport(currentYear: Int, versionText: String) {
-        MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
-            .setTitle("Send diagnostic report?")
-            .setMessage(
+        MaterialAlertDialogBuilder(
+            this,
+            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
+        ).setTitle("Send diagnostic report?").setMessage(
                 """
     OpenPigeon will create a sanitized ZIP containing recent warnings, errors, safe diagnostic events, and basic app and device information.
 
@@ -102,55 +123,39 @@ class AboutActivity : Activity() {
 
     Your email app will open with the report addressed to support@colerabe.com. You can review or cancel the email before sending it.
     """.trimIndent()
-            )
-            .setPositiveButton("Create report") { _, _ ->
+            ).setPositiveButton("Create report") { _, _ ->
                 runCatching {
                     OpenPigeonLog.shareReport(this)
                 }.onFailure { error ->
                     OpenPigeonLog.e(
-                        "Diagnostics",
-                        "Unable to create diagnostic report",
-                        error
+                        "Diagnostics", "Unable to create diagnostic report", error
                     )
 
                     MaterialAlertDialogBuilder(
                         this,
-                        com.google.android.material.R.style
-                            .ThemeOverlay_Material3_MaterialAlertDialog
-                    )
-                        .setTitle("Report could not be created")
-                        .setMessage(
+                        com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
+                    ).setTitle("Report could not be created").setMessage(
                             "OpenPigeon could not prepare the diagnostic report. Please try again."
-                        )
-                        .setPositiveButton("OK") { _, _ ->
+                        ).setPositiveButton("OK") { _, _ ->
                             showAboutDialog(currentYear, versionText)
-                        }
-                        .show()
+                        }.show()
                 }
-            }
-            .setNegativeButton("Cancel") { _, _ ->
+            }.setNegativeButton("Cancel") { _, _ ->
                 showAboutDialog(currentYear, versionText)
-            }
-            .setOnCancelListener {
+            }.setOnCancelListener {
                 showAboutDialog(currentYear, versionText)
-            }
-            .show()
+            }.show()
     }
 
     private fun confirmReset(
-        title: String,
-        message: String,
-        currentYear: Int,
-        versionText: String,
-        onConfirm: () -> Unit
+        title: String, message: String, currentYear: Int, versionText: String, onConfirm: () -> Unit
     ) {
-        MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
-            .setTitle(title)
-            .setMessage(message)
-            .setPositiveButton("Reset") { _, _ -> onConfirm() }
+        MaterialAlertDialogBuilder(
+            this,
+            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
+        ).setTitle(title).setMessage(message).setPositiveButton("Reset") { _, _ -> onConfirm() }
             .setNegativeButton("Cancel") { _, _ -> showAboutDialog(currentYear, versionText) }
-            .setOnCancelListener { showAboutDialog(currentYear, versionText) }
-            .show()
+            .setOnCancelListener { showAboutDialog(currentYear, versionText) }.show()
     }
 
     private fun showAttributions() {
@@ -161,8 +166,7 @@ class AboutActivity : Activity() {
         startActivity(
             Intent.makeMainSelectorActivity(
                 Intent.ACTION_MAIN, Intent.CATEGORY_APP_BROWSER
-            )
-                .setData(url.toUri())
+            ).setData(url.toUri())
         )
     }
 
@@ -178,8 +182,7 @@ class AboutActivity : Activity() {
     }
 
     private fun resetTutorial() {
-        getSharedPreferences("openpigeon", MODE_PRIVATE).edit()
-            .putBoolean("tutorial_seen", false)
+        getSharedPreferences("openpigeon", MODE_PRIVATE).edit().putBoolean("tutorial_seen", false)
             .apply()
     }
 }
@@ -208,7 +211,9 @@ private fun buildAboutMessage(currentYear: Int, versionText: String): String {
         |Filler - ty8447
         |Four in a Row - jakecrowley + ty8447
         |Gomoku - ty8447
+        |Knockout - ty8447
         |Mancala - ty8447
+        |Mini Golf - ty8447
         |Paintball - ty8447
         |Reversi - ty8447
         |Sea Battle - Copper + ty8447
@@ -222,8 +227,7 @@ private fun buildAboutMessage(currentYear: Int, versionText: String): String {
 
 @Composable
 private fun AboutPreviewContent(
-    currentYear: Int = 2026,
-    versionText: String = "Version 1.4.0 (26052301)"
+    currentYear: Int = 2026, versionText: String = "Version 1.4.0 (26052301)"
 ) {
     MaterialTheme {
         Surface(
@@ -251,10 +255,7 @@ private fun AboutPreviewContent(
 }
 
 @Preview(
-    name = "About Screen",
-    showBackground = true,
-    widthDp = 360,
-    heightDp = 720
+    name = "About Screen", showBackground = true, widthDp = 360, heightDp = 720
 )
 @Composable
 private fun AboutActivityPreview() {
