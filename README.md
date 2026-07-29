@@ -22,10 +22,13 @@ OpenPigeon is fully open-source, and we're actively looking for game developers 
 - Filler
 - Four in a Row
 - Gomoku
+- Knockout
 - Mancala
+- Mini Golf
 - Paintball
 - Reversi
 - Sea Battle (All Sizes)
+- Shuffleboard
 - Tanks
 - Wordbites
 - Word Hunt (All Modes)
