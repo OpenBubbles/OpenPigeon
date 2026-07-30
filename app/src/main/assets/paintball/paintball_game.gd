@@ -497,7 +497,54 @@ func _set_game_data(raw_text: String) -> void:
 # -------------------------------------------------------------------
 # Button clicked entry point
 # -------------------------------------------------------------------
+func _apply_spectator_selection_state() -> void:
+	if not spectator_mode:
+		return
+
+	is_your_turn = false
+	is_my_turn = false
+
+	_selected_shoot = null
+	_require_new_shoot_selection = true
+	_need_new_selection = true
+	_touched_this_turn = false
+
+	if _move_tween and _move_tween.is_valid():
+		_move_tween.kill()
+
+	_move_tween = null
+
+	_show_fire_button(false)
+
+	if is_instance_valid(fire_button):
+		fire_button.visible = false
+		fire_button.modulate.a = 0.0
+		fire_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	for b: ActionButton3D in _buttons:
+		if not is_instance_valid(b):
+			continue
+
+		b.visible = false
+		b.set_click_enabled(false)
+		_set_button_enabled(b, false)
+
+	if is_instance_valid(fp_aim_sprite):
+		fp_aim_sprite.visible = false
+
+	stop_waiting_animation()
+
 func _on_button_clicked(b: ActionButton3D) -> void:
+	if spectator_mode:
+		OpLog.w(
+			LOG_TAG,
+			[
+				"button_ignored spectator name=",
+				b.name if is_instance_valid(b) else "invalid",
+			],
+		)
+		return
+
 	if not is_my_turn or _is_shot_sequence_running or _round_sequence_running:
 		OpLog.w(LOG_TAG, [
 			"button_ignored name=", b.name if is_instance_valid(b) else "invalid",
@@ -531,6 +578,16 @@ func _on_button_clicked(b: ActionButton3D) -> void:
 # Fire pressed gatekeeper
 # -------------------------------------------------------------------
 func _on_fire_pressed() -> void:
+	if spectator_mode:
+		OpLog.w(
+			LOG_TAG,
+			[
+				"fire_ignored spectator ",
+				_state_summary(),
+			],
+		)
+		return
+
 	if not is_my_turn:
 		OpLog.w(LOG_TAG, ["fire_ignored turn=false ", _state_summary()])
 		return

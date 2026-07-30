@@ -100,11 +100,20 @@ func restore_ui_after_round() -> void:
 	g.ui.hide_opponent_hit_splat()
 	(g.fire_button as Control).mouse_filter = Control.MOUSE_FILTER_STOP
 
-	var ui_nodes: Array = [g.rules_button, g.settings_button, g.top_info]
+	var ui_nodes: Array = [
+		g.rules_button,
+		g.settings_button,
+		g.top_info,
+	]
+
 	for n in ui_nodes:
 		if is_instance_valid(n):
 			n.visible = true
 			n.modulate.a = 1.0
+
+	if g.spectator_mode:
+		g._apply_spectator_selection_state()
+		return
 
 	g._show_fire_button(false)
 	if is_instance_valid(g.fire_button):
@@ -410,8 +419,26 @@ func _end_round_sequence() -> void:
 	g.dbg(["round_sequence_flags_reset replayPlayback=", g._is_replay_playback])
 
 func play_round() -> void:
-	if not g.is_my_turn or g._is_shot_sequence_running or g._round_sequence_running:
-		OpLog.w("Paintball", ["play_round ignored turn_or_sequence ", g._state_summary()])
+	var spectator_replay := (
+		g.spectator_mode and
+		g._is_replay_playback and
+		g._pending_enemy_shot
+	)
+
+	if (
+		(not g.is_my_turn and not spectator_replay) or
+		g._is_shot_sequence_running or
+		g._round_sequence_running
+	):
+		OpLog.w(
+			"Paintball",
+			[
+				"play_round ignored turn_or_sequence spectatorReplay=",
+				spectator_replay,
+				" ",
+				g._state_summary(),
+			],
+		)
 		return
 
 	if g._require_new_shoot_selection or g._selected_shoot == null or not is_instance_valid(g._selected_shoot):

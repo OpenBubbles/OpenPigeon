@@ -19,43 +19,153 @@ var _settings_open := false
 var spectator_mode: bool = false
 var dot_count: int = 0
 var game_settings_category: String = ""
+var _startup_cover: CanvasLayer
+var _startup_reveal_queued: bool = false
+var _startup_revealed: bool = false
+
+func _create_startup_cover() -> void:
+	_startup_cover = CanvasLayer.new()
+	_startup_cover.name = "StartupCover"
+	_startup_cover.layer = 1000
+	add_child(_startup_cover)
+
+	var cover := ColorRect.new()
+	cover.name = "Cover"
+	cover.color = Color.BLACK
+	cover.mouse_filter = Control.MOUSE_FILTER_STOP
+	_startup_cover.add_child(cover)
+	cover.set_anchors_and_offsets_preset(
+		Control.PRESET_FULL_RECT,
+	)
+
+
+func _receive_game_data(json: String) -> void:
+	_set_game_data(json)
+	_queue_startup_reveal()
+
+
+func _queue_startup_reveal() -> void:
+	if _startup_revealed or _startup_reveal_queued:
+		return
+
+	_startup_reveal_queued = true
+	call_deferred("_reveal_startup_after_layout")
+
+
+func _reveal_startup_after_layout() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	if not is_inside_tree():
+		return
+
+	_startup_revealed = true
+
+	if is_instance_valid(_startup_cover):
+		_startup_cover.visible = false
+		_startup_cover.queue_free()
+		_startup_cover = null
 
 func _ready() -> void:
+	_create_startup_cover()
+
 	if Engine.has_singleton("OpenPigeonMedia"):
 		mediaPlugin = Engine.get_singleton("OpenPigeonMedia")
-	GameUtils.start_music(self, _get_music_stream(), mediaPlugin)
 
-	if is_instance_valid(settings_button) and not settings_button.pressed.is_connected(_on_settings_button_pressed):
-		settings_button.pressed.connect(_on_settings_button_pressed)
-	if is_instance_valid(rules_button) and not rules_button.pressed.is_connected(_on_rules_button_pressed):
-		rules_button.pressed.connect(_on_rules_button_pressed)
-	if is_instance_valid(dot_timer) and not dot_timer.timeout.is_connected(_on_dot_timer_timeout):
-		dot_timer.timeout.connect(_on_dot_timer_timeout)
+	GameUtils.start_music(
+		self,
+		_get_music_stream(),
+		mediaPlugin,
+	)
 
-	appPlugin = Engine.get_singleton("AppPlugin")
+	if (
+		is_instance_valid(settings_button) and
+		not settings_button.pressed.is_connected(
+			_on_settings_button_pressed,
+		)
+	):
+		settings_button.pressed.connect(
+			_on_settings_button_pressed,
+		)
+
+	if (
+		is_instance_valid(rules_button) and
+		not rules_button.pressed.is_connected(
+			_on_rules_button_pressed,
+		)
+	):
+		rules_button.pressed.connect(
+			_on_rules_button_pressed,
+		)
+
+	if (
+		is_instance_valid(dot_timer) and
+		not dot_timer.timeout.is_connected(
+			_on_dot_timer_timeout,
+		)
+	):
+		dot_timer.timeout.connect(
+			_on_dot_timer_timeout,
+		)
+
+	if Engine.has_singleton("AppPlugin"):
+		appPlugin = Engine.get_singleton("AppPlugin")
+	else:
+		appPlugin = null
+
 	if appPlugin:
-		appPlugin.connect("set_game_data", _set_game_data)
+		var receive_callable := Callable(
+			self,
+			"_receive_game_data",
+		)
+
+		if not appPlugin.is_connected(
+			"set_game_data",
+			receive_callable,
+		):
+			appPlugin.connect(
+				"set_game_data",
+				receive_callable,
+			)
+
 		my_uuid = appPlugin.getSenderUUID()
-		appPlugin.onReady()
 	else:
 		my_uuid = DEV_UUID
-		var dev := _get_dev_data()
-		if dev != "":
-			_set_game_data(dev)
 
 	_on_game_ready()
 
+	if appPlugin:
+		appPlugin.onReady()
+	else:
+		var dev := _get_dev_data()
+
+		if dev != "":
+			_receive_game_data(dev)
+		else:
+			_queue_startup_reveal()
+
 func _exit_tree() -> void:
+	SettingsManager.suppress_avatar_changed = false
 	GameUtils.stop_music(self)
 
 func _on_settings_button_pressed() -> void:
 	if _settings_open:
 		return
+
 	_settings_open = true
+	SettingsManager.suppress_avatar_changed = spectator_mode
+
 	GameUtils.open_settings_popup(
-		self, mediaPlugin, settings_button, _get_settings_avatar_display(), _get_music_stream(),
+		self,
+		mediaPlugin,
+		settings_button,
+		null if spectator_mode else _get_settings_avatar_display(),
+		_get_music_stream(),
 		Callable(self, "_add_settings_rows"),
-		func(): _settings_open = false
+		func():
+			SettingsManager.suppress_avatar_changed = false
+			_settings_open = false
 	)
 
 func _on_rules_button_pressed() -> void:

@@ -209,6 +209,7 @@ alignment = 1
 layout_mode = 2
 
 [node name="YouLabel" type="Label" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer" unique_id=1254292232]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)

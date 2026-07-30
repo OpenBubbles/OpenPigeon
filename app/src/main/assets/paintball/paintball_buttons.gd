@@ -202,6 +202,16 @@ func move_player_to_button(b: ActionButton3D) -> void:
 	if g == null:
 		return
 
+	if g.spectator_mode:
+		OpLog.w(
+			"Paintball",
+			[
+				"move_ignored spectator ",
+				g._state_summary(),
+			],
+		)
+		return
+
 	if not g.is_my_turn or g._is_shot_sequence_running or g._round_sequence_running:
 		OpLog.w("Paintball", ["move_ignored turn_or_sequence ", g._state_summary()])
 		return

@@ -11,6 +11,7 @@ const MUSIC_STREAM := preload("res://global/audio/darts.ogg")
 @onready var opp_score_label: Label = %OpponentScoreLabel
 @onready var main_overlay: Control = %MainOverlay
 @onready var spectator_label: Label = %SpecLabel
+@onready var you_label: Label = %YouLabel
 @onready var darts_menu_button: Button = %MenuButton
 var points_to_win_popup: Control
 var points_to_win_panel: PanelContainer
@@ -1095,16 +1096,18 @@ func _open_darts_settings_popup() -> void:
 	var existing_node_ids := _snapshot_darts_node_ids()
 
 	_settings_open = true
+	SettingsManager.suppress_avatar_changed = spectator_mode
 	_hide_points_to_win_popup()
 
 	GameUtils.open_settings_popup(
 		self,
 		mediaPlugin,
 		darts_menu_button,
-		_get_settings_avatar_display(),
+		null if spectator_mode else _get_settings_avatar_display(),
 		_get_music_stream(),
 		Callable(self, "_add_settings_rows"),
 		func() -> void:
+			SettingsManager.suppress_avatar_changed = false
 			_settings_open = false
 			_update_points_to_win()
 
@@ -1383,6 +1386,9 @@ func _set_game_data(new_replay: String):
 
 	if is_instance_valid(spectator_label):
 		spectator_label.visible = spectator_mode
+
+	if is_instance_valid(you_label):
+		you_label.modulate.a = 0.0 if spectator_mode else 1.0
 
 	if is_my_turn and not spectator_mode:
 		player = 2 if player == 1 else 1

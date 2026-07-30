@@ -70,7 +70,8 @@ func _ready():
 		custom_settings_container.add_theme_constant_override("separation", 8)
 
 func close_popup():
-	SettingsManager.avatar_changed.emit()
+	if not SettingsManager.suppress_avatar_changed:
+		SettingsManager.avatar_changed.emit()
 	
 	print("SettingsPopup: Closing popup.")
 	var tween = create_tween()

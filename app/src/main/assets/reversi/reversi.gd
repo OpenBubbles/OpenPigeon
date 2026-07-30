@@ -14,6 +14,7 @@ extends BaseGame
 @onready var board_root: Control = %GameAreaCenterContainer
 @onready var star_layer: Control = %StarPointLayer
 @onready var main_vbox: Control = %MainVBoxContainer
+@onready var you_label: Label = %YouLabel
 
 const BOARD_SIZE = 8
 const LOG_TAG := "Reversi"
@@ -612,6 +613,9 @@ func _set_game_data(new_game_data_json: String):
 
 	if is_instance_valid(spec_label):
 		spec_label.visible = spectator_mode
+
+	if is_instance_valid(you_label):
+		you_label.modulate.a = 0.0 if spectator_mode else 1.0
 
 	setup_score_labels()
 

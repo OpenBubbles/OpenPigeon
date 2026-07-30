@@ -2332,17 +2332,19 @@ class GolfActivity : AppCompatActivity() {
                 data = parsed, localPlayer = localPlayer
             )
 
-            val opponentAvatar = if (localPlayer == 1) {
-                msg["avatar2"].orEmpty()
-            } else {
-                msg["avatar1"].orEmpty()
-            }
+            if (!spectatorMode) {
+                val opponentAvatar = if (localPlayer == 1) {
+                    msg["avatar2"].orEmpty()
+                } else {
+                    msg["avatar1"].orEmpty()
+                }
 
-            if (opponentAvatar.isNotBlank() && ::gameMenu.isInitialized) {
-                runOnUiThread {
-                    gameMenu.sheet.applyOpponentAvatarString(
-                        opponentAvatar,
-                    )
+                if (opponentAvatar.isNotBlank() && ::gameMenu.isInitialized) {
+                    runOnUiThread {
+                        gameMenu.sheet.applyOpponentAvatarString(
+                            opponentAvatar,
+                        )
+                    }
                 }
             }
 

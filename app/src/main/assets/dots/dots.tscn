@@ -356,6 +356,15 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_dllis")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_l1x53")
 theme_override_styles/hover = SubResource("StyleBoxTexture_vpag6")
 
+[node name="SpecLabel" type="Label" parent="MarginContainer" unique_id=1589311018]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 0
+theme_override_font_sizes/font_size = 50
+text = "Spectating..."
+horizontal_alignment = 1
+vertical_alignment = 1
+
 [node name="WaitBlur" type="ColorRect" parent="." unique_id=1821675812]
 unique_name_in_owner = true
 visible = false
@@ -434,20 +443,3 @@ vertical_alignment = 1
 [node name="DotTimer" type="Timer" parent="." unique_id=656791883]
 unique_name_in_owner = true
 wait_time = 0.75
-
-[node name="SpecLabel" type="Label" parent="." unique_id=1589311018]
-unique_name_in_owner = true
-visible = false
-layout_mode = 1
-anchors_preset = 5
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -324.0
-offset_right = 324.0
-offset_bottom = 69.0
-grow_horizontal = 2
-size_flags_vertical = 0
-theme_override_font_sizes/font_size = 50
-text = "Spectating..."
-horizontal_alignment = 1
-vertical_alignment = 1

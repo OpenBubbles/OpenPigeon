@@ -7,6 +7,7 @@ signal replay_finished
 
 var _replay_pending: int = 0
 var _replay_token: int = 0
+var _data_token: int = 0
 
 var sent_tween: Tween
 
@@ -299,7 +300,15 @@ func _set_game_data(new_replay: String) -> void:
 		OpLog.e(LOG_TAG, ["set_game_data invalid JSON parsed=", parsed, " raw=", new_replay])
 		return
 
+	_data_token += 1
+	var data_token := _data_token
+
+	_replay_token += 1
+	_replay_pending = 0
+	emit_signal("replay_finished")
+
 	replay.clear()
+	_ensure_clouds_visible()
 	var greplay: String = parsed.get("replay", "")
 	dbg(["replay_field=", greplay])
 
@@ -429,29 +438,97 @@ func _set_game_data(new_replay: String) -> void:
 
 	OpLog.i(LOG_TAG, ["board_map player=", player, " my=", my_bg_name, " their=", their_bg_name])
 
-	if is_instance_valid(theirBattleground):
+	if (not spectator_mode and is_instance_valid(theirBattleground)):
 		theirBattleground.set_grid_tint(Color.BLACK)
 
 	var my_avatar := _get_my_avatar_display()
 	var opp_avatar := _get_opp_avatar_display()
 
-	if is_instance_valid(my_avatar) and my_avatar.has_method("update_display_from_settings"):
-		dbg("avatar loading local settings")
-		my_avatar.call_deferred("update_display_from_settings")
+	if spectator_mode:
+		if parsed.has("avatar1"):
+			var player1_avatar_string := str(parsed["avatar1"])
 
-	if parsed.has(player_avatar_key):
-		var player_avatar_string: String = str(parsed[player_avatar_key])
-		dbg(["avatar local key=", player_avatar_key, " len=", player_avatar_string.length()])
-		var player_data: Dictionary = GameUtils._parse_avatar_string(player_avatar_string)
-		if is_instance_valid(my_avatar):
-			my_avatar.call_deferred("update_avatar_from_data", player_data)
+			if player1_avatar_string != "":
+				p1_avatar_display.call_deferred(
+					"update_avatar_from_data",
+					GameUtils._parse_avatar_string(
+						player1_avatar_string
+					)
+				)
 
-	if parsed.has(opponent_avatar_key):
-		var opp_avatar_string: String = str(parsed[opponent_avatar_key])
-		dbg(["avatar opponent key=", opponent_avatar_key, " len=", opp_avatar_string.length()])
-		var opp_data: Dictionary = GameUtils._parse_avatar_string(opp_avatar_string)
-		if is_instance_valid(opp_avatar):
-			opp_avatar.call_deferred("update_avatar_from_data", opp_data)
+		if parsed.has("avatar2"):
+			var player2_avatar_string := str(parsed["avatar2"])
+
+			if player2_avatar_string != "":
+				p2_avatar_display.call_deferred(
+					"update_avatar_from_data",
+					GameUtils._parse_avatar_string(
+						player2_avatar_string
+					)
+				)
+
+		_set_avatar_display_shown(
+			p1_avatar_display,
+			true
+		)
+
+		_set_avatar_display_shown(
+			p2_avatar_display,
+			true
+		)
+	else:
+		if (
+			is_instance_valid(my_avatar) and
+			my_avatar.has_method("update_display_from_settings")
+		):
+			dbg("avatar loading local settings")
+			my_avatar.call_deferred(
+				"update_display_from_settings"
+			)
+
+		if parsed.has(player_avatar_key):
+			var player_avatar_string := str(
+				parsed[player_avatar_key]
+			)
+
+			dbg([
+				"avatar local key=",
+				player_avatar_key,
+				" len=",
+				player_avatar_string.length()
+			])
+
+			var player_data := GameUtils._parse_avatar_string(
+				player_avatar_string
+			)
+
+			if is_instance_valid(my_avatar):
+				my_avatar.call_deferred(
+					"update_avatar_from_data",
+					player_data
+				)
+
+		if parsed.has(opponent_avatar_key):
+			var opp_avatar_string := str(
+				parsed[opponent_avatar_key]
+			)
+
+			dbg([
+				"avatar opponent key=",
+				opponent_avatar_key,
+				" len=",
+				opp_avatar_string.length()
+			])
+
+			var opp_data := GameUtils._parse_avatar_string(
+				opp_avatar_string
+			)
+
+			if is_instance_valid(opp_avatar):
+				opp_avatar.call_deferred(
+					"update_avatar_from_data",
+					opp_data
+				)
 
 	if not s1.is_empty():
 		dbg(["board_load ships1 len=", s1.length()])
@@ -479,14 +556,42 @@ func _set_game_data(new_replay: String) -> void:
 	else:
 		dbg(["init_board not_randomizing spectator=", spectator_mode, " shipsEmpty=", my_ships_encoded.is_empty(), " player=", player])
 	if spectator_mode and not greplay.is_empty():
-		OpLog.i(LOG_TAG, ["spectator_replay replayMoves=", replay.size()])
-		_apply_bullets_from_payload(battleground1, bullets1)
-		_apply_bullets_from_payload(battleground2, bullets2)
-		show_battleground(false)
+		OpLog.i(
+			LOG_TAG,
+			[
+				"spectator_replay replayMoves=",
+				replay.size()
+			]
+		)
+
+		_apply_bullets_from_payload(
+			battleground1,
+			bullets1
+		)
+
+		_apply_bullets_from_payload(
+			battleground2,
+			bullets2
+		)
+
+		show_battleground(true)
+		_ensure_clouds_visible()
+
 		await get_tree().process_frame
-		if not greplay.is_empty():
-			play_replay(greplay, false)
+
+		if data_token != _data_token:
+			return
+
+		await play_replay(
+			greplay,
+			false
+		)
+
+		if data_token != _data_token:
+			return
+
 	show_battleground(true)
+	_ensure_clouds_visible()
 
 	OpLog.i(LOG_TAG, [
 		"set_game_data_done turn=", isTurn,
@@ -521,7 +626,10 @@ func _set_game_data(new_replay: String) -> void:
 			if is_instance_valid(state):
 				state.text = ""
 
-			play_replay(greplay)
+			await play_replay(greplay)
+
+			if data_token != _data_token:
+				return
 		else:
 			OpLog.i(LOG_TAG, "turn_flow initial_setup")
 			_set_setup_mode(true)
@@ -593,8 +701,11 @@ func _set_game_data(new_replay: String) -> void:
 		if is_instance_valid(state):
 			state.text = ""
 
-		start_waiting_animation()
-		if not spectator_mode:
+		if spectator_mode:
+			stop_waiting_animation()
+			_ensure_clouds_visible()
+		else:
+			start_waiting_animation()
 			myBattleground.process_mode = Node.PROCESS_MODE_DISABLED
 			theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
 
@@ -607,10 +718,7 @@ func play_replay(preplay: String, enter_turn_after: bool = true) -> void:
 		" raw=", preplay
 	])
 
-	clouds_rect.visible = false
-	var m := clouds_rect.modulate
-	m.a = 0.0
-	clouds_rect.modulate = m
+	_ensure_clouds_visible()
 
 	if moves.is_empty():
 		OpLog.i(LOG_TAG, "play_replay_empty")
@@ -675,13 +783,35 @@ func play_replay(preplay: String, enter_turn_after: bool = true) -> void:
 		return
 
 	replay.clear()
-	await get_tree().create_timer(1.0).timeout
+	_ensure_clouds_visible()
 
-	OpLog.i(LOG_TAG, ["play_replay_done myBoard={", _bg_summary(myBattleground), "}"])
-	my_battleground_ready()
+	OpLog.i(
+		LOG_TAG,
+		[
+			"play_replay_done myBoard={",
+			_bg_summary(myBattleground),
+			"}"
+		]
+	)
 
-func _start_replay_move_async(local_pos: Vector2, delay: float, token: int) -> void:
-	await _run_replay_move(local_pos, delay)
+	if enter_turn_after:
+		await get_tree().create_timer(1.0).timeout
+
+		if token != _replay_token:
+			return
+
+		my_battleground_ready()
+
+func _start_replay_move_async(
+	local_pos: Vector2,
+	delay: float,
+	token: int
+) -> void:
+	await _run_replay_move(
+		local_pos,
+		delay,
+		token
+	)
 
 	if token != _replay_token:
 		return
@@ -981,6 +1111,31 @@ func _candidate_conflicts(
 
 	return false
 
+func _ensure_clouds_visible() -> void:
+	if not is_instance_valid(clouds_rect):
+		return
+
+	var required_cloud_z := clouds_rect.z_index
+
+	if is_instance_valid(player1_container):
+		required_cloud_z = max(
+			required_cloud_z,
+			player1_container.z_index + 5
+		)
+
+	if is_instance_valid(player2_container):
+		required_cloud_z = max(
+			required_cloud_z,
+			player2_container.z_index + 5
+		)
+
+	clouds_rect.z_index = required_cloud_z
+	clouds_rect.visible = true
+
+	var cloud_modulate := clouds_rect.modulate
+	cloud_modulate.a = 1.0
+	clouds_rect.modulate = cloud_modulate
+
 func _set_avatar_display_shown(display: Control, should_show: bool) -> void:
 	if not is_instance_valid(display):
 		return
@@ -1042,25 +1197,52 @@ func _set_setup_mode(enabled: bool) -> void:
 		shuffle_button.disabled = not setup_enabled
 		shuffle_button.modulate.a = 1.0 if setup_enabled else 0.0
 
-	var my_avatar := _get_my_avatar_display()
-	var should_show_avatar := (
-		not setup_enabled and
-		not spectator_mode
-	)
+	if spectator_mode:
+		_set_avatar_display_shown(
+			p1_avatar_display,
+			true
+		)
 
-	_set_avatar_display_shown(
-		my_avatar,
-		should_show_avatar
-	)
+		_set_avatar_display_shown(
+			p2_avatar_display,
+			true
+		)
 
-	_update_you_labels(should_show_avatar)
+		_update_you_labels(false)
+	else:
+		var my_avatar := _get_my_avatar_display()
+		var should_show_avatar := not setup_enabled
 
-func show_battleground(mine: bool):
-	if not is_instance_valid(myBoardContainer) or not is_instance_valid(theirBoardContainer):
+		_set_avatar_display_shown(
+			my_avatar,
+			should_show_avatar
+		)
+
+		_update_you_labels(
+			should_show_avatar
+		)
+
+func show_battleground(mine: bool) -> void:
+	if (
+		not is_instance_valid(myBoardContainer) or
+		not is_instance_valid(theirBoardContainer)
+	):
 		return
 
-	_set_board_active(myBoardContainer, myBattleground, mine)
-	_set_board_active(theirBoardContainer, theirBattleground, not mine)
+	_set_board_active(
+		myBoardContainer,
+		myBattleground,
+		mine
+	)
+
+	_set_board_active(
+		theirBoardContainer,
+		theirBattleground,
+		not mine
+	)
+
+	_ensure_clouds_visible()
+	call_deferred("_ensure_clouds_visible")
 
 func _set_board_active(container: Control, board: BattleGround, active: bool) -> void:
 	if not is_instance_valid(container) or not is_instance_valid(board):
@@ -1330,11 +1512,19 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 		var clouds_target_pos: Vector2 = Vector2(incoming_target_pos.x + cloud_x_offset, view_center.y) - cloud_offset
 
 		clouds_rect.global_position = clouds_start_pos
-		clouds_rect.modulate.a = 0.0
+		clouds_rect.modulate.a = 1.0
 
 		clouds_tween = create_tween().set_parallel(true)
-		clouds_tween.tween_property(clouds_rect, "modulate:a", 1.0, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-		clouds_tween.tween_property(clouds_rect, "global_position", clouds_target_pos, travel_anim_duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		clouds_tween.tween_property(
+			clouds_rect,
+			"global_position",
+			clouds_target_pos,
+			travel_anim_duration
+		).set_trans(
+			Tween.TRANS_SINE
+		).set_ease(
+			Tween.EASE_IN_OUT
+		)
 
 		var sw_start_val = cmat.get_shader_parameter("swipe_offset")
 		var sw_start := float(sw_start_val if sw_start_val != null else 0.0)
@@ -1450,19 +1640,22 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 
 func _update_you_labels(show_you: bool = true) -> void:
 	if is_instance_valid(p1_you_label):
-		p1_you_label.visible = false
+		p1_you_label.visible = true
+		p1_you_label.modulate.a = 0.0
+
 	if is_instance_valid(p2_you_label):
-		p2_you_label.visible = false
+		p2_you_label.visible = true
+		p2_you_label.modulate.a = 0.0
 
 	if not show_you or spectator_mode:
 		return
 
 	if player == 1 and is_instance_valid(p1_you_label):
 		p1_you_label.text = "You"
-		p1_you_label.visible = true
+		p1_you_label.modulate.a = 1.0
 	elif player == 2 and is_instance_valid(p2_you_label):
 		p2_you_label.text = "You"
-		p2_you_label.visible = true
+		p2_you_label.modulate.a = 1.0
 
 func _process(_delta: float) -> void:
 	var menu_open: bool = get("_settings_open") == true or get("_rules_open") == true
@@ -1829,12 +2022,30 @@ func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2,
 	if is_instance_valid(plane):
 		plane.queue_free()
 
-func _run_replay_move(local_pos: Vector2, delay: float) -> void:
+func _run_replay_move(
+	local_pos: Vector2,
+	delay: float,
+	token: int
+) -> void:
 	await get_tree().create_timer(delay).timeout
-	await _play_bomb_fall_animation_for_board(myBattleground, local_pos, true, 2.0)
+
+	if token != _replay_token:
+		return
+
+	await _play_bomb_fall_animation_for_board(
+		myBattleground,
+		local_pos,
+		true,
+		2.0
+	)
+
+	if token != _replay_token:
+		return
 
 	if is_instance_valid(myBattleground):
-		var hit : bool = myBattleground.replay_fire(local_pos)
+		var hit: bool = myBattleground.replay_fire(
+			local_pos
+		)
 		if hit:
 			_haptic_explosion(1.0, 45)
 		OpLog.i(LOG_TAG, ["replay_fire pos=", local_pos, " hit=", hit])

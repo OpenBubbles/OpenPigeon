@@ -22,6 +22,7 @@ extends BaseGame
 @onready var view_words_button: Button = %ViewWords
 @onready var full_word_list: VBoxContainer = %FullWordList
 @onready var back_button: TextureButton = %BackButton
+@onready var spec_label: Label = %SpecLabel
 
 const LETTER_BG: Texture2D = preload("res://anagrams/letter_bg.png")
 const MUSIC_STREAM := preload("res://global/audio/wordbites.ogg")
@@ -371,6 +372,9 @@ func _set_game_data(raw_text: String) -> void:
 		" my_has_data=", my_has_data,
 		" opponent_avatar_key=", opponent_avatar_key
 	])
+
+	if is_instance_valid(spec_label):
+		spec_label.visible = spectator_mode
 
 	if spectator_mode:
 		OpLog.i(LOG_TAG, "spectator_mode_enabled")

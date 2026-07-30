@@ -33,8 +33,7 @@ class AboutActivity : Activity() {
 
     private fun showAboutDialog(currentYear: Int, versionText: String) {
         MaterialAlertDialogBuilder(
-            this,
-            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
+            this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
         ).setTitle("OpenPigeon").setMessage(buildAboutMessage(currentYear, versionText))
             .setPositiveButton("Done") { _, _ ->
                 finishAndRemoveTask()
@@ -60,61 +59,59 @@ class AboutActivity : Activity() {
         )
 
         MaterialAlertDialogBuilder(
-            this,
-            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
+            this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
         ).setTitle("More options").setItems(options) { _, which ->
-                when (which) {
-                    0 -> showAttributions()
-                    1 -> confirmDiagnosticReport(currentYear, versionText)
-                    2 -> confirmReset(
-                        "Reset stats?",
-                        "This will clear your win counts for all games. This cannot be undone.",
-                        currentYear,
-                        versionText
-                    ) {
-                        resetStats(); showAboutDialog(currentYear, versionText)
-                    }
-
-                    3 -> confirmReset(
-                        "Reset avatar?",
-                        "This will reset your avatar to defaults. This cannot be undone.",
-                        currentYear,
-                        versionText
-                    ) {
-                        resetAvatar(); showAboutDialog(currentYear, versionText)
-                    }
-
-                    4 -> confirmReset(
-                        "Reset tutorial?",
-                        "The welcome tutorial will appear again next time you open the game picker.",
-                        currentYear,
-                        versionText
-                    ) {
-                        resetTutorial(); showAboutDialog(currentYear, versionText)
-                    }
-
-                    5 -> confirmReset(
-                        "Reset everything?",
-                        "This will clear your stats, avatar, and tutorial state. This cannot be undone.",
-                        currentYear,
-                        versionText
-                    ) {
-                        resetStats(); resetAvatar(); resetTutorial()
-                        showAboutDialog(currentYear, versionText)
-                    }
-
-                    6 -> showAboutDialog(currentYear, versionText)
+            when (which) {
+                0 -> showAttributions()
+                1 -> confirmDiagnosticReport(currentYear, versionText)
+                2 -> confirmReset(
+                    "Reset stats?",
+                    "This will clear your win counts for all games. This cannot be undone.",
+                    currentYear,
+                    versionText
+                ) {
+                    resetStats(); showAboutDialog(currentYear, versionText)
                 }
-            }.setCancelable(true).setOnCancelListener { showAboutDialog(currentYear, versionText) }
+
+                3 -> confirmReset(
+                    "Reset avatar?",
+                    "This will reset your avatar to defaults. This cannot be undone.",
+                    currentYear,
+                    versionText
+                ) {
+                    resetAvatar(); showAboutDialog(currentYear, versionText)
+                }
+
+                4 -> confirmReset(
+                    "Reset tutorial?",
+                    "The welcome tutorial will appear again next time you open the game picker.",
+                    currentYear,
+                    versionText
+                ) {
+                    resetTutorial(); showAboutDialog(currentYear, versionText)
+                }
+
+                5 -> confirmReset(
+                    "Reset everything?",
+                    "This will clear your stats, avatar, and tutorial state. This cannot be undone.",
+                    currentYear,
+                    versionText
+                ) {
+                    resetStats(); resetAvatar(); resetTutorial()
+                    showAboutDialog(currentYear, versionText)
+                }
+
+                6 -> showAboutDialog(currentYear, versionText)
+            }
+        }.setCancelable(true).setOnCancelListener { showAboutDialog(currentYear, versionText) }
             .show()
     }
 
     private fun confirmDiagnosticReport(currentYear: Int, versionText: String) {
         MaterialAlertDialogBuilder(
-            this,
-            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
+            this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
         ).setTitle("Send diagnostic report?").setMessage(
-                """
+            """
     OpenPigeon will create a sanitized ZIP containing recent warnings, errors, safe diagnostic events, and basic app and device information.
 
     Player and session identifiers are replaced with consistent labels such as p1uid, p2uid, uid1, and session1. This allows related events to be followed without including the original identifiers.
@@ -123,36 +120,35 @@ class AboutActivity : Activity() {
 
     Your email app will open with the report addressed to support@colerabe.com. You can review or cancel the email before sending it.
     """.trimIndent()
-            ).setPositiveButton("Create report") { _, _ ->
-                runCatching {
-                    OpenPigeonLog.shareReport(this)
-                }.onFailure { error ->
-                    OpenPigeonLog.e(
-                        "Diagnostics", "Unable to create diagnostic report", error
-                    )
+        ).setPositiveButton("Create report") { _, _ ->
+            runCatching {
+                OpenPigeonLog.shareReport(this)
+            }.onFailure { error ->
+                OpenPigeonLog.e(
+                    "Diagnostics", "Unable to create diagnostic report", error
+                )
 
-                    MaterialAlertDialogBuilder(
-                        this,
-                        com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
-                    ).setTitle("Report could not be created").setMessage(
-                            "OpenPigeon could not prepare the diagnostic report. Please try again."
-                        ).setPositiveButton("OK") { _, _ ->
-                            showAboutDialog(currentYear, versionText)
-                        }.show()
-                }
-            }.setNegativeButton("Cancel") { _, _ ->
-                showAboutDialog(currentYear, versionText)
-            }.setOnCancelListener {
-                showAboutDialog(currentYear, versionText)
-            }.show()
+                MaterialAlertDialogBuilder(
+                    this,
+                    com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
+                ).setTitle("Report could not be created").setMessage(
+                    "OpenPigeon could not prepare the diagnostic report. Please try again."
+                ).setPositiveButton("OK") { _, _ ->
+                    showAboutDialog(currentYear, versionText)
+                }.show()
+            }
+        }.setNegativeButton("Cancel") { _, _ ->
+            showAboutDialog(currentYear, versionText)
+        }.setOnCancelListener {
+            showAboutDialog(currentYear, versionText)
+        }.show()
     }
 
     private fun confirmReset(
         title: String, message: String, currentYear: Int, versionText: String, onConfirm: () -> Unit
     ) {
         MaterialAlertDialogBuilder(
-            this,
-            com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
+            this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog
         ).setTitle(title).setMessage(message).setPositiveButton("Reset") { _, _ -> onConfirm() }
             .setNegativeButton("Cancel") { _, _ -> showAboutDialog(currentYear, versionText) }
             .setOnCancelListener { showAboutDialog(currentYear, versionText) }.show()

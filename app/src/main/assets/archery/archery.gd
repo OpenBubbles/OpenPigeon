@@ -1001,6 +1001,9 @@ func _set_game_data(new_replay: String) -> void:
 	spectator_mode = my_player != "" and p1_id != "" and p2_id != "" and my_player != p1_id and my_player != p2_id
 	if is_instance_valid(spectator_label):
 		spectator_label.visible = spectator_mode
+
+	if is_instance_valid(you_label):
+		you_label.modulate.a = 0.0 if spectator_mode else 1.0
 	OpLog.i(LOG_TAG, [
 		"set_game_data parsed_initial turn=", isTurn,
 		" payloadPlayer=", player,

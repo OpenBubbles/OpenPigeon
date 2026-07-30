@@ -3373,6 +3373,9 @@ func _set_game_data(
 		if is_instance_valid(spectator_label):
 			spectator_label.hide()
 
+	if is_instance_valid(you_label):
+		you_label.modulate.a = 0.0 if spectator_mode else 1.0
+
 	stop_waiting_animation()
 
 	OpLog.i(

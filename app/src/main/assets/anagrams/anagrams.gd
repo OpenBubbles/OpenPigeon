@@ -23,6 +23,7 @@ extends BaseGame
 @onready var full_word_list: VBoxContainer = %FullWordList
 @onready var back_button: TextureButton = %BackButton
 @onready var words_scroll: ScrollContainer = %VScrollBar
+@onready var spec_label: Label = %SpecLabel
 
 const LETTER_BG: Texture2D = preload("res://anagrams/letter_bg.png")
 
@@ -368,6 +369,9 @@ func _set_game_data(raw_text: String) -> void:
 		" reason=", resolution_reason,
 		" opponent_avatar_key=", opponent_avatar_key
 	])
+
+	if is_instance_valid(spec_label):
+		spec_label.visible = spectator_mode
 
 	if spectator_mode:
 		is_my_turn = false

@@ -58,6 +58,10 @@ class KnockoutActivity : AppCompatActivity() {
     private lateinit var gameMenu: GameMenuController
 
     private lateinit var avatarWinBurstController: AvatarWinBurstController
+    private lateinit var spectatorLabel: TextView
+
+    @Volatile
+    var spectatorMode = false
 
     var table: Long = 0L
     var closing = false
@@ -245,6 +249,8 @@ class KnockoutActivity : AppCompatActivity() {
             )
         )
         waterView?.visibility = if (darkMode) View.GONE else View.VISIBLE
+        createSpectatorLabel(rootFrame)
+
         gameMenu = GameMenuController(
             activity = this,
             rootFrame = rootFrame,
@@ -286,6 +292,11 @@ class KnockoutActivity : AppCompatActivity() {
                     View.VISIBLE
                 }
             },
+            onSettingsClosed = {
+                if (spectatorMode) {
+                    restoreSpectatorAvatarsAfterSettingsOpen()
+                }
+            },
         )
 
         gameMenu.sheet.attachGameAvatar(
@@ -299,6 +310,8 @@ class KnockoutActivity : AppCompatActivity() {
                 R.id.knockoutOpponentAvatarAnchor,
             ),
         )
+
+        configureSettingsAvatarTarget()
 
         avatarWinBurstController = AvatarWinBurstController(
             root = rootFrame,
@@ -520,9 +533,23 @@ class KnockoutActivity : AppCompatActivity() {
         player1Id = msg["player1"] ?: player1Id
         player2Id = msg["player2"] ?: player2Id
         myPlayerId = localUserId(msg)
-        player = resolvePlayer(msg)
-        applyOpponentAvatarFromMessage(msg)
+
+        updateSpectatorMode(msg)
+
+        player = if (spectatorMode) {
+            1
+        } else {
+            resolvePlayer(msg)
+        }
+
+        if (spectatorMode) {
+            applySpectatorAvatars(msg)
+        } else {
+            applyOpponentAvatarFromMessage(msg)
+        }
+
         updateAvatarHud()
+        updateYouLabelOpacity()
 
         gateAimingForIntro = shouldShowIntroPopupFor(msg) && !introPopupDismissed
 
@@ -757,6 +784,265 @@ class KnockoutActivity : AppCompatActivity() {
         return dataPlayer
     }
 
+    private fun createSpectatorLabel(
+        rootFrame: FrameLayout,
+    ) {
+        spectatorLabel = TextView(
+            this,
+        ).apply {
+            text = "Spectating..."
+            visibility = View.GONE
+            setTextColor(Color.WHITE)
+            textSize = 28f
+            gravity = Gravity.CENTER
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+
+            setShadowLayer(
+                3f,
+                0f,
+                dp(1.5f),
+                Color.argb(
+                    150,
+                    0,
+                    0,
+                    0,
+                ),
+            )
+        }
+
+        rootFrame.addView(
+            spectatorLabel,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.CENTER_HORIZONTAL,
+            ).apply {
+                topMargin = dp(98f).toInt()
+            },
+        )
+    }
+
+    private fun updateSpectatorMode(
+        msg: Map<String, String>,
+    ) {
+        val player1 = (msg["player1"] ?: player1Id)
+        val player2 = (msg["player2"] ?: player2Id)
+
+        spectatorMode =
+            myPlayerId.isNotBlank() &&
+                    player1.isNotBlank() &&
+                    player2.isNotBlank() &&
+                    myPlayerId != player1 &&
+                    myPlayerId != player2
+
+        spectatorLabel.visibility = if (spectatorMode) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
+
+        if (spectatorMode) {
+            player = 1
+            gateAimingForIntro = false
+            enforceSpectatorControlsHidden()
+            spectatorLabel.bringToFront()
+        }
+
+        updateYouLabelOpacity()
+        configureSettingsAvatarTarget()
+
+        OpenPigeonLog.i(
+            "KnockoutNative",
+            "spectatorMode=$spectatorMode " +
+                    "myIdBlank=${myPlayerId.isBlank()} " +
+                    "p1Blank=${player1.isBlank()} " +
+                    "p2Blank=${player2.isBlank()}",
+        )
+    }
+
+    private fun findAvatarView(
+        view: View,
+    ): AvatarView? {
+        if (view is AvatarView) {
+            return view
+        }
+
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                val found = findAvatarView(
+                    view.getChildAt(index),
+                )
+
+                if (found != null) {
+                    return found
+                }
+            }
+        }
+
+        return null
+    }
+
+    private fun applyAvatarToAnchor(
+        anchor: View,
+        avatarData: String,
+    ) {
+        val avatar = findAvatarView(anchor) ?: return
+
+        if (avatarData.isBlank()) {
+            avatar.showPlaceholder()
+        } else {
+            avatar.applyFromOpponentString(
+                avatarData,
+            )
+        }
+    }
+
+    private fun applySpectatorAvatars(
+        data: Map<String, String>,
+    ) {
+        if (!spectatorMode) {
+            return
+        }
+
+        val player1Anchor = findViewById<View>(
+            R.id.knockoutGameAvatarAnchor,
+        )
+
+        val player2Anchor = findViewById<View>(
+            R.id.knockoutOpponentAvatarAnchor,
+        )
+
+        applyAvatarToAnchor(
+            anchor = player1Anchor,
+            avatarData = data["avatar1"].orEmpty(),
+        )
+
+        applyAvatarToAnchor(
+            anchor = player2Anchor,
+            avatarData = data["avatar2"].orEmpty(),
+        )
+
+        findViewById<View>(
+            R.id.knockoutAvatarHud,
+        )?.bringToFront()
+
+        spectatorLabel.bringToFront()
+    }
+
+    private fun updateYouLabelOpacity() {
+        val root = findViewById<View>(
+            R.id.knockoutRoot,
+        ) ?: return
+
+        fun updateView(
+            view: View,
+        ) {
+            if (
+                view is TextView &&
+                view.text
+                    ?.toString()
+                    ?.trim()
+                    ?.equals(
+                        "You",
+                        ignoreCase = true,
+                    ) == true
+            ) {
+                view.visibility = View.VISIBLE
+                view.alpha = if (spectatorMode) {
+                    0f
+                } else {
+                    1f
+                }
+            }
+
+            if (view is ViewGroup) {
+                for (index in 0 until view.childCount) {
+                    updateView(
+                        view.getChildAt(index),
+                    )
+                }
+            }
+        }
+
+        updateView(root)
+    }
+
+    private fun configureSettingsAvatarTarget() {
+        if (!::gameMenu.isInitialized) {
+            return
+        }
+
+        gameMenu.sheet.setGameAvatarRefreshEnabled(
+            enabled = !spectatorMode,
+        )
+    }
+
+    private fun restoreSpectatorAvatarsAfterSettingsOpen() {
+        if (!spectatorMode || lastMessage.isEmpty()) {
+            return
+        }
+
+        val player1Anchor = findViewById<View>(
+            R.id.knockoutGameAvatarAnchor,
+        )
+
+        player1Anchor.post {
+            if (
+                !spectatorMode ||
+                isFinishing ||
+                isDestroyed
+            ) {
+                return@post
+            }
+
+            gameMenu.sheet.setGameAvatarRefreshEnabled(
+                false,
+            )
+
+            applySpectatorAvatars(
+                lastMessage,
+            )
+
+            updateYouLabelOpacity()
+        }
+    }
+
+    private fun enforceSpectatorControlsHidden() {
+        if (!spectatorMode) {
+            return
+        }
+
+        selectedPiece = null
+        sentWaitingSequenceActive = false
+
+        setPowerHintVisible(false)
+        setLaunchButtonVisible(false)
+
+        findViewById<Button>(
+            R.id.knockoutLaunchButton,
+        )?.apply {
+            animate().cancel()
+            visibility = View.GONE
+            alpha = 1f
+            translationY = 0f
+        }
+
+        findViewById<TextView>(
+            R.id.knockoutPowerHintLabel,
+        )?.apply {
+            animate().cancel()
+            visibility = View.GONE
+            alpha = 0f
+        }
+
+        hideStateLabelNow()
+
+        spectatorLabel.visibility = View.VISIBLE
+        spectatorLabel.bringToFront()
+    }
+
     private fun applyOpponentAvatarFromMessage(msg: Map<String, String>) {
         val oppAvatarKey = if (player == 1) "avatar2" else "avatar1"
 
@@ -889,6 +1175,17 @@ class KnockoutActivity : AppCompatActivity() {
         val boardWinLossState = winLossStateForBoard(board)
         if (boardWinLossState.isNotBlank()) {
             markGameOver(boardWinLossState)
+            return
+        }
+
+        if (spectatorMode) {
+            mode = Mode.Disabled
+            gateAimingForIntro = false
+            selectedPiece = null
+
+            hideIntroPopup()
+            enforceSpectatorControlsHidden()
+
             return
         }
 
@@ -1211,7 +1508,15 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun launchCurrentAims() {
-        if (isGameOver() || mode != Mode.Aiming || closing || table == 0L) return
+        if (
+            spectatorMode ||
+            isGameOver() ||
+            mode != Mode.Aiming ||
+            closing ||
+            table == 0L
+        ) {
+            return
+        }
 
         val baseBoard = currentBoard ?: KnockoutReplayParser.boardFromLivePieces(
             boardIndex, pieces, zeroPower = false
@@ -1257,7 +1562,12 @@ class KnockoutActivity : AppCompatActivity() {
             PlaySource.AutoReplay -> finishAutoReplayRound(inferredPost)
             PlaySource.LocalLaunch -> finishLocalLaunchRound(inferredPost)
             PlaySource.None -> {
-                mode = Mode.Aiming
+                mode = if (spectatorMode) {
+                    Mode.Disabled
+                } else {
+                    Mode.Aiming
+                }
+
                 updateStateLabel()
             }
         }
@@ -1428,6 +1738,15 @@ class KnockoutActivity : AppCompatActivity() {
         winnerState: String? = null,
         showSentLabel: Boolean = true
     ) {
+        if (spectatorMode) {
+            OpenPigeonLog.w(
+                "KnockoutNative",
+                "Ignoring sendReplayTokens while spectating",
+            )
+
+            return
+        }
+
         val replay = KnockoutReplayParser.serializeTokens(tokens)
         val currentMessage = gameSessionIPC?.getCurrentMessage(sessionId).orEmpty()
         val myId = localUserId(currentMessage.ifEmpty { lastMessage })
@@ -1514,6 +1833,11 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun handleTouch(event: MotionEvent): Boolean {
+        if (spectatorMode) {
+            selectedPiece = null
+            return true
+        }
+
         if (isGameOver()) {
             return true
         }
@@ -1745,6 +2069,11 @@ class KnockoutActivity : AppCompatActivity() {
         runOnUiThread {
             if (isGameOver()) {
                 showGameOverLabel()
+                return@runOnUiThread
+            }
+
+            if (spectatorMode) {
+                enforceSpectatorControlsHidden()
                 return@runOnUiThread
             }
 
@@ -2341,6 +2670,12 @@ class KnockoutActivity : AppCompatActivity() {
     fun isIntroPopupShowing(): Boolean = gateAimingForIntro
 
     private fun dismissIntroPopupAndEnableAiming() {
+        if (spectatorMode) {
+            hideIntroPopup()
+            enforceSpectatorControlsHidden()
+            return
+        }
+
         introPopupDismissed = true
         gateAimingForIntro = false
         hideIntroPopup()

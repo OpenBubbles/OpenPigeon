@@ -107,15 +107,6 @@ expand_margin_bottom = 8.0
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_gx26o"]
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_vlj17"]
-texture = ExtResource("12_vevvc")
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_vrfh0"]
-texture = ExtResource("12_vevvc")
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_ohmqa"]
-texture = ExtResource("12_vevvc")
-
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_fvh8h"]
 texture = ExtResource("13_gx26o")
 
@@ -124,6 +115,15 @@ texture = ExtResource("13_gx26o")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_24vgr"]
 texture = ExtResource("13_gx26o")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_vlj17"]
+texture = ExtResource("12_vevvc")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_vrfh0"]
+texture = ExtResource("12_vevvc")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_ohmqa"]
+texture = ExtResource("12_vevvc")
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_gx26o"]
 bg_color = Color(0, 0, 0, 0.788235)
@@ -486,15 +486,22 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_vevvc")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_gx26o")
 text = "Fire!"
 
-[node name="MarginContainer" type="MarginContainer" parent="MarginContainer/VBoxContainer" unique_id=1444638642]
+[node name="BottomInfoContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=62555008]
 layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 8
-theme_override_constants/margin_left = 40
-theme_override_constants/margin_right = 40
-theme_override_constants/margin_bottom = 30
 
-[node name="SettingsButton" type="Button" parent="MarginContainer/VBoxContainer/MarginContainer" unique_id=1310041826]
+[node name="RulesButton" type="Button" parent="MarginContainer/VBoxContainer/BottomInfoContainer" unique_id=1716192625]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 2
+size_flags_vertical = 8
+focus_mode = 0
+theme_override_font_sizes/font_size = 32
+theme_override_styles/normal = SubResource("StyleBoxTexture_fvh8h")
+theme_override_styles/pressed = SubResource("StyleBoxTexture_qilti")
+theme_override_styles/hover = SubResource("StyleBoxTexture_24vgr")
+
+[node name="SettingsButton" type="Button" parent="MarginContainer/VBoxContainer/BottomInfoContainer" unique_id=1310041826]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -505,18 +512,6 @@ theme_override_font_sizes/font_size = 32
 theme_override_styles/normal = SubResource("StyleBoxTexture_vlj17")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_vrfh0")
 theme_override_styles/hover = SubResource("StyleBoxTexture_ohmqa")
-
-[node name="RulesButton" type="Button" parent="MarginContainer/VBoxContainer/MarginContainer" unique_id=1716192625]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(64, 64)
-layout_mode = 2
-size_flags_horizontal = 0
-size_flags_vertical = 8
-focus_mode = 0
-theme_override_font_sizes/font_size = 32
-theme_override_styles/normal = SubResource("StyleBoxTexture_fvh8h")
-theme_override_styles/pressed = SubResource("StyleBoxTexture_qilti")
-theme_override_styles/hover = SubResource("StyleBoxTexture_24vgr")
 
 [node name="SentLabel" type="Label" parent="MarginContainer" unique_id=835395556]
 unique_name_in_owner = true
@@ -546,9 +541,9 @@ wait_time = 0.75
 
 [node name="SpecLabel" type="Label" parent="MarginContainer" unique_id=951527160]
 unique_name_in_owner = true
-visible = false
 layout_mode = 2
 size_flags_horizontal = 4
+size_flags_vertical = 0
 theme_override_font_sizes/font_size = 50
 text = "Spectating..."
 horizontal_alignment = 1

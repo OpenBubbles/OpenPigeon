@@ -292,6 +292,7 @@ theme_override_styles/hover = SubResource("StyleBoxTexture_yqr8p")
 
 [node name="WaitBlur" type="ColorRect" parent="." unique_id=429017406]
 unique_name_in_owner = true
+visible = false
 z_index = 100
 layout_mode = 1
 anchors_preset = 15

@@ -7,6 +7,7 @@ signal avatar_changed
 
 const SETTINGS_FILE_PATH = "user://settings.cfg"
 var config = ConfigFile.new()
+var suppress_avatar_changed: bool = false
 
 func _first_key(d: Dictionary, fallback: String) -> String:
 	for k in d.keys():

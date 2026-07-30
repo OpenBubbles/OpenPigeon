@@ -532,9 +532,9 @@ class PoolActivity : AppCompatActivity() {
         }
 
         return winLossState.toIntOrNull()?.coerceIn(
-                -1,
-                1,
-            )
+            -1,
+            1,
+        )
     }
 
     private fun showGameOverLabel() {
@@ -3426,25 +3426,31 @@ class PoolActivity : AppCompatActivity() {
             return
         }
 
+        gameMenu.sheet.setGameAvatarRefreshTarget(
+            avatarView = if (spectatorMode) {
+                null
+            } else {
+                findAvatarView(gameAvatarAnchor)
+            },
+        )
+
         gameMenu.sheet.setGameAvatarRefreshEnabled(
             enabled = !spectatorMode,
         )
     }
 
     private fun restoreSpectatorAvatarsAfterSettingsOpen() {
-        if (!spectatorMode || lastMessage.isEmpty()) return
+        if (!spectatorMode || lastMessage.isEmpty()) {
+            return
+        }
 
         gameAvatarAnchor.post {
             if (!spectatorMode || poolActivityClosing) {
                 return@post
             }
 
-            gameMenu.sheet.setGameAvatarRefreshEnabled(
-                false,
-            )
+            configureSettingsAvatarTarget()
             applySpectatorAvatars(lastMessage)
-            hidePoolYouLabel()
-            alignSpectatorAvatarAnchors()
             showSpectatorLabel()
         }
     }
@@ -3475,7 +3481,8 @@ class PoolActivity : AppCompatActivity() {
             if (view is TextView && view.text?.toString()?.trim()
                     ?.equals("You", ignoreCase = true) == true
             ) {
-                view.visibility = View.GONE
+                view.visibility = View.VISIBLE
+                view.alpha = 0f
             }
 
             if (view is ViewGroup) {

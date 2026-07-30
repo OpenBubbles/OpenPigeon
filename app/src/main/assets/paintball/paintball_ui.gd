@@ -32,6 +32,22 @@ func show_fire_button(should_show: bool) -> void:
 	if g == null:
 		return
 
+	if g.spectator_mode:
+		g._fire_button_is_shown = false
+
+		if g._fire_btn_tween and g._fire_btn_tween.is_valid():
+			g._fire_btn_tween.kill()
+
+		g._fire_btn_tween = null
+
+		if is_instance_valid(g.fire_button):
+			g.fire_button.visible = false
+			g.fire_button.modulate.a = 0.0
+			g.fire_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			g.fire_button.global_position = g._fire_btn_hidden_pos
+
+		return
+
 	if not is_instance_valid(g.fire_button):
 		g._fire_button_is_shown = should_show
 		return

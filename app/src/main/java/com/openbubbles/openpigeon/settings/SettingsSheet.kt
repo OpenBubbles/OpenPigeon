@@ -15,8 +15,7 @@ import androidx.core.view.isVisible
 import androidx.appcompat.widget.SwitchCompat
 
 class SettingsSheet(
-    private val context: Context,
-    private val rootFrame: FrameLayout
+    private val context: Context, private val rootFrame: FrameLayout
 
 ) {
 
@@ -27,18 +26,21 @@ class SettingsSheet(
 
     // ── dp helpers ────────────────────────────────────────────────────────────
     private fun dp(v: Float) = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, v, context.resources.displayMetrics).toInt()
+        TypedValue.COMPLEX_UNIT_DIP, v, context.resources.displayMetrics
+    ).toInt()
+
     private fun dpf(v: Float) = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, v, context.resources.displayMetrics)
+        TypedValue.COMPLEX_UNIT_DIP, v, context.resources.displayMetrics
+    )
 
     // ── Colors ───────────────────────────────────────────────────────────────
-    private val COL_CARD       = Color.parseColor("#1e1e2e")
-    private val COL_HANDLE     = Color.parseColor("#555566")
-    private val COL_LABEL      = Color.parseColor("#aaaacc")
-    private val COL_TAB_SEL    = Color.parseColor("#a78bfa")
-    private val COL_TAB_UNSEL  = Color.parseColor("#666688")
+    private val COL_CARD = Color.parseColor("#1e1e2e")
+    private val COL_HANDLE = Color.parseColor("#555566")
+    private val COL_LABEL = Color.parseColor("#aaaacc")
+    private val COL_TAB_SEL = Color.parseColor("#a78bfa")
+    private val COL_TAB_UNSEL = Color.parseColor("#666688")
     private val COL_SEL_BORDER = Color.parseColor("#a78bfa")
-    private val COL_DIVIDER    = Color.parseColor("#333355")
+    private val COL_DIVIDER = Color.parseColor("#333355")
 
     // ── Views ─────────────────────────────────────────────────────────────────
     private val dimView: View
@@ -77,8 +79,7 @@ class SettingsSheet(
         var suppressCallback: Boolean = false,
     )
 
-    private val booleanSettingBindings =
-        mutableListOf<BooleanSettingBinding>()
+    private val booleanSettingBindings = mutableListOf<BooleanSettingBinding>()
 
     private var isOpen = false
 
@@ -86,6 +87,7 @@ class SettingsSheet(
     private var hasNotifiedClosed = false
 
     private enum class Tab { BACKGROUND, BODY, HAIR, FACE, CLOTHING }
+
     private var currentTab = Tab.HAIR
     private val tabViews = mutableMapOf<Tab, TextView>()
 
@@ -112,8 +114,7 @@ class SettingsSheet(
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).also { it.bottomMargin = dp(8f) }
             gravity = Gravity.CENTER_VERTICAL
         }
@@ -122,7 +123,8 @@ class SettingsSheet(
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         })
         controlView.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        )
         row.addView(controlView)
         controlsContainer.addView(row)
     }
@@ -138,19 +140,17 @@ class SettingsSheet(
             context,
         )
 
-        val control =
-            SwitchCompat(
-                context,
-            )
+        val control = SwitchCompat(
+            context,
+        )
 
-        val binding =
-            BooleanSettingBinding(
-                scope = scope,
-                key = key,
-                default = default,
-                switch = control,
-                onChanged = onChanged,
-            )
+        val binding = BooleanSettingBinding(
+            scope = scope,
+            key = key,
+            default = default,
+            switch = control,
+            onChanged = onChanged,
+        )
 
         control.setOnCheckedChangeListener { _, checked ->
             if (binding.suppressCallback) {
@@ -168,8 +168,7 @@ class SettingsSheet(
             )
         }
 
-        booleanSettingBindings +=
-            binding
+        booleanSettingBindings += binding
 
         addGameControl(
             label,
@@ -211,26 +210,19 @@ class SettingsSheet(
     private fun refreshBooleanSetting(
         binding: BooleanSettingBinding,
     ) {
-        val enabled =
-            SettingsData.getBoolean(
-                scope = binding.scope,
-                key = binding.key,
-                default = binding.default,
-            )
+        val enabled = SettingsData.getBoolean(
+            scope = binding.scope,
+            key = binding.key,
+            default = binding.default,
+        )
 
-        binding.suppressCallback =
-            true
+        binding.suppressCallback = true
 
-        if (
-            binding.switch.isChecked !=
-            enabled
-        ) {
-            binding.switch.isChecked =
-                enabled
+        if (binding.switch.isChecked != enabled) {
+            binding.switch.isChecked = enabled
         }
 
-        binding.suppressCallback =
-            false
+        binding.suppressCallback = false
 
         binding.onChanged(
             enabled,
@@ -243,8 +235,7 @@ class SettingsSheet(
         }
         val av = AvatarView(context).apply {
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
             )
             applyFromAvatarData()
         }
@@ -258,8 +249,7 @@ class SettingsSheet(
         }
         val av = AvatarView(context).apply {
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
             )
             showPlaceholder()   // question mark until real data arrives
         }
@@ -269,6 +259,12 @@ class SettingsSheet(
 
     fun applyOpponentAvatarString(avatarString: String) {
         oppAvatarView?.applyFromOpponentString(avatarString)
+    }
+
+    fun setGameAvatarRefreshTarget(
+        avatarView: AvatarView?,
+    ) {
+        gameAvatarView = avatarView
     }
 
     fun setGameAvatarRefreshEnabled(enabled: Boolean) {
@@ -326,8 +322,7 @@ class SettingsSheet(
     init {
         dimView = View(context).apply {
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
             )
 
             setBackgroundColor(Color.argb(160, 0, 0, 0))
@@ -342,7 +337,9 @@ class SettingsSheet(
             orientation = LinearLayout.VERTICAL
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM)
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM
+            )
             background = GradientDrawable().apply {
                 setColor(COL_CARD)
                 cornerRadii = floatArrayOf(dpf(22f), dpf(22f), dpf(22f), dpf(22f), 0f, 0f, 0f, 0f)
@@ -375,8 +372,7 @@ class SettingsSheet(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.CENTER_HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).also {
                 it.leftMargin = dp(16f)
                 it.rightMargin = dp(16f)
@@ -392,8 +388,7 @@ class SettingsSheet(
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).also {
                 it.leftMargin = dp(12f)
             }
@@ -402,11 +397,10 @@ class SettingsSheet(
 
         headerNameEdit = EditText(context).apply {
             layoutParams = LinearLayout.LayoutParams(
-                dp(180f),
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                dp(180f), LinearLayout.LayoutParams.WRAP_CONTENT
             )
             hint = "Player name"
-            setSingleLine(true)
+            isSingleLine = true
             setTextColor(Color.WHITE)
             setHintTextColor(COL_LABEL)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
@@ -418,7 +412,14 @@ class SettingsSheet(
             setPadding(dp(12f), dp(10f), dp(12f), dp(10f))
 
             addTextChangedListener(object : android.text.TextWatcher {
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun beforeTextChanged(
+                    s: CharSequence?,
+                    start: Int,
+                    count: Int,
+                    after: Int
+                ) {
+                }
+
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
                 override fun afterTextChanged(s: android.text.Editable?) {
                     if (!headerNameEnabled) return
@@ -437,7 +438,8 @@ class SettingsSheet(
         tabBar = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            )
             setPadding(dp(8f), 0, dp(8f), 0)
         }
         Tab.values().forEach { tab ->
@@ -485,7 +487,8 @@ class SettingsSheet(
         colorRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            )
             setPadding(0, dp(4f), 0, dp(4f))
         }
         colorRowContainer.addView(colorRow)
@@ -501,8 +504,8 @@ class SettingsSheet(
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).also {
-                it.leftMargin = dp(16f); it.rightMargin  = dp(16f)
-                it.topMargin  = dp(4f);  it.bottomMargin = dp(16f)
+                it.leftMargin = dp(16f); it.rightMargin = dp(16f)
+                it.topMargin = dp(4f); it.bottomMargin = dp(16f)
             }
             isVisible = false
         }
@@ -521,16 +524,17 @@ class SettingsSheet(
         controlsContainer = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
         controlsSection.addView(controlsContainer)
         card.addView(controlsSection)
     }
 
     private fun buildGradientSlider(): FrameLayout {
-        val thumbD  = dp(22f)
-        val trackH  = dp(10f)
-        val totalH  = thumbD + dp(4f)
+        val thumbD = dp(22f)
+        val trackH = dp(10f)
+        val totalH = thumbD + dp(4f)
         val outerPad = dp(28f)    // outer margin from card edge
         val halfThumb = thumbD / 2
 
@@ -543,8 +547,8 @@ class SettingsSheet(
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, totalH
             ).also {
-                it.leftMargin  = outerPad; it.rightMargin  = outerPad
-                it.topMargin   = dp(8f);   it.bottomMargin = dp(30f)
+                it.leftMargin = outerPad; it.rightMargin = outerPad
+                it.topMargin = dp(8f); it.bottomMargin = dp(30f)
             }
             // Allow the thumb to draw outside the track bounds (into the padding)
             clipChildren = false
@@ -559,11 +563,9 @@ class SettingsSheet(
         val track = object : View(context) {
             override fun onDraw(c: Canvas) {
                 val w = width.toFloat()
-                if (cachedTrackColor != currentSliderBaseColor
-                    || cachedTrackShader == null
-                    || cachedTrackWidth != w) {
-                    cachedTrackColor  = currentSliderBaseColor
-                    cachedTrackWidth  = w
+                if (cachedTrackColor != currentSliderBaseColor || cachedTrackShader == null || cachedTrackWidth != w) {
+                    cachedTrackColor = currentSliderBaseColor
+                    cachedTrackWidth = w
                     cachedTrackShader = buildTrackShader(currentSliderBaseColor, w)
                 }
                 trackPaint.shader = cachedTrackShader
@@ -590,8 +592,8 @@ class SettingsSheet(
             elevation = dpf(4f)
         }
 
-        gradientTrackView     = track
-        gradientThumbView     = thumb
+        gradientTrackView = track
+        gradientThumbView = thumb
         gradientThumbDrawable = thumbDrawable
 
         container.addView(track)
@@ -602,8 +604,8 @@ class SettingsSheet(
             when (event.action) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
                     // Subtract padding so x=0 means start of track
-                    val trackX   = (event.x - halfThumb).coerceIn(0f, (v.width - thumbD).toFloat())
-                    val trackW   = (v.width - thumbD).toFloat()
+                    val trackX = (event.x - halfThumb).coerceIn(0f, (v.width - thumbD).toFloat())
+                    val trackW = (v.width - thumbD).toFloat()
                     val fraction = if (trackW > 0f) trackX / trackW else 0f
                     val progress = (fraction * 200f).toInt().coerceIn(0, 200)
                     brightnessProgress = progress
@@ -615,10 +617,12 @@ class SettingsSheet(
                     refreshMainPreview()
                     true
                 }
+
                 MotionEvent.ACTION_UP -> {
                     refreshPickerTints()
                     true
                 }
+
                 else -> false
             }
         }
@@ -628,11 +632,12 @@ class SettingsSheet(
     }
 
     private fun positionThumb(progress: Int) {
-        val thumb     = gradientThumbView ?: return
+        val thumb = gradientThumbView ?: return
         val container = brightnessContainer
         if (container.width == 0) return
 
-        val trackW  = (container.width - thumbDiameterPx - container.paddingLeft - container.paddingRight).toFloat()
+        val trackW =
+            (container.width - thumbDiameterPx - container.paddingLeft - container.paddingRight).toFloat()
         val fraction = progress / 200f
         // translationX: 0 = track start (left padding), trackW = track end
         thumb.translationX = fraction * trackW
@@ -641,10 +646,12 @@ class SettingsSheet(
     private fun buildTrackShader(baseColor: Int, width: Float): Shader {
         val hsv = FloatArray(3)
         Color.colorToHSV(baseColor, hsv)
-        val dark  = Color.HSVToColor(floatArrayOf(hsv[0], hsv[1], (hsv[2] * 0.3f).coerceAtLeast(0.05f)))
+        val dark =
+            Color.HSVToColor(floatArrayOf(hsv[0], hsv[1], (hsv[2] * 0.3f).coerceAtLeast(0.05f)))
         val light = Color.HSVToColor(floatArrayOf(hsv[0], 0f, 1f))
-        return LinearGradient(0f, 0f, width, 0f,
-            intArrayOf(dark, baseColor, light), null, Shader.TileMode.CLAMP)
+        return LinearGradient(
+            0f, 0f, width, 0f, intArrayOf(dark, baseColor, light), null, Shader.TileMode.CLAMP
+        )
     }
 
     private fun computeAdjustedColor(base: Int, brightness: Float): Int {
@@ -664,9 +671,9 @@ class SettingsSheet(
     private fun showBrightnessSlider(baseColor: Int, current: Float) {
         currentSliderBaseColor = baseColor
         brightnessProgress = ((current + 1f) * 100f).toInt().coerceIn(0, 200)
-        cachedTrackShader  = null
-        cachedTrackColor   = -1
-        cachedTrackWidth   = 0f
+        cachedTrackShader = null
+        cachedTrackColor = -1
+        cachedTrackWidth = 0f
         gradientTrackView?.invalidate()
         val brightness = (brightnessProgress - 100) / 100f
         gradientThumbDrawable?.setColor(computeAdjustedColor(baseColor, brightness))
@@ -680,11 +687,11 @@ class SettingsSheet(
 
     private fun applyBrightnessForCurrentTab(v: Float) {
         when (currentTab) {
-            Tab.BACKGROUND -> AvatarData.bgBrightness      = v
-            Tab.BODY       -> AvatarData.fshapeBrightness  = v
-            Tab.HAIR       -> AvatarData.hairBrightness     = v
-            Tab.CLOTHING   -> AvatarData.clothingBrightness = v
-            else           -> {}
+            Tab.BACKGROUND -> AvatarData.bgBrightness = v
+            Tab.BODY -> AvatarData.fshapeBrightness = v
+            Tab.HAIR -> AvatarData.hairBrightness = v
+            Tab.CLOTHING -> AvatarData.clothingBrightness = v
+            else -> {}
         }
     }
 
@@ -719,35 +726,50 @@ class SettingsSheet(
 
         when (tab) {
             Tab.BACKGROUND -> {
-                buildStylePicker(pickerRow, listOf("Plain") + (1..9).map { "Pattern $it" },
-                    AvatarData.bgStyle) { AvatarData.bgStyle = it; refreshMainPreview() }
+                buildStylePicker(
+                    pickerRow,
+                    listOf("Plain") + (1..9).map { "Pattern $it" },
+                    AvatarData.bgStyle
+                ) { AvatarData.bgStyle = it; refreshMainPreview() }
                 buildColorSwatches(bgColors(), AvatarData.bgColor) { c ->
                     AvatarData.bgColor = c; onColorSwatchPicked(c)
                     refreshMainPreview(); rebuildCurrentPicker()
                 }
                 showBrightnessSlider(AvatarData.bgColor, AvatarData.bgBrightness)
             }
+
             Tab.BODY -> {
-                buildStylePicker(pickerRow, listOf("Default") + (1..7).map { "fshape$it" },
-                    AvatarData.fshapeStyle) { AvatarData.fshapeStyle = it; refreshMainPreview() }
+                buildStylePicker(
+                    pickerRow,
+                    listOf("Default") + (1..7).map { "fshape$it" },
+                    AvatarData.fshapeStyle
+                ) { AvatarData.fshapeStyle = it; refreshMainPreview() }
                 buildColorSwatches(skinTones(), AvatarData.fshapeColor) { c ->
                     AvatarData.fshapeColor = c; onColorSwatchPicked(c)
                     refreshMainPreview(); rebuildCurrentPicker()
                 }
                 showBrightnessSlider(AvatarData.fshapeColor, AvatarData.fshapeBrightness)
             }
+
             Tab.HAIR -> {
-                buildStylePicker(pickerRow, (1..15).map { "hair$it" },
-                    AvatarData.hairStyle) { AvatarData.hairStyle = it; refreshMainPreview() }
+                buildStylePicker(
+                    pickerRow,
+                    (1..15).map { "hair$it" },
+                    AvatarData.hairStyle
+                ) { AvatarData.hairStyle = it; refreshMainPreview() }
                 buildColorSwatches(hairColors(), AvatarData.hairColor) { c ->
                     AvatarData.hairColor = c; onColorSwatchPicked(c)
                     refreshMainPreview(); rebuildCurrentPicker()
                 }
                 showBrightnessSlider(AvatarData.hairColor, AvatarData.hairBrightness)
             }
+
             Tab.FACE -> {
-                buildStylePicker(pickerRow, (1..13).map { "eyes$it" },
-                    AvatarData.eyesStyle) { AvatarData.eyesStyle = it; refreshMainPreview() }
+                buildStylePicker(
+                    pickerRow,
+                    (1..13).map { "eyes$it" },
+                    AvatarData.eyesStyle
+                ) { AvatarData.eyesStyle = it; refreshMainPreview() }
                 val mouthScroll = HorizontalScrollView(context).apply {
                     layoutParams = LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT, dp(96f)
@@ -759,13 +781,20 @@ class SettingsSheet(
                     setPadding(dp(12f), dp(4f), dp(12f), dp(4f))
                 }
                 mouthScroll.addView(mouthRow)
-                buildStylePicker(mouthRow, (1..17).map { "mouth$it" },
-                    AvatarData.mouthStyle) { AvatarData.mouthStyle = it; refreshMainPreview() }
+                buildStylePicker(
+                    mouthRow,
+                    (1..17).map { "mouth$it" },
+                    AvatarData.mouthStyle
+                ) { AvatarData.mouthStyle = it; refreshMainPreview() }
                 addExtraRow(mouthScroll)
             }
+
             Tab.CLOTHING -> {
-                buildStylePicker(pickerRow, (1..3).map { "clothing$it" },
-                    AvatarData.clothingStyle) { AvatarData.clothingStyle = it; refreshMainPreview() }
+                buildStylePicker(
+                    pickerRow,
+                    (1..3).map { "clothing$it" },
+                    AvatarData.clothingStyle
+                ) { AvatarData.clothingStyle = it; refreshMainPreview() }
                 buildColorSwatches(clothingColors(), AvatarData.clothingColor) { c ->
                     AvatarData.clothingColor = c; onColorSwatchPicked(c)
                     refreshMainPreview(); rebuildCurrentPicker()
@@ -789,8 +818,9 @@ class SettingsSheet(
     }
 
     // ── Style picker ──────────────────────────────────────────────────────────
-    private fun buildStylePicker(row: LinearLayout, styles: List<String>,
-                                  selected: String, onPick: (String) -> Unit) {
+    private fun buildStylePicker(
+        row: LinearLayout, styles: List<String>, selected: String, onPick: (String) -> Unit
+    ) {
         row.removeAllViews()
         styles.forEach { style ->
             val thumb = AvatarView(context).apply {
@@ -832,31 +862,38 @@ class SettingsSheet(
 
     private fun styleForIndex(tab: Tab, i: Int): String = when (tab) {
         Tab.BACKGROUND -> if (i == 0) "Plain" else "Pattern $i"
-        Tab.BODY       -> if (i == 0) "Default" else "fshape$i"
-        Tab.HAIR       -> "hair${i + 1}"
-        Tab.FACE       -> "eyes${i + 1}"
-        Tab.CLOTHING   -> "clothing${i + 1}"
+        Tab.BODY -> if (i == 0) "Default" else "fshape$i"
+        Tab.HAIR -> "hair${i + 1}"
+        Tab.FACE -> "eyes${i + 1}"
+        Tab.CLOTHING -> "clothing${i + 1}"
     }
 
     // ── Preview state ─────────────────────────────────────────────────────────
     private fun previewStateFor(base: AvatarView.DrawState, style: String) = when {
         style == "Plain" || style.startsWith("Pattern") -> base.copy(bgStyle = style)
         style == "Default" || style.startsWith("fshape") -> base.copy(fshapeStyle = style)
-        style.startsWith("hair")     -> base.copy(hairStyle = style)
-        style.startsWith("eyes")     -> base.copy(eyesStyle = style)
-        style.startsWith("mouth")    -> base.copy(mouthStyle = style)
+        style.startsWith("hair") -> base.copy(hairStyle = style)
+        style.startsWith("eyes") -> base.copy(eyesStyle = style)
+        style.startsWith("mouth") -> base.copy(mouthStyle = style)
         style.startsWith("clothing") -> base.copy(clothingStyle = style)
         else -> base
     }
 
     private fun currentDrawState() = AvatarView.DrawState(
-        bgStyle = AvatarData.bgStyle, bgColor = AvatarData.bgColor,
-        bgBrightness = AvatarData.bgBrightness, fshapeStyle = AvatarData.fshapeStyle,
-        fshapeColor = AvatarData.fshapeColor, fshapeBrightness = AvatarData.fshapeBrightness,
-        hairStyle = AvatarData.hairStyle, hairColor = AvatarData.hairColor,
-        hairBrightness = AvatarData.hairBrightness, eyesStyle = AvatarData.eyesStyle,
-        mouthStyle = AvatarData.mouthStyle, clothingStyle = AvatarData.clothingStyle,
-        clothingColor = AvatarData.clothingColor, clothingBrightness = AvatarData.clothingBrightness
+        bgStyle = AvatarData.bgStyle,
+        bgColor = AvatarData.bgColor,
+        bgBrightness = AvatarData.bgBrightness,
+        fshapeStyle = AvatarData.fshapeStyle,
+        fshapeColor = AvatarData.fshapeColor,
+        fshapeBrightness = AvatarData.fshapeBrightness,
+        hairStyle = AvatarData.hairStyle,
+        hairColor = AvatarData.hairColor,
+        hairBrightness = AvatarData.hairBrightness,
+        eyesStyle = AvatarData.eyesStyle,
+        mouthStyle = AvatarData.mouthStyle,
+        clothingStyle = AvatarData.clothingStyle,
+        clothingColor = AvatarData.clothingColor,
+        clothingBrightness = AvatarData.clothingBrightness
     )
 
     private fun refreshMainPreview() {
@@ -871,7 +908,8 @@ class SettingsSheet(
         colors.forEach { color ->
             colorRow.addView(View(context).apply {
                 val size = dp(28f)
-                layoutParams = LinearLayout.LayoutParams(size, size).also { it.rightMargin = dp(6f) }
+                layoutParams =
+                    LinearLayout.LayoutParams(size, size).also { it.rightMargin = dp(6f) }
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL; setColor(color)
                     if (color == current) setStroke(dp(2f), COL_SEL_BORDER)
@@ -881,7 +919,8 @@ class SettingsSheet(
                     for (i in 0 until colorRow.childCount) {
                         val sv = colorRow.getChildAt(i)
                         (sv.background as? GradientDrawable)?.setStroke(
-                            if (sv === this) dp(2f) else 0, COL_SEL_BORDER)
+                            if (sv === this) dp(2f) else 0, COL_SEL_BORDER
+                        )
                     }
                 }
             })
@@ -890,11 +929,15 @@ class SettingsSheet(
 
     // ── Drag-to-dismiss ───────────────────────────────────────────────────────
     private fun setupDragToDismiss() {
-        var dragStartY = 0f; var dragging = false
+        var dragStartY = 0f
+        var dragging = false
         card.setOnTouchListener { _, event ->
             when (event.action) {
-                MotionEvent.ACTION_DOWN  -> { dragStartY = event.rawY; dragging = false; false }
-                MotionEvent.ACTION_MOVE  -> {
+                MotionEvent.ACTION_DOWN -> {
+                    dragStartY = event.rawY; dragging = false; false
+                }
+
+                MotionEvent.ACTION_MOVE -> {
                     val delta = event.rawY - dragStartY
                     if (!dragging && delta > dp(10f)) dragging = true
                     if (dragging) {
@@ -903,6 +946,7 @@ class SettingsSheet(
                     }
                     false
                 }
+
                 MotionEvent.ACTION_UP -> {
                     if (dragging && card.translationY > card.height * 0.28f) close()
                     else {
@@ -911,6 +955,7 @@ class SettingsSheet(
                     }
                     false
                 }
+
                 else -> false
             }
         }
@@ -963,20 +1008,14 @@ class SettingsSheet(
             selectTab(Tab.HAIR)
 
             val slideUp = ObjectAnimator.ofFloat(
-                card,
-                "translationY",
-                card.height.toFloat(),
-                0f
+                card, "translationY", card.height.toFloat(), 0f
             ).apply {
                 duration = 320
                 interpolator = DecelerateInterpolator(1.8f)
             }
 
             val fadeIn = ObjectAnimator.ofFloat(
-                dimView,
-                "alpha",
-                0f,
-                1f
+                dimView, "alpha", 0f, 1f
             ).apply {
                 duration = 220
             }
@@ -1003,12 +1042,14 @@ class SettingsSheet(
 
         val slideDown = ObjectAnimator.ofFloat(card, "translationY", 0f, card.height.toFloat())
             .apply { duration = 260; interpolator = DecelerateInterpolator(1.4f) }
-        val fadeOut = ObjectAnimator.ofFloat(dimView, "alpha", dimView.alpha, 0f)
-            .apply { duration = 220 }
+        val fadeOut =
+            ObjectAnimator.ofFloat(dimView, "alpha", dimView.alpha, 0f).apply { duration = 220 }
         AnimatorSet().apply {
             playTogether(slideDown, fadeOut)
             addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: Animator) { detach() }
+                override fun onAnimationEnd(animation: Animator) {
+                    detach()
+                }
             })
             start()
         }
@@ -1027,12 +1068,59 @@ class SettingsSheet(
     }
 
     // ── Palettes ──────────────────────────────────────────────────────────────
-    private fun bgColors()       = listOf("#7c7c7c","#e7639f","#9e45c0","#5798f6","#32d5c8",
-        "#7cb33e","#b1da1a","#f6d61a","#ee7c09","#f11f06","#d3292c").map { Color.parseColor(it) }
-    private fun skinTones()      = listOf("#ffbd9a","#ffb070","#804734","#5f442f","#cccccc",
-        "#da73a2","#6394f1","#82b941","#f8cf55","#f6820c","#c34126").map { Color.parseColor(it) }
-    private fun hairColors()     = listOf("#f8cf55","#e1872f","#d24325","#6d411d","#572c1f",
-        "#000000","#e1e1e1","#ee67a4","#a348c7","#699bff","#82b941").map { Color.parseColor(it) }
-    private fun clothingColors() = listOf("#7c7c7c","#e7639f","#9e45c0","#5798f6","#32d5c8",
-        "#7cb33e","#b1da1a","#f6d61a","#ee7c09","#f11f06","#d3292c").map { Color.parseColor(it) }
+    private fun bgColors() = listOf(
+        "#7c7c7c",
+        "#e7639f",
+        "#9e45c0",
+        "#5798f6",
+        "#32d5c8",
+        "#7cb33e",
+        "#b1da1a",
+        "#f6d61a",
+        "#ee7c09",
+        "#f11f06",
+        "#d3292c"
+    ).map { Color.parseColor(it) }
+
+    private fun skinTones() = listOf(
+        "#ffbd9a",
+        "#ffb070",
+        "#804734",
+        "#5f442f",
+        "#cccccc",
+        "#da73a2",
+        "#6394f1",
+        "#82b941",
+        "#f8cf55",
+        "#f6820c",
+        "#c34126"
+    ).map { Color.parseColor(it) }
+
+    private fun hairColors() = listOf(
+        "#f8cf55",
+        "#e1872f",
+        "#d24325",
+        "#6d411d",
+        "#572c1f",
+        "#000000",
+        "#e1e1e1",
+        "#ee67a4",
+        "#a348c7",
+        "#699bff",
+        "#82b941"
+    ).map { Color.parseColor(it) }
+
+    private fun clothingColors() = listOf(
+        "#7c7c7c",
+        "#e7639f",
+        "#9e45c0",
+        "#5798f6",
+        "#32d5c8",
+        "#7cb33e",
+        "#b1da1a",
+        "#f6d61a",
+        "#ee7c09",
+        "#f11f06",
+        "#d3292c"
+    ).map { Color.parseColor(it) }
 }

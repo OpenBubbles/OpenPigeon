@@ -159,6 +159,7 @@ class KnockoutRenderer(
                     }
 
             } else if (
+                !activity.spectatorMode &&
                 activity.mode == KnockoutActivity.Mode.Aiming &&
                 !activity.isIntroPopupShowing()
             ) {
@@ -171,6 +172,7 @@ class KnockoutRenderer(
             }
 
             if (
+                !activity.spectatorMode &&
                 activity.mode == KnockoutActivity.Mode.Aiming &&
                 !activity.isIntroPopupShowing() &&
                 !activity.showAllReplayArrows

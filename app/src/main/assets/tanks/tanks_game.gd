@@ -19,6 +19,7 @@ class_name TanksGame
 @onready var power_label: RichTextLabel = %PowerLabel
 @onready var wind_indicator: WindIndicator = %WindIndicator
 @onready var spec_label: Label = %SpecLabel
+@onready var you_label: Label = %YouLabel
 
 const MUSIC_STREAM := preload("res://global/audio/tanks.ogg")
 
@@ -268,11 +269,16 @@ func _set_game_data(raw_text: String) -> void:
 	_ensure_core()
 
 	core.ingest_game_data(JSON.stringify(data))
+	spectator_mode = core.spectator_mode
+
 	OpLog.i(LOG_TAG, ["set_game_data core_ingested ", _state_summary()])
 	_apply_view_flip()
 
 	if is_instance_valid(spec_label):
-		spec_label.visible = core.spectator_mode
+		spec_label.visible = spectator_mode
+
+	if is_instance_valid(you_label):
+		you_label.modulate.a = 0.0 if spectator_mode else 1.0
 
 	_update_avatars()
 	_apply_health_colors()
@@ -906,11 +912,38 @@ func _update_avatars() -> void:
 	if not is_instance_valid(player_avatar_display) or not is_instance_valid(opp_avatar_display):
 		return
 
-	var my_key := ("avatar1" if core.player == 1 else "avatar2")
-	var my_str := (core.avatar1_str if my_key == "avatar1" else core.avatar2_str)
-	
-	if player_avatar_display.has_method("update_avatar_from_string") and my_str != "":
-		player_avatar_display.update_avatar_from_string(my_str)
+	if spectator_mode:
+		if core.avatar1_str != "":
+			player_avatar_display.call_deferred(
+				"update_avatar_from_data",
+				GameUtils._parse_avatar_string(
+					core.avatar1_str
+				)
+			)
+
+		if core.avatar2_str != "":
+			opp_avatar_display.call_deferred(
+				"update_avatar_from_data",
+				GameUtils._parse_avatar_string(
+					core.avatar2_str
+				)
+			)
+
+		return
+
+	var my_str := (
+		core.avatar1_str
+			if core.player == 1
+			else core.avatar2_str
+	)
+
+	if my_str != "":
+		player_avatar_display.call_deferred(
+			"update_avatar_from_data",
+			GameUtils._parse_avatar_string(
+				my_str
+			)
+		)
 
 func _circle_intersects_rect(center: Vector2, radius: float, rect: Rect2) -> bool:
 	var closest_x: float = clampf(center.x, rect.position.x, rect.position.x + rect.size.x)

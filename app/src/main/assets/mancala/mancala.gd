@@ -43,6 +43,7 @@ const MUSIC_STREAM := preload("res://global/audio/mancala.ogg")
 @onready var skip_button = %SkipButton
 @onready var spec_label = %SpecLabel
 @onready var board_sprite := %BoardSprite as TextureRect
+@onready var you_label: Label = %YouLabel
 
 var _carrying_stones_container: Node2D = Node2D.new()
 const STONE_DROP_DELAY: float = 0.1 # Time to pause after dropping each stone
@@ -236,6 +237,9 @@ func _set_game_data(raw_text: String) -> void:
 		is_my_turn = is_your_turn
 		spectator_mode = false
 		opponent_avatar_key = "avatar2" if player == 1 else "avatar1"
+	
+	if is_instance_valid(you_label):
+		you_label.modulate.a = 0.0 if spectator_mode else 1.0
 
 	if spectator_mode:
 		OpLog.i(LOG_TAG, "spectator_mode_enabled")

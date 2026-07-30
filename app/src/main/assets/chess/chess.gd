@@ -78,6 +78,8 @@ var flip_board_ui: bool = false  # Whether to flip the board UI to put local pla
 @onready var opp_marker: TextureRect = %OpponentMarker
 @onready var send_button: Button = %SendButton
 @onready var win_loss_label: Label = %WinLossLabel
+@onready var you_label: Label = %YouLabel
+@onready var spec_label: Label = %SpecLabel
 
 const MUSIC_STREAM := preload("res://global/audio/chess.ogg")
 const CHESS_VERBOSE_LOGS := false
@@ -294,29 +296,79 @@ func _set_game_data_impl(raw: String) -> void:
 
 		# Determine player assignment from GamePigeon protocol fields
 		var isYourTurn: bool = bool(data.get("isYourTurn", false))
-		var message_player: int = int(data.get("player", 2))
-		_log_data.debug("_set_game_data: isYourTurn=%s, message_player=%d" % [str(isYourTurn), message_player])
+		var message_player: int = clamp(int(data.get("player", 2)), 1, 2)
+		my_player_id = str(data.get("myPlayerId", my_player_id))
 
-		my_player_index = _calculate_player_index(isYourTurn, message_player)
-		enemy_player_index = 3 - my_player_index  # Flip: 1↔2
-		_log_data.debug("Player assignment: my_player=%d, enemy_player=%d" % [my_player_index, enemy_player_index])
+		var player1_id: String = str(data.get("player1", ""))
+		var player2_id: String = str(data.get("player2", ""))
+		var resolved_player := 0
 
-		# Player 1 = black, Player 2 = white (GamePigeon convention)
+		if my_player_id != "" and player1_id != "" and player2_id != "":
+			if my_player_id == player1_id:
+				resolved_player = 1
+				opponent_avatar_key = "avatar2"
+			elif my_player_id == player2_id:
+				resolved_player = 2
+				opponent_avatar_key = "avatar1"
+		else:
+			resolved_player = _calculate_player_index(
+				isYourTurn,
+				message_player
+			)
+			opponent_avatar_key = (
+				"avatar2"
+				if resolved_player == 1
+				else "avatar1"
+			)
+
+		spectator_mode = resolved_player == 0
+		my_player_index = 1 if spectator_mode else resolved_player
+		enemy_player_index = 2 if my_player_index == 1 else 1
+
 		my_color = "b" if my_player_index == 1 else "w"
 		var opp_color: String = ChessPiece.opposite_side(my_color)
-		if my_player_index == 1:
-			opponent_avatar_key = "avatar1"
-		else:
-			opponent_avatar_key = "avatar2"
+
 		player_marker.modulate = ChessUI.get_marker_color(my_color)
 		opp_marker.modulate = ChessUI.get_marker_color(opp_color)
 
-		if opponent_avatar_key != "" and data.has(opponent_avatar_key):
-			var avatar_string = data[opponent_avatar_key]
-			var opponent_data = GameUtils._parse_avatar_string(avatar_string)
+		if is_instance_valid(spec_label):
+			spec_label.visible = spectator_mode
+
+		if is_instance_valid(you_label):
+			you_label.modulate.a = 0.0 if spectator_mode else 1.0
+
+		if spectator_mode:
+			if data.has("avatar1") and is_instance_valid(player_avatar_display):
+				player_avatar_display.call_deferred(
+					"update_avatar_from_data",
+					GameUtils._parse_avatar_string(
+						String(data["avatar1"])
+					)
+				)
+
+			if data.has("avatar2") and is_instance_valid(opp_avatar_display):
+				opp_avatar_display.call_deferred(
+					"update_avatar_from_data",
+					GameUtils._parse_avatar_string(
+						String(data["avatar2"])
+					)
+				)
+		elif opponent_avatar_key != "" and data.has(opponent_avatar_key):
+			var avatar_string: String = String(
+				data[opponent_avatar_key]
+			)
+
+			var opponent_data: Dictionary = (
+				GameUtils._parse_avatar_string(
+					avatar_string
+				)
+			)
 
 			if is_instance_valid(opp_avatar_display):
-				opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+				opp_avatar_display.call_deferred(
+					"update_avatar_from_data",
+					opponent_data
+				)
 		# Track if orientation changed (for UI rebuild detection)
 		var old_flip_board_ui = flip_board_ui
 		flip_board_ui = (my_color == "b")
@@ -335,7 +387,6 @@ func _set_game_data_impl(raw: String) -> void:
 			_refresh_board_ui()
 			ui_already_rebuilt = true
 
-		my_player_id = str(data.get("myPlayerId", my_player_id))
 		_log_data.debug("my_player_id=%s" % my_player_id)
 
 		# Parse the game state - GamePigeon format only
@@ -355,17 +406,31 @@ func _set_game_data_impl(raw: String) -> void:
 		_update_turn_flags()
 
 		# Override with explicit isYourTurn from message data (for initial state and updates)
-		isTurn = isYourTurn
-		waitingForOpponent = not isTurn
-		# Update board turn to match message data
-		if isTurn:
-			turn = my_color
+		if spectator_mode:
+			isTurn = false
+			waitingForOpponent = false
+			turn = "b" if message_player == 1 else "w"
 		else:
-			turn = ChessPiece.opposite_side(my_color)
-		_log_data.debug("Turn flags: isTurn=%s, waiting=%s, turn=%s" % [str(isTurn), str(waitingForOpponent), turn])
+			isTurn = isYourTurn
+			waitingForOpponent = not isTurn
+
+			if isTurn:
+				turn = my_color
+			else:
+				turn = ChessPiece.opposite_side(my_color)
+
+		_log_data.debug(
+			"Turn flags: isTurn=%s, waiting=%s, turn=%s" % [
+				str(isTurn),
+				str(waitingForOpponent),
+				turn
+			]
+		)
 		
 		if data.has("winner"):
-			var winner_parts := String(data.get("winner", "")).split("|", false)
+			var winner_parts := String(
+				data.get("winner", "")
+			).split("|", false)
 
 			if winner_parts.size() >= 2:
 				var winner_sender := String(winner_parts[0])
@@ -379,25 +444,68 @@ func _set_game_data_impl(raw: String) -> void:
 					game_over_state = ChessEngine.GameState.DRAW_FIFTY_MOVE
 					game_over_reason = "Draw"
 					game_over_winner_side = ""
+				elif spectator_mode:
+					var sender_color := ""
+
+					if winner_sender == player1_id:
+						sender_color = "b"
+					elif winner_sender == player2_id:
+						sender_color = "w"
+					else:
+						sender_color = (
+							"b"
+								if message_player == 1
+								else "w"
+						)
+
+					game_over_winner_side = (
+						sender_color
+							if win_loss_state == "1"
+							else ChessPiece.opposite_side(
+								sender_color
+							)
+					)
+
+					game_over_state = ChessEngine.GameState.CHECKMATE
+					game_over_reason = ChessEngine.state_description(
+						game_over_state,
+						game_over_winner_side
+					)
 				elif winner_sender == my_player_id:
 					if win_loss_state == "1":
 						game_over_winner_side = my_color
 					else:
-						game_over_winner_side = ChessPiece.opposite_side(my_color)
+						game_over_winner_side = ChessPiece.opposite_side(
+							my_color
+						)
 
 					game_over_state = ChessEngine.GameState.CHECKMATE
-					game_over_reason = ChessEngine.state_description(game_over_state, game_over_winner_side)
+					game_over_reason = ChessEngine.state_description(
+						game_over_state,
+						game_over_winner_side
+					)
 				else:
 					if win_loss_state == "1":
-						game_over_winner_side = ChessPiece.opposite_side(my_color)
+						game_over_winner_side = ChessPiece.opposite_side(
+							my_color
+						)
 					else:
 						game_over_winner_side = my_color
 
 					game_over_state = ChessEngine.GameState.CHECKMATE
-					game_over_reason = ChessEngine.state_description(game_over_state, game_over_winner_side)
+					game_over_reason = ChessEngine.state_description(
+						game_over_state,
+						game_over_winner_side
+					)
 
-				_log_data.debug("Parsed winner payload: sender=%s result=%s winner_side=%s" % [winner_sender, win_loss_state, game_over_winner_side])
-	
+				_log_data.debug(
+					"Parsed winner payload: sender=%s result=%s winner_side=%s" % [
+						winner_sender,
+						win_loss_state,
+						game_over_winner_side
+					]
+				)
+
 	_log_data.info("set_game_data parsed turn=%s waiting=%s player=%d color=%s flip=%s replayLen=%d boards=%d moves=%d winner=%s gameOver=%s reason=%s" % [
 		str(isTurn),
 		str(waitingForOpponent),
@@ -431,13 +539,20 @@ func _set_game_data_impl(raw: String) -> void:
 		_refresh_board_ui()
 
 	# Update the centralized BaseGame waiting animation.
-	if waitingForOpponent and not game_over:
+	if spectator_mode:
+		stop_waiting_animation()
+	elif waitingForOpponent and not game_over:
 		start_waiting_animation()
 	else:
 		stop_waiting_animation()
 
 func _update_turn_flags() -> void:
 	# canonicalize interaction flags based on board 'turn' and local 'my_color'
+	if spectator_mode:
+		isTurn = false
+		waitingForOpponent = false
+		return
+
 	if game_over:
 		isTurn = false
 		waitingForOpponent = true
@@ -909,7 +1024,7 @@ func _refresh_board_ui() -> void:
 		_hide_win_loss_result()
 	
 	# Ensure pending-state UI is visible and correct
-	if _has_pending():
+	if _has_pending() and not spectator_mode:
 		var from_sq: Vector2i = _get_pending_from()
 		if from_sq != Vector2i(-1, -1):
 			# Ensure undo arrow is present and positioned
@@ -927,6 +1042,9 @@ func _refresh_board_ui() -> void:
 			_start_pulse(ov_back)
 		_update_send_button_visibility(true)
 	else:
+		if spectator_mode:
+			_hide_undo_arrow()
+
 		_update_send_button_visibility(false)
 	
 	_log_ui.debug("_refresh_board_ui done")
@@ -1049,9 +1167,24 @@ func _show_win_loss_result() -> void:
 			GameUtils._show_win_burst(player_avatar_display)
 		else:
 			if spectator_mode:
-				win_loss_label.text = "%s Wins!" % ("White" if game_over_winner_side == "w" else "Black")
-				win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-				GameUtils._show_win_burst(player_avatar_display if game_over_winner_side == my_color else opp_avatar_display)
+				var player1_won := game_over_winner_side == "b"
+
+				win_loss_label.text = (
+					"Player 1 Wins!"
+						if player1_won
+						else "Player 2 Wins!"
+				)
+
+				win_loss_label.add_theme_color_override(
+					"font_color",
+					Color(1, 0.84, 0)
+				)
+
+				GameUtils._show_win_burst(
+					player_avatar_display
+						if player1_won
+						else opp_avatar_display
+				)
 			else:
 				win_loss_label.text = "YOU LOSE"
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
@@ -1116,6 +1249,9 @@ func _on_promotion_choice(piece: String) -> void:
 		_log_ui.error("_on_promotion_choice: ERROR - no pending promotion move stored")
 
 func _on_send_pressed() -> void:
+	if spectator_mode:
+		return
+
 	_log_ui.debug("_on_send_pressed called: has_pending=%s local_mode=%s" % [str(_has_pending()), str(local_mode)])
 	if not _has_pending():
 		_log_ui.debug("_on_send_pressed: early return (no pending move)")
@@ -1130,6 +1266,9 @@ func _on_send_pressed() -> void:
 	_refresh_board_ui()
 
 func _undo_pending() -> void:
+	if spectator_mode:
+		return
+
 	if not _has_pending():
 		return
 	_log_ui.debug("_undo_pending: reverting to snapshot via game_board")
@@ -1155,6 +1294,9 @@ func _input(event: InputEvent) -> void:
 		_on_tap(event.position)
 
 func _can_interact() -> bool:
+	if spectator_mode:
+		return false
+
 	if _modal_open:
 		return false
 	if game_over:
