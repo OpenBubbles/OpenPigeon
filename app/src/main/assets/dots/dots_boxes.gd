@@ -16,6 +16,12 @@ extends BaseGame
 @onready var opp_marker: TextureRect = %OppMarker
 @onready var you_label: Label = %YouLabel
 @onready var spec_label: Label = %SpecLabel
+@onready var dots_main_vbox: VBoxContainer = %DotsMainVBox
+@onready var dots_top_hud: HBoxContainer = %TopInfoHBoxContainer
+@onready var dots_board_center: CenterContainer = %Center
+@onready var dots_bottom_controls: HBoxContainer = %BottomItemHBoxContainer
+@onready var dots_settings_button: Button = %SettingsButton
+@onready var dots_rules_button: Button = %RulesButton
 
 const MUSIC_STREAM := preload("res://global/audio/dots.ogg")
 
@@ -53,6 +59,80 @@ func _get_music_stream() -> AudioStream:
 	
 const LOG_TAG := "DotsBoxes"
 var DEBUG_DOTS_BOXES := false
+
+const DOTS_LANDSCAPE_BOARD_HEIGHT_RATIO := 0.80
+const DOTS_PORTRAIT_BOARD_RATIO := 0.70
+const DOTS_REFERENCE_BOARD_SIZE := 500.0
+
+const DOTS_BASE_AVATAR_SIZE := Vector2(
+	96.0,
+	90.0,
+)
+
+const DOTS_BASE_YOU_FONT_SIZE := 18.0
+const DOTS_BASE_SCORE_FONT_SIZE := 20.0
+
+const DOTS_BASE_SCORE_ICON_SIZE := Vector2(
+	28.0,
+	28.0,
+)
+
+const DOTS_BASE_MARKER_SIZE := Vector2(
+	80.0,
+	80.0,
+)
+
+const DOTS_BASE_MENU_BUTTON_SIZE := Vector2(
+	64.0,
+	64.0,
+)
+
+const DOTS_BASE_MENU_BUTTON_FONT_SIZE := 32.0
+
+const DOTS_BASE_SEND_BUTTON_SIZE := Vector2(
+	70.0,
+	50.0,
+)
+
+const DOTS_BASE_SEND_BUTTON_FONT_SIZE := 28.0
+
+const DOTS_LANDSCAPE_AVATAR_MIN_SCALE := 2.05
+const DOTS_LANDSCAPE_AVATAR_MAX_SCALE := 2.35
+
+const DOTS_BASE_SIDE_MARGIN := 40.0
+const DOTS_BASE_TOP_MARGIN := 20.0
+const DOTS_LANDSCAPE_BOTTOM_PADDING := 24.0
+const DOTS_BOARD_ACTION_GAP := 24.0
+
+const DOTS_PORTRAIT_BOTTOM_HEIGHT := 120.0
+
+const DOTS_BASE_SPECTATOR_FONT_SIZE := 50.0
+const DOTS_BASE_SPECTATOR_HALF_WIDTH := 324.0
+const DOTS_BASE_SPECTATOR_HEIGHT := 220.0
+const DOTS_PORTRAIT_SPECTATOR_TOP_OFFSET := 90.0
+
+const DOTS_LANDSCAPE_OVERLAY_MIN_SCALE := 1.35
+const DOTS_LANDSCAPE_OVERLAY_MAX_SCALE := 1.65
+
+const DOTS_BASE_DOT_RADIUS := 9.0
+const DOTS_BASE_LINE_WIDTH := 8.0
+const DOTS_BASE_HOVER_WIDTH := 8.0
+const DOTS_BASE_ANIMATION_LINE_WIDTH := 12.0
+
+const DOTS_WIN_BURST_WRAPPER_NAME := (
+	"DotsResponsiveWinBurstWrapper"
+)
+
+var _dots_layout_pending := false
+var _dots_last_viewport_size := Vector2.ZERO
+var _dots_layout_generation := 0
+
+var _dots_current_avatar_scale := 1.0
+var _dots_current_board_scale := 1.0
+
+var _dots_portrait_vbox_separation := 0
+
+var _dots_active_win_burst_avatar: TextureButton = null
 
 func dbg(msg: String) -> void:
 	if DEBUG_DOTS_BOXES:
@@ -143,12 +223,8 @@ func _on_game_ready() -> void:
 		OpLog.w(LOG_TAG, "missing_send_button")
 		push_warning("No %SendButton in scene")
 
-		OpLog.d(LOG_TAG, [
-			"send_button_ready visible=",
-			send_button.visible
-		])
-
 	_apply_player_color_icons()
+	_initialize_dots_responsive_layout()
 
 func _set_game_data(raw_text: String) -> void:
 	OpLog.event(LOG_TAG, ["set_game_data_in raw=", raw_text])
@@ -175,6 +251,9 @@ func _set_game_data(raw_text: String) -> void:
 		win_loss_label.visible = false
 		win_loss_label.text = ""
 		win_loss_label.scale = Vector2.ONE
+	
+	_dots_active_win_burst_avatar = null
+	_clear_dots_win_burst_proxies()
 
 	var p1_id: String = res.get("player1", "")
 	var p2_id: String = res.get("player2", "")
@@ -203,9 +282,6 @@ func _set_game_data(raw_text: String) -> void:
 		if player == 0:
 			spectator_mode = true
 
-			if is_instance_valid(you_label):
-				you_label.text = ""
-
 			if is_instance_valid(spec_label):
 				spec_label.show()
 
@@ -223,6 +299,18 @@ func _set_game_data(raw_text: String) -> void:
 		opponent_avatar_key = "avatar2"
 	else:
 		opponent_avatar_key = "avatar1"
+
+	if is_instance_valid(you_label):
+		you_label.text = "You"
+
+		you_label.modulate.a = (
+			0.0
+			if spectator_mode
+			else 1.0
+		)
+
+	if is_instance_valid(spec_label):
+		spec_label.visible = spectator_mode
 
 	OpLog.i(LOG_TAG, [
 		"resolved_player player=", player,
@@ -245,6 +333,7 @@ func _set_game_data(raw_text: String) -> void:
 			player_avatar_display.call_deferred("update_avatar_from_data", p1_data)
 
 	_apply_player_color_icons()
+	_schedule_dots_responsive_layout(true)
 
 	board_size = clamp(int(res.get("size", board_size)), 4, 6)
 
@@ -283,6 +372,108 @@ func _set_game_data(raw_text: String) -> void:
 		" opp_score=", opp_score,
 		" turn_steps=", _turn_steps.size()
 	])
+
+func _remove_dots_win_burst_proxy(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	var existing := avatar_button.get_node_or_null(
+		DOTS_WIN_BURST_WRAPPER_NAME,
+	)
+
+	if existing == null:
+		return
+
+	avatar_button.remove_child(existing)
+	existing.queue_free()
+
+
+func _clear_dots_win_burst_proxies() -> void:
+	_remove_dots_win_burst_proxy(
+		player_avatar_display,
+	)
+
+	_remove_dots_win_burst_proxy(
+		opp_avatar_display,
+	)
+
+
+func _create_dots_win_burst_target(
+	avatar_button: TextureButton,
+) -> TextureButton:
+	if not is_instance_valid(avatar_button):
+		return null
+
+	_remove_dots_win_burst_proxy(
+		avatar_button,
+	)
+
+	var wrapper := Control.new()
+
+	wrapper.name = DOTS_WIN_BURST_WRAPPER_NAME
+
+	wrapper.mouse_filter = (
+		Control.MOUSE_FILTER_IGNORE
+	)
+
+	wrapper.show_behind_parent = true
+	wrapper.clip_contents = false
+	wrapper.size = DOTS_BASE_AVATAR_SIZE
+
+	wrapper.pivot_offset = (
+		DOTS_BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	wrapper.position = (
+		avatar_button.size *
+			0.5 -
+		DOTS_BASE_AVATAR_SIZE *
+			0.5
+	)
+
+	wrapper.scale = Vector2.ONE * (
+		_dots_current_avatar_scale
+	)
+
+	avatar_button.add_child(wrapper)
+
+	var target := TextureButton.new()
+
+	target.name = "DotsBurstTarget"
+	target.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	target.ignore_texture_size = true
+	target.clip_contents = false
+	target.size = DOTS_BASE_AVATAR_SIZE
+
+	target.pivot_offset = (
+		DOTS_BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	wrapper.add_child(target)
+
+	return target
+
+
+func _show_dots_win_burst(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	_dots_active_win_burst_avatar = avatar_button
+
+	var target := _create_dots_win_burst_target(
+		avatar_button,
+	)
+
+	if not is_instance_valid(target):
+		return
+
+	GameUtils._show_win_burst(target)
 
 func _load_pre_state_and_replay(replay_str: String) -> void:
 	_loading_replay = true
@@ -463,15 +654,864 @@ func _apply_bg_for_dark(is_dark: bool) -> void:
 		OpLog.d(LOG_TAG, ["apply_background is_dark=", is_dark])
 		background.color = Color("#261a19") if is_dark else Color("#947972")
 
+func _configure_dots_avatar(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	avatar_button.clip_contents = false
+
+	var internal_viewport := (
+		avatar_button.get_node_or_null(
+			"SubViewportContainer/SubViewport",
+		) as SubViewport
+	)
+
+	if internal_viewport != null:
+		internal_viewport.render_target_update_mode = (
+			SubViewport.UPDATE_ALWAYS
+		)
+
+	var internal_preview := (
+		avatar_button.get_node_or_null(
+			"SubViewportContainer",
+		) as SubViewportContainer
+	)
+
+	if internal_preview != null:
+		internal_preview.mouse_filter = (
+			Control.MOUSE_FILTER_IGNORE
+		)
+		internal_preview.visible = true
+		internal_preview.self_modulate = Color.WHITE
+		internal_preview.pivot_offset = Vector2(
+			48.0,
+			140.0,
+		)
+
+func _initialize_dots_responsive_layout() -> void:
+	_configure_dots_avatar(
+		player_avatar_display,
+	)
+
+	_configure_dots_avatar(
+		opp_avatar_display,
+	)
+
+	_dots_portrait_vbox_separation = (
+		dots_main_vbox.get_theme_constant(
+			"separation",
+		)
+	)
+
+	if spec_label.get_parent() != self:
+		spec_label.reparent(
+			self,
+			false,
+		)
+
+	var viewport := get_viewport()
+
+	if viewport != null:
+		if not viewport.size_changed.is_connected(
+			_on_dots_viewport_size_changed,
+		):
+			viewport.size_changed.connect(
+				_on_dots_viewport_size_changed,
+			)
+
+	_schedule_dots_responsive_layout(true)
+
+
+func _on_dots_viewport_size_changed() -> void:
+	_schedule_dots_responsive_layout(true)
+
+
+func _schedule_dots_responsive_layout(
+	force: bool = false,
+) -> void:
+	if force:
+		_dots_last_viewport_size = Vector2.ZERO
+
+	if _dots_layout_pending:
+		return
+
+	_dots_layout_pending = true
+
+	call_deferred(
+		"_apply_dots_responsive_layout",
+	)
+
+func _reset_dots_control_for_container(
+	control: Control,
+) -> void:
+	if not is_instance_valid(control):
+		return
+
+	control.set_anchors_preset(
+		Control.PRESET_TOP_LEFT,
+		false,
+	)
+
+	control.offset_left = 0.0
+	control.offset_top = 0.0
+	control.offset_right = 0.0
+	control.offset_bottom = 0.0
+	control.scale = Vector2.ONE
+
+
+func _set_dots_landscape_mode(
+	enabled: bool,
+) -> void:
+	if enabled:
+		if dots_top_hud.get_parent() != self:
+			dots_top_hud.reparent(
+				self,
+				false,
+			)
+
+		dots_main_vbox.move_child(
+			dots_board_center,
+			0,
+		)
+
+		dots_main_vbox.move_child(
+			dots_bottom_controls,
+			1,
+		)
+
+		dots_main_vbox.alignment = (
+			BoxContainer.ALIGNMENT_CENTER
+		)
+
+		dots_board_center.size_flags_horizontal = (
+			Control.SIZE_SHRINK_CENTER
+		)
+
+		dots_board_center.size_flags_vertical = (
+			Control.SIZE_SHRINK_CENTER
+		)
+
+		dots_bottom_controls.size_flags_horizontal = (
+			Control.SIZE_EXPAND_FILL
+		)
+
+		dots_bottom_controls.size_flags_vertical = (
+			Control.SIZE_SHRINK_CENTER
+		)
+
+		dots_top_hud.z_index = 20
+		spec_label.z_index = 30
+
+		dots_main_vbox.queue_sort()
+		return
+
+	if dots_top_hud.get_parent() != dots_main_vbox:
+		dots_top_hud.reparent(
+			dots_main_vbox,
+			false,
+		)
+
+	dots_main_vbox.move_child(
+		dots_top_hud,
+		0,
+	)
+
+	dots_main_vbox.move_child(
+		dots_board_center,
+		1,
+	)
+
+	dots_main_vbox.move_child(
+		dots_bottom_controls,
+		2,
+	)
+
+	dots_main_vbox.alignment = (
+		BoxContainer.ALIGNMENT_CENTER
+	)
+
+	dots_top_hud.z_index = 0
+
+	_reset_dots_control_for_container(
+		dots_top_hud,
+	)
+
+	_reset_dots_control_for_container(
+		dots_board_center,
+	)
+
+	_reset_dots_control_for_container(
+		dots_bottom_controls,
+	)
+
+	dots_top_hud.size_flags_horizontal = (
+		Control.SIZE_EXPAND_FILL
+	)
+
+	dots_top_hud.size_flags_vertical = (
+		Control.SIZE_SHRINK_CENTER
+	)
+
+	dots_board_center.size_flags_horizontal = (
+		Control.SIZE_EXPAND_FILL
+	)
+
+	dots_board_center.size_flags_vertical = (
+		Control.SIZE_EXPAND_FILL
+	)
+
+	dots_bottom_controls.size_flags_horizontal = (
+		Control.SIZE_EXPAND_FILL
+	)
+
+	dots_bottom_controls.size_flags_vertical = (
+		Control.SIZE_SHRINK_CENTER
+	)
+
+	dots_main_vbox.queue_sort()
+
+	call_deferred(
+		"_finish_dots_portrait_restore",
+	)
+
+
+func _finish_dots_portrait_restore() -> void:
+	await get_tree().process_frame
+
+	if not is_inside_tree():
+		return
+
+	_reset_dots_control_for_container(
+		dots_top_hud,
+	)
+
+	_reset_dots_control_for_container(
+		dots_board_center,
+	)
+
+	_reset_dots_control_for_container(
+		dots_bottom_controls,
+	)
+
+	dots_main_vbox.queue_sort()
+	dots_top_hud.queue_sort()
+	dots_board_center.queue_sort()
+	dots_bottom_controls.queue_sort()
+
+func _dots_avatar_scale_hint(
+	viewport_size: Vector2,
+	is_portrait: bool,
+) -> float:
+	if is_portrait:
+		return 1.0
+
+	var landscape_aspect := (
+		viewport_size.x /
+		maxf(
+			viewport_size.y,
+			1.0,
+		)
+	)
+
+	return clampf(
+		landscape_aspect,
+		DOTS_LANDSCAPE_AVATAR_MIN_SCALE,
+		DOTS_LANDSCAPE_AVATAR_MAX_SCALE,
+	)
+
+
+func _dots_landscape_action_height(
+	avatar_scale: float,
+) -> float:
+	var largest_button_height := maxf(
+		DOTS_BASE_MENU_BUTTON_SIZE.y,
+		DOTS_BASE_SEND_BUTTON_SIZE.y,
+	)
+
+	return (
+		largest_button_height *
+			avatar_scale +
+		DOTS_LANDSCAPE_BOTTOM_PADDING
+	)
+
+
+func _apply_dots_grid_visual_scale(
+	board_scale: float,
+) -> void:
+	if not is_instance_valid(grid):
+		return
+
+	grid.set(
+		"dot_radius",
+		DOTS_BASE_DOT_RADIUS *
+			board_scale,
+	)
+
+	grid.set(
+		"line_width",
+		DOTS_BASE_LINE_WIDTH *
+			board_scale,
+	)
+
+	grid.set(
+		"hover_width",
+		DOTS_BASE_HOVER_WIDTH *
+			board_scale,
+	)
+
+	var animation_line := (
+		grid.get_node_or_null(
+			"AnimationLine",
+		) as Line2D
+	)
+
+	if animation_line != null:
+		animation_line.width = (
+			DOTS_BASE_ANIMATION_LINE_WIDTH *
+			board_scale
+		)
+
+	grid.queue_redraw()
+
+
+func _apply_dots_board_layout(
+	viewport_size: Vector2,
+	is_portrait: bool,
+	action_scale: float,
+) -> float:
+	var board_display_size := 0.0
+
+	if is_portrait:
+		board_display_size = floorf(
+			minf(
+				viewport_size.x,
+				viewport_size.y,
+			) *
+			DOTS_PORTRAIT_BOARD_RATIO
+		)
+	else:
+		var target_stack_height := floorf(
+			viewport_size.y *
+			DOTS_LANDSCAPE_BOARD_HEIGHT_RATIO
+		)
+
+		var action_height := (
+			_dots_landscape_action_height(
+				action_scale,
+			)
+		)
+
+		var available_board_height := maxf(
+			target_stack_height -
+				action_height -
+				DOTS_BOARD_ACTION_GAP,
+			1.0,
+		)
+
+		var available_board_width := maxf(
+			viewport_size.x -
+				DOTS_BASE_SIDE_MARGIN *
+					2.0,
+			1.0,
+		)
+
+		board_display_size = floorf(
+			minf(
+				available_board_height,
+				available_board_width,
+			)
+		)
+
+	board_display_size = maxf(
+		board_display_size,
+		1.0,
+	)
+
+	_dots_current_board_scale = (
+		board_display_size /
+		DOTS_REFERENCE_BOARD_SIZE
+	)
+
+	paper.custom_minimum_size = Vector2(
+		board_display_size,
+		board_display_size,
+	)
+
+	grid.custom_minimum_size = Vector2(
+		board_display_size,
+		board_display_size,
+	)
+
+	dots_board_center.custom_minimum_size = Vector2(
+		board_display_size,
+		board_display_size,
+	)
+
+	_apply_dots_grid_visual_scale(
+		_dots_current_board_scale,
+	)
+
+	paper.queue_sort()
+	grid.update_minimum_size()
+	dots_board_center.queue_sort()
+
+	return board_display_size
+
+func _apply_dots_action_button_layout(
+	avatar_scale: float,
+) -> void:
+	var menu_size := (
+		DOTS_BASE_MENU_BUTTON_SIZE *
+		avatar_scale
+	)
+
+	var menu_buttons: Array[Button] = [
+		dots_settings_button,
+		dots_rules_button,
+	]
+
+	for menu_button in menu_buttons:
+		if not is_instance_valid(menu_button):
+			continue
+
+		menu_button.custom_minimum_size = menu_size
+
+		menu_button.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					DOTS_BASE_MENU_BUTTON_FONT_SIZE *
+						avatar_scale
+				),
+				1,
+			),
+		)
+
+		menu_button.queue_redraw()
+
+	if is_instance_valid(send_button):
+		var send_size := (
+			DOTS_BASE_SEND_BUTTON_SIZE *
+			avatar_scale
+		)
+
+		send_button.size_flags_horizontal = (
+			Control.SIZE_SHRINK_CENTER
+		)
+
+		send_button.size_flags_vertical = (
+			Control.SIZE_SHRINK_CENTER
+		)
+
+		send_button.custom_minimum_size = send_size
+		send_button.size = send_size
+		send_button.scale = Vector2.ONE
+
+		send_button.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					DOTS_BASE_SEND_BUTTON_FONT_SIZE *
+						avatar_scale
+				),
+				1,
+			),
+		)
+
+		send_button.pivot_offset = (
+			send_button.size *
+			0.5
+		)
+
+
+func _apply_dots_avatar_and_score_layout(
+	content_scale: float,
+	is_portrait: bool,
+	viewport_size: Vector2,
+) -> void:
+	var avatar_scale := 1.0
+
+	if not is_portrait:
+		var landscape_aspect := (
+			viewport_size.x /
+			maxf(
+				viewport_size.y,
+				1.0,
+			)
+		)
+
+		avatar_scale = clampf(
+			maxf(
+				content_scale,
+				landscape_aspect,
+			),
+			DOTS_LANDSCAPE_AVATAR_MIN_SCALE,
+			DOTS_LANDSCAPE_AVATAR_MAX_SCALE,
+		)
+
+	_dots_current_avatar_scale = avatar_scale
+
+	_clear_dots_win_burst_proxies()
+
+	var avatar_size := (
+		DOTS_BASE_AVATAR_SIZE *
+		avatar_scale
+	)
+
+	var avatars: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatars:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		_configure_dots_avatar(
+			avatar_button,
+		)
+
+		avatar_button.scale = Vector2.ONE
+		avatar_button.custom_minimum_size = avatar_size
+
+		var internal_preview := (
+			avatar_button.get_node_or_null(
+				"SubViewportContainer",
+			) as SubViewportContainer
+		)
+
+		if internal_preview != null:
+			internal_preview.scale = Vector2.ONE * avatar_scale
+
+		avatar_button.queue_redraw()
+
+	if is_instance_valid(you_label):
+		you_label.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					DOTS_BASE_YOU_FONT_SIZE *
+						avatar_scale
+				),
+				1,
+			),
+		)
+
+	var score_labels: Array[Label] = [
+		player_score_label,
+		opp_score_label,
+	]
+
+	for score_label in score_labels:
+		if not is_instance_valid(score_label):
+			continue
+
+		score_label.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					DOTS_BASE_SCORE_FONT_SIZE *
+						avatar_scale
+				),
+				1,
+			),
+		)
+
+	var score_icon_size := (
+		DOTS_BASE_SCORE_ICON_SIZE *
+		avatar_scale
+	)
+
+	player_color_icon.custom_minimum_size = score_icon_size
+	opp_color_icon.custom_minimum_size = score_icon_size
+
+	var marker_size := (
+		DOTS_BASE_MARKER_SIZE *
+		avatar_scale
+	)
+
+	player_marker.custom_minimum_size = marker_size
+	opp_marker.custom_minimum_size = marker_size
+
+	_apply_dots_action_button_layout(
+		avatar_scale,
+	)
+
+func _apply_dots_landscape_positions(
+	avatar_scale: float,
+) -> void:
+	var side_margin := (
+		DOTS_BASE_SIDE_MARGIN *
+		avatar_scale
+	)
+
+	var top_margin := (
+		DOTS_BASE_TOP_MARGIN *
+		avatar_scale
+	)
+
+	var score_height := (
+		DOTS_BASE_SCORE_ICON_SIZE.y *
+		avatar_scale
+	)
+
+	var avatar_stack_height := (
+		DOTS_BASE_YOU_FONT_SIZE *
+			avatar_scale +
+		DOTS_BASE_AVATAR_SIZE.y *
+			avatar_scale +
+		score_height +
+		10.0 *
+			avatar_scale
+	)
+
+	var marker_height := (
+		DOTS_BASE_MARKER_SIZE.y *
+		avatar_scale
+	)
+
+	var top_hud_height := (
+		maxf(
+			avatar_stack_height,
+			marker_height,
+		) +
+		top_margin
+	)
+
+	dots_top_hud.custom_minimum_size = Vector2(
+		0.0,
+		top_hud_height,
+	)
+
+	dots_top_hud.set_anchors_preset(
+		Control.PRESET_TOP_WIDE,
+		false,
+	)
+
+	dots_top_hud.offset_left = side_margin
+	dots_top_hud.offset_top = top_margin
+	dots_top_hud.offset_right = -side_margin
+	dots_top_hud.offset_bottom = (
+		top_margin +
+		top_hud_height
+	)
+
+	dots_bottom_controls.custom_minimum_size = Vector2(
+		0.0,
+		_dots_landscape_action_height(
+			avatar_scale,
+		),
+	)
+
+	dots_main_vbox.add_theme_constant_override(
+		"separation",
+		roundi(
+			DOTS_BOARD_ACTION_GAP,
+		),
+	)
+
+	dots_top_hud.queue_sort()
+	dots_bottom_controls.queue_sort()
+
+
+func _restore_dots_portrait_layout() -> void:
+	dots_top_hud.custom_minimum_size = Vector2.ZERO
+
+	dots_bottom_controls.custom_minimum_size = Vector2(
+		0.0,
+		DOTS_PORTRAIT_BOTTOM_HEIGHT,
+	)
+
+	dots_main_vbox.add_theme_constant_override(
+		"separation",
+		_dots_portrait_vbox_separation,
+	)
+
+	_reset_dots_control_for_container(
+		dots_top_hud,
+	)
+
+	_reset_dots_control_for_container(
+		dots_board_center,
+	)
+
+	_reset_dots_control_for_container(
+		dots_bottom_controls,
+	)
+
+	dots_main_vbox.queue_sort()
+
+func _apply_dots_spectator_label_layout(
+	content_scale: float,
+	is_portrait: bool,
+) -> void:
+	if not is_instance_valid(spec_label):
+		return
+
+	var overlay_scale := 1.0
+
+	if not is_portrait:
+		overlay_scale = clampf(
+			content_scale,
+			DOTS_LANDSCAPE_OVERLAY_MIN_SCALE,
+			DOTS_LANDSCAPE_OVERLAY_MAX_SCALE,
+		)
+
+	var top_offset := (
+		DOTS_PORTRAIT_SPECTATOR_TOP_OFFSET
+		if is_portrait
+		else 0.0
+	)
+
+	spec_label.set_anchors_preset(
+		Control.PRESET_CENTER_TOP,
+		false,
+	)
+
+	spec_label.offset_left = (
+		-DOTS_BASE_SPECTATOR_HALF_WIDTH *
+			overlay_scale
+	)
+
+	spec_label.offset_right = (
+		DOTS_BASE_SPECTATOR_HALF_WIDTH *
+			overlay_scale
+	)
+
+	spec_label.offset_top = top_offset
+
+	spec_label.offset_bottom = (
+		top_offset +
+		DOTS_BASE_SPECTATOR_HEIGHT *
+			overlay_scale
+	)
+
+	spec_label.grow_horizontal = (
+		Control.GROW_DIRECTION_BOTH
+	)
+
+	spec_label.horizontal_alignment = (
+		HORIZONTAL_ALIGNMENT_CENTER
+	)
+
+	spec_label.vertical_alignment = (
+		VERTICAL_ALIGNMENT_CENTER
+	)
+
+	spec_label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				DOTS_BASE_SPECTATOR_FONT_SIZE *
+					overlay_scale
+			),
+			1,
+		),
+	)
+
+func _kill_dots_send_button_tween() -> void:
+	if not is_instance_valid(send_button):
+		return
+
+	if not send_button.has_meta("sb_tween"):
+		return
+
+	var existing: Variant = send_button.get_meta(
+		"sb_tween",
+	)
+
+	if (
+		existing is Tween and
+		(existing as Tween).is_running()
+	):
+		(existing as Tween).kill()
+
+
+func _refresh_dots_send_button_home() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	if not is_inside_tree():
+		return
+
+	if not is_instance_valid(send_button):
+		return
+
+	if not is_instance_valid(dots_bottom_controls):
+		return
+
+	_kill_dots_send_button_tween()
+	
+	var send_size := (
+		DOTS_BASE_SEND_BUTTON_SIZE *
+		_dots_current_avatar_scale
+	)
+
+	send_button.custom_minimum_size = send_size
+	send_button.size = send_size
+	send_button.scale = Vector2.ONE
+	send_button.pivot_offset = send_size * 0.5
+
+	var should_show := _send_button_target_visible
+	var root_rect := get_global_rect()
+	var controls_rect := (
+		dots_bottom_controls.get_global_rect()
+	)
+
+	_send_button_home_global = Vector2(
+		root_rect.position.x +
+			(
+				root_rect.size.x -
+				send_button.size.x
+			) *
+			0.5,
+		controls_rect.position.y +
+			(
+				controls_rect.size.y -
+					send_button.size.y
+			) *
+			0.5,
+	)
+
+	_send_button_home_ready = true
+	send_button.set_as_top_level(true)
+	send_button.global_position = (
+		_send_button_home_global
+	)
+
+	if should_show:
+		send_button.visible = true
+		send_button.disabled = false
+		send_button.mouse_filter = (
+			Control.MOUSE_FILTER_STOP
+		)
+
+		send_button.modulate.a = 1.0
+	else:
+		send_button.visible = false
+		send_button.disabled = true
+		send_button.mouse_filter = (
+			Control.MOUSE_FILTER_IGNORE
+		)
+
 func _on_resized() -> void:
-	var s := get_viewport_rect().size
-	var side: float = min(s.x, s.y) * 0.7
-	paper.custom_minimum_size = Vector2(side, side)
+	_schedule_dots_responsive_layout(true)
 
 func set_board_size(n: int) -> void:
 	board_size = clamp(n, 4, 6)
-	if is_instance_valid(grid) and grid.has_method("set_grid"):
-		grid.call("set_grid", board_size)
+
+	if is_instance_valid(grid) and grid.has_method(
+		"set_grid",
+	):
+		grid.call(
+			"set_grid",
+			board_size,
+		)
+
+	if is_inside_tree():
+		_schedule_dots_responsive_layout(true)
 
 func _on_turn() -> void:
 	pass
@@ -567,25 +1607,16 @@ func _update_send_button_visibility(
 		_queue_send_button_initialization()
 		return
 
-	if send_button.has_meta("sb_tween"):
-		var old_tween: Variant = send_button.get_meta(
-			"sb_tween"
-		)
-
-		if (
-			old_tween is Tween and
-			(old_tween as Tween).is_running()
-		):
-			(old_tween as Tween).kill()
+	_kill_dots_send_button_tween()
 
 	var home := _send_button_home_global
-	var viewport_height := get_viewport_rect().size.y
+	var root_bottom := get_global_rect().end.y
 
 	var offscreen_position := Vector2(
 		home.x,
-		viewport_height +
+		root_bottom +
 			send_button.size.y +
-			30.0
+			30.0,
 	)
 
 	if should_show:
@@ -644,7 +1675,136 @@ func _update_send_button_visibility(
 					send_button.global_position = _send_button_home_global
 		)
 
+func _apply_dots_responsive_layout() -> void:
+	_dots_layout_pending = false
+
+	if not is_inside_tree():
+		return
+
+	var viewport := get_viewport()
+
+	if viewport == null:
+		return
+
+	var viewport_size := (
+		viewport.get_visible_rect().size
+	)
+
+	if (
+		viewport_size.x <= 1.0 or
+		viewport_size.y <= 1.0
+	):
+		return
+
+	if viewport_size.is_equal_approx(
+		_dots_last_viewport_size,
+	):
+		return
+
+	_dots_last_viewport_size = viewport_size
+
+	var is_portrait := (
+		viewport_size.y >=
+		viewport_size.x
+	)
+
+	_set_dots_landscape_mode(
+		not is_portrait,
+	)
+
+	var action_scale_hint := (
+		_dots_avatar_scale_hint(
+			viewport_size,
+			is_portrait,
+		)
+	)
+
+	var board_display_size := (
+		_apply_dots_board_layout(
+			viewport_size,
+			is_portrait,
+			action_scale_hint,
+		)
+	)
+
+	var content_scale := clampf(
+		board_display_size /
+			DOTS_REFERENCE_BOARD_SIZE,
+		0.5,
+		2.0,
+	)
+
+	_apply_dots_avatar_and_score_layout(
+		content_scale,
+		is_portrait,
+		viewport_size,
+	)
+
+	if is_portrait:
+		_restore_dots_portrait_layout()
+	else:
+		_apply_dots_landscape_positions(
+			_dots_current_avatar_scale,
+		)
+
+	_apply_dots_spectator_label_layout(
+		content_scale,
+		is_portrait,
+	)
+
+	_dots_layout_generation += 1
+
+	call_deferred(
+		"_finish_dots_responsive_layout",
+		_dots_layout_generation,
+	)
+
+	dots_main_vbox.queue_sort()
+	dots_board_center.queue_sort()
+
+
+func _finish_dots_responsive_layout(
+	layout_generation: int,
+) -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	if (
+		not is_inside_tree() or
+		layout_generation !=
+			_dots_layout_generation
+	):
+		return
+
+	player_avatar_display.pivot_offset = (
+		player_avatar_display.size *
+		0.5
+	)
+
+	opp_avatar_display.pivot_offset = (
+		opp_avatar_display.size *
+		0.5
+	)
+
+	await _refresh_dots_send_button_home()
+
+	_clear_dots_win_burst_proxies()
+
+	if (
+		is_instance_valid(win_loss_label) and
+		win_loss_label.visible and
+		is_instance_valid(
+			_dots_active_win_burst_avatar
+		)
+	):
+		_show_dots_win_burst(
+			_dots_active_win_burst_avatar,
+		)
+
 func _on_send_pressed() -> void:
+	if _settings_open or _rules_open:
+		return
+
 	OpLog.event(LOG_TAG, [
 		"send_pressed game_over=", game_over,
 		" spectator=", spectator_mode,
@@ -942,6 +2102,9 @@ func check_win() -> bool:
 	game_over = true
 
 	if not was_over:
+		_clear_dots_win_burst_proxies()
+		_dots_active_win_burst_avatar = null
+
 		OpLog.event(LOG_TAG, [
 			"win_condition_met my_score=", my_score,
 			" opp_score=", opp_score,
@@ -951,7 +2114,9 @@ func check_win() -> bool:
 
 		if my_score > opp_score:
 			OpLog.event(LOG_TAG, "final_tally local_win")
-			GameUtils._show_win_burst(player_avatar_display)
+			_show_dots_win_burst(
+				player_avatar_display,
+			)
 
 			if not spectator_mode:
 				win_loss_label.text = "YOU WIN!"
@@ -963,7 +2128,9 @@ func check_win() -> bool:
 			win_loss_state = "1"
 		elif opp_score > my_score:
 			OpLog.event(LOG_TAG, "final_tally local_loss")
-			GameUtils._show_win_burst(opp_avatar_display)
+			_show_dots_win_burst(
+				opp_avatar_display,
+			)
 
 			if not spectator_mode:
 				win_loss_label.text = "YOU LOSE"
@@ -1022,6 +2189,9 @@ func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: St
 	stop_waiting_animation()
 	_update_send_button_visibility(false)
 
+	_clear_dots_win_burst_proxies()
+	_dots_active_win_burst_avatar = null
+
 	if result == "0":
 		win_loss_state = "0"
 		win_loss_label.text = "DRAW!"
@@ -1038,15 +2208,26 @@ func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: St
 
 		if result == "-1":
 			winning_player = 2 if sender_player == 1 else 1
+			
+		if winning_player == 1:
+			win_loss_state = "1"
+		elif winning_player == 2:
+			win_loss_state = "-1"
+		else:
+			win_loss_state = ""
 
 		if winning_player == 1:
 			win_loss_label.text = "Player 1 Wins!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			GameUtils._show_win_burst(player_avatar_display)
+			_show_dots_win_burst(
+				player_avatar_display,
+			)
 		elif winning_player == 2:
 			win_loss_label.text = "Player 2 Wins!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			GameUtils._show_win_burst(opp_avatar_display)
+			_show_dots_win_burst(
+				opp_avatar_display,
+			)
 		else:
 			win_loss_label.text = "Game Over"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
@@ -1055,23 +2236,31 @@ func _apply_winner_payload(winner_payload: String, p1_id: String = "", p2_id: St
 			win_loss_state = "1"
 			win_loss_label.text = "YOU WIN!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			GameUtils._show_win_burst(player_avatar_display)
+			_show_dots_win_burst(
+				player_avatar_display,
+			)
 		else:
 			win_loss_state = "-1"
 			win_loss_label.text = "YOU LOSE"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
-			GameUtils._show_win_burst(opp_avatar_display)
+			_show_dots_win_burst(
+				opp_avatar_display,
+			)
 	else:
 		if result == "1":
 			win_loss_state = "-1"
 			win_loss_label.text = "YOU LOSE"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
-			GameUtils._show_win_burst(opp_avatar_display)
+			_show_dots_win_burst(
+				opp_avatar_display,
+			)
 		else:
 			win_loss_state = "1"
 			win_loss_label.text = "YOU WIN!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			GameUtils._show_win_burst(player_avatar_display)
+			_show_dots_win_burst(
+				player_avatar_display,
+			)
 
 	OpLog.event(LOG_TAG, [
 		"winner_resolved sender_uuid=", sender_uuid,

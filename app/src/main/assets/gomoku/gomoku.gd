@@ -11,6 +11,15 @@ extends BaseGame
 @onready var you_label: Label = %YouLabel
 @onready var spec_label: Label = %SpecLabel
 @onready var send_button: Button = %SendButton
+@onready var gomoku_root_margin: MarginContainer = %GomokuRootMargin
+@onready var gomoku_main_vbox: VBoxContainer = %GomokuMainVBox
+@onready var gomoku_top_hud: HBoxContainer = %TopInfoHBoxContainer
+@onready var gomoku_bowls_hbox: HBoxContainer = %GomokuBowlsHBox
+@onready var gomoku_opponent_top_spacer: Control = %GomokuOpponentTopSpacer
+@onready var gomoku_board_center: CenterContainer = %GameBoard
+@onready var gomoku_board_texture: TextureRect = %Board_Tex
+@onready var gomoku_bottom_controls: HBoxContainer = %BottomItemHBoxContainer
+@onready var gomoku_bottom_controls_margin: MarginContainer = %GomokuBottomControlsMargin
 
 const PLAYER1_BOWL_TEX := preload("res://gomoku/player1_bowl.png")
 const PLAYER2_BOWL_TEX := preload("res://gomoku/player2_bowl.png")
@@ -63,6 +72,83 @@ var _send_btn_hidden_y := 0.0
 
 const LOG_TAG := "Gomoku"
 
+const GOMOKU_LANDSCAPE_BOARD_HEIGHT_RATIO := 0.80
+const GOMOKU_PORTRAIT_BOARD_SIZE := 600.0
+
+const GOMOKU_BASE_AVATAR_SIZE := Vector2(
+	96.0,
+	90.0,
+)
+
+const GOMOKU_BASE_TOP_HUD_HEIGHT := 150.0
+const GOMOKU_BASE_BOTTOM_HEIGHT := 150.0
+
+const GOMOKU_BASE_SIDE_MARGIN := 40.0
+const GOMOKU_BASE_TOP_MARGIN := 20.0
+const GOMOKU_BASE_BOTTOM_MARGIN := 30.0
+
+const GOMOKU_BASE_MENU_BUTTON_SIZE := Vector2(
+	64.0,
+	64.0,
+)
+
+const GOMOKU_BASE_SEND_BUTTON_SIZE := Vector2(
+	70.0,
+	50.0,
+)
+
+const GOMOKU_BASE_SEND_BUTTON_FONT_SIZE := 28.0
+const GOMOKU_BOARD_SEND_GAP := 24.0
+
+const GOMOKU_BASE_HINT_FONT_SIZE := 22.0
+const GOMOKU_BASE_HINT_WIDTH := 420.0
+const GOMOKU_BASE_HINT_HEIGHT := 56.0
+
+var _gomoku_is_portrait := true
+
+const GOMOKU_BASE_MENU_BUTTON_FONT_SIZE := 32.0
+const GOMOKU_BASE_YOU_FONT_SIZE := 18.0
+const GOMOKU_BASE_OPPONENT_SPACER_HEIGHT := 26.0
+
+const GOMOKU_LANDSCAPE_AVATAR_MIN_SCALE := 2.05
+const GOMOKU_LANDSCAPE_AVATAR_MAX_SCALE := 2.35
+
+const GOMOKU_BASE_SPECTATOR_FONT_SIZE := 50.0
+const GOMOKU_BASE_SPECTATOR_HALF_WIDTH := 324.0
+const GOMOKU_BASE_SPECTATOR_HEIGHT := 220.0
+const GOMOKU_PORTRAIT_SPECTATOR_TOP_OFFSET := 90.0
+
+const GOMOKU_LANDSCAPE_OVERLAY_MIN_SCALE := 1.35
+const GOMOKU_LANDSCAPE_OVERLAY_MAX_SCALE := 1.65
+
+const GOMOKU_WIN_BURST_WRAPPER_NAME := (
+	"GomokuResponsiveWinBurstWrapper"
+)
+
+const GOMOKU_TILE_GRID_META := &"gomoku_grid_position"
+
+var _gomoku_responsive_layout_pending := false
+var _gomoku_last_viewport_size := Vector2.ZERO
+var _gomoku_layout_generation := 0
+
+var _gomoku_current_avatar_scale := 1.0
+var _gomoku_current_board_scale := 1.0
+
+var _gomoku_base_player_bowl_size := Vector2(
+	140.0,
+	90.0,
+)
+
+var _gomoku_base_opponent_bowl_size := Vector2(
+	140.0,
+	90.0,
+)
+
+var _current_tile_px: float = float(TILE_PX)
+var _current_board_margin_px: float = 32.0
+
+var _gomoku_active_win_burst_avatar: TextureButton = null
+
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
 	
@@ -114,6 +200,7 @@ func _on_game_ready() -> void:
 		
 	_setup_place_hint_label()
 	_update_place_hint_visibility()
+	_initialize_gomoku_responsive_layout()
 		
 func _set_game_data(raw_text: String) -> void:
 	OpLog.event(LOG_TAG, ["set_game_data_in raw=", raw_text])
@@ -145,6 +232,9 @@ func _set_game_data(raw_text: String) -> void:
 		win_loss_label.visible = false
 		win_loss_label.text = ""
 		win_loss_label.scale = Vector2.ONE
+
+	_gomoku_active_win_burst_avatar = null
+	_clear_gomoku_win_burst_proxies()
 
 	game_id = _get_first(d, "id", game_id)
 
@@ -193,7 +283,13 @@ func _set_game_data(raw_text: String) -> void:
 		spec_label.visible = spectator_mode
 
 	if is_instance_valid(you_label):
-		you_label.text = "" if spectator_mode else "You"
+		you_label.text = "You"
+
+		you_label.modulate.a = (
+			0.0
+			if spectator_mode
+			else 1.0
+		)
 
 	opponent_avatar_key = "avatar2" if player == 1 else "avatar1"
 
@@ -218,6 +314,8 @@ func _set_game_data(raw_text: String) -> void:
 	_reset_board_arrays(clampi(inferred_dim, 4, 32))
 	_clear_board_visuals()
 	_make_runtime_nodes()
+
+	_schedule_gomoku_responsive_layout(true)
 
 	OpLog.d(LOG_TAG, [
 		"board_reset inferred_dim=", inferred_dim,
@@ -329,6 +427,130 @@ func _set_game_data(raw_text: String) -> void:
 		" moves=", moves.size()
 	])
 
+func _remove_gomoku_win_burst_proxy(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	var existing := avatar_button.get_node_or_null(
+		GOMOKU_WIN_BURST_WRAPPER_NAME,
+	)
+
+	if existing == null:
+		return
+
+	avatar_button.remove_child(existing)
+	existing.queue_free()
+
+func _gomoku_avatar_scale_hint(
+	viewport_size: Vector2,
+	is_portrait: bool,
+) -> float:
+	if is_portrait:
+		return 1.0
+
+	var landscape_aspect: float = (
+		viewport_size.x /
+		maxf(
+			viewport_size.y,
+			1.0,
+		)
+	)
+
+	return clampf(
+		landscape_aspect,
+		GOMOKU_LANDSCAPE_AVATAR_MIN_SCALE,
+		GOMOKU_LANDSCAPE_AVATAR_MAX_SCALE,
+	)
+
+func _clear_gomoku_win_burst_proxies() -> void:
+	_remove_gomoku_win_burst_proxy(
+		player_avatar_display,
+	)
+
+	_remove_gomoku_win_burst_proxy(
+		opp_avatar_display,
+	)
+
+
+func _create_gomoku_win_burst_target(
+	avatar_button: TextureButton,
+) -> TextureButton:
+	if not is_instance_valid(avatar_button):
+		return null
+
+	_remove_gomoku_win_burst_proxy(
+		avatar_button,
+	)
+
+	var wrapper := Control.new()
+
+	wrapper.name = (
+		GOMOKU_WIN_BURST_WRAPPER_NAME
+	)
+
+	wrapper.mouse_filter = (
+		Control.MOUSE_FILTER_IGNORE
+	)
+
+	wrapper.show_behind_parent = true
+	wrapper.clip_contents = false
+	wrapper.size = GOMOKU_BASE_AVATAR_SIZE
+
+	wrapper.pivot_offset = (
+		GOMOKU_BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	wrapper.position = (
+		avatar_button.size *
+			0.5 -
+		GOMOKU_BASE_AVATAR_SIZE *
+			0.5
+	)
+
+	wrapper.scale = Vector2.ONE * (
+		_gomoku_current_avatar_scale
+	)
+
+	avatar_button.add_child(wrapper)
+
+	var target := TextureButton.new()
+
+	target.name = "GomokuBurstTarget"
+	target.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	target.ignore_texture_size = true
+	target.clip_contents = false
+	target.size = GOMOKU_BASE_AVATAR_SIZE
+
+	target.pivot_offset = (
+		GOMOKU_BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	wrapper.add_child(target)
+
+	return target
+
+
+func _show_gomoku_win_burst(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	_gomoku_active_win_burst_avatar = avatar_button
+
+	var target := _create_gomoku_win_burst_target(
+		avatar_button,
+	)
+
+	if not is_instance_valid(target):
+		return
+
+	GameUtils._show_win_burst(target)
+
 func _panel_inner_rect() -> Rect2:
 	var r := Board.get_rect()
 	var sb := Board.get_theme_stylebox("panel")
@@ -342,8 +564,21 @@ func _panel_inner_rect() -> Rect2:
 
 func _grid_area_rect() -> Rect2:
 	var inner := _panel_inner_rect()
-	return Rect2(inner.position + Vector2(BOARD_MARGIN_PX, BOARD_MARGIN_PX),
-				 inner.size - Vector2(2.0*BOARD_MARGIN_PX, 2.0*BOARD_MARGIN_PX))
+
+	return Rect2(
+		inner.position +
+			Vector2(
+				_current_board_margin_px,
+				_current_board_margin_px,
+			),
+		inner.size -
+			Vector2(
+				2.0 *
+					_current_board_margin_px,
+				2.0 *
+					_current_board_margin_px,
+			),
+	)
 
 func _steps() -> Vector2:
 	var area := _grid_area_rect()
@@ -430,7 +665,7 @@ func _make_runtime_nodes() -> void:
 	_win_preview_node.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_win_preview_node.z_as_relative = false
 	_win_preview_node.z_index = 40
-	_win_preview_node.radius_px = TILE_PX * 0.3
+	_win_preview_node.radius_px = _current_tile_px * 0.3
 	_win_preview_node.get_pos_for_grid = func(g: Vector2i) -> Vector2:
 		return _grid_to_pos(g)
 	_board_tiles_root.add_child(_win_preview_node)
@@ -463,8 +698,8 @@ func _make_tile(is_black: bool) -> TextureRect:
 	t.expand_mode = TextureRect.EXPAND_KEEP_SIZE
 	t.ignore_texture_size = true
 	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	t.custom_minimum_size = Vector2(TILE_PX, TILE_PX)
-	t.size = Vector2(TILE_PX, TILE_PX)
+	t.custom_minimum_size = Vector2(_current_tile_px, _current_tile_px)
+	t.size = Vector2(_current_tile_px, _current_tile_px)
 	t.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
 	t.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -507,8 +742,8 @@ func _set_active_tile_drag_pos(final_center_pos: Vector2) -> void:
 		return
 
 	var lifted_pos := Vector2(
-		final_center_pos.x - TILE_PX * 0.5,
-		final_center_pos.y - TILE_PX * 0.5 - 18.0
+		final_center_pos.x - _current_tile_px * 0.5,
+		final_center_pos.y - _current_tile_px * 0.5 - 18.0
 	)
 
 	_set_tile_offsets(_active_tile, lifted_pos.x, lifted_pos.y)
@@ -539,7 +774,7 @@ func _drop_active_tile_to(final_pos: Vector2) -> void:
 			_active_tile.scale = Vector2.ONE
 			_active_tile.z_index = BOARD_TILE_Z
 
-			var center := final_pos + Vector2(TILE_PX * 0.5, TILE_PX * 0.5)
+			var center := final_pos + Vector2(_current_tile_px * 0.5, _current_tile_px * 0.5)
 			_spawn_drop_dust(center)
 
 		_active_tile_lifted = false
@@ -577,7 +812,7 @@ func _animate_active_tile_to(final_pos: Vector2, lift_move: bool) -> void:
 			_active_tile.scale = Vector2.ONE
 			_active_tile.z_index = BOARD_TILE_Z
 
-			var center := final_pos + Vector2(TILE_PX * 0.5, TILE_PX * 0.5)
+			var center := final_pos + Vector2(_current_tile_px * 0.5, _current_tile_px * 0.5)
 			_spawn_drop_dust(center)
 
 		if lift_move:
@@ -587,7 +822,7 @@ func _animate_active_tile_to(final_pos: Vector2, lift_move: bool) -> void:
 	)
 
 func _set_tile_offsets(t: TextureRect, left: float, top: float) -> void:
-	t.offset_left = left; t.offset_top = top; t.offset_right = left + TILE_PX; t.offset_bottom = top + TILE_PX
+	t.offset_left = left; t.offset_top = top; t.offset_right = left + _current_tile_px; t.offset_bottom = top + _current_tile_px
 
 func _prepare_tile_for_board(tile: TextureRect, is_black: bool) -> TextureRect:
 	if tile == null:
@@ -597,8 +832,8 @@ func _prepare_tile_for_board(tile: TextureRect, is_black: bool) -> TextureRect:
 	tile.expand_mode = TextureRect.EXPAND_KEEP_SIZE
 	tile.ignore_texture_size = true
 	tile.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	tile.custom_minimum_size = Vector2(TILE_PX, TILE_PX)
-	tile.size = Vector2(TILE_PX, TILE_PX)
+	tile.custom_minimum_size = Vector2(_current_tile_px, _current_tile_px)
+	tile.size = Vector2(_current_tile_px, _current_tile_px)
 	tile.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
 	tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	tile.z_as_relative = false
@@ -628,7 +863,7 @@ func _take_tile_from_bowl_for_board(bowl: Control, is_black: bool) -> Dictionary
 	if is_instance_valid(bowl):
 		var bowl_rect := bowl.get_global_rect()
 		var bowl_center_global := bowl_rect.position + bowl_rect.size * 0.5
-		fallback_start = _root_local_from_global(bowl_center_global) - Vector2(TILE_PX * 0.5, TILE_PX * 0.5)
+		fallback_start = _root_local_from_global(bowl_center_global) - Vector2(_current_tile_px * 0.5, _current_tile_px * 0.5)
 
 	return {
 		"tile": fallback_tile,
@@ -658,6 +893,10 @@ func _animate_incoming_move_from_opp_bowl(g: Vector2i, p: int) -> void:
 	var start_pos := taken["start"] as Vector2
 
 	tile = _prepare_tile_for_board(tile, is_black)
+	tile.set_meta(
+		GOMOKU_TILE_GRID_META,
+		g,
+	)
 
 	if tile.get_parent() != null:
 		tile.get_parent().remove_child(tile)
@@ -669,7 +908,7 @@ func _animate_incoming_move_from_opp_bowl(g: Vector2i, p: int) -> void:
 	tile.scale = Vector2(0.92, 0.92)
 
 	var center := _grid_to_pos(g)
-	var final_pos := Vector2(center.x - TILE_PX * 0.5, center.y - TILE_PX * 0.5)
+	var final_pos := Vector2(center.x - _current_tile_px * 0.5, center.y - _current_tile_px * 0.5)
 
 	var tw := create_tween().set_parallel(false)
 
@@ -728,7 +967,7 @@ func _spawn_drop_dust(center: Vector2) -> void:
 	dust.z_as_relative = false
 	dust.z_index = DUST_Z
 	dust.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	dust.position = center - dust.size * 0.5 + Vector2(0, TILE_PX * 0.32)
+	dust.position = center - dust.size * 0.5 + Vector2(0, _current_tile_px * 0.32)
 	dust.scale = Vector2(0.65, 0.50)
 	dust.modulate.a = 0.0
 
@@ -775,8 +1014,8 @@ func _spawn_drop_dust(center: Vector2) -> void:
 func _place_random_in_bowl(bowl: Control, t: TextureRect) -> void:
 	var sz := (bowl.size if bowl.size != Vector2.ZERO else bowl.get_rect().size)
 	var pad := 25.0
-	var x := _rng.randf_range(pad, max(pad, sz.x - TILE_PX - pad))
-	var y := _rng.randf_range(pad, max(pad, sz.y - TILE_PX - pad))
+	var x := _rng.randf_range(pad, max(pad, sz.x - _current_tile_px - pad))
+	var y := _rng.randf_range(pad, max(pad, sz.y - _current_tile_px - pad))
 	_set_tile_offsets(t, x, y)
 
 func _pop_bowl_tile(is_ours: bool) -> TextureRect:
@@ -849,7 +1088,7 @@ func _place_or_move_active_to(g: Vector2i, from_drag: bool = false) -> void:
 
 		if from_drag and is_instance_valid(_active_tile):
 			var same_center := _grid_to_pos(g)
-			var same_final_pos := Vector2(same_center.x - TILE_PX * 0.5, same_center.y - TILE_PX * 0.5)
+			var same_final_pos := Vector2(same_center.x - _current_tile_px * 0.5, same_center.y - _current_tile_px * 0.5)
 			_drop_active_tile_to(same_final_pos)
 
 		return
@@ -867,9 +1106,14 @@ func _place_or_move_active_to(g: Vector2i, from_drag: bool = false) -> void:
 	var p := (2 if player == 1 else 1)
 	board_state[g.y][g.x] = p
 	_current_move = g
+	if is_instance_valid(_active_tile):
+		_active_tile.set_meta(
+			GOMOKU_TILE_GRID_META,
+			g,
+		)
 
 	var c := _grid_to_pos(g)
-	var final_pos := Vector2(c.x - TILE_PX * 0.5, c.y - TILE_PX * 0.5)
+	var final_pos := Vector2(c.x - _current_tile_px * 0.5, c.y - _current_tile_px * 0.5)
 
 	if from_drag:
 		_drop_active_tile_to(final_pos)
@@ -912,8 +1156,18 @@ func _return_active_to_bowl() -> void:
 	_active_tile.z_index = 50
 	_active_tile_lifted = false
 
-	_active_tile.reparent(PlayerBowl)
-	_set_tile_offsets(_active_tile, _active_from_bowl_offset.x, _active_from_bowl_offset.y)
+	_active_tile.remove_meta(
+		GOMOKU_TILE_GRID_META,
+	)
+
+	_active_tile.reparent(
+		PlayerBowl,
+	)
+
+	_place_random_in_bowl(
+		PlayerBowl,
+		_active_tile,
+	)
 	_active_tile = null
 	_current_move = Vector2i(-1, -1)
 	_clear_win_preview()
@@ -924,16 +1178,49 @@ func _finalize_active_tile() -> void:
 		_active_tile.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_active_tile = null
 
-func _place_stone_direct(g: Vector2i, p:int) -> void:
-	if not _grid_in_bounds(g): 
+func _place_stone_direct(
+	g: Vector2i,
+	p: int,
+) -> void:
+	if not _grid_in_bounds(g):
 		return
+
 	board_state[g.y][g.x] = p
-	var tile := _prepare_tile_for_board(null, p==2)
-	_board_tiles_root.add_child(tile)
-	var c := _grid_to_pos(g)
-	_set_tile_offsets(tile, c.x - TILE_PX*0.5, c.y - TILE_PX*0.5)
+
+	var tile := _prepare_tile_for_board(
+		null,
+		p == 2,
+	)
+
+	tile.set_meta(
+		GOMOKU_TILE_GRID_META,
+		g,
+	)
+
+	_board_tiles_root.add_child(
+		tile,
+	)
+
+	var center := _grid_to_pos(g)
+
+	_set_tile_offsets(
+		tile,
+		center.x -
+			_current_tile_px *
+				0.5,
+		center.y -
+			_current_tile_px *
+				0.5,
+	)
 
 func _input(e: InputEvent) -> void:
+	if get("_settings_open") == true or get("_rules_open") == true:
+		_ui_gesture_block = false
+		_is_dragging = false
+		_drag_started = false
+		_drag_snapped_grid = Vector2i(-1, -1)
+		return
+
 	if _ui_gesture_block:
 		if (e is InputEventMouseButton and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT and not (e as InputEventMouseButton).pressed) \
 		or (e is InputEventScreenTouch and not (e as InputEventScreenTouch).pressed):
@@ -1080,35 +1367,205 @@ func _setup_place_hint_label() -> void:
 	if not is_instance_valid(send_button):
 		return
 
-	var parent := send_button.get_parent() as Control
-	if parent == null:
-		return
+	var existing := (
+		find_child(
+			"PlaceHintLabel",
+			true,
+			false,
+		) as Label
+	)
 
-	var existing := parent.get_node_or_null("PlaceHintLabel") as Label
-	if existing:
+	if existing != null:
 		place_hint_label = existing
+
+		if place_hint_label.get_parent() != self:
+			place_hint_label.reparent(
+				self,
+				false,
+			)
 	else:
 		place_hint_label = Label.new()
 		place_hint_label.name = "PlaceHintLabel"
-		parent.add_child(place_hint_label)
 
-	place_hint_label.text = "Place a stone on an empty tile."
-	place_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	place_hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	place_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	place_hint_label.add_theme_font_size_override("font_size", 22)
-	place_hint_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
+		add_child(
+			place_hint_label,
+		)
 
-	var hint_size := send_button.size
-	if hint_size.x <= 0.0:
-		hint_size.x = 360.0
-	if hint_size.y <= 0.0:
-		hint_size.y = 50.0
+	place_hint_label.text = (
+		"Place a stone on an empty tile."
+	)
 
-	place_hint_label.size = hint_size
-	place_hint_label.position = Vector2(send_button.position.x, _send_btn_shown_y)
+	place_hint_label.horizontal_alignment = (
+		HORIZONTAL_ALIGNMENT_CENTER
+	)
+
+	place_hint_label.vertical_alignment = (
+		VERTICAL_ALIGNMENT_CENTER
+	)
+
+	place_hint_label.mouse_filter = (
+		Control.MOUSE_FILTER_IGNORE
+	)
+
+	place_hint_label.add_theme_color_override(
+		"font_color",
+		Color(
+			1.0,
+			1.0,
+			1.0,
+			0.9,
+		),
+	)
+
+	place_hint_label.z_index = 99
 	place_hint_label.visible = false
 
+func _layout_gomoku_action_ui(
+	is_portrait: bool,
+) -> void:
+	if not is_instance_valid(send_button):
+		return
+
+	var button_parent := (
+		send_button.get_parent() as Control
+	)
+
+	if button_parent == null:
+		return
+
+	if (
+		send_button_tween != null and
+		send_button_tween.is_running()
+	):
+		send_button_tween.kill()
+
+	var parent_height: float = maxf(
+		button_parent.size.y,
+		send_button.size.y,
+	)
+
+	_send_btn_shown_y = maxf(
+		(
+			parent_height -
+				send_button.size.y
+		) *
+			0.5,
+		0.0,
+	)
+
+	_send_btn_hidden_y = (
+		parent_height +
+			send_button.size.y +
+			40.0
+	)
+
+	var should_show_send: bool = (
+		_has_uncommitted_move and
+		is_my_turn and
+		not spectator_mode and
+		not game_over
+	)
+
+	send_button.modulate.a = 1.0
+
+	if should_show_send:
+		send_button.visible = true
+		send_button.position.y = _send_btn_shown_y
+	else:
+		send_button.position.y = _send_btn_hidden_y
+		send_button.visible = false
+
+	if not is_instance_valid(place_hint_label):
+		return
+
+	var hint_scale: float = (
+		1.0
+		if is_portrait
+		else _gomoku_current_avatar_scale
+	)
+
+	var viewport_size: Vector2 = (
+		get_viewport_rect().size
+	)
+
+	var hint_width: float = minf(
+		viewport_size.x *
+			0.82,
+		GOMOKU_BASE_HINT_WIDTH *
+			hint_scale,
+	)
+
+	var hint_height: float = (
+		GOMOKU_BASE_HINT_HEIGHT *
+			hint_scale
+	)
+
+	var root_global_top: float = (
+		get_global_rect().position.y
+	)
+
+	var parent_global_top: float = (
+		button_parent.get_global_rect().position.y
+	)
+
+	var hint_top: float = (
+		parent_global_top -
+			root_global_top +
+		_send_btn_shown_y +
+		(
+			send_button.size.y -
+				hint_height
+		) *
+			0.5
+	)
+
+	place_hint_label.set_anchors_preset(
+		Control.PRESET_CENTER_TOP,
+		false,
+	)
+
+	place_hint_label.offset_left = (
+		-hint_width *
+			0.5
+	)
+
+	place_hint_label.offset_right = (
+		hint_width *
+			0.5
+	)
+
+	place_hint_label.offset_top = hint_top
+
+	place_hint_label.offset_bottom = (
+		hint_top +
+			hint_height
+	)
+
+	place_hint_label.horizontal_alignment = (
+		HORIZONTAL_ALIGNMENT_CENTER
+	)
+
+	place_hint_label.vertical_alignment = (
+		VERTICAL_ALIGNMENT_CENTER
+	)
+
+	place_hint_label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				GOMOKU_BASE_HINT_FONT_SIZE *
+					hint_scale
+			),
+			1,
+		),
+	)
+
+	place_hint_label.pivot_offset = (
+		place_hint_label.size *
+			0.5
+	)
+
+	_update_place_hint_visibility()
 
 func _update_place_hint_visibility() -> void:
 	if not is_instance_valid(place_hint_label):
@@ -1330,6 +1787,9 @@ func _show_result_from_state(state: String, spectator_winner_player: int = 0) ->
 	if not is_instance_valid(win_loss_label):
 		return
 
+	_clear_gomoku_win_burst_proxies()
+	_gomoku_active_win_burst_avatar = null
+
 	if state == "0":
 		win_loss_label.text = "DRAW!"
 		win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
@@ -1344,22 +1804,30 @@ func _show_result_from_state(state: String, spectator_winner_player: int = 0) ->
 
 		if player_num == 1:
 			if is_instance_valid(player_avatar_display):
-				GameUtils._show_win_burst(player_avatar_display)
+				_show_gomoku_win_burst(
+					player_avatar_display,
+				)
 		else:
 			if is_instance_valid(opp_avatar_display):
-				GameUtils._show_win_burst(opp_avatar_display)
+				_show_gomoku_win_burst(
+					opp_avatar_display,
+				)
 	elif state == "1":
 		win_loss_label.text = "YOU WIN!"
 		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 
 		if is_instance_valid(player_avatar_display):
-			GameUtils._show_win_burst(player_avatar_display)
+			_show_gomoku_win_burst(
+				player_avatar_display,
+			)
 	else:
 		win_loss_label.text = "YOU LOSE"
 		win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
 
 		if is_instance_valid(opp_avatar_display):
-			GameUtils._show_win_burst(opp_avatar_display)
+			_show_gomoku_win_burst(
+				opp_avatar_display,
+			)
 
 	win_loss_label.visible = true
 	win_loss_label.scale = Vector2.ZERO
@@ -1544,6 +2012,231 @@ func _apply_bg_for_dark(is_dark: bool) -> void:
 		OpLog.d(LOG_TAG, ["apply_background is_dark=", is_dark])
 		background.color = Color("#261a19") if is_dark else Color("#947972")
 
+func _configure_gomoku_avatar(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	avatar_button.clip_contents = false
+
+	var internal_viewport := (
+		avatar_button.get_node_or_null(
+			"SubViewportContainer/SubViewport",
+		) as SubViewport
+	)
+
+	if internal_viewport != null:
+		internal_viewport.render_target_update_mode = (
+			SubViewport.UPDATE_ALWAYS
+		)
+
+	var internal_preview := (
+		avatar_button.get_node_or_null(
+			"SubViewportContainer",
+		) as SubViewportContainer
+	)
+
+	if internal_preview != null:
+		internal_preview.mouse_filter = (
+			Control.MOUSE_FILTER_IGNORE
+		)
+		internal_preview.visible = true
+		internal_preview.self_modulate = Color.WHITE
+		internal_preview.pivot_offset = Vector2(
+			48.0,
+			140.0,
+		)
+
+func _initialize_gomoku_responsive_layout() -> void:
+	_configure_gomoku_avatar(
+		player_avatar_display,
+	)
+
+	_configure_gomoku_avatar(
+		opp_avatar_display,
+	)
+
+	PlayerBowl.stretch_mode = (
+		TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	)
+
+	OppBowl.stretch_mode = (
+		TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	)
+
+	await get_tree().process_frame
+
+	if PlayerBowl.size.x > 1.0 and PlayerBowl.size.y > 1.0:
+		_gomoku_base_player_bowl_size = PlayerBowl.size
+
+	if OppBowl.size.x > 1.0 and OppBowl.size.y > 1.0:
+		_gomoku_base_opponent_bowl_size = OppBowl.size
+
+	var viewport := get_viewport()
+
+	if viewport == null:
+		return
+
+	if not viewport.size_changed.is_connected(
+		_on_gomoku_viewport_size_changed,
+	):
+		viewport.size_changed.connect(
+			_on_gomoku_viewport_size_changed,
+		)
+
+	_schedule_gomoku_responsive_layout(true)
+
+
+func _on_gomoku_viewport_size_changed() -> void:
+	_schedule_gomoku_responsive_layout(true)
+
+
+func _schedule_gomoku_responsive_layout(
+	force: bool = false,
+) -> void:
+	if force:
+		_gomoku_last_viewport_size = Vector2.ZERO
+
+	if _gomoku_responsive_layout_pending:
+		return
+
+	_gomoku_responsive_layout_pending = true
+
+	call_deferred(
+		"_apply_gomoku_responsive_layout",
+	)
+
+func _reset_gomoku_control_for_container(
+	control: Control,
+) -> void:
+	if not is_instance_valid(control):
+		return
+
+	control.set_anchors_preset(
+		Control.PRESET_TOP_LEFT,
+		false,
+	)
+
+	control.offset_left = 0.0
+	control.offset_top = 0.0
+	control.offset_right = 0.0
+	control.offset_bottom = 0.0
+	control.scale = Vector2.ONE
+
+
+func _set_gomoku_landscape_overlay_mode(
+	enabled: bool,
+) -> void:
+	if enabled:
+		if gomoku_top_hud.get_parent() != self:
+			gomoku_top_hud.reparent(
+				self,
+				false,
+			)
+
+		if gomoku_bottom_controls.get_parent() != self:
+			gomoku_bottom_controls.reparent(
+				self,
+				false,
+			)
+
+		gomoku_main_vbox.move_child(
+			gomoku_board_center,
+			0,
+		)
+
+		gomoku_main_vbox.alignment = (
+			BoxContainer.ALIGNMENT_CENTER
+		)
+
+		gomoku_board_center.size_flags_horizontal = (
+			Control.SIZE_EXPAND_FILL
+		)
+
+		gomoku_board_center.size_flags_vertical = (
+			Control.SIZE_EXPAND_FILL
+		)
+
+		gomoku_top_hud.z_index = 20
+		gomoku_bottom_controls.z_index = 20
+		spec_label.z_index = 30
+
+		gomoku_main_vbox.queue_sort()
+		return
+
+	if gomoku_top_hud.get_parent() != gomoku_main_vbox:
+		gomoku_top_hud.reparent(
+			gomoku_main_vbox,
+			false,
+		)
+
+	if gomoku_bottom_controls.get_parent() != gomoku_main_vbox:
+		gomoku_bottom_controls.reparent(
+			gomoku_main_vbox,
+			false,
+		)
+
+	gomoku_main_vbox.move_child(
+		gomoku_top_hud,
+		0,
+	)
+
+	gomoku_main_vbox.move_child(
+		gomoku_board_center,
+		1,
+	)
+
+	gomoku_main_vbox.move_child(
+		gomoku_bottom_controls,
+		2,
+	)
+
+	gomoku_main_vbox.alignment = (
+		BoxContainer.ALIGNMENT_BEGIN
+	)
+
+	gomoku_top_hud.z_index = 0
+	gomoku_bottom_controls.z_index = 0
+
+	_reset_gomoku_control_for_container(
+		gomoku_top_hud,
+	)
+
+	_reset_gomoku_control_for_container(
+		gomoku_board_center,
+	)
+
+	_reset_gomoku_control_for_container(
+		gomoku_bottom_controls,
+	)
+
+	gomoku_top_hud.size_flags_horizontal = (
+		Control.SIZE_EXPAND_FILL
+	)
+
+	gomoku_top_hud.size_flags_vertical = (
+		Control.SIZE_SHRINK_CENTER
+	)
+
+	gomoku_board_center.size_flags_horizontal = (
+		Control.SIZE_EXPAND_FILL
+	)
+
+	gomoku_board_center.size_flags_vertical = (
+		Control.SIZE_EXPAND_FILL
+	)
+
+	gomoku_bottom_controls.size_flags_horizontal = (
+		Control.SIZE_EXPAND_FILL
+	)
+
+	gomoku_bottom_controls.size_flags_vertical = (
+		Control.SIZE_SHRINK_CENTER
+	)
+
+	gomoku_main_vbox.queue_sort()
+
 func _get_rules_text() -> String:
 	return """
 [font_size={32px}][b]Gomoku[/b][/font_size]
@@ -1643,6 +2336,722 @@ func _clear_win_preview() -> void:
 	if is_instance_valid(_win_preview_node):
 		_win_preview_node.coords = []
 		_win_preview_node.queue_redraw()
+
+func _apply_gomoku_board_layout(
+	viewport_size: Vector2,
+	is_portrait: bool,
+	action_scale: float,
+) -> float:
+	var target_board_size: float = (
+		GOMOKU_PORTRAIT_BOARD_SIZE
+	)
+
+	if not is_portrait:
+		var target_stack_height: float = floorf(
+			viewport_size.y *
+				GOMOKU_LANDSCAPE_BOARD_HEIGHT_RATIO
+		)
+
+		var reserved_send_height: float = (
+			GOMOKU_BASE_SEND_BUTTON_SIZE.y *
+				action_scale +
+			GOMOKU_BOARD_SEND_GAP
+		)
+
+		var height_limited_size: float = floorf(
+			maxf(
+				target_stack_height -
+					reserved_send_height,
+				1.0,
+			)
+		)
+
+		var width_limited_size: float = floorf(
+			viewport_size.x -
+				GOMOKU_BASE_TOP_MARGIN *
+					2.0
+		)
+
+		target_board_size = maxf(
+			minf(
+				height_limited_size,
+				width_limited_size,
+			),
+			1.0,
+		)
+
+		Board.custom_minimum_size = Vector2(
+			target_board_size,
+			target_board_size,
+		)
+
+		gomoku_board_texture.custom_minimum_size = Vector2(
+			target_board_size,
+			target_board_size,
+		)
+
+		gomoku_board_center.custom_minimum_size = Vector2(
+			target_board_size,
+			target_board_size,
+		)
+	else:
+		Board.custom_minimum_size = Vector2.ZERO
+
+		gomoku_board_texture.custom_minimum_size = Vector2(
+			0.0,
+			GOMOKU_PORTRAIT_BOARD_SIZE,
+		)
+
+		gomoku_board_center.custom_minimum_size = Vector2.ZERO
+
+	_gomoku_current_board_scale = (
+		target_board_size /
+			GOMOKU_PORTRAIT_BOARD_SIZE
+	)
+
+	_current_tile_px = (
+		float(TILE_PX) *
+			_gomoku_current_board_scale
+	)
+
+	_current_board_margin_px = (
+		BOARD_MARGIN_PX *
+			_gomoku_current_board_scale
+	)
+
+	Board.queue_sort()
+	gomoku_board_texture.queue_redraw()
+	gomoku_board_center.queue_sort()
+
+	return target_board_size
+
+func _apply_gomoku_send_button_layout(
+	avatar_scale: float,
+) -> void:
+	if not is_instance_valid(send_button):
+		return
+
+	var button_size: Vector2 = (
+		GOMOKU_BASE_SEND_BUTTON_SIZE *
+			avatar_scale
+	)
+
+	send_button.custom_minimum_size = button_size
+	send_button.scale = Vector2.ONE
+	send_button.size = button_size
+
+	send_button.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				GOMOKU_BASE_SEND_BUTTON_FONT_SIZE *
+					avatar_scale
+			),
+			1,
+		),
+	)
+
+	send_button.pivot_offset = (
+		button_size *
+			0.5
+	)
+
+	send_button.queue_redraw()
+
+func _apply_gomoku_menu_button_layout(
+	avatar_scale: float,
+) -> void:
+	var button_size := (
+		GOMOKU_BASE_MENU_BUTTON_SIZE *
+		avatar_scale
+	)
+
+	var menu_buttons: Array[Button] = [
+		rules_button,
+		settings_button,
+	]
+
+	for menu_button in menu_buttons:
+		if not is_instance_valid(menu_button):
+			continue
+
+		menu_button.custom_minimum_size = button_size
+
+		menu_button.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					GOMOKU_BASE_MENU_BUTTON_FONT_SIZE *
+						avatar_scale
+				),
+				1,
+			),
+		)
+
+		menu_button.queue_redraw()
+
+
+func _apply_gomoku_avatar_and_tray_layout(
+	content_scale: float,
+	is_portrait: bool,
+	viewport_size: Vector2,
+) -> void:
+	var avatar_scale := 1.0
+
+	if not is_portrait:
+		var landscape_aspect := (
+			viewport_size.x /
+			maxf(
+				viewport_size.y,
+				1.0,
+			)
+		)
+
+		avatar_scale = clampf(
+			maxf(
+				content_scale,
+				landscape_aspect,
+			),
+			GOMOKU_LANDSCAPE_AVATAR_MIN_SCALE,
+			GOMOKU_LANDSCAPE_AVATAR_MAX_SCALE,
+		)
+
+	_gomoku_current_avatar_scale = avatar_scale
+
+	_clear_gomoku_win_burst_proxies()
+
+	var avatar_size := (
+		GOMOKU_BASE_AVATAR_SIZE *
+		avatar_scale
+	)
+
+	var avatars: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatars:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		_configure_gomoku_avatar(
+			avatar_button,
+		)
+
+		avatar_button.scale = Vector2.ONE
+		avatar_button.custom_minimum_size = avatar_size
+
+		var internal_preview := (
+			avatar_button.get_node_or_null(
+				"SubViewportContainer",
+			) as SubViewportContainer
+		)
+
+		if internal_preview != null:
+			internal_preview.scale = Vector2.ONE * avatar_scale
+
+		avatar_button.queue_redraw()
+	
+	_apply_gomoku_send_button_layout(
+		avatar_scale,
+	)
+	
+	PlayerBowl.custom_minimum_size = (
+		_gomoku_base_player_bowl_size *
+		avatar_scale
+	)
+
+	OppBowl.custom_minimum_size = (
+		_gomoku_base_opponent_bowl_size *
+		avatar_scale
+	)
+
+	PlayerBowl.queue_redraw()
+	OppBowl.queue_redraw()
+	gomoku_bowls_hbox.queue_sort()
+
+	you_label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				GOMOKU_BASE_YOU_FONT_SIZE *
+					avatar_scale
+			),
+			1,
+		),
+	)
+
+	gomoku_opponent_top_spacer.custom_minimum_size = Vector2(
+		0.0,
+		GOMOKU_BASE_OPPONENT_SPACER_HEIGHT *
+			avatar_scale,
+	)
+
+	_apply_gomoku_menu_button_layout(
+		avatar_scale,
+	)
+
+func _apply_gomoku_landscape_overlay_positions(
+	avatar_scale: float,
+) -> void:
+	var side_margin := (
+		GOMOKU_BASE_SIDE_MARGIN *
+		avatar_scale
+	)
+
+	var top_margin := (
+		GOMOKU_BASE_TOP_MARGIN *
+		avatar_scale
+	)
+
+	var bottom_margin := (
+		GOMOKU_BASE_BOTTOM_MARGIN *
+		avatar_scale
+	)
+
+	var avatar_stack_height := (
+		GOMOKU_BASE_AVATAR_SIZE.y *
+			avatar_scale +
+		GOMOKU_BASE_YOU_FONT_SIZE *
+			avatar_scale
+	)
+
+	var tray_height := maxf(
+		PlayerBowl.custom_minimum_size.y,
+		OppBowl.custom_minimum_size.y,
+	)
+
+	var top_hud_height := (
+		maxf(
+			avatar_stack_height,
+			tray_height,
+		) +
+		top_margin
+	)
+
+	gomoku_top_hud.custom_minimum_size = Vector2(
+		0.0,
+		top_hud_height,
+	)
+
+	gomoku_top_hud.set_anchors_preset(
+		Control.PRESET_TOP_WIDE,
+	)
+
+	gomoku_top_hud.offset_left = side_margin
+	gomoku_top_hud.offset_top = top_margin
+	gomoku_top_hud.offset_right = -side_margin
+	gomoku_top_hud.offset_bottom = (
+		top_margin +
+		top_hud_height
+	)
+
+	gomoku_bottom_controls_margin.add_theme_constant_override(
+		"margin_left",
+		roundi(side_margin),
+	)
+
+	gomoku_bottom_controls_margin.add_theme_constant_override(
+		"margin_right",
+		roundi(side_margin),
+	)
+
+	gomoku_bottom_controls_margin.add_theme_constant_override(
+		"margin_bottom",
+		roundi(bottom_margin),
+	)
+
+	var largest_action_height: float = maxf(
+		GOMOKU_BASE_MENU_BUTTON_SIZE.y,
+		GOMOKU_BASE_SEND_BUTTON_SIZE.y,
+	) * avatar_scale
+
+	var bottom_height: float = (
+		largest_action_height +
+			bottom_margin
+	)
+
+	gomoku_bottom_controls.custom_minimum_size = Vector2(
+		0.0,
+		bottom_height,
+	)
+
+	gomoku_bottom_controls.set_anchors_preset(
+		Control.PRESET_BOTTOM_WIDE,
+	)
+
+	gomoku_bottom_controls.offset_left = 0.0
+	gomoku_bottom_controls.offset_top = -bottom_height
+	gomoku_bottom_controls.offset_right = 0.0
+	gomoku_bottom_controls.offset_bottom = 0.0
+
+	gomoku_top_hud.queue_sort()
+	gomoku_bottom_controls.queue_sort()
+
+
+func _restore_gomoku_portrait_layout() -> void:
+	gomoku_top_hud.custom_minimum_size = Vector2(
+		0.0,
+		GOMOKU_BASE_TOP_HUD_HEIGHT,
+	)
+
+	gomoku_bottom_controls.custom_minimum_size = Vector2(
+		0.0,
+		GOMOKU_BASE_BOTTOM_HEIGHT,
+	)
+
+	PlayerBowl.custom_minimum_size = (
+		_gomoku_base_player_bowl_size
+	)
+
+	OppBowl.custom_minimum_size = (
+		_gomoku_base_opponent_bowl_size
+	)
+
+	gomoku_bottom_controls_margin.add_theme_constant_override(
+		"margin_left",
+		roundi(GOMOKU_BASE_SIDE_MARGIN),
+	)
+
+	gomoku_bottom_controls_margin.add_theme_constant_override(
+		"margin_right",
+		roundi(GOMOKU_BASE_SIDE_MARGIN),
+	)
+
+	gomoku_bottom_controls_margin.add_theme_constant_override(
+		"margin_bottom",
+		roundi(GOMOKU_BASE_BOTTOM_MARGIN),
+	)
+
+	_reset_gomoku_control_for_container(
+		gomoku_top_hud,
+	)
+
+	_reset_gomoku_control_for_container(
+		gomoku_board_center,
+	)
+
+	_reset_gomoku_control_for_container(
+		gomoku_bottom_controls,
+	)
+
+	gomoku_main_vbox.queue_sort()
+	gomoku_top_hud.queue_sort()
+	gomoku_board_center.queue_sort()
+	gomoku_bottom_controls.queue_sort()
+
+func _apply_gomoku_spectator_label_layout(
+	content_scale: float,
+	is_portrait: bool,
+) -> void:
+	if not is_instance_valid(spec_label):
+		return
+
+	var overlay_scale := 1.0
+
+	if not is_portrait:
+		overlay_scale = clampf(
+			content_scale,
+			GOMOKU_LANDSCAPE_OVERLAY_MIN_SCALE,
+			GOMOKU_LANDSCAPE_OVERLAY_MAX_SCALE,
+		)
+
+	var top_offset := (
+		GOMOKU_PORTRAIT_SPECTATOR_TOP_OFFSET
+		if is_portrait
+		else 0.0
+	)
+
+	spec_label.set_anchors_preset(
+		Control.PRESET_CENTER_TOP,
+	)
+
+	spec_label.offset_left = (
+		-GOMOKU_BASE_SPECTATOR_HALF_WIDTH *
+		overlay_scale
+	)
+
+	spec_label.offset_right = (
+		GOMOKU_BASE_SPECTATOR_HALF_WIDTH *
+		overlay_scale
+	)
+
+	spec_label.offset_top = top_offset
+
+	spec_label.offset_bottom = (
+		top_offset +
+		GOMOKU_BASE_SPECTATOR_HEIGHT *
+			overlay_scale
+	)
+
+	spec_label.grow_horizontal = (
+		Control.GROW_DIRECTION_BOTH
+	)
+
+	spec_label.horizontal_alignment = (
+		HORIZONTAL_ALIGNMENT_CENTER
+	)
+
+	spec_label.vertical_alignment = (
+		VERTICAL_ALIGNMENT_CENTER
+	)
+
+	spec_label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				GOMOKU_BASE_SPECTATOR_FONT_SIZE *
+					overlay_scale
+			),
+			1,
+		),
+	)
+
+func _apply_gomoku_responsive_layout() -> void:
+	_gomoku_responsive_layout_pending = false
+
+	if not is_inside_tree():
+		return
+
+	var viewport := get_viewport()
+
+	if viewport == null:
+		return
+
+	var viewport_size := (
+		viewport.get_visible_rect().size
+	)
+
+	if (
+		viewport_size.x <= 1.0 or
+		viewport_size.y <= 1.0
+	):
+		return
+
+	if viewport_size.is_equal_approx(
+		_gomoku_last_viewport_size,
+	):
+		return
+
+	_gomoku_last_viewport_size = viewport_size
+
+	var is_portrait := (
+		viewport_size.y >=
+		viewport_size.x
+	)
+	
+	_gomoku_is_portrait = is_portrait
+
+	var action_scale_hint: float = (
+		_gomoku_avatar_scale_hint(
+			viewport_size,
+			is_portrait,
+		)
+	)
+
+	_set_gomoku_landscape_overlay_mode(
+		not is_portrait,
+	)
+
+	var board_display_size := (
+		_apply_gomoku_board_layout(
+			viewport_size,
+			is_portrait,
+			action_scale_hint,
+		)
+	)
+
+	var content_scale := clampf(
+		board_display_size /
+			GOMOKU_PORTRAIT_BOARD_SIZE,
+		0.5,
+		2.0,
+	)
+
+	_apply_gomoku_avatar_and_tray_layout(
+		content_scale,
+		is_portrait,
+		viewport_size,
+	)
+
+	if is_portrait:
+		_restore_gomoku_portrait_layout()
+	else:
+		_apply_gomoku_landscape_overlay_positions(
+			_gomoku_current_avatar_scale,
+		)
+
+	_apply_gomoku_spectator_label_layout(
+		content_scale,
+		is_portrait,
+	)
+
+	_gomoku_layout_generation += 1
+
+	call_deferred(
+		"_finish_gomoku_responsive_layout",
+		_gomoku_layout_generation,
+	)
+
+	gomoku_main_vbox.queue_sort()
+	gomoku_board_center.queue_sort()
+
+func _relayout_gomoku_board_tiles() -> void:
+	if not is_instance_valid(_board_tiles_root):
+		return
+
+	if (
+		_active_tile_tween and
+		_active_tile_tween.is_running()
+	):
+		_active_tile_tween.kill()
+
+	for child in _board_tiles_root.get_children():
+		if not child is TextureRect:
+			continue
+
+		var tile := child as TextureRect
+
+		if not tile.has_meta(
+			GOMOKU_TILE_GRID_META,
+		):
+			continue
+
+		var grid_value: Variant = tile.get_meta(
+			GOMOKU_TILE_GRID_META,
+		)
+
+		if typeof(grid_value) != TYPE_VECTOR2I:
+			continue
+
+		var grid_position := grid_value as Vector2i
+
+		if not _grid_in_bounds(grid_position):
+			continue
+
+		var stone_value := int(
+			board_state[
+				grid_position.y
+			][
+				grid_position.x
+			]
+		)
+
+		if stone_value == 0:
+			continue
+
+		_prepare_tile_for_board(
+			tile,
+			stone_value == 2,
+		)
+
+		var center := _grid_to_pos(
+			grid_position,
+		)
+
+		_set_tile_offsets(
+			tile,
+			center.x -
+				_current_tile_px *
+					0.5,
+			center.y -
+				_current_tile_px *
+					0.5,
+		)
+
+		tile.scale = Vector2.ONE
+		tile.z_index = BOARD_TILE_Z
+
+	if is_instance_valid(_win_preview_node):
+		_win_preview_node.radius_px = (
+			_current_tile_px *
+			0.3
+		)
+
+		_win_preview_node.queue_redraw()
+
+
+func _relayout_gomoku_bowl_tiles() -> void:
+	var bowls: Array[TextureRect] = [
+		PlayerBowl,
+		OppBowl,
+	]
+
+	for bowl in bowls:
+		if not is_instance_valid(bowl):
+			continue
+
+		for child in bowl.get_children():
+			if not child is TextureRect:
+				continue
+
+			var tile := child as TextureRect
+
+			tile.custom_minimum_size = Vector2(
+				_current_tile_px,
+				_current_tile_px,
+			)
+
+			tile.size = Vector2(
+				_current_tile_px,
+				_current_tile_px,
+			)
+
+			tile.pivot_offset = (
+				tile.size *
+				0.5
+			)
+
+			tile.z_index = 50
+
+			_place_random_in_bowl(
+				bowl,
+				tile,
+			)
+
+
+func _finish_gomoku_responsive_layout(
+	layout_generation: int,
+) -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	if (
+		not is_inside_tree() or
+		layout_generation !=
+			_gomoku_layout_generation
+	):
+		return
+	
+	_layout_gomoku_action_ui(
+		_gomoku_is_portrait,
+	)
+
+	_relayout_gomoku_board_tiles()
+	_relayout_gomoku_bowl_tiles()
+
+	player_avatar_display.pivot_offset = (
+		player_avatar_display.size *
+		0.5
+	)
+
+	opp_avatar_display.pivot_offset = (
+		opp_avatar_display.size *
+		0.5
+	)
+
+	_clear_gomoku_win_burst_proxies()
+
+	if (
+		is_instance_valid(win_loss_label) and
+		win_loss_label.visible and
+		is_instance_valid(
+			_gomoku_active_win_burst_avatar
+		)
+	):
+		_show_gomoku_win_burst(
+			_gomoku_active_win_burst_avatar,
+		)
 
 func _update_win_preview_for_current_move() -> void:
 	if _current_move.x < 0 or _current_move.y < 0:

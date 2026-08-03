@@ -15,15 +15,6 @@ shader_parameter/vignette_intensity = 0.1
 shader_parameter/vignette_opacity = 0.412
 shader_parameter/vignette_rgb = Color(0, 0, 0, 1)
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_xpj4b"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_1ko3n"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_8oayu"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_xpj4b"]
 corner_radius_top_left = 8
 corner_radius_top_right = 8
@@ -64,15 +55,6 @@ expand_margin_bottom = 5.0
 shadow_color = Color(0, 0, 0, 0.647059)
 shadow_size = 4
 shadow_offset = Vector2(-1, 4)
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_0pvrk"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_u2n3q"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_qrx05"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_qrx05"]
 texture = ExtResource("5_elfvu")
@@ -185,9 +167,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_xpj4b")
-texture_pressed = SubResource("ViewportTexture_1ko3n")
-texture_hover = SubResource("ViewportTexture_8oayu")
 is_display_only = true
 
 [node name="GameAreaCenterContainer" type="CenterContainer" parent="MarginContainer/InfoHBoxContainer" unique_id=1577027218]
@@ -244,9 +223,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_0pvrk")
-texture_pressed = SubResource("ViewportTexture_u2n3q")
-texture_hover = SubResource("ViewportTexture_qrx05")
 is_display_only = true
 controlled_by_data = true
 

@@ -279,16 +279,17 @@ func _on_theme_option_button_item_selected(index: int):
 func _setup_avatar_customizer():
 	main_avatar_preview = AvatarThumbnailScene.instantiate()
 	main_avatar_preview.is_display_only = true
-	main_avatar_preview.custom_minimum_size = Vector2(96, 75)
+	main_avatar_preview.custom_minimum_size = Vector2(96, 140)
+	main_preview_container.custom_minimum_size.y = 140
 	main_preview_container.add_child(main_avatar_preview)
 
 	avatar_tab_container.tab_changed.connect(_on_avatar_tab_changed)
-	avatar_tab_container.add_tab("Background")
+	avatar_tab_container.add_tab("BG")
 	avatar_tab_container.add_tab("Body")
 	avatar_tab_container.add_tab("Hair")
 	avatar_tab_container.add_tab("Face")
-	avatar_tab_container.add_tab("Clothing")
-	# avatar_tab_container.add_tab("Accessories")
+	avatar_tab_container.add_tab("Cloth")
+	avatar_tab_container.add_tab("Acc.")
 	avatar_tab_container.current_tab = 0
 	_on_avatar_tab_changed(0)
 
@@ -305,12 +306,12 @@ func _on_avatar_tab_changed(tab_index: int, restored_scroll: Variant = null):
 
 	current_brightness_slider = null
 	match tab_name:
-		"Background": _populate_background_properties()
+		"BG": _populate_background_properties()
 		"Body": _populate_fshape_properties()
 		"Hair": _populate_hair_properties()
 		"Face": _populate_face_properties()
-		"Clothing": _populate_clothing_properties()
-		"Accessories": _populate_accessories_properties()
+		"Cloth": _populate_clothing_properties()
+		"Acc.": _populate_accessories_properties()
 
 	if restored_scroll != null:
 		for child in properties_box.get_children():
@@ -403,7 +404,9 @@ func _populate_clothing_properties():
 	_create_color_and_brightness_control("clothing", "color", "brightness", clothing_colors, default_color, initial_brightness)
 
 func _populate_accessories_properties():
-	var head_accessories_styles = ["None", "Hat1", "Headband"]
+	var head_accessories_styles := []
+	for i in range(13):
+		head_accessories_styles.append("hat_" + str(i))
 	_create_image_presets_scrollbar("accessories", "head_style", head_accessories_styles)
 	var face_accessories_styles = ["None", "Glasses", "Mask"]
 	_create_image_presets_scrollbar("accessories", "face_style", face_accessories_styles)
@@ -543,7 +546,7 @@ func _get_current_avatar_settings() -> Dictionary:
 		"accessories": {
 			"color": SettingsManager.get_setting("avatar_accessories", "color", Color("#ffffff")),
 			"brightness": SettingsManager.get_setting("avatar_accessories", "brightness", 0.0),
-			"head_style": SettingsManager.get_setting("avatar_accessories", "head_style", "None"),
+			"head_style": SettingsManager.get_setting("avatar_accessories", "head_style", "hat_0"),
 			"face_style": SettingsManager.get_setting("avatar_accessories", "face_style", "None"),
 		}
 	}
@@ -551,7 +554,7 @@ func _get_current_avatar_settings() -> Dictionary:
 func _create_image_presets_scrollbar(category: String, key: String, style_options: Array):
 	var scroll_container := ScrollContainer.new()
 	scroll_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll_container.custom_minimum_size = Vector2(0, 100)
+	scroll_container.custom_minimum_size = Vector2(0, 150)
 	scroll_container.mouse_filter = Control.MOUSE_FILTER_PASS
 	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -576,7 +579,7 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 
 	for style_name in style_options:
 		var thumbnail := AvatarThumbnailScene.instantiate()
-		thumbnail.custom_minimum_size = Vector2(96, 75)
+		thumbnail.custom_minimum_size = Vector2(96, 140)
 		thumbnail.controlled_by_data = true
 		thumbnail.focus_mode = Control.FOCUS_NONE
 		thumbnail.mouse_filter = Control.MOUSE_FILTER_PASS

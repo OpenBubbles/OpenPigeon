@@ -33,7 +33,8 @@ const Z_HAIR_BACK        := 10
 const Z_BACKGROUND       := 0
 # Bottom
 
-const AVATAR_PART_SIZE = 256
+const AVATAR_PART_SIZE := 256
+const HEAD_ACCESSORY_CELL_SIZE := 384
 
 @export var AVATAR_FG_SCALE_RATIO := 1.1  # >1.0 makes the avatar larger inside the background
 @export var AVATAR_FG_BOTTOM_PAD  := -12   # +down / -up in pixels
@@ -100,7 +101,6 @@ const MOUTH_WITH_FACIAL_HAIR := {
 	
 const avatar_clothing_regions := { "clothing1": Rect2(0, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE), "clothing2": Rect2(AVATAR_PART_SIZE, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE), "clothing3": Rect2(AVATAR_PART_SIZE * 2, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE)}
 
-const avatar_head_accessories_regions := { "None": Rect2(0, 0, 1, 1), "Hat1": Rect2(0, 0, 64, 64), "Headband": Rect2(64, 0, 64, 64) }
 const avatar_face_accessories_regions := { "None": Rect2(0, 0, 1, 1), "Glasses": Rect2(128, 0, 64, 64), "Mask": Rect2(192, 0, 64, 64) }
 
 var _selection_stylebox: StyleBox = null
@@ -291,17 +291,36 @@ func _draw_avatar(settings: Dictionary) -> void:
 	# Accessories
 	var acc_color = settings["accessories"]["color"]
 	var final_acc_color = calculate_final_color(acc_color, settings["accessories"]["brightness"])
-	avatar_head_accessories.texture = AvatarResources.AVATAR_ACCESSORIES_MAP_PATH
+	avatar_head_accessories.texture = AvatarResources.AVATAR_HEAD_ACCESSORIES_MAP_PATH
 	avatar_face_accessories.texture = AvatarResources.AVATAR_ACCESSORIES_MAP_PATH
-	avatar_head_accessories.self_modulate = final_acc_color
+	avatar_head_accessories.self_modulate = Color.WHITE
 	avatar_face_accessories.self_modulate = final_acc_color
-	var head_acc_style = settings["accessories"]["head_style"]
-	if avatar_head_accessories_regions.has(head_acc_style) and head_acc_style != "None":
+	avatar_head_accessories.offset = Vector2(0, -64)
+
+	var head_acc_style = str(settings["accessories"]["head_style"])
+	var head_acc_index = 0
+
+	if head_acc_style == "Hat1":
+		head_acc_index = 1
+	elif head_acc_style.begins_with("hat_"):
+		var head_acc_number = head_acc_style.trim_prefix("hat_")
+		if head_acc_number.is_valid_int():
+			head_acc_index = clampi(head_acc_number.to_int(), 0, 12)
+	elif head_acc_style.is_valid_int():
+		head_acc_index = clampi(head_acc_style.to_int(), 0, 12)
+
+	if head_acc_index > 0:
 		avatar_head_accessories.region_enabled = true
-		avatar_head_accessories.region_rect = avatar_head_accessories_regions[head_acc_style]
+		avatar_head_accessories.region_rect = Rect2(
+			(head_acc_index % 5) * HEAD_ACCESSORY_CELL_SIZE,
+			int(head_acc_index / 5) * HEAD_ACCESSORY_CELL_SIZE,
+			HEAD_ACCESSORY_CELL_SIZE,
+			HEAD_ACCESSORY_CELL_SIZE
+		)
 		avatar_head_accessories.self_modulate.a = 1.0
 	else:
 		avatar_head_accessories.self_modulate.a = 0.0
+
 	var face_acc_style = settings["accessories"]["face_style"]
 	if avatar_face_accessories_regions.has(face_acc_style) and face_acc_style != "None":
 		avatar_face_accessories.region_enabled = true
@@ -421,17 +440,20 @@ func set_selected(is_selected: bool):
 
 func _center_and_scale_sprites():
 	var center_x: float = sub_viewport.size.x * 0.5
-	var h: float = sub_viewport.size.y
+	var h: float = 90.0
+	var top_offset: float = max(0.0, float(sub_viewport.size.y) - h)
 	var base_bg_size := 128.0
 	var bg_scale_x := sub_viewport.size.x / base_bg_size
-	var bg_scale_y := sub_viewport.size.y / base_bg_size
+	var bg_scale_y := h / base_bg_size
 	var bg_scale_factor : float = max(bg_scale_x, bg_scale_y)
+
 	avatar_background.centered = true
 	avatar_background.position = Vector2(center_x, h * 0.5)
 	avatar_background.scale = Vector2(bg_scale_factor, bg_scale_factor)
+
 	var s256 := (h / 256.0) * AVATAR_FG_SCALE_RATIO
 	var visual_h := h * AVATAR_FG_SCALE_RATIO
-	var base_y := h - (visual_h * 0.5) - AVATAR_FG_BOTTOM_PAD
+	var base_y := top_offset + h - (visual_h * 0.5) - AVATAR_FG_BOTTOM_PAD
 
 	for sprite in [avatar_hair_back, avatar_base_fshape, avatar_torso, avatar_hair_front, avatar_eyes, avatar_mouth, avatar_clothing, avatar_clothing_details, avatar_head_accessories, avatar_face_accessories]:
 		if sprite:

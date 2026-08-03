@@ -139,7 +139,13 @@ static func _show_win_burst(avatar: Control) -> void:
 
 # ---------- Rules popup ----------
 
-static func open_rules_popup(game: Node, rules_button: Button, title: String, body: String) -> void:
+static func open_rules_popup(
+	game: Node,
+	rules_button: Button,
+	title: String,
+	body: String,
+	on_closed: Callable,
+) -> void:
 	if is_instance_valid(rules_button):
 		rules_button.pivot_offset = rules_button.size / 2.0
 		var bump := game.create_tween()
@@ -157,10 +163,17 @@ static func open_rules_popup(game: Node, rules_button: Button, title: String, bo
 	root.add_child(popup)
 	popup.z_index = 200
 	dim.z_index = 150
-	popup.tree_exited.connect(func():
-		if is_instance_valid(dim):
-			dim.queue_free()
+
+	popup.tree_exited.connect(
+		func():
+			if on_closed.is_valid():
+				on_closed.call()
+
+			if is_instance_valid(dim):
+				dim.queue_free(),
+		CONNECT_ONE_SHOT,
 	)
+
 	popup.open(title, body)
 
 # ---------- Settings popup ----------

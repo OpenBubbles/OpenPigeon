@@ -78,8 +78,10 @@ func ensure_avatar_defaults() -> void:
 
 	# Accessories (head/face)
 	var head_acc: String = str(get_setting("avatar_accessories", "head_style", ""))
-	if head_acc == "":
-		set_setting("avatar_accessories", "head_style", _first_key(AT.avatar_head_accessories_regions, "None"))
+	if head_acc == "" or head_acc == "None" or head_acc == "Headband":
+		set_setting("avatar_accessories", "head_style", "hat_0")
+	elif head_acc == "Hat1":
+		set_setting("avatar_accessories", "head_style", "hat_1")
 
 	var face_acc: String = str(get_setting("avatar_accessories", "face_style", ""))
 	if face_acc == "":

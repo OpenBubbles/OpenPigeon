@@ -88,8 +88,44 @@ Player 1 tries to guess Player 2's secret answer in 20 questions or less.
 
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
-	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
-		_my_avatar_string = player_avatar_display.get_avatar_data_string()
+	if is_instance_valid(player_avatar_display):
+		player_avatar_display.clip_contents = false
+
+		var internal_viewport := (
+			player_avatar_display.get_node_or_null(
+				"SubViewportContainer/SubViewport",
+			) as SubViewport
+		)
+
+		if internal_viewport != null:
+			internal_viewport.render_target_update_mode = (
+				SubViewport.UPDATE_ALWAYS
+			)
+
+		var internal_preview := (
+			player_avatar_display.get_node_or_null(
+				"SubViewportContainer",
+			) as SubViewportContainer
+		)
+
+		if internal_preview != null:
+			internal_preview.mouse_filter = (
+				Control.MOUSE_FILTER_IGNORE
+			)
+			internal_preview.visible = true
+			internal_preview.self_modulate = Color.WHITE
+			internal_preview.pivot_offset = Vector2(
+				48.0,
+				140.0,
+			)
+			internal_preview.scale = Vector2.ONE
+
+		if player_avatar_display.has_method(
+			"get_avatar_data_string",
+		):
+			_my_avatar_string = (
+				player_avatar_display.get_avatar_data_string()
+			)
 		
 	var sender_id := _get_s(last_raw_payload, "sender", "")
 	_refresh_avatar_roles(sender_id)
@@ -1356,16 +1392,49 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 
 			opp_inst.set("controlled_by_data", true)
 			opp_inst.set("is_display_only", true)
-			opp_inst.set_anchors_preset(Control.PRESET_FULL_RECT, false)
-			opp_inst.offset_left = 24
-			opp_inst.offset_right = 0
-			opp_inst.offset_top = 15
-			opp_inst.offset_bottom = 0
-			opp_inst.custom_minimum_size = Vector2(72, 56)
 			opp_inst.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			opp_inst.clip_contents = false
 			left_stack.add_child(opp_inst)
-			opp_inst.scale = Vector2(0.75, 0.75)
-			dbg("row_avatar added left_stack_size=%s" % str(left_stack.get_rect().size))
+			opp_inst.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
+			opp_inst.position = Vector2.ZERO
+			opp_inst.size = Vector2(96.0, 75.0)
+			opp_inst.custom_minimum_size = Vector2(96.0,75.0)
+			opp_inst.pivot_offset = Vector2.ZERO
+			opp_inst.scale = Vector2(0.75,0.75)
+
+			var internal_viewport := (
+				opp_inst.get_node_or_null(
+					"SubViewportContainer/SubViewport",
+				) as SubViewport
+			)
+
+			if internal_viewport != null:
+				internal_viewport.render_target_update_mode = (
+					SubViewport.UPDATE_ALWAYS
+				)
+
+			var internal_preview := (
+				opp_inst.get_node_or_null(
+					"SubViewportContainer",
+				) as SubViewportContainer
+			)
+
+			if internal_preview != null:
+				internal_preview.mouse_filter = (
+					Control.MOUSE_FILTER_IGNORE
+				)
+				internal_preview.visible = true
+				internal_preview.self_modulate = Color.WHITE
+				internal_preview.pivot_offset = Vector2(
+					48.0,
+					140.0,
+				)
+				internal_preview.scale = Vector2.ONE
+
+			dbg(
+				"row_avatar added left_stack_size=%s" %
+				str(left_stack.get_rect().size)
+			)
 
 			if _sender_avatar_data.is_empty():
 				OpLog.w(LOG_TAG, "row_sender_avatar_empty_using_defaults")

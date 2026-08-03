@@ -54,24 +54,6 @@ albedo_texture = ExtResource("9_ohmqa")
 material = SubResource("StandardMaterial3D_fvh8h")
 size = Vector2(1.5, 1.5)
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_ohmqa"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_fvh8h"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_qilti"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_24vgr"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_8pydp"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_tmo83"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_f7ola"]
 bg_color = Color(0.8392157, 0.7921569, 0.24313726, 1)
 corner_radius_top_left = 8
@@ -356,9 +338,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_ohmqa")
-texture_pressed = SubResource("ViewportTexture_fvh8h")
-texture_hover = SubResource("ViewportTexture_qilti")
 is_display_only = true
 
 [node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoContainer/VBoxContainer" unique_id=612783076]
@@ -432,9 +411,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_24vgr")
-texture_pressed = SubResource("ViewportTexture_8pydp")
-texture_hover = SubResource("ViewportTexture_tmo83")
 is_display_only = true
 controlled_by_data = true
 

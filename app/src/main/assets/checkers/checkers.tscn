@@ -8,24 +8,6 @@
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="6_wk37g"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="7_736no"]
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_4qhse"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_wk37g"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_736no"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_dd3h5"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_kefgb"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_f5lgo"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wk37g"]
 bg_color = Color(0.6, 0.6, 0.6, 0)
 shadow_size = 20
@@ -136,7 +118,8 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.84786046, 0.77981114, 0.76212347, 1)
 
-[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=296782781]
+[node name="CheckersMainVBox" type="VBoxContainer" parent="." unique_id=296782781]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -144,26 +127,36 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer" unique_id=37953435]
+[node name="CheckersTopHudMargin" type="MarginContainer" parent="CheckersMainVBox" unique_id=37953435]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/margin_left = 20
-theme_override_constants/margin_top = 10
+theme_override_constants/margin_top = 40
 theme_override_constants/margin_right = 20
 theme_override_constants/margin_bottom = 0
 
-[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="VBoxContainer/MarginContainer" unique_id=1815698414]
+[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="CheckersMainVBox/CheckersTopHudMargin" unique_id=1815698414]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 
-[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer" unique_id=1620434473]
+[node name="HBoxContainer" type="HBoxContainer" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer" unique_id=1620434473]
 layout_mode = 2
 
-[node name="PlayerContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer" unique_id=391216103]
+[node name="PlayerContainer" type="VBoxContainer" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer/HBoxContainer" unique_id=391216103]
 layout_mode = 2
 
-[node name="YouLabel" type="Label" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer/PlayerContainer" unique_id=1088997496]
+[node name="PlayerAvatarDisplay" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer/HBoxContainer/PlayerContainer" unique_id=2009099527 instance=ExtResource("1_4qhse")]
 unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+is_display_only = true
+
+[node name="YouLabel" type="Label" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer/HBoxContainer/PlayerContainer" unique_id=1088997496]
+unique_name_in_owner = true
+z_index = 1
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
@@ -172,80 +165,74 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="PlayerAvatarDisplay" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer/PlayerContainer" unique_id=2009099527 instance=ExtResource("1_4qhse")]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 4
-size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_4qhse")
-texture_pressed = SubResource("ViewportTexture_wk37g")
-texture_hover = SubResource("ViewportTexture_736no")
-is_display_only = true
-
-[node name="PlayerPieceContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer" unique_id=660710194]
+[node name="PlayerPieceContainer" type="VBoxContainer" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer/HBoxContainer" unique_id=660710194]
 layout_mode = 2
 
-[node name="Control" type="Control" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer/PlayerPieceContainer" unique_id=1020807403]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
-
-[node name="PlayerPiece" type="TextureRect" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer/PlayerPieceContainer" unique_id=1353645607]
+[node name="PlayerPiece" type="TextureRect" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer/HBoxContainer/PlayerPieceContainer" unique_id=1353645607]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
+size_flags_vertical = 10
 texture = ExtResource("2_t0jlu")
 expand_mode = 3
 stretch_mode = 4
 
-[node name="Spacer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer" unique_id=1060202107]
+[node name="PlayerPieceTopSpacer" type="Control" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer/HBoxContainer/PlayerPieceContainer" unique_id=1020807403]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+
+[node name="Spacer" type="VBoxContainer" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer" unique_id=1060202107]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="HBoxContainer2" type="HBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer" unique_id=252820419]
+[node name="HBoxContainer2" type="HBoxContainer" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer" unique_id=252820419]
 layout_mode = 2
 
-[node name="OppPieceContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2" unique_id=1516656298]
+[node name="OppPieceContainer" type="VBoxContainer" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer/HBoxContainer2" unique_id=1516656298]
 layout_mode = 2
 
-[node name="Control" type="Control" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2/OppPieceContainer" unique_id=1483497191]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
-
-[node name="OppPiece" type="TextureRect" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2/OppPieceContainer" unique_id=103316106]
+[node name="OppPiece" type="TextureRect" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer/HBoxContainer2/OppPieceContainer" unique_id=103316106]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
+size_flags_vertical = 10
 texture = ExtResource("2_nlcs0")
 expand_mode = 3
 stretch_mode = 4
 
-[node name="OppContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2" unique_id=1800004970]
+[node name="OppPieceTopSpacer" type="Control" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer/HBoxContainer2/OppPieceContainer" unique_id=1483497191]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 30)
 layout_mode = 2
 
-[node name="OppLabel" type="Control" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2/OppContainer" unique_id=63188163]
-custom_minimum_size = Vector2(0, 26)
+[node name="OppContainer" type="VBoxContainer" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer/HBoxContainer2" unique_id=1800004970]
 layout_mode = 2
 
-[node name="OppAvatarDisplay" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2/OppContainer" unique_id=566378402 instance=ExtResource("1_4qhse")]
+[node name="OppAvatarDisplay" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer/HBoxContainer2/OppContainer" unique_id=566378402 instance=ExtResource("1_4qhse")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_dd3h5")
-texture_pressed = SubResource("ViewportTexture_kefgb")
-texture_hover = SubResource("ViewportTexture_f5lgo")
 is_display_only = true
 controlled_by_data = true
 
-[node name="CenterContainer" type="CenterContainer" parent="VBoxContainer" unique_id=516894525]
+[node name="OppLabel" type="Control" parent="CheckersMainVBox/CheckersTopHudMargin/TopInfoHBoxContainer/HBoxContainer2/OppContainer" unique_id=63188163]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
+
+[node name="CheckersBoardCenter" type="CenterContainer" parent="CheckersMainVBox" unique_id=516894525]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="Node2D" type="PanelContainer" parent="VBoxContainer/CenterContainer" unique_id=770811710]
+[node name="CheckersBoardPanel" type="PanelContainer" parent="CheckersMainVBox/CheckersBoardCenter" unique_id=770811710]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_wk37g")
 
-[node name="CheckersBoardTop" type="TextureRect" parent="VBoxContainer/CenterContainer/Node2D" unique_id=510443736]
+[node name="CheckersBoardTop" type="TextureRect" parent="CheckersMainVBox/CheckersBoardCenter/CheckersBoardPanel" unique_id=510443736]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(625, 625)
 layout_mode = 2
@@ -254,7 +241,7 @@ expand_mode = 2
 stretch_mode = 5
 script = ExtResource("2_3slu2")
 
-[node name="WinLossLabel" type="Label" parent="VBoxContainer/CenterContainer/Node2D" unique_id=2042408597]
+[node name="WinLossLabel" type="Label" parent="CheckersMainVBox/CheckersBoardCenter/CheckersBoardPanel" unique_id=2042408597]
 unique_name_in_owner = true
 visible = false
 z_index = 6
@@ -265,20 +252,22 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_4qhse")
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="VBoxContainer" unique_id=804983312]
+[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="CheckersMainVBox" unique_id=804983312]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 10
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/BottomItemHBoxContainer" unique_id=1990101535]
+[node name="CheckersBottomControlsMargin" type="MarginContainer" parent="CheckersMainVBox/BottomItemHBoxContainer" unique_id=1990101535]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/margin_left = 40
 theme_override_constants/margin_right = 40
 theme_override_constants/margin_bottom = 30
 
-[node name="SettingsButton" type="Button" parent="VBoxContainer/BottomItemHBoxContainer/MarginContainer" unique_id=1150453400]
+[node name="SettingsButton" type="Button" parent="CheckersMainVBox/BottomItemHBoxContainer/CheckersBottomControlsMargin" unique_id=1150453400]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -290,7 +279,7 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_dd3h5")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_kefgb")
 theme_override_styles/hover = SubResource("StyleBoxTexture_f5lgo")
 
-[node name="RulesButton" type="Button" parent="VBoxContainer/BottomItemHBoxContainer/MarginContainer" unique_id=967674531]
+[node name="RulesButton" type="Button" parent="CheckersMainVBox/BottomItemHBoxContainer/CheckersBottomControlsMargin" unique_id=967674531]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2

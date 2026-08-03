@@ -11,6 +11,9 @@ func _input(event: InputEvent) -> void:
 		if mb.button_index != MOUSE_BUTTON_LEFT or not mb.pressed:
 			return
 
+		if board._is_blocking_menu_open():
+			return
+
 		if not get_global_rect().has_point(mb.position):
 			return
 
@@ -27,6 +30,9 @@ func _input(event: InputEvent) -> void:
 		var touch: InputEventScreenTouch = event as InputEventScreenTouch
 
 		if not touch.pressed:
+			return
+
+		if board._is_blocking_menu_open():
 			return
 
 		if not get_global_rect().has_point(touch.position):

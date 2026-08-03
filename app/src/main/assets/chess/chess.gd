@@ -74,16 +74,86 @@ var flip_board_ui: bool = false  # Whether to flip the board UI to put local pla
 @onready var player_avatar_display = %PlayerAvatarDisplay
 @onready var opp_avatar_display = %OppAvatarDisplay
 @onready var background: ColorRect = %Background
-@onready var player_marker: TextureRect = %PlayerMarker
-@onready var opp_marker: TextureRect = %OpponentMarker
+@onready var player_marker: TextureRect = %PlayerChessBlack
+@onready var opp_marker: TextureRect = %PlayerChessWhite
 @onready var send_button: Button = %SendButton
 @onready var win_loss_label: Label = %WinLossLabel
 @onready var you_label: Label = %YouLabel
 @onready var spec_label: Label = %SpecLabel
+@onready var chess_top_bar: HBoxContainer = %TopBarContainer
+@onready var chess_top_margin: MarginContainer = %TopMarginContainer
+@onready var chess_bottom_margin: MarginContainer = %BottomMarginContainer
+@onready var chess_bottom_controls: HBoxContainer = %BottomItemHBoxContainer
 
 const MUSIC_STREAM := preload("res://global/audio/chess.ogg")
 const CHESS_VERBOSE_LOGS := false
 const LOG_TAG := "Chess"
+
+const CHESS_REFERENCE_PORTRAIT_SIZE := Vector2(
+	648.0,
+	1152.0,
+)
+
+const CHESS_LANDSCAPE_STACK_HEIGHT_RATIO := 0.80
+const CHESS_LANDSCAPE_UI_MULTIPLIER := 1.60
+
+const CHESS_BASE_AVATAR_SIZE := Vector2(
+	96.0,
+	90.0,
+)
+
+const CHESS_BASE_MARKER_SIZE := Vector2(
+	32.0,
+	32.0,
+)
+
+const CHESS_BASE_OPPONENT_TOP_SPACER := 26.0
+const CHESS_BASE_YOU_FONT_SIZE := 18.0
+
+const CHESS_BASE_MENU_BUTTON_SIZE := Vector2(
+	64.0,
+	64.0,
+)
+
+const CHESS_BASE_MENU_FONT_SIZE := 32.0
+
+const CHESS_BASE_SEND_BUTTON_SIZE := Vector2(
+	70.0,
+	50.0,
+)
+
+const CHESS_BASE_SEND_FONT_SIZE := 28.0
+
+const CHESS_BASE_CHECK_LABEL_HEIGHT := 40.0
+const CHESS_CHECK_BOARD_GAP := 5.0
+const CHESS_BOARD_SEND_GAP := 12.0
+
+const CHESS_BASE_TOP_SIDE_MARGIN := 40.0
+const CHESS_BASE_TOP_MARGIN := 30.0
+
+const CHESS_LANDSCAPE_TOP_SIDE_MARGIN := 20.0
+const CHESS_LANDSCAPE_TOP_MARGIN := 10.0
+
+const CHESS_BASE_BOTTOM_SIDE_MARGIN := 40.0
+const CHESS_BASE_BOTTOM_MARGIN := 30.0
+const CHESS_BASE_BOTTOM_HEIGHT := 120.0
+
+const CHESS_BASE_OVERLAY_FONT_SIZE := 25.0
+
+const CHESS_BASE_SPECTATOR_FONT_SIZE := 50.0
+const CHESS_BASE_SPECTATOR_HALF_WIDTH := 324.0
+const CHESS_BASE_SPECTATOR_HEIGHT := 220.0
+const CHESS_PORTRAIT_SPECTATOR_TOP_OFFSET := 90.0
+
+const CHESS_WIN_BURST_WRAPPER_NAME := (
+	"ChessResponsiveWinBurstWrapper"
+)
+
+var _chess_layout_pending := false
+var _chess_current_ui_scale := 1.0
+var _chess_send_target_visible := false
+
+var _chess_active_win_burst_avatar: TextureButton = null
 
 var sent_tween: Tween
 var win_loss_tween: Tween
@@ -140,8 +210,6 @@ var opponent_last_move_to: Vector2i = Vector2i(-1, -1)    # opponent's last move
 
 # UI controls
 var undo_arrow_label: Label = null
-var player_chess_black: Sprite2D = null
-var player_chess_white: Sprite2D = null
 
 # Promotion state (dialogs managed by ChessDialogs)
 var promotion_choice: String = ""  # "Q", "R", "B", or "N", set when user chooses
@@ -218,14 +286,6 @@ func _game_state_dict() -> Dictionary:
 		"reason": game_over_reason
 	}
 
-## Calculate player index from GamePigeon protocol fields.
-## GamePigeon protocol: The "player" field indicates whose turn it currently is.
-## - If it's NOT your turn, you are the OPPOSITE of the message player (flip 1↔2)
-## - If it IS your turn, you are the SAME as the message player
-## Returns the local player's index (1 = black, 2 = white)
-func _calculate_player_index(is_your_turn: bool, message_player: int) -> int:
-	return message_player if is_your_turn else (3 - message_player)
-
 # ---------- Ready / plugin ----------
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
@@ -253,6 +313,57 @@ func _on_game_ready() -> void:
 		_update_turn_flags()
 		
 	_log_init.game_state("_ready after init", _game_state_dict())
+	var avatars: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatars:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		avatar_button.clip_contents = false
+
+		var internal_viewport := (
+			avatar_button.get_node_or_null(
+				"SubViewportContainer/SubViewport",
+			) as SubViewport
+		)
+
+		if internal_viewport != null:
+			internal_viewport.render_target_update_mode = (
+				SubViewport.UPDATE_ALWAYS
+			)
+
+		var internal_preview := (
+			avatar_button.get_node_or_null(
+				"SubViewportContainer",
+			) as SubViewportContainer
+		)
+
+		if internal_preview != null:
+			internal_preview.mouse_filter = (
+				Control.MOUSE_FILTER_IGNORE
+			)
+
+			internal_preview.visible = true
+			internal_preview.self_modulate = Color.WHITE
+			internal_preview.pivot_offset = Vector2(
+				48.0,
+				140.0,
+			)
+
+	var viewport := get_viewport()
+
+	if (
+		viewport != null and
+		not viewport.size_changed.is_connected(
+			_on_chess_viewport_size_changed,
+		)
+	):
+		viewport.size_changed.connect(
+			_on_chess_viewport_size_changed,
+		)
 	_compute_sizes()
 	_build_board_ui()
 	_refresh_board_ui()
@@ -283,7 +394,6 @@ func _set_game_data_impl(raw: String) -> void:
 	var orientation_changed: bool = false  # Track if board orientation changes
 	var ui_already_rebuilt: bool = false  # Track if we rebuilt UI early (before animation)
 	var data: Variant = JSON.parse_string(raw)
-	var opponent_avatar_key = ""
 	var replay: String = ""
 	_log_data.debug("_set_game_data parse result type=%s" % typeof(data))
 
@@ -299,37 +409,65 @@ func _set_game_data_impl(raw: String) -> void:
 		var message_player: int = clamp(int(data.get("player", 2)), 1, 2)
 		my_player_id = str(data.get("myPlayerId", my_player_id))
 
-		var player1_id: String = str(data.get("player1", ""))
-		var player2_id: String = str(data.get("player2", ""))
+		var player1_id: String = str(
+			data.get("player1", "")
+		)
+
+		var player2_id: String = str(
+			data.get("player2", "")
+		)
+
 		var resolved_player := 0
 
-		if my_player_id != "" and player1_id != "" and player2_id != "":
+		if (
+			not my_player_id.is_empty() and
+			not player1_id.is_empty() and
+			not player2_id.is_empty()
+		):
 			if my_player_id == player1_id:
 				resolved_player = 1
-				opponent_avatar_key = "avatar2"
 			elif my_player_id == player2_id:
 				resolved_player = 2
-				opponent_avatar_key = "avatar1"
 		else:
-			resolved_player = _calculate_player_index(
-				isYourTurn,
-				message_player
-			)
-			opponent_avatar_key = (
-				"avatar2"
-				if resolved_player == 1
-				else "avatar1"
+			# The message player is the sender.
+			#
+			# Opening our own sent game:
+			# isYourTurn = false, so we are message_player.
+			#
+			# Receiving the opponent's game:
+			# isYourTurn = true, so we are the opposite player.
+			resolved_player = (
+				3 - message_player
+				if isYourTurn
+				else message_player
 			)
 
 		spectator_mode = resolved_player == 0
-		my_player_index = 1 if spectator_mode else resolved_player
-		enemy_player_index = 2 if my_player_index == 1 else 1
+
+		my_player_index = (
+			1
+			if spectator_mode
+			else resolved_player
+		)
+
+		enemy_player_index = (
+			2
+			if my_player_index == 1
+			else 1
+		)
 
 		my_color = "b" if my_player_index == 1 else "w"
 		var opp_color: String = ChessPiece.opposite_side(my_color)
 
-		player_marker.modulate = ChessUI.get_marker_color(my_color)
-		opp_marker.modulate = ChessUI.get_marker_color(opp_color)
+		if is_instance_valid(player_marker):
+			player_marker.modulate = (
+				ChessUI.get_marker_color(my_color)
+			)
+
+		if is_instance_valid(opp_marker):
+			opp_marker.modulate = (
+				ChessUI.get_marker_color(opp_color)
+			)
 
 		if is_instance_valid(spec_label):
 			spec_label.visible = spectator_mode
@@ -338,36 +476,71 @@ func _set_game_data_impl(raw: String) -> void:
 			you_label.modulate.a = 0.0 if spectator_mode else 1.0
 
 		if spectator_mode:
-			if data.has("avatar1") and is_instance_valid(player_avatar_display):
+			# Spectator:
+			# left = Player 1 / avatar1
+			# right = Player 2 / avatar2
+			var avatar1_string := String(
+				data.get("avatar1", "")
+			)
+
+			if (
+				not avatar1_string.is_empty() and
+				is_instance_valid(
+					player_avatar_display
+				)
+			):
 				player_avatar_display.call_deferred(
 					"update_avatar_from_data",
 					GameUtils._parse_avatar_string(
-						String(data["avatar1"])
-					)
+						avatar1_string
+					),
 				)
 
-			if data.has("avatar2") and is_instance_valid(opp_avatar_display):
+			var avatar2_string := String(
+				data.get("avatar2", "")
+			)
+
+			if (
+				not avatar2_string.is_empty() and
+				is_instance_valid(
+					opp_avatar_display
+				)
+			):
 				opp_avatar_display.call_deferred(
 					"update_avatar_from_data",
 					GameUtils._parse_avatar_string(
-						String(data["avatar2"])
-					)
+						avatar2_string
+					),
 				)
-		elif opponent_avatar_key != "" and data.has(opponent_avatar_key):
-			var avatar_string: String = String(
-				data[opponent_avatar_key]
+
+		else:
+			# Playing:
+			# left remains the local avatar.
+			# right reads the opposite player's avatar.
+			var opponent_avatar_key := (
+				"avatar2"
+				if my_player_index == 1
+				else "avatar1"
 			)
 
-			var opponent_data: Dictionary = (
-				GameUtils._parse_avatar_string(
-					avatar_string
+			var opponent_avatar_string := String(
+				data.get(
+					opponent_avatar_key,
+					"",
 				)
 			)
 
-			if is_instance_valid(opp_avatar_display):
+			if (
+				not opponent_avatar_string.is_empty() and
+				is_instance_valid(
+					opp_avatar_display
+				)
+			):
 				opp_avatar_display.call_deferred(
 					"update_avatar_from_data",
-					opponent_data
+					GameUtils._parse_avatar_string(
+						opponent_avatar_string
+					),
 				)
 		# Track if orientation changed (for UI rebuild detection)
 		var old_flip_board_ui = flip_board_ui
@@ -571,12 +744,102 @@ func _update_turn_flags() -> void:
 
 # ---------- UI / sizes ----------
 func _compute_sizes() -> void:
-	var viewport_size: Vector2 = get_viewport_rect().size
+	var viewport_size: Vector2 = (
+		get_viewport_rect().size
+	)
 
-	var dims: Dictionary = ChessUI.calculate_board_dimensions(
-		viewport_size,
-		BOARD_SAFE_TOP,
-		BOARD_SAFE_BOTTOM
+	var is_portrait := (
+		viewport_size.y >=
+		viewport_size.x
+	)
+
+	if is_portrait:
+		_chess_current_ui_scale = clampf(
+			minf(
+				viewport_size.x /
+					CHESS_REFERENCE_PORTRAIT_SIZE.x,
+				viewport_size.y /
+					CHESS_REFERENCE_PORTRAIT_SIZE.y,
+			),
+			0.78,
+			1.35,
+		)
+	else:
+		# Use both viewport width and height. This prevents
+		# extremely wide but short displays from producing
+		# oversized HUD assets.
+		var landscape_size_scale := minf(
+			viewport_size.x /
+				CHESS_REFERENCE_PORTRAIT_SIZE.y,
+			viewport_size.y /
+				CHESS_REFERENCE_PORTRAIT_SIZE.x,
+		)
+
+		_chess_current_ui_scale = clampf(
+			landscape_size_scale *
+				CHESS_LANDSCAPE_UI_MULTIPLIER,
+			1.25,
+			2.20,
+		)
+
+	var safe_top := (
+		BOARD_SAFE_TOP *
+		_chess_current_ui_scale
+	)
+
+	var safe_bottom := (
+		BOARD_SAFE_BOTTOM *
+		_chess_current_ui_scale
+	)
+
+	if not is_portrait:
+		var target_stack_height := (
+			viewport_size.y *
+			CHESS_LANDSCAPE_STACK_HEIGHT_RATIO
+		)
+
+		var check_height := maxf(
+			32.0,
+			CHESS_BASE_CHECK_LABEL_HEIGHT *
+				_chess_current_ui_scale,
+		)
+
+		var reserved_action_height := (
+			CHESS_CHECK_BOARD_GAP *
+				_chess_current_ui_scale +
+			check_height +
+			CHESS_BOARD_SEND_GAP *
+				_chess_current_ui_scale +
+			CHESS_BASE_SEND_BUTTON_SIZE.y *
+				_chess_current_ui_scale
+		)
+
+		var outside_stack_height := (
+			viewport_size.y -
+			target_stack_height
+		) * 0.5
+
+		# calculate_board_dimensions() adds its own viewport
+		# margin, so remove that margin from these safe values.
+		safe_top = maxf(
+			0.0,
+			outside_stack_height -
+				ChessUI.VIEWPORT_MARGIN,
+		)
+
+		safe_bottom = maxf(
+			0.0,
+			outside_stack_height +
+				reserved_action_height -
+				ChessUI.VIEWPORT_MARGIN,
+		)
+
+	var dims: Dictionary = (
+		ChessUI.calculate_board_dimensions(
+			viewport_size,
+			safe_top,
+			safe_bottom,
+		)
 	)
 
 	SQUARE_SIZE = dims["square_size"]
@@ -584,12 +847,378 @@ func _compute_sizes() -> void:
 	BOARD_ORIGIN = dims["board_origin"]
 	BLACK_THICK = dims["black_thick"]
 
+	var avatar_size := (
+		CHESS_BASE_AVATAR_SIZE *
+		_chess_current_ui_scale
+	)
+
+	var avatars: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatars:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		avatar_button.scale = Vector2.ONE
+		avatar_button.custom_minimum_size = avatar_size
+
+		var internal_preview := (
+			avatar_button.get_node_or_null(
+				"SubViewportContainer",
+			) as SubViewportContainer
+		)
+
+		if internal_preview != null:
+			internal_preview.scale = Vector2.ONE * (
+				_chess_current_ui_scale
+			)
+
+		avatar_button.queue_redraw()
+
+	var color_indicators: Array[TextureRect] = [
+	player_marker,
+	opp_marker,
+]
+
+	for indicator in color_indicators:
+		if not is_instance_valid(indicator):
+			continue
+
+		# These are fixed-size Chess color indicators,
+		# not scalable game-piece trays.
+		indicator.custom_minimum_size = (
+			CHESS_BASE_MARKER_SIZE
+		)
+
+		indicator.size = CHESS_BASE_MARKER_SIZE
+		indicator.scale = Vector2.ONE
+
+		indicator.size_flags_horizontal = (
+			Control.SIZE_SHRINK_CENTER
+		)
+
+		indicator.size_flags_vertical = (
+			Control.SIZE_SHRINK_CENTER
+		)
+
+		var indicator_container := (
+			indicator.get_parent() as BoxContainer
+		)
+
+		if is_instance_valid(indicator_container):
+			indicator_container.alignment = (
+				BoxContainer.ALIGNMENT_CENTER
+			)
+
+			# Remove the old Dots-and-Boxes-style
+			# vertical spacer from this container.
+			if indicator.get_index() > 0:
+				var previous_control := (
+					indicator_container.get_child(
+						indicator.get_index() - 1
+					) as Control
+				)
+
+				if is_instance_valid(previous_control):
+					previous_control.custom_minimum_size = (
+						Vector2.ZERO
+					)
+					
+	var opponent_avatar_spacer := (
+		opp_avatar_display
+			.get_parent()
+			.get_node_or_null("OppLabel") as Control
+	)
+
+	if is_instance_valid(opponent_avatar_spacer):
+		opponent_avatar_spacer.custom_minimum_size = Vector2(
+			0.0,
+			CHESS_BASE_OPPONENT_TOP_SPACER *
+				_chess_current_ui_scale,
+		)
+
+	you_label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				CHESS_BASE_YOU_FONT_SIZE *
+					_chess_current_ui_scale
+			),
+			1,
+		),
+	)
+
+	var top_side_margin := (
+		(
+			CHESS_BASE_TOP_SIDE_MARGIN
+			if is_portrait
+			else CHESS_LANDSCAPE_TOP_SIDE_MARGIN
+		) *
+		_chess_current_ui_scale
+	)
+
+	var top_margin := (
+		(
+			CHESS_BASE_TOP_MARGIN
+			if is_portrait
+			else CHESS_LANDSCAPE_TOP_MARGIN
+		) *
+		_chess_current_ui_scale
+	)
+
+	chess_top_margin.add_theme_constant_override(
+		"margin_left",
+		roundi(top_side_margin),
+	)
+
+	chess_top_margin.add_theme_constant_override(
+		"margin_top",
+		roundi(top_margin),
+	)
+
+	chess_top_margin.add_theme_constant_override(
+		"margin_right",
+		roundi(top_side_margin),
+	)
+
+	var avatar_stack_height := maxf(
+		CHESS_BASE_AVATAR_SIZE.y *
+			_chess_current_ui_scale +
+		CHESS_BASE_YOU_FONT_SIZE *
+			_chess_current_ui_scale,
+		CHESS_BASE_AVATAR_SIZE.y *
+			_chess_current_ui_scale +
+		CHESS_BASE_OPPONENT_TOP_SPACER *
+			_chess_current_ui_scale,
+	)
+
+	var marker_stack_height := (
+		CHESS_BASE_MARKER_SIZE.y
+	)
+
+	var top_hud_height := (
+		maxf(
+			avatar_stack_height,
+			marker_stack_height,
+		) +
+		top_margin
+	)
+
+	chess_top_margin.set_anchors_preset(
+		Control.PRESET_TOP_WIDE,
+		false,
+	)
+
+	chess_top_margin.offset_left = 0.0
+	chess_top_margin.offset_top = 0.0
+	chess_top_margin.offset_right = 0.0
+	chess_top_margin.offset_bottom = top_hud_height
+
+	var menu_size := (
+		CHESS_BASE_MENU_BUTTON_SIZE *
+		_chess_current_ui_scale
+	)
+
+	var menu_buttons: Array[Button] = [
+		settings_button,
+		rules_button,
+	]
+
+	for menu_button in menu_buttons:
+		if not is_instance_valid(menu_button):
+			continue
+
+		menu_button.custom_minimum_size = menu_size
+
+		menu_button.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					CHESS_BASE_MENU_FONT_SIZE *
+						_chess_current_ui_scale
+				),
+				1,
+			),
+		)
+
+	var bottom_side_margin := (
+		CHESS_BASE_BOTTOM_SIDE_MARGIN *
+		_chess_current_ui_scale
+	)
+
+	var bottom_margin := (
+		CHESS_BASE_BOTTOM_MARGIN *
+		_chess_current_ui_scale
+	)
+
+	chess_bottom_margin.add_theme_constant_override(
+		"margin_left",
+		roundi(bottom_side_margin),
+	)
+
+	chess_bottom_margin.add_theme_constant_override(
+		"margin_right",
+		roundi(bottom_side_margin),
+	)
+
+	chess_bottom_margin.add_theme_constant_override(
+		"margin_bottom",
+		roundi(bottom_margin),
+	)
+
+	var bottom_height := (
+		menu_size.y +
+		bottom_margin
+	)
+
+	if is_portrait:
+		bottom_height = maxf(
+			bottom_height,
+			CHESS_BASE_BOTTOM_HEIGHT *
+				_chess_current_ui_scale,
+		)
+
+	chess_bottom_controls.custom_minimum_size = Vector2(
+		0.0,
+		bottom_height,
+	)
+
+	chess_bottom_controls.set_anchors_preset(
+		Control.PRESET_BOTTOM_WIDE,
+		false,
+	)
+
+	chess_bottom_controls.offset_left = 0.0
+	chess_bottom_controls.offset_top = -bottom_height
+	chess_bottom_controls.offset_right = 0.0
+	chess_bottom_controls.offset_bottom = 0.0
+
+	var send_size := (
+		CHESS_BASE_SEND_BUTTON_SIZE *
+		_chess_current_ui_scale
+	)
+
+	send_button.size_flags_horizontal = (
+		Control.SIZE_SHRINK_CENTER
+	)
+
+	send_button.size_flags_vertical = (
+		Control.SIZE_SHRINK_CENTER
+	)
+
+	send_button.custom_minimum_size = send_size
+	send_button.size = send_size
+	send_button.scale = Vector2.ONE
+	send_button.pivot_offset = send_size * 0.5
+
+	send_button.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				CHESS_BASE_SEND_FONT_SIZE *
+					_chess_current_ui_scale
+			),
+			1,
+		),
+	)
+
+	var overlay_scale := clampf(
+		_chess_current_ui_scale,
+		0.85,
+		1.65,
+	)
+
+	var spectator_half_width := minf(
+		CHESS_BASE_SPECTATOR_HALF_WIDTH *
+			overlay_scale,
+		viewport_size.x *
+			0.46,
+	)
+
+	var spectator_top_offset := (
+		CHESS_PORTRAIT_SPECTATOR_TOP_OFFSET *
+			minf(
+				_chess_current_ui_scale,
+				1.20,
+			)
+		if is_portrait
+		else 0.0
+	)
+
+	spec_label.set_anchors_preset(
+		Control.PRESET_CENTER_TOP,
+		false,
+	)
+
+	spec_label.offset_left = -spectator_half_width
+	spec_label.offset_right = spectator_half_width
+	spec_label.offset_top = spectator_top_offset
+	spec_label.offset_bottom = (
+		spectator_top_offset +
+		CHESS_BASE_SPECTATOR_HEIGHT *
+			overlay_scale
+	)
+
+	spec_label.grow_horizontal = (
+		Control.GROW_DIRECTION_BOTH
+	)
+
+	spec_label.horizontal_alignment = (
+		HORIZONTAL_ALIGNMENT_CENTER
+	)
+
+	spec_label.vertical_alignment = (
+		VERTICAL_ALIGNMENT_CENTER
+	)
+
+	spec_label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				CHESS_BASE_SPECTATOR_FONT_SIZE *
+					overlay_scale
+			),
+			1,
+		),
+	)
+
+	var overlay_font_size := maxi(
+		roundi(
+			CHESS_BASE_OVERLAY_FONT_SIZE *
+				overlay_scale
+		),
+		1,
+	)
+
+	sent_label.add_theme_font_size_override(
+		"font_size",
+		overlay_font_size,
+	)
+
+	waiting_label.add_theme_font_size_override(
+		"font_size",
+		overlay_font_size,
+	)
+
+	win_loss_label.add_theme_font_size_override(
+		"font_size",
+		overlay_font_size,
+	)
+
+	chess_top_margin.queue_sort()
+	chess_top_bar.queue_sort()
+	chess_bottom_controls.queue_sort()
+
 	_log_ui.debug(
-		"_compute_sizes: viewport=%s square=%f border=%f origin=%s" % [
+		"_compute_sizes viewport=%s portrait=%s uiScale=%.3f square=%.3f border=%.3f origin=%s" % [
 			str(viewport_size),
+			str(is_portrait),
+			_chess_current_ui_scale,
 			SQUARE_SIZE,
 			BORDER_THICK,
-			str(BOARD_ORIGIN)
+			str(BOARD_ORIGIN),
 		]
 	)
 
@@ -834,10 +1463,40 @@ func _build_board_ui() -> void:
 
 	# Style / position labels (positioned below board instead of top)
 	# Note: board_w is already declared earlier in this function (line 414)
-	var check_label_y: float = BOARD_ORIGIN.y + board_w + BORDER_THICK + 5.0
-	check_label.position = Vector2(BOARD_ORIGIN.x, check_label_y)
-	check_label.size = Vector2(board_w, 40)
-	check_label.add_theme_font_size_override("font_size", 28)
+	var check_label_height := maxf(
+		32.0,
+		CHESS_BASE_CHECK_LABEL_HEIGHT *
+			_chess_current_ui_scale,
+	)
+
+	var check_label_y := (
+		BOARD_ORIGIN.y +
+		board_w +
+		BORDER_THICK +
+		CHESS_CHECK_BOARD_GAP *
+			_chess_current_ui_scale
+	)
+
+	check_label.position = Vector2(
+		BOARD_ORIGIN.x,
+		check_label_y,
+	)
+
+	check_label.size = Vector2(
+		board_w,
+		check_label_height,
+	)
+
+	check_label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				28.0 *
+					_chess_current_ui_scale
+			),
+			18,
+		),
+	)
 	check_label.add_theme_color_override("font_color", Color(1,0.1,0.1))
 	check_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	check_label.text = ""
@@ -855,52 +1514,84 @@ func _build_board_ui() -> void:
 	_log_ui.debug("_build_board_ui: dialogs controller initialized")
 
 	# Get the Send button from the scene and reposition it
-	send_button = get_node("SendButton")
-	if send_button:
-		# Calculate dynamic size and position based on board dimensions (increased for better visibility)
-		var btn_w: float = maxf(120.0, SQUARE_SIZE * 2.4)
-		var btn_h: float = maxf(48.0, SQUARE_SIZE * 0.6)
-		send_button.size = Vector2(btn_w, btn_h)
-		var btn_x: float = BOARD_ORIGIN.x + board_w * 0.5 - btn_w * 0.5
-		# Position send button below check label (check label is 40px tall)
-		var btn_y: float = BOARD_ORIGIN.y + board_w + BORDER_THICK + 50.0
-		send_button.position = Vector2(btn_x, btn_y)
-		_update_send_button_visibility(_has_pending())
-		# Connect the pressed signal only if not already connected
-		if not send_button.pressed.is_connected(_on_send_pressed):
-			send_button.pressed.connect(_on_send_pressed)
-			_log_ui.debug("SendButton pressed signal connected to _on_send_pressed")
+	send_button = %SendButton
 
-	# Get and scale the player piece icons based on board piece size
-	player_chess_black = get_node("Player1Box/PlayerChessBlack")
-	player_chess_white = get_node("Player2Box/PlayerChessWhite")
-	
-	# Calculate scale based on piece size (pieces on board are SQUARE_SIZE * 0.9)
-	# The original texture is large, so we scale it to match the board piece size
-	var piece_display_size: float = SQUARE_SIZE * 0.9
-	# Assuming the original SVG is around 1000px, scale to match piece_display_size
-	var target_scale: float = piece_display_size / 50.0
-	
-	if is_instance_valid(player_chess_black):
-		player_chess_black.scale = Vector2(target_scale, target_scale)
-		_log_ui.debug("PlayerChessBlack scaled to %f (piece_size=%f)" % [target_scale, piece_display_size])
+	if is_instance_valid(send_button):
+		if send_button.has_meta("sb_tween"):
+			var old_tween: Variant = (
+				send_button.get_meta("sb_tween")
+			)
 
-	if is_instance_valid(player_chess_white):
-		player_chess_white.scale = Vector2(target_scale, target_scale)
-		_log_ui.debug("PlayerChessWhite scaled to %f (piece_size=%f)" % [target_scale, piece_display_size])
+			if (
+				old_tween is Tween and
+				(old_tween as Tween).is_running()
+			):
+				(old_tween as Tween).kill()
 
-	# Setup animations controller with UI references
-	animations.setup(pieces, squares, get_tree(), func(msg: String) -> void: _log_ui.debug(msg))
-	_log_ui.debug("_build_board_ui: animations controller initialized")
+		var send_size := (
+			CHESS_BASE_SEND_BUTTON_SIZE *
+			_chess_current_ui_scale
+		)
 
-	_log_ui.debug("_build_board_ui done")
+		send_button.size_flags_horizontal = (
+			Control.SIZE_SHRINK_CENTER
+		)
 
-		# If parse_gp_replay ran earlier and requested evaluation, do it now that UI exists
-	if pending_evaluate:
-		_log_ui.debug("_build_board_ui: running deferred _evaluate_check_and_update_flags()")
-		pending_evaluate = false
-		_evaluate_check_and_update_flags()
+		send_button.size_flags_vertical = (
+			Control.SIZE_SHRINK_CENTER
+		)
 
+		send_button.custom_minimum_size = send_size
+		send_button.size = send_size
+		send_button.scale = Vector2.ONE
+		send_button.pivot_offset = send_size * 0.5
+
+		send_button.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					CHESS_BASE_SEND_FONT_SIZE *
+						_chess_current_ui_scale
+				),
+				1,
+			),
+		)
+
+		var button_local_position := Vector2(
+			BOARD_ORIGIN.x +
+				board_w *
+					0.5 -
+				send_size.x *
+					0.5,
+			check_label_y +
+				check_label_height +
+				CHESS_BOARD_SEND_GAP *
+					_chess_current_ui_scale,
+		)
+
+		var button_home_global := (
+			get_global_rect().position +
+			button_local_position
+		)
+
+		send_button.set_as_top_level(true)
+		send_button.global_position = button_home_global
+
+		send_button.set_meta(
+			"home_pos",
+			button_home_global,
+		)
+
+		_update_send_button_visibility(
+			_has_pending(),
+		)
+
+		if not send_button.pressed.is_connected(
+			_on_send_pressed,
+		):
+			send_button.pressed.connect(
+				_on_send_pressed,
+			)
 
 func _get_piece_texture(code: String) -> Texture2D:
 	if code == "":
@@ -1102,46 +1793,322 @@ func _show_undo_arrow(from_sq: Vector2i) -> void:
 	undo_arrow_label.z_index = 1000
 	add_child(undo_arrow_label)
 	
-func _update_send_button_visibility(should_show: bool) -> void:
+func _update_send_button_visibility(
+	should_show: bool,
+) -> void:
 	if not is_instance_valid(send_button):
 		return
+
+	_chess_send_target_visible = should_show
 
 	send_button.disabled = not should_show
 	send_button.set_as_top_level(true)
 
 	if not send_button.has_meta("home_pos"):
-		send_button.set_meta("home_pos", send_button.global_position)
+		send_button.set_meta(
+			"home_pos",
+			send_button.global_position,
+		)
 
 	if send_button.has_meta("sb_tween"):
-		var old: Tween = send_button.get_meta("sb_tween") as Tween
-		if old and old.is_running():
-			old.kill()
+		var old_tween: Variant = (
+			send_button.get_meta("sb_tween")
+		)
 
-	var home: Vector2 = send_button.get_meta("home_pos")
-	var vp: Rect2 = get_viewport_rect()
-	var off_y: float = vp.size.y + send_button.size.y + 30.0
-	var start_pos: Vector2 = Vector2(home.x, off_y)
+		if (
+			old_tween is Tween and
+			(old_tween as Tween).is_running()
+		):
+			(old_tween as Tween).kill()
+
+	var home: Vector2 = (
+		send_button.get_meta("home_pos")
+	)
+
+	var offscreen_position := Vector2(
+		home.x,
+		get_global_rect().end.y +
+			send_button.size.y +
+			30.0,
+	)
 
 	if should_show:
-		if not send_button.visible:
-			send_button.global_position = start_pos
-			send_button.visible = true
-			send_button.modulate.a = 1.0
-		elif send_button.global_position.y > vp.size.y:
-			send_button.global_position = start_pos
+		send_button.visible = true
+		send_button.disabled = false
+		send_button.modulate.a = 1.0
 
-		var t_in: Tween = create_tween()
-		send_button.set_meta("sb_tween", t_in)
-		t_in.tween_property(send_button, "global_position", home, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	else:
-		if send_button.visible:
-			var t_out: Tween = create_tween()
-			send_button.set_meta("sb_tween", t_out)
-			t_out.tween_property(send_button, "global_position", Vector2(home.x, off_y), 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-			t_out.tween_callback(func():
-				if is_instance_valid(send_button):
-					send_button.visible = false
+		if (
+			send_button.global_position.y >=
+			get_global_rect().end.y
+		):
+			send_button.global_position = (
+				offscreen_position
 			)
+
+		var tween_in := create_tween()
+
+		send_button.set_meta(
+			"sb_tween",
+			tween_in,
+		)
+
+		tween_in.tween_property(
+			send_button,
+			"global_position",
+			home,
+			0.35,
+		).set_trans(
+			Tween.TRANS_QUAD,
+		).set_ease(
+			Tween.EASE_OUT,
+		)
+
+	else:
+		send_button.disabled = true
+
+		if not send_button.visible:
+			send_button.global_position = home
+			send_button.modulate.a = 0.0
+			return
+
+		var tween_out := create_tween()
+
+		send_button.set_meta(
+			"sb_tween",
+			tween_out,
+		)
+
+		tween_out.tween_property(
+			send_button,
+			"global_position",
+			offscreen_position,
+			0.25,
+		).set_trans(
+			Tween.TRANS_QUAD,
+		).set_ease(
+			Tween.EASE_IN,
+		)
+
+		tween_out.tween_callback(
+			func() -> void:
+				if not is_instance_valid(send_button):
+					return
+
+				# Ignore callbacks created before a rotation
+				# or before the button became visible again.
+				if _chess_send_target_visible:
+					return
+
+				send_button.visible = false
+				send_button.global_position = home
+				send_button.modulate.a = 0.0
+		)
+
+func _on_chess_viewport_size_changed() -> void:
+	if _chess_layout_pending:
+		return
+
+	_chess_layout_pending = true
+
+	call_deferred(
+		"_apply_chess_responsive_layout",
+	)
+
+
+func _apply_chess_responsive_layout() -> void:
+	_chess_layout_pending = false
+
+	if not is_inside_tree():
+		return
+
+	var should_show_send := (
+		_chess_send_target_visible or
+		_has_pending()
+	)
+
+	var pending_from := (
+		_get_pending_from()
+	)
+
+	var promotion_was_visible := (
+		dialogs.is_promotion_visible()
+	)
+
+	var previous_promotion_side := (
+		dialogs.promotion_side
+	)
+
+	_compute_sizes()
+	_build_board_ui()
+
+	# _build_board_ui() clears highlighted but selected and
+	# legal_moves remain valid.
+	highlighted.clear()
+
+	for legal_move in legal_moves:
+		highlighted.append(legal_move)
+
+	_refresh_board_ui()
+
+	if (
+		_has_pending() and
+		pending_from != Vector2i(-1, -1)
+	):
+		_show_undo_arrow(
+			pending_from,
+		)
+
+	if (
+		promotion_was_visible and
+		previous_promotion_side != ""
+	):
+		dialogs.show_promotion(
+			previous_promotion_side,
+		)
+
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	if not is_inside_tree():
+		return
+
+	player_avatar_display.pivot_offset = (
+		player_avatar_display.size *
+		0.5
+	)
+
+	opp_avatar_display.pivot_offset = (
+		opp_avatar_display.size *
+		0.5
+	)
+
+	if send_button.has_meta("sb_tween"):
+		var old_tween: Variant = (
+			send_button.get_meta("sb_tween")
+		)
+
+		if (
+			old_tween is Tween and
+			(old_tween as Tween).is_running()
+		):
+			(old_tween as Tween).kill()
+
+	if send_button.has_meta("home_pos"):
+		send_button.global_position = (
+			send_button.get_meta("home_pos")
+		)
+
+	send_button.visible = should_show_send
+	send_button.disabled = not should_show_send
+	send_button.modulate.a = (
+		1.0
+		if should_show_send
+		else 0.0
+	)
+
+	_chess_send_target_visible = (
+		should_show_send
+	)
+
+	if (
+		is_instance_valid(win_loss_label) and
+		win_loss_label.visible and
+		is_instance_valid(
+			_chess_active_win_burst_avatar
+		)
+	):
+		_show_chess_win_burst(
+			_chess_active_win_burst_avatar,
+		)
+
+func _clear_chess_win_bursts() -> void:
+	var avatars: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatars:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		var existing := avatar_button.get_node_or_null(
+			CHESS_WIN_BURST_WRAPPER_NAME,
+		)
+
+		if existing == null:
+			continue
+
+		avatar_button.remove_child(existing)
+		existing.queue_free()
+
+
+func _show_chess_win_burst(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	_chess_active_win_burst_avatar = (
+		avatar_button
+	)
+
+	var existing := avatar_button.get_node_or_null(
+		CHESS_WIN_BURST_WRAPPER_NAME,
+	)
+
+	if existing != null:
+		avatar_button.remove_child(existing)
+		existing.queue_free()
+
+	var wrapper := Control.new()
+
+	wrapper.name = (
+		CHESS_WIN_BURST_WRAPPER_NAME
+	)
+
+	wrapper.mouse_filter = (
+		Control.MOUSE_FILTER_IGNORE
+	)
+
+	wrapper.show_behind_parent = true
+	wrapper.clip_contents = false
+	wrapper.size = CHESS_BASE_AVATAR_SIZE
+
+	wrapper.pivot_offset = (
+		CHESS_BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	wrapper.position = (
+		avatar_button.size *
+			0.5 -
+		CHESS_BASE_AVATAR_SIZE *
+			0.5
+	)
+
+	wrapper.scale = (
+		Vector2.ONE *
+		_chess_current_ui_scale
+	)
+
+	avatar_button.add_child(wrapper)
+
+	var target := TextureButton.new()
+
+	target.name = "ChessBurstTarget"
+	target.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	target.ignore_texture_size = true
+	target.clip_contents = false
+	target.size = CHESS_BASE_AVATAR_SIZE
+
+	target.pivot_offset = (
+		CHESS_BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	wrapper.add_child(target)
+
+	GameUtils._show_win_burst(target)
 
 func _show_win_loss_result() -> void:
 	if not is_instance_valid(win_loss_label):
@@ -1149,6 +2116,9 @@ func _show_win_loss_result() -> void:
 
 	if win_loss_tween and win_loss_tween.is_running():
 		win_loss_tween.kill()
+	
+	_clear_chess_win_bursts()
+	_chess_active_win_burst_avatar = null
 
 	var is_draw := game_over_state == ChessEngine.GameState.STALEMATE \
 		or game_over_state == ChessEngine.GameState.DRAW_INSUFFICIENT \
@@ -1164,7 +2134,9 @@ func _show_win_loss_result() -> void:
 		if you_win:
 			win_loss_label.text = "YOU WIN!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			GameUtils._show_win_burst(player_avatar_display)
+			_show_chess_win_burst(
+				player_avatar_display,
+			)
 		else:
 			if spectator_mode:
 				var player1_won := game_over_winner_side == "b"
@@ -1180,7 +2152,7 @@ func _show_win_loss_result() -> void:
 					Color(1, 0.84, 0)
 				)
 
-				GameUtils._show_win_burst(
+				_show_chess_win_burst(
 					player_avatar_display
 						if player1_won
 						else opp_avatar_display
@@ -1188,7 +2160,9 @@ func _show_win_loss_result() -> void:
 			else:
 				win_loss_label.text = "YOU LOSE"
 				win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
-				GameUtils._show_win_burst(opp_avatar_display)
+				_show_chess_win_burst(
+					opp_avatar_display,
+				)
 
 	win_loss_label.visible = true
 	await get_tree().process_frame
@@ -1206,6 +2180,9 @@ func _hide_win_loss_result() -> void:
 		win_loss_label.visible = false
 		win_loss_label.text = ""
 		win_loss_label.scale = Vector2.ONE
+	
+	_chess_active_win_burst_avatar = null
+	_clear_chess_win_bursts()
 
 func _hide_undo_arrow() -> void:
 	if is_instance_valid(undo_arrow_label):
@@ -1249,6 +2226,9 @@ func _on_promotion_choice(piece: String) -> void:
 		_log_ui.error("_on_promotion_choice: ERROR - no pending promotion move stored")
 
 func _on_send_pressed() -> void:
+	if _settings_open or _rules_open:
+		return
+
 	if spectator_mode:
 		return
 
@@ -1266,6 +2246,9 @@ func _on_send_pressed() -> void:
 	_refresh_board_ui()
 
 func _undo_pending() -> void:
+	if _settings_open or _rules_open:
+		return
+
 	if spectator_mode:
 		return
 
@@ -1295,6 +2278,9 @@ func _input(event: InputEvent) -> void:
 
 func _can_interact() -> bool:
 	if spectator_mode:
+		return false
+
+	if _settings_open or _rules_open:
 		return false
 
 	if _modal_open:
@@ -1685,7 +2671,11 @@ func _commit_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 	var to_send = {
 		"replay": gp_replay
 	}
-	var avatar_key := ("avatar2" if my_player_index == 1 else "avatar1")
+	var avatar_key := (
+		"avatar1"
+		if my_player_index == 1
+		else "avatar2"
+	)
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		to_send[avatar_key] = player_avatar_display.get_avatar_data_string()
 	if winner_decl != null:

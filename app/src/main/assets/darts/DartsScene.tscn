@@ -79,15 +79,6 @@ expand_margin_top = 10.0
 expand_margin_right = 20.0
 expand_margin_bottom = 10.0
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_ge5bb"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_g6j2t"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_mtx0u"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_mtx0u"]
 
 [sub_resource type="FontVariation" id="FontVariation_hr6en"]
@@ -100,15 +91,6 @@ variation_embolden = 1.0
 [sub_resource type="StyleBoxLine" id="StyleBoxLine_56o8f"]
 color = Color(1, 1, 1, 1)
 thickness = 2
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_hr6en"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_4pw5h"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_grv75"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_trppf"]
 
@@ -314,9 +296,6 @@ custom_minimum_size = Vector2(96, 90)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_ge5bb")
-texture_pressed = SubResource("ViewportTexture_g6j2t")
-texture_hover = SubResource("ViewportTexture_mtx0u")
 ignore_texture_size = true
 is_display_only = true
 
@@ -379,9 +358,6 @@ custom_minimum_size = Vector2(96, 90)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_hr6en")
-texture_pressed = SubResource("ViewportTexture_4pw5h")
-texture_hover = SubResource("ViewportTexture_grv75")
 ignore_texture_size = true
 is_display_only = true
 controlled_by_data = true

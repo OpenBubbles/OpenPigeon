@@ -10,3 +10,4 @@ const AVATAR_EYES_MAP_PATH: Texture2D = preload("res://global/avatar_textures/fa
 const AVATAR_MOUTH_MAP_PATH: Texture2D = preload("res://global/avatar_textures/face/avatar_mouth.png")
 const AVATAR_HAIR_FRONT_MAP_PATH: Texture2D = preload("res://global/avatar_textures/hair/avatar_hair_front.png")
 const AVATAR_ACCESSORIES_MAP_PATH: Texture2D = preload("res://global/avatar_textures/accessories/avatar_accessories.png")
+const AVATAR_HEAD_ACCESSORIES_MAP_PATH: Texture2D = preload("res://global/avatar_textures/accessories/avatar_head_accessories.png")

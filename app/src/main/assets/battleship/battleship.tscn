@@ -160,25 +160,7 @@ expand_margin_bottom = 10.0
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_xmvnm"]
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_0ayae"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_xmvnm"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_wlxoc"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_wlxoc"]
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_874s0"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_7yxgj"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_e4m7h"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [node name="Battleship" type="Control" unique_id=772642184]
 layout_mode = 3
@@ -493,9 +475,6 @@ z_index = 5
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_0ayae")
-texture_pressed = SubResource("ViewportTexture_xmvnm")
-texture_hover = SubResource("ViewportTexture_wlxoc")
 is_display_only = true
 controlled_by_data = true
 
@@ -555,9 +534,6 @@ z_index = 5
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_874s0")
-texture_pressed = SubResource("ViewportTexture_7yxgj")
-texture_hover = SubResource("ViewportTexture_e4m7h")
 is_display_only = true
 controlled_by_data = true
 

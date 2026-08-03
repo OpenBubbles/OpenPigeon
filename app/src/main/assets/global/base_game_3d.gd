@@ -15,6 +15,7 @@ var appPlugin = null
 var mediaPlugin = null
 var my_uuid: String = ""
 var _settings_open := false
+var _rules_open := false
 
 var spectator_mode: bool = false
 var dot_count: int = 0
@@ -169,7 +170,19 @@ func _on_settings_button_pressed() -> void:
 	)
 
 func _on_rules_button_pressed() -> void:
-	GameUtils.open_rules_popup(self, rules_button, _get_rules_title(), _get_rules_text())
+	if _rules_open:
+		return
+
+	_rules_open = true
+
+	GameUtils.open_rules_popup(
+		self,
+		rules_button,
+		_get_rules_title(),
+		_get_rules_text(),
+		func():
+			_rules_open = false
+	)
 
 func start_waiting_animation() -> void:
 	if spectator_mode:

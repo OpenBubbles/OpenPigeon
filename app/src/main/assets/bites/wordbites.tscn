@@ -107,15 +107,6 @@ bg_color = Color(0.6, 0.6, 0.6, 0)
 shadow_size = 16
 shadow_offset = Vector2(0, 6)
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_46jxq"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_chhsm"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_k0fh3"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_eugg7"]
 
 [sub_resource type="FastNoiseLite" id="FastNoiseLite_a0pbh"]
@@ -150,15 +141,6 @@ corner_radius_top_left = 10
 corner_radius_top_right = 10
 corner_radius_bottom_right = 10
 corner_radius_bottom_left = 10
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_6j5fk"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_x3vcx"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_grw1s"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_vu1q5"]
 shader = ExtResource("7_x0qku")
@@ -590,9 +572,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 0
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_46jxq")
-texture_pressed = SubResource("ViewportTexture_chhsm")
-texture_hover = SubResource("ViewportTexture_k0fh3")
 is_display_only = true
 
 [node name="Control" type="Control" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore" unique_id=1674964032]
@@ -677,9 +656,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 8
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_6j5fk")
-texture_pressed = SubResource("ViewportTexture_x3vcx")
-texture_hover = SubResource("ViewportTexture_grw1s")
 is_display_only = true
 controlled_by_data = true
 

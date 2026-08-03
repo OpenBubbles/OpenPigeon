@@ -8,24 +8,6 @@
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="4_xoh6u"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="5_f1idx"]
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_tsn4m"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_xoh6u"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_f1idx"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_nvnld"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_a4icl"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_c8si1"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_nvnld"]
 bg_color = Color(1, 1, 1, 1)
 shadow_size = 8
@@ -141,7 +123,8 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.579516, 0.475065, 0.44891, 1)
 
-[node name="MarginContainer" type="MarginContainer" parent="." unique_id=532768087]
+[node name="DotsRootMargin" type="MarginContainer" parent="." unique_id=532768087]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -155,20 +138,23 @@ theme_override_constants/margin_top = 20
 theme_override_constants/margin_right = 40
 theme_override_constants/margin_bottom = 20
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer" unique_id=857982204]
+[node name="DotsMainVBox" type="VBoxContainer" parent="DotsRootMargin" unique_id=857982204]
+unique_name_in_owner = true
 layout_mode = 2
 alignment = 1
 
-[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=1046206011]
+[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="DotsRootMargin/DotsMainVBox" unique_id=1046206011]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 4
 alignment = 1
 
-[node name="PlayerContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer" unique_id=43482200]
+[node name="PlayerContainer" type="VBoxContainer" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer" unique_id=43482200]
 layout_mode = 2
 
-[node name="YouLabel" type="Label" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer/PlayerContainer" unique_id=1480713607]
+[node name="YouLabel" type="Label" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer/PlayerContainer" unique_id=1480713607]
 unique_name_in_owner = true
+z_index = 1
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
@@ -177,25 +163,22 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="PlayerAvatarDisplay" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer/PlayerContainer" unique_id=1150378756 instance=ExtResource("2_oiv88")]
+[node name="PlayerAvatarDisplay" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer/PlayerContainer" unique_id=1150378756 instance=ExtResource("2_oiv88")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_tsn4m")
-texture_pressed = SubResource("ViewportTexture_xoh6u")
-texture_hover = SubResource("ViewportTexture_f1idx")
 is_display_only = true
 
-[node name="Control3" type="Control" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer/PlayerContainer" unique_id=818342085]
+[node name="Control3" type="Control" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer/PlayerContainer" unique_id=818342085]
 custom_minimum_size = Vector2(0, 10)
 layout_mode = 2
 
-[node name="PlayerScorebox" type="HBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer/PlayerContainer" unique_id=341184356]
+[node name="PlayerScorebox" type="HBoxContainer" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer/PlayerContainer" unique_id=341184356]
 layout_mode = 2
 size_flags_horizontal = 4
 
-[node name="PlayerScore" type="Label" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer/PlayerContainer/PlayerScorebox" unique_id=280570972]
+[node name="PlayerScore" type="Label" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer/PlayerContainer/PlayerScorebox" unique_id=280570972]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -204,66 +187,63 @@ text = "0"
 horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="PlayerColor" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer/PlayerContainer/PlayerScorebox" unique_id=1792130707]
+[node name="PlayerColor" type="TextureRect" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer/PlayerContainer/PlayerScorebox" unique_id=1792130707]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 2
 texture = ExtResource("3_oiv88")
 stretch_mode = 5
 
-[node name="Control2" type="Control" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer" unique_id=1363197333]
+[node name="Control2" type="Control" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer" unique_id=1363197333]
 custom_minimum_size = Vector2(10, 0)
 layout_mode = 2
 
-[node name="PlayerMarker" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer" unique_id=209559964]
+[node name="PlayerMarker" type="TextureRect" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer" unique_id=209559964]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 expand_mode = 3
 stretch_mode = 5
 
-[node name="Spacer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer" unique_id=1719920858]
+[node name="Spacer" type="VBoxContainer" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer" unique_id=1719920858]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="OppMarker" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer" unique_id=88505293]
+[node name="OppMarker" type="TextureRect" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer" unique_id=88505293]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 expand_mode = 3
 stretch_mode = 5
 
-[node name="Control" type="Control" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer" unique_id=1548320725]
+[node name="Control" type="Control" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer" unique_id=1548320725]
 custom_minimum_size = Vector2(10, 0)
 layout_mode = 2
 
-[node name="OppContainer" type="VBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer" unique_id=1530238905]
+[node name="OppContainer" type="VBoxContainer" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer" unique_id=1530238905]
 layout_mode = 2
 
-[node name="OppLabel" type="Control" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer/OppContainer" unique_id=300070119]
+[node name="OppLabel" type="Control" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer/OppContainer" unique_id=300070119]
 custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
 
-[node name="OppAvatarDisplay" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer/OppContainer" unique_id=748583852 instance=ExtResource("2_oiv88")]
+[node name="OppAvatarDisplay" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer/OppContainer" unique_id=748583852 instance=ExtResource("2_oiv88")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_nvnld")
-texture_pressed = SubResource("ViewportTexture_a4icl")
-texture_hover = SubResource("ViewportTexture_c8si1")
 is_display_only = true
 controlled_by_data = true
 
-[node name="Control3" type="Control" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer/OppContainer" unique_id=1589595159]
+[node name="Control3" type="Control" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer/OppContainer" unique_id=1589595159]
 custom_minimum_size = Vector2(0, 10)
 layout_mode = 2
 
-[node name="OppScorebox" type="HBoxContainer" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer/OppContainer" unique_id=471398832]
+[node name="OppScorebox" type="HBoxContainer" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer/OppContainer" unique_id=471398832]
 layout_mode = 2
 size_flags_horizontal = 4
 
-[node name="OppScore" type="Label" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer/OppContainer/OppScorebox" unique_id=935483439]
+[node name="OppScore" type="Label" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer/OppContainer/OppScorebox" unique_id=935483439]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -272,47 +252,49 @@ text = "0"
 horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="OppColor" type="TextureRect" parent="MarginContainer/VBoxContainer/TopInfoHBoxContainer/OppContainer/OppScorebox" unique_id=1185516031]
+[node name="OppColor" type="TextureRect" parent="DotsRootMargin/DotsMainVBox/TopInfoHBoxContainer/OppContainer/OppScorebox" unique_id=1185516031]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 2
 texture = ExtResource("3_oiv88")
 stretch_mode = 5
 
-[node name="Center" type="CenterContainer" parent="MarginContainer/VBoxContainer" unique_id=742345430]
+[node name="Center" type="CenterContainer" parent="DotsRootMargin/DotsMainVBox" unique_id=742345430]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="Paper" type="PanelContainer" parent="MarginContainer/VBoxContainer/Center" unique_id=1067495750]
+[node name="Paper" type="PanelContainer" parent="DotsRootMargin/DotsMainVBox/Center" unique_id=1067495750]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_nvnld")
 
-[node name="TextureRect" type="TextureRect" parent="MarginContainer/VBoxContainer/Center/Paper" unique_id=548925866]
+[node name="TextureRect" type="TextureRect" parent="DotsRootMargin/DotsMainVBox/Center/Paper" unique_id=548925866]
 layout_mode = 2
 texture = ExtResource("4_tsn4m")
 expand_mode = 3
 
-[node name="DotsGrid" type="Control" parent="MarginContainer/VBoxContainer/Center/Paper" unique_id=1069489579]
+[node name="DotsGrid" type="Control" parent="DotsRootMargin/DotsMainVBox/Center/Paper" unique_id=1069489579]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(500, 500)
 layout_mode = 2
 script = ExtResource("3_tsn4m")
 
-[node name="AnimationLine" type="Line2D" parent="MarginContainer/VBoxContainer/Center/Paper/DotsGrid" unique_id=1259133605]
+[node name="AnimationLine" type="Line2D" parent="DotsRootMargin/DotsMainVBox/Center/Paper/DotsGrid" unique_id=1259133605]
 show_behind_parent = true
 width = 12.0
 width_curve = SubResource("Curve_oiv88")
 default_color = Color(1, 1, 1, 0.592157)
 antialiased = true
 
-[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=106398128]
+[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="DotsRootMargin/DotsMainVBox" unique_id=106398128]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
 mouse_filter = 2
 alignment = 1
 
-[node name="SettingsButton" type="Button" parent="MarginContainer/VBoxContainer/BottomItemHBoxContainer" unique_id=1235962934]
+[node name="SettingsButton" type="Button" parent="DotsRootMargin/DotsMainVBox/BottomItemHBoxContainer" unique_id=1235962934]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -324,7 +306,7 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_feg08")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_c8si1")
 theme_override_styles/hover = SubResource("StyleBoxTexture_a4icl")
 
-[node name="SendButton" type="Button" parent="MarginContainer/VBoxContainer/BottomItemHBoxContainer" unique_id=754910593]
+[node name="SendButton" type="Button" parent="DotsRootMargin/DotsMainVBox/BottomItemHBoxContainer" unique_id=754910593]
 unique_name_in_owner = true
 z_index = 99
 custom_minimum_size = Vector2(70, 50)
@@ -344,7 +326,7 @@ theme_override_styles/pressed = SubResource("StyleBoxFlat_a4icl")
 theme_override_styles/hover = SubResource("StyleBoxFlat_f1idx")
 text = "Send"
 
-[node name="RulesButton" type="Button" parent="MarginContainer/VBoxContainer/BottomItemHBoxContainer" unique_id=892627875]
+[node name="RulesButton" type="Button" parent="DotsRootMargin/DotsMainVBox/BottomItemHBoxContainer" unique_id=892627875]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -356,10 +338,12 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_dllis")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_l1x53")
 theme_override_styles/hover = SubResource("StyleBoxTexture_vpag6")
 
-[node name="SpecLabel" type="Label" parent="MarginContainer" unique_id=1589311018]
+[node name="SpecLabel" type="Label" parent="DotsRootMargin" unique_id=1589311018]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 0
+offset_transform_enabled = true
+offset_transform_position = Vector2(0, 100)
 theme_override_font_sizes/font_size = 50
 text = "Spectating..."
 horizontal_alignment = 1

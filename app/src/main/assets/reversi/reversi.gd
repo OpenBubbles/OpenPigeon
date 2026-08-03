@@ -1,23 +1,92 @@
 extends BaseGame
 
-@onready var player_avatar_display = %PlayerAvatarDisplay
-@onready var opp_avatar_display = %OppAvatarDisplay
-@onready var player_count_label = %PlayerCountLabel
-@onready var opp_count_label = %OppCountLabel
-@onready var grid = %GridContainer
-@onready var send_button = %SendButton
-@onready var sent_label = %SentLabel
-@onready var background = %Background
-@onready var win_loss_label = %WinLossLabel
-@onready var replay_button = %ReplayButton
-@onready var spec_label = %SpecLabel
+@onready var player_avatar_display: TextureButton = %PlayerAvatarDisplay
+@onready var opp_avatar_display: TextureButton = %OppAvatarDisplay
+@onready var player_count_label: Label = %PlayerCountLabel
+@onready var opp_count_label: Label = %OppCountLabel
+@onready var grid: GridContainer = %GridContainer
+@onready var send_button: Button = %SendButton
+@onready var sent_label: Label = %SentLabel
+@onready var background: ColorRect = %Background
+@onready var win_loss_label: Label = %WinLossLabel
+@onready var replay_button: Button = %ReplayButton
+@onready var spec_label: Label = %SpecLabel
 @onready var board_root: Control = %GameAreaCenterContainer
 @onready var star_layer: Control = %StarPointLayer
-@onready var main_vbox: Control = %MainVBoxContainer
+@onready var main_vbox: VBoxContainer = %MainVBoxContainer
 @onready var you_label: Label = %YouLabel
+@onready var board_panel: PanelContainer = %BorderPanelContainer
+@onready var top_hud_margin: MarginContainer = %TopMarginContainer
+@onready var bottom_controls: HBoxContainer = %BottomItemHBoxContainer
+@onready var bottom_controls_margin: MarginContainer = %BottomMarginContainer
+@onready var center_label_spacer: Control = %CenterLabel
+@onready var opponent_label_spacer: Control = %OppYouLabel
 
 const BOARD_SIZE = 8
 const LOG_TAG := "Reversi"
+
+const LANDSCAPE_BOARD_HEIGHT_RATIO := 0.80
+
+const DEFAULT_CELL_SIZE := 64.0
+const GRID_SEPARATION := 2.0
+const BOARD_BORDER_WIDTH := 4.0
+
+const BASE_SEND_BUTTON_SIZE := Vector2(
+	180.0,
+	50.0,
+)
+
+const BASE_SEND_BUTTON_FONT_SIZE := 24.0
+const LANDSCAPE_BOARD_SEND_GAP := 24.0
+
+const BOARD_REFERENCE_SIZE := (
+	DEFAULT_CELL_SIZE * BOARD_SIZE +
+	GRID_SEPARATION * (BOARD_SIZE - 1) +
+	BOARD_BORDER_WIDTH * 2.0
+)
+
+const BASE_AVATAR_SIZE := Vector2(
+	96.0,
+	90.0,
+)
+
+const BASE_YOU_LABEL_FONT_SIZE := 18.0
+const BASE_LABEL_SPACER_HEIGHT := 26.0
+
+const LANDSCAPE_AVATAR_MIN_SCALE := 2.05
+const LANDSCAPE_AVATAR_MAX_SCALE := 2.35
+
+const BASE_SCORE_SIZE := Vector2(
+	72.0,
+	72.0,
+)
+
+const BASE_SCORE_FONT_SIZE := 32.0
+const BASE_MENU_BUTTON_SIZE := Vector2(64.0, 64.0)
+const BASE_MENU_BUTTON_FONT_SIZE := 32.0
+
+const BASE_SIDE_MARGIN := 40.0
+const BASE_TOP_MARGIN := 20.0
+const BASE_BOTTOM_MARGIN := 30.0
+const PORTRAIT_BOTTOM_AREA_HEIGHT := 250.0
+
+const BASE_SPECTATOR_FONT_SIZE := 50.0
+const BASE_SPECTATOR_HALF_WIDTH := 324.0
+const BASE_SPECTATOR_HEIGHT := 220.0
+
+const LANDSCAPE_OVERLAY_MIN_SCALE := 1.35
+const LANDSCAPE_OVERLAY_MAX_SCALE := 1.65
+const PORTRAIT_SPECTATOR_TOP_OFFSET := 90.0
+
+const WIN_BURST_WRAPPER_NAME := "ResponsiveWinBurstWrapper"
+
+var _responsive_layout_pending := false
+var _last_viewport_size := Vector2.ZERO
+
+var _avatar_layout_generation := 0
+var _current_avatar_scale := 1.0
+
+var _active_win_burst_avatar: TextureButton = null
 
 var board = []
 var player_symbol = ""
@@ -134,7 +203,856 @@ func _on_game_ready():
 
 	if is_instance_valid(send_button):
 		send_button.visible = false
-		
+
+	_initialize_responsive_layout()
+
+func _responsive_avatar_scale_hint(
+	viewport_size: Vector2,
+	is_portrait: bool,
+) -> float:
+	if is_portrait:
+		return 1.0
+
+	var landscape_aspect: float = (
+		viewport_size.x /
+		maxf(
+			viewport_size.y,
+			1.0,
+		)
+	)
+
+	return clampf(
+		landscape_aspect,
+		LANDSCAPE_AVATAR_MIN_SCALE,
+		LANDSCAPE_AVATAR_MAX_SCALE,
+	)
+
+func _configure_avatar_rendering(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	avatar_button.clip_contents = false
+
+	var internal_viewport := (
+		avatar_button.get_node_or_null(
+			"SubViewportContainer/SubViewport",
+		) as SubViewport
+	)
+
+	if internal_viewport != null:
+		internal_viewport.render_target_update_mode = (
+			SubViewport.UPDATE_ALWAYS
+		)
+
+	var internal_preview := (
+		avatar_button.get_node_or_null(
+			"SubViewportContainer",
+		) as SubViewportContainer
+	)
+
+	if internal_preview != null:
+		internal_preview.mouse_filter = (
+			Control.MOUSE_FILTER_IGNORE
+		)
+		internal_preview.visible = true
+		internal_preview.self_modulate = Color.WHITE
+		internal_preview.pivot_offset = Vector2(
+			48.0,
+			140.0,
+		)
+
+func _initialize_responsive_layout() -> void:
+	_configure_avatar_rendering(
+		player_avatar_display,
+	)
+
+	_configure_avatar_rendering(
+		opp_avatar_display,
+	)
+
+	var viewport := get_viewport()
+
+	if viewport == null:
+		return
+
+	if not viewport.size_changed.is_connected(
+		_on_viewport_size_changed,
+	):
+		viewport.size_changed.connect(
+			_on_viewport_size_changed,
+		)
+
+	_schedule_responsive_layout(true)
+
+
+func _on_viewport_size_changed() -> void:
+	_schedule_responsive_layout(true)
+
+
+func _schedule_responsive_layout(
+	force: bool = false,
+) -> void:
+	if force:
+		_last_viewport_size = Vector2.ZERO
+
+	if _responsive_layout_pending:
+		return
+
+	_responsive_layout_pending = true
+
+	call_deferred(
+		"_apply_responsive_layout",
+	)
+
+
+func _set_landscape_overlay_mode(
+	enabled: bool,
+) -> void:
+	if enabled:
+		if top_hud_margin.get_parent() != self:
+			top_hud_margin.reparent(self)
+
+		if bottom_controls.get_parent() != self:
+			bottom_controls.reparent(self)
+
+		top_hud_margin.z_index = 20
+		bottom_controls.z_index = 20
+		spec_label.z_index = 30
+	else:
+		if top_hud_margin.get_parent() != main_vbox:
+			top_hud_margin.reparent(main_vbox)
+
+		main_vbox.move_child(
+			top_hud_margin,
+			0,
+		)
+
+		if bottom_controls.get_parent() != main_vbox:
+			bottom_controls.reparent(main_vbox)
+
+		main_vbox.move_child(
+			bottom_controls,
+			main_vbox.get_child_count() - 1,
+		)
+
+	main_vbox.queue_sort()
+
+func _apply_board_responsive_layout(
+	viewport_size: Vector2,
+	is_portrait: bool,
+	action_scale: float,
+) -> float:
+	if is_portrait:
+		board_panel.custom_minimum_size = Vector2.ZERO
+		grid.custom_minimum_size = Vector2.ZERO
+
+		for row in board:
+			for cell in row:
+				if is_instance_valid(cell):
+					cell.custom_minimum_size = Vector2(
+						DEFAULT_CELL_SIZE,
+						DEFAULT_CELL_SIZE,
+					)
+
+		return BOARD_REFERENCE_SIZE
+
+	var target_stack_height: float = floorf(
+		viewport_size.y *
+		LANDSCAPE_BOARD_HEIGHT_RATIO
+	)
+
+	var reserved_send_height: float = (
+		BASE_SEND_BUTTON_SIZE.y *
+			action_scale +
+		LANDSCAPE_BOARD_SEND_GAP
+	)
+
+	var available_board_height: float = maxf(
+		target_stack_height -
+			reserved_send_height,
+		1.0,
+	)
+
+	var width_limited_board_size: float = maxf(
+		viewport_size.x,
+		1.0,
+	)
+
+	var board_size: float = floorf(
+		minf(
+			available_board_height,
+			width_limited_board_size,
+		)
+	)
+
+	var border_total: float = (
+		BOARD_BORDER_WIDTH *
+		2.0
+	)
+
+	var separation_total: float = (
+		GRID_SEPARATION *
+		float(BOARD_SIZE - 1)
+	)
+
+	var grid_size: float = maxf(
+		board_size -
+			border_total,
+		1.0,
+	)
+
+	var cell_size: float = floorf(
+		(
+			grid_size -
+				separation_total
+		) /
+			float(BOARD_SIZE)
+	)
+
+	cell_size = maxf(
+		cell_size,
+		1.0,
+	)
+
+	for row in board:
+		for cell in row:
+			if is_instance_valid(cell):
+				cell.custom_minimum_size = Vector2(
+					cell_size,
+					cell_size,
+				)
+
+	grid.custom_minimum_size = Vector2(
+		grid_size,
+		grid_size,
+	)
+
+	board_panel.custom_minimum_size = Vector2(
+		board_size,
+		board_size,
+	)
+
+	board_panel.queue_sort()
+	grid.queue_sort()
+	board_root.queue_sort()
+
+	return board_size
+
+func _apply_send_button_responsive_layout(
+	avatar_scale: float,
+) -> void:
+	if not is_instance_valid(send_button):
+		return
+
+	var button_size: Vector2 = (
+		BASE_SEND_BUTTON_SIZE *
+		avatar_scale
+	)
+
+	send_button.custom_minimum_size = button_size
+	send_button.size = button_size
+	send_button.scale = Vector2.ONE
+
+	send_button.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				BASE_SEND_BUTTON_FONT_SIZE *
+					avatar_scale
+			),
+			1,
+		),
+	)
+
+	send_button.pivot_offset = (
+		send_button.size *
+		0.5
+	)
+
+	send_button.queue_redraw()
+
+func _apply_score_label_layout(
+	label: Label,
+	avatar_scale: float,
+) -> void:
+	if not is_instance_valid(label):
+		return
+
+	var score_size := (
+		BASE_SCORE_SIZE *
+		avatar_scale
+	)
+
+	label.custom_minimum_size = score_size
+
+	label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				BASE_SCORE_FONT_SIZE *
+				avatar_scale
+			),
+			1,
+		),
+	)
+
+	var score_style := (
+		label.get_theme_stylebox(
+			"normal",
+		) as StyleBoxFlat
+	)
+
+	if score_style == null:
+		return
+
+	var radius := maxi(
+		roundi(
+			score_size.x *
+			0.5
+		),
+		1,
+	)
+
+	score_style.corner_radius_top_left = radius
+	score_style.corner_radius_top_right = radius
+	score_style.corner_radius_bottom_left = radius
+	score_style.corner_radius_bottom_right = radius
+
+	score_style.set_border_width_all(
+		maxi(
+			roundi(
+				2.0 *
+				avatar_scale
+			),
+			2,
+		),
+	)
+
+
+func _apply_avatar_responsive_layout(
+	content_scale: float,
+	is_portrait: bool,
+	viewport_size: Vector2,
+) -> void:
+	var avatar_scale := 1.0
+
+	if not is_portrait:
+		var landscape_aspect := (
+			viewport_size.x /
+			maxf(
+				viewport_size.y,
+				1.0,
+			)
+		)
+
+		avatar_scale = clampf(
+			maxf(
+				content_scale,
+				landscape_aspect,
+			),
+			LANDSCAPE_AVATAR_MIN_SCALE,
+			LANDSCAPE_AVATAR_MAX_SCALE,
+		)
+
+	_current_avatar_scale = avatar_scale
+
+	_clear_all_win_burst_proxies()
+
+	var avatar_size := (
+		BASE_AVATAR_SIZE *
+		avatar_scale
+	)
+
+	var avatar_buttons: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatar_buttons:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		_configure_avatar_rendering(
+			avatar_button,
+		)
+
+		avatar_button.scale = Vector2.ONE
+		avatar_button.custom_minimum_size = avatar_size
+
+		var internal_preview := (
+			avatar_button.get_node_or_null(
+				"SubViewportContainer",
+			) as SubViewportContainer
+		)
+
+		if internal_preview != null:
+			internal_preview.scale = Vector2(
+				avatar_scale,
+				avatar_scale,
+			)
+
+		avatar_button.queue_redraw()
+
+		var avatar_parent := (
+			avatar_button.get_parent()
+			as Container
+		)
+
+		if avatar_parent != null:
+			avatar_parent.queue_sort()
+
+	if is_instance_valid(you_label):
+		you_label.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					BASE_YOU_LABEL_FONT_SIZE *
+						avatar_scale
+				),
+				1,
+			),
+		)
+
+	var spacer_height := (
+		BASE_LABEL_SPACER_HEIGHT *
+		avatar_scale
+	)
+
+	if is_instance_valid(center_label_spacer):
+		center_label_spacer.custom_minimum_size = Vector2(
+			0.0,
+			spacer_height,
+		)
+
+	if is_instance_valid(opponent_label_spacer):
+		opponent_label_spacer.custom_minimum_size = Vector2(
+			0.0,
+			spacer_height,
+		)
+	
+	_apply_send_button_responsive_layout(
+		avatar_scale,
+	)
+
+	_apply_score_label_layout(
+		player_count_label,
+		avatar_scale,
+	)
+
+	_apply_score_label_layout(
+		opp_count_label,
+		avatar_scale,
+	)
+
+	_apply_menu_button_layout(
+		avatar_scale,
+	)
+
+	_avatar_layout_generation += 1
+
+	call_deferred(
+		"_finalize_avatar_responsive_layout",
+		_avatar_layout_generation,
+	)
+
+
+func _apply_menu_button_layout(
+	avatar_scale: float,
+) -> void:
+	var button_size := (
+		BASE_MENU_BUTTON_SIZE *
+		avatar_scale
+	)
+
+	var menu_buttons: Array[Button] = [
+		rules_button,
+		settings_button,
+	]
+
+	for menu_button in menu_buttons:
+		if not is_instance_valid(menu_button):
+			continue
+
+		menu_button.custom_minimum_size = button_size
+
+		menu_button.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					BASE_MENU_BUTTON_FONT_SIZE *
+						avatar_scale
+				),
+				1,
+			),
+		)
+
+		menu_button.queue_redraw()
+
+
+func _apply_landscape_overlay_positions(
+	viewport_size: Vector2,
+	avatar_scale: float,
+) -> void:
+	var side_margin := (
+		BASE_SIDE_MARGIN *
+		avatar_scale
+	)
+
+	var top_margin := (
+		BASE_TOP_MARGIN *
+		avatar_scale
+	)
+
+	var bottom_margin := (
+		BASE_BOTTOM_MARGIN *
+		avatar_scale
+	)
+
+	top_hud_margin.add_theme_constant_override(
+		"margin_left",
+		roundi(side_margin),
+	)
+
+	top_hud_margin.add_theme_constant_override(
+		"margin_top",
+		roundi(top_margin),
+	)
+
+	top_hud_margin.add_theme_constant_override(
+		"margin_right",
+		roundi(side_margin),
+	)
+
+	var avatar_stack_height := (
+		BASE_AVATAR_SIZE.y *
+			avatar_scale +
+		BASE_YOU_LABEL_FONT_SIZE *
+			avatar_scale +
+		top_margin
+	)
+
+	var score_stack_height := (
+		BASE_SCORE_SIZE.y *
+			avatar_scale +
+		BASE_LABEL_SPACER_HEIGHT *
+			avatar_scale +
+		top_margin
+	)
+
+	var top_hud_height := maxf(
+		avatar_stack_height,
+		score_stack_height,
+	)
+
+	top_hud_margin.set_anchors_preset(
+		Control.PRESET_TOP_WIDE,
+	)
+
+	top_hud_margin.offset_left = 0.0
+	top_hud_margin.offset_top = 0.0
+	top_hud_margin.offset_right = 0.0
+	top_hud_margin.offset_bottom = top_hud_height
+
+	bottom_controls_margin.add_theme_constant_override(
+		"margin_left",
+		roundi(side_margin),
+	)
+
+	bottom_controls_margin.add_theme_constant_override(
+		"margin_right",
+		roundi(side_margin),
+	)
+
+	bottom_controls_margin.add_theme_constant_override(
+		"margin_bottom",
+		roundi(bottom_margin),
+	)
+
+	var bottom_height := (
+		BASE_MENU_BUTTON_SIZE.y *
+			avatar_scale +
+		bottom_margin
+	)
+
+	bottom_controls.custom_minimum_size = Vector2(
+		0.0,
+		bottom_height,
+	)
+
+	bottom_controls.set_anchors_preset(
+		Control.PRESET_BOTTOM_WIDE,
+	)
+
+	bottom_controls.offset_left = 0.0
+	bottom_controls.offset_top = -bottom_height
+	bottom_controls.offset_right = 0.0
+	bottom_controls.offset_bottom = 0.0
+
+	top_hud_margin.queue_sort()
+	bottom_controls.queue_sort()
+
+
+func _restore_portrait_container_layout() -> void:
+	top_hud_margin.add_theme_constant_override(
+		"margin_left",
+		roundi(BASE_SIDE_MARGIN),
+	)
+
+	top_hud_margin.add_theme_constant_override(
+		"margin_top",
+		roundi(BASE_TOP_MARGIN),
+	)
+
+	top_hud_margin.add_theme_constant_override(
+		"margin_right",
+		roundi(BASE_SIDE_MARGIN),
+	)
+
+	bottom_controls_margin.add_theme_constant_override(
+		"margin_left",
+		roundi(BASE_SIDE_MARGIN),
+	)
+
+	bottom_controls_margin.add_theme_constant_override(
+		"margin_right",
+		roundi(BASE_SIDE_MARGIN),
+	)
+
+	bottom_controls_margin.add_theme_constant_override(
+		"margin_bottom",
+		roundi(BASE_BOTTOM_MARGIN),
+	)
+
+	bottom_controls.custom_minimum_size = Vector2(
+		0.0,
+		PORTRAIT_BOTTOM_AREA_HEIGHT,
+	)
+
+	main_vbox.queue_sort()
+
+
+func _apply_spectator_label_responsive_layout(
+	content_scale: float,
+	is_portrait: bool,
+) -> void:
+	if not is_instance_valid(spec_label):
+		return
+
+	var overlay_scale := 1.0
+
+	if not is_portrait:
+		overlay_scale = clampf(
+			content_scale,
+			LANDSCAPE_OVERLAY_MIN_SCALE,
+			LANDSCAPE_OVERLAY_MAX_SCALE,
+		)
+
+	spec_label.set_anchors_preset(
+		Control.PRESET_CENTER_TOP,
+	)
+
+	spec_label.offset_left = (
+		-BASE_SPECTATOR_HALF_WIDTH *
+		overlay_scale
+	)
+
+	spec_label.offset_right = (
+		BASE_SPECTATOR_HALF_WIDTH *
+		overlay_scale
+	)
+
+	var spectator_top_offset := (
+		PORTRAIT_SPECTATOR_TOP_OFFSET
+		if is_portrait
+		else 0.0
+	)
+
+	spec_label.offset_top = spectator_top_offset
+
+	spec_label.offset_bottom = (
+		spectator_top_offset +
+		BASE_SPECTATOR_HEIGHT *
+			overlay_scale
+	)
+
+	spec_label.grow_horizontal = (
+		Control.GROW_DIRECTION_BOTH
+	)
+
+	spec_label.horizontal_alignment = (
+		HORIZONTAL_ALIGNMENT_CENTER
+	)
+
+	spec_label.vertical_alignment = (
+		VERTICAL_ALIGNMENT_CENTER
+	)
+
+	spec_label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				BASE_SPECTATOR_FONT_SIZE *
+					overlay_scale
+			),
+			1,
+		),
+	)
+
+
+func _apply_responsive_layout() -> void:
+	_responsive_layout_pending = false
+
+	if not is_inside_tree():
+		return
+
+	var viewport := get_viewport()
+
+	if viewport == null:
+		return
+
+	var viewport_size := (
+		viewport.get_visible_rect().size
+	)
+
+	if (
+		viewport_size.x <= 1.0 or
+		viewport_size.y <= 1.0
+	):
+		return
+
+	if viewport_size.is_equal_approx(
+		_last_viewport_size,
+	):
+		return
+
+	_last_viewport_size = viewport_size
+
+	var is_portrait := (
+		viewport_size.y >=
+		viewport_size.x
+	)
+	
+	var action_scale_hint: float = (
+		_responsive_avatar_scale_hint(
+			viewport_size,
+			is_portrait,
+		)
+	)
+
+	_set_landscape_overlay_mode(
+		not is_portrait,
+	)
+
+	var board_size := (
+		_apply_board_responsive_layout(
+			viewport_size,
+			is_portrait,
+			action_scale_hint,
+		)
+	)
+
+	var content_scale := clampf(
+		board_size /
+			BOARD_REFERENCE_SIZE,
+		0.5,
+		2.0,
+	)
+
+	_apply_avatar_responsive_layout(
+		content_scale,
+		is_portrait,
+		viewport_size,
+	)
+
+	if is_portrait:
+		_restore_portrait_container_layout()
+	else:
+		_apply_landscape_overlay_positions(
+			viewport_size,
+			_current_avatar_scale,
+		)
+
+	_apply_spectator_label_responsive_layout(
+		content_scale,
+		is_portrait,
+	)
+
+	main_vbox.queue_sort()
+	board_root.queue_sort()
+
+
+func _finalize_avatar_responsive_layout(
+	layout_generation: int,
+) -> void:
+	await get_tree().process_frame
+
+	if (
+		not is_inside_tree() or
+		layout_generation !=
+			_avatar_layout_generation
+	):
+		return
+
+	var avatar_buttons: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatar_buttons:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		var avatar_parent := (
+			avatar_button.get_parent()
+			as Container
+		)
+
+		if avatar_parent != null:
+			avatar_parent.queue_sort()
+
+	await get_tree().process_frame
+
+	if (
+		not is_inside_tree() or
+		layout_generation !=
+			_avatar_layout_generation
+	):
+		return
+
+	for avatar_button in avatar_buttons:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		avatar_button.scale = Vector2.ONE
+
+		avatar_button.pivot_offset = (
+			avatar_button.size *
+			0.5
+		)
+
+		avatar_button.queue_redraw()
+
+	call_deferred(
+		"place_star_points",
+	)
+
+	call_deferred(
+		"calculate_button_target_position",
+	)
+
+	_clear_all_win_burst_proxies()
+
+	if (
+		is_instance_valid(win_loss_label) and
+		win_loss_label.visible and
+		is_instance_valid(_active_win_burst_avatar)
+	):
+		_show_win_burst_for_avatar(
+			_active_win_burst_avatar,
+		)
+
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
 		background.color = Color(0.08, 0.08, 0.08) if is_dark else Color("#e5e5e5")
@@ -177,13 +1095,195 @@ func setup_board_structure():
 			else:
 				board[y].append(null)
 
-func calculate_button_target_position():
-	var grid_global_bottom_y = grid.get_global_position().y + grid.size.y
-	var main_vbox_global_position = $MainVBoxContainer.get_global_position().y
-	send_button_target_y_position = grid_global_bottom_y - main_vbox_global_position + 60
-	
-	var offscreen_bottom_y = $MainVBoxContainer.size.y + BUTTON_OFFSCREEN_OFFSET
-	send_button.position.y = offscreen_bottom_y
+func calculate_button_target_position() -> void:
+	if not is_instance_valid(send_button):
+		return
+
+	if not is_instance_valid(grid):
+		return
+
+	var keep_visible: bool = send_button.visible
+
+	if (
+		button_tween != null and
+		button_tween.is_running()
+	):
+		button_tween.kill()
+
+	var viewport_size: Vector2 = (
+		get_viewport_rect().size
+	)
+
+	var root_global_y: float = (
+		get_global_rect().position.y
+	)
+
+	var grid_bottom_global_y: float = (
+		grid.get_global_rect().end.y
+	)
+
+	var desired_y: float = (
+		grid_bottom_global_y -
+			root_global_y +
+		LANDSCAPE_BOARD_SEND_GAP
+	)
+
+	var maximum_y: float = (
+		viewport_size.y -
+			send_button.size.y -
+			20.0
+	)
+
+	send_button_target_y_position = minf(
+		desired_y,
+		maximum_y,
+	)
+
+	var offscreen_bottom_y: float = (
+		viewport_size.y +
+		BUTTON_OFFSCREEN_OFFSET
+	)
+
+	send_button.position.x = (
+		viewport_size.x -
+			send_button.size.x
+	) * 0.5
+
+	if keep_visible:
+		send_button.position.y = (
+			send_button_target_y_position
+		)
+
+		send_button.visible = true
+	else:
+		send_button.position.y = (
+			offscreen_bottom_y
+		)
+
+func _remove_win_burst_proxy(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	var existing_proxy := (
+		avatar_button.get_node_or_null(
+			WIN_BURST_WRAPPER_NAME,
+		)
+	)
+
+	if existing_proxy == null:
+		return
+
+	avatar_button.remove_child(
+		existing_proxy,
+	)
+
+	existing_proxy.queue_free()
+
+
+func _clear_all_win_burst_proxies() -> void:
+	_remove_win_burst_proxy(
+		player_avatar_display,
+	)
+
+	_remove_win_burst_proxy(
+		opp_avatar_display,
+	)
+
+
+func _create_win_burst_target(
+	avatar_button: TextureButton,
+	avatar_scale: float,
+) -> TextureButton:
+	if not is_instance_valid(avatar_button):
+		return null
+
+	_remove_win_burst_proxy(
+		avatar_button,
+	)
+
+	var burst_wrapper := Control.new()
+
+	burst_wrapper.name = (
+		WIN_BURST_WRAPPER_NAME
+	)
+
+	burst_wrapper.mouse_filter = (
+		Control.MOUSE_FILTER_IGNORE
+	)
+
+	burst_wrapper.show_behind_parent = true
+	burst_wrapper.clip_contents = false
+
+	avatar_button.add_child(
+		burst_wrapper,
+	)
+
+	burst_wrapper.size = BASE_AVATAR_SIZE
+
+	burst_wrapper.pivot_offset = (
+		BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	burst_wrapper.position = (
+		avatar_button.size *
+			0.5 -
+		BASE_AVATAR_SIZE *
+			0.5
+	)
+
+	burst_wrapper.scale = Vector2(
+		avatar_scale,
+		avatar_scale,
+	)
+
+	var burst_target := TextureButton.new()
+
+	burst_target.name = "BurstTarget"
+
+	burst_target.mouse_filter = (
+		Control.MOUSE_FILTER_IGNORE
+	)
+
+	burst_target.ignore_texture_size = true
+	burst_target.clip_contents = false
+	burst_target.size = BASE_AVATAR_SIZE
+
+	burst_target.pivot_offset = (
+		BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	burst_wrapper.add_child(
+		burst_target,
+	)
+
+	return burst_target
+
+
+func _show_win_burst_for_avatar(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	_active_win_burst_avatar = avatar_button
+
+	var burst_target := (
+		_create_win_burst_target(
+			avatar_button,
+			_current_avatar_scale,
+		)
+	)
+
+	if not is_instance_valid(burst_target):
+		return
+
+	GameUtils._show_win_burst(
+		burst_target,
+	)
 
 func setup_ui_elements_style_and_signals():
 	if send_button:
@@ -618,6 +1718,7 @@ func _set_game_data(new_game_data_json: String):
 		you_label.modulate.a = 0.0 if spectator_mode else 1.0
 
 	setup_score_labels()
+	_schedule_responsive_layout(true)
 
 	OpLog.i(LOG_TAG, [
 		"set_game_data_state player=", player,
@@ -774,6 +1875,9 @@ func _show_result_from_state(state: String, spectator_winner_player: int = 0) ->
 	if not is_instance_valid(win_loss_label):
 		return
 
+	_clear_all_win_burst_proxies()
+	_active_win_burst_avatar = null
+
 	if state == "0":
 		win_loss_label.text = "DRAW!"
 		win_loss_label.add_theme_color_override("font_color", Color(1, 1, 1))
@@ -788,22 +1892,22 @@ func _show_result_from_state(state: String, spectator_winner_player: int = 0) ->
 
 		if player_num == 1:
 			if is_instance_valid(player_avatar_display):
-				GameUtils._show_win_burst(player_avatar_display)
+				_show_win_burst_for_avatar(player_avatar_display)
 		else:
 			if is_instance_valid(opp_avatar_display):
-				GameUtils._show_win_burst(opp_avatar_display)
+				_show_win_burst_for_avatar(opp_avatar_display)
 	elif state == "1":
 		win_loss_label.text = "YOU WIN!"
 		win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 
 		if is_instance_valid(player_avatar_display):
-			GameUtils._show_win_burst(player_avatar_display)
+			_show_win_burst_for_avatar(player_avatar_display)
 	else:
 		win_loss_label.text = "YOU LOSE"
 		win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
 
 		if is_instance_valid(opp_avatar_display):
-			GameUtils._show_win_burst(opp_avatar_display)
+			_show_win_burst_for_avatar(opp_avatar_display)
 
 	win_loss_label.visible = true
 	win_loss_label.modulate.a = 1.0
@@ -1436,7 +2540,10 @@ func animate_button_slide_down():
 	if button_tween and button_tween.is_running():
 		button_tween.kill()
 
-	var offscreen_bottom_y = $MainVBoxContainer.size.y + BUTTON_OFFSCREEN_OFFSET
+	var offscreen_bottom_y: float = (
+		get_viewport_rect().size.y +
+		BUTTON_OFFSCREEN_OFFSET
+	)
 
 	button_tween = create_tween()
 	button_tween.tween_property(send_button, "position:y", offscreen_bottom_y, 0.6)\

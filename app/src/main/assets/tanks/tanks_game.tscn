@@ -12,24 +12,6 @@
 [ext_resource type="Texture2D" uid="uid://bdldwjhh5k4tn" path="res://tanks/wind_backing.png" id="7_yjlgf"]
 [ext_resource type="Texture2D" uid="uid://dcav7qvfoafl4" path="res://tanks/wind_arrow.png" id="8_blwoc"]
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_blwoc"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_7jppp"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_knpvn"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_ngt5w"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_qlxma"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_8kvy3"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_5g7og"]
 texture = ExtResource("3_mnn5w")
 
@@ -217,9 +199,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_blwoc")
-texture_pressed = SubResource("ViewportTexture_7jppp")
-texture_hover = SubResource("ViewportTexture_knpvn")
 is_display_only = true
 
 [node name="Control3" type="Control" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/PlayerContainer" unique_id=401160366]
@@ -278,8 +257,8 @@ stretch_mode = 5
 [node name="ClipRect" type="Control" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/Wind/WindIndicator" unique_id=1277963275]
 unique_name_in_owner = true
 clip_children = 1
-clip_contents = true
 custom_minimum_size = Vector2(0, 20)
+clip_contents = true
 layout_mode = 1
 anchors_preset = 0
 grow_horizontal = 2
@@ -311,9 +290,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_ngt5w")
-texture_pressed = SubResource("ViewportTexture_qlxma")
-texture_hover = SubResource("ViewportTexture_8kvy3")
 is_display_only = true
 controlled_by_data = true
 

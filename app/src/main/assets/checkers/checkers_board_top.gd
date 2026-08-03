@@ -15,6 +15,17 @@ class_name CheckersBoardTop
 @onready var background = %Background
 @onready var spec_label: Label = %SpecLabel
 @onready var board: TextureRect = %CheckersBoardTop
+@onready var checkers_scene_root: Control = background.get_parent() as Control
+@onready var checkers_main_vbox: VBoxContainer = %CheckersMainVBox
+@onready var checkers_top_hud_margin: MarginContainer = %CheckersTopHudMargin
+@onready var checkers_top_hud: HBoxContainer = %TopInfoHBoxContainer
+@onready var checkers_board_center: CenterContainer = %CheckersBoardCenter
+@onready var checkers_board_panel: PanelContainer = %CheckersBoardPanel
+@onready var checkers_bottom_controls: HBoxContainer = %BottomItemHBoxContainer
+@onready var checkers_bottom_controls_margin: MarginContainer = %CheckersBottomControlsMargin
+@onready var player_piece_top_spacer: Control = %PlayerPieceTopSpacer
+@onready var opp_piece_top_spacer: Control = %OppPieceTopSpacer
+@onready var opponent_avatar_top_spacer: Control = %OppLabel
 
 var sent_tween: Tween
 var black_king_texture := preload("res://checkers/checker_black_king.png")
@@ -25,6 +36,69 @@ const MUSIC_STREAM := preload("res://global/audio/checkers.ogg")
 
 const LOG_TAG := "Checkers"
 var DEBUG_CHECKERS := false
+
+const CHECKERS_LANDSCAPE_BOARD_HEIGHT_RATIO := 0.80
+const CHECKERS_REFERENCE_BOARD_SIZE := 625.0
+
+const CHECKERS_BASE_AVATAR_SIZE := Vector2(
+	96.0,
+	90.0,
+)
+
+const CHECKERS_BASE_PIECE_ICON_SIZE := Vector2(
+	64.0,
+	64.0,
+)
+
+const CHECKERS_BASE_PIECE_TOP_SPACER := 40.0
+const CHECKERS_BASE_OPPONENT_AVATAR_SPACER := 26.0
+const CHECKERS_BASE_YOU_FONT_SIZE := 18.0
+
+const CHECKERS_BASE_MENU_BUTTON_SIZE := Vector2(
+	64.0,
+	64.0,
+)
+
+const CHECKERS_BASE_MENU_BUTTON_FONT_SIZE := 32.0
+
+const CHECKERS_BASE_SEND_BUTTON_SIZE := Vector2(
+	70.0,
+	50.0,
+)
+
+const CHECKERS_BASE_SEND_BUTTON_FONT_SIZE := 28.0
+
+const CHECKERS_LANDSCAPE_AVATAR_MIN_SCALE := 2.05
+const CHECKERS_LANDSCAPE_AVATAR_MAX_SCALE := 2.35
+
+const CHECKERS_BASE_TOP_MARGIN_LEFT := 20.0
+const CHECKERS_BASE_TOP_MARGIN_TOP := 10.0
+const CHECKERS_BASE_BOTTOM_SIDE_MARGIN := 40.0
+const CHECKERS_BASE_BOTTOM_MARGIN := 30.0
+
+const CHECKERS_PORTRAIT_BOTTOM_HEIGHT := 120.0
+const CHECKERS_BOARD_ACTION_GAP := 24.0
+const CHECKERS_LANDSCAPE_BOTTOM_PADDING := 24.0
+
+const CHECKERS_BASE_SPECTATOR_FONT_SIZE := 50.0
+const CHECKERS_BASE_SPECTATOR_HALF_WIDTH := 324.0
+const CHECKERS_BASE_SPECTATOR_HEIGHT := 220.0
+const CHECKERS_PORTRAIT_SPECTATOR_TOP_OFFSET := 90.0
+
+const CHECKERS_LANDSCAPE_OVERLAY_MIN_SCALE := 1.35
+const CHECKERS_LANDSCAPE_OVERLAY_MAX_SCALE := 1.65
+
+const CHECKERS_WIN_BURST_WRAPPER_NAME := (
+	"CheckersResponsiveWinBurstWrapper"
+)
+
+var _checkers_layout_pending := false
+var _checkers_last_viewport_size := Vector2.ZERO
+var _checkers_layout_generation := 0
+var _checkers_portrait_vbox_separation := 0
+
+var _checkers_current_avatar_scale := 1.0
+var _checkers_active_win_burst_avatar: TextureButton = null
 
 func dbg(parts: Variant) -> void:
 	if DEBUG_CHECKERS:
@@ -121,7 +195,7 @@ func _on_game_ready() -> void:
 		send_button.scale = Vector2(1.0, 1.0)
 		if not send_button.pressed.is_connected(Callable(self, "_on_send_pressed")):
 			send_button.pressed.connect(_on_send_pressed)
-
+	_initialize_checkers_responsive_layout()
 	if player == 0 or replay == "":
 		return
 
@@ -187,7 +261,9 @@ func _apply_board_orientation() -> void:
 	
 func _can_accept_board_input() -> bool:
 	return (
-		not input_locked
+		not _settings_open
+		and not _rules_open
+		and not input_locked
 		and not replay_locked
 		and not spectator_mode
 		and not waitingForOpponent
@@ -266,6 +342,9 @@ func _current_board_string() -> String:
 	return ",".join(board_values)
 
 func _on_send_pressed() -> void:
+	if _settings_open or _rules_open:
+		return
+
 	if input_locked:
 		dbg("send_pressed blocked input_locked")
 		return
@@ -380,9 +459,72 @@ func send_game_checkers() -> void:
 func _on_board_resized() -> void:
 	_recalculate_board_layout_from_board()
 	_apply_board_orientation()
-	if selected_highlight and selected_highlight.visible and clicked_piece:
-		var p := getPiecePos(clicked_piece)
-		_show_selected_highlight_at(int(p.x), int(p.y))
+
+	if is_instance_valid(pieces_root):
+		for child in pieces_root.get_children():
+			var piece := child as Sprite2D
+
+			if not is_instance_valid(piece):
+				continue
+
+			var piece_position := _get_piece_pos(
+				piece,
+			)
+
+			if piece_position == Vector2i(-1, -1):
+				continue
+
+			_apply_piece_scale(piece)
+
+			piece.position = _cell_pos(
+				piece_position.x,
+				piece_position.y,
+			)
+
+	for key in move_highlights.keys():
+		var move_highlight := (
+			move_highlights[key] as Sprite2D
+		)
+
+		if not is_instance_valid(move_highlight):
+			continue
+
+		var target_px := float(cell_px) * 0.9
+
+		var scale_factor := minf(
+			target_px /
+				float(
+					move_highlight.texture.get_width()
+				),
+			target_px /
+				float(
+					move_highlight.texture.get_height()
+				),
+		)
+
+		move_highlight.scale = Vector2.ONE * (
+			scale_factor
+		)
+
+		move_highlight.position = _cell_pos(
+			key.x,
+			key.y,
+		)
+
+	if (
+		is_instance_valid(selected_highlight) and
+		selected_highlight.visible and
+		is_instance_valid(clicked_piece)
+	):
+		var selected_position := (
+			_get_piece_pos(clicked_piece)
+		)
+
+		if selected_position != Vector2i(-1, -1):
+			_show_selected_highlight_at(
+				selected_position.x,
+				selected_position.y,
+			)
 
 func _spawn_piece(val: String, lx: int, ly: int) -> Sprite2D:
 	var s := Sprite2D.new()
@@ -459,40 +601,893 @@ func _clear_pieces() -> void:
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
 		background.color = Color(0.08, 0.08, 0.08) if is_dark else Color("#e5e5e5")
-	
+
+func _initialize_checkers_responsive_layout() -> void:
+	var avatars: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatars:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		avatar_button.clip_contents = false
+
+		var internal_viewport := (
+			avatar_button.get_node_or_null(
+				"SubViewportContainer/SubViewport",
+			) as SubViewport
+		)
+
+		if internal_viewport != null:
+			internal_viewport.render_target_update_mode = (
+				SubViewport.UPDATE_ALWAYS
+			)
+
+		var internal_preview := (
+			avatar_button.get_node_or_null(
+				"SubViewportContainer",
+			) as SubViewportContainer
+		)
+
+		if internal_preview != null:
+			internal_preview.mouse_filter = (
+				Control.MOUSE_FILTER_IGNORE
+			)
+			internal_preview.visible = true
+			internal_preview.self_modulate = Color.WHITE
+			internal_preview.pivot_offset = Vector2(
+				48.0,
+				140.0,
+			)
+
+	_checkers_portrait_vbox_separation = (
+		checkers_main_vbox.get_theme_constant(
+			"separation",
+		)
+	)
+
+	var viewport := get_viewport()
+
+	if viewport == null:
+		return
+
+	if not viewport.size_changed.is_connected(
+		_schedule_checkers_responsive_layout,
+	):
+		viewport.size_changed.connect(
+			_schedule_checkers_responsive_layout,
+		)
+
+	_schedule_checkers_responsive_layout(true)
+
+
+func _schedule_checkers_responsive_layout(
+	force: bool = false,
+) -> void:
+	if force:
+		_checkers_last_viewport_size = Vector2.ZERO
+
+	if _checkers_layout_pending:
+		return
+
+	_checkers_layout_pending = true
+
+	call_deferred(
+		"_apply_checkers_responsive_layout",
+	)
+
+func _apply_checkers_responsive_layout() -> void:
+	_checkers_layout_pending = false
+
+	if not is_inside_tree():
+		return
+
+	var viewport := get_viewport()
+
+	if viewport == null:
+		return
+
+	var viewport_size := (
+		viewport.get_visible_rect().size
+	)
+
+	if (
+		viewport_size.x <= 1.0 or
+		viewport_size.y <= 1.0
+	):
+		return
+
+	if viewport_size.is_equal_approx(
+		_checkers_last_viewport_size,
+	):
+		return
+
+	_checkers_last_viewport_size = viewport_size
+
+	var is_portrait := (
+		viewport_size.y >=
+		viewport_size.x
+	)
+
+	var action_scale_hint := 1.0
+
+	if not is_portrait:
+		var landscape_aspect := (
+			viewport_size.x /
+			maxf(
+				viewport_size.y,
+				1.0,
+			)
+		)
+
+		action_scale_hint = clampf(
+			landscape_aspect,
+			CHECKERS_LANDSCAPE_AVATAR_MIN_SCALE,
+			CHECKERS_LANDSCAPE_AVATAR_MAX_SCALE,
+		)
+
+	# ---------------------------------------------------------
+	# Scene hierarchy
+	# ---------------------------------------------------------
+
+	if not is_portrait:
+		if (
+			checkers_top_hud_margin.get_parent() !=
+			checkers_scene_root
+		):
+			checkers_top_hud_margin.reparent(
+				checkers_scene_root,
+				false,
+			)
+
+		checkers_main_vbox.move_child(
+			checkers_board_center,
+			0,
+		)
+
+		checkers_main_vbox.move_child(
+			checkers_bottom_controls,
+			1,
+		)
+
+		checkers_main_vbox.alignment = (
+			BoxContainer.ALIGNMENT_CENTER
+		)
+
+		checkers_top_hud_margin.z_index = 20
+		spec_label.z_index = 30
+	else:
+		if (
+			checkers_top_hud_margin.get_parent() !=
+			checkers_main_vbox
+		):
+			checkers_top_hud_margin.reparent(
+				checkers_main_vbox,
+				false,
+			)
+
+		checkers_main_vbox.move_child(
+			checkers_top_hud_margin,
+			0,
+		)
+
+		checkers_main_vbox.move_child(
+			checkers_board_center,
+			1,
+		)
+
+		checkers_main_vbox.move_child(
+			checkers_bottom_controls,
+			2,
+		)
+
+		checkers_main_vbox.alignment = (
+			BoxContainer.ALIGNMENT_BEGIN
+		)
+
+		checkers_top_hud_margin.z_index = 0
+
+		checkers_top_hud_margin.set_anchors_preset(
+			Control.PRESET_TOP_LEFT,
+			false,
+		)
+
+		checkers_top_hud_margin.offset_left = 0.0
+		checkers_top_hud_margin.offset_top = 0.0
+		checkers_top_hud_margin.offset_right = 0.0
+		checkers_top_hud_margin.offset_bottom = 0.0
+
+		checkers_board_center.set_anchors_preset(
+			Control.PRESET_TOP_LEFT,
+			false,
+		)
+
+		checkers_board_center.offset_left = 0.0
+		checkers_board_center.offset_top = 0.0
+		checkers_board_center.offset_right = 0.0
+		checkers_board_center.offset_bottom = 0.0
+
+		checkers_bottom_controls.set_anchors_preset(
+			Control.PRESET_TOP_LEFT,
+			false,
+		)
+
+		checkers_bottom_controls.offset_left = 0.0
+		checkers_bottom_controls.offset_top = 0.0
+		checkers_bottom_controls.offset_right = 0.0
+		checkers_bottom_controls.offset_bottom = 0.0
+
+	# ---------------------------------------------------------
+	# Board size
+	# ---------------------------------------------------------
+
+	var board_display_size := (
+		CHECKERS_REFERENCE_BOARD_SIZE
+	)
+
+	if not is_portrait:
+		var target_stack_height := floorf(
+			viewport_size.y *
+			CHECKERS_LANDSCAPE_BOARD_HEIGHT_RATIO
+		)
+
+		var action_height := (
+			maxf(
+				CHECKERS_BASE_MENU_BUTTON_SIZE.y,
+				CHECKERS_BASE_SEND_BUTTON_SIZE.y,
+			) *
+			action_scale_hint +
+			CHECKERS_LANDSCAPE_BOTTOM_PADDING
+		)
+
+		var available_board_height := maxf(
+			target_stack_height -
+				action_height -
+				CHECKERS_BOARD_ACTION_GAP,
+			1.0,
+		)
+
+		var available_board_width := maxf(
+			viewport_size.x -
+				CHECKERS_BASE_BOTTOM_SIDE_MARGIN *
+					2.0,
+			1.0,
+		)
+
+		board_display_size = floorf(
+			minf(
+				available_board_height,
+				available_board_width,
+			)
+		)
+
+	board_display_size = maxf(
+		board_display_size,
+		1.0,
+	)
+
+	board.custom_minimum_size = Vector2(
+		board_display_size,
+		board_display_size,
+	)
+
+	checkers_board_panel.custom_minimum_size = Vector2(
+		board_display_size,
+		board_display_size,
+	)
+
+	checkers_board_center.custom_minimum_size = Vector2(
+		board_display_size,
+		board_display_size,
+	)
+
+	var content_scale := clampf(
+		board_display_size /
+			CHECKERS_REFERENCE_BOARD_SIZE,
+		0.5,
+		2.0,
+	)
+
+	# ---------------------------------------------------------
+	# Avatars and checker trays
+	# ---------------------------------------------------------
+
+	var avatar_scale := 1.0
+
+	if not is_portrait:
+		var landscape_aspect := (
+			viewport_size.x /
+			maxf(
+				viewport_size.y,
+				1.0,
+			)
+		)
+
+		avatar_scale = clampf(
+			maxf(
+				content_scale,
+				landscape_aspect,
+			),
+			CHECKERS_LANDSCAPE_AVATAR_MIN_SCALE,
+			CHECKERS_LANDSCAPE_AVATAR_MAX_SCALE,
+		)
+
+	_checkers_current_avatar_scale = avatar_scale
+
+	var avatar_size := (
+		CHECKERS_BASE_AVATAR_SIZE *
+		avatar_scale
+	)
+
+	var avatars: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatars:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		avatar_button.scale = Vector2.ONE
+		avatar_button.custom_minimum_size = avatar_size
+
+		var internal_preview := (
+			avatar_button.get_node_or_null(
+				"SubViewportContainer",
+			) as SubViewportContainer
+		)
+
+		if internal_preview != null:
+			internal_preview.scale = (
+				Vector2.ONE *
+				avatar_scale
+			)
+
+		avatar_button.queue_redraw()
+
+	var piece_icon_size := (
+		CHECKERS_BASE_PIECE_ICON_SIZE *
+		avatar_scale
+	)
+
+	player_piece_icon.custom_minimum_size = (
+		piece_icon_size
+	)
+
+	opp_piece_icon.custom_minimum_size = (
+		piece_icon_size
+	)
+
+	player_piece_top_spacer.custom_minimum_size = Vector2(
+		0.0,
+		CHECKERS_BASE_PIECE_TOP_SPACER *
+			avatar_scale,
+	)
+
+	opp_piece_top_spacer.custom_minimum_size = Vector2(
+		0.0,
+		CHECKERS_BASE_PIECE_TOP_SPACER *
+			avatar_scale,
+	)
+
+	opponent_avatar_top_spacer.custom_minimum_size = Vector2(
+		0.0,
+		CHECKERS_BASE_OPPONENT_AVATAR_SPACER *
+			avatar_scale,
+	)
+
+	you_label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				CHECKERS_BASE_YOU_FONT_SIZE *
+					avatar_scale
+			),
+			1,
+		),
+	)
+
+	# ---------------------------------------------------------
+	# Rules, Settings, and Send
+	# ---------------------------------------------------------
+
+	var menu_size := (
+		CHECKERS_BASE_MENU_BUTTON_SIZE *
+		avatar_scale
+	)
+
+	var menu_buttons: Array[Button] = [
+		settings_button,
+		rules_button,
+	]
+
+	for menu_button in menu_buttons:
+		if not is_instance_valid(menu_button):
+			continue
+
+		menu_button.custom_minimum_size = menu_size
+
+		menu_button.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					CHECKERS_BASE_MENU_BUTTON_FONT_SIZE *
+						avatar_scale
+				),
+				1,
+			),
+		)
+
+	var send_size := (
+		CHECKERS_BASE_SEND_BUTTON_SIZE *
+		avatar_scale
+	)
+
+	send_button.size_flags_horizontal = (
+		Control.SIZE_SHRINK_CENTER
+	)
+
+	send_button.size_flags_vertical = (
+		Control.SIZE_SHRINK_CENTER
+	)
+
+	send_button.custom_minimum_size = send_size
+	send_button.size = send_size
+	send_button.scale = Vector2.ONE
+
+	send_button.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				CHECKERS_BASE_SEND_BUTTON_FONT_SIZE *
+					avatar_scale
+			),
+			1,
+		),
+	)
+
+	send_button.pivot_offset = (
+		send_size *
+		0.5
+	)
+
+	# ---------------------------------------------------------
+	# Landscape positioning or portrait restoration
+	# ---------------------------------------------------------
+
+	if not is_portrait:
+		var side_margin := (
+			CHECKERS_BASE_TOP_MARGIN_LEFT *
+			avatar_scale
+		)
+
+		var top_margin := (
+			CHECKERS_BASE_TOP_MARGIN_TOP *
+			avatar_scale
+		)
+
+		checkers_top_hud_margin.add_theme_constant_override(
+			"margin_left",
+			roundi(side_margin),
+		)
+
+		checkers_top_hud_margin.add_theme_constant_override(
+			"margin_top",
+			roundi(top_margin),
+		)
+
+		checkers_top_hud_margin.add_theme_constant_override(
+			"margin_right",
+			roundi(side_margin),
+		)
+
+		checkers_top_hud_margin.set_anchors_preset(
+			Control.PRESET_TOP_WIDE,
+			false,
+		)
+
+		var avatar_stack_height := (
+			CHECKERS_BASE_AVATAR_SIZE.y *
+				avatar_scale +
+			CHECKERS_BASE_YOU_FONT_SIZE *
+				avatar_scale
+		)
+
+		var piece_stack_height := (
+			CHECKERS_BASE_PIECE_TOP_SPACER *
+				avatar_scale +
+			CHECKERS_BASE_PIECE_ICON_SIZE.y *
+				avatar_scale
+		)
+
+		var top_hud_height := (
+			maxf(
+				avatar_stack_height,
+				piece_stack_height,
+			) +
+			top_margin
+		)
+
+		checkers_top_hud_margin.offset_left = 0.0
+		checkers_top_hud_margin.offset_top = 0.0
+		checkers_top_hud_margin.offset_right = 0.0
+		checkers_top_hud_margin.offset_bottom = (
+			top_hud_height
+		)
+
+		var bottom_side_margin := (
+			CHECKERS_BASE_BOTTOM_SIDE_MARGIN *
+			avatar_scale
+		)
+
+		var bottom_margin := (
+			CHECKERS_BASE_BOTTOM_MARGIN *
+			avatar_scale
+		)
+
+		checkers_bottom_controls_margin.add_theme_constant_override(
+			"margin_left",
+			roundi(bottom_side_margin),
+		)
+
+		checkers_bottom_controls_margin.add_theme_constant_override(
+			"margin_right",
+			roundi(bottom_side_margin),
+		)
+
+		checkers_bottom_controls_margin.add_theme_constant_override(
+			"margin_bottom",
+			roundi(bottom_margin),
+		)
+
+		var action_height := (
+			maxf(
+				CHECKERS_BASE_MENU_BUTTON_SIZE.y,
+				CHECKERS_BASE_SEND_BUTTON_SIZE.y,
+			) *
+			avatar_scale +
+			CHECKERS_LANDSCAPE_BOTTOM_PADDING
+		)
+
+		checkers_bottom_controls.custom_minimum_size = Vector2(
+			0.0,
+			action_height,
+		)
+
+		checkers_main_vbox.add_theme_constant_override(
+			"separation",
+			roundi(
+				CHECKERS_BOARD_ACTION_GAP,
+			),
+		)
+	else:
+		checkers_top_hud_margin.add_theme_constant_override(
+			"margin_left",
+			roundi(
+				CHECKERS_BASE_TOP_MARGIN_LEFT,
+			),
+		)
+
+		checkers_top_hud_margin.add_theme_constant_override(
+			"margin_top",
+			roundi(
+				CHECKERS_BASE_TOP_MARGIN_TOP,
+			),
+		)
+
+		checkers_top_hud_margin.add_theme_constant_override(
+			"margin_right",
+			roundi(
+				CHECKERS_BASE_TOP_MARGIN_LEFT,
+			),
+		)
+
+		checkers_bottom_controls_margin.add_theme_constant_override(
+			"margin_left",
+			roundi(
+				CHECKERS_BASE_BOTTOM_SIDE_MARGIN,
+			),
+		)
+
+		checkers_bottom_controls_margin.add_theme_constant_override(
+			"margin_right",
+			roundi(
+				CHECKERS_BASE_BOTTOM_SIDE_MARGIN,
+			),
+		)
+
+		checkers_bottom_controls_margin.add_theme_constant_override(
+			"margin_bottom",
+			roundi(
+				CHECKERS_BASE_BOTTOM_MARGIN,
+			),
+		)
+
+		checkers_bottom_controls.custom_minimum_size = Vector2(
+			0.0,
+			CHECKERS_PORTRAIT_BOTTOM_HEIGHT,
+		)
+
+		checkers_main_vbox.add_theme_constant_override(
+			"separation",
+			_checkers_portrait_vbox_separation,
+		)
+
+	# ---------------------------------------------------------
+	# Spectator label
+	# ---------------------------------------------------------
+
+	var overlay_scale := 1.0
+
+	if not is_portrait:
+		overlay_scale = clampf(
+			content_scale,
+			CHECKERS_LANDSCAPE_OVERLAY_MIN_SCALE,
+			CHECKERS_LANDSCAPE_OVERLAY_MAX_SCALE,
+		)
+
+	var spectator_top_offset := (
+		CHECKERS_PORTRAIT_SPECTATOR_TOP_OFFSET
+		if is_portrait
+		else 0.0
+	)
+
+	spec_label.set_anchors_preset(
+		Control.PRESET_CENTER_TOP,
+		false,
+	)
+
+	spec_label.offset_left = (
+		-CHECKERS_BASE_SPECTATOR_HALF_WIDTH *
+			overlay_scale
+	)
+
+	spec_label.offset_right = (
+		CHECKERS_BASE_SPECTATOR_HALF_WIDTH *
+			overlay_scale
+	)
+
+	spec_label.offset_top = spectator_top_offset
+
+	spec_label.offset_bottom = (
+		spectator_top_offset +
+		CHECKERS_BASE_SPECTATOR_HEIGHT *
+			overlay_scale
+	)
+
+	spec_label.horizontal_alignment = (
+		HORIZONTAL_ALIGNMENT_CENTER
+	)
+
+	spec_label.vertical_alignment = (
+		VERTICAL_ALIGNMENT_CENTER
+	)
+
+	spec_label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				CHECKERS_BASE_SPECTATOR_FONT_SIZE *
+					overlay_scale
+			),
+			1,
+		),
+	)
+
+	board.queue_redraw()
+	checkers_board_panel.queue_sort()
+	checkers_board_center.queue_sort()
+	checkers_top_hud.queue_sort()
+	checkers_main_vbox.queue_sort()
+
+	_checkers_layout_generation += 1
+
+	call_deferred(
+		"_finish_checkers_responsive_layout",
+		_checkers_layout_generation,
+	)
+
+func _finish_checkers_responsive_layout(
+	layout_generation: int,
+) -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	if (
+		not is_inside_tree() or
+		layout_generation !=
+			_checkers_layout_generation
+	):
+		return
+
+	_on_board_resized()
+
+	player_avatar_display.pivot_offset = (
+		player_avatar_display.size *
+		0.5
+	)
+
+	opp_avatar_display.pivot_offset = (
+		opp_avatar_display.size *
+		0.5
+	)
+
+	if send_button.has_meta("sb_tween"):
+		var old_tween: Variant = (
+			send_button.get_meta("sb_tween")
+		)
+
+		if (
+			old_tween is Tween and
+			(old_tween as Tween).is_running()
+		):
+			(old_tween as Tween).kill()
+
+	var send_size := (
+		CHECKERS_BASE_SEND_BUTTON_SIZE *
+		_checkers_current_avatar_scale
+	)
+
+	send_button.custom_minimum_size = send_size
+	send_button.size = send_size
+	send_button.scale = Vector2.ONE
+	send_button.pivot_offset = send_size * 0.5
+
+	var root_rect := (
+		checkers_scene_root.get_global_rect()
+	)
+
+	var controls_rect := (
+		checkers_bottom_controls.get_global_rect()
+	)
+
+	var home_position := Vector2(
+		(
+			root_rect.size.x -
+			send_button.size.x
+		) *
+		0.5,
+		controls_rect.position.y -
+			root_rect.position.y +
+		(
+			controls_rect.size.y -
+			send_button.size.y
+		) *
+		0.5,
+	)
+
+	send_button.set_meta(
+		"sb_home_pos",
+		home_position,
+	)
+
+	send_button.position = home_position
+
+	var should_show_send := (
+		has_moved and
+		isTurn and
+		not spectator_mode and
+		not game_over
+	)
+
+	send_button.visible = should_show_send
+	send_button.disabled = not should_show_send
+	send_button.modulate.a = (
+		1.0
+		if should_show_send
+		else 0.0
+	)
+
+	_clear_checkers_win_bursts()
+
+	if (
+		is_instance_valid(win_loss_label) and
+		win_loss_label.visible and
+		is_instance_valid(
+			_checkers_active_win_burst_avatar
+		)
+	):
+		_show_checkers_win_burst(
+			_checkers_active_win_burst_avatar,
+		)
+
 func _visual_to_logical(gx: int, gy: int) -> Vector2i:
 	var lx := gx if (player == 2 and not spectator_mode) else (7 - gx)
 	var ly := (7 - gy) if (player == 2 and not spectator_mode) else gy
 	return Vector2i(lx, ly)
 	
-func _animate_send_button(should_show: bool) -> void:
+func _animate_send_button(
+	should_show: bool,
+) -> void:
 	if not is_instance_valid(send_button):
 		return
-	if not send_button.has_meta("sb_home_pos"):
-		send_button.set_meta("sb_home_pos", send_button.position)
-	var home_pos: Vector2 = send_button.get_meta("sb_home_pos")
-	var off_pos: Vector2 = Vector2(home_pos.x, get_viewport_rect().size.y + send_button.size.y + 24.0)
-	if send_button.has_meta("sb_tween"):
-		var old_tw: Variant = send_button.get_meta("sb_tween")
-		if old_tw is Tween and (old_tw as Tween).is_running():
-			(old_tw as Tween).kill()
 
-	var tw := create_tween()
-	send_button.set_meta("sb_tween", tw)
+	if not send_button.has_meta("sb_home_pos"):
+		send_button.set_meta(
+			"sb_home_pos",
+			send_button.position,
+		)
+
+	var home_pos: Vector2 = (
+		send_button.get_meta("sb_home_pos")
+	)
+
+	var off_pos := Vector2(
+		home_pos.x,
+		checkers_scene_root.size.y +
+			send_button.size.y +
+			24.0,
+	)
+
+	if send_button.has_meta("sb_tween"):
+		var old_tween: Variant = (
+			send_button.get_meta("sb_tween")
+		)
+
+		if (
+			old_tween is Tween and
+			(old_tween as Tween).is_running()
+		):
+			(old_tween as Tween).kill()
+
+	var tween := create_tween()
+
+	send_button.set_meta(
+		"sb_tween",
+		tween,
+	)
 
 	if should_show:
 		send_button.visible = true
 		send_button.disabled = false
 		send_button.position = off_pos
 		send_button.modulate.a = 0.0
-		tw.tween_property(send_button, "position", home_pos, 0.35).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-		tw.parallel().tween_property(send_button, "modulate:a", 1.0, 0.35)
+
+		tween.tween_property(
+			send_button,
+			"position",
+			home_pos,
+			0.35,
+		).set_ease(
+			Tween.EASE_OUT,
+		).set_trans(
+			Tween.TRANS_QUAD,
+		)
+
+		tween.parallel().tween_property(
+			send_button,
+			"modulate:a",
+			1.0,
+			0.35,
+		)
 	else:
 		send_button.disabled = true
-		tw.tween_property(send_button, "position", off_pos, 0.25).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-		tw.parallel().tween_property(send_button, "modulate:a", 0.0, 0.25)
-		tw.tween_callback(func():
-			if is_instance_valid(send_button):
+
+		tween.tween_property(
+			send_button,
+			"position",
+			off_pos,
+			0.25,
+		).set_ease(
+			Tween.EASE_IN,
+		).set_trans(
+			Tween.TRANS_QUAD,
+		)
+
+		tween.parallel().tween_property(
+			send_button,
+			"modulate:a",
+			0.0,
+			0.25,
+		)
+
+		tween.tween_callback(
+			func() -> void:
+				if not is_instance_valid(send_button):
+					return
+
 				send_button.visible = false
 				send_button.position = home_pos
 		)
@@ -1106,6 +2101,9 @@ func _set_game_data(new_replay: String) -> void:
  
 	var my_side := 0
 	var opponent_avatar_key := ""
+	
+	_checkers_active_win_burst_avatar = null
+	_clear_checkers_win_bursts()
 
 	if my_player != "" and p1_id != "" and p2_id != "":
 		if my_player == p1_id:
@@ -1167,38 +2165,171 @@ func _set_game_data(new_replay: String) -> void:
 					opponent_data
 				)
 
+	_schedule_checkers_responsive_layout(true)
+
 	waitingForOpponent = not isTurn
 	OpLog.i(LOG_TAG, ["set_game_data parsed turn=", isTurn, " player=", player, " sender=", data_sender, " spectator=", spectator_mode, " mode=", mode, " replayLen=", replay.length(), " boards=", replay.count("board:"), " moves=", replay.count("move:") + replay.count("attack:")])
 	_apply_player_piece_icons()
 	call_deferred("_rebuild_from_replay")
-	
-func game_over_visual(results: String) -> void:
+
+func _clear_checkers_win_bursts() -> void:
+	var avatars: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatars:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		var wrapper := avatar_button.get_node_or_null(
+			CHECKERS_WIN_BURST_WRAPPER_NAME,
+		)
+
+		if wrapper != null:
+			wrapper.queue_free()
+
+
+func _show_checkers_win_burst(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	_checkers_active_win_burst_avatar = avatar_button
+
+	var existing := avatar_button.get_node_or_null(
+		CHECKERS_WIN_BURST_WRAPPER_NAME,
+	)
+
+	if existing != null:
+		existing.queue_free()
+
+	var wrapper := Control.new()
+
+	wrapper.name = (
+		CHECKERS_WIN_BURST_WRAPPER_NAME
+	)
+
+	wrapper.mouse_filter = (
+		Control.MOUSE_FILTER_IGNORE
+	)
+
+	wrapper.show_behind_parent = true
+	wrapper.clip_contents = false
+	wrapper.size = CHECKERS_BASE_AVATAR_SIZE
+
+	wrapper.pivot_offset = (
+		CHECKERS_BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	wrapper.position = (
+		avatar_button.size *
+			0.5 -
+		CHECKERS_BASE_AVATAR_SIZE *
+			0.5
+	)
+
+	wrapper.scale = Vector2.ONE * (
+		_checkers_current_avatar_scale
+	)
+
+	avatar_button.add_child(wrapper)
+
+	var target := TextureButton.new()
+
+	target.name = "CheckersBurstTarget"
+	target.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	target.ignore_texture_size = true
+	target.clip_contents = false
+	target.size = CHECKERS_BASE_AVATAR_SIZE
+
+	target.pivot_offset = (
+		CHECKERS_BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	wrapper.add_child(target)
+
+	GameUtils._show_win_burst(target)
+
+func game_over_visual(
+	results: String,
+) -> void:
+	_clear_checkers_win_bursts()
+	_checkers_active_win_burst_avatar = null
+
 	if spectator_mode:
 		if results == "win":
 			win_loss_label.text = "Player 1 Wins!"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			GameUtils._show_win_burst(player_avatar_display)
+
+			win_loss_label.add_theme_color_override(
+				"font_color",
+				Color(1, 0.84, 0),
+			)
+
+			_show_checkers_win_burst(
+				player_avatar_display,
+			)
 		else:
 			win_loss_label.text = "Player 2 Wins!"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			GameUtils._show_win_burst(opp_avatar_display)
+
+			win_loss_label.add_theme_color_override(
+				"font_color",
+				Color(1, 0.84, 0),
+			)
+
+			_show_checkers_win_burst(
+				opp_avatar_display,
+			)
 	else:
 		if results == "win":
-			GameUtils._show_win_burst(player_avatar_display)
 			win_loss_label.text = "YOU WIN!"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+
+			win_loss_label.add_theme_color_override(
+				"font_color",
+				Color(1, 0.84, 0),
+			)
+
+			_show_checkers_win_burst(
+				player_avatar_display,
+			)
 		else:
-			GameUtils._show_win_burst(opp_avatar_display)
 			win_loss_label.text = "YOU LOSE"
-			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
+
+			win_loss_label.add_theme_color_override(
+				"font_color",
+				Color(1, 0.2, 0.2),
+			)
+
+			_show_checkers_win_burst(
+				opp_avatar_display,
+			)
 
 	win_loss_label.visible = true
+
 	await get_tree().process_frame
+
 	win_loss_label.scale = Vector2.ZERO
-	win_loss_label.pivot_offset = win_loss_label.size / 2
-	var t_in: Tween = create_tween()
-	t_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
-	
+	win_loss_label.pivot_offset = (
+		win_loss_label.size *
+		0.5
+	)
+
+	var tween_in := create_tween()
+
+	tween_in.tween_property(
+		win_loss_label,
+		"scale",
+		Vector2.ONE,
+		0.6,
+	).set_ease(
+		Tween.EASE_OUT,
+	).set_trans(
+		Tween.TRANS_BACK,
+	)
+
 func export_replay() -> String:
 	var board_values: Array[String] = []
 

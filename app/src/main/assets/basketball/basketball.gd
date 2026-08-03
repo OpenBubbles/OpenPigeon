@@ -319,7 +319,7 @@ func _configure_avatar_rendering(
 		avatar_button,
 	):
 		return
-		
+
 	avatar_button.clip_contents = false
 
 	var internal_viewport: SubViewport = (
@@ -345,8 +345,12 @@ func _configure_avatar_rendering(
 		internal_preview.mouse_filter = (
 			Control.MOUSE_FILTER_IGNORE
 		)
-
-		internal_preview.visible = false
+		internal_preview.visible = true
+		internal_preview.self_modulate = Color.WHITE
+		internal_preview.pivot_offset = Vector2(
+			48.0,
+			140.0,
+		)
 
 func _prepare_round_card_resources() -> void:
 	if _round_card_resources_prepared:
@@ -797,10 +801,17 @@ func _apply_avatar_responsive_layout(
 			avatar_size
 		)
 
-		avatar_button.ignore_texture_size = true
-		avatar_button.stretch_mode = (
-			TextureButton.STRETCH_SCALE
+		var internal_preview := (
+			avatar_button.get_node_or_null(
+				"SubViewportContainer",
+			) as SubViewportContainer
 		)
+
+		if internal_preview != null:
+			internal_preview.scale = Vector2(
+				avatar_scale,
+				avatar_scale,
+			)
 
 		avatar_button.queue_redraw()
 
@@ -2016,6 +2027,12 @@ func _update_ball_drag(
 func _input(
 	event: InputEvent,
 ) -> void:
+	if _settings_open or _rules_open:
+		if dragging:
+			_cancel_ball_drag()
+
+		return
+
 	if spectator_mode:
 		return
 

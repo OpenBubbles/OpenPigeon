@@ -95,24 +95,6 @@ expand_margin_bottom = 8.0
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_3ufe5"]
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_diu2m"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_ofxhw"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_3ufe5"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_yj865"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_0odob"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_u7o17"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_julsv"]
 albedo_texture = ExtResource("2_ryf8r")
 texture_filter = 5
@@ -376,9 +358,6 @@ custom_minimum_size = Vector2(96, 90)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_diu2m")
-texture_pressed = SubResource("ViewportTexture_ofxhw")
-texture_hover = SubResource("ViewportTexture_3ufe5")
 ignore_texture_size = true
 stretch_mode = 0
 is_display_only = true
@@ -407,9 +386,6 @@ custom_minimum_size = Vector2(96, 90)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_yj865")
-texture_pressed = SubResource("ViewportTexture_0odob")
-texture_hover = SubResource("ViewportTexture_u7o17")
 ignore_texture_size = true
 stretch_mode = 0
 is_display_only = true

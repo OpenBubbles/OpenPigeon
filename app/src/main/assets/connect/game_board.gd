@@ -11,6 +11,16 @@ class_name ConnectGameBoard
 @onready var opp_piece: TextureRect = %OppPiece
 @onready var you_label: Label = %YouLabel
 @onready var spec_label: Label = %SpecLabel
+@onready var connect_scene_root: Control = background.get_parent() as Control
+@onready var connect_main_vbox: VBoxContainer = %ConnectMainVBox
+@onready var connect_top_hud_margin: MarginContainer = %ConnectTopHudMargin
+@onready var connect_top_hud: HBoxContainer = %TopInfoHBoxContainer
+@onready var connect_board_center: CenterContainer = %ConnectBoardCenter
+@onready var connect_bottom_controls: HBoxContainer = %BottomItemHBoxContainer
+@onready var connect_bottom_controls_margin: MarginContainer = %ConnectBottomControlsMargin
+@onready var player_piece_top_spacer: Control = %PlayerPieceTopSpacer
+@onready var opp_piece_top_spacer: Control = %OppPieceTopSpacer
+@onready var opponent_avatar_top_spacer: Control = %OppLabel
 
 const BOARD_W:= 7
 const BOARD_H:= 6
@@ -59,6 +69,75 @@ func _get_music_stream() -> AudioStream:
 const LOG_TAG := "Connect4"
 var DEBUG_CONNECT4 := false
 
+const CONNECT_LANDSCAPE_BOARD_HEIGHT_RATIO := 0.80
+
+const CONNECT_REFERENCE_BOARD_EXTENT := Vector2(
+	648.0,
+	621.0,
+)
+
+const CONNECT_BASE_AVATAR_SIZE := Vector2(
+	96.0,
+	90.0,
+)
+
+const CONNECT_BASE_PIECE_ICON_SIZE := Vector2(
+	64.0,
+	64.0,
+)
+
+const CONNECT_BASE_PIECE_TOP_SPACER := 40.0
+const CONNECT_BASE_OPPONENT_AVATAR_SPACER := 26.0
+const CONNECT_BASE_YOU_FONT_SIZE := 18.0
+
+const CONNECT_BASE_MENU_BUTTON_SIZE := Vector2(
+	64.0,
+	64.0,
+)
+
+const CONNECT_BASE_MENU_BUTTON_FONT_SIZE := 32.0
+
+const CONNECT_BASE_SEND_BUTTON_SIZE := Vector2(
+	70.0,
+	50.0,
+)
+
+const CONNECT_BASE_SEND_BUTTON_FONT_SIZE := 28.0
+
+const CONNECT_LANDSCAPE_AVATAR_MIN_SCALE := 2.05
+const CONNECT_LANDSCAPE_AVATAR_MAX_SCALE := 2.35
+
+const CONNECT_BASE_TOP_SIDE_MARGIN := 20.0
+const CONNECT_BASE_TOP_MARGIN := 10.0
+const CONNECT_BASE_BOTTOM_SIDE_MARGIN := 40.0
+const CONNECT_BASE_BOTTOM_MARGIN := 30.0
+
+const CONNECT_PORTRAIT_BOTTOM_HEIGHT := 120.0
+const CONNECT_BOARD_ACTION_GAP := 24.0
+const CONNECT_LANDSCAPE_BOTTOM_PADDING := 24.0
+
+const CONNECT_BASE_SPECTATOR_FONT_SIZE := 50.0
+const CONNECT_BASE_SPECTATOR_HALF_WIDTH := 324.0
+const CONNECT_BASE_SPECTATOR_HEIGHT := 220.0
+const CONNECT_PORTRAIT_SPECTATOR_TOP_OFFSET := 90.0
+
+const CONNECT_LANDSCAPE_OVERLAY_MIN_SCALE := 1.35
+const CONNECT_LANDSCAPE_OVERLAY_MAX_SCALE := 1.65
+
+const CONNECT_WIN_BURST_WRAPPER_NAME := (
+	"ConnectResponsiveWinBurstWrapper"
+)
+
+var _connect_layout_pending := false
+var _connect_last_viewport_size := Vector2.ZERO
+var _connect_layout_generation := 0
+var _connect_portrait_vbox_separation := 0
+
+var _connect_current_avatar_scale := 1.0
+var _connect_send_target_visible := false
+
+var _connect_active_win_burst_avatar: TextureButton = null
+
 func dbg(msg: String) -> void:
 	if DEBUG_CONNECT4:
 		OpLog.d(LOG_TAG, msg)
@@ -95,6 +174,8 @@ func _on_game_ready() -> void:
 			send_button.pressed.connect(send_game)
 	else:
 		OpLog.w(LOG_TAG, "missing_send_button")
+	
+	_initialize_connect_responsive_layout()
 
 	if player == 0 or replay.is_empty():
 		OpLog.d(LOG_TAG, [
@@ -136,6 +217,9 @@ func _set_game_data(new_replay: String) -> void:
 		return
 
 	var data: Dictionary = parsed
+	
+	_connect_active_win_burst_avatar = null
+	_clear_connect_win_bursts()
 
 	isTurn = bool(data.get("isYourTurn", false))
 	replay = String(data.get("replay", ""))
@@ -183,19 +267,48 @@ func _set_game_data(new_replay: String) -> void:
 	if is_instance_valid(you_label):
 		you_label.modulate.a = 1.0 if not spectator_mode else 0.0
 
-	var opp_key: String = ""
+	if spectator_mode:
+		if data.has("avatar1"):
+			var player_one_data := (
+				GameUtils._parse_avatar_string(
+					String(data["avatar1"]),
+				)
+			)
 
-	if player == 1:
-		opp_key = "avatar2"
-	elif player == 2:
-		opp_key = "avatar1"
+			player_avatar_display.call_deferred(
+				"update_avatar_from_data",
+				player_one_data,
+			)
 
-	if opp_key != "" and data.has(opp_key):
-		var opp_data: Dictionary = GameUtils._parse_avatar_string(String(data[opp_key]))
-		if is_instance_valid(opp_avatar_display):
-			opp_avatar_display.call_deferred("update_avatar_from_data", opp_data)
+		if data.has("avatar2"):
+			var player_two_data := (
+				GameUtils._parse_avatar_string(
+					String(data["avatar2"]),
+				)
+			)
+
+			opp_avatar_display.call_deferred(
+				"update_avatar_from_data",
+				player_two_data,
+			)
 	else:
-		dbg("opponent_avatar_missing key=%s" % opp_key)
+		var opp_key := (
+			"avatar2"
+			if player == 1
+			else "avatar1"
+		)
+
+		if data.has(opp_key):
+			var opponent_data := (
+				GameUtils._parse_avatar_string(
+					String(data[opp_key]),
+				)
+			)
+
+			opp_avatar_display.call_deferred(
+				"update_avatar_from_data",
+				opponent_data,
+			)
 
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()
@@ -209,6 +322,8 @@ func _set_game_data(new_replay: String) -> void:
 		opp_piece.texture = PIECE_TEX[getPlayerColor(true)]
 	else:
 		OpLog.w(LOG_TAG, "piece_icons_missing")
+	
+	_schedule_connect_responsive_layout(true)
 
 	if is_instance_valid(you_label):
 		you_label.text = "You"
@@ -299,6 +414,9 @@ func _finish_replay_turn_state() -> void:
 func _finalize_draw() -> void:
 	if game_over:
 		return
+	
+	_connect_active_win_burst_avatar = null
+	_clear_connect_win_bursts()
 
 	game_over = true
 	can_interact = false
@@ -670,46 +788,114 @@ func _set_waiting(enabled: bool) -> void:
 	else:
 		stop_waiting_animation()
 
-func _update_send_button_visibility(should_show: bool) -> void:
+func _update_send_button_visibility(
+	should_show: bool,
+) -> void:
 	if not is_instance_valid(send_button):
 		return
+
+	_connect_send_target_visible = should_show
 
 	send_button.disabled = not should_show
 	send_button.set_as_top_level(true)
 
 	if not send_button.has_meta("home_pos"):
-		send_button.set_meta("home_pos", send_button.global_position)
+		send_button.set_meta(
+			"home_pos",
+			send_button.global_position,
+		)
 
 	if send_button.has_meta("sb_tween"):
-		var old: Tween = send_button.get_meta("sb_tween") as Tween
-		if old and old.is_running():
-			old.kill()
+		var old_tween: Variant = (
+			send_button.get_meta("sb_tween")
+		)
 
-	var home: Vector2 = send_button.get_meta("home_pos")
-	var vp: Rect2 = get_viewport_rect()
-	var off_y: float = vp.size.y + send_button.size.y + 30.0
-	var start_pos: Vector2 = Vector2(home.x, off_y)
+		if (
+			old_tween is Tween and
+			(old_tween as Tween).is_running()
+		):
+			(old_tween as Tween).kill()
+
+	var home: Vector2 = (
+		send_button.get_meta("home_pos")
+	)
+
+	var offscreen_y := (
+		connect_scene_root.get_global_rect().end.y +
+		send_button.size.y +
+		30.0
+	)
+
+	var offscreen_position := Vector2(
+		home.x,
+		offscreen_y,
+	)
 
 	if should_show:
-		if not send_button.visible:
-			send_button.global_position = start_pos
-			send_button.visible = true
-			send_button.modulate.a = 1.0
-		elif send_button.global_position.y > vp.size.y:
-			send_button.global_position = start_pos
+		send_button.visible = true
+		send_button.disabled = false
+		send_button.modulate.a = 1.0
 
-		var t_in: Tween = create_tween()
-		send_button.set_meta("sb_tween", t_in)
-		t_in.tween_property(send_button, "global_position", home, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	else:
-		if send_button.visible:
-			var t_out: Tween = create_tween()
-			send_button.set_meta("sb_tween", t_out)
-			t_out.tween_property(send_button, "global_position", Vector2(home.x, off_y), 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-			t_out.tween_callback(func():
-				if is_instance_valid(send_button):
-					send_button.visible = false
+		if send_button.global_position.y >= offscreen_y:
+			send_button.global_position = (
+				offscreen_position
 			)
+
+		var tween_in := create_tween()
+
+		send_button.set_meta(
+			"sb_tween",
+			tween_in,
+		)
+
+		tween_in.tween_property(
+			send_button,
+			"global_position",
+			home,
+			0.35,
+		).set_trans(
+			Tween.TRANS_QUAD,
+		).set_ease(
+			Tween.EASE_OUT,
+		)
+	else:
+		send_button.disabled = true
+
+		if not send_button.visible:
+			send_button.global_position = home
+			send_button.modulate.a = 0.0
+			return
+
+		var tween_out := create_tween()
+
+		send_button.set_meta(
+			"sb_tween",
+			tween_out,
+		)
+
+		tween_out.tween_property(
+			send_button,
+			"global_position",
+			offscreen_position,
+			0.25,
+		).set_trans(
+			Tween.TRANS_QUAD,
+		).set_ease(
+			Tween.EASE_IN,
+		)
+
+		tween_out.tween_callback(
+			func() -> void:
+				if not is_instance_valid(send_button):
+					return
+
+				if _connect_send_target_visible:
+					return
+
+				send_button.visible = false
+				send_button.global_position = home
+				send_button.modulate.a = 0.0
+		)
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
@@ -1372,6 +1558,9 @@ func _pulse_sprite(spr: Sprite2D) -> Tween:
 func _finalize_win(winner_pid: int) -> void:
 	if game_over:
 		return
+	
+	_clear_connect_win_bursts()
+	_connect_active_win_burst_avatar = null
 
 	game_over = true
 	can_interact = false
@@ -1388,18 +1577,26 @@ func _finalize_win(winner_pid: int) -> void:
 		if winner_pid == 1:
 			win_loss_label.text = "Player 1 Wins!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			GameUtils._show_win_burst(player_avatar_display)
+			_show_connect_win_burst(
+				player_avatar_display,
+			)
 		else:
 			win_loss_label.text = "Player 2 Wins!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
-			GameUtils._show_win_burst(opp_avatar_display)
+			_show_connect_win_burst(
+				opp_avatar_display,
+			)
 	else:
 		if i_won:
-			GameUtils._show_win_burst(player_avatar_display)
+			_show_connect_win_burst(
+				player_avatar_display,
+			)
 			win_loss_label.text = "YOU WIN!"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
 		else:
-			GameUtils._show_win_burst(opp_avatar_display)
+			_show_connect_win_burst(
+				opp_avatar_display,
+			)
 			win_loss_label.text = "YOU LOSE"
 			win_loss_label.add_theme_color_override("font_color", Color(1, 0.2, 0.2))
 
@@ -1472,3 +1669,988 @@ func _get_rules_text() -> String:
 • If the board fills completely with no four-in-a-row for either player, the game ends in a draw.
 [/font_size]
 """
+
+func _initialize_connect_responsive_layout() -> void:
+	var avatars: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatars:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		avatar_button.clip_contents = false
+
+		var internal_viewport := (
+			avatar_button.get_node_or_null(
+				"SubViewportContainer/SubViewport",
+			) as SubViewport
+		)
+
+		if internal_viewport != null:
+			internal_viewport.render_target_update_mode = (
+				SubViewport.UPDATE_ALWAYS
+			)
+
+		var internal_preview := (
+			avatar_button.get_node_or_null(
+				"SubViewportContainer",
+			) as SubViewportContainer
+		)
+
+		if internal_preview != null:
+			internal_preview.mouse_filter = (
+				Control.MOUSE_FILTER_IGNORE
+			)
+			internal_preview.visible = true
+			internal_preview.self_modulate = Color.WHITE
+
+	_connect_portrait_vbox_separation = (
+		connect_main_vbox.get_theme_constant(
+			"separation",
+		)
+	)
+
+	var viewport := get_viewport()
+
+	if viewport == null:
+		return
+
+	if not viewport.size_changed.is_connected(
+		_schedule_connect_responsive_layout,
+	):
+		viewport.size_changed.connect(
+			_schedule_connect_responsive_layout,
+		)
+
+	_schedule_connect_responsive_layout(true)
+
+
+func _schedule_connect_responsive_layout(
+	force: bool = false,
+) -> void:
+	if force:
+		_connect_last_viewport_size = Vector2.ZERO
+
+	if _connect_layout_pending:
+		return
+
+	_connect_layout_pending = true
+
+	call_deferred(
+		"_apply_connect_responsive_layout",
+	)
+
+func _apply_connect_responsive_layout() -> void:
+	_connect_layout_pending = false
+
+	if not is_inside_tree():
+		return
+
+	var viewport := get_viewport()
+
+	if viewport == null:
+		return
+
+	var viewport_size := (
+		viewport.get_visible_rect().size
+	)
+
+	if (
+		viewport_size.x <= 1.0 or
+		viewport_size.y <= 1.0
+	):
+		return
+
+	if viewport_size.is_equal_approx(
+		_connect_last_viewport_size,
+	):
+		return
+
+	_connect_last_viewport_size = viewport_size
+
+	var is_portrait := (
+		viewport_size.y >=
+		viewport_size.x
+	)
+
+	# Stop an old orientation's Send-button callback from
+	# hiding the button after the new layout is applied.
+	if send_button.has_meta("sb_tween"):
+		var old_tween: Variant = (
+			send_button.get_meta("sb_tween")
+		)
+
+		if (
+			old_tween is Tween and
+			(old_tween as Tween).is_running()
+		):
+			(old_tween as Tween).kill()
+
+	var action_scale_hint := 1.0
+
+	if not is_portrait:
+		var landscape_aspect := (
+			viewport_size.x /
+			maxf(
+				viewport_size.y,
+				1.0,
+			)
+		)
+
+		action_scale_hint = clampf(
+			landscape_aspect,
+			CONNECT_LANDSCAPE_AVATAR_MIN_SCALE,
+			CONNECT_LANDSCAPE_AVATAR_MAX_SCALE,
+		)
+
+	# ---------------------------------------------------------
+	# Scene hierarchy
+	# ---------------------------------------------------------
+
+	if not is_portrait:
+		if (
+			connect_top_hud_margin.get_parent() !=
+			connect_scene_root
+		):
+			connect_top_hud_margin.reparent(
+				connect_scene_root,
+				false,
+			)
+
+		connect_main_vbox.move_child(
+			connect_board_center,
+			0,
+		)
+
+		connect_main_vbox.move_child(
+			connect_bottom_controls,
+			1,
+		)
+
+		connect_main_vbox.alignment = (
+			BoxContainer.ALIGNMENT_CENTER
+		)
+
+		connect_board_center.size_flags_horizontal = (
+			Control.SIZE_SHRINK_CENTER
+		)
+
+		connect_board_center.size_flags_vertical = (
+			Control.SIZE_SHRINK_CENTER
+		)
+
+		connect_top_hud_margin.z_index = 20
+		spec_label.z_index = 30
+	else:
+		if (
+			connect_top_hud_margin.get_parent() !=
+			connect_main_vbox
+		):
+			connect_top_hud_margin.reparent(
+				connect_main_vbox,
+				false,
+			)
+
+		connect_main_vbox.move_child(
+			connect_top_hud_margin,
+			0,
+		)
+
+		connect_main_vbox.move_child(
+			connect_board_center,
+			1,
+		)
+
+		connect_main_vbox.move_child(
+			connect_bottom_controls,
+			2,
+		)
+
+		connect_main_vbox.alignment = (
+			BoxContainer.ALIGNMENT_BEGIN
+		)
+
+		connect_top_hud_margin.z_index = 0
+
+		connect_top_hud_margin.set_anchors_preset(
+			Control.PRESET_TOP_LEFT,
+			false,
+		)
+
+		connect_top_hud_margin.offset_left = 0.0
+		connect_top_hud_margin.offset_top = 0.0
+		connect_top_hud_margin.offset_right = 0.0
+		connect_top_hud_margin.offset_bottom = 0.0
+
+		connect_board_center.set_anchors_preset(
+			Control.PRESET_TOP_LEFT,
+			false,
+		)
+
+		connect_board_center.offset_left = 0.0
+		connect_board_center.offset_top = 0.0
+		connect_board_center.offset_right = 0.0
+		connect_board_center.offset_bottom = 0.0
+
+		connect_bottom_controls.set_anchors_preset(
+			Control.PRESET_TOP_LEFT,
+			false,
+		)
+
+		connect_bottom_controls.offset_left = 0.0
+		connect_bottom_controls.offset_top = 0.0
+		connect_bottom_controls.offset_right = 0.0
+		connect_bottom_controls.offset_bottom = 0.0
+
+		connect_board_center.size_flags_horizontal = (
+			Control.SIZE_EXPAND_FILL
+		)
+
+		connect_board_center.size_flags_vertical = (
+			Control.SIZE_EXPAND_FILL
+		)
+
+	# ---------------------------------------------------------
+	# Board scale
+	# ---------------------------------------------------------
+
+	var board_scale := 1.0
+	var board_display_size := CONNECT_REFERENCE_BOARD_EXTENT
+
+	if not is_portrait:
+		var target_stack_height := floorf(
+			viewport_size.y *
+			CONNECT_LANDSCAPE_BOARD_HEIGHT_RATIO
+		)
+
+		var action_height := (
+			maxf(
+				CONNECT_BASE_MENU_BUTTON_SIZE.y,
+				CONNECT_BASE_SEND_BUTTON_SIZE.y,
+			) *
+			action_scale_hint +
+			CONNECT_LANDSCAPE_BOTTOM_PADDING
+		)
+
+		var available_board_height := maxf(
+			target_stack_height -
+				action_height -
+				CONNECT_BOARD_ACTION_GAP,
+			1.0,
+		)
+
+		var available_board_width := maxf(
+			viewport_size.x -
+				CONNECT_BASE_BOTTOM_SIDE_MARGIN *
+					2.0,
+			1.0,
+		)
+
+		board_scale = minf(
+			available_board_height /
+				CONNECT_REFERENCE_BOARD_EXTENT.y,
+			available_board_width /
+				CONNECT_REFERENCE_BOARD_EXTENT.x,
+		)
+
+		board_scale = maxf(
+			board_scale,
+			0.01,
+		)
+
+		board_display_size = (
+			CONNECT_REFERENCE_BOARD_EXTENT *
+			board_scale
+		)
+
+		connect_board_center.custom_minimum_size = (
+			board_display_size
+		)
+	else:
+		connect_board_center.custom_minimum_size = (
+			Vector2.ZERO
+		)
+
+	self.scale = Vector2.ONE * board_scale
+	self.pivot_offset = Vector2.ZERO
+
+	var content_scale := clampf(
+		board_scale,
+		0.5,
+		2.0,
+	)
+
+	# ---------------------------------------------------------
+	# Avatars and piece trays
+	# ---------------------------------------------------------
+
+	var avatar_scale := 1.0
+
+	if not is_portrait:
+		var landscape_aspect := (
+			viewport_size.x /
+			maxf(
+				viewport_size.y,
+				1.0,
+			)
+		)
+
+		avatar_scale = clampf(
+			maxf(
+				content_scale,
+				landscape_aspect,
+			),
+			CONNECT_LANDSCAPE_AVATAR_MIN_SCALE,
+			CONNECT_LANDSCAPE_AVATAR_MAX_SCALE,
+		)
+
+	_connect_current_avatar_scale = avatar_scale
+
+	var avatar_size := (
+		CONNECT_BASE_AVATAR_SIZE *
+		avatar_scale
+	)
+
+	var avatars: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatars:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		avatar_button.scale = Vector2.ONE
+		avatar_button.custom_minimum_size = avatar_size
+		avatar_button.queue_redraw()
+
+	var piece_icon_size := (
+		CONNECT_BASE_PIECE_ICON_SIZE *
+		avatar_scale
+	)
+
+	player_piece.custom_minimum_size = piece_icon_size
+	opp_piece.custom_minimum_size = piece_icon_size
+
+	player_piece_top_spacer.custom_minimum_size = Vector2(
+		0.0,
+		CONNECT_BASE_PIECE_TOP_SPACER *
+			avatar_scale,
+	)
+
+	opp_piece_top_spacer.custom_minimum_size = Vector2(
+		0.0,
+		CONNECT_BASE_PIECE_TOP_SPACER *
+			avatar_scale,
+	)
+
+	opponent_avatar_top_spacer.custom_minimum_size = Vector2(
+		0.0,
+		CONNECT_BASE_OPPONENT_AVATAR_SPACER *
+			avatar_scale,
+	)
+
+	you_label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				CONNECT_BASE_YOU_FONT_SIZE *
+					avatar_scale
+			),
+			1,
+		),
+	)
+
+	# ---------------------------------------------------------
+	# Rules, Settings, and Send
+	# ---------------------------------------------------------
+
+	var menu_size := (
+		CONNECT_BASE_MENU_BUTTON_SIZE *
+		avatar_scale
+	)
+
+	var menu_buttons: Array[Button] = [
+		settings_button,
+		rules_button,
+	]
+
+	for menu_button in menu_buttons:
+		if not is_instance_valid(menu_button):
+			continue
+
+		menu_button.custom_minimum_size = menu_size
+
+		menu_button.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					CONNECT_BASE_MENU_BUTTON_FONT_SIZE *
+						avatar_scale
+				),
+				1,
+			),
+		)
+
+	var send_size := (
+		CONNECT_BASE_SEND_BUTTON_SIZE *
+		avatar_scale
+	)
+
+	send_button.size_flags_horizontal = (
+		Control.SIZE_SHRINK_CENTER
+	)
+
+	send_button.size_flags_vertical = (
+		Control.SIZE_SHRINK_CENTER
+	)
+
+	send_button.custom_minimum_size = send_size
+	send_button.size = send_size
+	send_button.scale = Vector2.ONE
+
+	send_button.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				CONNECT_BASE_SEND_BUTTON_FONT_SIZE *
+					avatar_scale
+			),
+			1,
+		),
+	)
+
+	send_button.pivot_offset = (
+		send_size *
+		0.5
+	)
+
+	# ---------------------------------------------------------
+	# Landscape positioning or portrait restoration
+	# ---------------------------------------------------------
+
+	if not is_portrait:
+		var top_side_margin := (
+			CONNECT_BASE_TOP_SIDE_MARGIN *
+			avatar_scale
+		)
+
+		var top_margin := (
+			CONNECT_BASE_TOP_MARGIN *
+			avatar_scale
+		)
+
+		connect_top_hud_margin.add_theme_constant_override(
+			"margin_left",
+			roundi(top_side_margin),
+		)
+
+		connect_top_hud_margin.add_theme_constant_override(
+			"margin_top",
+			roundi(top_margin),
+		)
+
+		connect_top_hud_margin.add_theme_constant_override(
+			"margin_right",
+			roundi(top_side_margin),
+		)
+
+		connect_top_hud_margin.set_anchors_preset(
+			Control.PRESET_TOP_WIDE,
+			false,
+		)
+
+		var avatar_stack_height := (
+			CONNECT_BASE_AVATAR_SIZE.y *
+				avatar_scale +
+			CONNECT_BASE_YOU_FONT_SIZE *
+				avatar_scale
+		)
+
+		var piece_stack_height := (
+			CONNECT_BASE_PIECE_TOP_SPACER *
+				avatar_scale +
+			CONNECT_BASE_PIECE_ICON_SIZE.y *
+				avatar_scale
+		)
+
+		var top_hud_height := (
+			maxf(
+				avatar_stack_height,
+				piece_stack_height,
+			) +
+			top_margin
+		)
+
+		connect_top_hud_margin.offset_left = 0.0
+		connect_top_hud_margin.offset_top = 0.0
+		connect_top_hud_margin.offset_right = 0.0
+		connect_top_hud_margin.offset_bottom = (
+			top_hud_height
+		)
+
+		var bottom_side_margin := (
+			CONNECT_BASE_BOTTOM_SIDE_MARGIN *
+			avatar_scale
+		)
+
+		var bottom_margin := (
+			CONNECT_BASE_BOTTOM_MARGIN *
+			avatar_scale
+		)
+
+		connect_bottom_controls_margin.add_theme_constant_override(
+			"margin_left",
+			roundi(bottom_side_margin),
+		)
+
+		connect_bottom_controls_margin.add_theme_constant_override(
+			"margin_right",
+			roundi(bottom_side_margin),
+		)
+
+		connect_bottom_controls_margin.add_theme_constant_override(
+			"margin_bottom",
+			roundi(bottom_margin),
+		)
+
+		var action_height := (
+			maxf(
+				CONNECT_BASE_MENU_BUTTON_SIZE.y,
+				CONNECT_BASE_SEND_BUTTON_SIZE.y,
+			) *
+			avatar_scale +
+			CONNECT_LANDSCAPE_BOTTOM_PADDING
+		)
+
+		connect_bottom_controls.custom_minimum_size = Vector2(
+			0.0,
+			action_height,
+		)
+
+		connect_main_vbox.add_theme_constant_override(
+			"separation",
+			roundi(
+				CONNECT_BOARD_ACTION_GAP,
+			),
+		)
+	else:
+		connect_top_hud_margin.add_theme_constant_override(
+			"margin_left",
+			roundi(
+				CONNECT_BASE_TOP_SIDE_MARGIN,
+			),
+		)
+
+		connect_top_hud_margin.add_theme_constant_override(
+			"margin_top",
+			roundi(
+				CONNECT_BASE_TOP_MARGIN,
+			),
+		)
+
+		connect_top_hud_margin.add_theme_constant_override(
+			"margin_right",
+			roundi(
+				CONNECT_BASE_TOP_SIDE_MARGIN,
+			),
+		)
+
+		connect_bottom_controls_margin.add_theme_constant_override(
+			"margin_left",
+			roundi(
+				CONNECT_BASE_BOTTOM_SIDE_MARGIN,
+			),
+		)
+
+		connect_bottom_controls_margin.add_theme_constant_override(
+			"margin_right",
+			roundi(
+				CONNECT_BASE_BOTTOM_SIDE_MARGIN,
+			),
+		)
+
+		connect_bottom_controls_margin.add_theme_constant_override(
+			"margin_bottom",
+			roundi(
+				CONNECT_BASE_BOTTOM_MARGIN,
+			),
+		)
+
+		connect_bottom_controls.custom_minimum_size = Vector2(
+			0.0,
+			CONNECT_PORTRAIT_BOTTOM_HEIGHT,
+		)
+
+		connect_main_vbox.add_theme_constant_override(
+			"separation",
+			_connect_portrait_vbox_separation,
+		)
+
+	# ---------------------------------------------------------
+	# Spectator label
+	# ---------------------------------------------------------
+
+	var overlay_scale := 1.0
+
+	if not is_portrait:
+		overlay_scale = clampf(
+			content_scale,
+			CONNECT_LANDSCAPE_OVERLAY_MIN_SCALE,
+			CONNECT_LANDSCAPE_OVERLAY_MAX_SCALE,
+		)
+
+	var spectator_top_offset := (
+		CONNECT_PORTRAIT_SPECTATOR_TOP_OFFSET
+		if is_portrait
+		else 0.0
+	)
+
+	spec_label.set_anchors_preset(
+		Control.PRESET_CENTER_TOP,
+		false,
+	)
+
+	spec_label.offset_left = (
+		-CONNECT_BASE_SPECTATOR_HALF_WIDTH *
+			overlay_scale
+	)
+
+	spec_label.offset_right = (
+		CONNECT_BASE_SPECTATOR_HALF_WIDTH *
+			overlay_scale
+	)
+
+	spec_label.offset_top = spectator_top_offset
+
+	spec_label.offset_bottom = (
+		spectator_top_offset +
+		CONNECT_BASE_SPECTATOR_HEIGHT *
+			overlay_scale
+	)
+
+	spec_label.horizontal_alignment = (
+		HORIZONTAL_ALIGNMENT_CENTER
+	)
+
+	spec_label.vertical_alignment = (
+		VERTICAL_ALIGNMENT_CENTER
+	)
+
+	spec_label.add_theme_font_size_override(
+		"font_size",
+		maxi(
+			roundi(
+				CONNECT_BASE_SPECTATOR_FONT_SIZE *
+					overlay_scale
+			),
+			1,
+		),
+	)
+
+	connect_board_center.queue_sort()
+	connect_top_hud.queue_sort()
+	connect_main_vbox.queue_sort()
+
+	_connect_layout_generation += 1
+
+	call_deferred(
+		"_finish_connect_responsive_layout",
+		_connect_layout_generation,
+	)
+
+func _finish_connect_responsive_layout(
+	layout_generation: int,
+) -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	if (
+		not is_inside_tree() or
+		layout_generation !=
+			_connect_layout_generation
+	):
+		return
+
+	# Rebuild the seven touch columns from the transformed
+	# foreground-board bounds.
+	var layer := (
+		get_node_or_null(
+			"%TextureLayer1",
+		) as Sprite2D
+	)
+
+	if layer != null:
+		var layer_rect := layer.get_rect()
+
+		var corners: Array[Vector2] = [
+			layer.to_global(
+				layer_rect.position,
+			),
+			layer.to_global(
+				layer_rect.position +
+					Vector2(
+						layer_rect.size.x,
+						0.0,
+					),
+			),
+			layer.to_global(
+				layer_rect.position +
+					layer_rect.size,
+			),
+			layer.to_global(
+				layer_rect.position +
+					Vector2(
+						0.0,
+						layer_rect.size.y,
+					),
+			),
+		]
+
+		var minimum_x := INF
+		var minimum_y := INF
+		var maximum_x := -INF
+		var maximum_y := -INF
+
+		for corner in corners:
+			minimum_x = minf(
+				minimum_x,
+				corner.x,
+			)
+
+			minimum_y = minf(
+				minimum_y,
+				corner.y,
+			)
+
+			maximum_x = maxf(
+				maximum_x,
+				corner.x,
+			)
+
+			maximum_y = maxf(
+				maximum_y,
+				corner.y,
+			)
+
+		var column_width := (
+			(maximum_x - minimum_x) /
+			float(BOARD_W)
+		)
+
+		var input_height := (
+			maximum_y -
+			minimum_y
+		)
+
+		var scene := get_tree().current_scene
+
+		if scene != null:
+			for column in range(BOARD_W):
+				var row := (
+					scene.get_node_or_null(
+						"Row%d" % column,
+					) as Control
+				)
+
+				if row == null:
+					continue
+
+				row.set_as_top_level(true)
+
+				row.global_position = Vector2(
+					minimum_x +
+						column_width *
+							float(column),
+					minimum_y,
+				)
+
+				row.size = Vector2(
+					column_width,
+					input_height,
+				)
+
+	if _highlighted_column >= 0:
+		_set_column_highlight(
+			_highlighted_column,
+		)
+
+	player_avatar_display.pivot_offset = (
+		player_avatar_display.size *
+		0.5
+	)
+
+	opp_avatar_display.pivot_offset = (
+		opp_avatar_display.size *
+		0.5
+	)
+
+	if send_button.has_meta("sb_tween"):
+		var old_tween: Variant = (
+			send_button.get_meta("sb_tween")
+		)
+
+		if (
+			old_tween is Tween and
+			(old_tween as Tween).is_running()
+		):
+			(old_tween as Tween).kill()
+
+	var send_size := (
+		CONNECT_BASE_SEND_BUTTON_SIZE *
+		_connect_current_avatar_scale
+	)
+
+	send_button.custom_minimum_size = send_size
+	send_button.size = send_size
+	send_button.scale = Vector2.ONE
+	send_button.pivot_offset = send_size * 0.5
+
+	var root_rect := (
+		connect_scene_root.get_global_rect()
+	)
+
+	var controls_rect := (
+		connect_bottom_controls.get_global_rect()
+	)
+
+	var home_position := Vector2(
+		root_rect.position.x +
+			(
+				root_rect.size.x -
+				send_button.size.x
+			) *
+				0.5,
+		controls_rect.position.y +
+			(
+				controls_rect.size.y -
+					send_button.size.y
+			) *
+				0.5,
+	)
+
+	send_button.set_as_top_level(true)
+
+	send_button.set_meta(
+		"home_pos",
+		home_position,
+	)
+
+	send_button.global_position = home_position
+
+	var should_show_send := (
+		_connect_send_target_visible and
+		is_instance_valid(droppedPiece) and
+		isTurn and
+		not spectator_mode and
+		not game_over
+	)
+
+	send_button.visible = should_show_send
+	send_button.disabled = not should_show_send
+	send_button.modulate.a = (
+		1.0
+		if should_show_send
+		else 0.0
+	)
+
+	_clear_connect_win_bursts()
+
+	if (
+		is_instance_valid(win_loss_label) and
+		win_loss_label.visible and
+		is_instance_valid(
+			_connect_active_win_burst_avatar
+		)
+	):
+		_show_connect_win_burst(
+			_connect_active_win_burst_avatar,
+		)
+
+func _clear_connect_win_bursts() -> void:
+	var avatars: Array[TextureButton] = [
+		player_avatar_display,
+		opp_avatar_display,
+	]
+
+	for avatar_button in avatars:
+		if not is_instance_valid(avatar_button):
+			continue
+
+		var wrapper := avatar_button.get_node_or_null(
+			CONNECT_WIN_BURST_WRAPPER_NAME,
+		)
+
+		if wrapper == null:
+			continue
+
+		avatar_button.remove_child(wrapper)
+		wrapper.queue_free()
+
+
+func _show_connect_win_burst(
+	avatar_button: TextureButton,
+) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	_connect_active_win_burst_avatar = avatar_button
+
+	var existing := avatar_button.get_node_or_null(
+		CONNECT_WIN_BURST_WRAPPER_NAME,
+	)
+
+	if existing != null:
+		avatar_button.remove_child(existing)
+		existing.queue_free()
+
+	var wrapper := Control.new()
+
+	wrapper.name = (
+		CONNECT_WIN_BURST_WRAPPER_NAME
+	)
+
+	wrapper.mouse_filter = (
+		Control.MOUSE_FILTER_IGNORE
+	)
+
+	wrapper.show_behind_parent = true
+	wrapper.clip_contents = false
+	wrapper.size = CONNECT_BASE_AVATAR_SIZE
+
+	wrapper.pivot_offset = (
+		CONNECT_BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	wrapper.position = (
+		avatar_button.size *
+			0.5 -
+		CONNECT_BASE_AVATAR_SIZE *
+			0.5
+	)
+
+	wrapper.scale = Vector2.ONE * (
+		_connect_current_avatar_scale
+	)
+
+	avatar_button.add_child(wrapper)
+
+	var target := TextureButton.new()
+
+	target.name = "ConnectBurstTarget"
+	target.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	target.ignore_texture_size = true
+	target.clip_contents = false
+	target.size = CONNECT_BASE_AVATAR_SIZE
+
+	target.pivot_offset = (
+		CONNECT_BASE_AVATAR_SIZE *
+		0.5
+	)
+
+	wrapper.add_child(target)
+
+	GameUtils._show_win_burst(target)

@@ -5,24 +5,6 @@
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_cwv3m"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="3_cwv3m"]
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_cwv3m"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_m5bvx"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_gybti"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_31pxf"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_on1mr"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_an3or"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ig7tw"]
 bg_color = Color(0, 0, 0, 1)
 border_width_left = 4
@@ -193,23 +175,32 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="MainVBoxContainer" unique_id=981538613]
+[node name="TopMarginContainer" type="MarginContainer" parent="MainVBoxContainer" unique_id=981538613]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/margin_left = 40
 theme_override_constants/margin_top = 20
 theme_override_constants/margin_right = 40
 
-[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer/MarginContainer" unique_id=870367590]
+[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer/TopMarginContainer" unique_id=870367590]
 layout_mode = 2
 size_flags_vertical = 4
 alignment = 1
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer" unique_id=1473341432]
+[node name="VBoxContainer" type="VBoxContainer" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer" unique_id=1473341432]
 layout_mode = 2
 
-[node name="YouLabel" type="Label" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer" unique_id=1254292232]
+[node name="PlayerAvatarDisplay" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer/VBoxContainer" unique_id=1912461780 instance=ExtResource("2_cwv3m")]
 unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+is_display_only = true
+
+[node name="YouLabel" type="Label" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer/VBoxContainer" unique_id=1254292232]
+unique_name_in_owner = true
+z_index = 1
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
@@ -218,67 +209,56 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="PlayerAvatarDisplay" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer" unique_id=1912461780 instance=ExtResource("2_cwv3m")]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 4
-size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_cwv3m")
-texture_pressed = SubResource("ViewportTexture_m5bvx")
-texture_hover = SubResource("ViewportTexture_gybti")
-is_display_only = true
-
-[node name="VBoxContainer3" type="VBoxContainer" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer" unique_id=949578115]
+[node name="VBoxContainer3" type="VBoxContainer" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer" unique_id=949578115]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Label" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3" unique_id=1516836061]
-custom_minimum_size = Vector2(0, 26)
-layout_mode = 2
-
-[node name="HBoxContainer" type="HBoxContainer" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3" unique_id=704129010]
+[node name="HBoxContainer" type="HBoxContainer" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer/VBoxContainer3" unique_id=704129010]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="Separation4" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=1397791600]
+[node name="Separation4" type="Control" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=1397791600]
 custom_minimum_size = Vector2(8, 0)
 layout_mode = 2
 
-[node name="PlayerCountLabel" type="Label" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=541223853]
+[node name="PlayerCountLabel" type="Label" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=541223853]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 
-[node name="Separation" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=2134539785]
+[node name="Separation" type="Control" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=2134539785]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="OppCountLabel" type="Label" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=276484070]
+[node name="OppCountLabel" type="Label" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=276484070]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 
-[node name="Separation3" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=1423360136]
+[node name="Separation3" type="Control" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer/VBoxContainer3/HBoxContainer" unique_id=1423360136]
 custom_minimum_size = Vector2(8, 0)
 layout_mode = 2
 
-[node name="VBoxContainer2" type="VBoxContainer" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer" unique_id=1858708587]
+[node name="CenterLabel" type="Control" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer/VBoxContainer3" unique_id=1516836061]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 10)
 layout_mode = 2
 
-[node name="Label" type="Control" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer2" unique_id=1073392581]
-custom_minimum_size = Vector2(0, 26)
+[node name="VBoxContainer2" type="VBoxContainer" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer" unique_id=1858708587]
 layout_mode = 2
 
-[node name="OppAvatarDisplay" parent="MainVBoxContainer/MarginContainer/TopInfoHBoxContainer/VBoxContainer2" unique_id=1468532327 instance=ExtResource("2_cwv3m")]
+[node name="OppAvatarDisplay" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer/VBoxContainer2" unique_id=1468532327 instance=ExtResource("2_cwv3m")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_31pxf")
-texture_pressed = SubResource("ViewportTexture_on1mr")
-texture_hover = SubResource("ViewportTexture_an3or")
 is_display_only = true
 controlled_by_data = true
+
+[node name="OppYouLabel" type="Control" parent="MainVBoxContainer/TopMarginContainer/TopInfoHBoxContainer/VBoxContainer2" unique_id=1073392581]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
 
 [node name="GameAreaCenterContainer" type="CenterContainer" parent="MainVBoxContainer" unique_id=1751118404]
 unique_name_in_owner = true
@@ -290,6 +270,7 @@ layout_mode = 2
 alignment = 1
 
 [node name="BorderPanelContainer" type="PanelContainer" parent="MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer" unique_id=915855555]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -331,19 +312,21 @@ layout_mode = 2
 mouse_filter = 2
 
 [node name="BottomItemHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer" unique_id=1536183417]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 250)
 layout_mode = 2
 size_flags_vertical = 4
 theme_override_constants/separation = 10
 
-[node name="MarginContainer" type="MarginContainer" parent="MainVBoxContainer/BottomItemHBoxContainer" unique_id=1231647709]
+[node name="BottomMarginContainer" type="MarginContainer" parent="MainVBoxContainer/BottomItemHBoxContainer" unique_id=1231647709]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/margin_left = 40
 theme_override_constants/margin_right = 40
 theme_override_constants/margin_bottom = 30
 
-[node name="SettingsButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer" unique_id=1930811821]
+[node name="SettingsButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/BottomMarginContainer" unique_id=1930811821]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -355,7 +338,7 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_31pxf")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_gybti")
 theme_override_styles/hover = SubResource("StyleBoxTexture_m5bvx")
 
-[node name="RulesButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer" unique_id=670403671]
+[node name="RulesButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/BottomMarginContainer" unique_id=670403671]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2

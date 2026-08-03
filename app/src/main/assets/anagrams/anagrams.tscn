@@ -153,15 +153,6 @@ corner_radius_bottom_left = 15
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vu1q5"]
 bg_color = Color(1, 1, 1, 0)
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_r3ggu"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_4ax03"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_eugg7"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_eugg7"]
 
 [sub_resource type="FastNoiseLite" id="FastNoiseLite_a0pbh"]
@@ -197,15 +188,6 @@ corner_radius_top_left = 10
 corner_radius_top_right = 10
 corner_radius_bottom_right = 10
 corner_radius_bottom_left = 10
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_a0pbh"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_rly8n"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_tfubl"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
 
 [sub_resource type="Shader" id="Shader_0k6o1"]
 code = "shader_type canvas_item;
@@ -712,9 +694,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 0
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_r3ggu")
-texture_pressed = SubResource("ViewportTexture_4ax03")
-texture_hover = SubResource("ViewportTexture_eugg7")
 is_display_only = true
 
 [node name="Control" type="Control" parent="ScoreScreen/MarginContainer/CenterContainer/HBoxContainer/PlayerScore" unique_id=1141046952]
@@ -799,9 +778,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 8
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_a0pbh")
-texture_pressed = SubResource("ViewportTexture_rly8n")
-texture_hover = SubResource("ViewportTexture_tfubl")
 is_display_only = true
 controlled_by_data = true
 

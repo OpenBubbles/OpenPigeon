@@ -5,24 +5,6 @@
 [ext_resource type="PackedScene" uid="uid://hknsjsntnvnb" path="res://global/avatar_textures/AvatarThumbnail.tscn" id="2_kqrkf"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="3_cobdr"]
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_kqrkf"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_fprbq"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_1gr0b"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_nn5xc"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_008sc"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_05x7v"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kqrkf"]
 bg_color = Color(0, 0, 0, 0)
 border_color = Color(0, 0, 0, 1)
@@ -146,6 +128,7 @@ grow_vertical = 2
 color = Color(0.898039, 0.898039, 0.898039, 1)
 
 [node name="MainVBoxContainer" type="VBoxContainer" parent="." unique_id=1417703064]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -154,10 +137,11 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="ScoreMarginContainer" type="MarginContainer" parent="MainVBoxContainer" unique_id=1540334565]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/margin_left = 40
-theme_override_constants/margin_top = 20
+theme_override_constants/margin_top = 40
 theme_override_constants/margin_right = 40
 
 [node name="TopInfoHBoxContainer2" type="HBoxContainer" parent="MainVBoxContainer/ScoreMarginContainer" unique_id=1226791454]
@@ -167,6 +151,13 @@ alignment = 1
 
 [node name="VBoxContainer" type="VBoxContainer" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2" unique_id=2079631812]
 layout_mode = 2
+
+[node name="PlayerAvatarDisplay" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer" unique_id=396423958 instance=ExtResource("2_kqrkf")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+is_display_only = true
 
 [node name="YouLabel" type="Label" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer" unique_id=1265450229]
 unique_name_in_owner = true
@@ -178,23 +169,9 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="PlayerAvatarDisplay" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer" unique_id=396423958 instance=ExtResource("2_kqrkf")]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 4
-size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_kqrkf")
-texture_pressed = SubResource("ViewportTexture_fprbq")
-texture_hover = SubResource("ViewportTexture_1gr0b")
-is_display_only = true
-
 [node name="VBoxContainer3" type="VBoxContainer" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2" unique_id=639022898]
 layout_mode = 2
 size_flags_horizontal = 3
-
-[node name="Label" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3" unique_id=574667792]
-custom_minimum_size = Vector2(0, 46)
-layout_mode = 2
 
 [node name="HBoxContainer" type="HBoxContainer" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3" unique_id=55950779]
 layout_mode = 2
@@ -205,6 +182,7 @@ custom_minimum_size = Vector2(8, 0)
 layout_mode = 2
 
 [node name="LeftPlayer" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3/HBoxContainer" unique_id=1257557358]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(56, 38)
 layout_mode = 2
 size_flags_horizontal = 0
@@ -256,6 +234,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 
 [node name="RightPlayer" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3/HBoxContainer" unique_id=1274846624]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(56, 38)
 layout_mode = 2
 size_flags_horizontal = 8
@@ -304,6 +283,11 @@ vertical_alignment = 1
 custom_minimum_size = Vector2(8, 0)
 layout_mode = 2
 
+[node name="FillScoreTopSpacer" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer3" unique_id=574667792]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+
 [node name="Separation" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2" unique_id=357966303]
 visible = false
 layout_mode = 2
@@ -312,22 +296,21 @@ size_flags_horizontal = 3
 [node name="VBoxContainer2" type="VBoxContainer" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2" unique_id=1739433355]
 layout_mode = 2
 
-[node name="Label" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer2" unique_id=2034262939]
-custom_minimum_size = Vector2(0, 26)
-layout_mode = 2
-
 [node name="OppAvatarDisplay" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer2" unique_id=1791921290 instance=ExtResource("2_kqrkf")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_nn5xc")
-texture_pressed = SubResource("ViewportTexture_008sc")
-texture_hover = SubResource("ViewportTexture_05x7v")
 is_display_only = true
 controlled_by_data = true
 
+[node name="FillOpponentTopSpacer" type="Control" parent="MainVBoxContainer/ScoreMarginContainer/TopInfoHBoxContainer2/VBoxContainer2" unique_id=2034262939]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
+
 [node name="GameAreaCenterContainer" type="CenterContainer" parent="MainVBoxContainer" unique_id=2096552172]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
@@ -336,6 +319,7 @@ layout_mode = 2
 alignment = 1
 
 [node name="BorderPanelContainer" type="PanelContainer" parent="MainVBoxContainer/GameAreaCenterContainer/BoardVBoxContainer" unique_id=684859131]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
@@ -380,20 +364,22 @@ theme_override_constants/separation = 8
 alignment = 1
 
 [node name="BottomItemHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer" unique_id=913200433]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 250)
 layout_mode = 2
 size_flags_vertical = 4
 theme_override_constants/separation = 10
 alignment = 1
 
-[node name="MarginContainer" type="MarginContainer" parent="MainVBoxContainer/BottomItemHBoxContainer" unique_id=779514511]
+[node name="FillBottomControlsMargin" type="MarginContainer" parent="MainVBoxContainer/BottomItemHBoxContainer" unique_id=779514511]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/margin_left = 40
 theme_override_constants/margin_right = 40
 theme_override_constants/margin_bottom = 30
 
-[node name="RulesButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer" unique_id=1485915152]
+[node name="RulesButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/FillBottomControlsMargin" unique_id=1485915152]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -405,7 +391,7 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_ad4vd")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_bwi04")
 theme_override_styles/hover = SubResource("StyleBoxTexture_q50tp")
 
-[node name="SettingsButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/MarginContainer" unique_id=86595637]
+[node name="SettingsButton" type="Button" parent="MainVBoxContainer/BottomItemHBoxContainer/FillBottomControlsMargin" unique_id=86595637]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2

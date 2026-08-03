@@ -11,24 +11,6 @@
 [ext_resource type="Texture2D" uid="uid://bvwvei4ltepsw" path="res://global/settings.png" id="8_mg74y"]
 [ext_resource type="Texture2D" uid="uid://b1gcb7q4xawaw" path="res://global/rules.png" id="9_2im17"]
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_mg74y"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_2im17"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_mdy7o"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_q5pf0"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_1wmsy"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_336qj"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_utbov"]
 size = Vector2(678.133, 18)
 
@@ -147,7 +129,8 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.84786046, 0.77981114, 0.76212347, 1)
 
-[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=1785527722]
+[node name="ConnectMainVBox" type="VBoxContainer" parent="." unique_id=1785527722]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -155,26 +138,36 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer" unique_id=1829284039]
+[node name="ConnectTopHudMargin" type="MarginContainer" parent="ConnectMainVBox" unique_id=1829284039]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/margin_left = 20
-theme_override_constants/margin_top = 10
+theme_override_constants/margin_top = 30
 theme_override_constants/margin_right = 20
 theme_override_constants/margin_bottom = 0
 
-[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="VBoxContainer/MarginContainer" unique_id=1555652397]
+[node name="TopInfoHBoxContainer" type="HBoxContainer" parent="ConnectMainVBox/ConnectTopHudMargin" unique_id=1555652397]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 
-[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer" unique_id=188136653]
+[node name="HBoxContainer" type="HBoxContainer" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer" unique_id=188136653]
 layout_mode = 2
 
-[node name="PlayerContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer" unique_id=896129561]
+[node name="PlayerContainer" type="VBoxContainer" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer/HBoxContainer" unique_id=896129561]
 layout_mode = 2
 
-[node name="YouLabel" type="Label" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer/PlayerContainer" unique_id=1205509279]
+[node name="PlayerAvatarDisplay" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer/HBoxContainer/PlayerContainer" unique_id=2098737924 instance=ExtResource("2_pdash")]
 unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+is_display_only = true
+
+[node name="YouLabel" type="Label" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer/HBoxContainer/PlayerContainer" unique_id=1205509279]
+unique_name_in_owner = true
+z_index = 1
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
@@ -183,131 +176,124 @@ theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
 
-[node name="PlayerAvatarDisplay" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer/PlayerContainer" unique_id=2098737924 instance=ExtResource("2_pdash")]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 4
-size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_mg74y")
-texture_pressed = SubResource("ViewportTexture_2im17")
-texture_hover = SubResource("ViewportTexture_mdy7o")
-is_display_only = true
-
-[node name="PlayerPieceContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer" unique_id=1819160646]
+[node name="PlayerPieceContainer" type="VBoxContainer" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer/HBoxContainer" unique_id=1819160646]
 layout_mode = 2
 
-[node name="Control" type="Control" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer/PlayerPieceContainer" unique_id=1000744334]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
-
-[node name="PlayerPiece" type="TextureRect" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer/PlayerPieceContainer" unique_id=1037806849]
+[node name="PlayerPiece" type="TextureRect" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer/HBoxContainer/PlayerPieceContainer" unique_id=1037806849]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
+size_flags_vertical = 10
 texture = ExtResource("2_ipfru")
 expand_mode = 3
 stretch_mode = 4
 
-[node name="Spacer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer" unique_id=2002389819]
+[node name="PlayerPieceTopSpacer" type="Control" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer/HBoxContainer/PlayerPieceContainer" unique_id=1000744334]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+
+[node name="Spacer" type="VBoxContainer" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer" unique_id=2002389819]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="HBoxContainer2" type="HBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer" unique_id=1309046317]
+[node name="HBoxContainer2" type="HBoxContainer" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer" unique_id=1309046317]
 layout_mode = 2
 
-[node name="OppPieceContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2" unique_id=703705832]
+[node name="OppPieceContainer" type="VBoxContainer" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer/HBoxContainer2" unique_id=703705832]
 layout_mode = 2
 
-[node name="Control" type="Control" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2/OppPieceContainer" unique_id=1250574910]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
-
-[node name="OppPiece" type="TextureRect" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2/OppPieceContainer" unique_id=512110323]
+[node name="OppPiece" type="TextureRect" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer/HBoxContainer2/OppPieceContainer" unique_id=512110323]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
+size_flags_vertical = 10
 texture = ExtResource("3_utbov")
 expand_mode = 3
 stretch_mode = 4
 
-[node name="OppContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2" unique_id=2021581905]
+[node name="OppPieceTopSpacer" type="Control" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer/HBoxContainer2/OppPieceContainer" unique_id=1250574910]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 30)
 layout_mode = 2
 
-[node name="OppLabel" type="Control" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2/OppContainer" unique_id=1050554070]
-custom_minimum_size = Vector2(0, 26)
+[node name="OppContainer" type="VBoxContainer" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer/HBoxContainer2" unique_id=2021581905]
 layout_mode = 2
 
-[node name="OppAvatarDisplay" parent="VBoxContainer/MarginContainer/TopInfoHBoxContainer/HBoxContainer2/OppContainer" unique_id=244744598 instance=ExtResource("2_pdash")]
+[node name="OppAvatarDisplay" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer/HBoxContainer2/OppContainer" unique_id=244744598 instance=ExtResource("2_pdash")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 1
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_q5pf0")
-texture_pressed = SubResource("ViewportTexture_1wmsy")
-texture_hover = SubResource("ViewportTexture_336qj")
 is_display_only = true
 controlled_by_data = true
 
-[node name="CenterContainer" type="CenterContainer" parent="VBoxContainer" unique_id=1630033337]
+[node name="OppLabel" type="Control" parent="ConnectMainVBox/ConnectTopHudMargin/TopInfoHBoxContainer/HBoxContainer2/OppContainer" unique_id=1050554070]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
+
+[node name="ConnectBoardCenter" type="CenterContainer" parent="ConnectMainVBox" unique_id=1630033337]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 6
 
-[node name="GameBoard" type="PanelContainer" parent="VBoxContainer/CenterContainer" unique_id=66627191]
+[node name="GameBoard" type="PanelContainer" parent="ConnectMainVBox/ConnectBoardCenter" unique_id=66627191]
 unique_name_in_owner = true
 layout_mode = 2
 script = ExtResource("4_utbov")
 
-[node name="TextureLayer1" type="Sprite2D" parent="VBoxContainer/CenterContainer/GameBoard" unique_id=1915724798]
+[node name="TextureLayer1" type="Sprite2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard" unique_id=1915724798]
 unique_name_in_owner = true
 z_index = 10
 scale = Vector2(0.885, 0.885)
 texture = ExtResource("3_28fnr")
 
-[node name="TextureLayer2" type="Sprite2D" parent="VBoxContainer/CenterContainer/GameBoard" unique_id=709958164]
+[node name="TextureLayer2" type="Sprite2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard" unique_id=709958164]
 z_index = 9
 scale = Vector2(0.885, 0.885)
 texture = ExtResource("6_wlgta")
 
-[node name="BoardCollisions" type="RigidBody2D" parent="VBoxContainer/CenterContainer/GameBoard" unique_id=561774438]
+[node name="BoardCollisions" type="RigidBody2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard" unique_id=561774438]
 freeze = true
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/BoardCollisions" unique_id=1788986086]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/BoardCollisions" unique_id=1788986086]
 position = Vector2(0.243988, 236.284)
 shape = SubResource("RectangleShape2D_utbov")
 
-[node name="Column1" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/BoardCollisions" unique_id=936867123]
+[node name="Column1" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/BoardCollisions" unique_id=936867123]
 position = Vector2(-285.943, -20.9896)
 shape = SubResource("RectangleShape2D_vrcua")
 
-[node name="Column2" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/BoardCollisions" unique_id=2086539855]
+[node name="Column2" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/BoardCollisions" unique_id=2086539855]
 position = Vector2(-203.76, -20.8957)
 shape = SubResource("RectangleShape2D_vrcua")
 
-[node name="Column3" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/BoardCollisions" unique_id=1319416957]
+[node name="Column3" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/BoardCollisions" unique_id=1319416957]
 position = Vector2(-121.759, -20.896)
 shape = SubResource("RectangleShape2D_vrcua")
 
-[node name="Column4" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/BoardCollisions" unique_id=60040146]
+[node name="Column4" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/BoardCollisions" unique_id=60040146]
 position = Vector2(-40.4803, -20.8958)
 shape = SubResource("RectangleShape2D_wlgta")
 
-[node name="Column5" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/BoardCollisions" unique_id=1556219438]
+[node name="Column5" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/BoardCollisions" unique_id=1556219438]
 position = Vector2(41.3, -20.896)
 shape = SubResource("RectangleShape2D_vrcua")
 
-[node name="Column6" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/BoardCollisions" unique_id=892750754]
+[node name="Column6" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/BoardCollisions" unique_id=892750754]
 position = Vector2(122.6, -20.896)
 shape = SubResource("RectangleShape2D_vrcua")
 
-[node name="Column7" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/BoardCollisions" unique_id=842972558]
+[node name="Column7" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/BoardCollisions" unique_id=842972558]
 position = Vector2(203.6, -20.896)
 shape = SubResource("RectangleShape2D_vrcua")
 
-[node name="Column8" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/BoardCollisions" unique_id=1410409348]
+[node name="Column8" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/BoardCollisions" unique_id=1410409348]
 position = Vector2(284.6, -20.896)
 shape = SubResource("RectangleShape2D_vrcua")
 
-[node name="ConnectPiece0" type="RigidBody2D" parent="VBoxContainer/CenterContainer/GameBoard" unique_id=1711630846]
+[node name="ConnectPiece0" type="RigidBody2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard" unique_id=1711630846]
 visible = false
 position = Vector2(-244.759, -316.5)
 gravity_scale = 3.0
@@ -315,17 +301,17 @@ freeze = true
 script = ExtResource("7_wlgta")
 metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
 
-[node name="PieceSprite" type="Sprite2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece0" unique_id=897720004]
+[node name="PieceSprite" type="Sprite2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece0" unique_id=897720004]
 position = Vector2(0.8, -0.59)
 scale = Vector2(0.44, 0.44)
 texture = ExtResource("2_ipfru")
 
-[node name="PieceCollision" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece0" unique_id=244689923]
+[node name="PieceCollision" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece0" unique_id=244689923]
 position = Vector2(-0.125, -6.5)
 shape = SubResource("RectangleShape2D_ipfru")
 disabled = true
 
-[node name="ConnectPiece1" type="RigidBody2D" parent="VBoxContainer/CenterContainer/GameBoard" unique_id=246941054]
+[node name="ConnectPiece1" type="RigidBody2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard" unique_id=246941054]
 visible = false
 position = Vector2(-162.759, -316.5)
 gravity_scale = 3.0
@@ -333,17 +319,17 @@ freeze = true
 script = ExtResource("7_wlgta")
 metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
 
-[node name="PieceSprite" type="Sprite2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece1" unique_id=480865490]
+[node name="PieceSprite" type="Sprite2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece1" unique_id=480865490]
 position = Vector2(0.8, -0.59)
 scale = Vector2(0.44, 0.44)
 texture = ExtResource("2_ipfru")
 
-[node name="PieceCollision" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece1" unique_id=2097784161]
+[node name="PieceCollision" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece1" unique_id=2097784161]
 position = Vector2(-0.125, -6.5)
 shape = SubResource("RectangleShape2D_ipfru")
 disabled = true
 
-[node name="ConnectPiece2" type="RigidBody2D" parent="VBoxContainer/CenterContainer/GameBoard" unique_id=88775866]
+[node name="ConnectPiece2" type="RigidBody2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard" unique_id=88775866]
 visible = false
 position = Vector2(-80.759, -316.5)
 gravity_scale = 3.0
@@ -351,17 +337,17 @@ freeze = true
 script = ExtResource("7_wlgta")
 metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
 
-[node name="PieceSprite" type="Sprite2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece2" unique_id=420279869]
+[node name="PieceSprite" type="Sprite2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece2" unique_id=420279869]
 position = Vector2(0.8, -0.59)
 scale = Vector2(0.44, 0.44)
 texture = ExtResource("2_ipfru")
 
-[node name="PieceCollision" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece2" unique_id=755120644]
+[node name="PieceCollision" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece2" unique_id=755120644]
 position = Vector2(-0.125, -6.5)
 shape = SubResource("RectangleShape2D_ipfru")
 disabled = true
 
-[node name="ConnectPiece3" type="RigidBody2D" parent="VBoxContainer/CenterContainer/GameBoard" unique_id=656338933]
+[node name="ConnectPiece3" type="RigidBody2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard" unique_id=656338933]
 visible = false
 position = Vector2(0.240997, -316.5)
 gravity_scale = 3.0
@@ -369,17 +355,17 @@ freeze = true
 script = ExtResource("7_wlgta")
 metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
 
-[node name="PieceSprite" type="Sprite2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece3" unique_id=519691253]
+[node name="PieceSprite" type="Sprite2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece3" unique_id=519691253]
 position = Vector2(0.8, -0.59)
 scale = Vector2(0.44, 0.44)
 texture = ExtResource("2_ipfru")
 
-[node name="PieceCollision" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece3" unique_id=969344202]
+[node name="PieceCollision" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece3" unique_id=969344202]
 position = Vector2(-0.125, -6.5)
 shape = SubResource("RectangleShape2D_ipfru")
 disabled = true
 
-[node name="ConnectPiece4" type="RigidBody2D" parent="VBoxContainer/CenterContainer/GameBoard" unique_id=828606305]
+[node name="ConnectPiece4" type="RigidBody2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard" unique_id=828606305]
 visible = false
 position = Vector2(82.241, -316.5)
 gravity_scale = 3.0
@@ -387,17 +373,17 @@ freeze = true
 script = ExtResource("7_wlgta")
 metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
 
-[node name="PieceSprite" type="Sprite2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece4" unique_id=960949451]
+[node name="PieceSprite" type="Sprite2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece4" unique_id=960949451]
 position = Vector2(0.8, -0.59)
 scale = Vector2(0.44, 0.44)
 texture = ExtResource("2_ipfru")
 
-[node name="PieceCollision" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece4" unique_id=1119274715]
+[node name="PieceCollision" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece4" unique_id=1119274715]
 position = Vector2(-0.125, -6.5)
 shape = SubResource("RectangleShape2D_ipfru")
 disabled = true
 
-[node name="ConnectPiece5" type="RigidBody2D" parent="VBoxContainer/CenterContainer/GameBoard" unique_id=1825855653]
+[node name="ConnectPiece5" type="RigidBody2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard" unique_id=1825855653]
 visible = false
 position = Vector2(163.241, -316.5)
 gravity_scale = 3.0
@@ -405,17 +391,17 @@ freeze = true
 script = ExtResource("7_wlgta")
 metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
 
-[node name="PieceSprite" type="Sprite2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece5" unique_id=1229572033]
+[node name="PieceSprite" type="Sprite2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece5" unique_id=1229572033]
 position = Vector2(0.8, -0.59)
 scale = Vector2(0.44, 0.44)
 texture = ExtResource("2_ipfru")
 
-[node name="PieceCollision" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece5" unique_id=2100126508]
+[node name="PieceCollision" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece5" unique_id=2100126508]
 position = Vector2(-0.125, -6.5)
 shape = SubResource("RectangleShape2D_ipfru")
 disabled = true
 
-[node name="ConnectPiece6" type="RigidBody2D" parent="VBoxContainer/CenterContainer/GameBoard" unique_id=1114657166]
+[node name="ConnectPiece6" type="RigidBody2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard" unique_id=1114657166]
 visible = false
 position = Vector2(244.241, -316.5)
 gravity_scale = 3.0
@@ -423,30 +409,32 @@ freeze = true
 script = ExtResource("7_wlgta")
 metadata/_custom_type_script = "uid://bhkk1jj0y7aan"
 
-[node name="PieceSprite" type="Sprite2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece6" unique_id=1458343328]
+[node name="PieceSprite" type="Sprite2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece6" unique_id=1458343328]
 position = Vector2(0.8, -0.59)
 scale = Vector2(0.44, 0.44)
 texture = ExtResource("2_ipfru")
 
-[node name="PieceCollision" type="CollisionShape2D" parent="VBoxContainer/CenterContainer/GameBoard/ConnectPiece6" unique_id=1916385579]
+[node name="PieceCollision" type="CollisionShape2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard/ConnectPiece6" unique_id=1916385579]
 position = Vector2(-0.125, -6.5)
 shape = SubResource("RectangleShape2D_ipfru")
 disabled = true
 
-[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="VBoxContainer" unique_id=1046370839]
+[node name="BottomItemHBoxContainer" type="HBoxContainer" parent="ConnectMainVBox" unique_id=1046370839]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 10
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/BottomItemHBoxContainer" unique_id=66150163]
+[node name="ConnectBottomControlsMargin" type="MarginContainer" parent="ConnectMainVBox/BottomItemHBoxContainer" unique_id=66150163]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/margin_left = 40
 theme_override_constants/margin_right = 40
 theme_override_constants/margin_bottom = 30
 
-[node name="SettingsButton" type="Button" parent="VBoxContainer/BottomItemHBoxContainer/MarginContainer" unique_id=1577674723]
+[node name="SettingsButton" type="Button" parent="ConnectMainVBox/BottomItemHBoxContainer/ConnectBottomControlsMargin" unique_id=1577674723]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
@@ -458,7 +446,7 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_mdy7o")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_q5pf0")
 theme_override_styles/hover = SubResource("StyleBoxTexture_1wmsy")
 
-[node name="RulesButton" type="Button" parent="VBoxContainer/BottomItemHBoxContainer/MarginContainer" unique_id=1345844342]
+[node name="RulesButton" type="Button" parent="ConnectMainVBox/BottomItemHBoxContainer/ConnectBottomControlsMargin" unique_id=1345844342]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
