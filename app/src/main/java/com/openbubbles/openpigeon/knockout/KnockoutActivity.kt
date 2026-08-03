@@ -299,17 +299,18 @@ class KnockoutActivity : AppCompatActivity() {
             },
         )
 
+        val localAvatarAnchor = findViewById<FrameLayout>(R.id.knockoutGameAvatarAnchor)
+        val opponentAvatarAnchor = findViewById<FrameLayout>(R.id.knockoutOpponentAvatarAnchor)
+
         gameMenu.sheet.attachGameAvatar(
-            findViewById(
-                R.id.knockoutGameAvatarAnchor,
-            ),
+            localAvatarAnchor,
         )
 
         gameMenu.sheet.attachOpponentAvatar(
-            findViewById(
-                R.id.knockoutOpponentAvatarAnchor,
-            ),
+            opponentAvatarAnchor,
         )
+
+        alignKnockoutAvatarAnchors()
 
         configureSettingsAvatarTarget()
 
@@ -831,11 +832,7 @@ class KnockoutActivity : AppCompatActivity() {
         val player2 = (msg["player2"] ?: player2Id)
 
         spectatorMode =
-            myPlayerId.isNotBlank() &&
-                    player1.isNotBlank() &&
-                    player2.isNotBlank() &&
-                    myPlayerId != player1 &&
-                    myPlayerId != player2
+            myPlayerId.isNotBlank() && player1.isNotBlank() && player2.isNotBlank() && myPlayerId != player1 && myPlayerId != player2
 
         spectatorLabel.visibility = if (spectatorMode) {
             View.VISIBLE
@@ -855,10 +852,7 @@ class KnockoutActivity : AppCompatActivity() {
 
         OpenPigeonLog.i(
             "KnockoutNative",
-            "spectatorMode=$spectatorMode " +
-                    "myIdBlank=${myPlayerId.isBlank()} " +
-                    "p1Blank=${player1.isBlank()} " +
-                    "p2Blank=${player2.isBlank()}",
+            "spectatorMode=$spectatorMode " + "myIdBlank=${myPlayerId.isBlank()} " + "p1Blank=${player1.isBlank()} " + "p2Blank=${player2.isBlank()}",
         )
     }
 
@@ -939,12 +933,7 @@ class KnockoutActivity : AppCompatActivity() {
         fun updateView(
             view: View,
         ) {
-            if (
-                view is TextView &&
-                view.text
-                    ?.toString()
-                    ?.trim()
-                    ?.equals(
+            if (view is TextView && view.text?.toString()?.trim()?.equals(
                         "You",
                         ignoreCase = true,
                     ) == true
@@ -955,6 +944,11 @@ class KnockoutActivity : AppCompatActivity() {
                 } else {
                     1f
                 }
+
+                val labelLayer = dp(24f)
+                view.elevation = labelLayer
+                view.translationZ = labelLayer
+                view.bringToFront()
             }
 
             if (view is ViewGroup) {
@@ -989,11 +983,7 @@ class KnockoutActivity : AppCompatActivity() {
         )
 
         player1Anchor.post {
-            if (
-                !spectatorMode ||
-                isFinishing ||
-                isDestroyed
-            ) {
+            if (!spectatorMode || isFinishing || isDestroyed) {
                 return@post
             }
 
@@ -1053,6 +1043,72 @@ class KnockoutActivity : AppCompatActivity() {
         }
     }
 
+    private fun alignKnockoutAvatarAnchors() {
+        val localAnchor = findViewById<FrameLayout>(
+            R.id.knockoutGameAvatarAnchor,
+        )
+
+        val opponentAnchor = findViewById<FrameLayout>(
+            R.id.knockoutOpponentAvatarAnchor,
+        )
+
+        val opponentPreserver = findViewById<ImageView>(
+            R.id.knockoutOpponentPreserver,
+        )
+
+        localAnchor.post {
+            val localParams = localAnchor.layoutParams
+            val opponentParams = opponentAnchor.layoutParams
+
+            opponentParams.width = localParams.width
+            opponentParams.height = localParams.height
+
+            if (
+                localParams is ViewGroup.MarginLayoutParams &&
+                opponentParams is ViewGroup.MarginLayoutParams
+            ) {
+                opponentParams.topMargin = localParams.topMargin
+                opponentParams.bottomMargin = localParams.bottomMargin
+            }
+
+            opponentAnchor.translationY = 0f
+            opponentPreserver.translationY = 0f
+
+            opponentAnchor.layoutParams = opponentParams
+            opponentAnchor.requestLayout()
+
+            opponentAnchor.post {
+                val localLocation = IntArray(2)
+                val opponentLocation = IntArray(2)
+
+                localAnchor.getLocationOnScreen(
+                    localLocation,
+                )
+
+                opponentAnchor.getLocationOnScreen(
+                    opponentLocation,
+                )
+
+                val verticalCorrection =
+                    (localLocation[1] - opponentLocation[1]).toFloat()
+
+                opponentAnchor.translationY =
+                    verticalCorrection
+
+                opponentPreserver.translationY =
+                    verticalCorrection
+
+                AvatarView.configureTallAnchor(
+                    localAnchor,
+                )
+
+                AvatarView.configureTallAnchor(
+                    opponentAnchor,
+                )
+            }
+        }
+    }
+
     private fun updateAvatarHud() {
         runOnUiThread {
             val myPreserver = findViewById<ImageView>(R.id.knockoutMyPreserver)
@@ -1080,7 +1136,7 @@ class KnockoutActivity : AppCompatActivity() {
                 val lp = hud.layoutParams as? FrameLayout.LayoutParams
 
                 if (lp != null) {
-                    val topPadding = dp(32f).toInt()
+                    val topPadding = dp(56f).toInt()
 
                     if (lp.topMargin != topPadding) {
                         lp.topMargin = topPadding
@@ -1091,7 +1147,12 @@ class KnockoutActivity : AppCompatActivity() {
                 hud.bringToFront()
             }
 
-            findViewById<View>(R.id.knockoutSettingsButton)?.bringToFront()
+            findViewById<View>(
+                R.id.knockoutSettingsButton,
+            )?.bringToFront()
+
+            alignKnockoutAvatarAnchors()
+            updateYouLabelOpacity()
         }
     }
 
@@ -1508,13 +1569,7 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun launchCurrentAims() {
-        if (
-            spectatorMode ||
-            isGameOver() ||
-            mode != Mode.Aiming ||
-            closing ||
-            table == 0L
-        ) {
+        if (spectatorMode || isGameOver() || mode != Mode.Aiming || closing || table == 0L) {
             return
         }
 
@@ -2028,17 +2083,17 @@ class KnockoutActivity : AppCompatActivity() {
             )
 
             winLossState.toIntOrNull()?.coerceIn(
-                    -1,
-                    1,
-                )?.let { result ->
-                    if (::avatarWinBurstController.isInitialized) {
-                        avatarWinBurstController.show(
-                            result = result,
-                            dimView = statusDimView,
-                            label = label,
-                        )
-                    }
+                -1,
+                1,
+            )?.let { result ->
+                if (::avatarWinBurstController.isInitialized) {
+                    avatarWinBurstController.show(
+                        result = result,
+                        dimView = statusDimView,
+                        label = label,
+                    )
                 }
+            }
 
             label.bringToFront()
         }

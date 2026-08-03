@@ -257,34 +257,15 @@ func set_game_data(raw_text: String) -> void:
 				),
 			)
 	else:
-		var opponent_avatar_key := (
-			"avatar2"
-				if g.playernum == 1
-				else "avatar1"
-		)
+		if is_instance_valid(g.player_avatar_display) and g.player_avatar_display.has_method("update_display_from_settings"):
+			g.player_avatar_display.call_deferred("update_display_from_settings")
 
-		var avatar_string := res_str(
-			res,
-			opponent_avatar_key,
-			"",
-		).strip_edges()
+		var opponent_avatar_key := "avatar2" if g.playernum == 1 else "avatar1"
+		var avatar_string := res_str(res, opponent_avatar_key, "").strip_edges()
 
-		if (
-			avatar_string != "" and
-			is_instance_valid(g.opp_avatar_display)
-		):
-			var opponent_data := (
-				GameUtils._parse_avatar_string(
-					avatar_string,
-				)
-			)
-
-			if g.opp_avatar_display.has_method(
-				"update_avatar_from_data",
-			):
-				g.opp_avatar_display.update_avatar_from_data(
-					opponent_data,
-				)
+		if avatar_string != "" and is_instance_valid(g.opp_avatar_display) and g.opp_avatar_display.has_method("update_avatar_from_data"):
+			var opponent_data := GameUtils._parse_avatar_string(avatar_string)
+			g.opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
 	var replay_str: String = res_str(res, "replay", "")
 	OpLog.i(LOG_TAG, ["state_replay_loaded ", g._replay_summary(replay_str), " raw=", replay_str])

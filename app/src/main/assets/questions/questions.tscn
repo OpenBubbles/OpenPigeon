@@ -238,7 +238,8 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.021434616, 0.021434642, 0.021434627, 1)
 
-[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=1536777420]
+[node name="MainVBoxContainer" type="VBoxContainer" parent="." unique_id=1536777420]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -246,22 +247,24 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="MarginContainer2" type="MarginContainer" parent="VBoxContainer" unique_id=154196375]
+[node name="MainMarginContainer" type="MarginContainer" parent="MainVBoxContainer" unique_id=154196375]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/margin_top = 40
 
-[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/MarginContainer2" unique_id=427536182]
+[node name="TopHBoxContainer" type="HBoxContainer" parent="MainVBoxContainer/MainMarginContainer" unique_id=427536182]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 
-[node name="PlayerAvatarDisplay" parent="VBoxContainer/MarginContainer2/HBoxContainer" unique_id=479958841 instance=ExtResource("2_v8hg5")]
+[node name="PlayerAvatarDisplay" parent="MainVBoxContainer/MainMarginContainer/TopHBoxContainer" unique_id=479958841 instance=ExtResource("2_v8hg5")]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
 is_display_only = true
 
-[node name="Description" type="RichTextLabel" parent="VBoxContainer/MarginContainer2/HBoxContainer" unique_id=1423178070]
+[node name="Description" type="RichTextLabel" parent="MainVBoxContainer/MainMarginContainer/TopHBoxContainer" unique_id=1423178070]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(280, 0)
 layout_mode = 2
@@ -271,17 +274,17 @@ fit_content = true
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="HSeparator" type="HSeparator" parent="VBoxContainer" unique_id=805448099]
+[node name="HSeparator" type="HSeparator" parent="MainVBoxContainer" unique_id=805448099]
 layout_mode = 2
 theme_override_constants/separation = 22
 theme_override_styles/separator = SubResource("StyleBoxLine_f3wg7")
 
-[node name="QuestionsContainer" type="CenterContainer" parent="VBoxContainer" unique_id=1150296572]
+[node name="QuestionsContainer" type="CenterContainer" parent="MainVBoxContainer" unique_id=1150296572]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="QuestionMark" type="RichTextLabel" parent="VBoxContainer/QuestionsContainer" unique_id=562881055]
+[node name="QuestionMark" type="RichTextLabel" parent="MainVBoxContainer/QuestionsContainer" unique_id=562881055]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(128, 128)
 layout_mode = 2
@@ -290,22 +293,22 @@ text = "?"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/QuestionsContainer" unique_id=1872583456]
+[node name="MarginContainer" type="MarginContainer" parent="MainVBoxContainer/QuestionsContainer" unique_id=1872583456]
 layout_mode = 2
 
-[node name="QuestionsScroll" type="ScrollContainer" parent="VBoxContainer/QuestionsContainer/MarginContainer" unique_id=94837564]
+[node name="QuestionsScroll" type="ScrollContainer" parent="MainVBoxContainer/QuestionsContainer/MarginContainer" unique_id=94837564]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(600, 680)
 layout_mode = 2
 size_flags_vertical = 4
 
-[node name="QuestionsList" type="VBoxContainer" parent="VBoxContainer/QuestionsContainer/MarginContainer/QuestionsScroll" unique_id=178508909]
+[node name="QuestionsList" type="VBoxContainer" parent="MainVBoxContainer/QuestionsContainer/MarginContainer/QuestionsScroll" unique_id=178508909]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="AnswerOverlay" type="PanelContainer" parent="VBoxContainer/QuestionsContainer" unique_id=1194795212]
+[node name="AnswerOverlay" type="PanelContainer" parent="MainVBoxContainer/QuestionsContainer" unique_id=1194795212]
 unique_name_in_owner = true
 visible = false
 z_index = 10
@@ -313,21 +316,21 @@ custom_minimum_size = Vector2(300, 150)
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_sib42")
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/QuestionsContainer/AnswerOverlay" unique_id=927000363]
+[node name="MarginContainer" type="MarginContainer" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay" unique_id=927000363]
 layout_mode = 2
 theme_override_constants/margin_left = 10
 theme_override_constants/margin_top = 10
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 10
 
-[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer" unique_id=1662486277]
+[node name="VBoxContainer" type="VBoxContainer" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer" unique_id=1662486277]
 layout_mode = 2
 
-[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer" unique_id=337746914]
+[node name="HBoxContainer" type="HBoxContainer" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer" unique_id=337746914]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 
-[node name="QuestionNumber" type="RichTextLabel" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/HBoxContainer" unique_id=800496902]
+[node name="QuestionNumber" type="RichTextLabel" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/HBoxContainer" unique_id=800496902]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(60, 0)
 layout_mode = 2
@@ -338,7 +341,7 @@ bbcode_enabled = true
 fit_content = true
 vertical_alignment = 1
 
-[node name="QuestionText" type="RichTextLabel" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1073873343]
+[node name="QuestionText" type="RichTextLabel" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1073873343]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
@@ -349,15 +352,15 @@ bbcode_enabled = true
 fit_content = true
 vertical_alignment = 1
 
-[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer" unique_id=1384704120]
+[node name="VBoxContainer" type="VBoxContainer" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer" unique_id=1384704120]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer" unique_id=312418351]
+[node name="HBoxContainer" type="HBoxContainer" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer" unique_id=312418351]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="YesButton" type="Button" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer" unique_id=264448089]
+[node name="YesButton" type="Button" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer" unique_id=264448089]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 50)
 layout_mode = 2
@@ -371,11 +374,11 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_f3wg7")
 theme_override_styles/focus = SubResource("StyleBoxFlat_2kinu")
 text = "Yes"
 
-[node name="Control" type="Control" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer" unique_id=630365771]
+[node name="Control" type="Control" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer" unique_id=630365771]
 custom_minimum_size = Vector2(5, 5)
 layout_mode = 2
 
-[node name="NoButton" type="Button" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer" unique_id=947397909]
+[node name="NoButton" type="Button" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer" unique_id=947397909]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
@@ -386,11 +389,11 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_nkuys")
 theme_override_styles/focus = SubResource("StyleBoxFlat_gbmx1")
 text = "No"
 
-[node name="Control2" type="Control" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer" unique_id=989193967]
+[node name="Control2" type="Control" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer" unique_id=989193967]
 custom_minimum_size = Vector2(5, 0)
 layout_mode = 2
 
-[node name="SometimesButton" type="Button" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer" unique_id=386018770]
+[node name="SometimesButton" type="Button" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer/HBoxContainer" unique_id=386018770]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(100, 0)
 layout_mode = 2
@@ -404,11 +407,11 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_cq7dp")
 theme_override_styles/focus = SubResource("StyleBoxFlat_4llm0")
 text = "Sometimes"
 
-[node name="Control" type="Control" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer" unique_id=1713065008]
+[node name="Control" type="Control" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer" unique_id=1713065008]
 custom_minimum_size = Vector2(0, 5)
 layout_mode = 2
 
-[node name="CorrectButton" type="Button" parent="VBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer" unique_id=1123395531]
+[node name="CorrectButton" type="Button" parent="MainVBoxContainer/QuestionsContainer/AnswerOverlay/MarginContainer/VBoxContainer/VBoxContainer" unique_id=1123395531]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 50)
 layout_mode = 2
@@ -422,42 +425,47 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_kxftw")
 theme_override_styles/focus = SubResource("StyleBoxFlat_iobw7")
 text = "You've Guessed It!"
 
-[node name="HSeparator2" type="HSeparator" parent="VBoxContainer" unique_id=1333457684]
+[node name="HSeparator2" type="HSeparator" parent="MainVBoxContainer" unique_id=1333457684]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 5)
 layout_mode = 2
 theme_override_styles/separator = SubResource("StyleBoxLine_nj7t5")
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer" unique_id=1026307500]
+[node name="BottomMarginContainer" type="MarginContainer" parent="MainVBoxContainer" unique_id=1026307500]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/margin_left = 20
 theme_override_constants/margin_top = 20
 theme_override_constants/margin_right = 20
 theme_override_constants/margin_bottom = 20
 
-[node name="BottomItems" type="VBoxContainer" parent="VBoxContainer/MarginContainer" unique_id=2015528429]
+[node name="BottomItems" type="VBoxContainer" parent="MainVBoxContainer/BottomMarginContainer" unique_id=2015528429]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 9
 
-[node name="QuestionsTextContainer" type="PanelContainer" parent="VBoxContainer/MarginContainer/BottomItems" unique_id=515102771]
+[node name="QuestionsTextContainer" type="PanelContainer" parent="MainVBoxContainer/BottomMarginContainer/BottomItems" unique_id=515102771]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
 size_flags_vertical = 4
 theme_override_styles/panel = SubResource("StyleBoxFlat_26m2u")
 
-[node name="MarginContainer" type="MarginContainer" parent="VBoxContainer/MarginContainer/BottomItems/QuestionsTextContainer" unique_id=337826679]
+[node name="TextMarginContainer" type="MarginContainer" parent="MainVBoxContainer/BottomMarginContainer/BottomItems/QuestionsTextContainer" unique_id=337826679]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/margin_left = 20
 theme_override_constants/margin_right = 20
 theme_override_constants/margin_bottom = 20
 
-[node name="VBoxContainer" type="VBoxContainer" parent="VBoxContainer/MarginContainer/BottomItems/QuestionsTextContainer/MarginContainer" unique_id=1334157226]
+[node name="TextVBoxContainer" type="VBoxContainer" parent="MainVBoxContainer/BottomMarginContainer/BottomItems/QuestionsTextContainer/TextMarginContainer" unique_id=1334157226]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
 
-[node name="RichTextLabel" type="RichTextLabel" parent="VBoxContainer/MarginContainer/BottomItems/QuestionsTextContainer/MarginContainer/VBoxContainer" unique_id=673864136]
+[node name="InputText" type="RichTextLabel" parent="MainVBoxContainer/BottomMarginContainer/BottomItems/QuestionsTextContainer/TextMarginContainer/TextVBoxContainer" unique_id=673864136]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(180, 60)
 layout_mode = 2
 size_flags_horizontal = 4
@@ -468,7 +476,7 @@ fit_content = true
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="TextBox" type="TextEdit" parent="VBoxContainer/MarginContainer/BottomItems/QuestionsTextContainer/MarginContainer/VBoxContainer" unique_id=454011786]
+[node name="TextBox" type="TextEdit" parent="MainVBoxContainer/BottomMarginContainer/BottomItems/QuestionsTextContainer/TextMarginContainer/TextVBoxContainer" unique_id=454011786]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(400, 100)
 layout_mode = 2
@@ -479,7 +487,7 @@ theme_override_colors/selection_color = Color(0, 0, 0, 1)
 theme_override_colors/font_color = Color(0, 0, 0, 1)
 theme_override_colors/background_color = Color(1, 1, 1, 1)
 
-[node name="SendButton" type="Button" parent="VBoxContainer/MarginContainer/BottomItems" unique_id=344033590]
+[node name="SendButton" type="Button" parent="MainVBoxContainer/BottomMarginContainer/BottomItems" unique_id=344033590]
 unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(100, 60)
@@ -493,7 +501,7 @@ theme_override_styles/hover = SubResource("StyleBoxFlat_n0tly")
 theme_override_styles/focus = SubResource("StyleBoxFlat_k70bj")
 text = "Send"
 
-[node name="Container" type="Control" parent="VBoxContainer/MarginContainer/BottomItems" unique_id=898863733]
+[node name="Container" type="Control" parent="MainVBoxContainer/BottomMarginContainer/BottomItems" unique_id=898863733]
 layout_mode = 2
 
 [node name="DotTimer" type="Timer" parent="." unique_id=1375439605]

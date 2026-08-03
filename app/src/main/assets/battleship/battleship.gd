@@ -20,10 +20,10 @@ var sent_tween: Tween
 @onready var winner_label: Label = %WinLossLabel
 @onready var sent_label: Label = %SentLabel
 @onready var spectator_label: Label = %SpecLabel
-@onready var p1_avatar_display = %P1AvatarDisplay
+@onready var p1_avatar_display: TextureButton = %P1AvatarDisplay
 @onready var p1_you_label: Label = %P1YouLabel
 @onready var p2_you_label: Label = %P2YouLabel
-@onready var p2_avatar_display = %P2AvatarDisplay
+@onready var p2_avatar_display: TextureButton = %P2AvatarDisplay
 @onready var choose_target_label: Label = %ChooseTargetLabel
 @onready var water_rect: ColorRect = %WaterRect
 @onready var clouds_rect: ColorRect = %CloudsRect
@@ -243,8 +243,34 @@ func _drand48() -> float:
 
 	return float(_rand48_state) / RAND48_DIVISOR
 
+func _configure_battleship_avatar(avatar_button: TextureButton) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	avatar_button.clip_contents = false
+	avatar_button.scale = Vector2.ONE
+	avatar_button.custom_minimum_size = Vector2(96.0, 90.0)
+
+	var internal_viewport := avatar_button.get_node_or_null("SubViewportContainer/SubViewport") as SubViewport
+
+	if internal_viewport != null:
+		internal_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+
+	var internal_preview := avatar_button.get_node_or_null("SubViewportContainer") as SubViewportContainer
+
+	if internal_preview != null:
+		internal_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		internal_preview.visible = true
+		internal_preview.self_modulate = Color.WHITE
+		internal_preview.pivot_offset = Vector2(48.0, 140.0)
+		internal_preview.scale = Vector2.ONE
+
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
+
+	_configure_battleship_avatar(p1_avatar_display)
+	_configure_battleship_avatar(p2_avatar_display)
+
 	if player == null:
 		if is_instance_valid(state):
 			state.visible = false
@@ -477,41 +503,31 @@ func _set_game_data(new_replay: String) -> void:
 			true
 		)
 	else:
-		if (
-			is_instance_valid(my_avatar) and
-			my_avatar.has_method("update_display_from_settings")
-		):
-			dbg("avatar loading local settings")
-			my_avatar.call_deferred(
-				"update_display_from_settings"
-			)
+		var loaded_local_from_settings := false
 
-		if parsed.has(player_avatar_key):
-			var player_avatar_string := str(
-				parsed[player_avatar_key]
-			)
+		if is_instance_valid(my_avatar) and my_avatar.has_method("update_display_from_settings"):
+			dbg("avatar loading local settings")
+			my_avatar.call_deferred("update_display_from_settings")
+			loaded_local_from_settings = true
+
+		if not loaded_local_from_settings and parsed.has(player_avatar_key):
+			var player_avatar_string := str(parsed[player_avatar_key])
 
 			dbg([
-				"avatar local key=",
+				"avatar local fallback key=",
 				player_avatar_key,
 				" len=",
 				player_avatar_string.length()
 			])
 
-			var player_data := GameUtils._parse_avatar_string(
-				player_avatar_string
-			)
+			if player_avatar_string != "":
+				var player_data := GameUtils._parse_avatar_string(player_avatar_string)
 
-			if is_instance_valid(my_avatar):
-				my_avatar.call_deferred(
-					"update_avatar_from_data",
-					player_data
-				)
+				if is_instance_valid(my_avatar):
+					my_avatar.call_deferred("update_avatar_from_data", player_data)
 
 		if parsed.has(opponent_avatar_key):
-			var opp_avatar_string := str(
-				parsed[opponent_avatar_key]
-			)
+			var opp_avatar_string := str(parsed[opponent_avatar_key])
 
 			dbg([
 				"avatar opponent key=",
@@ -520,15 +536,11 @@ func _set_game_data(new_replay: String) -> void:
 				opp_avatar_string.length()
 			])
 
-			var opp_data := GameUtils._parse_avatar_string(
-				opp_avatar_string
-			)
+			if opp_avatar_string != "":
+				var opp_data := GameUtils._parse_avatar_string(opp_avatar_string)
 
-			if is_instance_valid(opp_avatar):
-				opp_avatar.call_deferred(
-					"update_avatar_from_data",
-					opp_data
-				)
+				if is_instance_valid(opp_avatar):
+					opp_avatar.call_deferred("update_avatar_from_data", opp_data)
 
 	if not s1.is_empty():
 		dbg(["board_load ships1 len=", s1.length()])

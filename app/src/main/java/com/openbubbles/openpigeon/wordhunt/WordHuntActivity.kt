@@ -25,6 +25,8 @@ import com.openbubbles.openpigeon.ui.RulesPopup
 import com.openbubbles.openpigeon.wordgames.WordGameLanguage
 import com.openbubbles.openpigeon.wordgames.WordGameLanguages
 import kotlin.random.Random
+import android.view.View
+import android.view.ViewGroup
 
 class WordHuntActivity : AppCompatActivity() {
     private val baseGame: Game = WordHuntGame()
@@ -85,6 +87,7 @@ class WordHuntActivity : AppCompatActivity() {
     companion object {
         const val GAME_DURATION = 80000L // 80 seconds
         const val MIN_WORD_LENGTH = 3
+        const val LOCAL_AVATAR_VIEW_TAG = "wordhunt_local_avatar"
 
         fun generateLetterPool(
             context: Context,
@@ -177,6 +180,30 @@ class WordHuntActivity : AppCompatActivity() {
         }
     }
 
+    private fun refreshWordHuntLocalAvatar() {
+        val contentRoot = findViewById<View>(
+            android.R.id.content,
+        )
+
+        contentRoot.post {
+            fun refreshInside(view: View) {
+                if (view is AvatarView && view.tag == LOCAL_AVATAR_VIEW_TAG) {
+                    view.applyFromAvatarData()
+                }
+
+                if (view is ViewGroup) {
+                    for (index in 0 until view.childCount) {
+                        refreshInside(
+                            view.getChildAt(index),
+                        )
+                    }
+                }
+            }
+
+            refreshInside(contentRoot)
+        }
+    }
+
     private fun setupWordHuntMenu() {
         val rootFrame = findViewById<FrameLayout>(
             android.R.id.content,
@@ -213,6 +240,11 @@ class WordHuntActivity : AppCompatActivity() {
             placement = GameMenuPlacement.BOTTOM_END,
 
             fallbackDarkOverlayAlpha = 0.18f,
+
+            onSettingsClosed = {
+                AvatarData.refreshFromGodot()
+                refreshWordHuntLocalAvatar()
+            },
         )
     }
 
@@ -685,11 +717,55 @@ class WordHuntActivity : AppCompatActivity() {
         }
 
         OpenPigeonLog.i("Word List", gameState.sortedWords().joinToString("|"))
-        gameSessionIPC!!.updateSession(updates, sessionId) {
+        ipc.updateSession(
+            updates,
+            sessionId,
+        ) {
             runOnUiThread {
-                currentMessage = gameSessionIPC!!.getCurrentMessage(sessionId)
-                gameSessionIPC!!.unlockMsgHandle(sessionId)
-                navController.navigate(GameUI.Screen.Score.route)
+                val refreshedMessage = runCatching {
+                    ipc.getCurrentMessage(
+                        sessionId,
+                    )
+                }.getOrElse { error ->
+                    OpenPigeonLog.e(
+                        "WordHunt",
+                        "Failed to refresh the message after submitting the score.",
+                        error,
+                    )
+
+                    currentMessage + updates
+                }
+
+                currentMessage = refreshedMessage
+
+                if (::currentMessageState.isInitialized) {
+                    currentMessageState.value = refreshedMessage
+                }
+
+                runCatching {
+                    ipc.unlockMsgHandle(
+                        sessionId,
+                    )
+                }.onFailure { error ->
+                    OpenPigeonLog.e(
+                        "WordHunt",
+                        "Could not unlock the message handle after submitting the score.",
+                        error,
+                    )
+                }
+
+                if (
+                    !isFinishing &&
+                    !isDestroyed &&
+                    ::navController.isInitialized &&
+                    navController.currentDestination?.route != GameUI.Screen.Score.route
+                ) {
+                    navController.navigate(
+                        GameUI.Screen.Score.route,
+                    ) {
+                        launchSingleTop = true
+                    }
+                }
             }
         }
     }

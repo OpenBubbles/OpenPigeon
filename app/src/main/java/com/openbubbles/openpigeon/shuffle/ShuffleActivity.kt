@@ -53,6 +53,7 @@ class ShuffleActivity : AppCompatActivity() {
     private var rendererHasInitialData = false
     private lateinit var myAvatarAnchor: FrameLayout
     private lateinit var opponentAvatarAnchor: FrameLayout
+    private lateinit var youLabel: TextView
 
     private lateinit var avatarWinBurstController: AvatarWinBurstController
 
@@ -128,8 +129,11 @@ class ShuffleActivity : AppCompatActivity() {
 
         renderer.onTopHudAlphaChanged = { alpha ->
             myAvatarAnchor.alpha = alpha
-
             opponentAvatarAnchor.alpha = alpha
+
+            if (::youLabel.isInitialized) {
+                youLabel.alpha = if (spectatorMode) 0f else alpha
+            }
 
             if (::spectatorLabel.isInitialized) {
                 spectatorLabel.alpha = alpha
@@ -177,6 +181,8 @@ class ShuffleActivity : AppCompatActivity() {
                 renderer.setDarkMode(
                     enabled,
                 )
+
+                updateShuffleYouLabel()
             },
             onSettingsClosed = {
                 if (spectatorMode) {
@@ -456,6 +462,8 @@ class ShuffleActivity : AppCompatActivity() {
         renderer.setLocalPlayer(
             localPlayer,
         )
+
+        updateShuffleYouLabel()
 
         if (spectatorMode) {
             applySpectatorAvatars(
@@ -1570,29 +1578,19 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun createAvatarHud() {
-        myAvatarAnchor = FrameLayout(
-            this,
-        ).apply {
+        myAvatarAnchor = FrameLayout(this).apply {
             clipChildren = false
-
             clipToPadding = false
         }
 
-        opponentAvatarAnchor = FrameLayout(
-            this,
-        ).apply {
+        opponentAvatarAnchor = FrameLayout(this).apply {
             clipChildren = false
-
             clipToPadding = false
         }
 
-        val avatarWidth = dp(
-            64f,
-        ).toInt()
-
-        val avatarHeight = dp(
-            46f,
-        ).toInt()
+        val avatarWidth = dp(64f).toInt()
+        val avatarHeight = dp(46f).toInt()
+        val avatarTop = dp(52f).toInt()
 
         rootFrame.addView(
             myAvatarAnchor,
@@ -1601,13 +1599,8 @@ class ShuffleActivity : AppCompatActivity() {
                 avatarHeight,
                 Gravity.TOP or Gravity.START,
             ).apply {
-                leftMargin = dp(
-                    10f,
-                ).toInt()
-
-                topMargin = dp(
-                    40f,
-                ).toInt()
+                leftMargin = dp(10f).toInt()
+                topMargin = avatarTop
             },
         )
 
@@ -1618,15 +1611,63 @@ class ShuffleActivity : AppCompatActivity() {
                 avatarHeight,
                 Gravity.TOP or Gravity.END,
             ).apply {
-                rightMargin = dp(
-                    10f,
-                ).toInt()
-
-                topMargin = dp(
-                    40f,
-                ).toInt()
+                rightMargin = dp(10f).toInt()
+                topMargin = avatarTop
             },
         )
+
+        youLabel = TextView(this).apply {
+            text = "You"
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER_VERTICAL
+            includeFontPadding = false
+            setShadowLayer(
+                2.5f,
+                0f,
+                dp(1f),
+                Color.argb(210, 0, 0, 0),
+            )
+
+            val labelLayer = dp(24f)
+            elevation = labelLayer
+            translationZ = labelLayer
+        }
+
+        rootFrame.addView(
+            youLabel,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                dp(22f).toInt(),
+                Gravity.TOP or Gravity.START,
+            ).apply {
+                leftMargin = dp(10f).toInt() + avatarWidth + dp(8f).toInt()
+                topMargin = avatarTop + ((avatarHeight - dp(22f).toInt()) / 2) - dp(6f).toInt()
+            },
+        )
+    }
+
+    private fun updateShuffleYouLabel() {
+        if (!::youLabel.isInitialized) {
+            return
+        }
+
+        youLabel.visibility = if (spectatorMode) {
+            View.GONE
+        } else {
+            View.VISIBLE
+        }
+
+        if (!spectatorMode) {
+            youLabel.setTextColor(
+                renderer.hudColorForPlayer(
+                    localPlayer,
+                ),
+            )
+
+            youLabel.alpha = myAvatarAnchor.alpha
+            youLabel.bringToFront()
+        }
     }
 
     private fun clearGameOverPresentation() {
@@ -1714,7 +1755,6 @@ class ShuffleActivity : AppCompatActivity() {
         return null
     }
 
-
     private fun applyAvatarToAnchor(
         anchor: FrameLayout,
         avatarData: String,
@@ -1730,8 +1770,9 @@ class ShuffleActivity : AppCompatActivity() {
                 avatarData,
             )
         }
-    }
 
+        AvatarView.configureTallAnchor(anchor)
+    }
 
     private fun applySpectatorAvatars(
         data: Map<String, String>,
@@ -1753,6 +1794,7 @@ class ShuffleActivity : AppCompatActivity() {
         myAvatarAnchor.bringToFront()
         opponentAvatarAnchor.bringToFront()
         spectatorLabel.bringToFront()
+        updateShuffleYouLabel()
     }
 
 

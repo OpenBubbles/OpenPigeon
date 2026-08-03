@@ -282,6 +282,7 @@ layout_mode = 2
 
 [node name="YouLabel" type="Label" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/YouContainer" unique_id=1041219731]
 unique_name_in_owner = true
+z_index = 1
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
@@ -296,7 +297,6 @@ custom_minimum_size = Vector2(96, 90)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-ignore_texture_size = true
 is_display_only = true
 
 [node name="Control" type="Control" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/YouContainer" unique_id=1549673522]
@@ -349,6 +349,7 @@ size_flags_vertical = 4
 layout_mode = 2
 
 [node name="Control" type="Control" parent="MainOverlay/MarginContainer/VBoxContainer/BottomHBoxContainer/OppContainer" unique_id=1679438771]
+z_index = 1
 custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
 
@@ -358,7 +359,6 @@ custom_minimum_size = Vector2(96, 90)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-ignore_texture_size = true
 is_display_only = true
 controlled_by_data = true
 

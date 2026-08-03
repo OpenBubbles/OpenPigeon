@@ -3,8 +3,8 @@ class_name ArcheryGame
 
 const MUSIC_STREAM := preload("res://global/audio/archery.ogg")
 
-@onready var opp_avatar_display = %OppAvatarDisplay
-@onready var player_avatar_display = %PlayerAvatarDisplay
+@onready var opp_avatar_display: TextureButton = %OppAvatarDisplay
+@onready var player_avatar_display: TextureButton = %PlayerAvatarDisplay
 @onready var winner_label: Label = %WinLossLabel
 @onready var sent_label: Label = %SentLabel
 @onready var main_overlay: Control = %MainOverlay
@@ -145,8 +145,40 @@ func _update_set_score_labels() -> void:
 		opp_wins.visible = false
 		opp_label.visible = true
 
+func _configure_archery_avatar(avatar_button: TextureButton) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	avatar_button.clip_contents = false
+	avatar_button.scale = Vector2.ONE
+	avatar_button.custom_minimum_size = Vector2(96.0, 90.0)
+
+	avatar_button.texture_normal = null
+	avatar_button.texture_pressed = null
+	avatar_button.texture_hover = null
+	avatar_button.texture_disabled = null
+	avatar_button.texture_focused = null
+
+	var internal_viewport := avatar_button.get_node_or_null("SubViewportContainer/SubViewport") as SubViewport
+
+	if internal_viewport != null:
+		internal_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+
+	var internal_preview := avatar_button.get_node_or_null("SubViewportContainer") as SubViewportContainer
+
+	if internal_preview != null:
+		internal_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		internal_preview.visible = true
+		internal_preview.self_modulate = Color.WHITE
+		internal_preview.pivot_offset = Vector2(48.0, 140.0)
+		internal_preview.scale = Vector2.ONE
+
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
+
+	_configure_archery_avatar(player_avatar_display)
+	_configure_archery_avatar(opp_avatar_display)
+
 	if is_instance_valid(aim_cursor):
 		aim_cursor.visible = false
 	if is_instance_valid(aim_progress_bar):

@@ -6,8 +6,8 @@ class_name PaintballGame
 
 @onready var player: Node3D = %Player
 @onready var fire_button: Control = %FireButton
-@onready var player_avatar_display: Control = %PlayerAvatarDisplay
-@onready var opp_avatar_display: Control = %OppAvatarDisplay
+@onready var player_avatar_display: TextureButton = %PlayerAvatarDisplay
+@onready var opp_avatar_display: TextureButton = %OppAvatarDisplay
 @onready var sent_label: Label = %SentLabel
 @onready var win_loss_label: Label = %WinLossLabel
 @onready var spec_label: Label = %SpecLabel
@@ -233,9 +233,6 @@ var _opp_splat: Sprite3D = null
 var _opp_splat_tween: Tween = null
 
 var sent_tween: Tween = null
-var _opp_avatar_texture_normal: Texture2D = null
-var _opp_avatar_texture_pressed: Texture2D = null
-var _opp_avatar_texture_hover: Texture2D = null
 
 # -------------------------------------------------------------------
 # Ready / process
@@ -329,8 +326,37 @@ Pick where to move and where to shoot. Try to hit your opponent before they hit 
 [/font_size]
 """
 
+func _configure_paintball_avatar(avatar_button: TextureButton) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	avatar_button.clip_contents = false
+	avatar_button.scale = Vector2.ONE
+	avatar_button.custom_minimum_size = Vector2(96.0, 90.0)
+
+	var internal_viewport := avatar_button.get_node_or_null("SubViewportContainer/SubViewport") as SubViewport
+
+	if internal_viewport != null:
+		internal_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+
+	var internal_preview := avatar_button.get_node_or_null("SubViewportContainer") as SubViewportContainer
+
+	if internal_preview != null:
+		internal_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		internal_preview.visible = true
+		internal_preview.self_modulate = Color.WHITE
+		internal_preview.pivot_offset = Vector2(48.0, 140.0)
+		internal_preview.scale = Vector2.ONE
+
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
+
+	_configure_paintball_avatar(player_avatar_display)
+	_configure_paintball_avatar(opp_avatar_display)
+
+	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("update_display_from_settings"):
+		player_avatar_display.call_deferred("update_display_from_settings")
+
 	_configure_camera_aspect()
 	
 	var viewport := get_viewport()
@@ -371,11 +397,6 @@ func _on_game_ready() -> void:
 	if is_instance_valid(fp_aim_sprite):
 		_fp_aim_base_scale = fp_aim_sprite.scale
 		_fp_aim_base_pos = fp_aim_sprite.position
-
-	if is_instance_valid(opp_avatar_display):
-		_opp_avatar_texture_normal = opp_avatar_display.get("texture_normal") as Texture2D
-		_opp_avatar_texture_pressed = opp_avatar_display.get("texture_pressed") as Texture2D
-		_opp_avatar_texture_hover = opp_avatar_display.get("texture_hover") as Texture2D
 
 	if fire_button is BaseButton:
 		var fire_callable := Callable(self, "_on_fire_pressed")
@@ -475,6 +496,9 @@ func _set_game_data(raw_text: String) -> void:
 		win_loss_label.visible = false
 		win_loss_label.text = ""
 		win_loss_label.scale = Vector2.ONE
+
+	_configure_paintball_avatar(player_avatar_display)
+	_configure_paintball_avatar(opp_avatar_display)
 
 	if states != null:
 		states.set_game_data(raw_text)

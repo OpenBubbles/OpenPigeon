@@ -86,7 +86,7 @@ class SettingsSheet(
     var onClosed: (() -> Unit)? = null
     private var hasNotifiedClosed = false
 
-    private enum class Tab { BACKGROUND, BODY, HAIR, FACE, CLOTHING }
+    private enum class Tab { BACKGROUND, BODY, HAIR, FACE, CLOTHING, HATS }
 
     private var currentTab = Tab.HAIR
     private val tabViews = mutableMapOf<Tab, TextView>()
@@ -111,6 +111,7 @@ class SettingsSheet(
     fun addGameControl(label: String, controlView: View) {
         if (!::controlsSection.isInitialized) return
         controlsSection.isVisible = true
+        card.setPadding(0, 0, 0, 0)
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
@@ -231,30 +232,50 @@ class SettingsSheet(
 
     fun attachGameAvatar(gameRoot: FrameLayout) {
         gameAvatarView?.let {
-            if (it.parent != null) (it.parent as ViewGroup).removeView(it)
+            if (it.parent != null) {
+                (it.parent as ViewGroup).removeView(it)
+            }
         }
+
         val av = AvatarView(context).apply {
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
             )
             applyFromAvatarData()
         }
+
+        gameRoot.clipChildren = false
+        gameRoot.clipToPadding = false
         gameRoot.addView(av)
         gameAvatarView = av
+
+        AvatarView.configureTallAnchor(gameRoot)
     }
 
     fun attachOpponentAvatar(gameRoot: FrameLayout) {
         oppAvatarView?.let {
-            if (it.parent != null) (it.parent as ViewGroup).removeView(it)
+            if (it.parent != null) {
+                (it.parent as ViewGroup).removeView(it)
+            }
         }
+
         val av = AvatarView(context).apply {
             layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
             )
-            showPlaceholder()   // question mark until real data arrives
+            showPlaceholder()
         }
+
+        gameRoot.clipChildren = false
+        gameRoot.clipToPadding = false
         gameRoot.addView(av)
         oppAvatarView = av
+
+        AvatarView.configureTallAnchor(gameRoot)
     }
 
     fun applyOpponentAvatarString(avatarString: String) {
@@ -381,7 +402,7 @@ class SettingsSheet(
         }
 
         mainPreview = AvatarView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(110f), dp(88f))
+            layoutParams = LinearLayout.LayoutParams(dp(110f), dp(160f))
         }
 
         headerNameContainer = LinearLayout(context).apply {
@@ -444,10 +465,16 @@ class SettingsSheet(
         }
         Tab.values().forEach { tab ->
             val tv = TextView(context).apply {
-                text = tab.name.lowercase().replaceFirstChar { it.uppercase() }
-                textSize = 11f; setTextColor(COL_TAB_UNSEL); gravity = Gravity.CENTER
+                text = when (tab) {
+                    Tab.CLOTHING -> "Clothes"
+                    Tab.HATS -> "Acc"
+                    else -> tab.name.lowercase().replaceFirstChar { it.uppercase() }
+                }
+                textSize = 10f
+                setTextColor(COL_TAB_UNSEL)
+                gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(0, dp(36f), 1f)
-                setPadding(dp(2f), 0, dp(2f), 0)
+                setPadding(dp(1f), 0, dp(1f), 0)
                 setOnClickListener { selectTab(tab) }
             }
             tabViews[tab] = tv; tabBar.addView(tv)
@@ -465,8 +492,12 @@ class SettingsSheet(
         // Primary picker scroll
         pickerScroll = HorizontalScrollView(context).apply {
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(96f)
-            ).also { it.topMargin = dp(10f); it.bottomMargin = dp(4f) }
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(96f),
+            ).also {
+                it.topMargin = dp(10f)
+                it.bottomMargin = dp(4f)
+            }
             isHorizontalScrollBarEnabled = false
         }
         pickerRow = LinearLayout(context).apply {
@@ -801,7 +832,49 @@ class SettingsSheet(
                 }
                 showBrightnessSlider(AvatarData.clothingColor, AvatarData.clothingBrightness)
             }
+
+            Tab.HATS -> {
+                buildStylePicker(
+                    pickerRow,
+                    (0..12).map { "hat_$it" },
+                    AvatarData.headAccessoryStyle
+                ) { style ->
+                    AvatarData.headAccessoryStyle = style
+                    refreshMainPreview()
+                }
+
+                val faceAccessoryScroll = HorizontalScrollView(context).apply {
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        dp(96f)
+                    ).also {
+                        it.topMargin = dp(4f)
+                        it.bottomMargin = dp(4f)
+                    }
+                    isHorizontalScrollBarEnabled = false
+                }
+
+                val faceAccessoryRow = LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    setPadding(dp(12f), dp(4f), dp(12f), dp(4f))
+                }
+
+                faceAccessoryScroll.addView(faceAccessoryRow)
+
+                buildStylePicker(
+                    faceAccessoryRow,
+                    (1..14).map { "face_$it" },
+                    AvatarData.faceAccessoryStyle
+                ) { style ->
+                    AvatarData.faceAccessoryStyle = style
+                    refreshMainPreview()
+                }
+
+                addExtraRow(faceAccessoryScroll)
+            }
         }
+
+        card.setPadding(0, 0, 0, if (controlsSection.isVisible) 0 else dp(20f))
     }
 
     private fun onColorSwatchPicked(color: Int) {
@@ -824,8 +897,8 @@ class SettingsSheet(
         row.removeAllViews()
         styles.forEach { style ->
             val thumb = AvatarView(context).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(80f), dp(64f)).also {
-                    it.rightMargin = dp(8f)
+                layoutParams = LinearLayout.LayoutParams(dp(60f), dp(88f)).also {
+                    it.rightMargin = dp(6f)
                 }
                 background = pillBorder(style == selected)
                 applyPreview(previewStateFor(currentDrawState(), style))
@@ -866,6 +939,7 @@ class SettingsSheet(
         Tab.HAIR -> "hair${i + 1}"
         Tab.FACE -> "eyes${i + 1}"
         Tab.CLOTHING -> "clothing${i + 1}"
+        Tab.HATS -> "hat_$i"
     }
 
     // ── Preview state ─────────────────────────────────────────────────────────
@@ -876,6 +950,8 @@ class SettingsSheet(
         style.startsWith("eyes") -> base.copy(eyesStyle = style)
         style.startsWith("mouth") -> base.copy(mouthStyle = style)
         style.startsWith("clothing") -> base.copy(clothingStyle = style)
+        style.startsWith("hat_") -> base.copy(headAccessoryStyle = style)
+        style.startsWith("face_") -> base.copy(faceAccessoryStyle = style)
         else -> base
     }
 
@@ -893,7 +969,9 @@ class SettingsSheet(
         mouthStyle = AvatarData.mouthStyle,
         clothingStyle = AvatarData.clothingStyle,
         clothingColor = AvatarData.clothingColor,
-        clothingBrightness = AvatarData.clothingBrightness
+        clothingBrightness = AvatarData.clothingBrightness,
+        headAccessoryStyle = AvatarData.headAccessoryStyle,
+        faceAccessoryStyle = AvatarData.faceAccessoryStyle
     )
 
     private fun refreshMainPreview() {

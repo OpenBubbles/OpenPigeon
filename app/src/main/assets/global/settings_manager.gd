@@ -41,48 +41,43 @@ func get_game_name_from_path(scene_path: String) -> String:
 func ensure_avatar_defaults() -> void:
 	var AT = preload("res://global/avatar_textures/avatar_thumbnail.gd")
 
-	# Background style
-	var bg_style_val: String = str(get_setting("avatar_background", "style", ""))
-	if bg_style_val == "":
-		# If you want the first patterned background instead, use:
-		# set_setting("avatar_background", "style", _first_key(AT.avatar_background_regions, "Pattern 1"))
+	var bg_style_val := str(get_setting("avatar_background", "style", ""))
+	if bg_style_val.is_empty():
 		set_setting("avatar_background", "style", "Plain")
 
-	# Face: eyes, mouth
-	var eyes_val: String = str(get_setting("avatar_face", "eyes", ""))
-	if eyes_val == "":
+	var eyes_val := str(get_setting("avatar_face", "eyes", ""))
+	if eyes_val.is_empty():
 		set_setting("avatar_face", "eyes", _first_key(AT.avatar_eyes_regions, "eyes1"))
 
-	var mouth_val: String = str(get_setting("avatar_face", "mouth", ""))
-	if mouth_val == "":
+	var mouth_val := str(get_setting("avatar_face", "mouth", ""))
+	if mouth_val.is_empty():
 		set_setting("avatar_face", "mouth", _first_key(AT.avatar_mouth_regions, "mouth1"))
 
-	# Fshape (head style)
-	var fshape_val: String = str(get_setting("avatar_fshape", "head_style", ""))
-	if fshape_val == "":
+	var fshape_val := str(get_setting("avatar_fshape", "head_style", ""))
+	if fshape_val.is_empty():
 		set_setting("avatar_fshape", "head_style", _first_key(AT.avatar_fshape_regions, "Default"))
 
-	# Hair (both layers + legacy)
-	var hair_style_val: String = str(get_setting("avatar_hair_front", "style",
-		get_setting("avatar_hair", "style", "")))
-	if hair_style_val == "":
-		var first_hair: String = _first_key(AT.avatar_hair_regions, "hair1")
+	var hair_style_val := str(get_setting("avatar_hair_front", "style", get_setting("avatar_hair", "style", "")))
+	if hair_style_val.is_empty():
+		var first_hair := _first_key(AT.avatar_hair_regions, "hair1")
 		set_setting("avatar_hair_front", "style", first_hair)
 		set_setting("avatar_hair_back", "style", first_hair)
-		set_setting("avatar_hair", "style", first_hair) # legacy key for safety
+		set_setting("avatar_hair", "style", first_hair)
 
-	# Clothing style
-	var clothing_val: String = str(get_setting("avatar_clothing", "style", ""))
-	if clothing_val == "":
+	var clothing_val := str(get_setting("avatar_clothing", "style", ""))
+	if clothing_val.is_empty():
 		set_setting("avatar_clothing", "style", _first_key(AT.avatar_clothing_regions, "clothing1"))
 
-	# Accessories (head/face)
-	var head_acc: String = str(get_setting("avatar_accessories", "head_style", ""))
-	if head_acc == "" or head_acc == "None" or head_acc == "Headband":
+	var head_acc := str(get_setting("avatar_accessories", "head_style", ""))
+	if head_acc.is_empty() or head_acc == "None" or head_acc == "Headband":
 		set_setting("avatar_accessories", "head_style", "hat_0")
 	elif head_acc == "Hat1":
 		set_setting("avatar_accessories", "head_style", "hat_1")
 
-	var face_acc: String = str(get_setting("avatar_accessories", "face_style", ""))
-	if face_acc == "":
-		set_setting("avatar_accessories", "face_style", _first_key(AT.avatar_face_accessories_regions, "None"))
+	var face_acc := str(get_setting("avatar_accessories", "face_style", ""))
+	if face_acc.is_empty() or face_acc == "None" or face_acc == "Mask":
+		set_setting("avatar_accessories", "face_style", "face_1")
+	elif face_acc == "Glasses":
+		set_setting("avatar_accessories", "face_style", "face_2")
+	elif not AT.avatar_face_accessories_regions.has(face_acc):
+		set_setting("avatar_accessories", "face_style", "face_1")

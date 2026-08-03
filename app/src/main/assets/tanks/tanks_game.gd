@@ -2,8 +2,8 @@ extends BaseGame
 class_name TanksGame
 
 @onready var world: Node2D = %World
-@onready var player_avatar_display: Control = %PlayerAvatarDisplay
-@onready var opp_avatar_display: Control = %OppAvatarDisplay
+@onready var player_avatar_display: TextureButton = %PlayerAvatarDisplay
+@onready var opp_avatar_display: TextureButton = %OppAvatarDisplay
 @onready var sent_label: Label = %SentLabel
 @onready var win_loss_label: Label = %WinLossLabel
 @onready var terrain: TanksTerrain = %Terrain
@@ -159,8 +159,37 @@ func _ensure_core() -> void:
 	core.outbound_ready.connect(_send_payload)
 	core.opponent_avatar_ready.connect(_on_opponent_avatar_received)
 
+func _configure_tanks_avatar(avatar_button: TextureButton) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	avatar_button.clip_contents = false
+	avatar_button.scale = Vector2.ONE
+	avatar_button.custom_minimum_size = Vector2(96.0, 90.0)
+
+	var internal_viewport := avatar_button.get_node_or_null("SubViewportContainer/SubViewport") as SubViewport
+
+	if internal_viewport != null:
+		internal_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+
+	var internal_preview := avatar_button.get_node_or_null("SubViewportContainer") as SubViewportContainer
+
+	if internal_preview != null:
+		internal_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		internal_preview.visible = true
+		internal_preview.self_modulate = Color.WHITE
+		internal_preview.pivot_offset = Vector2(48.0, 140.0)
+		internal_preview.scale = Vector2.ONE
+
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
+
+	_configure_tanks_avatar(player_avatar_display)
+	_configure_tanks_avatar(opp_avatar_display)
+
+	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("update_display_from_settings"):
+		player_avatar_display.call_deferred("update_display_from_settings")
+
 	_ensure_core()
 
 	if is_instance_valid(fire_button):
@@ -267,6 +296,9 @@ func _set_game_data(raw_text: String) -> void:
 		win_loss_label.modulate.a = 1.0
 		
 	_ensure_core()
+
+	_configure_tanks_avatar(player_avatar_display)
+	_configure_tanks_avatar(opp_avatar_display)
 
 	core.ingest_game_data(JSON.stringify(data))
 	spectator_mode = core.spectator_mode
@@ -423,11 +455,13 @@ func _apply_view_flip() -> void:
 func _on_resized() -> void:
 	if is_instance_valid(sky):
 		sky.set_view_size(size)
-		
+
 func _on_opponent_avatar_received(avatar_data: Dictionary) -> void:
-	if is_instance_valid(opp_avatar_display):
-		if opp_avatar_display.has_method("update_avatar_from_data"):
-			opp_avatar_display.update_avatar_from_data(avatar_data)
+	if avatar_data.is_empty():
+		return
+
+	if is_instance_valid(opp_avatar_display) and opp_avatar_display.has_method("update_avatar_from_data"):
+		opp_avatar_display.call_deferred("update_avatar_from_data", avatar_data)
 
 func _apply_health_colors() -> void:
 	if not is_instance_valid(player_health) or not is_instance_valid(opp_health):
@@ -914,36 +948,15 @@ func _update_avatars() -> void:
 
 	if spectator_mode:
 		if core.avatar1_str != "":
-			player_avatar_display.call_deferred(
-				"update_avatar_from_data",
-				GameUtils._parse_avatar_string(
-					core.avatar1_str
-				)
-			)
+			player_avatar_display.call_deferred("update_avatar_from_data", GameUtils._parse_avatar_string(core.avatar1_str))
 
 		if core.avatar2_str != "":
-			opp_avatar_display.call_deferred(
-				"update_avatar_from_data",
-				GameUtils._parse_avatar_string(
-					core.avatar2_str
-				)
-			)
+			opp_avatar_display.call_deferred("update_avatar_from_data", GameUtils._parse_avatar_string(core.avatar2_str))
 
 		return
 
-	var my_str := (
-		core.avatar1_str
-			if core.player == 1
-			else core.avatar2_str
-	)
-
-	if my_str != "":
-		player_avatar_display.call_deferred(
-			"update_avatar_from_data",
-			GameUtils._parse_avatar_string(
-				my_str
-			)
-		)
+	if player_avatar_display.has_method("update_display_from_settings"):
+		player_avatar_display.call_deferred("update_display_from_settings")
 
 func _circle_intersects_rect(center: Vector2, radius: float, rect: Rect2) -> bool:
 	var closest_x: float = clampf(center.x, rect.position.x, rect.position.x + rect.size.x)

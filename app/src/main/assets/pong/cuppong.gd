@@ -39,8 +39,8 @@ func _replay_move_count(value: String) -> int:
 		return 0
 	return value.count("move:")
 
-@onready var opp_avatar_display = %OppAvatarDisplay
-@onready var player_avatar_display = %PlayerAvatarDisplay
+@onready var opp_avatar_display: TextureButton = %OppAvatarDisplay
+@onready var player_avatar_display: TextureButton = %PlayerAvatarDisplay
 @onready var winner_label: Label = %WinLossLabel
 @onready var balls_back_label: Label = %ballsBackLabel
 @onready var redemption_label: Label = %redemptionLabel
@@ -125,8 +125,37 @@ func _get_settings_avatar_display() -> Control:
 func _get_rules_title() -> String:
 	return "Cup Pong"
 
+func _configure_cuppong_avatar(avatar_button: TextureButton) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	avatar_button.clip_contents = false
+	avatar_button.scale = Vector2.ONE
+	avatar_button.custom_minimum_size = Vector2(96.0, 90.0)
+	avatar_button.texture_normal = null
+	avatar_button.texture_pressed = null
+	avatar_button.texture_hover = null
+	avatar_button.texture_disabled = null
+	avatar_button.texture_focused = null
+
+	var internal_viewport := avatar_button.get_node_or_null("SubViewportContainer/SubViewport") as SubViewport
+
+	if internal_viewport != null:
+		internal_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+
+	var internal_preview := avatar_button.get_node_or_null("SubViewportContainer") as SubViewportContainer
+
+	if internal_preview != null:
+		internal_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		internal_preview.visible = true
+		internal_preview.self_modulate = Color.WHITE
+		internal_preview.pivot_offset = Vector2(48.0, 140.0)
+		internal_preview.scale = Vector2.ONE
+
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
+	_configure_cuppong_avatar(player_avatar_display)
+	_configure_cuppong_avatar(opp_avatar_display)
 	screen_size = get_viewport().get_visible_rect().size
 
 	if is_instance_valid(main_overlay):
@@ -288,31 +317,43 @@ func _set_game_data(new_replay: String):
 	winner = parsed["winner"] if "winner" in parsed else ""
 	if winner != "":
 		game_over = check_winner()
-	var opponent_avatar_key = ""
-	var p1_id: String = parsed.get("player1", "")
-	var p2_id: String = parsed.get("player2", "")
+	var p1_id: String = str(parsed.get("player1", ""))
+	var p2_id: String = str(parsed.get("player2", ""))
+
 	spectator_mode = my_uuid != "" and p1_id != "" and p2_id != "" and my_uuid != p1_id and my_uuid != p2_id
+
 	if is_instance_valid(spectator_label):
 		spectator_label.visible = spectator_mode
+
 	if is_my_turn and not spectator_mode:
 		player = 2 if player == 1 else 1
-	elif spectator_mode: player = 1
-		
-	if player == 1 or spectator_mode:
-		opponent_avatar_key = "avatar2"
-	else:
-		opponent_avatar_key = "avatar1"
-		
-	if opponent_avatar_key != "" and parsed.has(opponent_avatar_key):
-		var avatar_string = parsed[opponent_avatar_key]
-		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
-		if is_instance_valid(opp_avatar_display):
+	elif spectator_mode:
+		player = 1
+
+	_configure_cuppong_avatar(player_avatar_display)
+	_configure_cuppong_avatar(opp_avatar_display)
+
+	if spectator_mode:
+		var player_avatar_string := str(parsed.get("avatar1", ""))
+		var opponent_avatar_string := str(parsed.get("avatar2", ""))
+
+		if player_avatar_string != "" and is_instance_valid(player_avatar_display):
+			var player_data := GameUtils._parse_avatar_string(player_avatar_string)
+			player_avatar_display.call_deferred("update_avatar_from_data", player_data)
+
+		if opponent_avatar_string != "" and is_instance_valid(opp_avatar_display):
+			var opponent_data := GameUtils._parse_avatar_string(opponent_avatar_string)
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
-	if spectator_mode and parsed.has("avatar1"):
-		var p1_data = GameUtils._parse_avatar_string(parsed["avatar1"])
-		if is_instance_valid(player_avatar_display):
-			player_avatar_display.call_deferred("update_avatar_from_data", p1_data)
-		
+	else:
+		if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("update_display_from_settings"):
+			player_avatar_display.call_deferred("update_display_from_settings")
+
+		var opponent_avatar_key := "avatar2" if player == 1 else "avatar1"
+		var opponent_avatar_string := str(parsed.get(opponent_avatar_key, ""))
+
+		if opponent_avatar_string != "" and is_instance_valid(opp_avatar_display):
+			var opponent_data := GameUtils._parse_avatar_string(opponent_avatar_string)
+			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 		
 	played_replay = false
 	redemption = false

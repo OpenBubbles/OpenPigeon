@@ -1113,6 +1113,10 @@ class PoolActivity : AppCompatActivity() {
 
         enableEdgeToEdge()
         setContentView(R.layout.activity_pool)
+        findViewById<FrameLayout>(R.id.poolRoot).apply {
+            clipChildren = false
+            clipToPadding = false
+        }
         val contentRoot = findViewById<FrameLayout>(android.R.id.content)
         ViewCompat.setOnApplyWindowInsetsListener(contentRoot) { _, insets ->
             insets
@@ -1160,6 +1164,10 @@ class PoolActivity : AppCompatActivity() {
             oppAvatarAnchor,
         )
 
+        gameAvatarAnchor.post {
+            updatePoolYouLabelLayer()
+        }
+
         avatarWinBurstController = AvatarWinBurstController(
             root = findViewById(
                 R.id.poolRoot,
@@ -1168,7 +1176,7 @@ class PoolActivity : AppCompatActivity() {
             opponentAnchor = oppAvatarAnchor,
         )
 
-        configureSettingsAvatarTarget()
+        updatePoolYouLabelLayer()
 
         val cueView = findViewById<FrameLayout>(R.id.cueView)
         val cueOverlay = findViewById<FrameLayout>(R.id.cueOverlay)
@@ -1946,43 +1954,9 @@ class PoolActivity : AppCompatActivity() {
         if (!spectatorMode) return
 
         runOnUiThread {
-            fun removeSpectatorTopSpace(anchor: FrameLayout) {
-                val anchorParams = anchor.layoutParams as? ViewGroup.MarginLayoutParams
-
-                if (anchorParams != null) {
-                    anchorParams.topMargin = 0
-                    anchor.layoutParams = anchorParams
-                }
-
-                anchor.setPadding(
-                    anchor.paddingLeft, 0, anchor.paddingRight, anchor.paddingBottom
-                )
-
-                anchor.translationY = 0f
-
-                for (index in 0 until anchor.childCount) {
-                    val child = anchor.getChildAt(index)
-
-                    val childParams = child.layoutParams as? ViewGroup.MarginLayoutParams
-
-                    if (childParams != null) {
-                        childParams.topMargin = 0
-                        child.layoutParams = childParams
-                    }
-
-                    child.setPadding(
-                        child.paddingLeft, 0, child.paddingRight, child.paddingBottom
-                    )
-
-                    child.translationY = 0f
-                    child.requestLayout()
-                }
-
-                anchor.requestLayout()
-            }
-
-            removeSpectatorTopSpace(gameAvatarAnchor)
-            removeSpectatorTopSpace(oppAvatarAnchor)
+            AvatarView.configureTallAnchor(gameAvatarAnchor)
+            AvatarView.configureTallAnchor(oppAvatarAnchor)
+            updatePoolYouLabelLayer()
         }
     }
 
@@ -3410,7 +3384,8 @@ class PoolActivity : AppCompatActivity() {
     }
 
     private fun applyAvatarToAnchor(
-        anchor: FrameLayout, avatarData: String
+        anchor: FrameLayout,
+        avatarData: String,
     ) {
         val avatar = findAvatarView(anchor) ?: return
 
@@ -3418,6 +3393,14 @@ class PoolActivity : AppCompatActivity() {
             avatar.showPlaceholder()
         } else {
             avatar.applyFromOpponentString(avatarData)
+        }
+
+        AvatarView.configureTallAnchor(anchor)
+
+        if (anchor === gameAvatarAnchor) {
+            anchor.post {
+                updatePoolYouLabelLayer()
+            }
         }
     }
 
@@ -3469,30 +3452,23 @@ class PoolActivity : AppCompatActivity() {
                 anchor = oppAvatarAnchor, avatarData = msg["avatar2"].orEmpty()
             )
 
-            hidePoolYouLabel()
+            updatePoolYouLabelLayer()
             alignSpectatorAvatarAnchors()
         }
     }
 
-    private fun hidePoolYouLabel() {
-        val root = findViewById<View>(R.id.poolRoot)
+    private fun updatePoolYouLabelLayer() {
+        val youLabel = findViewById<TextView>(R.id.youLabel)
+        val labelLayer = stateLabelDp(24f).toFloat()
 
-        fun hideInside(view: View) {
-            if (view is TextView && view.text?.toString()?.trim()
-                    ?.equals("You", ignoreCase = true) == true
-            ) {
-                view.visibility = View.VISIBLE
-                view.alpha = 0f
-            }
+        youLabel.visibility = View.VISIBLE
+        youLabel.alpha = if (spectatorMode) 0f else 1f
 
-            if (view is ViewGroup) {
-                for (index in 0 until view.childCount) {
-                    hideInside(view.getChildAt(index))
-                }
-            }
-        }
+        youLabel.elevation = labelLayer
+        youLabel.translationZ = labelLayer
 
-        hideInside(root)
+        gameAvatarAnchor.elevation = 0f
+        gameAvatarAnchor.translationZ = 0f
     }
 
     @SuppressLint("SetTextI18n")
@@ -3555,7 +3531,7 @@ class PoolActivity : AppCompatActivity() {
 
             findViewById<LinearLayout>(R.id.controls).visibility = View.GONE
 
-            hidePoolYouLabel()
+            updatePoolYouLabelLayer()
             alignSpectatorAvatarAnchors()
             showSpectatorLabel()
         }

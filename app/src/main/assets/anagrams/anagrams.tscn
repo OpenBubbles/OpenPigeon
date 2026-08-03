@@ -99,15 +99,6 @@ shader_parameter/burn_color = Color(0, 0, 0, 0)
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_4ax03"]
 bg_color = Color(1, 1, 1, 1)
 
-[sub_resource type="ViewportTexture" id="ViewportTexture_0k6o1"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_ix8dr"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
-[sub_resource type="ViewportTexture" id="ViewportTexture_56riw"]
-viewport_path = NodePath("SubViewportContainer/SubViewport")
-
 [sub_resource type="FontVariation" id="FontVariation_v2j8k"]
 variation_embolden = 0.75
 
@@ -560,9 +551,6 @@ unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-texture_normal = SubResource("ViewportTexture_0k6o1")
-texture_pressed = SubResource("ViewportTexture_ix8dr")
-texture_hover = SubResource("ViewportTexture_56riw")
 is_display_only = true
 
 [node name="Control" type="Control" parent="GameScreen/MarginContainer/VBoxContainer/Control2/MainScoreBoxContainer/ScoreBox/VBoxContainer2" unique_id=2054480046]

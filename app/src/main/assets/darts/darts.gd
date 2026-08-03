@@ -3,8 +3,8 @@ class_name DartsGame
 
 const MUSIC_STREAM := preload("res://global/audio/darts.ogg")
 
-@onready var opp_avatar_display = %OppAvatarDisplay
-@onready var player_avatar_display = %PlayerAvatarDisplay
+@onready var opp_avatar_display: TextureButton = %OppAvatarDisplay
+@onready var player_avatar_display: TextureButton = %PlayerAvatarDisplayy
 @onready var winner_label: Label = %WinLossLabel
 @onready var sent_label: Label = %SentLabel
 @onready var you_score_label: Label = %PlayerScoreLabel
@@ -139,7 +139,6 @@ func _get_settings_avatar_display() -> Control:
 func _get_rules_title() -> String:
 	return "Darts"
 
-
 func _get_rules_text() -> String:
 	return (
 		"[font_size=24][b]Goal[/b][/font_size]\n" +
@@ -176,7 +175,6 @@ func _get_rules_text() -> String:
 		"• If the second player also reaches exactly 0, the game ends in a draw.\n" +
 		"• If the second player does not reach 0, the first player wins."
 	)
-
 
 func _ensure_main_dart() -> bool:
 	if is_instance_valid(main_dart):
@@ -347,6 +345,41 @@ func _score_color_code(score: Array, world_pos: Vector3) -> String:
 		return "g" if base_is_white else "r"
 
 	return "w" if base_is_white else "b"
+
+func _configure_darts_avatar(avatar_button: TextureButton) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	avatar_button.clip_contents = false
+	avatar_button.scale = Vector2.ONE
+	avatar_button.custom_minimum_size = Vector2(96.0, 90.0)
+
+	var internal_viewport := avatar_button.get_node_or_null("SubViewportContainer/SubViewport") as SubViewport
+
+	if internal_viewport != null:
+		internal_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+
+	var internal_preview := avatar_button.get_node_or_null("SubViewportContainer") as SubViewportContainer
+
+	if internal_preview != null:
+		internal_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		internal_preview.visible = true
+		internal_preview.self_modulate = Color.WHITE
+		internal_preview.pivot_offset = Vector2(48.0, 140.0)
+		internal_preview.scale = Vector2.ONE
+
+func _initialize_darts_avatars() -> void:
+	if not is_instance_valid(player_avatar_display):
+		player_avatar_display = get_node_or_null("%PlayerAvatarDisplay") as TextureButton
+
+	if not is_instance_valid(opp_avatar_display):
+		opp_avatar_display = get_node_or_null("%OppAvatarDisplay") as TextureButton
+
+	_configure_darts_avatar(player_avatar_display)
+	_configure_darts_avatar(opp_avatar_display)
+
+	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("update_display_from_settings"):
+		player_avatar_display.call_deferred("update_display_from_settings")
 
 func _score_popup_path(score: Array, world_pos: Vector3, bust: bool = false) -> String:
 	if bust:
@@ -1159,7 +1192,9 @@ func _open_darts_rules_popup() -> void:
 		self,
 		darts_menu_button,
 		_get_rules_title(),
-		_get_rules_text()
+		_get_rules_text(),
+		func():
+			_rules_open = false
 	)
 
 	call_deferred(
@@ -1302,6 +1337,8 @@ func _on_game_ready():
 		]
 	)
 
+	call_deferred("_initialize_darts_avatars")
+
 	_ensure_main_dart()
 	_setup_dart_indicator()
 	_setup_points_to_win_popup()
@@ -1407,16 +1444,29 @@ func _set_game_data(new_replay: String):
 		" opponent_avatar_key=", opponent_avatar_key
 	])
 
-	if opponent_avatar_key != "" and parsed.has(opponent_avatar_key):
-		var avatar_string = parsed[opponent_avatar_key]
-		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
-		if is_instance_valid(opp_avatar_display):
-			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+	_configure_darts_avatar(player_avatar_display)
+	_configure_darts_avatar(opp_avatar_display)
 
-	if spectator_mode and parsed.has("avatar1"):
-		var p1_data = GameUtils._parse_avatar_string(parsed["avatar1"])
-		if is_instance_valid(player_avatar_display):
-			player_avatar_display.call_deferred("update_avatar_from_data", p1_data)
+	if spectator_mode:
+		var player_avatar_string := String(parsed.get("avatar1", ""))
+		var opponent_avatar_string := String(parsed.get("avatar2", ""))
+
+		if player_avatar_string != "" and is_instance_valid(player_avatar_display):
+			var player_data := GameUtils._parse_avatar_string(player_avatar_string)
+			player_avatar_display.call_deferred("update_avatar_from_data", player_data)
+
+		if opponent_avatar_string != "" and is_instance_valid(opp_avatar_display):
+			var opponent_data := GameUtils._parse_avatar_string(opponent_avatar_string)
+			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+	else:
+		if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("update_display_from_settings"):
+			player_avatar_display.call_deferred("update_display_from_settings")
+
+		var opponent_avatar_string := String(parsed.get(opponent_avatar_key, ""))
+
+		if opponent_avatar_string != "" and is_instance_valid(opp_avatar_display):
+			var opponent_data := GameUtils._parse_avatar_string(opponent_avatar_string)
+			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
 	stop_waiting_animation()
 	redemption_active = false

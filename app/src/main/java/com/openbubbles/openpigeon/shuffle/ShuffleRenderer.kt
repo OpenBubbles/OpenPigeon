@@ -1344,6 +1344,12 @@ class ShuffleRenderer @JvmOverloads constructor(
         }
     }
 
+    fun hudColorForPlayer(
+        player: Int,
+    ): Int {
+        return playerHudColor(player)
+    }
+
     private fun playerArrowColor(
         player: Int,
     ): Int {
@@ -2127,7 +2133,7 @@ class ShuffleRenderer @JvmOverloads constructor(
         )
 
         val avatarCenterY = dp(
-            40f,
+            52f,
         ) + avatarHeight / 2f
 
         val leftTextX = dp(
@@ -2164,20 +2170,18 @@ class ShuffleRenderer @JvmOverloads constructor(
             6f,
         ) - (textPaint.descent() + textPaint.ascent()) / 2f
 
-        drawOutlinedHudText(
-            canvas = canvas,
-            text = if (spectatorMode) {
-                "Player 1"
-            } else {
-                "You"
-            },
-            x = leftTextX,
-            baseline = playerLabelBaseline,
-            alignment = Paint.Align.LEFT,
-            fillColor = playerHudColor(
-                leftHudPlayer,
-            ),
-        )
+        if (spectatorMode) {
+            drawOutlinedHudText(
+                canvas = canvas,
+                text = "Player 1",
+                x = leftTextX,
+                baseline = playerLabelBaseline,
+                alignment = Paint.Align.LEFT,
+                fillColor = playerHudColor(
+                    leftHudPlayer,
+                ),
+            )
+        }
 
         if (spectatorMode) {
             drawOutlinedHudText(

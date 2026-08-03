@@ -117,6 +117,7 @@ class GolfActivity : AppCompatActivity() {
     private var topHudInsetPx = 0
 
     private val avatarBarTopPaddingDp = 6
+    private val tallAvatarTopPaddingDp = 43
     private val avatarBarSidePaddingDp = 12
 
     private val generator = GolfMapGenerator()
@@ -611,9 +612,9 @@ class GolfActivity : AppCompatActivity() {
             setUiLayer(this, LAYER_HUD)
 
             layoutParams = FrameLayout.LayoutParams(
-                dp(64), dp(48), Gravity.TOP or Gravity.START
+                dp(58), dp(44), Gravity.TOP or Gravity.START
             ).apply {
-                topMargin = dp(avatarBarTopPaddingDp)
+                topMargin = dp(tallAvatarTopPaddingDp)
                 marginStart = dp(avatarBarSidePaddingDp)
             }
         }
@@ -625,9 +626,9 @@ class GolfActivity : AppCompatActivity() {
             setUiLayer(this, LAYER_HUD)
 
             layoutParams = FrameLayout.LayoutParams(
-                dp(64), dp(48), Gravity.TOP or Gravity.END
+                dp(58), dp(44), Gravity.TOP or Gravity.END
             ).apply {
-                topMargin = dp(avatarBarTopPaddingDp)
+                topMargin = dp(tallAvatarTopPaddingDp)
                 marginEnd = dp(avatarBarSidePaddingDp)
             }
         }
@@ -727,12 +728,12 @@ class GolfActivity : AppCompatActivity() {
 
         val anchorWidth =
             gameAvatarAnchor.width.takeIf { it > 0 } ?: anchorParams.width.takeIf { it > 0 } ?: dp(
-                64
+                58
             )
 
         val anchorHeight =
             gameAvatarAnchor.height.takeIf { it > 0 } ?: anchorParams.height.takeIf { it > 0 }
-            ?: dp(48)
+            ?: dp(44)
 
         val labelWidth = localAvatarYouLabel.width.takeIf { it > 0 }
             ?: localAvatarYouLabel.layoutParams?.width?.takeIf { it > 0 } ?: dp(42)
@@ -748,7 +749,7 @@ class GolfActivity : AppCompatActivity() {
         }
 
         localAvatarYouLabel.layoutParams = params
-        setUiLayer(localAvatarYouLabel, LAYER_HUD)
+        setUiLayer(localAvatarYouLabel, LAYER_HUD + 20f)
         localAvatarYouLabel.bringToFront()
 
         bringGameMenuToFront()
@@ -801,7 +802,7 @@ class GolfActivity : AppCompatActivity() {
             setPadding(0, 0, 0, 0)
             background = null
             setShadowLayer(3f, 0f, 1f, Color.argb(170, 0, 0, 0))
-            setUiLayer(this, LAYER_HUD)
+            setUiLayer(this, LAYER_HUD + 20f)
 
             layoutParams = FrameLayout.LayoutParams(
                 dp(42), dp(20), Gravity.TOP or Gravity.START
@@ -869,10 +870,10 @@ class GolfActivity : AppCompatActivity() {
         val anchorParams = anchor.layoutParams as? FrameLayout.LayoutParams ?: return
 
         val anchorWidth =
-            anchor.width.takeIf { it > 0 } ?: anchorParams.width.takeIf { it > 0 } ?: dp(64)
+            anchor.width.takeIf { it > 0 } ?: anchorParams.width.takeIf { it > 0 } ?: dp(58)
 
         val anchorHeight =
-            anchor.height.takeIf { it > 0 } ?: anchorParams.height.takeIf { it > 0 } ?: dp(48)
+            anchor.height.takeIf { it > 0 } ?: anchorParams.height.takeIf { it > 0 } ?: dp(44)
 
         val counterSize = (anchorHeight * 1.12f).toInt().coerceIn(dp(50), dp(58))
 
@@ -918,13 +919,14 @@ class GolfActivity : AppCompatActivity() {
     }
 
     private fun applyTopHudLayout() {
-        val top = topHudInsetPx + dp(avatarBarTopPaddingDp)
+        val avatarTop = topHudInsetPx + dp(tallAvatarTopPaddingDp)
+        val labelTop = topHudInsetPx + dp(avatarBarTopPaddingDp)
         val side = dp(avatarBarSidePaddingDp)
 
         if (::gameAvatarAnchor.isInitialized) {
             (gameAvatarAnchor.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
                 params.gravity = Gravity.TOP or Gravity.START
-                params.topMargin = top
+                avatarTop.also { params.topMargin = it }
                 params.marginStart = side
                 gameAvatarAnchor.layoutParams = params
             }
@@ -933,7 +935,7 @@ class GolfActivity : AppCompatActivity() {
         if (::oppAvatarAnchor.isInitialized) {
             (oppAvatarAnchor.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
                 params.gravity = Gravity.TOP or Gravity.END
-                params.topMargin = top
+                params.topMargin = avatarTop
                 params.marginEnd = side
                 oppAvatarAnchor.layoutParams = params
             }
@@ -942,7 +944,7 @@ class GolfActivity : AppCompatActivity() {
         if (::stateLabel.isInitialized) {
             (stateLabel.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
                 params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                params.topMargin = top + dp(4)
+                params.topMargin = labelTop + dp(4)
                 stateLabel.layoutParams = params
             }
         }
@@ -950,7 +952,7 @@ class GolfActivity : AppCompatActivity() {
         if (::spectatorLabel.isInitialized) {
             (spectatorLabel.layoutParams as? FrameLayout.LayoutParams)?.let { params ->
                 params.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                params.topMargin = top + dp(4)
+                params.topMargin = labelTop + dp(4)
                 spectatorLabel.layoutParams = params
             }
         }
@@ -969,21 +971,7 @@ class GolfActivity : AppCompatActivity() {
         anchor.clipChildren = false
         anchor.clipToPadding = false
 
-        for (i in 0 until anchor.childCount) {
-            val child = anchor.getChildAt(i)
-
-            child.layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                Gravity.CENTER
-            )
-
-            child.scaleX = 1f
-            child.scaleY = 1f
-            child.translationX = 0f
-            child.translationY = 0f
-        }
-
+        AvatarView.configureTallAnchor(anchor)
         anchor.requestLayout()
     }
 
@@ -999,7 +987,7 @@ class GolfActivity : AppCompatActivity() {
         val container = FrameLayout(this).apply {
             clipChildren = false
             clipToPadding = false
-            setUiLayer(this, LAYER_HUD)
+            setUiLayer(this, LAYER_HUD + 20f)
             isClickable = false
             isFocusable = false
 

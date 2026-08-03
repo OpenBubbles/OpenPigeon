@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -98,6 +99,7 @@ import com.openbubbles.openpigeon.ui.GameMenuPlacement
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.foundation.layout.BoxWithConstraints
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -1628,39 +1630,94 @@ fun rememberAssetBitmap(context: Context, path: String): androidx.compose.ui.gra
 }
 
 @Composable
-fun RenderLobbyAvatar(avatarData: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(percent = 50))
-            .background(Color.White)
-            .border(1.dp, Color(0x22000000), RoundedCornerShape(percent = 50)),
-        contentAlignment = Alignment.Center
+fun RenderLobbyAvatar(
+    avatarData: String,
+    modifier: Modifier = Modifier,
+    previewScale: Float = 1f,
+    horizontalInset: Dp = 0.dp,
+) {
+    BoxWithConstraints(
+        modifier = modifier.graphicsLayer {
+            clip = false
+        },
+        contentAlignment = Alignment.Center,
     ) {
-        AndroidView(modifier = Modifier.fillMaxSize(), factory = { context ->
-            AvatarView(context).apply {
-                setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                alpha = 1f
-                elevation = 0f
-                try {
-                    applyFromOpponentString(avatarData)
-                    tag = avatarData
-                } catch (e: Exception) {
-                    OpenPigeonLog.e("Crazy8", "Failed to render lobby avatar", e)
-                    showPlaceholder()
-                }
-            }
-        }, update = { view ->
-            val lastApplied = view.tag as? String
-            if (lastApplied == avatarData) return@AndroidView
+        val previewWidth =
+            maxWidth * previewScale
 
-            try {
-                view.applyFromOpponentString(avatarData)
-                view.tag = avatarData
-            } catch (e: Exception) {
-                OpenPigeonLog.e("Crazy8", "Failed to update lobby avatar", e)
-                view.showPlaceholder()
-            }
-        })
+        val fullAvatarHeight =
+            previewWidth * (140f / 96f)
+
+        val verticalCorrection =
+            fullAvatarHeight * 0.25f
+
+        AndroidView(
+            modifier = Modifier
+                .offset(
+                    x = horizontalInset,
+                    y = -verticalCorrection,
+                )
+                .requiredSize(
+                    width = previewWidth,
+                    height = fullAvatarHeight,
+                )
+                .graphicsLayer {
+                    clip = false
+                }
+                .zIndex(
+                    3f,
+                ),
+            factory = { context ->
+                AvatarView(
+                    context,
+                ).apply {
+                    setBackgroundColor(
+                        android.graphics.Color.TRANSPARENT,
+                    )
+
+                    alpha = 1f
+                    elevation = 0f
+
+                    try {
+                        applyFromOpponentString(
+                            avatarData,
+                        )
+
+                        tag = avatarData
+                    } catch (e: Exception) {
+                        OpenPigeonLog.e(
+                            "Crazy8",
+                            "Failed to render lobby avatar",
+                            e,
+                        )
+
+                        showPlaceholder()
+                    }
+                }
+            },
+            update = { view ->
+                val lastApplied =
+                    view.tag as? String
+
+                if (lastApplied != avatarData) {
+                    try {
+                        view.applyFromOpponentString(
+                            avatarData,
+                        )
+
+                        view.tag = avatarData
+                    } catch (e: Exception) {
+                        OpenPigeonLog.e(
+                            "Crazy8",
+                            "Failed to update lobby avatar",
+                            e,
+                        )
+
+                        view.showPlaceholder()
+                    }
+                }
+            },
+        )
     }
 }
 
@@ -3874,103 +3931,125 @@ fun RenderWaiting(
                 verticalArrangement = Arrangement.Center,
             ) {
                 for (participant in participants) {
-                    ElevatedCard(
-                        modifier = Modifier.padding(
-                            horizontal = 16.dp,
-                            vertical = 5.dp,
-                        ),
-                        shape = RoundedCornerShape(
-                            32.dp,
-                        ),
-                        elevation = CardDefaults.cardElevation(
-                            defaultElevation = 6.dp,
-                        ),
+                    val bubbleText =
+                        activity?.lobbySpeechBubbles?.get(
+                            participant.id,
+                        )
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 16.dp,
+                                vertical = 5.dp,
+                            )
+                            .height(
+                                58.dp,
+                            ),
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .padding(
-                                    horizontal = 4.dp,
-                                    vertical = 3.dp,
-                                )
-                                .fillMaxWidth(),
+                        ElevatedCard(
+                            modifier = Modifier.matchParentSize(),
+                            shape = RoundedCornerShape(
+                                32.dp,
+                            ),
+                            elevation = CardDefaults.cardElevation(
+                                defaultElevation = 6.dp,
+                            ),
                         ) {
-                            RenderLobbyAvatar(
-                                avatarData = participant.avatar,
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(
+                                        horizontal = 4.dp,
+                                        vertical = 3.dp,
+                                    ),
+                            ) {
+                                Text(
+                                    text = participant.name,
+                                    modifier = Modifier
+                                        .align(
+                                            Alignment.Center,
+                                        )
+                                        .zIndex(
+                                            2f,
+                                        ),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 15.sp,
+                                )
+
+                                Icon(
+                                    imageVector = Icons.Rounded.CheckCircle,
+                                    contentDescription = "Ready",
+                                    modifier = Modifier
+                                        .align(
+                                            Alignment.CenterEnd,
+                                        )
+                                        .alpha(
+                                            if (participant.ready) {
+                                                1f
+                                            } else {
+                                                0f
+                                            },
+                                        ),
+                                    tint = Color(
+                                        0xFF06402B,
+                                    ),
+                                )
+
+                                Text(
+                                    text = "—",
+                                    modifier = Modifier
+                                        .align(
+                                            Alignment.CenterEnd,
+                                        )
+                                        .alpha(
+                                            if (participant.ready) {
+                                                0f
+                                            } else {
+                                                1f
+                                            },
+                                        )
+                                        .padding(
+                                            horizontal = 5.dp,
+                                        ),
+                                    color = Color.DarkGray,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 25.sp,
+                                )
+                            }
+                        }
+
+                        RenderLobbyAvatar(
+                            avatarData = participant.avatar,
+                            previewScale = 0.8f,
+                            horizontalInset = 2.dp,
+                            modifier = Modifier
+                                .align(
+                                    Alignment.CenterStart,
+                                )
+                                .size(
+                                    width = 72.dp,
+                                    height = 52.dp,
+                                )
+                                .zIndex(
+                                    4f,
+                                ),
+                        )
+
+                        if (!bubbleText.isNullOrBlank()) {
+                            LobbyAvatarSpeechBubble(
+                                text = bubbleText,
                                 modifier = Modifier
                                     .align(
                                         Alignment.CenterStart,
                                     )
-                                    .size(
-                                        width = 72.dp,
-                                        height = 52.dp,
-                                    ),
-                            )
-
-                            val bubbleText = activity?.lobbySpeechBubbles?.get(
-                                participant.id,
-                            )
-
-                            if (!bubbleText.isNullOrBlank()) {
-                                LobbyAvatarSpeechBubble(
-                                    text = bubbleText,
-                                    modifier = Modifier
-                                        .align(
-                                            Alignment.CenterStart,
-                                        )
-                                        .offset(
-                                            x = 42.dp,
-                                            y = (-6).dp,
-                                        ),
-                                )
-                            }
-
-                            Text(
-                                text = participant.name,
-                                modifier = Modifier.align(
-                                    Alignment.Center,
-                                ),
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 15.sp,
-                            )
-
-                            Icon(
-                                imageVector = Icons.Rounded.CheckCircle,
-                                contentDescription = "Ready",
-                                modifier = Modifier
-                                    .align(
-                                        Alignment.CenterEnd,
+                                    .offset(
+                                        x = 54.dp,
+                                        y = (-6).dp,
                                     )
-                                    .alpha(
-                                        if (participant.ready) {
-                                            1f
-                                        } else {
-                                            0f
-                                        },
+                                    .zIndex(
+                                        5f,
                                     ),
-                                tint = Color(
-                                    0xFF06402B,
-                                ),
-                            )
-
-                            Text(
-                                text = "—",
-                                modifier = Modifier
-                                    .align(
-                                        Alignment.CenterEnd,
-                                    )
-                                    .alpha(
-                                        if (participant.ready) {
-                                            0f
-                                        } else {
-                                            1f
-                                        },
-                                    )
-                                    .padding(
-                                        horizontal = 5.dp,
-                                    ),
-                                color = Color.DarkGray,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 25.sp,
                             )
                         }
                     }

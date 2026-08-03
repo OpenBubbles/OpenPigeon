@@ -152,6 +152,13 @@ alignment = 1
 layout_mode = 2
 size_flags_vertical = 4
 
+[node name="PlayerAvatarDisplay" parent="MarginContainer/InfoHBoxContainer/VBoxContainer" unique_id=151015637 instance=ExtResource("6_1ko3n")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+is_display_only = true
+
 [node name="YouLabel" type="Label" parent="MarginContainer/InfoHBoxContainer/VBoxContainer" unique_id=1917252504]
 unique_name_in_owner = true
 layout_mode = 2
@@ -161,13 +168,6 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
-
-[node name="PlayerAvatarDisplay" parent="MarginContainer/InfoHBoxContainer/VBoxContainer" unique_id=151015637 instance=ExtResource("6_1ko3n")]
-unique_name_in_owner = true
-layout_mode = 2
-size_flags_horizontal = 4
-size_flags_vertical = 4
-is_display_only = true
 
 [node name="GameAreaCenterContainer" type="CenterContainer" parent="MarginContainer/InfoHBoxContainer" unique_id=1577027218]
 layout_mode = 2
@@ -214,10 +214,6 @@ texture_hover = ExtResource("4_elfvu")
 layout_mode = 2
 size_flags_vertical = 4
 
-[node name="Label" type="Control" parent="MarginContainer/InfoHBoxContainer/VBoxContainer2" unique_id=743121182]
-custom_minimum_size = Vector2(0, 26)
-layout_mode = 2
-
 [node name="OppAvatarDisplay" parent="MarginContainer/InfoHBoxContainer/VBoxContainer2" unique_id=1528264790 instance=ExtResource("6_1ko3n")]
 unique_name_in_owner = true
 layout_mode = 2
@@ -225,6 +221,10 @@ size_flags_horizontal = 1
 size_flags_vertical = 4
 is_display_only = true
 controlled_by_data = true
+
+[node name="Label" type="Control" parent="MarginContainer/InfoHBoxContainer/VBoxContainer2" unique_id=743121182]
+custom_minimum_size = Vector2(0, 26)
+layout_mode = 2
 
 [node name="SpecLabel" type="Label" parent="MarginContainer" unique_id=1510871011]
 unique_name_in_owner = true

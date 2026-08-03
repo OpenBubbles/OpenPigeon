@@ -33,8 +33,8 @@ var StoreScene  : PackedScene = preload("res://mancala/store.tscn")
 var StoneScene : PackedScene = preload("res://mancala/stone.tscn")
 const MUSIC_STREAM := preload("res://global/audio/mancala.ogg")
 
-@onready var player_avatar_display = %PlayerAvatarDisplay
-@onready var opp_avatar_display = %OppAvatarDisplay
+@onready var player_avatar_display: TextureButton = %PlayerAvatarDisplay
+@onready var opp_avatar_display: TextureButton = %OppAvatarDisplay
 @onready var sent_label = %SentLabel
 @onready var background = %Background
 @onready var win_loss_label = %WinLossLabel
@@ -104,8 +104,37 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		dbg("unhandled_click pos=%s" % str(event.position))
 
+func _configure_mancala_avatar(avatar_button: TextureButton) -> void:
+	if not is_instance_valid(avatar_button):
+		return
+
+	avatar_button.clip_contents = false
+	avatar_button.scale = Vector2.ONE
+	avatar_button.custom_minimum_size = Vector2(96.0, 90.0)
+
+	var internal_viewport := avatar_button.get_node_or_null("SubViewportContainer/SubViewport") as SubViewport
+
+	if internal_viewport != null:
+		internal_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+
+	var internal_preview := avatar_button.get_node_or_null("SubViewportContainer") as SubViewportContainer
+
+	if internal_preview != null:
+		internal_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		internal_preview.visible = true
+		internal_preview.self_modulate = Color.WHITE
+		internal_preview.pivot_offset = Vector2(48.0, 140.0)
+		internal_preview.scale = Vector2.ONE
+
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
+
+	_configure_mancala_avatar(player_avatar_display)
+	_configure_mancala_avatar(opp_avatar_display)
+
+	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("update_display_from_settings"):
+		player_avatar_display.call_deferred("update_display_from_settings")
+
 	game_settings_category = SettingsManager.get_game_name_from_path(get_tree().current_scene.scene_file_path)
 	OpLog.i(LOG_TAG, ["game_ready settings_category=", game_settings_category])
 
@@ -241,6 +270,9 @@ func _set_game_data(raw_text: String) -> void:
 	if is_instance_valid(you_label):
 		you_label.modulate.a = 0.0 if spectator_mode else 1.0
 
+	_configure_mancala_avatar(player_avatar_display)
+	_configure_mancala_avatar(opp_avatar_display)
+
 	if spectator_mode:
 		OpLog.i(LOG_TAG, "spectator_mode_enabled")
 
@@ -249,21 +281,28 @@ func _set_game_data(raw_text: String) -> void:
 
 		is_my_turn = false
 
-		if res.has("avatar1") and is_instance_valid(player_avatar_display):
-			player_avatar_display.call_deferred("update_avatar_from_data", GameUtils._parse_avatar_string(str(res["avatar1"])))
+		var player_avatar_string := str(res.get("avatar1", ""))
+		var opponent_avatar_string := str(res.get("avatar2", ""))
 
-		if res.has("avatar2") and is_instance_valid(opp_avatar_display):
-			opp_avatar_display.call_deferred("update_avatar_from_data", GameUtils._parse_avatar_string(str(res["avatar2"])))
+		if player_avatar_string != "" and is_instance_valid(player_avatar_display):
+			var player_data := GameUtils._parse_avatar_string(player_avatar_string)
+			player_avatar_display.call_deferred("update_avatar_from_data", player_data)
+
+		if opponent_avatar_string != "" and is_instance_valid(opp_avatar_display):
+			var opponent_data := GameUtils._parse_avatar_string(opponent_avatar_string)
+			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 	else:
 		if is_instance_valid(spec_label):
 			spec_label.visible = false
 
-		if opponent_avatar_key != "" and res.has(opponent_avatar_key):
-			var avatar_string = res[opponent_avatar_key]
-			var opponent_data = GameUtils._parse_avatar_string(avatar_string)
+		if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("update_display_from_settings"):
+			player_avatar_display.call_deferred("update_display_from_settings")
 
-			if is_instance_valid(opp_avatar_display):
-				opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
+		var opponent_avatar_string := str(res.get(opponent_avatar_key, ""))
+
+		if opponent_avatar_string != "" and is_instance_valid(opp_avatar_display):
+			var opponent_data := GameUtils._parse_avatar_string(opponent_avatar_string)
+			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
 	OpLog.i(LOG_TAG, [
 		"resolved_player player=", player,

@@ -455,9 +455,18 @@ theme_override_constants/separation = 0
 alignment = 1
 
 [node name="Control" type="Control" parent="PanelContainer/Player1BoardContainer/VBoxContainer" unique_id=263444050]
-custom_minimum_size = Vector2(0, 20)
+custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 mouse_filter = 2
+
+[node name="P1AvatarDisplay" parent="PanelContainer/Player1BoardContainer/VBoxContainer" unique_id=217387468 instance=ExtResource("8_0ayae")]
+unique_name_in_owner = true
+z_index = 5
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+is_display_only = true
+controlled_by_data = true
 
 [node name="P1YouLabel" type="Label" parent="PanelContainer/Player1BoardContainer/VBoxContainer" unique_id=32039645]
 unique_name_in_owner = true
@@ -468,15 +477,6 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
-
-[node name="P1AvatarDisplay" parent="PanelContainer/Player1BoardContainer/VBoxContainer" unique_id=217387468 instance=ExtResource("8_0ayae")]
-unique_name_in_owner = true
-z_index = 5
-layout_mode = 2
-size_flags_horizontal = 4
-size_flags_vertical = 4
-is_display_only = true
-controlled_by_data = true
 
 [node name="CenterContainer" type="CenterContainer" parent="PanelContainer/Player1BoardContainer/VBoxContainer" unique_id=774056009]
 layout_mode = 2
@@ -514,9 +514,18 @@ theme_override_constants/separation = 0
 alignment = 1
 
 [node name="Control" type="Control" parent="PanelContainer/Player2BoardContainer/VBoxContainer" unique_id=379758072]
-custom_minimum_size = Vector2(0, 20)
+custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 mouse_filter = 2
+
+[node name="P2AvatarDisplay" parent="PanelContainer/Player2BoardContainer/VBoxContainer" unique_id=1318610400 instance=ExtResource("8_0ayae")]
+unique_name_in_owner = true
+z_index = 5
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+is_display_only = true
+controlled_by_data = true
 
 [node name="P2YouLabel" type="Label" parent="PanelContainer/Player2BoardContainer/VBoxContainer" unique_id=1339274672]
 unique_name_in_owner = true
@@ -527,15 +536,6 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_font_sizes/font_size = 18
 text = "You"
 horizontal_alignment = 1
-
-[node name="P2AvatarDisplay" parent="PanelContainer/Player2BoardContainer/VBoxContainer" unique_id=1318610400 instance=ExtResource("8_0ayae")]
-unique_name_in_owner = true
-z_index = 5
-layout_mode = 2
-size_flags_horizontal = 4
-size_flags_vertical = 4
-is_display_only = true
-controlled_by_data = true
 
 [node name="CenterContainer" type="CenterContainer" parent="PanelContainer/Player2BoardContainer/VBoxContainer" unique_id=1913121538]
 layout_mode = 2

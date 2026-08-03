@@ -447,11 +447,21 @@ class GameUI {
                     androidx.compose.ui.viewinterop.AndroidView(
                         factory = { ctx ->
                             com.openbubbles.openpigeon.settings.AvatarView(ctx).apply {
+                                tag = WordHuntActivity.LOCAL_AVATAR_VIEW_TAG
                                 applyFromAvatarData()
                             }
-                        }, modifier = Modifier
-                            .size(70.dp, 56.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                        },
+                        update = { avatarView ->
+                            avatarView.applyFromAvatarData()
+                        },
+                        modifier = Modifier
+                            .offset(
+                                y = (-12).dp,
+                            )
+                            .size(
+                                width = 47.dp,
+                                height = 68.dp,
+                            ),
                     )
 
                     Column(
@@ -1220,7 +1230,7 @@ class GameUI {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.width(
-                    80.dp,
+                    72.dp,
                 ),
             ) {
                 Text(
@@ -1236,13 +1246,28 @@ class GameUI {
                     },
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .offset(
+                            y = if (playerLabel == "You") {
+                                12.dp
+                            } else {
+                                0.dp
+                            },
+                        )
+                        .zIndex(
+                            3f,
+                        ),
                 )
 
                 Box(
-                    modifier = Modifier.size(
-                        width = 80.dp,
-                        height = 64.dp,
-                    ),
+                    modifier = Modifier
+                        .size(
+                            width = 80.dp,
+                            height = 117.dp,
+                        )
+                        .zIndex(
+                            1f,
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     AvatarWinBurstOverlay(
@@ -1251,6 +1276,9 @@ class GameUI {
                             .requiredSize(
                                 width = 136.dp,
                                 height = 108.dp,
+                            )
+                            .offset(
+                                y = 24.dp,
                             )
                             .zIndex(
                                 0f,
@@ -1263,16 +1291,15 @@ class GameUI {
                                 com.openbubbles.openpigeon.settings.AvatarView(
                                     context,
                                 ).apply {
+                                    tag = WordHuntActivity.LOCAL_AVATAR_VIEW_TAG
                                     applyFromAvatarData()
                                 }
                             },
+                            update = { avatarView ->
+                                avatarView.applyFromAvatarData()
+                            },
                             modifier = Modifier
                                 .fillMaxSize()
-                                .clip(
-                                    RoundedCornerShape(
-                                        8.dp,
-                                    ),
-                                )
                                 .zIndex(
                                     1f,
                                 ),
@@ -1303,11 +1330,6 @@ class GameUI {
                             },
                             modifier = Modifier
                                 .fillMaxSize()
-                                .clip(
-                                    RoundedCornerShape(
-                                        8.dp,
-                                    ),
-                                )
                                 .zIndex(
                                     1f,
                                 ),

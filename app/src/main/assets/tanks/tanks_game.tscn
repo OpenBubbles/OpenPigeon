@@ -186,6 +186,7 @@ layout_mode = 2
 
 [node name="YouLabel" type="Label" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/PlayerContainer" unique_id=67952328]
 unique_name_in_owner = true
+z_index = 2
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 1)
@@ -282,6 +283,7 @@ size_flags_horizontal = 3
 layout_mode = 2
 
 [node name="OppLabel" type="Control" parent="MarginContainer/Overlay/MarginContainer/TopInfoHBoxContainer/OppContainer" unique_id=919922178]
+z_index = 2
 custom_minimum_size = Vector2(0, 26)
 layout_mode = 2
 

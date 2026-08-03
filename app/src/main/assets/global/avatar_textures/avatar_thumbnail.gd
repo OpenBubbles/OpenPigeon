@@ -101,7 +101,29 @@ const MOUTH_WITH_FACIAL_HAIR := {
 	
 const avatar_clothing_regions := { "clothing1": Rect2(0, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE), "clothing2": Rect2(AVATAR_PART_SIZE, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE), "clothing3": Rect2(AVATAR_PART_SIZE * 2, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE)}
 
-const avatar_face_accessories_regions := { "None": Rect2(0, 0, 1, 1), "Glasses": Rect2(128, 0, 64, 64), "Mask": Rect2(192, 0, 64, 64) }
+const FACE_ACCESSORY_COUNT := 14
+
+const avatar_face_accessories_regions := {
+	# Row 1
+	"face_1": Rect2(0, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"face_2": Rect2(AVATAR_PART_SIZE, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"face_3": Rect2(AVATAR_PART_SIZE * 2, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"face_4": Rect2(AVATAR_PART_SIZE * 3, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"face_5": Rect2(AVATAR_PART_SIZE * 4, 0, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+
+	# Row 2
+	"face_6": Rect2(0, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"face_7": Rect2(AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"face_8": Rect2(AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"face_9": Rect2(AVATAR_PART_SIZE * 3, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"face_10": Rect2(AVATAR_PART_SIZE * 4, AVATAR_PART_SIZE, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+
+	# Row 3
+	"face_11": Rect2(0, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"face_12": Rect2(AVATAR_PART_SIZE, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"face_13": Rect2(AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE),
+	"face_14": Rect2(AVATAR_PART_SIZE * 3, AVATAR_PART_SIZE * 2, AVATAR_PART_SIZE, AVATAR_PART_SIZE)
+}
 
 var _selection_stylebox: StyleBox = null
 
@@ -148,39 +170,23 @@ func update_avatar_from_data(avatar_data: Dictionary):
 	if TEMP_DISABLE_AVATAR_RENDER:
 		return
 
-	var hair_color      = avatar_data.get("hair_color", Color.BLACK)
+	var hair_color = avatar_data.get("hair_color", Color.BLACK)
 	var hair_brightness = avatar_data.get("hair_brightness", 0.0)
-	var hair_style      = avatar_data.get("hair_style", "hair1")
+	var hair_style = avatar_data.get("hair_style", "hair1")
+	var face_acc_style := str(avatar_data.get("face_acc_style", "face_1"))
+	if face_acc_style == "None" or not avatar_face_accessories_regions.has(face_acc_style):
+		face_acc_style = "face_1"
 
 	var settings = {
-		"background": {
-			"color": avatar_data.get("bg_color", Color.WHITE),
-			"brightness": avatar_data.get("bg_brightness", 0.0),
-			"style": avatar_data.get("bg_style", "Plain")
-		},
-		"fshape": {
-			"color": avatar_data.get("fshape_color", Color.WHITE),
-			"brightness": avatar_data.get("fshape_brightness", 0.0),
-			"head_style": avatar_data.get("fshape_style", "Default")
-		},
-		"hair_front": { "color": hair_color, "brightness": hair_brightness, "style": hair_style },
-		"hair_back":  { "color": hair_color, "brightness": hair_brightness, "style": hair_style },
-		"face": {
-			"eyes": avatar_data.get("eyes_style", "Open"),
-			"mouth": avatar_data.get("mouth_style", "Plain")
-		},
-		"clothing": {
-			"color": avatar_data.get("clothing_color", Color.WHITE),
-			"brightness": avatar_data.get("clothing_brightness", 0.0),
-			"style": avatar_data.get("clothing_style", "clothing1")
-		},
-		"accessories": {
-			"color": avatar_data.get("acc_color", Color.WHITE),
-			"brightness": avatar_data.get("acc_brightness", 0.0),
-			"head_style": avatar_data.get("head_acc_style", "None"),
-			"face_style": avatar_data.get("face_acc_style", "None")
-		}
+		"background": {"color": avatar_data.get("bg_color", Color.WHITE), "brightness": avatar_data.get("bg_brightness", 0.0), "style": avatar_data.get("bg_style", "Plain")},
+		"fshape": {"color": avatar_data.get("fshape_color", Color.WHITE), "brightness": avatar_data.get("fshape_brightness", 0.0), "head_style": avatar_data.get("fshape_style", "Default")},
+		"hair_front": {"color": hair_color, "brightness": hair_brightness, "style": hair_style},
+		"hair_back": {"color": hair_color, "brightness": hair_brightness, "style": hair_style},
+		"face": {"eyes": avatar_data.get("eyes_style", "eyes1"), "mouth": avatar_data.get("mouth_style", "mouth1")},
+		"clothing": {"color": avatar_data.get("clothing_color", Color.WHITE), "brightness": avatar_data.get("clothing_brightness", 0.0), "style": avatar_data.get("clothing_style", "clothing1")},
+		"accessories": {"color": avatar_data.get("acc_color", Color.WHITE), "brightness": avatar_data.get("acc_brightness", 0.0), "head_style": avatar_data.get("head_acc_style", "hat_0"), "face_style": face_acc_style}
 	}
+
 	_draw_avatar(settings)
 
 func update_display_from_settings():
@@ -191,119 +197,110 @@ func update_display_from_settings():
 
 
 func _draw_avatar(settings: Dictionary) -> void:
-	# Background
 	if TEMP_DISABLE_AVATAR_RENDER:
 		return
+
 	var bg_color = settings["background"]["color"]
-	var final_bg = calculate_final_color(bg_color, settings["background"]["brightness"])
-	color_rect.color = final_bg
-	var bg_style = settings["background"]["style"]
+	color_rect.color = calculate_final_color(bg_color, settings["background"]["brightness"])
+	var bg_style := str(settings["background"]["style"])
+
 	if bg_style == "Plain" or not avatar_background_regions.has(bg_style):
 		color_rect.visible = true
 		avatar_background.visible = false
 	else:
 		color_rect.visible = false
 		avatar_background.visible = true
-		var atlas = AtlasTexture.new()
+		var atlas := AtlasTexture.new()
 		atlas.atlas = AvatarResources.AVATAR_BG_MAP_PATH
 		atlas.region = avatar_background_regions[bg_style]
 		avatar_background.texture = atlas
-		
-	# fshape
-	var tone_color = settings["fshape"]["color"]
-	avatar_base_fshape.self_modulate = calculate_final_color(tone_color, settings["fshape"]["brightness"])
-	avatar_base_fshape.texture = AvatarResources.AVATAR_FSHAPE_MAP_PATH
 
-	var fshape_style: String = settings["fshape"]["head_style"]
+	var tone_color = settings["fshape"]["color"]
+	avatar_base_fshape.texture = AvatarResources.AVATAR_FSHAPE_MAP_PATH
+	avatar_base_fshape.self_modulate = calculate_final_color(tone_color, settings["fshape"]["brightness"])
+	var fshape_style := str(settings["fshape"]["head_style"])
 	if not avatar_fshape_regions.has(fshape_style):
 		fshape_style = "Default"
-
 	avatar_base_fshape.region_enabled = true
 	avatar_base_fshape.region_rect = avatar_fshape_regions[fshape_style]
-	
-	# Torso
+
 	if is_instance_valid(avatar_torso):
 		avatar_torso.texture = AvatarResources.AVATAR_TORSO_MAP_PATH
 		avatar_torso.self_modulate = avatar_base_fshape.self_modulate
 		avatar_torso.region_enabled = true
-		avatar_torso.region_rect = avatar_torso_regions.get("Default", Rect2(0,0,0,0))
+		avatar_torso.region_rect = avatar_torso_regions["Default"]
 
-	# Hair Back
 	var hair_back_color = settings["hair_back"]["color"]
+	avatar_hair_back.texture = AvatarResources.AVATAR_HAIR_BACK_MAP_PATH
 	avatar_hair_back.self_modulate = calculate_final_color(hair_back_color, settings["hair_back"]["brightness"])
-	var back_tex: Texture2D = AvatarResources.AVATAR_HAIR_BACK_MAP_PATH
-	if back_tex:
-		avatar_hair_back.texture = back_tex
-	#else:
-		#push_warning("Avatar hair BACK texture missing: " + AVATAR_HAIR_BACK_MAP_PATH)
-	var hair_style_back = settings["hair_back"]["style"]
-	if avatar_hair_regions.has(hair_style_back):
-		avatar_hair_back.region_enabled = true
-		avatar_hair_back.region_rect = avatar_hair_regions[hair_style_back]
+	var hair_style_back := str(settings["hair_back"]["style"])
+	if not avatar_hair_regions.has(hair_style_back):
+		hair_style_back = "hair1"
+	avatar_hair_back.region_enabled = true
+	avatar_hair_back.region_rect = avatar_hair_regions[hair_style_back]
 
-	# Hair Front
 	var hair_front_color = settings["hair_front"]["color"]
-	avatar_hair_front.self_modulate = calculate_final_color(hair_front_color, settings["hair_front"]["brightness"])
-	var front_tex: Texture2D = AvatarResources.AVATAR_HAIR_FRONT_MAP_PATH
-	if front_tex:
-		avatar_hair_front.texture = front_tex
-	#else:
-		#push_warning("Avatar hair FRONT texture missing: " + AVATAR_HAIR_FRONT_MAP_PATH)
-	var hair_style_front = settings["hair_front"]["style"]
-	if avatar_hair_regions.has(hair_style_front):
-		avatar_hair_front.region_enabled = true
-		avatar_hair_front.region_rect = avatar_hair_regions[hair_style_front]
-		
-	var hair_front_final := calculate_final_color(hair_front_color, settings["hair_front"]["brightness"])
-	# Face
+	var hair_front_final = calculate_final_color(hair_front_color, settings["hair_front"]["brightness"])
+	avatar_hair_front.texture = AvatarResources.AVATAR_HAIR_FRONT_MAP_PATH
+	avatar_hair_front.self_modulate = hair_front_final
+	var hair_style_front := str(settings["hair_front"]["style"])
+	if not avatar_hair_regions.has(hair_style_front):
+		hair_style_front = "hair1"
+	avatar_hair_front.region_enabled = true
+	avatar_hair_front.region_rect = avatar_hair_regions[hair_style_front]
+
 	avatar_eyes.texture = AvatarResources.AVATAR_EYES_MAP_PATH
 	avatar_mouth.texture = AvatarResources.AVATAR_MOUTH_MAP_PATH
-	var eyes_style = settings["face"]["eyes"]
-	if avatar_eyes_regions.has(eyes_style):
-		avatar_eyes.region_enabled = true
-		avatar_eyes.region_rect = avatar_eyes_regions[eyes_style]
-	var mouth_style = settings["face"]["mouth"]
-	if avatar_mouth_regions.has(mouth_style):
-		avatar_mouth.region_enabled = true
-		avatar_mouth.region_rect = avatar_mouth_regions[mouth_style]
-	avatar_mouth.self_modulate = hair_front_final if MOUTH_WITH_FACIAL_HAIR.has(mouth_style) else Color(1,1,1,1)
+	avatar_face_accessories.texture = AvatarResources.AVATAR_FACE_ACCESSORIES_MAP_PATH
 
-	# Clothing
+	var eyes_style := str(settings["face"]["eyes"])
+	if not avatar_eyes_regions.has(eyes_style):
+		eyes_style = "eyes1"
+	avatar_eyes.region_enabled = true
+	avatar_eyes.region_rect = avatar_eyes_regions[eyes_style]
+
+	var mouth_style := str(settings["face"]["mouth"])
+	if not avatar_mouth_regions.has(mouth_style):
+		mouth_style = "mouth1"
+	avatar_mouth.region_enabled = true
+	avatar_mouth.region_rect = avatar_mouth_regions[mouth_style]
+	avatar_mouth.self_modulate = hair_front_final if MOUTH_WITH_FACIAL_HAIR.has(mouth_style) else Color.WHITE
+
+	var face_acc_style := str(settings["accessories"].get("face_style", "face_1"))
+	if face_acc_style == "None" or not avatar_face_accessories_regions.has(face_acc_style):
+		face_acc_style = "face_1"
+	avatar_face_accessories.modulate = Color.WHITE
+	avatar_face_accessories.self_modulate = Color.WHITE
+	avatar_face_accessories.offset = Vector2.ZERO
+	avatar_face_accessories.region_filter_clip_enabled = true
+	avatar_face_accessories.region_enabled = true
+	avatar_face_accessories.region_rect = avatar_face_accessories_regions[face_acc_style]
+	avatar_face_accessories.visible = true
+
 	var clothing_color = settings["clothing"]["color"]
-	avatar_clothing.self_modulate = calculate_final_color(clothing_color, settings["clothing"]["brightness"])
 	avatar_clothing.texture = AvatarResources.AVATAR_CLOTHING_MAP_PATH
-	var clothing_style = settings["clothing"]["style"]
-	if avatar_clothing_regions.has(clothing_style):
-		avatar_clothing.region_enabled = true
-		avatar_clothing.region_rect = avatar_clothing_regions[clothing_style]
-		avatar_clothing_details.region_rect = avatar_clothing_regions[clothing_style]
-		
-	# Clothing Details
-	avatar_clothing_details.self_modulate = Color(1,1,1,1)
+	avatar_clothing.self_modulate = calculate_final_color(clothing_color, settings["clothing"]["brightness"])
+	var clothing_style := str(settings["clothing"]["style"])
+	if not avatar_clothing_regions.has(clothing_style):
+		clothing_style = "clothing1"
+	avatar_clothing.region_enabled = true
+	avatar_clothing.region_rect = avatar_clothing_regions[clothing_style]
+
 	avatar_clothing_details.texture = AvatarResources.AVATAR_CLOTHING_DETAILS_MAP_PATH
-	if avatar_clothing_regions.has(clothing_style):
-		avatar_clothing_details.region_enabled = true
-		avatar_clothing_details.region_rect = avatar_clothing_regions[clothing_style]
-	else:
-		avatar_clothing_details.region_enabled = false
+	avatar_clothing_details.self_modulate = Color.WHITE
+	avatar_clothing_details.region_enabled = true
+	avatar_clothing_details.region_rect = avatar_clothing_regions[clothing_style]
 
-
-	# Accessories
-	var acc_color = settings["accessories"]["color"]
-	var final_acc_color = calculate_final_color(acc_color, settings["accessories"]["brightness"])
 	avatar_head_accessories.texture = AvatarResources.AVATAR_HEAD_ACCESSORIES_MAP_PATH
-	avatar_face_accessories.texture = AvatarResources.AVATAR_ACCESSORIES_MAP_PATH
 	avatar_head_accessories.self_modulate = Color.WHITE
-	avatar_face_accessories.self_modulate = final_acc_color
+	avatar_head_accessories.region_filter_clip_enabled = true
 	avatar_head_accessories.offset = Vector2(0, -64)
 
-	var head_acc_style = str(settings["accessories"]["head_style"])
-	var head_acc_index = 0
+	var head_acc_style := str(settings["accessories"]["head_style"])
+	var head_acc_index := 1 if head_acc_style == "Hat1" else 0
 
-	if head_acc_style == "Hat1":
-		head_acc_index = 1
-	elif head_acc_style.begins_with("hat_"):
-		var head_acc_number = head_acc_style.trim_prefix("hat_")
+	if head_acc_style.begins_with("hat_"):
+		var head_acc_number := head_acc_style.trim_prefix("hat_")
 		if head_acc_number.is_valid_int():
 			head_acc_index = clampi(head_acc_number.to_int(), 0, 12)
 	elif head_acc_style.is_valid_int():
@@ -311,125 +308,96 @@ func _draw_avatar(settings: Dictionary) -> void:
 
 	if head_acc_index > 0:
 		avatar_head_accessories.region_enabled = true
-		avatar_head_accessories.region_rect = Rect2(
-			(head_acc_index % 5) * HEAD_ACCESSORY_CELL_SIZE,
-			int(head_acc_index / 5) * HEAD_ACCESSORY_CELL_SIZE,
-			HEAD_ACCESSORY_CELL_SIZE,
-			HEAD_ACCESSORY_CELL_SIZE
-		)
-		avatar_head_accessories.self_modulate.a = 1.0
+		avatar_head_accessories.region_rect = Rect2((head_acc_index % 5) * HEAD_ACCESSORY_CELL_SIZE, int(head_acc_index / 5) * HEAD_ACCESSORY_CELL_SIZE, HEAD_ACCESSORY_CELL_SIZE, HEAD_ACCESSORY_CELL_SIZE)
+		avatar_head_accessories.visible = true
 	else:
-		avatar_head_accessories.self_modulate.a = 0.0
+		avatar_head_accessories.region_enabled = false
+		avatar_head_accessories.visible = false
 
-	var face_acc_style = settings["accessories"]["face_style"]
-	if avatar_face_accessories_regions.has(face_acc_style) and face_acc_style != "None":
-		avatar_face_accessories.region_enabled = true
-		avatar_face_accessories.region_rect = avatar_face_accessories_regions[face_acc_style]
-		avatar_face_accessories.self_modulate.a = 1.0
-	else:
-		avatar_face_accessories.self_modulate.a = 0.0
-	
 	_center_and_scale_sprites()
 	_apply_layer_order()
 
 func _get_current_avatar_settings() -> Dictionary:
-	var hair_color  = SettingsManager.get_setting("avatar_hair_front", "color",
-		SettingsManager.get_setting("avatar_hair", "color", Color("#2c232b")))
-	var hair_bright = SettingsManager.get_setting("avatar_hair_front", "brightness",
-		SettingsManager.get_setting("avatar_hair", "brightness", 0.0))
-	var hair_style  = SettingsManager.get_setting("avatar_hair_front", "style",
-		SettingsManager.get_setting("avatar_hair", "style", "hair1"))
+	var hair_color = SettingsManager.get_setting("avatar_hair_front", "color", SettingsManager.get_setting("avatar_hair", "color", Color("#2c232b")))
+	var hair_bright = SettingsManager.get_setting("avatar_hair_front", "brightness", SettingsManager.get_setting("avatar_hair", "brightness", 0.0))
+	var hair_style = SettingsManager.get_setting("avatar_hair_front", "style", SettingsManager.get_setting("avatar_hair", "style", "hair1"))
+	var face_style := str(SettingsManager.get_setting("avatar_accessories", "face_style", "face_1"))
+	if face_style == "None" or not avatar_face_accessories_regions.has(face_style):
+		face_style = "face_1"
 
 	return {
-		"background": {
-			"color": SettingsManager.get_setting("avatar_background", "color", Color("#4e5d89")),
-			"brightness": SettingsManager.get_setting("avatar_background", "brightness", 0.0),
-			"style": SettingsManager.get_setting("avatar_background", "style", "Plain"),
-		},
-		"fshape": {
-			"color": SettingsManager.get_setting("avatar_fshape", "color", Color("#e0ac69")),
-			"brightness": SettingsManager.get_setting("avatar_fshape", "brightness", 0.0),
-			"head_style": SettingsManager.get_setting("avatar_fshape", "head_style", "Default"),
-		},
-		"hair_front": { "color": hair_color, "brightness": hair_bright, "style": hair_style },
-		"hair_back":  { "color": hair_color, "brightness": hair_bright, "style": hair_style },
-		"face": {
-			"eyes": SettingsManager.get_setting("avatar_face", "eyes", "Open"),
-			"mouth": SettingsManager.get_setting("avatar_face", "mouth", "Plain"),
-		},
-		"clothing": {
-			"color": SettingsManager.get_setting("avatar_clothing", "color", Color("#a03c3c")),
-			"brightness": SettingsManager.get_setting("avatar_clothing", "brightness", 0.0),
-			"style": SettingsManager.get_setting("avatar_clothing", "style", "clothing1"),
-		},
-		"accessories": {
-			"color": SettingsManager.get_setting("avatar_accessories", "color", Color("#ffffff")),
-			"brightness": SettingsManager.get_setting("avatar_accessories", "brightness", 0.0),
-			"head_style": SettingsManager.get_setting("avatar_accessories", "head_style", "None"),
-			"face_style": SettingsManager.get_setting("avatar_accessories", "face_style", "None"),
-		}
+		"background": {"color": SettingsManager.get_setting("avatar_background", "color", Color("#4e5d89")), "brightness": SettingsManager.get_setting("avatar_background", "brightness", 0.0), "style": SettingsManager.get_setting("avatar_background", "style", "Plain")},
+		"fshape": {"color": SettingsManager.get_setting("avatar_fshape", "color", Color("#e0ac69")), "brightness": SettingsManager.get_setting("avatar_fshape", "brightness", 0.0), "head_style": SettingsManager.get_setting("avatar_fshape", "head_style", "Default")},
+		"hair_front": {"color": hair_color, "brightness": hair_bright, "style": hair_style},
+		"hair_back": {"color": hair_color, "brightness": hair_bright, "style": hair_style},
+		"face": {"eyes": SettingsManager.get_setting("avatar_face", "eyes", "eyes1"), "mouth": SettingsManager.get_setting("avatar_face", "mouth", "mouth1")},
+		"clothing": {"color": SettingsManager.get_setting("avatar_clothing", "color", Color("#a03c3c")), "brightness": SettingsManager.get_setting("avatar_clothing", "brightness", 0.0), "style": SettingsManager.get_setting("avatar_clothing", "style", "clothing1")},
+		"accessories": {"color": SettingsManager.get_setting("avatar_accessories", "color", Color.WHITE), "brightness": SettingsManager.get_setting("avatar_accessories", "brightness", 0.0), "head_style": SettingsManager.get_setting("avatar_accessories", "head_style", "hat_0"), "face_style": face_style}
 	}
-	
+
 func get_avatar_data_string() -> String:
 	var settings = _get_current_avatar_settings()
-
-	# Build reverse lookups
 	var hair_map = {}
+	var fshape_map = {}
+	var eyes_map = {}
+	var mouth_map = {}
+	var clothing_map = {}
+
 	for i in avatar_hair_regions.keys().size():
 		hair_map[avatar_hair_regions.keys()[i]] = i
-	var fshape_map = {}
 	for i in avatar_fshape_regions.keys().size():
 		fshape_map[avatar_fshape_regions.keys()[i]] = i
-	var eyes_map = {}
 	for i in avatar_eyes_regions.keys().size():
 		eyes_map[avatar_eyes_regions.keys()[i]] = i
-	var mouth_map = {}
 	for i in avatar_mouth_regions.keys().size():
 		mouth_map[avatar_mouth_regions.keys()[i]] = i
-	var clothing_map = {}
 	for i in avatar_clothing_regions.keys().size():
 		clothing_map[avatar_clothing_regions.keys()[i]] = i
-	var backdrop_map = ["Plain", "Pattern 1", "Pattern 2", "Pattern 3", "Pattern 4", "Pattern 5", "Pattern 6", "Pattern 7", "Pattern 8", "Pattern 9"]
 
+	var backdrop_map = ["Plain", "Pattern 1", "Pattern 2", "Pattern 3", "Pattern 4", "Pattern 5", "Pattern 6", "Pattern 7", "Pattern 8", "Pattern 9"]
 	var parts = []
-	# fshape
 	var fshape_style_name = settings["fshape"]["head_style"]
-	parts.append("fshape,%d" % fshape_map.get(fshape_style_name, 0))
 	var fshape_c = settings["fshape"]["color"]
+	parts.append("fshape,%d" % fshape_map.get(fshape_style_name, 0))
 	parts.append("fshape_color,%.6f,%.6f,%.6f" % [fshape_c.r, fshape_c.g, fshape_c.b])
-	
 	parts.append("body,%d" % fshape_map.get(fshape_style_name, 0))
 	parts.append("body_color,%.6f,%.6f,%.6f" % [fshape_c.r, fshape_c.g, fshape_c.b])
 
-	# Hair (serialize from FRONT layer for backwards-compat)
 	var hair_style_name = settings["hair_front"]["style"]
-	parts.append("hair,%d" % hair_map.get(hair_style_name, 0))
 	var hair_c = settings["hair_front"]["color"]
+	parts.append("hair,%d" % hair_map.get(hair_style_name, 0))
 	parts.append("hair_color,%.6f,%.6f,%.6f" % [hair_c.r, hair_c.g, hair_c.b])
 
-	# Face
-	var eyes_style_name = settings["face"]["eyes"]
-	parts.append("eyes,%d" % eyes_map.get(eyes_style_name, 0))
-	var mouth_style_name = settings["face"]["mouth"]
-	parts.append("mouth,%d" % mouth_map.get(mouth_style_name, 0))
+	parts.append("eyes,%d" % eyes_map.get(settings["face"]["eyes"], 0))
+	parts.append("mouth,%d" % mouth_map.get(settings["face"]["mouth"], 0))
 
-	# Clothing
 	var clothing_style_name = settings["clothing"]["style"]
-	parts.append("clothes,%d" % clothing_map.get(clothing_style_name, 0))
 	var clothes_c = settings["clothing"]["color"]
+	parts.append("clothes,%d" % clothing_map.get(clothing_style_name, 0))
 	parts.append("clothes_color,%.6f,%.6f,%.6f" % [clothes_c.r, clothes_c.g, clothes_c.b])
 
-	# Background Color
 	var bg_c = settings["background"]["color"]
 	parts.append("bg_color,%.6f,%.6f,%.6f" % [bg_c.r, bg_c.g, bg_c.b])
+	parts.append("backdrop,%d" % maxi(backdrop_map.find(settings["background"]["style"]), 0))
 
-	# Backdrop Style
-	var bg_style_name = settings["background"]["style"]
-	var backdrop_index = backdrop_map.find(bg_style_name)
-	if backdrop_index == -1:
-		backdrop_index = 0
-	parts.append("backdrop,%d" % backdrop_index)
-	
+	var head_acc_style := str(settings["accessories"]["head_style"])
+	var head_acc_index := 1 if head_acc_style == "Hat1" else 0
+	if head_acc_style.begins_with("hat_"):
+		var head_acc_number := head_acc_style.trim_prefix("hat_")
+		if head_acc_number.is_valid_int():
+			head_acc_index = clampi(head_acc_number.to_int(), 0, 12)
+	elif head_acc_style.is_valid_int():
+		head_acc_index = clampi(head_acc_style.to_int(), 0, 12)
+
+	var face_acc_style := str(settings["accessories"]["face_style"])
+	var face_acc_index := 0
+	if face_acc_style.begins_with("face_"):
+		var face_acc_number := face_acc_style.trim_prefix("face_")
+		if face_acc_number.is_valid_int():
+			face_acc_index = clampi(face_acc_number.to_int() - 1, 0, FACE_ACCESSORY_COUNT)
+
+	parts.append("acc,%d" % head_acc_index)
+	parts.append("glasses,%d" % face_acc_index)
 	return "|".join(parts)
 
 func set_selected(is_selected: bool):

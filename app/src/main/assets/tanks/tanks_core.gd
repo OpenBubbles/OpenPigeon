@@ -107,10 +107,12 @@ func ingest_game_data(raw_text: String) -> void:
 		" turnOwner=", turn_owner,
 		" opponentAvatarKey=", opponent_avatar_key
 	])
-	if opponent_avatar_key != "" and res.has(opponent_avatar_key):
-		var avatar_string = res[opponent_avatar_key]
-		var opponent_data = GameUtils._parse_avatar_string(avatar_string)
-		emit_signal("opponent_avatar_ready", opponent_data)
+	if opponent_avatar_key != "":
+		var avatar_string := String(d.get(opponent_avatar_key, ""))
+
+		if avatar_string != "":
+			var opponent_data := GameUtils._parse_avatar_string(avatar_string)
+			emit_signal("opponent_avatar_ready", opponent_data)
 
 	steps = _parse_replay(replay_raw)
 	current_board = _find_first_board(steps)

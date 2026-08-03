@@ -19,6 +19,8 @@ object AvatarBitmapCache {
     var bmClothing:   Bitmap? = null
     var bmClothingDt: Bitmap? = null
     var bmBackground: Bitmap? = null
+    var bmHeadAccessories: Bitmap? = null
+    var bmFaceAccessories: Bitmap? = null
 
     fun load(context: Context) {
         if (loaded) return
@@ -32,15 +34,17 @@ object AvatarBitmapCache {
             null
         }
 
-        bmFaces      = bmp(R.drawable.avatar_faces)
-        bmTorso      = bmp(R.drawable.avatar_torso)
-        bmHairBack   = bmp(R.drawable.avatar_hair_back)
-        bmHairFront  = bmp(R.drawable.avatar_hair_front)
-        bmEyes       = bmp(R.drawable.avatar_eyes)
-        bmMouth      = bmp(R.drawable.avatar_mouth)
-        bmClothing   = bmp(R.drawable.avatar_clothing_base)
+        bmFaces = bmp(R.drawable.avatar_faces)
+        bmTorso = bmp(R.drawable.avatar_torso)
+        bmHairBack = bmp(R.drawable.avatar_hair_back)
+        bmHairFront = bmp(R.drawable.avatar_hair_front)
+        bmEyes = bmp(R.drawable.avatar_eyes)
+        bmMouth = bmp(R.drawable.avatar_mouth)
+        bmClothing = bmp(R.drawable.avatar_clothing_base)
         bmClothingDt = bmp(R.drawable.avatar_clothing_details)
         bmBackground = bmp(R.drawable.background_sheet)
+        bmHeadAccessories = bmp(R.drawable.avatar_head_accessories)
+        bmFaceAccessories = bmp(R.drawable.avatar_face_accessories)
 
         loaded = listOf(
             bmFaces,
@@ -51,7 +55,9 @@ object AvatarBitmapCache {
             bmMouth,
             bmClothing,
             bmClothingDt,
-            bmBackground
+            bmBackground,
+            bmHeadAccessories,
+            bmFaceAccessories
         ).all { it != null }
     }
 }

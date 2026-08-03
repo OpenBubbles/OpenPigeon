@@ -404,11 +404,14 @@ func _populate_clothing_properties():
 	_create_color_and_brightness_control("clothing", "color", "brightness", clothing_colors, default_color, initial_brightness)
 
 func _populate_accessories_properties():
-	var head_accessories_styles := []
+	var head_accessories_styles: Array[String] = []
 	for i in range(13):
-		head_accessories_styles.append("hat_" + str(i))
+		head_accessories_styles.append("hat_%d" % i)
 	_create_image_presets_scrollbar("accessories", "head_style", head_accessories_styles)
-	var face_accessories_styles = ["None", "Glasses", "Mask"]
+
+	var face_accessories_styles: Array[String] = []
+	for i in range(1, 15):
+		face_accessories_styles.append("face_%d" % i)
 	_create_image_presets_scrollbar("accessories", "face_style", face_accessories_styles)
 
 func _create_color_and_brightness_control(category: String, color_key: String, brightness_key: String, colors: PackedColorArray, default_color: Color, initial_brightness: float):
@@ -512,42 +515,40 @@ func _update_brightness_slider_gradient(color: Color):
 	current_brightness_slider.add_theme_icon_override("grabber_pressed", grabber_icon)
 
 func _get_current_avatar_settings() -> Dictionary:
-	var hair_color  = SettingsManager.get_setting("avatar_hair_front", "color",
-		SettingsManager.get_setting("avatar_hair", "color", Color("#2c232b")))
-	var hair_bright = SettingsManager.get_setting("avatar_hair_front", "brightness",
-		SettingsManager.get_setting("avatar_hair", "brightness", 0.0))
-	var hair_style  = SettingsManager.get_setting("avatar_hair_front", "style",
-		SettingsManager.get_setting("avatar_hair", "style", "hair1"))
+	var hair_color = SettingsManager.get_setting("avatar_hair_front", "color", SettingsManager.get_setting("avatar_hair", "color", Color("#2c232b")))
+	var hair_bright = SettingsManager.get_setting("avatar_hair_front", "brightness", SettingsManager.get_setting("avatar_hair", "brightness", 0.0))
+	var hair_style = SettingsManager.get_setting("avatar_hair_front", "style", SettingsManager.get_setting("avatar_hair", "style", "hair1"))
+	var face_style := str(SettingsManager.get_setting("avatar_accessories", "face_style", "face_1"))
+	if face_style == "None" or not AvatarThumbnail.avatar_face_accessories_regions.has(face_style):
+		face_style = "face_1"
 
 	return {
 		"background": {
 			"color": SettingsManager.get_setting("avatar_background", "color", Color("#4e5d89")),
 			"brightness": SettingsManager.get_setting("avatar_background", "brightness", 0.0),
-			"style": SettingsManager.get_setting("avatar_background", "style", "Plain"),
+			"style": SettingsManager.get_setting("avatar_background", "style", "Plain")
 		},
 		"fshape": {
 			"color": SettingsManager.get_setting("avatar_fshape", "color", Color("#e0ac69")),
 			"brightness": SettingsManager.get_setting("avatar_fshape", "brightness", 0.0),
-			"head_style": SettingsManager.get_setting("avatar_fshape", "head_style", "Default"),
+			"head_style": SettingsManager.get_setting("avatar_fshape", "head_style", "Default")
 		},
-		# both layers carry same values by default
-		"hair_front": { "color": hair_color, "brightness": hair_bright, "style": hair_style },
-		"hair_back":  { "color": hair_color, "brightness": hair_bright, "style": hair_style },
-		
+		"hair_front": {"color": hair_color, "brightness": hair_bright, "style": hair_style},
+		"hair_back": {"color": hair_color, "brightness": hair_bright, "style": hair_style},
 		"face": {
 			"eyes": SettingsManager.get_setting("avatar_face", "eyes", "eyes1"),
-			"mouth": SettingsManager.get_setting("avatar_face", "mouth", "mouth1"),
+			"mouth": SettingsManager.get_setting("avatar_face", "mouth", "mouth1")
 		},
 		"clothing": {
 			"color": SettingsManager.get_setting("avatar_clothing", "color", Color("#a03c3c")),
 			"brightness": SettingsManager.get_setting("avatar_clothing", "brightness", 0.0),
-			"style": SettingsManager.get_setting("avatar_clothing", "style", "clothing1"),
+			"style": SettingsManager.get_setting("avatar_clothing", "style", "clothing1")
 		},
 		"accessories": {
-			"color": SettingsManager.get_setting("avatar_accessories", "color", Color("#ffffff")),
+			"color": SettingsManager.get_setting("avatar_accessories", "color", Color.WHITE),
 			"brightness": SettingsManager.get_setting("avatar_accessories", "brightness", 0.0),
 			"head_style": SettingsManager.get_setting("avatar_accessories", "head_style", "hat_0"),
-			"face_style": SettingsManager.get_setting("avatar_accessories", "face_style", "None"),
+			"face_style": face_style
 		}
 	}
 

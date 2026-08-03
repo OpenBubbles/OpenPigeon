@@ -20,6 +20,14 @@ extends BaseGame
 @onready var questions_text_container: PanelContainer = %QuestionsTextContainer
 @onready var win_loss_label: Label = %WinLossLabel
 @onready var sent_label: Label = %SentLabel
+@onready var main_vbox: VBoxContainer = %MainVBoxContainer
+@onready var avatar_margin: MarginContainer = %MainMarginContainer
+@onready var avatar_row: HBoxContainer = %TopHBoxContainer
+@onready var bottom_margin: MarginContainer = %BottomMarginContainer
+@onready var middle_separator: HSeparator = %HSeparator2
+@onready var input_prompt: RichTextLabel = %InputText
+@onready var input_content_vbox: VBoxContainer = %TextVBoxContainer
+@onready var input_content_margin: MarginContainer = %TextMarginContainer
 
 const OpponentAvatarScene: PackedScene = preload("res://global/avatar_textures/AvatarThumbnail.tscn")
 const MUSIC_STREAM := preload("res://global/audio/20questions.ogg")
@@ -29,6 +37,14 @@ var _local_avatar_data: Dictionary = {}
 var _my_avatar_string: String = ""
 var _avatar1_raw: String = ""
 var _avatar2_raw: String = ""
+
+const QUESTIONS_BASE_AVATAR_SIZE := Vector2(
+	96.0,
+	75.0,
+)
+
+const QUESTIONS_LANDSCAPE_AVATAR_SCALE := 1.65
+const QUESTIONS_LANDSCAPE_COLUMN_GAP := 24
 
 var sent_tween: Tween
 var _sent_animation_active: bool = false
@@ -54,6 +70,14 @@ var _kb_last_h := 0
 var _player1_id: String = ""
 var _player2_id: String = ""
 var _local_player_id: String = ""
+
+var _questions_landscape_body: HBoxContainer
+var _questions_landscape_active := false
+var _questions_layout_pending := false
+
+var _questions_portrait_scroll_min := Vector2.ZERO
+var _questions_portrait_top_margin := 0
+var _questions_portrait_header_separation := 0
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
@@ -194,6 +218,36 @@ func _on_game_ready() -> void:
 		if vbar:
 			vbar.visible = false
 			vbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			
+		_questions_portrait_scroll_min = questions_scroll.custom_minimum_size
+
+	_questions_portrait_top_margin = (
+		avatar_margin.get_theme_constant(
+			"margin_top",
+		)
+	)
+
+	_questions_portrait_header_separation = (
+		avatar_row.get_theme_constant(
+			"separation",
+		)
+	)
+
+	var viewport := get_viewport()
+
+	if (
+		viewport != null and
+		not viewport.size_changed.is_connected(
+			_on_questions_viewport_size_changed,
+		)
+	):
+		viewport.size_changed.connect(
+			_on_questions_viewport_size_changed,
+		)
+
+	call_deferred(
+		"_apply_questions_responsive_layout",
+	)
 
 	await get_tree().process_frame
 
@@ -214,7 +268,447 @@ func _on_game_ready() -> void:
 			_set_wait_base_text()
 			start_waiting_animation()
 			call_deferred("_refresh_questions_layout")
+
+func _on_questions_viewport_size_changed() -> void:
+	if _questions_layout_pending:
+		return
+
+	_questions_layout_pending = true
+
+	call_deferred(
+		"_apply_questions_responsive_layout",
+	)
+
+func _question_input_width() -> float:
+	var viewport_width := get_viewport().get_visible_rect().size.x
+
+	if _questions_landscape_active:
+		return maxf(viewport_width * 0.5 - 24.0, 420.0)
+
+	return minf(viewport_width * 0.88, 640.0)
+
+func _apply_questions_responsive_layout() -> void:
+	_questions_layout_pending = false
+
+	if not is_inside_tree():
+		return
+
+	var viewport := get_viewport()
+
+	if viewport == null:
+		return
+
+	var viewport_size := (
+		viewport.get_visible_rect().size
+	)
+
+	if (
+		viewport_size.x <= 1.0 or
+		viewport_size.y <= 1.0
+	):
+		return
+
+	var use_landscape := (
+		viewport_size.x >
+		viewport_size.y
+	)
+
+	var layout_changed := (
+		use_landscape !=
+		_questions_landscape_active
+	)
+
+	_questions_landscape_active = use_landscape
+
+	var avatar_scale := (
+		QUESTIONS_LANDSCAPE_AVATAR_SCALE
+		if use_landscape
+		else 1.0
+	)
+
+	player_avatar_display.scale = Vector2.ONE
+	player_avatar_display.custom_minimum_size = (
+		QUESTIONS_BASE_AVATAR_SIZE *
+		avatar_scale
+	)
+	player_avatar_display.clip_contents = false
+
+	var internal_viewport := (
+		player_avatar_display.get_node_or_null(
+			"SubViewportContainer/SubViewport",
+		) as SubViewport
+	)
+
+	if internal_viewport != null:
+		internal_viewport.render_target_update_mode = (
+			SubViewport.UPDATE_ALWAYS
+		)
+
+	var internal_preview := (
+		player_avatar_display.get_node_or_null(
+			"SubViewportContainer",
+		) as SubViewportContainer
+	)
+
+	if internal_preview != null:
+		internal_preview.mouse_filter = (
+			Control.MOUSE_FILTER_IGNORE
+		)
+		internal_preview.visible = true
+		internal_preview.self_modulate = Color.WHITE
+		internal_preview.pivot_offset = Vector2(
+			48.0,
+			140.0,
+		)
+		internal_preview.scale = (
+			Vector2.ONE *
+			avatar_scale
+		)
+
+	if use_landscape:
+		avatar_margin.add_theme_constant_override(
+			"margin_top",
+			roundi(
+				65.0 *
+					avatar_scale +
+				12.0
+			),
+		)
+
+		avatar_row.add_theme_constant_override("separation", 36)
+		_desc_rich.custom_minimum_size = Vector2(minf(viewport_size.x * 0.55, 760.0), 0.0)
+
+		if not is_instance_valid(
+			_questions_landscape_body,
+		):
+			_questions_landscape_body = (
+				HBoxContainer.new()
+			)
+
+			_questions_landscape_body.name = (
+				"QuestionsLandscapeBody"
+			)
+
+			_questions_landscape_body.size_flags_horizontal = (
+				Control.SIZE_EXPAND_FILL
+			)
+
+			_questions_landscape_body.size_flags_vertical = (
+				Control.SIZE_EXPAND_FILL
+			)
+
+			_questions_landscape_body.add_theme_constant_override(
+				"separation",
+				QUESTIONS_LANDSCAPE_COLUMN_GAP,
+			)
+
+			main_vbox.add_child(
+				_questions_landscape_body,
+			)
+
+		_questions_landscape_body.visible = true
+
+		main_vbox.move_child(
+			_questions_landscape_body,
+			2,
+		)
+
+		if (
+			questions_container.get_parent() !=
+			_questions_landscape_body
+		):
+			questions_container.reparent(
+				_questions_landscape_body,
+				false,
+			)
+
+		if (
+			bottom_margin.get_parent() !=
+			_questions_landscape_body
+		):
+			bottom_margin.reparent(
+				_questions_landscape_body,
+				false,
+			)
+
+		_questions_landscape_body.move_child(
+			questions_container,
+			0,
+		)
+
+		_questions_landscape_body.move_child(
+			bottom_margin,
+			1,
+		)
+
+		middle_separator.visible = false
+
+		questions_container.size_flags_horizontal = (
+			Control.SIZE_EXPAND_FILL
+		)
+
+		questions_container.size_flags_vertical = (
+			Control.SIZE_EXPAND_FILL
+		)
+
+		questions_container.size_flags_stretch_ratio = 1.0
+
+		bottom_margin.size_flags_horizontal = (
+			Control.SIZE_EXPAND_FILL
+		)
+
+		bottom_margin.size_flags_vertical = (
+			Control.SIZE_EXPAND_FILL
+		)
+
+		bottom_margin.size_flags_stretch_ratio = 1.0
+		bottom_items.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bottom_items.alignment = BoxContainer.ALIGNMENT_CENTER
+		bottom_items.add_theme_constant_override("separation", 30)
+
+		var column_width := maxf(
+			(
+				viewport_size.x -
+				float(
+					QUESTIONS_LANDSCAPE_COLUMN_GAP
+				)
+			) *
+				0.5,
+			1.0,
+		)
+
+		var history_height := maxf(
+			viewport_size.y -
+				QUESTIONS_BASE_AVATAR_SIZE.y *
+					avatar_scale -
+				65.0 *
+					avatar_scale -
+				70.0,
+			220.0,
+		)
+
+		questions_scroll.custom_minimum_size = Vector2(
+			maxf(
+				column_width - 40.0,
+				280.0,
+			),
+			history_height,
+		)
+	else:
+		avatar_margin.add_theme_constant_override(
+			"margin_top",
+			_questions_portrait_top_margin,
+		)
+
+		avatar_row.add_theme_constant_override(
+			"separation",
+			_questions_portrait_header_separation,
+		)
+
+		_desc_rich.custom_minimum_size = Vector2(
+			280.0,
+			0.0,
+		)
+
+		if questions_container.get_parent() != main_vbox:
+			questions_container.reparent(
+				main_vbox,
+				false,
+			)
+
+		if bottom_margin.get_parent() != main_vbox:
+			bottom_margin.reparent(
+				main_vbox,
+				false,
+			)
+
+		main_vbox.move_child(
+			questions_container,
+			2,
+		)
+
+		main_vbox.move_child(
+			middle_separator,
+			3,
+		)
+
+		main_vbox.move_child(
+			bottom_margin,
+			4,
+		)
+
+		if is_instance_valid(
+			_questions_landscape_body,
+		):
+			_questions_landscape_body.visible = false
+
+		middle_separator.visible = true
+
+		questions_container.size_flags_horizontal = Control.SIZE_FILL
+		questions_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		questions_container.size_flags_stretch_ratio = 1.0
+
+		bottom_margin.size_flags_horizontal = Control.SIZE_FILL
+		bottom_margin.size_flags_vertical = Control.SIZE_FILL
+		bottom_margin.size_flags_stretch_ratio = 1.0
+		bottom_items.size_flags_horizontal = Control.SIZE_FILL
+		bottom_items.alignment = BoxContainer.ALIGNMENT_BEGIN
+		bottom_items.add_theme_constant_override("separation", 9)
+
+		questions_scroll.custom_minimum_size = _questions_portrait_scroll_min
+
+	var input_height := 360.0 if use_landscape else 64.0
+
+	if is_instance_valid(questions_text_container):
+		questions_text_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL if use_landscape else Control.SIZE_SHRINK_CENTER
+
+		if questions_text_container.visible:
+			questions_text_container.custom_minimum_size = Vector2(_question_input_width(), input_height)
+
+	if is_instance_valid(input_content_margin):
+		input_content_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	if is_instance_valid(input_content_vbox):
+		input_content_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		input_content_vbox.custom_minimum_size.x = 0.0
+
+	if is_instance_valid(input_prompt):
+		input_prompt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		input_prompt.custom_minimum_size = Vector2(0.0, 105.0 if use_landscape else 60.0)
+		input_prompt.add_theme_font_size_override("normal_font_size", 40 if use_landscape else 16)
+
+	if is_instance_valid(text_box):
+		text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+		if text_box.visible:
+			text_box.custom_minimum_size = Vector2(0.0, 220.0 if use_landscape else 56.0)
+
+		text_box.add_theme_font_size_override("font_size", 42 if use_landscape else 16)
 	
+	var status_font_size := 42 if use_landscape else 25
+	var status_half_height := 34.0 if use_landscape else 17.5
+	var waiting_half_width := minf(viewport_size.x * 0.38, 350.0) if use_landscape else 143.0
+	var sent_half_width := 130.0 if use_landscape else 30.5
+	var result_half_width := minf(viewport_size.x * 0.28, 260.0) if use_landscape else 0.5
+	var status_labels: Array[Label] = [wait_for_label, sent_label, win_loss_label]
+
+	for status_label in status_labels:
+		if not is_instance_valid(status_label):
+			continue
+
+		status_label.add_theme_font_size_override("font_size", status_font_size)
+		status_label.offset_top = -status_half_height
+		status_label.offset_bottom = status_half_height
+
+	if is_instance_valid(wait_for_label):
+		wait_for_label.offset_left = -waiting_half_width
+		wait_for_label.offset_right = waiting_half_width
+
+	if is_instance_valid(sent_label):
+		sent_label.offset_left = -sent_half_width
+		sent_label.offset_right = sent_half_width
+
+	if is_instance_valid(win_loss_label):
+		win_loss_label.offset_left = -result_half_width
+		win_loss_label.offset_right = result_half_width
+
+	if is_instance_valid(send_button):
+		send_button.custom_minimum_size = Vector2(240.0, 120.0) if use_landscape else Vector2(100.0, 60.0)
+		send_button.add_theme_font_size_override("font_size", 40 if use_landscape else 16)
+
+	if is_instance_valid(overlay_num):
+		overlay_num.add_theme_font_size_override("normal_font_size", 42 if use_landscape else 24)
+
+	if is_instance_valid(overlay_text):
+		overlay_text.add_theme_font_size_override("normal_font_size", 42 if use_landscape else 24)
+
+	var answer_buttons: Array[Button] = [
+		overlay_yes,
+		overlay_no,
+		overlay_some,
+		overlay_correct,
+	]
+
+	for answer_button in answer_buttons:
+		if not is_instance_valid(answer_button):
+			continue
+
+		answer_button.add_theme_font_size_override("font_size", 30 if use_landscape else 16)
+
+	if use_landscape:
+		overlay_yes.custom_minimum_size = Vector2(
+			120.0,
+			68.0,
+		)
+
+		overlay_no.custom_minimum_size = Vector2(
+			120.0,
+			68.0,
+		)
+
+		overlay_some.custom_minimum_size = Vector2(
+			150.0,
+			68.0,
+		)
+
+		overlay_correct.custom_minimum_size = Vector2(
+			0.0,
+			68.0,
+		)
+	else:
+		overlay_yes.custom_minimum_size = Vector2(
+			80.0,
+			50.0,
+		)
+
+		overlay_no.custom_minimum_size = Vector2(
+			80.0,
+			0.0,
+		)
+
+		overlay_some.custom_minimum_size = Vector2(
+			100.0,
+			0.0,
+		)
+
+		overlay_correct.custom_minimum_size = Vector2(
+			0.0,
+			50.0,
+		)
+
+	_update_description_fill()
+
+	if layout_changed:
+		call_deferred(
+			"_render_all_questions",
+		)
+
+	if (
+		is_instance_valid(overlay) and
+		overlay.visible
+	):
+		call_deferred(
+			"_maybe_show_answer_popup",
+		)
+
+	call_deferred(
+		"_refresh_questions_layout",
+	)
+
+	main_vbox.queue_sort()
+
+	if is_instance_valid(questions_text_container):
+		questions_text_container.queue_sort()
+
+	if is_instance_valid(input_content_margin):
+		input_content_margin.queue_sort()
+
+	if is_instance_valid(input_content_vbox):
+		input_content_vbox.queue_sort()
+
+	if is_instance_valid(_questions_landscape_body):
+		_questions_landscape_body.queue_sort()
+
 func _get_s(parsed_dict: Dictionary, key: String, def: String = "") -> String:
 	if not parsed_dict.has(key):
 		return def
@@ -226,8 +720,11 @@ func _get_s(parsed_dict: Dictionary, key: String, def: String = "") -> String:
 func _on_text_focus_entered() -> void:
 	if game_over:
 		return
+
 	OpLog.d(LOG_TAG, "text_focus_entered")
-	questions_container.visible = false
+
+	if not _questions_landscape_active:
+		questions_container.visible = false
 
 func _on_text_focus_exited() -> void:
 	OpLog.d(LOG_TAG, "text_focus_exited")
@@ -331,10 +828,13 @@ func _process(_delta: float) -> void:
 				_on_keyboard_closed()
 				
 func _on_keyboard_open(_height: int) -> void:
-	if is_instance_valid(questions_container):
+	if (
+		is_instance_valid(questions_container) and
+		not _questions_landscape_active
+	):
 		questions_container.visible = false
 
-	if i_am_player == 1 and is_instance_valid(bottom_items):
+	if (i_am_player == 1 and is_instance_valid(bottom_items) and not _questions_landscape_active):
 		bottom_items.set_anchors_preset(Control.PRESET_TOP_WIDE)
 		var target_y := 8.0 + (_desc_rich.get_rect().size.y if is_instance_valid(_desc_rich) else 32.0)
 		var t := create_tween()
@@ -842,6 +1342,9 @@ func _replay_from_state() -> void:
 		])
 
 func _on_send_pressed() -> void:
+	if _settings_open or _rules_open:
+		return
+
 	var can_ask: bool = (
 		i_am_player != 2
 		and is_my_turn
@@ -1187,17 +1690,18 @@ func _update_ui_interactivity() -> void:
 
 	if is_instance_valid(questions_text_container):
 		questions_text_container.visible = enable_input
-		questions_text_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		questions_text_container.size_flags_horizontal = (Control.SIZE_EXPAND_FILL if _questions_landscape_active else Control.SIZE_SHRINK_CENTER)
 
 		if enable_input:
-			questions_text_container.custom_minimum_size = Vector2(min(get_viewport().get_visible_rect().size.x * 0.88, 640.0), 64.0)
+			questions_text_container.custom_minimum_size = Vector2(_question_input_width(), 360.0 if _questions_landscape_active else 64.0)
 		else:
 			questions_text_container.custom_minimum_size = Vector2.ZERO
 
 	if is_instance_valid(text_box):
 		text_box.visible = enable_input
 		text_box.editable = enable_input
-		text_box.custom_minimum_size.y = 56.0 if enable_input else 0.0
+		text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		text_box.custom_minimum_size = Vector2(0.0, 220.0 if _questions_landscape_active else 56.0) if enable_input else Vector2.ZERO
 
 	if is_instance_valid(bottom_items):
 		bottom_items.visible = enable_input
@@ -1244,15 +1748,15 @@ func _show_question_input() -> void:
 
 	if is_instance_valid(questions_text_container):
 		questions_text_container.visible = true
-		questions_text_container.custom_minimum_size = Vector2(min(get_viewport().get_visible_rect().size.x * 0.88, 640.0), 64.0)
-		questions_text_container.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		questions_text_container.custom_minimum_size = Vector2(_question_input_width(), 360.0 if _questions_landscape_active else 64.0)
+		questions_text_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL if _questions_landscape_active else Control.SIZE_SHRINK_CENTER
 
 	if is_instance_valid(text_box):
 		text_box.visible = true
 		text_box.editable = true
 		text_box.mouse_filter = Control.MOUSE_FILTER_STOP
-		text_box.custom_minimum_size.y = 56.0
 		text_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		text_box.custom_minimum_size = Vector2(0.0, 220.0 if _questions_landscape_active else 56.0)
 
 	if is_instance_valid(send_button):
 		send_button.visible = true
@@ -1358,17 +1862,28 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 	var idx := int(q["idx"])
 	var col := _question_color_for_index(idx)
 	var resp_code := int(q.get("resp", 0))
+	var wide_layout := (
+		_questions_landscape_active
+	)
 
 	dbg("row_build idx=%d latest=%s resp=%d" % [idx, str(is_latest), resp_code])
 
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.custom_minimum_size = Vector2(0, 72)
-	row.add_theme_constant_override("separation", 12)
+	row.custom_minimum_size = Vector2(0.0, 130.0 if wide_layout else 72.0)
+
+	row.add_theme_constant_override(
+		"separation",
+		16 if wide_layout else 12,
+	)
 
 	var left_holder := Control.new()
 	left_holder.name = "LeftHolder"
-	left_holder.custom_minimum_size = Vector2(72, 56)
+	left_holder.custom_minimum_size = (
+		Vector2(96.0, 75.0)
+		if wide_layout
+		else Vector2(72.0, 56.0)
+	)
 	left_holder.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var left_stack := Control.new()
 	left_stack.name = "LeftStack"
@@ -1390,66 +1905,94 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 		if opp_inst is Control:
 			opp_inst.name = "OpponentAvatar"
 
-			opp_inst.set("controlled_by_data", true)
-			opp_inst.set("is_display_only", true)
-			opp_inst.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			opp_inst.clip_contents = false
-			left_stack.add_child(opp_inst)
-			opp_inst.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
-			opp_inst.position = Vector2.ZERO
-			opp_inst.size = Vector2(96.0, 75.0)
-			opp_inst.custom_minimum_size = Vector2(96.0,75.0)
-			opp_inst.pivot_offset = Vector2.ZERO
-			opp_inst.scale = Vector2(0.75,0.75)
+			opp_inst.set(
+				"controlled_by_data",
+				true,
+			)
 
-			var internal_viewport := (
+			opp_inst.set(
+				"is_display_only",
+				true,
+			)
+
+			opp_inst.mouse_filter = (
+				Control.MOUSE_FILTER_IGNORE
+			)
+
+			opp_inst.clip_contents = false
+
+			left_stack.add_child(
+				opp_inst,
+			)
+
+			opp_inst.set_anchors_preset(
+				Control.PRESET_TOP_LEFT,
+				false,
+			)
+
+			opp_inst.position = Vector2.ZERO
+			opp_inst.size = Vector2(
+				96.0,
+				75.0,
+			)
+
+			opp_inst.custom_minimum_size = Vector2(
+				96.0,
+				75.0,
+			)
+
+			opp_inst.pivot_offset = Vector2.ZERO
+
+			opp_inst.scale = (
+				Vector2.ONE
+				if wide_layout
+				else Vector2(0.75, 0.75)
+			)
+
+			var avatar_viewport := (
 				opp_inst.get_node_or_null(
 					"SubViewportContainer/SubViewport",
 				) as SubViewport
 			)
 
-			if internal_viewport != null:
-				internal_viewport.render_target_update_mode = (
+			if avatar_viewport != null:
+				avatar_viewport.render_target_update_mode = (
 					SubViewport.UPDATE_ALWAYS
 				)
 
-			var internal_preview := (
+			var avatar_preview := (
 				opp_inst.get_node_or_null(
 					"SubViewportContainer",
 				) as SubViewportContainer
 			)
 
-			if internal_preview != null:
-				internal_preview.mouse_filter = (
+			if avatar_preview != null:
+				avatar_preview.mouse_filter = (
 					Control.MOUSE_FILTER_IGNORE
 				)
-				internal_preview.visible = true
-				internal_preview.self_modulate = Color.WHITE
-				internal_preview.pivot_offset = Vector2(
+
+				avatar_preview.visible = true
+				avatar_preview.self_modulate = Color.WHITE
+				avatar_preview.pivot_offset = Vector2(
 					48.0,
 					140.0,
 				)
-				internal_preview.scale = Vector2.ONE
-
-			dbg(
-				"row_avatar added left_stack_size=%s" %
-				str(left_stack.get_rect().size)
-			)
+				avatar_preview.scale = Vector2.ONE
 
 			if _sender_avatar_data.is_empty():
-				OpLog.w(LOG_TAG, "row_sender_avatar_empty_using_defaults")
-			else:
-				dbg("row_avatar using_sender_avatar_data")
-
-			if opp_inst.has_method("update_avatar_from_data"):
-				dbg("row_avatar calling_update_avatar_from_data")
-
-				_apply_sender_avatar_deferred(opp_inst, _sender_avatar_data.duplicate(true))
-			else:
-				OpLog.w(LOG_TAG, [
-					"row_avatar_missing_update_method node=", opp_inst,
-					" script=", opp_inst.get_script()
-				])
+				OpLog.w(
+					LOG_TAG,
+					"row_sender_avatar_empty_using_defaults",
+				)
+			elif opp_inst.has_method(
+				"update_avatar_from_data",
+			):
+				_apply_sender_avatar_deferred(
+					opp_inst,
+					_sender_avatar_data.duplicate(
+						true,
+					),
+				)
 		else:
 			OpLog.w(LOG_TAG, ["row_avatar_instance_not_control got=", opp_inst])
 	else:
@@ -1459,7 +2002,7 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 		qmark.text = "?"
 		qmark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		qmark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		qmark.add_theme_font_size_override("font_size", 48)
+		qmark.add_theme_font_size_override("font_size", 80 if wide_layout else 48)
 		qmark.add_theme_color_override("font_color", col)
 		qmark.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		qmark.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -1469,7 +2012,7 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 	var card := PanelContainer.new()
 	card.name = "QuestionCard"
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.custom_minimum_size = Vector2(0, 56)
+	card.custom_minimum_size = Vector2(0.0, 110.0 if wide_layout else 56.0)
 
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = col
@@ -1477,25 +2020,25 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 	sb.corner_radius_top_right = 12
 	sb.corner_radius_bottom_left = 12
 	sb.corner_radius_bottom_right = 12
-	sb.content_margin_left = 14
-	sb.content_margin_right = 14
-	sb.content_margin_top = 10
-	sb.content_margin_bottom = 10
+	sb.content_margin_left = 22 if wide_layout else 14
+	sb.content_margin_right = 22 if wide_layout else 14
+	sb.content_margin_top = 16 if wide_layout else 10
+	sb.content_margin_bottom = 16 if wide_layout else 10
 	card.add_theme_stylebox_override("panel", sb)
 
 	var inner := HBoxContainer.new()
 	inner.name = "Inner"
 	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inner.add_theme_constant_override("separation", 12)
+	inner.add_theme_constant_override("separation", 22 if wide_layout else 12)
 	card.add_child(inner)
 
 	var num_lbl := Label.new()
 	num_lbl.name = "IdxLabel"
 	num_lbl.text = str(idx) + "."
 	num_lbl.add_theme_color_override("font_color", Color.BLACK)
-	num_lbl.add_theme_font_size_override("font_size", 22)
+	num_lbl.add_theme_font_size_override("font_size", 38 if wide_layout else 22)
 	num_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	num_lbl.custom_minimum_size = Vector2(36, 0)
+	num_lbl.custom_minimum_size = Vector2(62.0 if wide_layout else 36.0, 0.0)
 	inner.add_child(num_lbl)
 
 	var q_lbl := Label.new()
@@ -1506,7 +2049,7 @@ func _make_question_row(q: Dictionary, is_latest: bool) -> HBoxContainer:
 	q_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	q_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	q_lbl.add_theme_color_override("font_color", Color.BLACK)
-	q_lbl.add_theme_font_size_override("font_size", 20)
+	q_lbl.add_theme_font_size_override("font_size", 38 if wide_layout else 20)
 	inner.add_child(q_lbl)
 
 	if resp_code > 0:
@@ -1559,7 +2102,7 @@ func _make_response_chip(code: int) -> Control:
 	var col := _response_color(code)
 
 	var holder := PanelContainer.new()
-	holder.custom_minimum_size = Vector2(110, 36)
+	holder.custom_minimum_size = Vector2(210.0, 70.0) if _questions_landscape_active else Vector2(110.0, 36.0)
 
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = col
@@ -1579,7 +2122,7 @@ func _make_response_chip(code: int) -> Control:
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	lbl.add_theme_font_size_override("font_size", 16)
+	lbl.add_theme_font_size_override("font_size", 28 if _questions_landscape_active else 16)
 	if code == 2:
 		lbl.add_theme_color_override("font_color", Color(1,1,1,1))
 	holder.add_child(lbl)
@@ -1665,6 +2208,9 @@ func _maybe_show_answer_popup() -> void:
 		overlay.z_index = 1000
 	
 func _overlay_click(code: int) -> void:
+	if _settings_open or _rules_open:
+		return
+
 	dbg("overlay: click code=%d on idx=%d" % [code, _overlay_idx])
 
 	if _overlay_idx == -1:
@@ -1734,15 +2280,48 @@ func _show_answer_overlay_for(idx: int, text: String, col: Color) -> void:
 	overlay.visible = true
 	OpLog.event(LOG_TAG, ["answer_overlay_visible idx=", idx, " text=", text])
 	overlay.move_to_front()
-	var vp_w := get_viewport_rect().size.x
-	var card := overlay.get_node_or_null("Card") as Control
+	var available_width := (
+		questions_container.size.x
+	)
+
+	if available_width <= 1.0:
+		available_width = (
+			get_viewport_rect().size.x *
+			(
+				0.5
+				if _questions_landscape_active
+				else 1.0
+			)
+		)
+
+	var card := (
+		overlay.get_node_or_null("Card")
+		as Control
+	)
+
 	var target := card if card else overlay
 
-	target.set_anchors_preset(Control.PRESET_CENTER)
-	target.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	target.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	target.custom_minimum_size.x = vp_w * 0.8
+	target.set_anchors_preset(
+		Control.PRESET_CENTER,
+	)
 
+	target.size_flags_horizontal = (
+		Control.SIZE_SHRINK_CENTER
+	)
+
+	target.size_flags_vertical = (
+		Control.SIZE_SHRINK_CENTER
+	)
+
+	target.custom_minimum_size = Vector2(
+		minf(
+			available_width * 0.88,
+			720.0,
+		),
+		240.0
+			if _questions_landscape_active
+			else 150.0,
+	)
 
 	var r := overlay.get_global_rect()
 	dbg("overlay: SHOW idx=%d text='%s' unanswered=%d turn=%s p=%d rect=(%.1f,%.1f,%.1f,%.1f) visible=%s z=%d top_level=%s" % [
@@ -1764,11 +2343,19 @@ func _update_description_fill() -> void:
 	if not is_instance_valid(_desc_rich):
 		return
 
+	var body_font_size := 30 if _questions_landscape_active else 18
+	var word_label_font_size := 36 if _questions_landscape_active else 20
+	var word_font_size := 52 if _questions_landscape_active else 34
+
 	_desc_rich.bbcode_enabled = true
 	_desc_rich.text = ""
 
 	if spectator_mode:
-		_desc_rich.parse_bbcode("[font_size=18]You are watching this game.[/font_size]")
+		_desc_rich.parse_bbcode(
+			"[font_size=%d]You are watching this game.[/font_size]" %
+				body_font_size
+		)
+
 		_desc_rich.visible = true
 		return
 
@@ -1778,14 +2365,33 @@ func _update_description_fill() -> void:
 		if word_text == "":
 			word_text = "..."
 
-		var your_word := "[font_size=20]Your word:[/font_size]\n"
-		var the_word := "[font_size=34][b]%s[/b][/font_size]" % word_text
-		_desc_rich.parse_bbcode(your_word + the_word)
+		var your_word := (
+			"[font_size=%d]Your word:[/font_size]\n" %
+				word_label_font_size
+		)
+
+		var the_word := (
+			"[font_size=%d][b]%s[/b][/font_size]" %
+				[
+					word_font_size,
+					word_text,
+				]
+		)
+
+		_desc_rich.parse_bbcode(
+			your_word +
+			the_word
+		)
+
 		_desc_rich.visible = true
 		return
 
 	if i_am_player == 1:
-		_desc_rich.parse_bbcode("[font_size=18]Your goal is to guess the answer in 20 questions or less.[/font_size]")
+		_desc_rich.parse_bbcode(
+			"[font_size=%d]Your goal is to guess the answer in 20 questions or less.[/font_size]" %
+				body_font_size
+		)
+
 		_desc_rich.visible = true
 		return
 

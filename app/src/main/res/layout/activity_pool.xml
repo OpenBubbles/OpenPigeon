@@ -20,7 +20,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
         android:layout_marginStart="10dp"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="18dp"
         android:orientation="vertical"
         android:gravity="center_horizontal">
 
@@ -59,9 +59,15 @@
         android:orientation="vertical"
         android:gravity="center_horizontal">
 
-        <View
+        <TextView
             android:layout_width="match_parent"
-            android:layout_height="18dp" />
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#CCFFFFFF"
+            android:textSize="18sp"
+            android:gravity="center"
+            android:layout_marginBottom="2dp"
+            android:visibility="invisible" />
 
         <FrameLayout
             android:id="@+id/oppAvatarAnchor"
