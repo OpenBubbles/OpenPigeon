@@ -122,6 +122,10 @@ import android.util.Base64
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.Density
 import kotlin.math.abs
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
@@ -573,12 +577,20 @@ class Crazy8Activity : ComponentActivity() {
     }
 
     private fun sendAsync(block: () -> Unit) {
-        networkExecutor.execute {
-            try {
-                block()
-            } catch (e: Exception) {
-                OpenPigeonLog.e("Crazy8", "Async operation failed", e)
+        if (crazy8ActivityClosing || networkExecutor.isShutdown) {
+            return
+        }
+
+        try {
+            networkExecutor.execute {
+                try {
+                    block()
+                } catch (e: Exception) {
+                    OpenPigeonLog.e("Crazy8", "Async operation failed", e)
+                }
             }
+        } catch (e: RejectedExecutionException) {
+            OpenPigeonLog.w("Crazy8", "Dropped async send after executor shutdown")
         }
     }
 
@@ -2241,7 +2253,11 @@ fun RenderGame(
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val keyboardController = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
+    val baseDensity = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
+    val gameScale = if (isLandscape) (configuration.screenHeightDp / 720f).coerceIn(0.5f, 1f) else 1f
+    val density = Density(baseDensity.density * gameScale, baseDensity.fontScale)
 
     var drawPileCenter by remember { mutableStateOf<Offset?>(null) }
     var discardPileCenter by remember { mutableStateOf<Offset?>(null) }
@@ -2674,9 +2690,10 @@ fun RenderGame(
 
     val boardSize = remember { mutableStateOf(IntSize.Zero) }
 
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
+    CompositionLocalProvider(LocalDensity provides density) {
+        Box(
+            modifier = Modifier.fillMaxSize()
+        ) {
         Image(
             painter = painterResource(id = R.drawable.crazybg),
             contentDescription = null,
@@ -3379,6 +3396,7 @@ fun RenderGame(
             }
         }
 
+        CompositionLocalProvider(LocalDensity provides baseDensity) {
         if (imeVisible) {
             ChatMessagesList(
                 messages = messages,
@@ -3447,8 +3465,9 @@ fun RenderGame(
                 color = Color.White
             )
         }
+        }
 
-        activity?.lobbySpeechBubbles?.forEach { entry ->
+            activity?.lobbySpeechBubbles?.forEach { entry ->
             val playerId = entry.key
             val bubbleText = entry.value
             val center = avatarCenters[playerId]
@@ -3539,6 +3558,7 @@ fun RenderGame(
                     card = flyingCard, modifier = flyingModifier, lightweight = true
                 )
             }
+        }
         }
     }
 }

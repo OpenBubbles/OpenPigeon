@@ -2573,12 +2573,24 @@ class KnockoutActivity : AppCompatActivity() {
             }
 
             if (hint != null && hint.isVisible) {
+                val landscape = width > height
+                val hintGravity = if (landscape) Gravity.START or Gravity.CENTER_VERTICAL else Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                val hintBottom = if (landscape) 0 else bottomMargin
+                val hintStart = if (landscape) dp(16f).toInt() else 0
+
                 val lp = hint.layoutParams as? FrameLayout.LayoutParams
-                if (lp != null && (lp.gravity != (Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL) || lp.bottomMargin != bottomMargin || lp.topMargin != 0)) {
-                    lp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                    lp.bottomMargin = bottomMargin
+                if (lp != null && (lp.gravity != hintGravity || lp.bottomMargin != hintBottom || lp.topMargin != 0 || lp.marginStart != hintStart)) {
+                    lp.gravity = hintGravity
+                    lp.bottomMargin = hintBottom
                     lp.topMargin = 0
+                    lp.marginStart = hintStart
                     hint.layoutParams = lp
+                }
+
+                hint.maxWidth = if (landscape) {
+                    ((width - height * 0.8f) / 2f - dp(32f)).toInt().coerceAtLeast(dp(96f).toInt())
+                } else {
+                    Int.MAX_VALUE
                 }
 
                 hint.bringToFront()

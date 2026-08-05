@@ -28,6 +28,8 @@ var terrain_base_y: float = 0.0
 
 var _vp_size: Vector2 = Vector2.ZERO
 var _wind_smoothed: float = 0.0
+var _cloud_phase_1: float = 0.0
+var _cloud_phase_2: float = 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -112,7 +114,7 @@ func _process(delta: float) -> void:
 	if _vp_size.x <= 1.0:
 		return
 
-	var a: float = clamp(wind_smooth * delta, 0.0, 1.0)
+	var a: float = 1.0 - exp(-max(wind_smooth, 0.001) * delta)
 	_wind_smoothed = lerp(_wind_smoothed, wind, a)
 
 	var wind_uv_speed: float = (_wind_smoothed * base_speed_px) / _vp_size.x
@@ -121,14 +123,17 @@ func _process(delta: float) -> void:
 
 	var mag: float = abs(_wind_smoothed)
 
-	_set_layer_params(c1, final_uv_speed, density, max_alpha, spread, whip_strength, whip_speed, mag)
-	_set_layer_params(c2, final_uv_speed * layer2_speed_mult, density * layer2_alpha_mult, max_alpha, spread * 1.25, whip_strength * 1.2, whip_speed, mag)
+	_cloud_phase_1 = fposmod(_cloud_phase_1 + final_uv_speed * delta, 1.0)
+	_cloud_phase_2 = fposmod(_cloud_phase_2 + final_uv_speed * layer2_speed_mult * delta, 1.0)
+
+	_set_layer_params(c1, final_uv_speed, _cloud_phase_1, density, max_alpha, spread, whip_strength, whip_speed, mag)
+	_set_layer_params(c2, final_uv_speed * layer2_speed_mult, _cloud_phase_2, density * layer2_alpha_mult, max_alpha, spread * 1.25, whip_strength * 1.2, whip_speed, mag)
 	
 func _push_all_params() -> void:
-	_set_layer_params(c1, 0.0, density, max_alpha, spread, whip_strength, whip_speed, 0.0)
-	_set_layer_params(c2, 0.0, density * layer2_alpha_mult, max_alpha, spread * 1.25, whip_strength * 1.2, whip_speed, 0.0)
+	_set_layer_params(c1, 0.0, _cloud_phase_1, density, max_alpha, spread, whip_strength, whip_speed, 0.0)
+	_set_layer_params(c2, 0.0, _cloud_phase_2, density * layer2_alpha_mult, max_alpha, spread * 1.25, whip_strength * 1.2, whip_speed, 0.0)
 
-func _set_layer_params(s: Sprite2D, uv_speed: float, dens: float, fade_max: float, spr: float, whip_s: float, whip_sp: float, wind_abs: float) -> void:
+func _set_layer_params(s: Sprite2D, uv_speed: float, uv_offset: float, dens: float, fade_max: float, spr: float, whip_s: float, whip_sp: float, wind_abs: float) -> void:
 	if not is_instance_valid(s):
 		return
 
@@ -137,6 +142,7 @@ func _set_layer_params(s: Sprite2D, uv_speed: float, dens: float, fade_max: floa
 	var m := s.material as ShaderMaterial
 	if m:
 		m.set_shader_parameter("uv_speed", uv_speed)
+		m.set_shader_parameter("uv_offset", uv_offset)
 		m.set_shader_parameter("density", dens)
 		m.set_shader_parameter("fade_max", fade_max)
 		m.set_shader_parameter("spread", spr)

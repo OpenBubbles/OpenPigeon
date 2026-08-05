@@ -27,6 +27,10 @@ import com.openbubbles.openpigeon.wordgames.WordGameLanguages
 import kotlin.random.Random
 import android.view.View
 import android.view.ViewGroup
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class WordHuntActivity : AppCompatActivity() {
     private val baseGame: Game = WordHuntGame()
@@ -483,6 +487,20 @@ class WordHuntActivity : AppCompatActivity() {
             )
         }
 
+        lifecycleScope.launch(Dispatchers.Default) {
+            val words = WordHuntSolver.solve(
+                board = gameState.board(),
+                gridSize = selectedMode.gridSize,
+                invalidPositions = selectedMode.invalidPositions,
+                dictionary = dictionary,
+                minLength = MIN_WORD_LENGTH,
+            )
+
+            withContext(Dispatchers.Main) {
+                gameState.setAllWords(words)
+            }
+        }
+
         gameState.isGameActive = !spectatorMode
 
         OpenPigeonLog.i(
@@ -810,6 +828,7 @@ class WordHuntActivity : AppCompatActivity() {
                 "avatar1" to msg["avatar1"].orEmpty(),
                 "avatar2" to msg["avatar2"].orEmpty(),
                 "winner_slot" to winnerSlot,
+                "all_words" to gameState.allWords.joinToString("|"),
             )
         }
 
@@ -873,6 +892,8 @@ class WordHuntActivity : AppCompatActivity() {
             "opponent_avatar" to msg["avatar$opponent"].orEmpty(),
 
             "winner_slot" to winnerSlot,
+
+            "all_words" to gameState.allWords.joinToString("|"),
         )
     }
 

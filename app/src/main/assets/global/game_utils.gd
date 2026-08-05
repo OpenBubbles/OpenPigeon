@@ -23,6 +23,8 @@ static func _parse_avatar_string(data_string: String) -> Dictionary:
 		"mouth_style":    mouth_map[0]    if mouth_map.size()    > 0 else "mouth1",
 		"clothing_style": clothing_map[0] if clothing_map.size() > 0 else "clothing1",
 		"bg_style":       "Plain",
+		"head_acc_style": "hat_0",
+		"face_acc_style": "face_1",
 		"fshape_color":   Color(0.88, 0.67, 0.41),
 		"hair_color":     Color(0.17, 0.14, 0.17),
 		"clothing_color": Color(0.63, 0.24, 0.24),
@@ -76,6 +78,12 @@ static func _parse_avatar_string(data_string: String) -> Dictionary:
 				var i := key_value[1].to_int()
 				if i >= 0 and i < backdrop_map.size():
 					data["bg_style"] = String(backdrop_map[i])
+			"acc":
+				data["head_acc_style"] = "hat_%d" % clampi(key_value[1].to_int(), 0, 12)
+			"glasses":
+				var face_style := "face_%d" % (key_value[1].to_int() + 1)
+				if AvatarThumbnail.avatar_face_accessories_regions.has(face_style):
+					data["face_acc_style"] = face_style
 			_:
 				pass
 	return data

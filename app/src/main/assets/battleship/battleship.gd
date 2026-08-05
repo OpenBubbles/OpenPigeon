@@ -17,6 +17,11 @@ var sent_tween: Tween
 @onready var shuffle_button: TextureButton = %ShuffleButton
 @onready var battleground1: BattleGround = %BattleGround1
 @onready var battleground2: BattleGround = %BattleGround2
+@onready var battle_area_root: MarginContainer = %BattleAreaRoot
+@onready var top_bar: HBoxContainer = %TopBar
+@onready var bottom_bar: HBoxContainer = %BottomBar
+@onready var p1_board_wrapper: Control = %P1BoardWrapper
+@onready var p2_board_wrapper: Control = %P2BoardWrapper
 @onready var winner_label: Label = %WinLossLabel
 @onready var sent_label: Label = %SentLabel
 @onready var spectator_label: Label = %SpecLabel
@@ -63,6 +68,7 @@ var _rand48_state: int = 0
 var _rand48_initialized: bool = false
 var _ship_creation_draws_consumed: bool = false
 var _popup_input_blocked: bool = false
+var _on_opponent_board := false
 
 const SHIP_TEMPLATES := {
 	8:  "pos:2,3&num:0,0,0,0&rot:0|pos:1,0&num:0,0,0&rot:1|pos:4,2&num:0,0,0&rot:1|pos:7,4&num:0,0,0&rot:0|pos:0,4&num:0,0&rot:0|pos:5,6&num:0,0&rot:0|pos:5,0&num:0,0&rot:1",
@@ -223,6 +229,7 @@ func _get_settings_avatar_display():
 func _add_settings_rows(_container, popup_script) -> void:
 	popup_script.settings_theme_selected.connect(_on_theme_changed)
 
+@warning_ignore("shadowed_global_identifier")
 func _srand48(seed: int) -> void:
 	var unsigned_seed: int = seed & 0xffffffff
 	_rand48_state = (
@@ -301,6 +308,9 @@ func _on_game_ready() -> void:
 	if is_instance_valid(fire_button):
 		fire_button.visible = false
 		fire_button.disabled = true
+
+	if not get_viewport().size_changed.is_connected(_apply_responsive_ui):
+		get_viewport().size_changed.connect(_apply_responsive_ui)
 
 	if replay == null or player == null:
 		return
@@ -403,6 +413,7 @@ func _set_game_data(new_replay: String) -> void:
 				resolved_player = 2 if payload_player == 1 else 1
 
 	player = resolved_player
+	_apply_responsive_ui()
 
 	OpLog.i(LOG_TAG, [
 		"player_resolve payloadPlayer=", payload_player,
@@ -422,6 +433,8 @@ func _set_game_data(new_replay: String) -> void:
 		battleground1.set_size(bsize)
 	if is_instance_valid(battleground2):
 		battleground2.set_size(bsize)
+
+	_prepare_pins()
 
 	var opponent_avatar_key := ""
 	var player_avatar_key := ""
@@ -1158,6 +1171,253 @@ func _set_avatar_display_shown(display: Control, should_show: bool) -> void:
 	m.a = 1.0 if should_show else 0.0
 	display.modulate = m
 
+const BS_LANDSCAPE_ROTATION := -90.0
+const BS_LANDSCAPE_UI_SCALE := 1.5
+const BS_BOARD_BASE := 512.0
+const BS_BOARD_HEIGHT_FRACTION := 0.8
+
+func _is_landscape() -> bool:
+	var vp := get_viewport_rect().size
+	return vp.x > vp.y
+
+func _fit_center_label(l: Label) -> void:
+	var m: Vector2 = l.get_theme_font("font").get_string_size(
+		l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, l.get_theme_font_size("font_size")
+	) + Vector2(24.0, 12.0)
+	l.offset_left = -m.x * 0.5
+	l.offset_right = m.x * 0.5
+	l.offset_top = -m.y * 0.5
+	l.offset_bottom = m.y * 0.5
+	l.pivot_offset = m * 0.5
+
+var _pin_homes: Dictionary = {}
+
+var _pins_ready := false
+
+func _pinned_nodes() -> Array:
+	return [
+		rules_button, settings_button, shuffle_button, state,
+		choose_target_label, fire_button, start_button,
+		p1_you_label, p2_you_label,
+		p1_avatar_display, p2_avatar_display
+	]
+
+func _prepare_pins() -> void:
+	if _pins_ready:
+		return
+	_pins_ready = true
+
+	var hidden: Array = []
+	for c in _pinned_nodes():
+		if is_instance_valid(c) and not c.visible:
+			hidden.append([c, c.modulate.a])
+			c.modulate.a = 0.0
+			c.visible = true
+
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	for c in _pinned_nodes():
+		if is_instance_valid(c) and c.get_parent() != self and c.size.x > 1.0 and c.size.y > 1.0:
+			_pin_homes[c] = Rect2(c.global_position, c.size)
+
+	for c in _pinned_nodes():
+		if is_instance_valid(c) and _pin_homes.has(c):
+			c.reparent(self)
+			c.set_anchors_preset(Control.PRESET_TOP_LEFT)
+
+	for entry in hidden:
+		var c: Control = entry[0]
+		if is_instance_valid(c):
+			c.visible = false
+			c.modulate.a = entry[1]
+
+	_apply_responsive_ui()
+
+func _capture_pin_home(_c: Control) -> void:
+	pass
+
+func _pin_to_root(c: Control, anchor: Vector2, off: Vector2, sz: Vector2) -> void:
+	if not _pin_homes.has(c):
+		return
+	c.rotation_degrees = 0.0
+	c.pivot_offset = Vector2.ZERO
+	c.anchor_left = anchor.x
+	c.anchor_right = anchor.x
+	c.anchor_top = anchor.y
+	c.anchor_bottom = anchor.y
+	c.offset_left = off.x
+	c.offset_top = off.y
+	c.offset_right = off.x + sz.x
+	c.offset_bottom = off.y + sz.y
+
+func _unpin_from_root(c: Control) -> void:
+	if not _pin_homes.has(c):
+		return
+	var r: Rect2 = _pin_homes[c]
+	_pin_to_root(c, Vector2.ZERO, r.position, r.size)
+
+var _avatar_rects: Dictionary = {}
+
+var _flight_nodes: Array = []
+var _ui_was_land := -1
+
+func _clear_flight_nodes() -> void:
+	for n in _flight_nodes:
+		if is_instance_valid(n):
+			n.queue_free()
+	_flight_nodes.clear()
+
+func _capture_avatar_rect(c: Control) -> void:
+	if not _avatar_rects.has(c) and c.get_parent() != self and c.size.x > 1.0:
+		_avatar_rects[c] = Rect2(c.global_position, c.size)
+
+func _refresh_action_controls() -> void:
+	await get_tree().process_frame
+	var land := _is_landscape()
+	var s := BS_LANDSCAPE_UI_SCALE if land else 1.0
+	var counter := -BS_LANDSCAPE_ROTATION if land else 0.0
+	choose_target_label.add_theme_font_size_override("font_size", int(28.0 * s))
+	if is_instance_valid(start_button):
+		start_button.reset_size()
+		start_button.pivot_offset = start_button.size * 0.5
+		start_button.rotation_degrees = counter
+	if is_instance_valid(fire_button):
+		fire_button.add_theme_font_size_override("font_size", int(32.0 * s))
+
+func _apply_responsive_ui() -> void:
+	await get_tree().process_frame
+	var vp := get_viewport_rect().size
+	var land := vp.x > vp.y
+	var s := BS_LANDSCAPE_UI_SCALE if land else 1.0
+	var land_i := 1 if land else 0
+	if _ui_was_land != -1 and _ui_was_land != land_i:
+		_clear_flight_nodes()
+	_ui_was_land = land_i
+
+	if land:
+		battle_area_root.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		var want := Vector2(vp.y, vp.x)
+		var mins := battle_area_root.get_combined_minimum_size()
+		var actual := Vector2(maxf(want.x, mins.x), maxf(want.y, mins.y))
+		battle_area_root.size = actual
+		battle_area_root.pivot_offset = actual * 0.5
+		battle_area_root.rotation_degrees = BS_LANDSCAPE_ROTATION
+		battle_area_root.position = (vp - actual) * 0.5
+	else:
+		battle_area_root.rotation_degrees = 0.0
+		battle_area_root.pivot_offset = Vector2.ZERO
+		battle_area_root.set_anchors_preset(Control.PRESET_FULL_RECT, true)
+		battle_area_root.offset_left = 0.0
+		battle_area_root.offset_top = 0.0
+		battle_area_root.offset_right = 0.0
+		battle_area_root.offset_bottom = 0.0
+
+	var my_avatar := _get_my_avatar_display()
+	var my_you_label: Label = p1_you_label if my_avatar == p1_avatar_display else p2_you_label
+	var pad := 20.0
+	var bsz := Vector2(96.0, 96.0) if land else Vector2(56.0, 56.0)
+	var gutter_w := (vp.x - vp.y * BS_BOARD_HEIGHT_FRACTION) * 0.5
+	var gutter_c := gutter_w * 0.5
+
+	for c in [rules_button, settings_button, shuffle_button, state, my_avatar, my_you_label]:
+		if is_instance_valid(c):
+			_capture_pin_home(c)
+
+	if land:
+		_pin_to_root(rules_button, Vector2(0.0, 0.0),
+			Vector2(gutter_c - bsz.x * 0.5, pad), bsz)
+		_pin_to_root(settings_button, Vector2(1.0, 0.0),
+			Vector2(-gutter_c - bsz.x * 0.5, pad), bsz)
+		_pin_to_root(shuffle_button, Vector2(1.0, 1.0),
+			Vector2(-gutter_c - bsz.x * 0.5, -pad - bsz.y), bsz)
+		var av := Vector2(96.0, 90.0) * s
+		var youh := 24.0 * s
+		var lbl := Vector2(gutter_w * 0.9, 44.0)
+		var y0 := -lbl.y * 0.5 - 8.0 - youh - av.y
+		if is_instance_valid(my_avatar):
+			_pin_to_root(my_avatar, Vector2(0.0, 0.5),
+				Vector2(gutter_c - av.x * 0.5, y0), av)
+			_pin_to_root(my_you_label, Vector2(0.0, 0.5),
+				Vector2(gutter_c - av.x * 0.5, y0 + av.y), Vector2(av.x, youh))
+			var their_avatar := _get_opp_avatar_display()
+			if is_instance_valid(their_avatar):
+				_capture_pin_home(their_avatar)
+				_pin_to_root(their_avatar, Vector2(0.0, 0.5),
+					Vector2(gutter_c - av.x * 0.5, y0), av)
+			for a in [my_avatar, their_avatar]:
+				if is_instance_valid(a):
+					a.custom_minimum_size = av
+					var prev := a.get_node_or_null("SubViewportContainer") as SubViewportContainer
+					if prev != null:
+						prev.scale = Vector2.ONE * s
+		else:
+			y0 = -lbl.y * 0.5
+		_pin_to_root(state, Vector2(0.0, 0.5), Vector2(gutter_c - lbl.x * 0.5, -lbl.y * 0.5), lbl)
+		var cth := 76.0
+		_capture_pin_home(choose_target_label)
+		_pin_to_root(choose_target_label, Vector2(1.0, 0.5),
+			Vector2(-gutter_c - lbl.x * 0.5, -cth * 0.5), Vector2(lbl.x, cth))
+		_capture_pin_home(fire_button)
+		_pin_to_root(fire_button, Vector2(1.0, 0.5),
+			Vector2(-gutter_c - lbl.x * 0.5, -42.0), Vector2(lbl.x, 84.0))
+	else:
+		_unpin_from_root(rules_button)
+		_unpin_from_root(settings_button)
+		_unpin_from_root(shuffle_button)
+		_unpin_from_root(state)
+		_unpin_from_root(choose_target_label)
+		_unpin_from_root(fire_button)
+		for a in [my_avatar, _get_opp_avatar_display()]:
+			if is_instance_valid(a):
+				a.custom_minimum_size = Vector2(96.0, 90.0)
+				var prev := a.get_node_or_null("SubViewportContainer") as SubViewportContainer
+				if prev != null:
+					prev.scale = Vector2.ONE
+				_unpin_from_root(a)
+	_unpin_from_root(p1_you_label)
+	_unpin_from_root(p2_you_label)
+
+	rules_button.custom_minimum_size = bsz
+	settings_button.custom_minimum_size = bsz
+	shuffle_button.custom_minimum_size = bsz
+	var wide := Vector2(gutter_w * 0.75, 84.0) if land else Vector2(200.0, 56.0)
+	start_button.custom_minimum_size = wide
+	fire_button.custom_minimum_size = wide
+	start_button.add_theme_font_size_override("font_size", int(32.0 * s))
+	fire_button.add_theme_font_size_override("font_size", int(32.0 * s))
+
+	state.add_theme_font_size_override("font_size", int(28.0 * s))
+	my_you_label.add_theme_font_size_override("font_size", int(18.0 * s))
+	spectator_label.add_theme_font_size_override("font_size", int(50.0 * s))
+	for l in [waiting_label, winner_label, sent_label]:
+		l.add_theme_font_size_override("font_size", int(25.0 * s))
+		_fit_center_label(l)
+
+	var k := 1.0
+	if land:
+		k = (vp.y * BS_BOARD_HEIGHT_FRACTION) / BS_BOARD_BASE
+	p1_board_wrapper.custom_minimum_size = Vector2.ONE * BS_BOARD_BASE * k
+	p2_board_wrapper.custom_minimum_size = Vector2.ONE * BS_BOARD_BASE * k
+	battleground1.scale = Vector2.ONE * k
+	battleground2.scale = Vector2.ONE * k
+
+	await get_tree().process_frame
+
+	if land:
+		var gutter_center: float = (vp.x - vp.y * BS_BOARD_HEIGHT_FRACTION) * 0.25
+		battle_area_root.add_theme_constant_override(
+			"margin_top", int(maxf(gutter_center - top_bar.size.y * 0.5, 0.0))
+		)
+		battle_area_root.add_theme_constant_override(
+			"margin_bottom", int(maxf(gutter_center - bottom_bar.size.y * 0.5, 0.0))
+		)
+	else:
+		battle_area_root.add_theme_constant_override("margin_top", 30)
+		battle_area_root.add_theme_constant_override("margin_bottom", 30)
+
+	_refresh_action_controls()
+
 func _get_my_avatar_display() -> Control:
 	if player == 1:
 		return p1_avatar_display
@@ -1253,6 +1513,7 @@ func show_battleground(mine: bool) -> void:
 		not mine
 	)
 
+	_on_opponent_board = not mine
 	_ensure_clouds_visible()
 	call_deferred("_ensure_clouds_visible")
 
@@ -1343,6 +1604,9 @@ func send_update():
 
 	if not is_end:
 		play_sent_animation()
+
+		if _on_opponent_board:
+			_swap_to_opponent_board(true)
 
 func my_battleground_ready():
 	print("[MY_BATTLEGROUND_READY] Entered")
@@ -1514,8 +1778,22 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 
 		var viewport_size: Vector2 = screen_rect.size
 		var view_center: Vector2 = viewport_size / 2.0
-		var cloud_offset: Vector2 = clouds_rect.size / 2.0
-		var cloud_x_offset: float = viewport_size.x * 0.25
+		var board_span: float = BS_BOARD_BASE * battleground1.scale.x
+		clouds_rect.custom_minimum_size = Vector2(board_span * 2.4, board_span * 1.6)
+		var cloud_size := Vector2(
+			maxf(clouds_rect.custom_minimum_size.x, viewport_size.x),
+			maxf(clouds_rect.custom_minimum_size.y, viewport_size.y)
+		)
+		var cloud_offset: Vector2 = cloud_size / 2.0
+		var cloud_container: Control = myBoardContainer if reverse else theirBoardContainer
+		var cloud_bg = myBattleground if reverse else theirBattleground
+		var cloud_x_offset: float = cloud_container.size.x * 0.5
+		if is_instance_valid(cloud_bg) and is_instance_valid(cloud_container):
+			cloud_x_offset = (
+				cloud_bg.global_position.x
+				+ BS_BOARD_BASE * cloud_bg.scale.x * 0.5
+				- cloud_container.global_position.x
+			)
 
 		var incoming_start_pos: Vector2 = my_start_pos if reverse else their_start_pos
 		var incoming_target_pos: Vector2 = my_target_pos if reverse else their_target_pos
@@ -1648,6 +1926,7 @@ func _swap_to_opponent_board(reverse: bool = false) -> void:
 		label_tween.tween_property(choose_target_label, "modulate:a", 1.0, 1.0)
 		print("[SWAP] choose_target_label fade-in tween started.")
 
+	_on_opponent_board = not reverse
 	print("[SWAP] === _swap_to_opponent_board END ===\n")
 
 func _update_you_labels(show_you: bool = true) -> void:
@@ -1720,6 +1999,7 @@ func _process(_delta: float) -> void:
 		
 		if is_instance_valid(fire_button):
 			fire_button.visible = true
+			_refresh_action_controls()
 			fire_button.disabled = false
 	else:
 		if is_instance_valid(fire_button):
@@ -1902,6 +2182,7 @@ func _on_fire_button_pressed() -> void:
 				fire_button.disabled = false
 				fire_button.modulate.a = 0.0
 				fire_button.visible = true
+				_refresh_action_controls()
 				
 				var button_tween := create_tween()
 				button_tween.tween_property(fire_button, "modulate:a", 1.0, 0.5)
@@ -1941,15 +2222,22 @@ func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2,
 	
 	var plane_y := cell_center_local.y - board_size.y * 0.45
 	
+	var vp_w: float = get_viewport_rect().size.x
+	var board_scale: float = maxf(board.scale.x, 0.001)
+	var board_origin_x: float = board.global_position.x
+	var left_edge_local: float = -board_origin_x / board_scale
+	var right_edge_local: float = (vp_w - board_origin_x) / board_scale
+	var margin_local: float = plane_width * 0.5 + 8.0 / board_scale
+	
 	var plane_start: Vector2
 	var plane_end: Vector2
 	
 	if from_right:
-		plane_start = Vector2(board_size.x + plane_width, plane_y)
-		plane_end = Vector2(-plane_width, plane_y)
+		plane_start = Vector2(right_edge_local + margin_local, plane_y)
+		plane_end = Vector2(left_edge_local - margin_local, plane_y)
 	else:
-		plane_start = Vector2(-plane_width, plane_y)
-		plane_end = Vector2(board_size.x + plane_width, plane_y)
+		plane_start = Vector2(left_edge_local - margin_local, plane_y)
+		plane_end = Vector2(right_edge_local + margin_local, plane_y)
 	
 	var plane := Sprite2D.new()
 	plane.texture = plane_tex
@@ -1962,6 +2250,7 @@ func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2,
 		plane.rotation = PI 
 	
 	board.add_child(plane)
+	_flight_nodes.append(plane)
 	
 	var bomb := Sprite2D.new()
 	bomb.texture = bomb_tex
@@ -2029,6 +2318,8 @@ func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2,
 	
 	await bomb_tween.finished
 	
+	_flight_nodes.erase(bomb)
+	_flight_nodes.erase(plane)
 	if is_instance_valid(bomb):
 		bomb.queue_free()
 	if is_instance_valid(plane):

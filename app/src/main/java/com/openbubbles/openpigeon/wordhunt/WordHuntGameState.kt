@@ -38,6 +38,13 @@ class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHu
     val secondsLeft: Int get() = _secondsLeft.intValue
 
     private val _foundWords = mutableStateListOf<String>()
+
+    private val _allWords = mutableStateOf<List<String>>(emptyList())
+    val allWords: List<String> get() = _allWords.value
+
+    fun setAllWords(words: List<String>) {
+        _allWords.value = words
+    }
     val wordCount: Int get() = _foundWords.size
 
     fun sortedWords(): List<String> {

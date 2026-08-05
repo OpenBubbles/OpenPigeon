@@ -1981,7 +1981,11 @@ class PoolActivity : AppCompatActivity() {
         var result = !cueBall.hitBall || cueBallScratch
 
         if (cueBall.ballHit != -1) {
-            val ballHit = poolBalls.find { it.number == cueBall.ballHit } ?: return result
+            val ballHit = poolBalls.find { it.number == cueBall.ballHit }
+            if (ballHit == null) {
+                this.scratch = result
+                return result
+            }
             val stripes = iAmStripes
             val hasMoreBalls = stripes == null || poolBalls.count {
                 !it.sunk && ((stripes && it.isStripe) || (!stripes && it.isSolid))
@@ -2192,8 +2196,8 @@ class PoolActivity : AppCompatActivity() {
                     "FINAL_STATE cueBall.sunk=${cueBall.sunk} nineBallSunk=$nineBallSunk scratch=$scratch target=$nineBallTargetAtShot sunk=${sunkNumberedBalls.map { it.number }}"
                 )
 
-                if (nineBallSunk) {
-                    winState = !scratch
+                if (nineBallSunk && !scratch) {
+                    winState = true
                 }
 
                 if (!scratch && winState == null && sunkNumberedBalls.isNotEmpty()) {
@@ -3013,7 +3017,7 @@ class PoolActivity : AppCompatActivity() {
 
     private fun exportBalls(centerScratch: Boolean): String {
         val result = poolBalls.filter {
-            !it.sunk || (centerScratch && it.number == 0) || (isNineBall && centerScratch && it.number in 1..9)
+            !it.sunk || (centerScratch && it.number == 0) || (isNineBall && centerScratch && it.number == 9)
         }.map {
             val density = if (isFirst) it.density else 1
 
@@ -3022,7 +3026,7 @@ class PoolActivity : AppCompatActivity() {
                 return@map "#392.000000,220.000000,0.000000,$density,0,${it.exportVisualRotationString()}"
             }
 
-            if (isNineBall && centerScratch && it.sunk && it.number in 1..9) {
+            if (isNineBall && centerScratch && it.sunk && it.number == 9) {
                 OpenPigeonLog.i("POOL9_DEBUG", "Respotted fouled pocketed ball ${it.number}")
                 return@map "#560.000000,220.000000,0.000000,1.000000,${it.number},${it.exportVisualRotationString()}"
             }

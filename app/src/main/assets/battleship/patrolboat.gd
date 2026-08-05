@@ -203,7 +203,7 @@ func _input(event: InputEvent) -> void:
 				set_grid_rotation(!is_horizontal)
 			dbg(["drag_end pos=", current_grid_pos, " horizontal=", is_horizontal])
 	elif event is InputEventMouseMotion and is_dragging:
-		var pos = event.position - this_battleground.get_transform().get_origin()
+		var pos = this_battleground.to_local(event.position)
 		set_grid_position(this_battleground.coord_to_grid(pos) - start_offset, is_horizontal)
 
 func set_grid_rotation(horizontal: bool):
@@ -233,7 +233,7 @@ func _on_area_2d_input_event(viewport: Node, event: InputEvent, shape_idx: int) 
 	if event is InputEventMouseButton and canBeMoved:
 		if event.pressed and event.button_index == 1:
 			is_dragging = true
-			var pos = event.position - this_battleground.get_transform().get_origin()
+			var pos = this_battleground.to_local(event.position)
 			start_offset = this_battleground.coord_to_grid(pos) - current_grid_pos
 			down_frame = Time.get_ticks_msec()
 			dbg(["drag_start pos=", current_grid_pos, " horizontal=", is_horizontal])

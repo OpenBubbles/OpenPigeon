@@ -44,6 +44,9 @@ const MUSIC_STREAM := preload("res://global/audio/mancala.ogg")
 @onready var spec_label = %SpecLabel
 @onready var board_sprite := %BoardSprite as TextureRect
 @onready var you_label: Label = %YouLabel
+@onready var game_area_root: MarginContainer = %GameAreaRoot
+@onready var bottom_bar: HBoxContainer = %BottomBar
+@onready var bottom_bar_margin: MarginContainer = %BottomBarMargin
 
 var _carrying_stones_container: Node2D = Node2D.new()
 const STONE_DROP_DELAY: float = 0.1 # Time to pause after dropping each stone
@@ -56,6 +59,93 @@ var sent_tween: Tween
 var _is_animating: bool = false
 var moves_made: Array = []
 var prev_board_str: String = ""
+
+const LANDSCAPE_ROTATION := -90.0
+const UI_BASE_SHORT := 720.0
+
+const LANDSCAPE_LABEL_SCALE := 1.8
+
+const YOU_LABEL_NUDGE := Vector2(20.0, 15.0)
+
+func _nudge_you_label() -> void:
+	var vp := get_viewport_rect().size
+	if vp.x > vp.y:
+		you_label.position += YOU_LABEL_NUDGE.rotated(-deg_to_rad(LANDSCAPE_ROTATION))
+
+func _label_scale() -> float:
+	var vp := get_viewport_rect().size
+	return LANDSCAPE_LABEL_SCALE if vp.x > vp.y else 1.0
+
+func _counter_rotation() -> float:
+	var vp := get_viewport_rect().size
+	return -LANDSCAPE_ROTATION if vp.x > vp.y else 0.0
+
+func _ui_scale() -> float:
+	var vp := get_viewport_rect().size
+	return clampf(min(vp.x, vp.y) / UI_BASE_SHORT * (1.5 if vp.x > vp.y else 1.0), 0.7, 2.5)
+
+func _fit_center_label(l: Label) -> void:
+	var m: Vector2 = l.get_theme_font("font").get_string_size(
+		l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, l.get_theme_font_size("font_size")
+	) + Vector2(24.0, 12.0)
+	l.offset_left = -m.x * 0.5
+	l.offset_right = m.x * 0.5
+	l.offset_top = -m.y * 0.5
+	l.offset_bottom = m.y * 0.5
+	l.pivot_offset = m * 0.5
+
+func _apply_responsive_ui() -> void:
+	await get_tree().process_frame
+	var vp := get_viewport_rect().size
+	var land := vp.x > vp.y
+	var s := _ui_scale()
+
+	game_area_root.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	game_area_root.size = Vector2(vp.y, vp.x) if land else vp
+	game_area_root.pivot_offset = game_area_root.size * 0.5
+	game_area_root.rotation_degrees = LANDSCAPE_ROTATION if land else 0.0
+	game_area_root.position = (vp - game_area_root.size) * 0.5
+
+	var col := 96.0
+	var k := 1.0
+	if land:
+		col = game_area_root.size.x * 0.16
+		k = min(
+			(game_area_root.size.x - 40.0 - 2.0 * col) / 350.0,
+			game_area_root.size.y / 800.0
+		)
+	var a_s: float = col / 96.0
+	for a in [player_avatar_display, opp_avatar_display]:
+		a.custom_minimum_size = Vector2(96.0, 90.0) * a_s
+		var p := a.get_node_or_null("SubViewportContainer") as SubViewportContainer
+		if p != null:
+			p.scale = Vector2.ONE * a_s
+	board_sprite.custom_minimum_size = Vector2(350.0, 800.0) * k
+	pits_root.scale = Vector2.ONE * k
+	_carrying_stones_container.scale = Vector2.ONE * k
+	if (player == 1 or player == 2) and pit_nodes.size() == PIT_COUNT:
+		for i in range(PIT_COUNT):
+			_refresh_pit_count_label(i)
+
+	var ls := _label_scale()
+	spec_label.add_theme_font_size_override("font_size", int(50.0 * ls))
+	you_label.add_theme_font_size_override("font_size", int(18.0 * ls))
+	for l in [waiting_label, sent_label, win_loss_label, free_turn_label]:
+		l.add_theme_font_size_override("font_size", int(25.0 * ls))
+		_fit_center_label(l)
+
+	var btn := Vector2(64.0, 64.0) * s
+	rules_button.custom_minimum_size = btn
+	settings_button.custom_minimum_size = btn
+	bottom_bar_margin.add_theme_constant_override("margin_left", int(40.0 * s))
+	bottom_bar_margin.add_theme_constant_override("margin_right", int(40.0 * s))
+	bottom_bar.custom_minimum_size.y = 100.0 * s
+	bottom_bar.offset_top = -94.0 * s
+
+	await get_tree().process_frame
+	for c in [player_avatar_display, you_label, opp_avatar_display, spec_label]:
+		c.pivot_offset = c.size * 0.5
+		c.rotation_degrees = _counter_rotation()
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
@@ -163,6 +253,13 @@ func _on_game_ready() -> void:
 	add_child(_carrying_stones_container)
 	_carrying_stones_container.z_index = 90
 	_apply_board_sprite_modulate()
+	
+	_apply_responsive_ui()
+	if not get_viewport().size_changed.is_connected(_apply_responsive_ui):
+		get_viewport().size_changed.connect(_apply_responsive_ui)
+	if not (%PlayerColumn as Container).sort_children.is_connected(_nudge_you_label):
+		(%PlayerColumn as Container).sort_children.connect(_nudge_you_label)
+	
 	OpLog.i(LOG_TAG, [
 		"game_ready_done theme=", current_theme_name,
 		" pit_nodes=", pit_nodes.size(),
@@ -1193,6 +1290,8 @@ func _refresh_pit_count_label(i: int) -> void:
 	lbl.get_parent().force_update_transform()
 	var lw = lbl.get_minimum_size().x
 	var lh = lbl.get_minimum_size().y
+	lbl.pivot_offset = Vector2(lw, lh) * 0.5
+	lbl.rotation_degrees = _counter_rotation()
 	var base = spawn_points[i].position
 	const OFFX = 40
 	const OFFY = 10
@@ -1476,7 +1575,7 @@ func _show_result_from_state(state: String, spectator_winner_player: int = 0) ->
 	])
 	win_loss_label.visible = true
 	win_loss_label.scale = Vector2.ZERO
-	win_loss_label.pivot_offset = win_loss_label.size / 2
+	_fit_center_label(win_loss_label)
 
 	var tween_in := create_tween()
 	tween_in.tween_property(win_loss_label, "scale", Vector2.ONE, 0.6)\
@@ -1626,7 +1725,7 @@ func play_sent_animation():
 	sent_label.visible = true
 	sent_label.modulate.a = 0.0
 	sent_label.scale = Vector2.ONE
-	sent_label.pivot_offset = sent_label.get_size() / 2.0
+	_fit_center_label(sent_label)
 
 	sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
 
@@ -1634,6 +1733,7 @@ func play_sent_animation():
 	sent_tween.tween_callback(func():
 		if is_instance_valid(sent_label):
 			sent_label.text = "Sent ✔"
+			_fit_center_label(sent_label)
 	)
 
 	sent_tween.tween_interval(2.0)

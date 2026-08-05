@@ -20,6 +20,11 @@ class_name TanksGame
 @onready var wind_indicator: WindIndicator = %WindIndicator
 @onready var spec_label: Label = %SpecLabel
 @onready var you_label: Label = %YouLabel
+@onready var player_container: VBoxContainer = %PlayerContainer
+@onready var opp_container: VBoxContainer = %OppContainer
+@onready var opp_label_spacer: Control = %OppLabel
+@onready var wind_label: RichTextLabel = %WindLabel
+@onready var bottom_bar_margin: MarginContainer = %BottomBarMargin
 
 const MUSIC_STREAM := preload("res://global/audio/tanks.ogg")
 
@@ -119,7 +124,7 @@ func _game_x_to_screen_x(game_x: float) -> float:
 	if not is_instance_valid(terrain):
 		return game_x
 	
-	return remap(game_x, BOARD_X_MIN, BOARD_X_MAX, 0.0, terrain.get_world_width())
+	return terrain.get_world_width() * 0.5 + game_x * _get_pixels_per_board_unit()
 
 var _aim_label: Label
 
@@ -158,6 +163,56 @@ func _ensure_core() -> void:
 	core.replay_action.connect(_on_replay_action)
 	core.outbound_ready.connect(_send_payload)
 	core.opponent_avatar_ready.connect(_on_opponent_avatar_received)
+
+const TANKS_LANDSCAPE_UI_SCALE := 1.5
+const TANKS_LANDSCAPE_WIND_SCALE := 1.25
+
+func _ui_scale() -> float:
+	var vp := get_viewport_rect().size
+	return TANKS_LANDSCAPE_UI_SCALE if vp.x > vp.y else 1.0
+
+func _wind_scale() -> float:
+	var vp := get_viewport_rect().size
+	return TANKS_LANDSCAPE_WIND_SCALE if vp.x > vp.y else 1.0
+
+func _fit_center_label(l: Label) -> void:
+	var m: Vector2 = l.get_theme_font("font").get_string_size(
+		l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, l.get_theme_font_size("font_size")
+	) + Vector2(24.0, 12.0)
+	l.offset_left = -m.x * 0.5
+	l.offset_right = m.x * 0.5
+	l.offset_top = -m.y * 0.5
+	l.offset_bottom = m.y * 0.5
+	l.pivot_offset = m * 0.5
+
+func _apply_responsive_ui() -> void:
+	await get_tree().process_frame
+	var s := _ui_scale()
+	var ws := _wind_scale()
+
+	you_label.add_theme_font_size_override("font_size", int(18.0 * s))
+	spec_label.add_theme_font_size_override("font_size", int(50.0 * s))
+	for l in [waiting_label, sent_label, win_loss_label]:
+		l.add_theme_font_size_override("font_size", int(25.0 * s))
+		_fit_center_label(l)
+
+	opp_label_spacer.custom_minimum_size.y = 26.0 * s
+
+	var avatar := Vector2(96.0, 90.0) * s
+	for a in [player_avatar_display, opp_avatar_display]:
+		a.custom_minimum_size = avatar
+		var p := a.get_node_or_null("SubViewportContainer") as SubViewportContainer
+		if p != null:
+			p.scale = Vector2.ONE * s
+
+	wind_label.add_theme_font_size_override("normal_font_size", int(24.0 * ws))
+	wind_indicator.custom_minimum_size = Vector2(200.0, 20.0) * ws
+
+	var btn := Vector2(64.0, 64.0) * s
+	settings_button.custom_minimum_size = btn
+	rules_button.custom_minimum_size = btn
+	bottom_bar_margin.add_theme_constant_override("margin_left", int(40.0 * s))
+	bottom_bar_margin.add_theme_constant_override("margin_right", int(40.0 * s))
 
 func _configure_tanks_avatar(avatar_button: TextureButton) -> void:
 	if not is_instance_valid(avatar_button):
@@ -345,7 +400,7 @@ func _screen_x_to_game_x(screen_x: float) -> float:
 	if not is_instance_valid(terrain):
 		return screen_x
 	
-	return remap(screen_x, 0.0, terrain.get_world_width(), BOARD_X_MIN, BOARD_X_MAX)
+	return (screen_x - terrain.get_world_width() * 0.5) / _get_pixels_per_board_unit()
 	
 func _units_vec_to_screen_delta(units: Vector2) -> Vector2:
 	var x_sign: float = -1.0 if _view_flipped else 1.0
@@ -428,7 +483,7 @@ func _get_pixels_per_board_unit() -> float:
 	if not is_instance_valid(terrain):
 		return 1.0
 	
-	return terrain.get_world_width() / BOARD_X_WIDTH
+	return terrain.get_pixels_per_board_unit()
 
 func _board_units_to_screen_px(units: float) -> float:
 	return units * _get_pixels_per_board_unit()
@@ -455,6 +510,7 @@ func _apply_view_flip() -> void:
 func _on_resized() -> void:
 	if is_instance_valid(sky):
 		sky.set_view_size(size)
+	_apply_responsive_ui()
 
 func _on_opponent_avatar_received(avatar_data: Dictionary) -> void:
 	if avatar_data.is_empty():

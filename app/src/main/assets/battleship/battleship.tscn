@@ -197,7 +197,8 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="MarginContainer" type="MarginContainer" parent="." unique_id=1513067229]
+[node name="BattleAreaRoot" type="MarginContainer" parent="." unique_id=1513067229]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -210,16 +211,17 @@ theme_override_constants/margin_top = 30
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 30
 
-[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer" unique_id=282603884]
+[node name="VBoxContainer" type="VBoxContainer" parent="BattleAreaRoot" unique_id=282603884]
 layout_mode = 2
 mouse_filter = 2
 
-[node name="TopBar" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=2029384277]
+[node name="TopBar" type="HBoxContainer" parent="BattleAreaRoot/VBoxContainer" unique_id=2029384277]
+unique_name_in_owner = true
 layout_mode = 2
 mouse_filter = 2
 alignment = 1
 
-[node name="RulesButton" type="Button" parent="MarginContainer/VBoxContainer/TopBar" unique_id=496177112]
+[node name="RulesButton" type="Button" parent="BattleAreaRoot/VBoxContainer/TopBar" unique_id=496177112]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(56, 56)
 layout_mode = 2
@@ -231,7 +233,7 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_cnvch")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_8c2i7")
 theme_override_styles/hover = SubResource("StyleBoxTexture_ow2dl")
 
-[node name="StateLabel" type="Label" parent="MarginContainer/VBoxContainer/TopBar" unique_id=1726717328]
+[node name="StateLabel" type="Label" parent="BattleAreaRoot/VBoxContainer/TopBar" unique_id=1726717328]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -242,7 +244,7 @@ text = "Arrange your ships."
 horizontal_alignment = 1
 justification_flags = 162
 
-[node name="SettingsButton" type="Button" parent="MarginContainer/VBoxContainer/TopBar" unique_id=1358888823]
+[node name="SettingsButton" type="Button" parent="BattleAreaRoot/VBoxContainer/TopBar" unique_id=1358888823]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(56, 56)
 layout_mode = 2
@@ -254,23 +256,24 @@ theme_override_styles/normal = SubResource("StyleBoxTexture_fql0a")
 theme_override_styles/pressed = SubResource("StyleBoxTexture_7ycry")
 theme_override_styles/hover = SubResource("StyleBoxTexture_0ayae")
 
-[node name="Control" type="Control" parent="MarginContainer/VBoxContainer" unique_id=1805439225]
+[node name="Control" type="Control" parent="BattleAreaRoot/VBoxContainer" unique_id=1805439225]
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 
-[node name="BottomBar" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=445107251]
+[node name="BottomBar" type="HBoxContainer" parent="BattleAreaRoot/VBoxContainer" unique_id=445107251]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 mouse_filter = 2
 alignment = 1
 
-[node name="CenterContainer" type="CenterContainer" parent="MarginContainer/VBoxContainer/BottomBar" unique_id=164986195]
+[node name="CenterContainer" type="CenterContainer" parent="BattleAreaRoot/VBoxContainer/BottomBar" unique_id=164986195]
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
 
-[node name="StartButton" type="Button" parent="MarginContainer/VBoxContainer/BottomBar/CenterContainer" unique_id=439567799]
+[node name="StartButton" type="Button" parent="BattleAreaRoot/VBoxContainer/BottomBar/CenterContainer" unique_id=439567799]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 56)
 layout_mode = 2
@@ -288,7 +291,7 @@ theme_override_styles/focus = SubResource("StyleBoxEmpty_cnvch")
 disabled = true
 text = "Start"
 
-[node name="FireButton" type="Button" parent="MarginContainer/VBoxContainer/BottomBar/CenterContainer" unique_id=792994879]
+[node name="FireButton" type="Button" parent="BattleAreaRoot/VBoxContainer/BottomBar/CenterContainer" unique_id=792994879]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 56)
 layout_mode = 2
@@ -306,7 +309,7 @@ theme_override_styles/focus = SubResource("StyleBoxEmpty_d2ch3")
 disabled = true
 text = "Fire!"
 
-[node name="ChooseTargetLabel" type="Label" parent="MarginContainer/VBoxContainer/BottomBar/CenterContainer" unique_id=350406634]
+[node name="ChooseTargetLabel" type="Label" parent="BattleAreaRoot/VBoxContainer/BottomBar/CenterContainer" unique_id=350406634]
 unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(400, 56)
@@ -320,7 +323,7 @@ text = "Choose your target."
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="ShuffleButton" type="TextureButton" parent="MarginContainer" unique_id=558923282]
+[node name="ShuffleButton" type="TextureButton" parent="BattleAreaRoot" unique_id=558923282]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(56, 56)
 layout_mode = 2
@@ -483,12 +486,13 @@ layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 
-[node name="BoardWrapper" type="Control" parent="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer" unique_id=539585886]
+[node name="P1BoardWrapper" type="Control" parent="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer" unique_id=539585886]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(512, 512)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="BattleGround1" type="Node2D" parent="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer/BoardWrapper" unique_id=369258069]
+[node name="BattleGround1" type="Node2D" parent="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer/P1BoardWrapper" unique_id=369258069]
 unique_name_in_owner = true
 script = ExtResource("1_4q04m")
 rows = 8
@@ -542,12 +546,13 @@ layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 
-[node name="BoardWrapper" type="Control" parent="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer" unique_id=715707348]
+[node name="P2BoardWrapper" type="Control" parent="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer" unique_id=715707348]
+unique_name_in_owner = true
 custom_minimum_size = Vector2(512, 512)
 layout_mode = 2
 mouse_filter = 2
 
-[node name="BattleGround2" type="Node2D" parent="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer/BoardWrapper" unique_id=1452145077]
+[node name="BattleGround2" type="Node2D" parent="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer/P2BoardWrapper" unique_id=1452145077]
 unique_name_in_owner = true
 script = ExtResource("1_4q04m")
 rows = 8
@@ -560,5 +565,5 @@ custom_minimum_size = Vector2(0, 101)
 layout_mode = 2
 mouse_filter = 2
 
-[connection signal="is_valid" from="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer/BoardWrapper/BattleGround1" to="." method="_on_battle_ground_is_valid"]
-[connection signal="is_valid" from="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer/BoardWrapper/BattleGround2" to="." method="_on_battle_ground_is_valid"]
+[connection signal="is_valid" from="PanelContainer/Player1BoardContainer/VBoxContainer/CenterContainer/P1BoardWrapper/BattleGround1" to="." method="_on_battle_ground_is_valid"]
+[connection signal="is_valid" from="PanelContainer/Player2BoardContainer/VBoxContainer/CenterContainer/P2BoardWrapper/BattleGround2" to="." method="_on_battle_ground_is_valid"]

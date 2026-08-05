@@ -107,6 +107,8 @@ const CHESS_BASE_MARKER_SIZE := Vector2(
 	32.0,
 )
 
+const CHESS_LANDSCAPE_MARKER_SCALE := 1.6
+
 const CHESS_BASE_OPPONENT_TOP_SPACER := 26.0
 const CHESS_BASE_YOU_FONT_SIZE := 18.0
 
@@ -888,11 +890,15 @@ func _compute_sizes() -> void:
 
 		# These are fixed-size Chess color indicators,
 		# not scalable game-piece trays.
-		indicator.custom_minimum_size = (
+		var marker_size := (
 			CHESS_BASE_MARKER_SIZE
+			if is_portrait
+			else CHESS_BASE_MARKER_SIZE *
+				CHESS_LANDSCAPE_MARKER_SCALE
 		)
 
-		indicator.size = CHESS_BASE_MARKER_SIZE
+		indicator.custom_minimum_size = marker_size
+		indicator.size = marker_size
 		indicator.scale = Vector2.ONE
 
 		indicator.size_flags_horizontal = (
@@ -995,8 +1001,11 @@ func _compute_sizes() -> void:
 	)
 
 	var marker_stack_height := (
-		CHESS_BASE_MARKER_SIZE.y
-	)
+			CHESS_BASE_MARKER_SIZE.y
+			if is_portrait
+			else CHESS_BASE_MARKER_SIZE.y *
+				CHESS_LANDSCAPE_MARKER_SCALE
+		)
 
 	var top_hud_height := (
 		maxf(

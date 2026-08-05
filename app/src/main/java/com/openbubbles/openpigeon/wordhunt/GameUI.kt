@@ -9,6 +9,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
@@ -24,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -73,15 +78,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.layout.requiredSize
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import com.openbubbles.openpigeon.settings.AvatarWinBurstOverlay
 import androidx.compose.ui.geometry.Offset
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
 class GameUI {
     private lateinit var tilePositions: Array<Array<TilePosition>>
@@ -105,6 +103,7 @@ class GameUI {
         data object Intro : Screen("intro")
         data object Game : Screen("game")
         data object Score : Screen("score")
+        data object AllWords : Screen("allwords")
     }
 
     @Composable
@@ -151,7 +150,15 @@ class GameUI {
                         onStartClicked = {
                             navController.navigate(
                                 Screen.Game.route,
-                            )
+                            ) {
+                                launchSingleTop = true
+
+                                popUpTo(
+                                    Screen.Intro.route,
+                                ) {
+                                    inclusive = true
+                                }
+                            }
 
                             onGameStart()
                         },
@@ -196,6 +203,28 @@ class GameUI {
                     ScoreScreen(
                         score = score,
                         spectatorMode = spectatorMode,
+                        onShowAllWords = {
+                            navController.navigate(
+                                Screen.AllWords.route,
+                            )
+                        },
+                    )
+                }
+
+                composable(route = Screen.AllWords.route, enterTransition = {
+                    slideIntoContainer(
+                        AnimatedContentTransitionScope.SlideDirection.Left, tween(450)
+                    )
+                }, exitTransition = { null }, popEnterTransition = { null }, popExitTransition = {
+                    slideOutOfContainer(
+                        AnimatedContentTransitionScope.SlideDirection.Right, tween(450)
+                    )
+                }) {
+                    AllWordsScreen(
+                        score = score,
+                        onBack = {
+                            navController.popBackStack()
+                        },
                     )
                 }
             }
@@ -327,22 +356,35 @@ class GameUI {
         tilePositions =
             Array(gameState.mode.gridSize) { Array(gameState.mode.gridSize) { TilePosition() } }
 
-        Box(
+        BoxWithConstraints(
             modifier = Modifier.fillMaxSize()
         ) {
+            val landscape = maxWidth > maxHeight
+            val boardSide = if (landscape) minOf(maxHeight * 0.9f, maxWidth * 0.55f) else 350.dp
+            val gutter = (maxWidth - boardSide) / 2
+            val scoreScale = if (landscape) (gutter * 0.9f) / 300.dp else 1f
+
             ScoreDisplay(
                 gameState = gameState,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 50.dp)
+                scale = scoreScale,
+                modifier = if (landscape) {
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = gutter * 0.05f)
+                } else {
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 50.dp)
+                }
             )
 
             GameBoard(
                 board = gameState.board(),
                 gameState = gameState,
+                boardSide = boardSide,
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .offset(x = 0.dp, y = 80.dp)
+                    .offset(x = 0.dp, y = if (landscape) 0.dp else 80.dp)
             )
 
             if (gameState.currentWord != "") {
@@ -378,7 +420,7 @@ class GameUI {
 
     @Composable
     private fun ScoreDisplay(
-        gameState: WordHuntGameState, modifier: Modifier = Modifier
+        gameState: WordHuntGameState, scale: Float = 1f, modifier: Modifier = Modifier
     ) {
         var displayedScore by remember { mutableIntStateOf(gameState.score) }
 
@@ -392,7 +434,7 @@ class GameUI {
             formattedScore.length == 6 -> 20.sp
             formattedScore.length == 5 -> 22.sp
             else -> 26.sp
-        }
+        } * scale
 
         LaunchedEffect(gameState.score) {
             val target = gameState.score
@@ -416,12 +458,12 @@ class GameUI {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .offset(x = (-20).dp, y = 25.dp)
+                    .offset(x = (-20).dp * scale, y = 25.dp * scale)
                     .background(
                         Color.hsl(0.0f, 0.0f, 0.05f, 0.42f), shape = RoundedCornerShape(10.dp)
                     )
-                    .padding(8.dp)
-                    .size(width = 55.dp, height = 15.dp)
+                    .padding(8.dp * scale)
+                    .size(width = 55.dp * scale, height = 15.dp * scale)
             ) {
                 Text(
                     text = formatSeconds(gameState.secondsLeft),
@@ -436,12 +478,12 @@ class GameUI {
             Box(
                 modifier = Modifier
                     .shadow(
-                        elevation = 50.dp, shape = TornPaperShape(), clip = false
+                        elevation = 50.dp * scale, shape = TornPaperShape(), clip = false
                     )
                     .clip(TornPaperShape())
                     .background(Color.White)
-                    .size(300.dp, 100.dp)
-                    .padding(16.dp)
+                    .size(300.dp * scale, 100.dp * scale)
+                    .padding(16.dp * scale)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     androidx.compose.ui.viewinterop.AndroidView(
@@ -456,18 +498,18 @@ class GameUI {
                         },
                         modifier = Modifier
                             .offset(
-                                y = (-12).dp,
+                                y = (-12).dp * scale,
                             )
                             .size(
-                                width = 47.dp,
-                                height = 68.dp,
+                                width = 47.dp * scale,
+                                height = 68.dp * scale,
                             ),
                     )
 
                     Column(
                         modifier = Modifier
                             .padding(
-                                start = 10.dp,
+                                start = 10.dp * scale,
                             )
                             .weight(
                                 1f,
@@ -480,7 +522,7 @@ class GameUI {
                             text = "WORDS: ${gameState.wordCount}",
                             fontFamily = interFamily,
                             fontWeight = FontWeight.Black,
-                            fontSize = 18.sp,
+                            fontSize = 18.sp * scale,
                             color = Color.Black
                         )
 
@@ -502,10 +544,13 @@ class GameUI {
 
     @Composable
     fun GameBoard(
-        board: Array<CharArray>, gameState: WordHuntGameState, modifier: Modifier = Modifier
+        board: Array<CharArray>,
+        gameState: WordHuntGameState,
+        boardSide: Dp = 350.dp,
+        modifier: Modifier = Modifier
     ) {
         Box(
-            modifier = modifier.size(350.dp)
+            modifier = modifier.size(boardSide)
         ) {
             Image(
                 painter = painterResource(gameState.mode.drawable),
@@ -517,7 +562,7 @@ class GameUI {
                     .align(alignment = Alignment.Center)
                     .fillMaxSize()
                     .clip(shape = RoundedCornerShape(10.dp))
-                    .pointerInput(Unit) {
+                    .pointerInput(boardSide, gameState.mode.gridSize) {
                         val size = this.size.toSize()
                         val tileWidth = size.width / gameState.mode.gridSize
                         val tileHeight = size.height / gameState.mode.gridSize
@@ -611,10 +656,10 @@ class GameUI {
 
             Box(
                 modifier = Modifier
-                    .size(335.dp)
+                    .size(boardSide - 15.dp)
                     .align(Alignment.Center)
             ) {
-                val size = LocalDensity.current.run { 335.dp.toPx() }
+                val size = LocalDensity.current.run { (boardSide - 15.dp).toPx() }
                 SelectionPathOverlay(
                     gameState = gameState,
                     tileSize = size / gameState.mode.gridSize,
@@ -787,6 +832,7 @@ class GameUI {
         modifier: Modifier = Modifier,
         score: () -> MutableMap<String, String>,
         spectatorMode: Boolean = false,
+        onShowAllWords: () -> Unit = {},
     ) {
         val scoreData = score()
 
@@ -804,6 +850,8 @@ class GameUI {
         ) {
             val screenWidth = maxWidth
             val screenHeight = maxHeight
+            val landscape = screenWidth > screenHeight
+            val avatarScale = if (landscape) 0.62f else 1f
 
             if (spectatorMode) {
                 Text(
@@ -937,12 +985,12 @@ class GameUI {
                         .padding(
                             start = screenWidth * 0.03f,
                             end = screenWidth * 0.03f,
-                            top = if (spectatorMode) {
-                                120.dp
+                            top = if (landscape) {
+                                if (spectatorMode) 62.dp else 46.dp
                             } else {
-                                95.dp
+                                if (spectatorMode) 120.dp else 95.dp
                             },
-                            bottom = 93.dp,
+                            bottom = if (landscape) 8.dp else 93.dp,
                         ),
                 ) {
                     PlayerColumn(
@@ -953,7 +1001,7 @@ class GameUI {
                         modifier = Modifier.weight(
                             1f,
                         ),
-                        screenHeight = screenHeight,
+                        avatarScale = avatarScale,
                         avatarString = if (spectatorMode) {
                             scoreData["avatar1"]
                         } else {
@@ -976,7 +1024,7 @@ class GameUI {
                         modifier = Modifier.weight(
                             1f,
                         ),
-                        screenHeight = screenHeight,
+                        avatarScale = avatarScale,
                         avatarString = if (spectatorMode) {
                             scoreData["avatar2"]
                         } else {
@@ -1016,6 +1064,50 @@ class GameUI {
                     (scoreData["words1"].isNullOrBlank() || scoreData["words2"].isNullOrBlank())
                 } else {
                     scoreData["words2"].isNullOrBlank()
+                }
+
+                if (bothPlayersFinished) {
+                    Box(
+                        modifier = Modifier
+                            .align(
+                                Alignment.CenterHorizontally,
+                            )
+                            .padding(
+                                bottom = 20.dp,
+                            )
+                            .shadow(
+                                elevation = 6.dp,
+                                shape = RoundedCornerShape(
+                                    10.dp,
+                                ),
+                            )
+                            .background(
+                                color = Color.White,
+                                shape = RoundedCornerShape(
+                                    10.dp,
+                                ),
+                            )
+                            .clickable(
+                                onClick = onShowAllWords,
+                            )
+                            .width(
+                                260.dp,
+                            )
+                            .padding(
+                                vertical = 14.dp,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "VIEW ALL WORDS",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = fivoSansFamily,
+                            color = Color.Black,
+                        )
+                    }
+
+                    return@Column
                 }
 
                 Box(
@@ -1065,6 +1157,122 @@ class GameUI {
         }
     }
 
+    @Composable
+    fun AllWordsScreen(
+        score: () -> MutableMap<String, String>,
+        onBack: () -> Unit,
+    ) {
+        val scoreData = score()
+
+        val words = scoreData["all_words"]?.takeIf {
+            it.isNotBlank()
+        }?.split(
+            "|",
+        ) ?: emptyList()
+
+        val foundWords = remember(scoreData["words_list1"]) {
+            scoreData["words_list1"]?.takeIf {
+                it.isNotBlank()
+            }?.split(
+                "|",
+            )?.toSet() ?: emptySet()
+        }
+
+        val listScroll = rememberScrollState()
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(
+                        listScroll,
+                    )
+                    .padding(
+                        top = 90.dp,
+                        bottom = 24.dp,
+                    ),
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(
+                        6.dp,
+                    ),
+                    modifier = Modifier
+                        .width(
+                            260.dp,
+                        )
+                        .clip(
+                            RoundedCornerShape(
+                                5.dp,
+                            ),
+                        )
+                        .background(
+                            Color(
+                                0xff385334,
+                            ),
+                        )
+                        .padding(
+                            horizontal = 10.dp,
+                            vertical = 7.dp,
+                        ),
+                ) {
+                    words.forEach { word ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            WordBox(
+                                word = word,
+                                found = foundWords.contains(word),
+                            )
+
+                            Text(
+                                text = WordHuntGameState.calculatePoints(
+                                    word,
+                                ).toString(),
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = interFamily,
+                            )
+                        }
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(
+                        Alignment.TopStart,
+                    )
+                    .padding(
+                        16.dp,
+                    )
+                    .size(
+                        48.dp,
+                    )
+                    .clickable(
+                        onClick = onBack,
+                    )
+                    .zIndex(
+                        2f,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    painter = painterResource(
+                        R.drawable.back,
+                    ),
+                    contentDescription = "Back",
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+    }
+
     private fun vibrateStrongTap(
         context: Context,
     ) {
@@ -1094,111 +1302,6 @@ class GameUI {
         )
     }
 
-    @Composable
-    private fun AvatarWinBurstOverlay(
-        active: Boolean,
-        modifier: Modifier = Modifier,
-    ) {
-        if (!active) {
-            return
-        }
-
-        val transition = rememberInfiniteTransition(
-            label = "avatar_win_burst",
-        )
-
-        val rotation by transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(
-                    durationMillis = 6000,
-                    easing = LinearEasing,
-                ),
-                repeatMode = RepeatMode.Restart,
-            ),
-            label = "avatar_win_burst_rotation",
-        )
-
-        val pulse by transition.animateFloat(
-            initialValue = 0.94f,
-            targetValue = 1.06f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(
-                    durationMillis = 700,
-                ),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "avatar_win_burst_pulse",
-        )
-
-        Canvas(
-            modifier = modifier.graphicsLayer {
-                rotationZ = rotation
-                scaleX = pulse
-                scaleY = pulse
-            },
-        ) {
-            val burstRadius = min(
-                size.width,
-                size.height,
-            ) * 0.48f
-
-            val innerRadius = burstRadius * 0.48f
-            val rayCount = 16
-            val rayWidth = maxOf(
-                3f,
-                burstRadius * 0.075f,
-            )
-
-            repeat(rayCount) { index ->
-                val angle = (index.toFloat() / rayCount.toFloat() * 2f * PI.toFloat())
-
-                val directionX = cos(
-                    angle,
-                )
-
-                val directionY = sin(
-                    angle,
-                )
-
-                val start = Offset(
-                    x = center.x + directionX * innerRadius,
-                    y = center.y + directionY * innerRadius,
-                )
-
-                val end = Offset(
-                    x = center.x + directionX * burstRadius,
-                    y = center.y + directionY * burstRadius,
-                )
-
-                drawLine(
-                    color = if (index % 2 == 0) {
-                        Color(
-                            0xFFFFE535,
-                        )
-                    } else {
-                        Color(
-                            0xFFFFF2A3,
-                        )
-                    },
-                    start = start,
-                    end = end,
-                    strokeWidth = rayWidth,
-                    cap = StrokeCap.Round,
-                )
-            }
-
-            drawCircle(
-                color = Color(
-                    0x44FFE535,
-                ),
-                radius = innerRadius,
-                center = center,
-            )
-        }
-    }
-
     @OptIn(ExperimentalTextApi::class)
     @Composable
     fun PlayerColumn(
@@ -1207,7 +1310,7 @@ class GameUI {
         wordList: List<String>,
         isLeft: Boolean,
         modifier: Modifier,
-        screenHeight: Dp,
+        avatarScale: Float = 1f,
         avatarString: String? = null,
         useLocalAvatar: Boolean = false,
         playerLabel: String = "",
@@ -1230,26 +1333,24 @@ class GameUI {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.width(
-                    72.dp,
+                    72.dp * avatarScale,
                 ),
             ) {
                 Text(
-                    text = if (playerLabel.isBlank()) {
+                    text = playerLabel.ifBlank {
                         " "
-                    } else {
-                        playerLabel
                     },
                     color = if (playerLabel.isBlank()) {
                         Color.Transparent
                     } else {
                         Color.Black
                     },
-                    fontSize = 17.sp,
+                    fontSize = 17.sp * avatarScale,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .offset(
                             y = if (playerLabel == "You") {
-                                12.dp
+                                12.dp * avatarScale
                             } else {
                                 0.dp
                             },
@@ -1262,8 +1363,8 @@ class GameUI {
                 Box(
                     modifier = Modifier
                         .size(
-                            width = 80.dp,
-                            height = 117.dp,
+                            width = 80.dp * avatarScale,
+                            height = 117.dp * avatarScale,
                         )
                         .zIndex(
                             1f,
@@ -1274,11 +1375,10 @@ class GameUI {
                         active = showWinBurst,
                         modifier = Modifier
                             .requiredSize(
-                                width = 136.dp,
-                                height = 108.dp,
+                                80.dp * avatarScale * 1.7f,
                             )
                             .offset(
-                                y = 24.dp,
+                                y = 24.dp * avatarScale,
                             )
                             .zIndex(
                                 0f,
@@ -1358,7 +1458,7 @@ class GameUI {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(
-                        65.dp,
+                        65.dp * avatarScale,
                     )
                     .clip(
                         TornPaperShape(),
@@ -1393,7 +1493,7 @@ class GameUI {
                             }
                         }",
                         color = scoreTextColor,
-                        fontSize = 17.sp,
+                        fontSize = 17.sp * avatarScale,
                         fontWeight = FontWeight.Bold,
                         fontFamily = interFamily,
                         textAlign = if (isLeft) {
@@ -1416,7 +1516,7 @@ class GameUI {
                             }
                         }",
                         color = scoreTextColor,
-                        fontSize = 22.sp,
+                        fontSize = 22.sp * avatarScale,
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = interFamily,
                         textAlign = if (isLeft) {
@@ -1429,17 +1529,7 @@ class GameUI {
                 }
             }
 
-            val wordItemHeight = 35.dp
-
-            val maxListHeight = screenHeight * 0.68f
-
-            val maxItems = (maxListHeight / wordItemHeight).toInt()
-
-            val visibleWords = wordList.take(
-                maxItems,
-            )
-
-            val hiddenCount = wordList.size - visibleWords.size
+            val listScroll = rememberScrollState()
 
             Column(
                 verticalArrangement = Arrangement.spacedBy(
@@ -1465,12 +1555,18 @@ class GameUI {
                             0xff385334,
                         ),
                     )
+                    .wordScrollbar(
+                        listScroll,
+                    )
+                    .verticalScroll(
+                        listScroll,
+                    )
                     .padding(
                         horizontal = 7.dp,
                         vertical = 7.dp,
                     ),
             ) {
-                visibleWords.forEach { word ->
+                wordList.forEach { word ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1518,37 +1614,44 @@ class GameUI {
                         }
                     }
                 }
-
-                if (hiddenCount > 0) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(
-                                25.dp,
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "($hiddenCount more)",
-                            color = Color(
-                                0xB2C7CFC7,
-                            ),
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
             }
         }
     }
 
+    private fun Modifier.wordScrollbar(state: ScrollState): Modifier = this.drawWithContent {
+        drawContent()
+
+        val range = state.maxValue
+
+        if (range <= 0) {
+            return@drawWithContent
+        }
+
+        val trackHeight = size.height
+        val thumbHeight = (trackHeight * trackHeight / (trackHeight + range)).coerceAtLeast(24f)
+        val progress = state.value.toFloat() / range.toFloat()
+
+        drawRoundRect(
+            color = Color(0x88FFFFFF),
+            topLeft = Offset(size.width - 7f, (trackHeight - thumbHeight) * progress),
+            size = Size(5f, thumbHeight),
+            cornerRadius = CornerRadius(2.5f, 2.5f),
+        )
+    }
+
     @Composable
-    private fun WordBox(word: String) {
+    private fun WordBox(word: String, found: Boolean = false) {
         Box(
             modifier = Modifier
                 .wrapContentSize()
                 .clip(RoundedCornerShape(3.dp))
-                .background(Color(0xffCEAA71))
+                .background(
+                    if (found) {
+                        Color(0xffF2DE8A)
+                    } else {
+                        Color(0xffCEAA71)
+                    }
+                )
                 .padding(start = 3.dp, end = 3.dp, top = 0.dp, bottom = 0.dp),
             contentAlignment = Alignment.Center
         ) {

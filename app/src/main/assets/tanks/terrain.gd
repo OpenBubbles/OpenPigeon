@@ -226,7 +226,7 @@ func _mirror_pts(pts: PackedVector2Array, w: float) -> PackedVector2Array:
 	return out
 
 func get_pixels_per_board_unit() -> float:
-	return world_width / BOARD_X_WIDTH
+	return minf(_vp_size.x, _vp_size.y) / BOARD_X_WIDTH
 
 func get_tower_target_width_px() -> float:
 	# Always 65 iOS units wide (half-width 32.5).

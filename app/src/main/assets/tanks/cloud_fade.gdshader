@@ -2,6 +2,7 @@ shader_type canvas_item;
 
 // Set this to 50.0 or 100.0 in the Inspector for extreme speed
 uniform float uv_speed = 80.0;			
+uniform float uv_offset = 0.0;
 uniform float density : hint_range(0.0, 1.0) = 0.5;	
 uniform float softness : hint_range(0.1, 1.0) = 0.6;	
 uniform float spread = 0.2;             // Lower = more horizontally stretched
@@ -19,7 +20,7 @@ void fragment() {
 	uv.x *= max(spread, 0.001);
 	
 	// INCREDIBLE SPEED: Moving the X-coordinate fast
-	uv.x -= TIME * uv_speed;
+	uv.x -= uv_offset;
 
 	// High-frequency vertical vibration (simulates extreme wind turbulence)
 	float whip = sin(TIME * whip_speed) * whip_strength * wind_abs;

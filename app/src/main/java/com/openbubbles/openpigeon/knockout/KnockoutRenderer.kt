@@ -18,7 +18,7 @@ class KnockoutRenderer(
     private val targetFps = 60
     private val frameTimeMs = 1000L / targetFps
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-
+    private val landscapeBoardHeightFraction = 0.8f
     private val mushroomHitStartMs = LongArray(4) { 0L }
 
     val transform = Matrix()
@@ -353,16 +353,21 @@ class KnockoutRenderer(
 
         val availableHeight = (boardBottom - boardTop).coerceAtLeast(1f)
         val availableWidth = safeWidth
+        val landscape = safeWidth > safeHeight
 
-        val baseScale = min(
-            availableWidth / KnockoutConstants.BOARD_SIZE,
-            availableHeight / KnockoutConstants.BOARD_SIZE
-        )
+        val baseScale = if (landscape) {
+            safeHeight * landscapeBoardHeightFraction / KnockoutConstants.BOARD_SIZE
+        } else {
+            min(
+                availableWidth / KnockoutConstants.BOARD_SIZE,
+                availableHeight / KnockoutConstants.BOARD_SIZE
+            )
+        }
 
         val boardScale = baseScale * boardVisualScale()
 
         val centerX = safeWidth / 2f
-        val centerY = boardTop + availableHeight / 2f
+        val centerY = if (landscape) safeHeight / 2f else boardTop + availableHeight / 2f
 
         // Pieces, arrows, rings, touch conversion, and physics coordinates.
         transform.reset()

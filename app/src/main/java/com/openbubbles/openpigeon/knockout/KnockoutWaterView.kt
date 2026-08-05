@@ -47,15 +47,22 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
     private class WaterRenderer(private val context: Context) : Renderer {
         var assetPath = "knockout/water.png"
 
-        @Volatile var useTint = false
-        @Volatile var tintR = 1.0f
-        @Volatile var tintG = 1.0f
-        @Volatile var tintB = 1.0f
+        @Volatile
+        var useTint = false
+        @Volatile
+        var tintR = 1.0f
+        @Volatile
+        var tintG = 1.0f
+        @Volatile
+        var tintB = 1.0f
 
         private var program = 0
-        private var aPos = 0; private var aTex = 0
-        private var uTime = 0; private var uX = 0
-        private var uTexture = 0; private var uAspect = 0
+        private var aPos = 0
+        private var aTex = 0
+        private var uTime = 0
+        private var uX = 0
+        private var uTexture = 0
+        private var uAspect = 0
         private var textureId = 0
         private var startNs = 0L
         private var uTint = 0
@@ -65,13 +72,10 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
         private val quad: FloatBuffer = run {
             // posX, posY, texU, texV  (triangle strip: BL, BR, TL, TR)
             val d = floatArrayOf(
-                -1f, -1f, 0f, 1f,
-                1f, -1f, 1f, 1f,
-                -1f,  1f, 0f, 0f,
-                1f,  1f, 1f, 0f
+                -1f, -1f, 0f, 1f, 1f, -1f, 1f, 1f, -1f, 1f, 0f, 0f, 1f, 1f, 1f, 0f
             )
-            ByteBuffer.allocateDirect(d.size * 4).order(ByteOrder.nativeOrder())
-                .asFloatBuffer().apply { put(d); position(0) }
+            ByteBuffer.allocateDirect(d.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
+                .apply { put(d); position(0) }
         }
 
         override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -126,12 +130,21 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
             val ids = IntArray(1); GLES20.glGenTextures(1, ids, 0)
             val id = ids[0]
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, id)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(
+                GLES20.GL_TEXTURE_2D,
+                GLES20.GL_TEXTURE_MIN_FILTER,
+                GLES20.GL_LINEAR
+            )
+            GLES20.glTexParameteri(
+                GLES20.GL_TEXTURE_2D,
+                GLES20.GL_TEXTURE_MAG_FILTER,
+                GLES20.GL_LINEAR
+            )
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_REPEAT)
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_REPEAT)
             val opts = BitmapFactory.Options().apply { inScaled = false }
-            val bmp: Bitmap = context.assets.open(path).use { BitmapFactory.decodeStream(it, null, opts) }!!
+            val bmp: Bitmap =
+                context.assets.open(path).use { BitmapFactory.decodeStream(it, null, opts) }!!
             GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bmp, 0)
             bmp.recycle()
             return id
@@ -143,8 +156,10 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
             GLES20.glAttachShader(p, compile(GLES20.GL_FRAGMENT_SHADER, fs))
             GLES20.glLinkProgram(p)
             val ok = IntArray(1); GLES20.glGetProgramiv(p, GLES20.GL_LINK_STATUS, ok, 0)
-            if (ok[0] == 0) { val log = GLES20.glGetProgramInfoLog(p); GLES20.glDeleteProgram(p)
-                throw RuntimeException("Water link failed: $log") }
+            if (ok[0] == 0) {
+                val log = GLES20.glGetProgramInfoLog(p); GLES20.glDeleteProgram(p)
+                throw RuntimeException("Water link failed: $log")
+            }
             return p
         }
 
@@ -152,8 +167,10 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
             val s = GLES20.glCreateShader(type)
             GLES20.glShaderSource(s, src); GLES20.glCompileShader(s)
             val ok = IntArray(1); GLES20.glGetShaderiv(s, GLES20.GL_COMPILE_STATUS, ok, 0)
-            if (ok[0] == 0) { val log = GLES20.glGetShaderInfoLog(s); GLES20.glDeleteShader(s)
-                throw RuntimeException("Water compile failed: $log") }
+            if (ok[0] == 0) {
+                val log = GLES20.glGetShaderInfoLog(s); GLES20.glDeleteShader(s)
+                throw RuntimeException("Water compile failed: $log")
+            }
             return s
         }
     }
@@ -191,21 +208,17 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
                 vec3 p = abs(fract(c.xxx + K.xyz)*6.0 - K.www);
                 return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
             }
-            float mirror_repeat(float v) {
-                float m = mod(v, 2.0);
-                return 1.0 - abs(m - 1.0);
-            }
-            
             vec2 mo(vec2 m) {
-                return vec2(mirror_repeat(m.x), mirror_repeat(m.y));
+                return fract(m);
             }
 
             void main(void){
                 float amp = 1.2;
                 float time = u_time;
                 vec2 uv = vec2(v_tex_coord.x + u_x, v_tex_coord.y);
-                vec2 p = uv + mo(-(texture2D(u_texture, mo((uv*0.3) + vec2(time*0.04, 0.0))).xy)*amp +
-                                  (texture2D(u_texture, uv*0.3 - vec2(time*0.05, 0.0)).xy)*amp);
+                vec2 na = texture2D(u_texture, mo(uv*0.3 + vec2(time*0.04, 0.0))).xy;
+                vec2 nb = texture2D(u_texture, mo(uv*0.3 - vec2(time*0.05, 0.0))).xy;
+                vec2 p = uv + (nb - na) * amp;
                 vec4 val = texture2D(u_texture, mo(p));
                 vec3 col = rgb2hsv(vec3(val.r, val.g, val.b));
                 col.x -= 7.0/255.0;
