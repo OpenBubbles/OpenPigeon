@@ -66,13 +66,12 @@ If you're unsure whether something is allowed, ask: **support@openbubbles.app**.
    This is required only for Crazy 8 multiplayer. Every other game runs without
    it, but the build will not proceed until the file is present.
 
-4. Point Gradle at your Godot binary. Rename your Godot executable to
-   `godot.exe` and add this line to `local.properties` (under Gradle Scripts in
-   Android Studio):
+4. Point Gradle to your Godot binary. Add `godot.path` to `local.properties` (found under Gradle Scripts in Android Studio):
 
-       godot.path=C\:\\Users\\you\\path\\to\\godot.exe
+   - **Windows:** `godot.path=C:\\path\\to\\godot.exe` *(Note: Use double backslashes `\\`)*
+   - **macOS:** `godot.path=/Applications/Godot.app/Contents/MacOS/Godot`
 
-   Note the doubled backslashes. Restart Android Studio afterwards.
+   Restart Android Studio after updating `local.properties`.
 
 5. Open `app/src/main/assets` in the Godot editor once, so the import cache is
    generated.
