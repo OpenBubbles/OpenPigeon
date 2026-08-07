@@ -125,7 +125,7 @@ class AboutActivity : Activity() {
                 finishAndRemoveTask()
             }
             .setNegativeButton(
-                "More…"
+                "Options"
             ) { _, _ ->
                 showMoreOptions(
                     currentYear,
@@ -155,6 +155,7 @@ class AboutActivity : Activity() {
     ) {
         val options = arrayOf(
             "ⓘ   Attributions",
+            "⚖   License",
             "✉   Send Diagnostic Report",
             "↻   Reset Stats",
             "♙   Reset Avatar",
@@ -169,22 +170,27 @@ class AboutActivity : Activity() {
                 .ThemeOverlay_Material3_MaterialAlertDialog
         )
             .setTitle("Options")
-            .setItems(
-                options
-            ) { _, which ->
+            .setItems(options) { _, which ->
                 when (which) {
                     0 -> {
                         showAttributions()
                     }
 
                     1 -> {
-                        confirmDiagnosticReport(
+                        showLicenseInfo(
                             currentYear,
                             versionText
                         )
                     }
 
                     2 -> {
+                        confirmDiagnosticReport(
+                            currentYear,
+                            versionText
+                        )
+                    }
+
+                    3 -> {
                         confirmReset(
                             title = "Reset stats?",
                             message =
@@ -203,7 +209,7 @@ class AboutActivity : Activity() {
                         }
                     }
 
-                    3 -> {
+                    4 -> {
                         confirmReset(
                             title = "Reset avatar?",
                             message =
@@ -221,7 +227,7 @@ class AboutActivity : Activity() {
                         }
                     }
 
-                    4 -> {
+                    5 -> {
                         confirmReset(
                             title = "Reset tutorial?",
                             message =
@@ -240,7 +246,7 @@ class AboutActivity : Activity() {
                         }
                     }
 
-                    5 -> {
+                    6 -> {
                         confirmReset(
                             title = "Reset everything?",
                             message =
@@ -261,7 +267,7 @@ class AboutActivity : Activity() {
                         }
                     }
 
-                    6 -> {
+                    7 -> {
                         showAboutDialog(
                             currentYear,
                             versionText
@@ -272,6 +278,59 @@ class AboutActivity : Activity() {
             .setCancelable(true)
             .setOnCancelListener {
                 showAboutDialog(
+                    currentYear,
+                    versionText
+                )
+            }
+            .show()
+    }
+
+    private fun showLicenseInfo(
+        currentYear: Int,
+        versionText: String
+    ) {
+        MaterialAlertDialogBuilder(
+            this,
+            com.google.android.material.R.style
+                .ThemeOverlay_Material3_MaterialAlertDialog
+        )
+            .setTitle("OpenPigeon License")
+            .setMessage(
+                """
+            OpenPigeon is source-available.
+
+            The source code may be viewed, studied, modified, and contributed to under the terms of the OpenPigeon Source License.
+
+            Commercial redistribution, repackaging, white-label distribution, embedding OpenPigeon games into another product, or publishing modified versions requires separate permission.
+
+            Applications may integrate with the separately installed OpenPigeon app through its documented integration interfaces.
+
+            Copyright © 2023-$currentYear OpenPigeon Contributors.
+            """.trimIndent()
+            )
+            .setPositiveButton(
+                "View Full License"
+            ) { _, _ ->
+                val intent = Intent(
+                    Intent.ACTION_VIEW
+                ).apply {
+                    data =
+                        "https://github.com/OpenBubbles/OpenPigeon/blob/HEAD/LICENSE"
+                            .toUri()
+                }
+
+                startActivity(intent)
+            }
+            .setNegativeButton(
+                "Back"
+            ) { _, _ ->
+                showMoreOptions(
+                    currentYear,
+                    versionText
+                )
+            }
+            .setOnCancelListener {
+                showMoreOptions(
                     currentYear,
                     versionText
                 )

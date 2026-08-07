@@ -26,6 +26,7 @@ fun getGodotExecutable(project: Project): String {
 }
 
 val godotCmd = getGodotExecutable(project)
+val skipGodot = project.hasProperty("skipGodot")
 
 val playerIoAar = file("libs/PlayerIO.aar")
 if (!playerIoAar.exists()) {
@@ -116,6 +117,7 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags += ""
+                arguments += "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
             }
         }
     }
@@ -151,6 +153,12 @@ android {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
         }
     }
 
@@ -213,8 +221,12 @@ dependencies {
  *
  * Note:
  * This task writes into src/main/assets/.godot because Godot expects the project
- * directory layout there. That is not ideal from Gradle’s perspective, but all
+ * directory layout there. That is not ideal from Gradle's perspective, but all
  * Android consumers are isolated from it by reading only build/generated/...
+ *
+ * .import and .uid files are declared as outputs rather than inputs because the
+ * Godot editor rewrites them during import. Treating them as inputs made this
+ * task dirty its own inputs, so it could never be UP-TO-DATE.
  */
 val importGodotAssets by tasks.registering(Exec::class) {
     description = "Imports Godot assets so .godot cache exists."
@@ -225,13 +237,21 @@ val importGodotAssets by tasks.registering(Exec::class) {
     inputs.files(fileTree(godotProjectDir) {
         exclude(".godot/**")
         exclude("addons/**/bin/~*")
+        exclude("**/*.import")
+        exclude("**/*.uid")
+        exclude("**/*.tmp")
     }).withPathSensitivity(PathSensitivity.RELATIVE)
 
     outputs.dir(godotHiddenFolder)
+    outputs.files(fileTree(godotProjectDir) {
+        include("**/*.import")
+        include("**/*.uid")
+    })
 
     doFirst {
         fileTree(godotProjectDir) {
             include("addons/**/bin/~*")
+            include("**/*.tmp")
         }.forEach { file ->
             if (file.exists() && !file.delete()) {
                 logger.warn("Unable to delete temporary Godot file: ${file.absolutePath}. It may be in use.")
@@ -248,6 +268,7 @@ val importGodotAssets by tasks.registering(Exec::class) {
         "--quit"
     )
 }
+
 /**
  * Debug pipeline:
  * import -> sync whole project assets into build/generated/godotAssets/debug
@@ -267,12 +288,22 @@ val prepareGodotDebugAssets by tasks.registering(Sync::class) {
         exclude("addons/**/bin/*windows*")
         exclude("addons/**/bin/*macos*")
         exclude("addons/**/bin/*linux*")
+        exclude("**/*.tmp")
+        exclude(".godot/editor/**")
+        exclude(".godot/shader_cache/**")
+        exclude(".godot/exported/**")
+        exclude("addons/**/bin/*.wasm")
+        exclude("addons/**/bin/*.exp")
+        exclude("addons/**/bin/*.lib")
+        exclude("addons/**/bin/*ios*")
+        exclude(".godot/imported/**/*.s3tc.ctex")
     }
 
     into(debugGodotAssetsDir)
 
     includeEmptyDirs = false
 }
+
 /**
  * Release pipeline:
  * import -> export pack -> unzip -> overlay extra files
@@ -320,14 +351,8 @@ val prepareGodotReleaseAssets by tasks.registering(Sync::class) {
         delete(releaseGodotAssetsDir.get().asFile)
     }
 
-    from(godotProjectDir.dir(".godot/imported")) {
-        include("RedCupAlbedo.png-*.s3tc.ctex")
-        into(".godot/imported")
-    }
-
     from(godotProjectDir) {
         include("attributions.html")
-        include("basketball/OFL-DSEG.txt")
         include("global/gp_wg_*.txt")
     }
 
@@ -344,6 +369,7 @@ val prepareGodotReleaseAssets by tasks.registering(Sync::class) {
 }
 
 tasks.configureEach {
+    if (skipGodot) return@configureEach
     when (name) {
         "mergeDebugAssets",
         "compressDebugAssets",
@@ -355,7 +381,7 @@ tasks.configureEach {
         "mergeReleaseAssets",
         "compressReleaseAssets",
         "generateReleaseLintReportModel",
-        "generateReleaseLintVitalReportModel", // add this
+        "generateReleaseLintVitalReportModel",
         "lintAnalyzeRelease",
         "lintVitalAnalyzeRelease",
         "lintVitalReportRelease",

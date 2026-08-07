@@ -10,6 +10,7 @@
 local.properties
 config.properties
 app/libs/*.aar
+app/src/main/assets/**/*.tmp
 
 .idea/*
 !.idea/codeStyles/
