@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://dk1un3cvg4j5k"
-path="res://.godot/imported/segment-eglas.ttf-2b5c4b3b883b67bf4631f3045ecbec3f.fontdata"
+uid="uid://oo85eowemq4v"
+path="res://.godot/imported/dseg7_classic_bold.ttf-c21596e877efc46c9845f04d54ad06f5.fontdata"
 
 [deps]
 
-source_file="res://basketball/segment-eglas.ttf"
-dest_files=["res://.godot/imported/segment-eglas.ttf-2b5c4b3b883b67bf4631f3045ecbec3f.fontdata"]
+source_file="res://basketball/dseg7_classic_bold.ttf"
+dest_files=["res://.godot/imported/dseg7_classic_bold.ttf-c21596e877efc46c9845f04d54ad06f5.fontdata"]
 
 [params]
 
@@ -22,7 +22,7 @@ msdf_size=48
 allow_system_fallback=true
 force_autohinter=false
 modulate_color_glyphs=false
-hinting=1
+hinting=3
 subpixel_positioning=4
 keep_rounding_remainders=true
 oversampling=0.0

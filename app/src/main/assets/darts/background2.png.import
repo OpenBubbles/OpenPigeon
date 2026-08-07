@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://jkmn81x6v6s"
-path.s3tc="res://.godot/imported/AdobeStock_530856469.png-64ec26c846bb288a2dc03e7d0ab30804.s3tc.ctex"
-path.etc2="res://.godot/imported/AdobeStock_530856469.png-64ec26c846bb288a2dc03e7d0ab30804.etc2.ctex"
+uid="uid://h8niwc2wiv3c"
+path.s3tc="res://.godot/imported/background2.png-2dab26e1accb3635592ae43cb07d975e.s3tc.ctex"
+path.etc2="res://.godot/imported/background2.png-2dab26e1accb3635592ae43cb07d975e.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://basketball/AdobeStock_530856469.png"
-dest_files=["res://.godot/imported/AdobeStock_530856469.png-64ec26c846bb288a2dc03e7d0ab30804.s3tc.ctex", "res://.godot/imported/AdobeStock_530856469.png-64ec26c846bb288a2dc03e7d0ab30804.etc2.ctex"]
+source_file="res://darts/background2.png"
+dest_files=["res://.godot/imported/background2.png-2dab26e1accb3635592ae43cb07d975e.s3tc.ctex", "res://.godot/imported/background2.png-2dab26e1accb3635592ae43cb07d975e.etc2.ctex"]
 
 [params]
 

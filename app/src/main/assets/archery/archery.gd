@@ -31,6 +31,13 @@ var _should_play_replay: bool = true
 
 var _top_bar_inited: bool = false
 
+const ARCHERY_LANDSCAPE_UI_SCALE := 1.5
+const ARCHERY_LANDSCAPE_LABEL_SCALE := 1.8
+const ARCHERY_LANDSCAPE_BUTTON_SCALE := 2.4
+
+var _score_box_base_min_size: Vector2 = Vector2.ZERO
+var _base_theme_values: Dictionary = {}
+
 @onready var aim_cursor: Sprite2D = %AimCursor
 @onready var aim_progress_bar: TextureProgressBar = aim_cursor.get_node("TextureProgressBar")
 
@@ -145,13 +152,35 @@ func _update_set_score_labels() -> void:
 		opp_wins.visible = false
 		opp_label.visible = true
 
+func _archery_ui_scale() -> float:
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	return ARCHERY_LANDSCAPE_UI_SCALE if vp.x > vp.y else 1.0
+
+func _base_theme_value(node: Control, theme_item: String, is_font: bool) -> int:
+	var key: String = str(node.get_instance_id()) + theme_item
+	if not _base_theme_values.has(key):
+		_base_theme_values[key] = node.get_theme_font_size(theme_item) if is_font \
+			else node.get_theme_constant(theme_item)
+	return int(_base_theme_values[key])
+
+func _scale_theme(node: Control, theme_item: String, k: float, is_font: bool = true) -> void:
+	if not is_instance_valid(node):
+		return
+	var scaled: int = int(round(float(_base_theme_value(node, theme_item, is_font)) * k))
+	if is_font:
+		node.add_theme_font_size_override(theme_item, scaled)
+	else:
+		node.add_theme_constant_override(theme_item, scaled)
+
 func _configure_archery_avatar(avatar_button: TextureButton) -> void:
 	if not is_instance_valid(avatar_button):
 		return
 
+	var k: float = _archery_ui_scale()
+
 	avatar_button.clip_contents = false
 	avatar_button.scale = Vector2.ONE
-	avatar_button.custom_minimum_size = Vector2(96.0, 90.0)
+	avatar_button.custom_minimum_size = Vector2(96.0, 90.0) * k
 
 	avatar_button.texture_normal = null
 	avatar_button.texture_pressed = null
@@ -171,7 +200,44 @@ func _configure_archery_avatar(avatar_button: TextureButton) -> void:
 		internal_preview.visible = true
 		internal_preview.self_modulate = Color.WHITE
 		internal_preview.pivot_offset = Vector2(48.0, 140.0)
-		internal_preview.scale = Vector2.ONE
+		internal_preview.scale = Vector2(k, k)
+
+func _apply_responsive_ui() -> void:
+	await get_tree().process_frame
+
+	var k: float = _archery_ui_scale()
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+
+	_configure_archery_avatar(player_avatar_display)
+	_configure_archery_avatar(opp_avatar_display)
+
+	if _score_box_inited and is_instance_valid(score_box):
+		_score_box_orig_min_size = _score_box_base_min_size * k
+		if not set_award_in_progress:
+			score_box.custom_minimum_size = _score_box_orig_min_size
+
+	if is_instance_valid(top_game_bar):
+		_scale_theme(top_game_bar, "separation", k, false)
+
+	for label: Control in [you_label, opp_label, player_set_win_label, opp_set_win_label]:
+		_scale_theme(label, "font_size", k)
+
+	for rich: Control in [set_label, score_label]:
+		_scale_theme(rich, "normal_font_size", k)
+		_scale_theme(rich, "bold_font_size", k)
+
+	var label_k: float = ARCHERY_LANDSCAPE_LABEL_SCALE if k > 1.0 else 1.0
+
+	for overlay: Control in [winner_label, sent_label, spectator_label, waiting_label]:
+		_scale_theme(overlay, "font_size", label_k)
+
+	var button_k: float = ARCHERY_LANDSCAPE_BUTTON_SCALE if k > 1.0 else 1.0
+
+	for button: Control in [settings_button, rules_button]:
+		if is_instance_valid(button):
+			var on_right: bool = button.get_global_rect().get_center().x > vp.x * 0.5
+			button.pivot_offset = Vector2(button.size.x if on_right else 0.0, 0.0)
+			button.scale = Vector2(button_k, button_k)
 
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
@@ -201,6 +267,7 @@ func _on_game_ready() -> void:
 		_score_box_orig_min_size = score_box.custom_minimum_size
 		if _score_box_orig_min_size == Vector2.ZERO:
 			_score_box_orig_min_size = score_box.get_combined_minimum_size()
+		_score_box_base_min_size = _score_box_orig_min_size
 		score_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if is_instance_valid(camera):
 		camera.position = CAMERA_DEFAULT_POS
@@ -209,6 +276,9 @@ func _on_game_ready() -> void:
 		camera.look_at(center - Vector3(0.0, CAMERA_LOOK_AT_Y_OFFSET, 0.0), Vector3.UP)
 
 	update_distance()
+
+	get_viewport().size_changed.connect(_apply_responsive_ui)
+	_apply_responsive_ui()
 	
 	OpLog.i(LOG_TAG, [
 		"game_ready localMode=", appPlugin == null,

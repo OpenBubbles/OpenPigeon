@@ -1665,7 +1665,7 @@ func _get_rules_text() -> String:
 
 [font_size={24px}][b]Winning the Game[/b][/font_size]
 [font_size={18px}]
-• You win by connecting four of your own colored pieces in a straight line—vertically, horizontally, or diagonally.
+• You win by connecting four of your own colored pieces in a straight line-vertically, horizontally, or diagonally.
 • If the board fills completely with no four-in-a-row for either player, the game ends in a draw.
 [/font_size]
 """

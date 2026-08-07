@@ -13,6 +13,16 @@ const MUSIC_STREAM := preload("res://global/audio/darts.ogg")
 @onready var spectator_label: Label = %SpecLabel
 @onready var you_label: Label = %YouLabel
 @onready var darts_menu_button: Button = %MenuButton
+
+const DARTS_LANDSCAPE_UI_SCALE: float = 1.5
+const DARTS_LANDSCAPE_LABEL_SCALE: float = 1.8
+const DARTS_LANDSCAPE_BUTTON_SCALE: float = 1.8
+@export var camera_fit_margin: float = 1.5
+const DART_BOARD_PLANE_Z := 0.067
+const DART_FIT_PAD := 0.14
+
+var _base_theme_values: Dictionary = {}
+var _darts_portrait_fov: float = -1.0
 var points_to_win_popup: Control
 var points_to_win_panel: PanelContainer
 var points_to_win_label: RichTextLabel
@@ -53,8 +63,11 @@ const DART_SEGMENTS := [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11,
 
 const DARTS_MENU_SIZE := Vector2(142.0, 104.0)
 const DARTS_MENU_ROW_HEIGHT := 48.0
+const DARTS_MENU_FONT_SIZE: int = 21
 const DARTS_MENU_BUTTON_GAP := 6.0
 const DARTS_MENU_SCREEN_MARGIN := 8.0
+
+const DARTS_LANDSCAPE_MENU_SCALE: float = 1.5
 
 var darts_menu_layer: Control
 var darts_menu_panel: PanelContainer
@@ -108,10 +121,22 @@ const SCORE_TICK_MAX_DURATION := 1.05
 const SCORE_TICK_LOG_SCALE := 0.16
 
 const POINTS_TO_WIN_COLOR := Color(1.0, 0.84, 0.0)
+
 const POINTS_TO_WIN_SIZE := Vector2(142.0, 42.0)
 const POINTS_TO_WIN_PANEL_HEIGHT := 38.0
 const POINTS_TO_WIN_ARROW_HEIGHT := 10.0
+const POINTS_TO_WIN_ARROW_HALF_WIDTH := 10.0
+const POINTS_TO_WIN_FONT_SIZE: int = 24
+const POINTS_TO_WIN_CORNER_RADIUS: int = 17
 const POINTS_TO_WIN_AVATAR_GAP := 6.0
+
+const POINTS_TO_WIN_LANDSCAPE_SIZE := Vector2(190.0, 58.0)
+const POINTS_TO_WIN_LANDSCAPE_PANEL_HEIGHT := 50.0
+const POINTS_TO_WIN_LANDSCAPE_ARROW_HEIGHT := 14.0
+const POINTS_TO_WIN_LANDSCAPE_ARROW_HALF_WIDTH := 14.0
+const POINTS_TO_WIN_LANDSCAPE_FONT_SIZE: int = 32
+const POINTS_TO_WIN_LANDSCAPE_CORNER_RADIUS: int = 23
+const POINTS_TO_WIN_LANDSCAPE_AVATAR_GAP := 8.0
 
 const RESULT_NONE := 0
 const RESULT_WIN := 1
@@ -350,9 +375,11 @@ func _configure_darts_avatar(avatar_button: TextureButton) -> void:
 	if not is_instance_valid(avatar_button):
 		return
 
+	var k: float = _darts_ui_scale()
+
 	avatar_button.clip_contents = false
 	avatar_button.scale = Vector2.ONE
-	avatar_button.custom_minimum_size = Vector2(96.0, 90.0)
+	avatar_button.custom_minimum_size = Vector2(96.0, 90.0) * k
 
 	var internal_viewport := avatar_button.get_node_or_null("SubViewportContainer/SubViewport") as SubViewport
 
@@ -366,7 +393,7 @@ func _configure_darts_avatar(avatar_button: TextureButton) -> void:
 		internal_preview.visible = true
 		internal_preview.self_modulate = Color.WHITE
 		internal_preview.pivot_offset = Vector2(48.0, 140.0)
-		internal_preview.scale = Vector2.ONE
+		internal_preview.scale = Vector2(k, k)
 
 func _initialize_darts_avatars() -> void:
 	if not is_instance_valid(player_avatar_display):
@@ -576,6 +603,107 @@ func _update_points_to_win() -> void:
 			int(target["multiplier"])
 		)
 
+func _apply_points_to_win_layout() -> void:
+	if (
+		not is_instance_valid(points_to_win_popup) or
+		not is_instance_valid(points_to_win_panel) or
+		not is_instance_valid(points_to_win_label) or
+		not is_instance_valid(points_to_win_arrow)
+	):
+		return
+
+	var viewport_size: Vector2 = (
+		get_viewport()
+		.get_visible_rect()
+		.size
+	)
+
+	var is_landscape: bool = (
+		viewport_size.x > viewport_size.y
+	)
+
+	var popup_size: Vector2 = (
+		POINTS_TO_WIN_LANDSCAPE_SIZE
+		if is_landscape
+		else POINTS_TO_WIN_SIZE
+	)
+
+	var panel_height: float = (
+		POINTS_TO_WIN_LANDSCAPE_PANEL_HEIGHT
+		if is_landscape
+		else POINTS_TO_WIN_PANEL_HEIGHT
+	)
+
+	var arrow_height: float = (
+		POINTS_TO_WIN_LANDSCAPE_ARROW_HEIGHT
+		if is_landscape
+		else POINTS_TO_WIN_ARROW_HEIGHT
+	)
+
+	var arrow_half_width: float = (
+		POINTS_TO_WIN_LANDSCAPE_ARROW_HALF_WIDTH
+		if is_landscape
+		else POINTS_TO_WIN_ARROW_HALF_WIDTH
+	)
+
+	var font_size: int = (
+		POINTS_TO_WIN_LANDSCAPE_FONT_SIZE
+		if is_landscape
+		else POINTS_TO_WIN_FONT_SIZE
+	)
+
+	var corner_radius: int = (
+		POINTS_TO_WIN_LANDSCAPE_CORNER_RADIUS
+		if is_landscape
+		else POINTS_TO_WIN_CORNER_RADIUS
+	)
+
+	points_to_win_popup.custom_minimum_size = popup_size
+	points_to_win_popup.size = popup_size
+
+	points_to_win_panel.position = Vector2.ZERO
+	points_to_win_panel.custom_minimum_size = Vector2(
+		popup_size.x,
+		panel_height
+	)
+	points_to_win_panel.size = Vector2(
+		popup_size.x,
+		panel_height
+	)
+
+	points_to_win_label.add_theme_font_size_override(
+		"normal_font_size",
+		font_size
+	)
+
+	points_to_win_label.add_theme_font_size_override(
+		"bold_font_size",
+		font_size
+	)
+
+	var panel_style := (
+		points_to_win_panel.get_theme_stylebox(
+			"panel"
+		) as StyleBoxFlat
+	)
+
+	if panel_style != null:
+		panel_style.corner_radius_top_left = corner_radius
+		panel_style.corner_radius_top_right = corner_radius
+		panel_style.corner_radius_bottom_left = corner_radius
+		panel_style.corner_radius_bottom_right = corner_radius
+
+	points_to_win_arrow.polygon = PackedVector2Array([
+		Vector2(-arrow_half_width, 0.0),
+		Vector2(arrow_half_width, 0.0),
+		Vector2(0.0, arrow_height)
+	])
+
+	points_to_win_arrow.position = Vector2(
+		popup_size.x * 0.5,
+		panel_height - 1.0
+	)
+
 func _setup_points_to_win_popup() -> void:
 	if is_instance_valid(points_to_win_popup):
 		return
@@ -607,10 +735,10 @@ func _setup_points_to_win_popup() -> void:
 
 	var style := StyleBoxFlat.new()
 	style.bg_color = POINTS_TO_WIN_COLOR
-	style.corner_radius_top_left = 17
-	style.corner_radius_top_right = 17
-	style.corner_radius_bottom_left = 17
-	style.corner_radius_bottom_right = 17
+	style.corner_radius_top_left = POINTS_TO_WIN_CORNER_RADIUS
+	style.corner_radius_top_right = POINTS_TO_WIN_CORNER_RADIUS
+	style.corner_radius_bottom_left = POINTS_TO_WIN_CORNER_RADIUS
+	style.corner_radius_bottom_right = POINTS_TO_WIN_CORNER_RADIUS
 	style.content_margin_left = 10.0
 	style.content_margin_right = 10.0
 	style.content_margin_top = 2.0
@@ -636,12 +764,12 @@ func _setup_points_to_win_popup() -> void:
 
 	points_to_win_label.add_theme_font_size_override(
 		"normal_font_size",
-		24
+		POINTS_TO_WIN_FONT_SIZE
 	)
-	
+
 	points_to_win_label.add_theme_font_size_override(
 		"bold_font_size",
-		24
+		POINTS_TO_WIN_FONT_SIZE
 	)
 
 	points_to_win_label.add_theme_color_override(
@@ -654,9 +782,18 @@ func _setup_points_to_win_popup() -> void:
 	points_to_win_arrow = Polygon2D.new()
 	points_to_win_arrow.name = "PointsToWinArrow"
 	points_to_win_arrow.polygon = PackedVector2Array([
-		Vector2(-10.0, 0.0),
-		Vector2(10.0, 0.0),
-		Vector2(0.0, POINTS_TO_WIN_ARROW_HEIGHT)
+		Vector2(
+			-POINTS_TO_WIN_ARROW_HALF_WIDTH,
+			0.0
+		),
+		Vector2(
+			POINTS_TO_WIN_ARROW_HALF_WIDTH,
+			0.0
+		),
+		Vector2(
+			0.0,
+			POINTS_TO_WIN_ARROW_HEIGHT
+		)
 	])
 	points_to_win_arrow.color = POINTS_TO_WIN_COLOR
 	points_to_win_arrow.position = Vector2(
@@ -665,6 +802,7 @@ func _setup_points_to_win_popup() -> void:
 	)
 
 	points_to_win_popup.add_child(points_to_win_arrow)
+	_apply_points_to_win_layout()
 	
 func _find_score_texture(
 	root: Node
@@ -688,13 +826,40 @@ func _position_points_to_win_popup() -> void:
 	):
 		return
 
-	var avatar_control: Control = player_avatar_display as Control
+	var avatar_control := (
+		player_avatar_display as Control
+	)
 
 	if avatar_control == null:
-		OpLog.w(LOG_TAG, "points_to_win_avatar_is_not_control")
+		OpLog.w(
+			LOG_TAG,
+			"points_to_win_avatar_is_not_control"
+		)
 		return
 
-	var avatar_rect: Rect2 = avatar_control.get_global_rect()
+	var viewport_size: Vector2 = (
+		get_viewport()
+		.get_visible_rect()
+		.size
+	)
+
+	var is_landscape: bool = (
+		viewport_size.x > viewport_size.y
+	)
+
+	var avatar_gap: float = (
+		POINTS_TO_WIN_LANDSCAPE_AVATAR_GAP
+		if is_landscape
+		else POINTS_TO_WIN_AVATAR_GAP
+	)
+
+	var popup_size: Vector2 = (
+		points_to_win_popup.size
+	)
+
+	var avatar_rect: Rect2 = (
+		avatar_control.get_global_rect()
+	)
 
 	var avatar_top_in_overlay: float = (
 		avatar_rect.position.y -
@@ -709,12 +874,12 @@ func _position_points_to_win_popup() -> void:
 
 	points_to_win_popup.position = Vector2(
 		avatar_center_x_in_overlay -
-			POINTS_TO_WIN_SIZE.x * 0.5,
+			popup_size.x * 0.5,
 		avatar_top_in_overlay -
-			POINTS_TO_WIN_SIZE.y -
-			POINTS_TO_WIN_AVATAR_GAP
+			popup_size.y -
+			avatar_gap
 	)
-	
+
 func _show_points_to_win_popup() -> void:
 	if not is_instance_valid(points_to_win_popup):
 		return
@@ -759,15 +924,337 @@ func _hide_points_to_win_popup() -> void:
 				points_to_win_popup.visible = false
 	)
 
-func _on_viewport_size_changed() -> void:
+func _darts_ui_scale() -> float:
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	return DARTS_LANDSCAPE_UI_SCALE if vp.x > vp.y else 1.0
+
+func _scale_theme(node: Control, theme_item: String, k: float) -> void:
+	if not is_instance_valid(node):
+		return
+
+	var key: String = str(node.get_instance_id()) + theme_item
+
+	if not _base_theme_values.has(key):
+		_base_theme_values[key] = node.get_theme_font_size(theme_item)
+
+	node.add_theme_font_size_override(
+		theme_item,
+		int(round(float(_base_theme_values[key]) * k))
+	)
+
+func _scale_min_size(node: Control, k: float) -> void:
+	if not is_instance_valid(node):
+		return
+
+	var id: String = str(node.get_instance_id()) + "minsize"
+
+	if not _base_theme_values.has(id):
+		_base_theme_values[id] = node.custom_minimum_size
+
+	node.custom_minimum_size = _base_theme_values[id] * k
+
+func _darts_fit_points() -> PackedVector3Array:
+	var pts := PackedVector3Array()
+	var cx: float = DART_BOARD_CENTER.x
+	var cy: float = DART_BOARD_CENTER.y
+	var r: float = DART_BOARD_RADIUS
+
+	pts.append(Vector3(cx - r, cy, DART_BOARD_PLANE_Z))
+	pts.append(Vector3(cx + r, cy, DART_BOARD_PLANE_Z))
+	pts.append(Vector3(cx, cy - r, DART_BOARD_PLANE_Z))
+	pts.append(Vector3(cx, cy + r, DART_BOARD_PLANE_Z))
+
+	var dart_pos: Vector3 = DART_IDLE_POSITION
+
+	if is_instance_valid(current_dart):
+		dart_pos = current_dart.position
+
+	for dx: float in [-DART_FIT_PAD, DART_FIT_PAD]:
+		for dy: float in [-DART_FIT_PAD, DART_FIT_PAD]:
+			pts.append(dart_pos + Vector3(dx, dy, 0.0))
+
+	return pts
+
+func _configure_darts_camera() -> void:
+	var cam := get_viewport().get_camera_3d()
+
+	if cam == null:
+		return
+
+	var vp: Vector2 = (
+		get_viewport()
+		.get_visible_rect()
+		.size
+	)
+
+	if vp.x <= 0.0 or vp.y <= 0.0:
+		return
+
+	if _darts_portrait_fov < 0.0:
+		_darts_portrait_fov = cam.fov
+
+	var is_landscape: bool = vp.x > vp.y
+
+	if not is_landscape:
+		cam.keep_aspect = Camera3D.KEEP_WIDTH
+		cam.fov = _darts_portrait_fov
+
+		OpLog.i(LOG_TAG, [
+			"darts_camera portrait viewport=",
+			vp,
+			" keepAspect=KEEP_WIDTH",
+			" restoredFov=",
+			cam.fov
+		])
+
+		return
+
+	cam.keep_aspect = Camera3D.KEEP_HEIGHT
+
+	var aspect: float = (
+		vp.x /
+		maxf(vp.y, 1.0)
+	)
+
+	var inverse_camera: Transform3D = (
+		cam.global_transform.affine_inverse()
+	)
+
+	var vertical_tangent: float = 0.0
+	var horizontal_tangent: float = 0.0
+
+	for world_point: Vector3 in _darts_fit_points():
+		var camera_point: Vector3 = (
+			inverse_camera * world_point
+		)
+
+		var depth: float = -camera_point.z
+
+		if depth <= 0.01:
+			continue
+
+		vertical_tangent = maxf(
+			vertical_tangent,
+			absf(camera_point.y) / depth
+		)
+
+		horizontal_tangent = maxf(
+			horizontal_tangent,
+			absf(camera_point.x) / depth
+		)
+
+	if (
+		vertical_tangent <= 0.0 and
+		horizontal_tangent <= 0.0
+	):
+		cam.fov = _darts_portrait_fov
+		return
+
+	var needed_tangent: float = maxf(
+		vertical_tangent,
+		horizontal_tangent / aspect
+	) * camera_fit_margin
+
+	var fitted_fov: float = clampf(
+		rad_to_deg(
+			atan(needed_tangent) * 2.0
+		),
+		1.0,
+		120.0
+	)
+
+	cam.fov = maxf(
+		_darts_portrait_fov,
+		fitted_fov
+	)
+
+	OpLog.i(LOG_TAG, [
+		"darts_camera landscape viewport=",
+		vp,
+		" aspect=",
+		aspect,
+		" verticalTangent=",
+		vertical_tangent,
+		" horizontalTangent=",
+		horizontal_tangent,
+		" baseFov=",
+		_darts_portrait_fov,
+		" fittedFov=",
+		fitted_fov,
+		" appliedFov=",
+		cam.fov
+	])
+
+func _apply_landscape_ui() -> void:
+	await get_tree().process_frame
+
+	_configure_darts_camera()
+
+	var k: float = _darts_ui_scale()
+
+	_configure_darts_avatar(player_avatar_display)
+	_configure_darts_avatar(opp_avatar_display)
+	
+	_apply_points_to_win_layout()
+
 	if (
 		is_instance_valid(points_to_win_popup) and
 		points_to_win_popup.visible
 	):
-		call_deferred("_position_points_to_win_popup")
-		
+		_position_points_to_win_popup()
+
+	var label_k: float = DARTS_LANDSCAPE_LABEL_SCALE if k > 1.0 else 1.0
+
+	for overlay: Control in [
+		winner_label,
+		sent_label,
+		waiting_label,
+		spectator_label,
+		you_label,
+	]:
+		_scale_theme(overlay, "font_size", label_k)
+
+	for score: Control in [you_score_label, opp_score_label]:
+		_scale_theme(score, "font_size", k)
+		_scale_min_size(score, k)
+
+	var button_k: float = DARTS_LANDSCAPE_BUTTON_SCALE if k > 1.0 else 1.0
+
+	_scale_min_size(darts_menu_button, button_k)
+
+	if darts_menu_button is Button:
+		darts_menu_button.expand_icon = true
+
+	if is_instance_valid(dart_indicator_root):
+		dart_indicator_root.pivot_offset = Vector2.ZERO
+		dart_indicator_root.scale = Vector2(k, k)
+		dart_indicator_root.position = DART_INDICATOR_POS * k
+
 	if is_instance_valid(darts_menu_panel):
-		call_deferred("_position_darts_menu")
+		_apply_darts_menu_layout()
+		_position_darts_menu()
+
+func _on_viewport_size_changed() -> void:
+	await _apply_landscape_ui()
+	await get_tree().process_frame
+
+	if (
+		is_instance_valid(points_to_win_popup) and
+		points_to_win_popup.visible
+	):
+		_position_points_to_win_popup()
+
+	if is_instance_valid(darts_menu_panel):
+		_position_darts_menu()
+
+	OpLog.i(LOG_TAG, [
+		"darts_orientation_applied viewport=",
+		get_viewport().get_visible_rect().size,
+		" portraitFov=",
+		_darts_portrait_fov,
+		" currentFov=",
+		get_viewport().get_camera_3d().fov
+		if get_viewport().get_camera_3d() != null
+		else -1.0
+	])
+
+func _darts_menu_scale() -> float:
+	var viewport_size: Vector2 = (
+		get_viewport()
+		.get_visible_rect()
+		.size
+	)
+
+	return (
+		DARTS_LANDSCAPE_MENU_SCALE
+		if viewport_size.x > viewport_size.y
+		else 1.0
+	)
+
+
+func _darts_menu_size() -> Vector2:
+	return DARTS_MENU_SIZE * _darts_menu_scale()
+
+
+func _apply_darts_menu_layout() -> void:
+	if not is_instance_valid(darts_menu_panel):
+		return
+
+	var scale_factor: float = _darts_menu_scale()
+	var menu_size: Vector2 = _darts_menu_size()
+
+	darts_menu_panel.custom_minimum_size = menu_size
+	darts_menu_panel.size = menu_size
+
+	var panel_style := (
+		darts_menu_panel.get_theme_stylebox(
+			"panel"
+		) as StyleBoxFlat
+	)
+
+	if panel_style != null:
+		var corner_radius: int = int(
+			round(10.0 * scale_factor)
+		)
+
+		panel_style.corner_radius_top_left = corner_radius
+		panel_style.corner_radius_top_right = corner_radius
+		panel_style.corner_radius_bottom_left = corner_radius
+		panel_style.corner_radius_bottom_right = corner_radius
+
+		panel_style.content_margin_left = (
+			4.0 * scale_factor
+		)
+		panel_style.content_margin_top = (
+			4.0 * scale_factor
+		)
+		panel_style.content_margin_right = (
+			4.0 * scale_factor
+		)
+		panel_style.content_margin_bottom = (
+			4.0 * scale_factor
+		)
+
+		panel_style.shadow_size = int(
+			round(8.0 * scale_factor)
+		)
+
+		panel_style.shadow_offset = Vector2(
+			0.0,
+			3.0 * scale_factor
+		)
+
+	var rows := (
+		darts_menu_panel.get_node_or_null(
+			"Rows"
+		) as VBoxContainer
+	)
+
+	if rows == null:
+		return
+
+	for child: Node in rows.get_children():
+		var row := child as Button
+
+		if row == null:
+			continue
+
+		row.custom_minimum_size = Vector2(
+			menu_size.x -
+				8.0 * scale_factor,
+			DARTS_MENU_ROW_HEIGHT *
+				scale_factor
+		)
+
+		row.add_theme_font_size_override(
+			"font_size",
+			int(
+				round(
+					DARTS_MENU_FONT_SIZE *
+					scale_factor
+				)
+			)
+		)
 
 func _make_darts_menu_button_style(
 	background_color: Color
@@ -803,7 +1290,7 @@ func _make_darts_menu_row(text_value: String) -> Button:
 
 	button.add_theme_font_size_override(
 		"font_size",
-		21
+		DARTS_MENU_FONT_SIZE
 	)
 
 	button.add_theme_color_override(
@@ -967,10 +1454,11 @@ func _setup_darts_menu() -> void:
 		_on_darts_menu_help_pressed
 	)
 
+	_apply_darts_menu_layout()
+
 	call_deferred(
 		"_position_darts_menu"
 	)
-
 
 func _position_darts_menu() -> void:
 	if (
@@ -980,55 +1468,71 @@ func _position_darts_menu() -> void:
 	):
 		return
 
-	var overlay_rect := main_overlay.get_global_rect()
-	var button_rect := darts_menu_button.get_global_rect()
+	var scale_factor: float = _darts_menu_scale()
+	var menu_size: Vector2 = _darts_menu_size()
+
+	var menu_gap: float = (
+		DARTS_MENU_BUTTON_GAP *
+		scale_factor
+	)
+
+	var screen_margin: float = (
+		DARTS_MENU_SCREEN_MARGIN *
+		scale_factor
+	)
+
+	var overlay_rect: Rect2 = (
+		main_overlay.get_global_rect()
+	)
+
+	var button_rect: Rect2 = (
+		darts_menu_button.get_global_rect()
+	)
 
 	var target_position := Vector2(
 		button_rect.end.x -
 			overlay_rect.position.x -
-			DARTS_MENU_SIZE.x,
+			menu_size.x,
 		button_rect.end.y -
 			overlay_rect.position.y +
-			DARTS_MENU_BUTTON_GAP
+			menu_gap
 	)
 
 	var maximum_position := Vector2(
 		maxf(
-			DARTS_MENU_SCREEN_MARGIN,
+			screen_margin,
 			main_overlay.size.x -
-				DARTS_MENU_SIZE.x -
-				DARTS_MENU_SCREEN_MARGIN
+				menu_size.x -
+				screen_margin
 		),
 		maxf(
-			DARTS_MENU_SCREEN_MARGIN,
+			screen_margin,
 			main_overlay.size.y -
-				DARTS_MENU_SIZE.y -
-				DARTS_MENU_SCREEN_MARGIN
+				menu_size.y -
+				screen_margin
 		)
 	)
 
 	target_position.x = clampf(
 		target_position.x,
-		DARTS_MENU_SCREEN_MARGIN,
+		screen_margin,
 		maximum_position.x
 	)
 
 	target_position.y = clampf(
 		target_position.y,
-		DARTS_MENU_SCREEN_MARGIN,
+		screen_margin,
 		maximum_position.y
 	)
 
 	darts_menu_panel.position = target_position
-	darts_menu_panel.size = DARTS_MENU_SIZE
-
+	darts_menu_panel.size = menu_size
 
 func _on_darts_menu_button_pressed() -> void:
 	if darts_menu_open:
 		_hide_darts_menu()
 	else:
 		_show_darts_menu()
-
 
 func _show_darts_menu() -> void:
 	if (
@@ -1040,13 +1544,16 @@ func _show_darts_menu() -> void:
 	darts_menu_open = true
 	_settings_open = true
 
+	_apply_darts_menu_layout()
 	_position_darts_menu()
+
+	var menu_size: Vector2 = _darts_menu_size()
 
 	darts_menu_layer.visible = true
 	darts_menu_layer.move_to_front()
 
 	darts_menu_panel.pivot_offset = Vector2(
-		DARTS_MENU_SIZE.x,
+		menu_size.x,
 		0.0
 	)
 
@@ -1057,7 +1564,9 @@ func _show_darts_menu() -> void:
 
 	darts_menu_panel.modulate.a = 0.0
 
-	var tween := create_tween().set_parallel(true)
+	var tween := create_tween().set_parallel(
+		true
+	)
 
 	tween.tween_property(
 		darts_menu_panel,
@@ -1076,7 +1585,6 @@ func _show_darts_menu() -> void:
 		1.0,
 		0.10
 	)
-
 
 func _hide_darts_menu() -> void:
 	darts_menu_open = false
@@ -1359,6 +1867,8 @@ func _on_game_ready():
 		viewport.size_changed.connect(
 			_on_viewport_size_changed
 		)
+
+	_apply_landscape_ui()
 
 	OpLog.i(LOG_TAG, [
 		"game_ready main_dart_valid=",

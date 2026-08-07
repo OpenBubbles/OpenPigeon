@@ -33,6 +33,42 @@ const THUMB_PRESS_MODE := BaseButton.ACTION_MODE_BUTTON_PRESS
 const DEADZONE_PX := 4
 var _scroll_pos_by_tab: Dictionary[String, Vector2] = {}
 
+const SETTINGS_LANDSCAPE_UI_SCALE: float = 1.5
+
+const SETTINGS_RICH_TEXT_FONT_ITEMS := [
+	"normal_font_size",
+	"bold_font_size",
+	"italics_font_size",
+	"bold_italics_font_size",
+	"mono_font_size"
+]
+
+const SETTINGS_MARGIN_ITEMS := [
+	"margin_left",
+	"margin_top",
+	"margin_right",
+	"margin_bottom"
+]
+
+const SETTINGS_TAB_CONSTANT_ITEMS := [
+	"h_separation",
+	"tab_separation"
+]
+
+const SETTINGS_BASE_MIN_SIZE_META := (
+	"_settings_base_minimum_size"
+)
+
+const SETTINGS_BASE_SIZE_META := (
+	"_settings_base_size"
+)
+
+const SETTINGS_BASE_POSITION_META := (
+	"_settings_base_position"
+)
+
+var _settings_layout_refresh_queued: bool = false
+
 func _remember_scroll_positions() -> void:
 	for child in properties_box.get_children():
 		if child is ScrollContainer:
@@ -52,22 +88,387 @@ func _restore_scroll(sc: ScrollContainer) -> void:
 		sc.call_deferred("set", "scroll_horizontal", int(pos.x))
 		sc.call_deferred("set", "scroll_vertical", int(pos.y))
 
-func _ready():
+func _ready() -> void:
 	print("SettingsPopup: _ready() called.")
+
 	self.custom_minimum_size.x = 400
-	if SettingsManager and SettingsManager.has_method("ensure_avatar_defaults"):
+
+	if (
+		SettingsManager and
+		SettingsManager.has_method(
+			"ensure_avatar_defaults"
+		)
+	):
 		SettingsManager.ensure_avatar_defaults()
+
+	var viewport := get_viewport()
+
+	if (
+		is_instance_valid(viewport) and
+		not viewport.size_changed.is_connected(
+			_queue_settings_layout_refresh
+		)
+	):
+		viewport.size_changed.connect(
+			_queue_settings_layout_refresh
+		)
 
 	_setup_theme_button()
 	_style_theme_dropdown()
 	_add_dark_mode_toggle()
 	_setup_avatar_customizer()
-	
-	var saved_dark: bool = SettingsManager.get_setting("global", "dark_mode", false) == true
+
+	var saved_dark: bool = (
+		SettingsManager.get_setting(
+			"global",
+			"dark_mode",
+			false
+		) == true
+	)
+
 	set_dark_mode(saved_dark, true)
 
 	if is_instance_valid(custom_settings_container):
-		custom_settings_container.add_theme_constant_override("separation", 8)
+		custom_settings_container.add_theme_constant_override(
+			"separation",
+			8
+		)
+
+		if not custom_settings_container.child_entered_tree.is_connected(
+			_on_settings_control_added
+		):
+			custom_settings_container.child_entered_tree.connect(
+				_on_settings_control_added
+			)
+
+	if is_instance_valid(properties_box):
+		if not properties_box.child_entered_tree.is_connected(
+			_on_settings_control_added
+		):
+			properties_box.child_entered_tree.connect(
+				_on_settings_control_added
+			)
+
+	if is_instance_valid(global_settings_container):
+		if not global_settings_container.child_entered_tree.is_connected(
+			_on_settings_control_added
+		):
+			global_settings_container.child_entered_tree.connect(
+				_on_settings_control_added
+			)
+
+	_queue_settings_layout_refresh()
+
+func _settings_ui_scale() -> float:
+	var viewport_size: Vector2 = (
+		get_viewport_rect().size
+	)
+
+	return (
+		SETTINGS_LANDSCAPE_UI_SCALE
+		if viewport_size.x > viewport_size.y
+		else 1.0
+	)
+
+
+func _on_settings_control_added(
+	_node: Node
+) -> void:
+	_queue_settings_layout_refresh()
+
+
+func _queue_settings_layout_refresh() -> void:
+	if _settings_layout_refresh_queued:
+		return
+
+	_settings_layout_refresh_queued = true
+
+	call_deferred(
+		"_apply_settings_layout_deferred"
+	)
+
+
+func _apply_settings_layout_deferred() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	_settings_layout_refresh_queued = false
+
+	if not is_inside_tree():
+		return
+
+	_apply_settings_orientation_layout()
+
+
+func _settings_meta_key(
+	prefix: String,
+	item_name: String
+) -> String:
+	return "%s_%s" % [
+		prefix,
+		item_name
+	]
+
+
+func _scale_settings_font_item(
+	control: Control,
+	font_item: String,
+	scale_factor: float
+) -> void:
+	var meta_key := _settings_meta_key(
+		"_settings_base_font",
+		font_item
+	)
+
+	if not control.has_meta(meta_key):
+		control.set_meta(
+			meta_key,
+			control.get_theme_font_size(font_item)
+		)
+
+	var base_size: int = int(
+		control.get_meta(meta_key)
+	)
+
+	control.add_theme_font_size_override(
+		font_item,
+		max(
+			1,
+			int(
+				round(
+					float(base_size) *
+					scale_factor
+				)
+			)
+		)
+	)
+
+
+func _scale_settings_theme_constant(
+	control: Control,
+	constant_name: String,
+	scale_factor: float
+) -> void:
+	var meta_key := _settings_meta_key(
+		"_settings_base_constant",
+		constant_name
+	)
+
+	if not control.has_meta(meta_key):
+		control.set_meta(
+			meta_key,
+			control.get_theme_constant(
+				constant_name
+			)
+		)
+
+	var base_value: int = int(
+		control.get_meta(meta_key)
+	)
+
+	control.add_theme_constant_override(
+		constant_name,
+		int(
+			round(
+				float(base_value) *
+				scale_factor
+			)
+		)
+	)
+
+
+func _scale_settings_minimum_size(
+	control: Control,
+	scale_factor: float
+) -> void:
+	if not control.has_meta(
+		SETTINGS_BASE_MIN_SIZE_META
+	):
+		control.set_meta(
+			SETTINGS_BASE_MIN_SIZE_META,
+			control.custom_minimum_size
+		)
+
+	var base_minimum_size: Vector2 = (
+		control.get_meta(
+			SETTINGS_BASE_MIN_SIZE_META
+		)
+	)
+
+	control.custom_minimum_size = (
+		base_minimum_size *
+		scale_factor
+	)
+
+
+func _scale_button_child_geometry(
+	control: Control,
+	scale_factor: float
+) -> void:
+	if not control.get_parent() is BaseButton:
+		return
+
+	if not control.has_meta(
+		SETTINGS_BASE_SIZE_META
+	):
+		control.set_meta(
+			SETTINGS_BASE_SIZE_META,
+			control.size
+		)
+
+	if not control.has_meta(
+		SETTINGS_BASE_POSITION_META
+	):
+		control.set_meta(
+			SETTINGS_BASE_POSITION_META,
+			control.position
+		)
+
+	var base_size: Vector2 = control.get_meta(
+		SETTINGS_BASE_SIZE_META
+	)
+
+	var base_position: Vector2 = control.get_meta(
+		SETTINGS_BASE_POSITION_META
+	)
+
+	control.size = base_size * scale_factor
+	control.position = base_position * scale_factor
+
+
+func _scale_settings_control_recursive(
+	node: Node,
+	scale_factor: float
+) -> void:
+	var control := node as Control
+
+	if control != null:
+		_scale_settings_minimum_size(
+			control,
+			scale_factor
+		)
+
+		if control is RichTextLabel:
+			for font_item: String in (
+				SETTINGS_RICH_TEXT_FONT_ITEMS
+			):
+				_scale_settings_font_item(
+					control,
+					font_item,
+					scale_factor
+				)
+		elif (
+			control is Label or
+			control is BaseButton or
+			control is LineEdit or
+			control is TextEdit or
+			control is TabBar
+		):
+			_scale_settings_font_item(
+				control,
+				"font_size",
+				scale_factor
+			)
+
+		if control is MarginContainer:
+			for margin_item: String in (
+				SETTINGS_MARGIN_ITEMS
+			):
+				_scale_settings_theme_constant(
+					control,
+					margin_item,
+					scale_factor
+				)
+
+		if control is BoxContainer:
+			_scale_settings_theme_constant(
+				control,
+				"separation",
+				scale_factor
+			)
+
+		if control is TabBar:
+			for constant_item: String in (
+				SETTINGS_TAB_CONSTANT_ITEMS
+			):
+				_scale_settings_theme_constant(
+					control,
+					constant_item,
+					scale_factor
+				)
+
+		_scale_button_child_geometry(
+			control,
+			scale_factor
+		)
+
+	for child: Node in node.get_children():
+		_scale_settings_control_recursive(
+			child,
+			scale_factor
+		)
+
+
+func _refresh_settings_switches(
+	node: Node
+) -> void:
+	var button := node as Button
+
+	if button != null:
+		var knob_wrap := button.get_node_or_null(
+			"KnobWrap"
+		)
+
+		var direct_knob := button.get_node_or_null(
+			"Knob"
+		)
+
+		if is_instance_valid(knob_wrap):
+			_layout_switch_children(button)
+
+			_update_switch_visual(
+				button,
+				button.button_pressed,
+				true
+			)
+		elif is_instance_valid(direct_knob):
+			_update_game_switch_visual(
+				button,
+				button.button_pressed,
+				true
+			)
+
+	for child: Node in node.get_children():
+		_refresh_settings_switches(child)
+
+
+func _apply_settings_orientation_layout() -> void:
+	var scale_factor: float = (
+		_settings_ui_scale()
+	)
+
+	_scale_settings_control_recursive(
+		self,
+		scale_factor
+	)
+
+	if is_instance_valid(theme_option_button):
+		var popup_menu := (
+			theme_option_button.get_popup()
+		)
+
+		if popup_menu != null:
+			popup_menu.add_theme_font_size_override(
+				"font_size",
+				int(
+					round(
+						15.0 *
+						scale_factor
+					)
+				)
+			)
+
+	_refresh_settings_switches(self)
 
 func close_popup():
 	if not SettingsManager.suppress_avatar_changed:
@@ -319,6 +720,8 @@ func _on_avatar_tab_changed(tab_index: int, restored_scroll: Variant = null):
 				child.call_deferred("set", "scroll_horizontal", int(restored_scroll.x))
 				child.call_deferred("set", "scroll_vertical", int(restored_scroll.y))
 				break
+	
+	_queue_settings_layout_refresh()
 
 func _on_avatar_preview_setting_changed(value, category: String, key: String):
 	_set_avatar_value(category, key, value)
@@ -630,10 +1033,17 @@ func _exit_tree():
 	if is_instance_valid(dim_rect):
 		dim_rect.queue_free()
 
-func setup_popup(dimmer: ColorRect):
+func setup_popup(
+	dimmer: ColorRect
+) -> void:
 	dim_rect = dimmer
+
 	if is_instance_valid(dim_rect):
-		dim_rect.gui_input.connect(_on_dim_rect_gui_input)
+		dim_rect.gui_input.connect(
+			_on_dim_rect_gui_input
+		)
+
+	_queue_settings_layout_refresh()
 		
 func set_dark_mode(enabled: bool, instant: bool = false) -> void:
 	if dark_mode_enabled == enabled:
@@ -770,28 +1180,87 @@ func _make_switch_button() -> Button:
 
 	return btn
 	
-func _layout_switch_children(btn: Button) -> void:
-	var icon_size := 20.0
-	var pad := 8.0
+func _layout_switch_children(
+	btn: Button
+) -> void:
+	var scale_factor: float = (
+		_settings_ui_scale()
+	)
 
-	var moon := btn.get_node_or_null("MoonIn") as TextureRect
-	var sun := btn.get_node_or_null("SunIn") as TextureRect
-	var knob_wrap := btn.get_node_or_null("KnobWrap") as PanelContainer
+	var icon_size: float = (
+		20.0 *
+		scale_factor
+	)
 
-	if is_instance_valid(moon):
-		moon.custom_minimum_size = Vector2(icon_size, icon_size)
-		moon.size = moon.custom_minimum_size
-		moon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		moon.position = Vector2(btn.size.x - icon_size - pad, (btn.size.y - icon_size) / 2.0)
+	var padding: float = (
+		8.0 *
+		scale_factor
+	)
 
-	if is_instance_valid(sun):
-		sun.custom_minimum_size = Vector2(icon_size, icon_size)
-		sun.size = sun.custom_minimum_size
-		sun.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		sun.position = Vector2(pad, (btn.size.y - icon_size) / 2.0)
+	var knob_size: Vector2 = (
+		Vector2(32.0, 32.0) *
+		scale_factor
+	)
+
+	var moon := btn.get_node_or_null(
+		"MoonIn"
+	) as TextureRect
+
+	var sun := btn.get_node_or_null(
+		"SunIn"
+	) as TextureRect
+
+	var knob_wrap := btn.get_node_or_null(
+		"KnobWrap"
+	) as PanelContainer
 
 	if is_instance_valid(knob_wrap):
-		knob_wrap.position.y = (btn.size.y - knob_wrap.size.y) / 2.0
+		knob_wrap.size = knob_size
+
+		knob_wrap.position.y = (
+			btn.size.y -
+			knob_wrap.size.y
+		) * 0.5
+
+	if is_instance_valid(moon):
+		moon.custom_minimum_size = Vector2(
+			icon_size,
+			icon_size
+		)
+
+		moon.size = moon.custom_minimum_size
+		moon.stretch_mode = (
+			TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		)
+
+		moon.position = Vector2(
+			btn.size.x -
+				icon_size -
+				padding,
+			(
+				btn.size.y -
+				icon_size
+			) * 0.5
+		)
+
+	if is_instance_valid(sun):
+		sun.custom_minimum_size = Vector2(
+			icon_size,
+			icon_size
+		)
+
+		sun.size = sun.custom_minimum_size
+		sun.stretch_mode = (
+			TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		)
+
+		sun.position = Vector2(
+			padding,
+			(
+				btn.size.y -
+				icon_size
+			) * 0.5
+		)
 
 func _update_switch_visual(btn: Button, on: bool, instant: bool):
 	var base := btn.get_theme_stylebox("normal", "Button") as StyleBoxFlat

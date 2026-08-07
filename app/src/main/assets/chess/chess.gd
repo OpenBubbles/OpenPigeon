@@ -1712,7 +1712,7 @@ func _refresh_board_ui() -> void:
 	if game_over:
 		check_label.visible = false
 	elif incheck:
-		check_label.text = "CHECK — %s to move" % ("White" if side_to_move == "w" else "Black")
+		check_label.text = "CHECK - %s to move" % ("White" if side_to_move == "w" else "Black")
 		check_label.visible = true
 		check_detected.emit(side_to_move)
 	else:

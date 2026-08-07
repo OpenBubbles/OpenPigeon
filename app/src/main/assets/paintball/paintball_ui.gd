@@ -7,35 +7,104 @@ func setup(owner: PaintballGame) -> void:
 	g = owner
 
 func init_fire_button() -> void:
+	if g == null:
+		return
+
+	if not is_instance_valid(g.fire_button):
+		return
+
+	# Preserve whether the button was already active before the
+	# viewport/orientation change.
+	var should_be_shown: bool = (
+		g._fire_button_is_shown and
+		not g.spectator_mode
+	)
+
+	if g.spectator_mode:
+		g._fire_button_is_shown = false
+
+	if (
+		g._fire_btn_tween != null and
+		g._fire_btn_tween.is_valid()
+	):
+		g._fire_btn_tween.kill()
+
+	g._fire_btn_tween = null
+
 	await g.get_tree().process_frame
 	await g.get_tree().process_frame
 
+	if not is_instance_valid(g.fire_button):
+		return
+
 	g.fire_button.top_level = true
+
+	# It needs to be visible while its new size is calculated.
 	g.fire_button.visible = true
 	g.fire_button.reset_size()
+
 	await g.get_tree().process_frame
+
+	if not is_instance_valid(g.fire_button):
+		return
+
+	recompute_fire_button_positions()
+
+	if should_be_shown:
+		g.fire_button.visible = true
+		g.fire_button.modulate.a = 1.0
+		g.fire_button.global_position = (
+			g._fire_btn_shown_pos
+		)
+		g.fire_button.mouse_filter = (
+			Control.MOUSE_FILTER_STOP
+		)
+	else:
+		g.fire_button.visible = false
+		g.fire_button.modulate.a = 0.0
+		g.fire_button.global_position = (
+			g._fire_btn_hidden_pos
+		)
+		g.fire_button.mouse_filter = (
+			Control.MOUSE_FILTER_IGNORE
+		)
+
+func recompute_fire_button_positions() -> void:
+	if not is_instance_valid(g.fire_button):
+		return
 
 	var vp := g.get_viewport().get_visible_rect().size
 	var margin := 26.0
-	var lift := 100.0
+	var lift := vp.y * 0.08
 
 	g._fire_btn_shown_pos = Vector2(
 		(vp.x - g.fire_button.size.x) * 0.5,
 		vp.y - g.fire_button.size.y - margin - lift
 	)
 
-	g._fire_btn_hidden_pos = Vector2(g._fire_btn_shown_pos.x, vp.y + g.fire_button.size.y + 40.0)
-	g.fire_button.modulate.a = 0.0
-	g.fire_button.global_position = g._fire_btn_hidden_pos
+	g._fire_btn_hidden_pos = Vector2(
+		g._fire_btn_shown_pos.x,
+		vp.y + g.fire_button.size.y + 40.0
+	)
 
-func show_fire_button(should_show: bool) -> void:
+	if g._fire_button_is_shown:
+		g.fire_button.global_position = g._fire_btn_shown_pos
+	else:
+		g.fire_button.global_position = g._fire_btn_hidden_pos
+
+func show_fire_button(
+	should_show: bool
+) -> void:
 	if g == null:
 		return
 
 	if g.spectator_mode:
 		g._fire_button_is_shown = false
 
-		if g._fire_btn_tween and g._fire_btn_tween.is_valid():
+		if (
+			g._fire_btn_tween != null and
+			g._fire_btn_tween.is_valid()
+		):
 			g._fire_btn_tween.kill()
 
 		g._fire_btn_tween = null
@@ -43,8 +112,12 @@ func show_fire_button(should_show: bool) -> void:
 		if is_instance_valid(g.fire_button):
 			g.fire_button.visible = false
 			g.fire_button.modulate.a = 0.0
-			g.fire_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			g.fire_button.global_position = g._fire_btn_hidden_pos
+			g.fire_button.mouse_filter = (
+				Control.MOUSE_FILTER_IGNORE
+			)
+			g.fire_button.global_position = (
+				g._fire_btn_hidden_pos
+			)
 
 		return
 
@@ -52,44 +125,122 @@ func show_fire_button(should_show: bool) -> void:
 		g._fire_button_is_shown = should_show
 		return
 
+	# Orientation changes can leave the logical state correct but
+	# the Control visually hidden. Reassert the visual state even
+	# when the requested value matches the stored value.
 	if should_show == g._fire_button_is_shown:
+		if (
+			g._fire_btn_tween != null and
+			g._fire_btn_tween.is_valid()
+		):
+			g._fire_btn_tween.kill()
+
+		g._fire_btn_tween = null
+
+		if should_show:
+			g.fire_button.top_level = true
+			g.fire_button.visible = true
+			g.fire_button.modulate.a = 1.0
+			g.fire_button.global_position = (
+				g._fire_btn_shown_pos
+			)
+			g.fire_button.mouse_filter = (
+				Control.MOUSE_FILTER_STOP
+			)
+		else:
+			g.fire_button.visible = false
+			g.fire_button.modulate.a = 0.0
+			g.fire_button.global_position = (
+				g._fire_btn_hidden_pos
+			)
+			g.fire_button.mouse_filter = (
+				Control.MOUSE_FILTER_IGNORE
+			)
+
 		return
 
 	g._fire_button_is_shown = should_show
 
-	if g._fire_btn_tween and g._fire_btn_tween.is_valid():
+	if (
+		g._fire_btn_tween != null and
+		g._fire_btn_tween.is_valid()
+	):
 		g._fire_btn_tween.kill()
+
+	g._fire_btn_tween = null
 
 	if should_show:
 		g.fire_button.top_level = true
 		g.fire_button.visible = true
-		g.fire_button.global_position = g._fire_btn_hidden_pos
+		g.fire_button.global_position = (
+			g._fire_btn_hidden_pos
+		)
 		g.fire_button.modulate.a = 0.0
-		g.fire_button.mouse_filter = Control.MOUSE_FILTER_STOP
+		g.fire_button.mouse_filter = (
+			Control.MOUSE_FILTER_STOP
+		)
 
 		g._fire_btn_tween = g.create_tween()
-		g._fire_btn_tween.set_trans(Tween.TRANS_SINE)
-		g._fire_btn_tween.set_ease(Tween.EASE_OUT)
-		g._fire_btn_tween.tween_property(g.fire_button, "global_position", g._fire_btn_shown_pos, 0.25)
-		g._fire_btn_tween.parallel().tween_property(g.fire_button, "modulate:a", 1.0, 0.18)
+		g._fire_btn_tween.set_trans(
+			Tween.TRANS_SINE
+		)
+		g._fire_btn_tween.set_ease(
+			Tween.EASE_OUT
+		)
+
+		g._fire_btn_tween.tween_property(
+			g.fire_button,
+			"global_position",
+			g._fire_btn_shown_pos,
+			0.25
+		)
+
+		g._fire_btn_tween.parallel().tween_property(
+			g.fire_button,
+			"modulate:a",
+			1.0,
+			0.18
+		)
 	else:
-		g.fire_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		g.fire_button.mouse_filter = (
+			Control.MOUSE_FILTER_IGNORE
+		)
 
 		if g.fire_button.modulate.a <= 0.01:
-			g.fire_button.global_position = g._fire_btn_hidden_pos
+			g.fire_button.global_position = (
+				g._fire_btn_hidden_pos
+			)
 			g.fire_button.visible = false
 			g.fire_button.modulate.a = 0.0
 			return
 
 		g._fire_btn_tween = g.create_tween()
-		g._fire_btn_tween.set_trans(Tween.TRANS_SINE)
-		g._fire_btn_tween.set_ease(Tween.EASE_OUT)
-		g._fire_btn_tween.tween_property(g.fire_button, "modulate:a", 0.0, 0.15)
-		g._fire_btn_tween.tween_callback(func() -> void:
-			if is_instance_valid(g.fire_button):
-				g.fire_button.global_position = g._fire_btn_hidden_pos
-				g.fire_button.visible = false
-				g.fire_button.modulate.a = 0.0
+		g._fire_btn_tween.set_trans(
+			Tween.TRANS_SINE
+		)
+		g._fire_btn_tween.set_ease(
+			Tween.EASE_OUT
+		)
+
+		g._fire_btn_tween.tween_property(
+			g.fire_button,
+			"modulate:a",
+			0.0,
+			0.15
+		)
+
+		g._fire_btn_tween.tween_callback(
+			func() -> void:
+				if is_instance_valid(
+					g.fire_button
+				):
+					g.fire_button.global_position = (
+						g._fire_btn_hidden_pos
+					)
+					g.fire_button.visible = false
+					g.fire_button.modulate.a = 0.0
+
+				g._fire_btn_tween = null
 		)
 
 func apply_hearts_from_hp() -> void:

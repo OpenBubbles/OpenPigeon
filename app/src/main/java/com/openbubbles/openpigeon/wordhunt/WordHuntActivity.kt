@@ -31,6 +31,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.openbubbles.openpigeon.wordhunt.WordHuntSolver.encodeCell
 
 class WordHuntActivity : AppCompatActivity() {
     private val baseGame: Game = WordHuntGame()
@@ -829,6 +830,16 @@ class WordHuntActivity : AppCompatActivity() {
                 "avatar2" to msg["avatar2"].orEmpty(),
                 "winner_slot" to winnerSlot,
                 "all_words" to gameState.allWords.joinToString("|"),
+                "all_paths" to gameState.allWordPaths.joinToString("|"),
+                "board" to gameState.board().joinToString("") { String(it) },
+                "grid_size" to gameState.mode.gridSize.toString(),
+                "invalid_cells" to String(
+                    CharArray(gameState.mode.invalidPositions.size) {
+                        val cell = gameState.mode.invalidPositions[it]
+
+                        encodeCell(cell.first * gameState.mode.gridSize + cell.second)
+                    },
+                ),
             )
         }
 
@@ -894,6 +905,16 @@ class WordHuntActivity : AppCompatActivity() {
             "winner_slot" to winnerSlot,
 
             "all_words" to gameState.allWords.joinToString("|"),
+            "all_paths" to gameState.allWordPaths.joinToString("|"),
+            "board" to gameState.board().joinToString("") { String(it) },
+            "grid_size" to gameState.mode.gridSize.toString(),
+            "invalid_cells" to String(
+                CharArray(gameState.mode.invalidPositions.size) {
+                    val cell = gameState.mode.invalidPositions[it]
+
+                    encodeCell(cell.first * gameState.mode.gridSize + cell.second)
+                },
+            ),
         )
     }
 

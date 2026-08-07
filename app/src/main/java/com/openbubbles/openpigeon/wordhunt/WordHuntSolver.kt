@@ -1,13 +1,21 @@
 package com.openbubbles.openpigeon.wordhunt
 
 object WordHuntSolver {
+    fun encodeCell(index: Int): Char {
+        return Character.forDigit(index, 36)
+    }
+
+    fun decodePath(path: String): List<Int> {
+        return path.map { Character.digit(it, 36) }
+    }
+
     fun solve(
         board: Array<CharArray>,
         gridSize: Int,
         invalidPositions: List<Pair<Int, Int>>,
         dictionary: WordDictionary,
         minLength: Int,
-    ): List<String> {
+    ): List<Pair<String, String>> {
         val cells = ArrayList<Pair<Int, Int>>()
         val letters = HashMap<Pair<Int, Int>, Char>()
         val allowed = HashSet<Char>()
@@ -34,20 +42,14 @@ object WordHuntSolver {
             return dictionary.allWords().sortedWith(
                 compareByDescending<String> { WordHuntGameState.calculatePoints(it) }
                     .thenBy { it }
-            )
-        }
-
-        if (cells.isEmpty()) {
-            return dictionary.allWords().sortedWith(
-                compareByDescending<String> { WordHuntGameState.calculatePoints(it) }
-                    .thenBy { it }
-            )
+            ).map { it to "" }
         }
 
         val root = dictionary.buildTrie(allowed, cells.size)
-        val found = HashSet<String>()
+        val found = HashMap<String, String>()
         val visited = HashSet<Pair<Int, Int>>()
         val builder = StringBuilder()
+        val path = StringBuilder()
 
         fun walk(cell: Pair<Int, Int>, node: WordDictionary.TrieNode) {
             val letter = letters[cell] ?: return
@@ -55,9 +57,14 @@ object WordHuntSolver {
 
             visited.add(cell)
             builder.append(letter)
+            path.append(encodeCell(cell.first * gridSize + cell.second))
 
             if (next.terminal && builder.length >= minLength) {
-                found.add(builder.toString())
+                val word = builder.toString()
+
+                if (!found.containsKey(word)) {
+                    found[word] = path.toString()
+                }
             }
 
             if (next.children.isNotEmpty()) {
@@ -82,6 +89,7 @@ object WordHuntSolver {
             }
 
             builder.setLength(builder.length - 1)
+            path.setLength(path.length - 1)
             visited.remove(cell)
         }
 
@@ -89,9 +97,9 @@ object WordHuntSolver {
             walk(cell, root)
         }
 
-        return found.sortedWith(
+        return found.keys.sortedWith(
             compareByDescending<String> { WordHuntGameState.calculatePoints(it) }
                 .thenBy { it }
-        )
+        ).map { it to found.getValue(it) }
     }
 }

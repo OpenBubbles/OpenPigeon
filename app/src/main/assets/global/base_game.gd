@@ -4,7 +4,7 @@ extends Control
 const DEV_UUID := "0a602920-2033-469d-aab8-5e832c5d4f6a"
 const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 
-# Optional buttons — guarded, since not every game has both.
+# Optional buttons - guarded, since not every game has both.
 @onready var settings_button: Button = get_node_or_null("%SettingsButton")
 @onready var rules_button: Button = get_node_or_null("%RulesButton")
 

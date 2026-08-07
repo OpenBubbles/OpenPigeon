@@ -326,13 +326,86 @@ Pick where to move and where to shoot. Try to hit your opponent before they hit 
 [/font_size]
 """
 
+func _paintball_ui_scale() -> float:
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	return PAINTBALL_LANDSCAPE_UI_SCALE if vp.x > vp.y else 1.0
+
+func _scale_theme(node: Control, theme_item: String, k: float) -> void:
+	if not is_instance_valid(node):
+		return
+
+	var key: String = str(node.get_instance_id()) + theme_item
+
+	if not _base_theme_values.has(key):
+		_base_theme_values[key] = node.get_theme_font_size(theme_item)
+
+	node.add_theme_font_size_override(
+		theme_item,
+		int(round(float(_base_theme_values[key]) * k))
+	)
+
+func _apply_landscape_ui() -> void:
+	await get_tree().process_frame
+
+	var k: float = _paintball_ui_scale()
+
+	_configure_paintball_avatar(player_avatar_display)
+	_configure_paintball_avatar(opp_avatar_display)
+
+	var label_k: float = PAINTBALL_LANDSCAPE_LABEL_SCALE if k > 1.0 else 1.0
+
+	for overlay: Control in [
+		win_loss_label,
+		sent_label,
+		waiting_label,
+		spec_label,
+		you_label,
+	]:
+		_scale_theme(overlay, "font_size", label_k)
+
+	var button_k: float = PAINTBALL_LANDSCAPE_BUTTON_SCALE if k > 1.0 else 1.0
+
+	for button: Control in [settings_button, rules_button, fire_button]:
+		if not is_instance_valid(button):
+			continue
+
+		var id: String = str(button.get_instance_id())
+
+		if not _base_theme_values.has(id + "minsize"):
+			_base_theme_values[id + "minsize"] = button.custom_minimum_size
+
+		button.custom_minimum_size = _base_theme_values[id + "minsize"] * button_k
+
+		if button is Button:
+			(button as Button).expand_icon = true
+			_scale_theme(button, "font_size", button_k)
+
+	var heart_k: float = PAINTBALL_LANDSCAPE_HEART_SCALE if k > 1.0 else 1.0
+
+	for heart: Control in [pheart1, pheart2, pheart3, oheart1, oheart2, oheart3]:
+		if not is_instance_valid(heart):
+			continue
+
+		var hid: String = str(heart.get_instance_id())
+
+		if not _base_theme_values.has(hid + "minsize"):
+			_base_theme_values[hid + "minsize"] = heart.custom_minimum_size
+
+		heart.custom_minimum_size = _base_theme_values[hid + "minsize"] * heart_k
+
+		if heart is TextureRect:
+			(heart as TextureRect).expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			(heart as TextureRect).stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+
 func _configure_paintball_avatar(avatar_button: TextureButton) -> void:
 	if not is_instance_valid(avatar_button):
 		return
 
+	var k: float = _paintball_ui_scale()
+
 	avatar_button.clip_contents = false
 	avatar_button.scale = Vector2.ONE
-	avatar_button.custom_minimum_size = Vector2(96.0, 90.0)
+	avatar_button.custom_minimum_size = Vector2(96.0, 90.0) * k
 
 	var internal_viewport := avatar_button.get_node_or_null("SubViewportContainer/SubViewport") as SubViewport
 
@@ -346,7 +419,7 @@ func _configure_paintball_avatar(avatar_button: TextureButton) -> void:
 		internal_preview.visible = true
 		internal_preview.self_modulate = Color.WHITE
 		internal_preview.pivot_offset = Vector2(48.0, 140.0)
-		internal_preview.scale = Vector2.ONE
+		internal_preview.scale = Vector2(k, k)
 
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
@@ -358,7 +431,8 @@ func _on_game_ready() -> void:
 		player_avatar_display.call_deferred("update_display_from_settings")
 
 	_configure_camera_aspect()
-	
+	_apply_landscape_ui()
+
 	var viewport := get_viewport()
 	var resize_callable := Callable(self, "_on_paintball_viewport_size_changed")
 
@@ -430,11 +504,41 @@ func _notification(what: int) -> void:
 		OpLog.i(LOG_TAG, "app_resumed")
 		
 func _on_paintball_viewport_size_changed() -> void:
+	var fire_was_shown: bool = (
+		_fire_button_is_shown
+	)
+
 	_configure_camera_aspect()
 
+	# Wait for the responsive UI changes before recalculating the
+	# fire button's size and screen position.
+	await _apply_landscape_ui()
+
 	if ui != null:
-		await get_tree().process_frame
 		await ui.init_fire_button()
+
+	_reassert_round_visuals()
+
+	OpLog.i(LOG_TAG, [
+		"viewport_size_changed size=",
+		get_viewport().get_visible_rect().size,
+		" fireWasShown=",
+		fire_was_shown,
+		" fireShown=",
+		_fire_button_is_shown,
+		" fireVisible=",
+		fire_button.visible
+		if is_instance_valid(fire_button)
+		else false,
+		" fireAlpha=",
+		fire_button.modulate.a
+		if is_instance_valid(fire_button)
+		else 0.0,
+		" firePosition=",
+		fire_button.global_position
+		if is_instance_valid(fire_button)
+		else Vector2.ZERO
+	])
 
 # -------------------------------------------------------------------
 # Modules bootstrapping
@@ -1002,9 +1106,74 @@ func _replay_build_after_my_fire(my_pos_enc: int, my_target_enc: int) -> String:
 
 const CAMERA_BASE_VERTICAL_FOV: float = 61.5
 
-# 648 / 1152, matching the normal portrait framing from your log.
 const CAMERA_REFERENCE_ASPECT: float = 0.5625
 
+const PAINTBALL_LANDSCAPE_UI_SCALE: float = 1.5
+const PAINTBALL_LANDSCAPE_LABEL_SCALE: float = 1.8
+const PAINTBALL_LANDSCAPE_BUTTON_SCALE: float = 1.8
+const PAINTBALL_LANDSCAPE_HEART_SCALE: float = 1.5
+
+var _base_theme_values: Dictionary = {}
+
+@export var camera_fit_margin: float = 1.35
+const CAMERA_MAX_VERTICAL_FOV: float = 110.0
+const CAMERA_FIT_TIRES: Array[String] = [
+	"Tire", "Tire2", "Tire3", "Tire4", "Tire5", "Tire6"
+]
+
+func _collect_fit_corners(node: Node, out: PackedVector3Array) -> void:
+	var vi := node as VisualInstance3D
+
+	if vi != null:
+		var box: AABB = vi.get_aabb()
+		var xf: Transform3D = vi.global_transform
+		for i in 8:
+			out.append(xf * box.get_endpoint(i))
+
+	for child: Node in node.get_children():
+		_collect_fit_corners(child, out)
+
+func _content_fit_fov(aspect: float) -> float:
+	var corners := PackedVector3Array()
+
+	for tire_name: String in CAMERA_FIT_TIRES:
+		var tire := get_node_or_null(tire_name)
+		if tire != null:
+			_collect_fit_corners(tire, corners)
+
+	var buttons := get_node_or_null("Buttons")
+
+	if buttons != null:
+		for child: Node in buttons.get_children():
+			_collect_fit_corners(child, corners)
+
+	if corners.is_empty():
+		return CAMERA_BASE_VERTICAL_FOV
+
+	var inv: Transform3D = cam.global_transform.affine_inverse()
+	var v_tan: float = 0.0
+	var h_tan: float = 0.0
+
+	for p: Vector3 in corners:
+		var c: Vector3 = inv * p
+		var depth: float = -c.z
+
+		if depth <= 0.01:
+			continue
+
+		v_tan = maxf(v_tan, absf(c.y) / depth)
+		h_tan = maxf(h_tan, absf(c.x) / depth)
+
+	if v_tan <= 0.0 and h_tan <= 0.0:
+		return CAMERA_BASE_VERTICAL_FOV
+
+	var needed: float = maxf(v_tan, h_tan / aspect) * camera_fit_margin
+
+	return clampf(
+		rad_to_deg(atan(needed) * 2.0),
+		1.0,
+		CAMERA_MAX_VERTICAL_FOV
+	)
 
 func _configure_camera_aspect() -> void:
 	if not is_instance_valid(cam):
@@ -1030,6 +1199,12 @@ func _configure_camera_aspect() -> void:
 
 		adjusted_fov = rad_to_deg(adjusted_half_fov_radians * 2.0)
 
+	var fit_fov: float = 0.0
+
+	if viewport_size.x > viewport_size.y:
+		fit_fov = _content_fit_fov(current_aspect)
+		adjusted_fov = clampf(fit_fov, 1.0, CAMERA_BASE_VERTICAL_FOV)
+
 	cam.keep_aspect = Camera3D.KEEP_HEIGHT
 	cam.fov = adjusted_fov
 
@@ -1039,5 +1214,27 @@ func _configure_camera_aspect() -> void:
 		" referenceAspect=", CAMERA_REFERENCE_ASPECT,
 		" keepAspect=KEEP_HEIGHT",
 		" baseFov=", CAMERA_BASE_VERTICAL_FOV,
-		" adjustedFov=", adjusted_fov
+		" adjustedFov=", adjusted_fov,
+		" fitFov=", fit_fov
+	])
+	
+func _reassert_round_visuals() -> void:
+	if round_mgr == null or _is_shot_sequence_running or _shot_in_progress:
+		return
+
+	if not is_instance_valid(_selected_shoot):
+		return
+
+	_selected_shoot.visible = true
+
+	var spr := _selected_shoot.get_node_or_null("Sprite3D") as Sprite3D
+
+	if spr != null:
+		var c: Color = spr.modulate
+		c.a = 1.0
+		spr.modulate = c
+
+	OpLog.i(LOG_TAG, [
+		"reassert_round_visuals selectedLane=", _selected_shoot_lane(),
+		" fireShown=", _fire_button_is_shown
 	])

@@ -94,7 +94,7 @@ object RulesPopup {
         }
         titleBar.addView(titleTv)
 
-        // Close button — loads close.png from assets, falls back to "✕"
+        // Close button - loads close.png from assets, falls back to "✕"
         val closeBtn = ImageButton(context).apply {
             val size = dp(context, 36f)
             layoutParams = FrameLayout.LayoutParams(size, size,

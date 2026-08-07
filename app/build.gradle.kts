@@ -27,8 +27,52 @@ fun getGodotExecutable(project: Project): String {
 
 val godotCmd = getGodotExecutable(project)
 
+val playerIoAar = file("libs/PlayerIO.aar")
+if (!playerIoAar.exists()) {
+    throw GradleException(
+        """
+        Missing required dependency: app/libs/PlayerIO.aar
+
+        The Player.IO Android SDK is proprietary and cannot be redistributed,
+        so it is not included in this repository. Crazy8 multiplayer requires it.
+
+          1. Register a free account at https://playerio.com
+          2. Create a game and note its game ID and shared secret
+          3. Download the Android SDK and place PlayerIO.aar at:
+             ${playerIoAar.absolutePath}
+          4. Create config.properties in the repository root (see below)
+
+        See CONTRIBUTING.md and THIRD-PARTY-NOTICES.md.
+        """.trimIndent()
+    )
+}
+
+val configFile = file("$rootDir/config.properties")
+if (!configFile.exists()) {
+    throw GradleException(
+        """
+        Missing required file: config.properties
+
+        Create it in the repository root with your own Player.IO credentials:
+
+          PIO_GAME_ID=your-game-id
+          PIO_SHARED_SECRET=your-shared-secret
+
+        Obtain both from your Player.IO dashboard. Do not commit this file.
+
+        See CONTRIBUTING.md.
+        """.trimIndent()
+    )
+}
+
 val props = Properties()
-file("$rootDir/config.properties").inputStream().use { props.load(it) }
+configFile.inputStream().use { props.load(it) }
+
+listOf("PIO_GAME_ID", "PIO_SHARED_SECRET").forEach { key ->
+    if (props[key]?.toString().isNullOrBlank()) {
+        throw GradleException("config.properties is missing a value for $key. See CONTRIBUTING.md.")
+    }
+}
 
 val godotProjectDir = layout.projectDirectory.dir("src/main/assets")
 val generatedGodotRoot = layout.buildDirectory.dir("generated/godotAssets")
@@ -81,10 +125,6 @@ android {
         viewBinding = true
         buildConfig = true
         compose = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.2"
     }
 
     buildTypes {
@@ -141,7 +181,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.ui.graphics.android)
     implementation(libs.androidx.media3.common.ktx)
-    implementation(files("libs/PlayerIO.aar"))
+    implementation(files(playerIoAar))
     implementation(libs.androidx.ui)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
@@ -287,6 +327,7 @@ val prepareGodotReleaseAssets by tasks.registering(Sync::class) {
 
     from(godotProjectDir) {
         include("attributions.html")
+        include("basketball/OFL-DSEG.txt")
         include("global/gp_wg_*.txt")
     }
 

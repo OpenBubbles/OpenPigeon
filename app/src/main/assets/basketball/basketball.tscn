@@ -10,9 +10,9 @@
 [ext_resource type="Texture2D" uid="uid://ermcfvwnyb8n" path="res://basketball/balldimpled.png" id="3_edmja"]
 [ext_resource type="Texture2D" uid="uid://dhj26lkqags20" path="res://basketball/backboard.png" id="3_julsv"]
 [ext_resource type="Texture2D" uid="uid://t4lc50ypi7ry" path="res://basketball/backboard_moving.png" id="7_jqehr"]
-[ext_resource type="Texture2D" uid="uid://jkmn81x6v6s" path="res://basketball/AdobeStock_530856469.png" id="8_banb7"]
-[ext_resource type="FontFile" uid="uid://dk1un3cvg4j5k" path="res://basketball/segment-eglas.ttf" id="8_kluaa"]
 [ext_resource type="Texture2D" uid="uid://bxkp6dpfg4vlk" path="res://basketball/scoreboard.png" id="9_lrgjq"]
+[ext_resource type="Texture2D" uid="uid://crdy3s168p578" path="res://basketball/hoop.png" id="10_diu2m"]
+[ext_resource type="FontFile" uid="uid://oo85eowemq4v" path="res://basketball/dseg7_classic_bold.ttf" id="12_diu2m"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_10mmx"]
 sky_horizon_color = Color(0.662243, 0.671743, 0.686743, 1)
@@ -182,7 +182,7 @@ height = 0.22
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0e03b"]
 transparency = 1
-albedo_texture = ExtResource("8_banb7")
+albedo_texture = ExtResource("10_diu2m")
 detail_blend_mode = 2
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_lrgjq"]
@@ -900,52 +900,52 @@ skeleton = NodePath("../Camera3D")
 
 [node name="Time" type="Label3D" parent="Scoreboard" unique_id=1248981394]
 unique_name_in_owner = true
-transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.0010318127, -0.054722667, 0.0031547546)
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, 0.0010318127, -0.054722667, 0.0031547546)
 modulate = Color(0.85, 0.68000007, 0, 1)
 text = "00:45"
-font = ExtResource("8_kluaa")
+font = ExtResource("12_diu2m")
 font_size = 23
 outline_size = 0
 
 [node name="Off_Time" type="Label3D" parent="Scoreboard" unique_id=272311975]
-transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.0010318127, -0.054722667, 0.0031547546)
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, 0.0010318127, -0.054722667, 0.0031547546)
 modulate = Color(0.45223302, 0.3534233, 0, 0.13725491)
 text = "88:88"
-font = ExtResource("8_kluaa")
+font = ExtResource("12_diu2m")
 font_size = 23
 outline_size = 0
 
 [node name="YouScore" type="Label3D" parent="Scoreboard" unique_id=994698007]
 unique_name_in_owner = true
-transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, -0.544, -0.084, 0.003)
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, -0.544, -0.084, 0.003)
 modulate = Color(0.77, 0, 0, 1)
 text = "00"
-font = ExtResource("8_kluaa")
+font = ExtResource("12_diu2m")
 font_size = 28
 outline_size = 0
 
 [node name="Off_Segment" type="Label3D" parent="Scoreboard" unique_id=1223897268]
-transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, -0.544, -0.084, 0.003)
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, -0.544, -0.084, 0.003)
 modulate = Color(0.44705883, 0, 0, 0.13725491)
 text = "88"
-font = ExtResource("8_kluaa")
+font = ExtResource("12_diu2m")
 font_size = 28
 outline_size = 0
 
 [node name="OppScore" type="Label3D" parent="Scoreboard" unique_id=943597829]
 unique_name_in_owner = true
-transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.56, -0.084, 0.003)
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, 0.56, -0.084, 0.003)
 modulate = Color(0.76862746, 0, 0, 1)
 text = "00"
-font = ExtResource("8_kluaa")
+font = ExtResource("12_diu2m")
 font_size = 28
 outline_size = 0
 
 [node name="Off_Segment2" type="Label3D" parent="Scoreboard" unique_id=1269249005]
-transform = Transform3D(1.71, 0, 0, 0, 1.71, 0, 0, 0, 1.71, 0.56, -0.085, 0.003)
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, 0.56, -0.085, 0.003)
 modulate = Color(0.44894964, 1.3055467e-06, 9.62615e-08, 0.13725491)
 text = "88"
-font = ExtResource("8_kluaa")
+font = ExtResource("12_diu2m")
 font_size = 28
 outline_size = 0
 

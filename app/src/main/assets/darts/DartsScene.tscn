@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://ctiesunb7o0wh" path="res://darts/darts.gd" id="1_bx3e1"]
 [ext_resource type="Script" uid="uid://cmr4dswtwrusy" path="res://darts/dart.gd" id="1_sjdir"]
-[ext_resource type="Texture2D" uid="uid://d3epayn4s82iw" path="res://darts/background2.jpeg" id="2_8txtq"]
+[ext_resource type="Texture2D" uid="uid://h8niwc2wiv3c" path="res://darts/background2.png" id="2_ge5bb"]
 [ext_resource type="Texture2D" uid="uid://bafyr8tdni2vp" path="res://darts/dartboard.png" id="2_k4g2s"]
 [ext_resource type="ArrayMesh" uid="uid://bqcwm7q0fnsxt" path="res://darts/dart.obj" id="4_8o3o4"]
 [ext_resource type="Script" uid="uid://bl8v6cnx4tmg0" path="res://darts/dart_board.gd" id="4_sj7sf"]
@@ -12,15 +12,15 @@
 [ext_resource type="Texture2D" uid="uid://dxa2vtwt0j2qh" path="res://global/burger.png" id="11_g6j2t"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_uhkgs"]
-albedo_texture = ExtResource("2_8txtq")
-uv1_scale = Vector3(5.265, 5.265, 5.265)
+albedo_texture = ExtResource("2_ge5bb")
+uv1_scale = Vector3(3, 3, 3)
 uv1_offset = Vector3(0.62, 0, 0)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_qvdfv"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_sjdir"]
 material = SubResource("StandardMaterial3D_qvdfv")
-size = Vector3(3.9, 5, 0)
+size = Vector3(8, 8, 0)
 
 [sub_resource type="ConcavePolygonShape3D" id="ConcavePolygonShape3D_qvdfv"]
 

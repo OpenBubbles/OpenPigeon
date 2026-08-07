@@ -2636,7 +2636,7 @@ class GolfActivity : AppCompatActivity() {
                 return
             }
 
-            stateLabel.text = "Mini Golf failed to load — using local visual fallback"
+            stateLabel.text = "Mini Golf failed to load - using local visual fallback"
             seed = GolfConstants.DEFAULT_SEED
             mode = GolfConstants.DEFAULT_MODE
             holeCount = GolfConstants.holeCountFor(mode)
@@ -3371,7 +3371,7 @@ class GolfActivity : AppCompatActivity() {
                 TAG,
                 "sendCurrentGolfState skipped ipcNull=${ipc == null} sessionBlank=${sessionId.isBlank()}"
             )
-            stateLabel.text = "No IPC session — visual only"
+            stateLabel.text = "No IPC session - visual only"
             return
         }
 
@@ -4610,7 +4610,7 @@ class GolfActivity : AppCompatActivity() {
     private fun safeShowFallbackFromOnCreateFailure() {
         try {
             if (!::root.isInitialized) buildLayout()
-            stateLabel.text = "Mini Golf failed to initialize — local fallback"
+            stateLabel.text = "Mini Golf failed to initialize - local fallback"
             seed = GolfConstants.DEFAULT_SEED
             mode = GolfConstants.DEFAULT_MODE
             holeCount = GolfConstants.holeCountFor(mode)

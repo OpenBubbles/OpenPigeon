@@ -17,6 +17,19 @@ const MUSIC_STREAM := preload("res://global/audio/pong.ogg")
 
 const LOG_TAG := "Cup Pong"
 const DEBUG_PONG := false
+const PHYSICS_TICKS_PER_SECOND: int = 200
+
+const CUP_STYLE_SETTINGS_PATH := "user://settings.cfg"
+const CUP_STYLE_SETTINGS_SECTION := "beer"
+const CUP_STYLE_SETTINGS_FALLBACK_SECTION := "pong"
+const CUP_STYLE_SETTINGS_KEY := "cup_style"
+const DEFAULT_CUP_STYLE: int = 1
+
+# my_cups is the rack the active player shoots into, while replay_cups is the rack nearest the local player.
+const LOCAL_CUP_TINT := Color(0.92, 0.08, 0.10, 1.0)
+const OPPONENT_CUP_TINT := Color(0.08, 0.30, 0.95, 1.0)
+
+var current_cup_style: int = DEFAULT_CUP_STYLE
 
 func dbg(parts: Variant) -> void:
 	if DEBUG_PONG:
@@ -65,6 +78,8 @@ var replay_cups: Cups
 var current_ball: PongBall
 var winner: String = ""
 var _current_seed: int = 0
+var _previous_physics_ticks_per_second: int = 60
+var _physics_tick_rate_overridden: bool = false
 
 var game_over: bool = false
 
@@ -89,24 +104,91 @@ var dragging = false
 var ball_ready: bool = false
 var ball_popo: Vector3 = Vector3.ZERO   # ball position at touch-down
 
-const IOS_H_SCALE: float = 0.65          # horizontal scale before distance
-const IOS_POWER_SLOPE: float = -5.7      # distance -> forward force
-const IOS_POWER_FLOOR: float = -3.85     # max forward force magnitude
-const IOS_X_NORM: float = 3.62           # X-target normalizer
-const IOS_X_GAIN: float = 2.08           # 1.3 * 1.6
-const IOS_Z_NORM: float = -3.62
-const IOS_Z_BIAS: float = -1.05
-const IOS_Z_GAIN: float = 1.3
-const IOS_Z_SPLIT: float = -2.0          # threshold: long vs short arc branch
-const IOS_LONG_GAIN: float = 1.3
-const IOS_LONG_Y: float = 4.12
-const IOS_SHORT_GAIN: float = 1.35
-const IOS_SHORT_Y_OFFSET: float = -3.0
-const IOS_BALL_Y_AIM_OFFSET: float = 0.45
-const IOS_DRAG_DEAD_DIST: float = 0.06
+const H_SCALE: float = 0.65
+const POWER_SLOPE: float = -5.7
+const POWER_FLOOR: float = -3.85
 
-@export var ios_aim_assist: float = 0.20
-@export var ios_screen_to_world_scale: float = 0.0030
+const X_NORM: float = 3.62
+const X_GAIN: float = 2.08
+
+const Z_NORM: float = -3.62
+const Z_BIAS: float = -1.05
+const Z_GAIN: float = 1.3
+
+const Z_SPLIT: float = -1.7
+
+const LONG_GAIN: float = 1.3
+const LONG_Y: float = 4.12
+
+const SHORT_GAIN: float = 1.35
+
+const SHORT_Z_DIVISOR: float = -0.6
+const SHORT_Y_BASE: float = 4.0
+const SHORT_Y_SCALE: float = -3.0
+
+const BALL_Y_AIM_OFFSET: float = 0.45
+const DRAG_DEAD_DIST: float = 1.0 / 17.0
+
+const DRAG_FILTER_FRAME: float = 0.016
+const DRAG_FILTER_FOLLOW: float = 0.15
+
+const AIM_BASE_NEW_PLAYER: float = 0.23
+const AIM_BASE_EXPERIENCED: float = 0.21
+const AIM_FIRST_MISS_BONUS: float = 0.03
+const AIM_LATER_MISS_BONUS: float = 0.08
+const AIM_BEHIND_BONUS: float = 0.03
+
+@export_range(0, 100000, 1)
+var local_cup_pong_wins: int = 0
+
+var _drag_world_current: Vector3 = Vector3.ZERO
+var _drag_world_filtered: Vector3 = Vector3.ZERO
+
+# Camera positions used by normal play and replay playback.
+const CUPPONG_CAM_THROW := Vector3(
+	0.0,
+	1.147,
+	-1.76
+)
+
+const CUPPONG_CAM_REPLAY := Vector3(
+	0.0,
+	1.147,
+	-3.486
+)
+
+# Landscape UI sizing.
+const CUPPONG_LANDSCAPE_UI_SCALE: float = 1.5
+const CUPPONG_LANDSCAPE_BUTTON_SCALE: float = 1.8
+const CUPPONG_LANDSCAPE_LABEL_SCALE: float = 1.8
+
+# Cup Pong popup menu sizing.
+const CUPPONG_MENU_SIZE := Vector2(
+	142.0,
+	104.0
+)
+
+const CUPPONG_MENU_ROW_HEIGHT: float = 48.0
+const CUPPONG_MENU_ROW_FONT: int = 21
+const CUPPONG_MENU_GAP: float = 6.0
+const CUPPONG_MENU_MARGIN: float = 8.0
+const CUPPONG_LANDSCAPE_MENU_SCALE: float = 1.6
+
+# Runtime menu nodes.
+var cuppong_menu_layer: Control = null
+var cuppong_menu_panel: PanelContainer = null
+var cuppong_menu_rows: Array[Button] = []
+var cuppong_menu_open: bool = false
+
+# Responsive camera/UI state.
+var _cam_station: Vector3 = Vector3.INF
+var _applied_landscape: int = -1
+var _base_theme_values: Dictionary = {}
+
+# Temporary visual debugging controls.
+@export var hide_all_cups: bool = false
+@export var hide_ball: bool = false
+@export var hide_table: bool = false
 
 var player: int
 var is_my_turn: int
@@ -125,13 +207,185 @@ func _get_settings_avatar_display() -> Control:
 func _get_rules_title() -> String:
 	return "Cup Pong"
 
+func _cuppong_ui_scale() -> float:
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	return CUPPONG_LANDSCAPE_UI_SCALE if vp.x > vp.y else 1.0
+
+func _cam_pos(base: Vector3) -> Vector3:
+	_cam_station = base
+
+	var viewport_size: Vector2 = (
+		get_viewport()
+		.get_visible_rect()
+		.size
+	)
+
+	if viewport_size.x <= viewport_size.y:
+		return base
+
+	var aspect_ratio: float = (
+		viewport_size.x /
+		maxf(viewport_size.y, 1.0)
+	)
+
+	var ultra_wide_amount: float = clampf(
+		(aspect_ratio - 1.7) / 0.6,
+		0.0,
+		1.0
+	)
+
+	var pull_back: float = lerpf(
+		0.08,
+		0.14,
+		ultra_wide_amount
+	)
+
+	var camera_lift: float = lerpf(
+		0.01,
+		0.03,
+		ultra_wide_amount
+	)
+
+	return base + Vector3(
+		0.0,
+		camera_lift,
+		-pull_back
+	)
+
+func _scale_theme(node: Control, theme_item: String, k: float) -> void:
+	if not is_instance_valid(node):
+		return
+	var key: String = str(node.get_instance_id()) + theme_item
+	if not _base_theme_values.has(key):
+		_base_theme_values[key] = node.get_theme_font_size(theme_item)
+	node.add_theme_font_size_override(theme_item, int(round(float(_base_theme_values[key]) * k)))
+
+func _apply_responsive_ui() -> void:
+	await get_tree().process_frame
+
+	var vp: Vector2 = (
+		get_viewport()
+		.get_visible_rect()
+		.size
+	)
+
+	var is_landscape: bool = vp.x > vp.y
+	var landscape_state: int = 1 if is_landscape else 0
+
+	_configure_cuppong_avatar(
+		player_avatar_display
+	)
+
+	_configure_cuppong_avatar(
+		opp_avatar_display
+	)
+
+	if is_instance_valid(camera):
+		if _cam_station == Vector3.INF:
+			_cam_station = camera.position
+
+		if is_landscape:
+			camera.keep_aspect = Camera3D.KEEP_HEIGHT
+			camera.fov = 40.0
+		else:
+			camera.keep_aspect = Camera3D.KEEP_WIDTH
+			camera.fov = 27.0
+
+		camera.position = _cam_pos(
+			_cam_station
+		)
+
+		if _applied_landscape != landscape_state:
+			_applied_landscape = landscape_state
+
+			OpLog.i(LOG_TAG, [
+				"camera_responsive viewport=",
+				vp,
+				" landscape=",
+				is_landscape,
+				" keepAspect=",
+				"KEEP_HEIGHT"
+				if is_landscape
+				else "KEEP_WIDTH",
+				" fov=",
+				camera.fov,
+				" station=",
+				_cam_station,
+				" position=",
+				camera.position
+			])
+
+	var button_k: float = (
+		CUPPONG_LANDSCAPE_BUTTON_SCALE
+		if is_landscape
+		else 1.0
+	)
+
+	for button: Control in [
+		settings_button
+	]:
+		if not is_instance_valid(button):
+			continue
+
+		var id: String = str(
+			button.get_instance_id()
+		)
+
+		if not _base_theme_values.has(
+			id + "minsize"
+		):
+			_base_theme_values[
+				id + "minsize"
+			] = button.custom_minimum_size
+
+		button.scale = Vector2.ONE
+		button.pivot_offset = Vector2.ZERO
+
+		button.custom_minimum_size = (
+			_base_theme_values[
+				id + "minsize"
+			] * button_k
+		)
+
+		if button is Button:
+			(button as Button).expand_icon = true
+
+	var label_k: float = (
+		CUPPONG_LANDSCAPE_LABEL_SCALE
+		if is_landscape
+		else 1.0
+	)
+
+	for overlay: Control in [
+		winner_label,
+		sent_label,
+		waiting_label,
+		overtime_label,
+		redemption_label,
+		balls_back_label,
+		spectator_label,
+	]:
+		_scale_theme(
+			overlay,
+			"font_size",
+			label_k
+		)
+
+	if is_instance_valid(
+		cuppong_menu_panel
+	):
+		_apply_cuppong_menu_scale()
+		_position_cuppong_menu()
+
 func _configure_cuppong_avatar(avatar_button: TextureButton) -> void:
 	if not is_instance_valid(avatar_button):
 		return
 
+	var k: float = _cuppong_ui_scale()
+
 	avatar_button.clip_contents = false
 	avatar_button.scale = Vector2.ONE
-	avatar_button.custom_minimum_size = Vector2(96.0, 90.0)
+	avatar_button.custom_minimum_size = Vector2(96.0, 90.0) * k
 	avatar_button.texture_normal = null
 	avatar_button.texture_pressed = null
 	avatar_button.texture_hover = null
@@ -150,10 +404,306 @@ func _configure_cuppong_avatar(avatar_button: TextureButton) -> void:
 		internal_preview.visible = true
 		internal_preview.self_modulate = Color.WHITE
 		internal_preview.pivot_offset = Vector2(48.0, 140.0)
-		internal_preview.scale = Vector2.ONE
+		internal_preview.scale = Vector2(k, k)
+
+func _menu_scale() -> float:
+	return CUPPONG_LANDSCAPE_MENU_SCALE if _cuppong_ui_scale() > 1.0 else 1.0
+
+func _menu_size() -> Vector2:
+	return CUPPONG_MENU_SIZE * _menu_scale()
+
+func _make_cuppong_menu_style(background_color: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = background_color
+	style.corner_radius_top_left = 6
+	style.corner_radius_top_right = 6
+	style.corner_radius_bottom_left = 6
+	style.corner_radius_bottom_right = 6
+	style.content_margin_left = 8.0
+	style.content_margin_right = 8.0
+	style.content_margin_top = 2.0
+	style.content_margin_bottom = 2.0
+	return style
+
+func _make_cuppong_menu_row(text_value: String) -> Button:
+	var button := Button.new()
+	button.text = text_value
+	button.focus_mode = Control.FOCUS_NONE
+	button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var dark := Color(0.04, 0.04, 0.04, 1.0)
+	for item: String in ["font_color", "font_hover_color", "font_pressed_color"]:
+		button.add_theme_color_override(item, dark)
+	button.add_theme_stylebox_override("normal", _make_cuppong_menu_style(Color(1.0, 1.0, 1.0, 0.0)))
+	button.add_theme_stylebox_override("hover", _make_cuppong_menu_style(Color(0.94, 0.94, 0.94, 1.0)))
+	button.add_theme_stylebox_override("pressed", _make_cuppong_menu_style(Color(0.86, 0.86, 0.86, 1.0)))
+	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	return button
+
+func _setup_cuppong_menu() -> void:
+	if (
+		is_instance_valid(cuppong_menu_layer) or
+		not is_instance_valid(main_overlay) or
+		not is_instance_valid(settings_button)
+	):
+		return
+
+	if settings_button.pressed.is_connected(_on_settings_button_pressed):
+		settings_button.pressed.disconnect(_on_settings_button_pressed)
+
+	if not settings_button.pressed.is_connected(_on_cuppong_menu_button_pressed):
+		settings_button.pressed.connect(_on_cuppong_menu_button_pressed)
+
+	settings_button.tooltip_text = "Menu"
+
+	cuppong_menu_layer = Control.new()
+	cuppong_menu_layer.name = "CupPongMenuLayer"
+	cuppong_menu_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	cuppong_menu_layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	cuppong_menu_layer.visible = false
+	cuppong_menu_layer.z_index = 4096
+	main_overlay.add_child(cuppong_menu_layer)
+	cuppong_menu_layer.gui_input.connect(_on_cuppong_menu_layer_gui_input)
+
+	cuppong_menu_panel = PanelContainer.new()
+	cuppong_menu_panel.name = "CupPongMenuPanel"
+	cuppong_menu_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color.WHITE
+	panel_style.corner_radius_top_left = 10
+	panel_style.corner_radius_top_right = 10
+	panel_style.corner_radius_bottom_left = 10
+	panel_style.corner_radius_bottom_right = 10
+	panel_style.content_margin_left = 4.0
+	panel_style.content_margin_top = 4.0
+	panel_style.content_margin_right = 4.0
+	panel_style.content_margin_bottom = 4.0
+	panel_style.shadow_color = Color(0.0, 0.0, 0.0, 0.22)
+	panel_style.shadow_size = 8
+	panel_style.shadow_offset = Vector2(0.0, 3.0)
+	cuppong_menu_panel.add_theme_stylebox_override("panel", panel_style)
+
+	cuppong_menu_layer.add_child(cuppong_menu_panel)
+
+	var rows := VBoxContainer.new()
+	rows.name = "Rows"
+	rows.add_theme_constant_override("separation", 0)
+	cuppong_menu_panel.add_child(rows)
+
+	var settings_row := _make_cuppong_menu_row("Settings")
+	var help_row := _make_cuppong_menu_row("Rules")
+	rows.add_child(settings_row)
+	rows.add_child(help_row)
+	cuppong_menu_rows = [settings_row, help_row]
+
+	settings_row.pressed.connect(_on_cuppong_menu_settings_pressed)
+	help_row.pressed.connect(_on_cuppong_menu_help_pressed)
+
+	_apply_cuppong_menu_scale()
+	call_deferred("_position_cuppong_menu")
+
+func _apply_cuppong_menu_scale() -> void:
+	if not is_instance_valid(cuppong_menu_panel):
+		return
+
+	var k: float = _menu_scale()
+	var menu_size := _menu_size()
+
+	cuppong_menu_panel.custom_minimum_size = menu_size
+	cuppong_menu_panel.size = menu_size
+
+	for row: Button in cuppong_menu_rows:
+		if is_instance_valid(row):
+			row.custom_minimum_size = Vector2(menu_size.x - 8.0 * k, CUPPONG_MENU_ROW_HEIGHT * k)
+			row.add_theme_font_size_override("font_size", int(round(CUPPONG_MENU_ROW_FONT * k)))
+
+func _position_cuppong_menu() -> void:
+	if (
+		not is_instance_valid(cuppong_menu_panel) or
+		not is_instance_valid(settings_button) or
+		not is_instance_valid(main_overlay)
+	):
+		return
+
+	var overlay_rect := main_overlay.get_global_rect()
+	var button_rect := settings_button.get_global_rect()
+	var menu_size := _menu_size()
+
+	var target_position := Vector2(
+		button_rect.position.x - overlay_rect.position.x,
+		button_rect.end.y - overlay_rect.position.y + CUPPONG_MENU_GAP
+	)
+
+	target_position.x = clampf(
+		target_position.x,
+		CUPPONG_MENU_MARGIN,
+		maxf(CUPPONG_MENU_MARGIN, main_overlay.size.x - menu_size.x - CUPPONG_MENU_MARGIN)
+	)
+
+	target_position.y = clampf(
+		target_position.y,
+		CUPPONG_MENU_MARGIN,
+		maxf(CUPPONG_MENU_MARGIN, main_overlay.size.y - menu_size.y - CUPPONG_MENU_MARGIN)
+	)
+
+	cuppong_menu_panel.position = target_position
+	cuppong_menu_panel.size = menu_size
+
+func _on_cuppong_menu_button_pressed() -> void:
+	if cuppong_menu_open:
+		_hide_cuppong_menu()
+	else:
+		_show_cuppong_menu()
+
+func _show_cuppong_menu() -> void:
+	if not is_instance_valid(cuppong_menu_layer) or not is_instance_valid(cuppong_menu_panel):
+		return
+
+	cuppong_menu_open = true
+	_settings_open = true
+
+	_apply_cuppong_menu_scale()
+	_position_cuppong_menu()
+
+	cuppong_menu_layer.visible = true
+	cuppong_menu_layer.move_to_front()
+
+	cuppong_menu_panel.pivot_offset = Vector2.ZERO
+	cuppong_menu_panel.scale = Vector2(0.92, 0.92)
+	cuppong_menu_panel.modulate.a = 0.0
+
+	var tween := create_tween().set_parallel(true)
+	tween.tween_property(cuppong_menu_panel, "scale", Vector2.ONE, 0.12) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(cuppong_menu_panel, "modulate:a", 1.0, 0.10)
+
+func _hide_cuppong_menu() -> void:
+	cuppong_menu_open = false
+	if is_instance_valid(cuppong_menu_layer):
+		cuppong_menu_layer.visible = false
+	_settings_open = false
+
+func _on_cuppong_menu_layer_gui_input(event: InputEvent) -> void:
+	if (
+		event is InputEventMouseButton and
+		event.button_index == MOUSE_BUTTON_LEFT and
+		event.pressed
+	):
+		_hide_cuppong_menu()
+		get_viewport().set_input_as_handled()
+
+func _on_cuppong_menu_settings_pressed() -> void:
+	_hide_cuppong_menu()
+	call_deferred("_on_settings_button_pressed")
+
+func _on_cuppong_menu_help_pressed() -> void:
+	_hide_cuppong_menu()
+	call_deferred("_on_rules_button_pressed")
+
+func _read_cup_style_setting() -> Dictionary:
+	var config := ConfigFile.new()
+	var load_error := config.load(CUP_STYLE_SETTINGS_PATH)
+
+	if load_error != OK:
+		return {
+			"style": DEFAULT_CUP_STYLE,
+			"source": "default(load_error=%d)" % load_error,
+		}
+
+	for section: String in [
+		CUP_STYLE_SETTINGS_SECTION,
+		CUP_STYLE_SETTINGS_FALLBACK_SECTION,
+	]:
+		if config.has_section_key(section, CUP_STYLE_SETTINGS_KEY):
+			return {
+				"style": maxi(
+					1,
+					int(
+						config.get_value(
+							section,
+							CUP_STYLE_SETTINGS_KEY,
+							DEFAULT_CUP_STYLE
+						)
+					)
+				),
+				"source": "%s/%s" % [
+					section,
+					CUP_STYLE_SETTINGS_KEY
+				],
+			}
+
+	return {
+		"style": DEFAULT_CUP_STYLE,
+		"source": "default(missing_key)",
+	}
+
+
+func _apply_cup_style(style: int, source: String = "runtime") -> void:
+	current_cup_style = maxi(style, DEFAULT_CUP_STYLE)
+
+	# my_cups is the target/opponent rack in the current Cup Pong flow.
+	if is_instance_valid(my_cups):
+		my_cups.set_cup_style(
+			current_cup_style,
+			OPPONENT_CUP_TINT
+		)
+
+	# replay_cups is the local rack shown on the player's side.
+	if is_instance_valid(replay_cups):
+		replay_cups.set_cup_style(
+			current_cup_style,
+			LOCAL_CUP_TINT
+		)
+
+	OpLog.i(LOG_TAG, [
+		"cup_style_applied style=", current_cup_style,
+		" source=", source,
+		" targetRack=", my_cups.name if is_instance_valid(my_cups) else "<missing>",
+		" targetTint=", OPPONENT_CUP_TINT,
+		" localRack=", replay_cups.name if is_instance_valid(replay_cups) else "<missing>",
+		" localTint=", LOCAL_CUP_TINT,
+		" available=", Cups.available_cup_styles()
+	])
+
+
+func refresh_cup_style_from_settings() -> void:
+	var setting := _read_cup_style_setting()
+	_apply_cup_style(
+		int(setting.style),
+		String(setting.source)
+	)
+
+
+func _apply_physics_tick_rate() -> void:
+	if not _physics_tick_rate_overridden:
+		_previous_physics_ticks_per_second = Engine.physics_ticks_per_second
+		_physics_tick_rate_overridden = true
+
+	Engine.physics_ticks_per_second = PHYSICS_TICKS_PER_SECOND
+
+	if not tree_exiting.is_connected(_restore_physics_tick_rate):
+		tree_exiting.connect(_restore_physics_tick_rate, CONNECT_ONE_SHOT)
+
+	OpLog.i(LOG_TAG, [
+		"physics_tick_rate previous=", _previous_physics_ticks_per_second,
+		" active=", Engine.physics_ticks_per_second,
+		" fixedDelta=", 1.0 / float(Engine.physics_ticks_per_second)
+	])
+
+
+func _restore_physics_tick_rate() -> void:
+	if not _physics_tick_rate_overridden:
+		return
+
+	if Engine.physics_ticks_per_second == PHYSICS_TICKS_PER_SECOND:
+		Engine.physics_ticks_per_second = _previous_physics_ticks_per_second
+
+	_physics_tick_rate_overridden = false
+
 
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
+	_apply_physics_tick_rate()
 	_configure_cuppong_avatar(player_avatar_display)
 	_configure_cuppong_avatar(opp_avatar_display)
 	screen_size = get_viewport().get_visible_rect().size
@@ -205,15 +755,15 @@ func _on_game_ready() -> void:
 	vp.use_debanding = true
 	vp.positional_shadow_atlas_size = 2048
 	vp.positional_shadow_atlas_quad_0 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_4
-	vp.positional_shadow_atlas_quad_1 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED
+	vp.positional_shadow_atlas_quad_1 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_4
 	vp.positional_shadow_atlas_quad_2 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED
 	vp.positional_shadow_atlas_quad_3 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_DISABLED
 
 	if is_instance_valid(sun):
 		sun.shadow_enabled = true
 		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
-		sun.directional_shadow_max_distance = 6.0
-		sun.directional_shadow_fade_start = 0.95
+		sun.directional_shadow_max_distance = 16.0
+		sun.directional_shadow_fade_start = 1.0
 		sun.directional_shadow_blend_splits = false
 		sun.shadow_bias = 0.1
 		sun.shadow_normal_bias = 2.0
@@ -235,8 +785,15 @@ func _on_game_ready() -> void:
 
 	_stabilized_mats.clear()
 	_stabilize_geometry(self)
+	refresh_cup_style_from_settings()
 
 	Engine.physics_jitter_fix = 0.5
+
+	rules_button = settings_button
+
+	get_viewport().size_changed.connect(_apply_responsive_ui)
+	_apply_responsive_ui()
+	call_deferred("_setup_cuppong_menu")
 	
 	OpLog.i(LOG_TAG, [
 		"game_ready screen=", screen_size,
@@ -415,64 +972,137 @@ func _stabilize_geometry(root: Node) -> void:
 					mesh.surface_set_material(s, new_mat)
 		_stabilize_geometry(child)
 
+func _apply_debug_hides() -> void:
+	if hide_all_cups:
+		for rack: Node in [my_cups, replay_cups]:
+			if not is_instance_valid(rack):
+				continue
+			for cup: Node in rack.get_children():
+				if cup is Node3D:
+					(cup as Node3D).visible = false
+
+	if hide_ball and is_instance_valid(ball):
+		ball.visible = false
+
+	if hide_table:
+		var table_node: Node = get_node_or_null("table")
+		if table_node is Node3D:
+			(table_node as Node3D).visible = false
+
+	OpLog.i(LOG_TAG, [
+		"debug_hides cups=", hide_all_cups,
+		" ball=", hide_ball,
+		" table=", hide_table
+	])
+
+func _dump_cup_state(label: String, cups: Cups) -> void:
+	if not is_instance_valid(cups):
+		return
+
+	var seen: Dictionary = {}
+
+	for child: Node in cups.get_children():
+		var cup := child as Node3D
+		if cup == null:
+			continue
+
+		var mesh_child: Node = cup.get_child(0) if cup.get_child_count() > 0 else null
+		var key: String = "%.3f_%.3f" % [cup.global_position.x, cup.global_position.z]
+		var dup: String = seen.get(key, "")
+		seen[key] = cup.name
+
+		OpLog.i(LOG_TAG, [
+			label, " ", cup.name,
+			" visible=", cup.visible,
+			" inTree=", cup.is_visible_in_tree(),
+			" layer=", (cup as StaticBody3D).collision_layer if cup is StaticBody3D else -1,
+			" pos=", cup.global_position,
+			" child0=", mesh_child.get_class() if mesh_child != null else "<none>",
+			" child0Vis=", (mesh_child as GeometryInstance3D).visible if mesh_child is GeometryInstance3D else false,
+			" children=", cup.get_child_count(),
+			" COINCIDENT_WITH=", dup
+		])
+
 func _process(delta: float) -> void:
+	if dragging:
+		_advance_throw_drag_filter(delta)
+
 	if not _debug_perf or not is_instance_valid(_debug_label):
 		return
-	
+
 	_frame_accum += delta
 	_frame_count += 1
+
 	if delta > _max_delta:
 		_max_delta = delta
-	
-	if _frame_accum >= 0.5:
-		var fps := Engine.get_frames_per_second()
-		var avg_dt := _frame_accum / _frame_count
-		var avg_ms := avg_dt * 1000.0
-		var max_ms := _max_delta * 1000.0
-		var mem_static_mb := Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0
-		var draw_calls := Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
-		var render_objects := Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)
-		var render_primitives := Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
-		var ball_count := 0
-		for child in get_children():
-			if child is PongBall and child != ball:
-				ball_count += 1
 
-		_debug_label.text = (
-			"FPS: %d\n" +
-			"avg dt: %.2f ms\n" +
-			"max dt: %.2f ms\n" +
-			"Static Mem: %.1f MB\n" +
-			"Draw Calls: %d\n" +
-			"Render Obj: %d\n" +
-			"Primitives: %d\n" +
-			"Balls: %d"
-		) % [
-			fps,
-			avg_ms,
-			max_ms,
-			mem_static_mb,
-			draw_calls,
-			render_objects,
-			render_primitives,
-			ball_count
-		]
-		
-		if max_ms > 25.0:
-			OpLog.w(LOG_TAG, [
-				"long_frame maxMs=", max_ms,
-				" fps=", fps,
-				" drawCalls=", draw_calls,
-				" objects=", render_objects,
-				" primitives=", render_primitives,
-				" balls=", ball_count,
-				" turn=", is_my_turn,
-				" playedReplay=", played_replay
-			])
-		
-		_frame_accum = 0.0
-		_frame_count = 0
-		_max_delta = 0.0
+	if _frame_accum < 0.5:
+		return
+
+	var fps := Engine.get_frames_per_second()
+	var avg_dt := _frame_accum / _frame_count
+	var avg_ms := avg_dt * 1000.0
+	var max_ms := _max_delta * 1000.0
+
+	var mem_static_mb := (
+		Performance.get_monitor(
+			Performance.MEMORY_STATIC
+		) / 1048576.0
+	)
+
+	var draw_calls := Performance.get_monitor(
+		Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME
+	)
+
+	var render_objects := Performance.get_monitor(
+		Performance.RENDER_TOTAL_OBJECTS_IN_FRAME
+	)
+
+	var render_primitives := Performance.get_monitor(
+		Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME
+	)
+
+	var ball_count := 0
+
+	for child: Node in get_children():
+		if child is PongBall and child != ball:
+			ball_count += 1
+
+	_debug_label.text = (
+		"FPS: %d\n" +
+		"avg dt: %.2f ms\n" +
+		"max dt: %.2f ms\n" +
+		"Static Mem: %.1f MB\n" +
+		"Draw Calls: %d\n" +
+		"Render Obj: %d\n" +
+		"Primitives: %d\n" +
+		"Balls: %d"
+	) % [
+		fps,
+		avg_ms,
+		max_ms,
+		mem_static_mb,
+		draw_calls,
+		render_objects,
+		render_primitives,
+		ball_count
+	]
+
+	if max_ms > 25.0:
+		OpLog.w(LOG_TAG, [
+			"long_frame maxMs=", max_ms,
+			" fps=", fps,
+			" drawCalls=", draw_calls,
+			" objects=", render_objects,
+			" primitives=", render_primitives,
+			" balls=", ball_count,
+			" turn=", is_my_turn,
+			" playedReplay=", played_replay
+		])
+
+	_frame_accum = 0.0
+	_frame_count = 0
+	_max_delta = 0.0
 
 func check_winner() -> bool:
 	if game_over:
@@ -724,7 +1354,7 @@ func _process_game_state():
 				return
 			if is_my_turn:
 				stop_waiting_animation()
-				camera.position = Vector3(0.0, 1.147, -1.73)
+				camera.position = _cam_pos(CUPPONG_CAM_THROW)
 	elif is_my_turn:
 		if check_winner():
 			return
@@ -765,7 +1395,10 @@ func _process_game_state():
 
 			add_child(new_ball)
 			preview_ball = new_ball
-
+	_apply_debug_hides()
+	_dump_cup_state("cupstate_mine", my_cups)
+	_dump_cup_state("cupstate_replay", replay_cups)
+	
 	OpLog.i(LOG_TAG, [
 		"process_state_done turn=", is_my_turn,
 		" playedReplay=", played_replay,
@@ -1006,7 +1639,7 @@ func spawn_ball(is_replay: bool = false) -> RigidBody3D:
 	return new_ball
 
 func playReplay(parsed: Dictionary):
-	camera.position = Vector3(0.0, 1.147, -3.486)
+	camera.position = _cam_pos(CUPPONG_CAM_REPLAY)
 	
 	var moves = parsed["moves"]
 	
@@ -1087,7 +1720,7 @@ func _on_replay_finished(new_ball: PongBall, move: Array, final_move: bool):
 
 		var cam_tween = create_tween()
 		cam_tween.tween_property(
-			camera, "position", Vector3(0.0, 1.147, -1.73), 1.0
+			camera, "position", _cam_pos(CUPPONG_CAM_THROW), 1.0
 		).from(camera.position).set_trans(Tween.TRANS_SINE)
 		cam_tween.play()
 
@@ -1100,106 +1733,500 @@ func _on_replay_finished(new_ball: PongBall, move: Array, final_move: bool):
 		played_replay = true
 		_process_game_state()
 
+func _screen_to_throw_plane(
+	screen_position: Vector2
+) -> Vector3:
+	if not is_instance_valid(camera):
+		return ball_popo
+
+	var ray_origin: Vector3 = camera.project_ray_origin(
+		screen_position
+	)
+
+	var ray_direction: Vector3 = camera.project_ray_normal(
+		screen_position
+	).normalized()
+
+	if absf(ray_direction.y) < 0.000001:
+		return _drag_world_current
+
+	var distance: float = (
+		ball_popo.y -
+		ray_origin.y
+	) / ray_direction.y
+
+	if distance <= 0.0:
+		return _drag_world_current
+
+	return ray_origin + ray_direction * distance
+
+
+func _advance_throw_drag_filter(
+	delta: float
+) -> void:
+	if not dragging:
+		return
+
+	var follow: float = clampf(
+		(
+			delta /
+			DRAG_FILTER_FRAME
+		) * DRAG_FILTER_FOLLOW,
+		0.0,
+		1.0
+	)
+
+	_drag_world_filtered += (
+		_drag_world_current -
+		_drag_world_filtered
+	) * follow
+
+
+func _live_target_cups() -> Array[Node3D]:
+	var result: Array[Node3D] = []
+
+	if not is_instance_valid(my_cups):
+		return result
+
+	for child: Node in my_cups.get_children():
+		var cup := child as Node3D
+
+		if cup == null:
+			continue
+
+		if not cup.visible:
+			continue
+
+		if cup.name == &"cupremoved":
+			continue
+
+		result.append(cup)
+
+	return result
+
+
+func _throw_forward_direction() -> Vector3:
+	var live_cups: Array[Node3D] = _live_target_cups()
+
+	if live_cups.is_empty():
+		var rack_direction: Vector3 = (
+			my_cups.global_position -
+			ball_popo
+			if is_instance_valid(my_cups)
+			else Vector3(0.0, 0.0, 1.0)
+		)
+
+		rack_direction.y = 0.0
+
+		if rack_direction.length_squared() > 0.000001:
+			return rack_direction.normalized()
+
+		return Vector3(0.0, 0.0, 1.0)
+
+	var target_center := Vector3.ZERO
+
+	for cup: Node3D in live_cups:
+		target_center += cup.global_position
+
+	target_center /= float(live_cups.size())
+
+	var direction: Vector3 = target_center - ball_popo
+	direction.y = 0.0
+
+	if direction.length_squared() <= 0.000001:
+		return Vector3(0.0, 0.0, 1.0)
+
+	return direction.normalized()
+
+
+func _aim_assist_strength() -> float:
+	var assist: float = (
+		AIM_BASE_NEW_PLAYER
+		if local_cup_pong_wins < 2
+		else AIM_BASE_EXPERIENCED
+	)
+
+	var made_cup_this_turn := false
+
+	for shot: Dictionary in throws:
+		if int(shot.get("cup", -1)) >= 0:
+			made_cup_this_turn = true
+			break
+
+	if not made_cup_this_turn:
+		if throws.is_empty():
+			assist += AIM_FIRST_MISS_BONUS
+		else:
+			assist += AIM_LATER_MISS_BONUS
+
+	if (
+		is_instance_valid(my_cups) and
+		is_instance_valid(replay_cups)
+	):
+		var target_cups_remaining: int = (
+			my_cups.cups_in_play.size()
+		)
+
+		var shooter_cups_remaining: int = (
+			replay_cups.cups_in_play.size()
+		)
+
+		if (
+			target_cups_remaining -
+			shooter_cups_remaining >= 4 and
+			shooter_cups_remaining > 0
+		):
+			assist += AIM_BEHIND_BONUS
+
+	return assist
+
 func _unhandled_input(event: InputEvent) -> void:
-	if _settings_open or spectator_mode or not ball_ready or current_ball == null:
+	if (
+		_settings_open or
+		spectator_mode or
+		not ball_ready or
+		current_ball == null
+	):
 		return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		var mb: InputEventMouseButton = event
-		if mb.pressed:
-			ball_popo = current_ball.global_position
-			drag_start_pos = mb.position
-			dragging = true
-		elif dragging:
-			dragging = false
-			_ios_throw_release(mb.position)
 
-func _ios_throw_release(release_screen_pos: Vector2) -> void:
+	if event is InputEventMouseMotion:
+		if dragging:
+			var motion := event as InputEventMouseMotion
+
+			_drag_world_current = _screen_to_throw_plane(
+				motion.position
+			)
+
+		return
+
+	if not (
+		event is InputEventMouseButton
+	):
+		return
+
+	var mouse_button := event as InputEventMouseButton
+
+	if mouse_button.button_index != MOUSE_BUTTON_LEFT:
+		return
+
+	if mouse_button.pressed:
+		ball_popo = current_ball.global_position
+		drag_start_pos = mouse_button.position
+
+		var world_position := _screen_to_throw_plane(
+			mouse_button.position
+		)
+
+		_drag_world_current = world_position
+		_drag_world_filtered = world_position
+		dragging = true
+
+		OpLog.i(LOG_TAG, [
+			"throw_drag_start screen=",
+			drag_start_pos,
+			" world=",
+			world_position,
+			" ball=",
+			ball_popo
+		])
+
+		return
+
+	if dragging:
+		_throw_release(
+			mouse_button.position
+		)
+
+func _throw_release(
+	release_screen_pos: Vector2
+) -> void:
 	if current_ball == null:
+		dragging = false
 		return
 
-	var screen_delta: Vector2 = release_screen_pos - drag_start_pos
-	var dx_world: float = -screen_delta.x * ios_screen_to_world_scale
-	var dz_world: float = -screen_delta.y * ios_screen_to_world_scale
-	var drag_len: float = sqrt(dx_world * dx_world + dz_world * dz_world)
+	_drag_world_current = _screen_to_throw_plane(
+		release_screen_pos
+	)
 
-	if drag_len < IOS_DRAG_DEAD_DIST:
-		dbg(["throw_cancelled dead_drag len=", drag_len])
+	dragging = false
+
+	var flick_world: Vector3 = (
+		_drag_world_filtered -
+		_drag_world_current
+	)
+
+	flick_world.y = 0.0
+
+	var throw_forward: Vector3 = (
+		_throw_forward_direction()
+	)
+
+	var throw_right: Vector3 = Vector3.UP.cross(
+		throw_forward
+	).normalized()
+
+	var dx_world: float = flick_world.dot(
+		throw_right
+	)
+
+	var dz_world: float = flick_world.dot(
+		throw_forward
+	)
+
+	var drag_len: float = sqrt(
+		dx_world * dx_world +
+		dz_world * dz_world
+	)
+
+	if drag_len < DRAG_DEAD_DIST:
+		OpLog.i(LOG_TAG, [
+			"throw_cancelled dead_drag len=",
+			drag_len,
+			" flick=",
+			flick_world,
+			" current=",
+			_drag_world_current,
+			" filtered=",
+			_drag_world_filtered
+		])
+
 		ball_ready = true
 		return
 
-	var scaled_dx: float = dx_world * IOS_H_SCALE
-	var dist: float = sqrt(scaled_dx * scaled_dx + dz_world * dz_world) * 0.9
-	var forward_force: float = max(dist * IOS_POWER_SLOPE, IOS_POWER_FLOOR)
-	var abs_force: float = abs(forward_force)
+	var scaled_dx: float = (
+		dx_world *
+		H_SCALE
+	)
 
-	var angle_factor: float = (dx_world / drag_len) if drag_len > 0.000001 else 0.0
+	var input_distance: float = sqrt(
+		scaled_dx * scaled_dx +
+		dz_world * dz_world
+	)
 
-	var raw_x_target: float = ball_popo.x + (abs_force / IOS_X_NORM * IOS_X_GAIN * angle_factor)
-	var ios_fz_target: float = IOS_Z_BIAS + (abs_force / IOS_Z_NORM) * IOS_Z_GAIN
+	var forward_force: float = maxf(
+		input_distance * POWER_SLOPE,
+		POWER_FLOOR
+	)
 
-	var raw_z_target: float = ball_popo.z + (abs(ios_fz_target) - abs(IOS_Z_BIAS))
+	var force_magnitude: float = absf(
+		forward_force
+	)
 
-	var target_cup: Vector3 = Vector3(raw_x_target, ball_popo.y, raw_z_target)
-	var best_d: float = INF
+	var angle_factor: float = (
+		dx_world / drag_len
+		if drag_len > 0.000001
+		else 0.0
+	)
 
-	if is_instance_valid(my_cups):
-		for cup in my_cups.get_children():
-			if cup == null or not (cup is Node3D):
-				continue
-			if cup.name == &"cupremoved" or not (cup as Node3D).visible:
-				continue
+	var lateral_distance: float = (
+		force_magnitude /
+		X_NORM *
+		X_GAIN *
+		angle_factor
+	)
 
-			var p: Vector3 = (cup as Node3D).global_position
-			var d: float = Vector2(raw_x_target - p.x, raw_z_target - p.z).length()
+	var raw_target_z: float = (
+		Z_BIAS +
+		(
+			force_magnitude /
+			Z_NORM
+		) * Z_GAIN
+	)
 
-			if d < best_d:
-				best_d = d
-				target_cup = p
+	var forward_distance: float = (
+		absf(raw_target_z) -
+		absf(Z_BIAS)
+	)
 
-	var assist: float = ios_aim_assist
+	var raw_world_target: Vector3 = (
+		ball_popo +
+		throw_right * lateral_distance +
+		throw_forward * forward_distance
+	)
 
-	if best_d > 0.55:
-		assist = 0.0
-	elif best_d > 0.34:
-		assist *= 0.45
+	raw_world_target.y = ball_popo.y
 
-	assist = clampf(assist, 0.0, 0.26)
+	var nearest_cup: Node3D = null
+	var nearest_distance: float = INF
 
-	var final_x: float = lerp(raw_x_target, target_cup.x, assist)
-	var final_z: float = lerp(raw_z_target, target_cup.z, assist)
+	for cup: Node3D in _live_target_cups():
+		var cup_position: Vector3 = cup.global_position
 
-	var ball_pos: Vector3 = current_ball.global_position
+		var aim_delta := Vector3(
+			cup_position.x -
+			raw_world_target.x,
+			cup_position.y +
+			BALL_Y_AIM_OFFSET,
+			cup_position.z -
+			raw_world_target.z
+		)
+
+		var cup_distance: float = aim_delta.length()
+
+		if cup_distance < nearest_distance:
+			nearest_distance = cup_distance
+			nearest_cup = cup
+
+	var aim_assist: float = 0.0
+	var final_world_target: Vector3 = raw_world_target
+	var assisted_target_z: float = raw_target_z
+	var target_name: String = "none"
+
+	if nearest_cup != null:
+		aim_assist = _aim_assist_strength()
+
+		var cup_position: Vector3 = (
+			nearest_cup.global_position
+		)
+
+		final_world_target.x = lerpf(
+			raw_world_target.x,
+			cup_position.x,
+			aim_assist
+		)
+
+		final_world_target.z = lerpf(
+			raw_world_target.z,
+			cup_position.z,
+			aim_assist
+		)
+
+		var cup_local_position: Vector3 = (
+			my_cups.to_local(
+				cup_position
+			)
+		)
+
+		assisted_target_z = lerpf(
+			raw_target_z,
+			cup_local_position.z,
+			aim_assist
+		)
+
+		target_name = String(
+			nearest_cup.name
+		)
+
+	var ball_position: Vector3 = (
+		current_ball.global_position
+	)
+
+	var target_delta: Vector3 = (
+		final_world_target -
+		ball_position
+	)
+
+	target_delta.y = 0.0
+
 	var fx_impulse: float
 	var fy_impulse: float
 	var fz_impulse: float
+	var arc_branch: String
 
-	if ios_fz_target <= IOS_Z_SPLIT:
-		fx_impulse = (final_x - ball_pos.x) * IOS_LONG_GAIN
-		fy_impulse = IOS_LONG_Y
-		fz_impulse = (final_z - ball_pos.z) * IOS_LONG_GAIN
+	if assisted_target_z <= Z_SPLIT:
+		arc_branch = "long"
+
+		fx_impulse = (
+			target_delta.x *
+			LONG_GAIN
+		)
+
+		fy_impulse = LONG_Y
+
+		fz_impulse = (
+			target_delta.z *
+			LONG_GAIN
+		)
 	else:
-		fx_impulse = (final_x - ball_pos.x) * IOS_SHORT_GAIN
-		fy_impulse = 4.0 * ((abs(final_z) - 1.05) / -7.2 + 1.0) + IOS_SHORT_Y_OFFSET
-		fz_impulse = (final_z - ball_pos.z) * IOS_SHORT_GAIN
+		arc_branch = "short"
+
+		fx_impulse = (
+			target_delta.x *
+			SHORT_GAIN
+		)
+
+		var short_curve: float = (
+			(
+				(
+					absf(
+						assisted_target_z
+					) -
+					absf(Z_BIAS)
+				) /
+				SHORT_Z_DIVISOR
+			) +
+			1.0
+		)
+
+		fy_impulse = (
+			SHORT_Y_BASE +
+			short_curve *
+			SHORT_Y_SCALE
+		)
+
+		fz_impulse = (
+			target_delta.z *
+			SHORT_GAIN
+		)
 
 	var thrown_ball: PongBall = current_ball
+
 	thrown_ball.freeze = false
 	thrown_ball.linear_velocity = Vector3.ZERO
 	thrown_ball.angular_velocity = Vector3.ZERO
-	thrown_ball.apply_impulse(Vector3(fx_impulse, fy_impulse, fz_impulse))
+
+	thrown_ball.apply_impulse(
+		Vector3(
+			fx_impulse,
+			fy_impulse,
+			fz_impulse
+		)
+	)
+
 	thrown_ball.thrown = true
+
 	ball_ready = false
 	current_ball = null
 
 	OpLog.i(LOG_TAG, [
-		"throw_release dx=", dx_world,
-		" dz=", dz_world,
-		" dragLen=", drag_len,
-		" rawTarget=", Vector2(raw_x_target, raw_z_target),
-		" targetCup=", target_cup,
-		" bestCupDist=", best_d,
-		" assist=", assist,
-		" impulse=", Vector3(fx_impulse, fy_impulse, fz_impulse)
+		"throw_release screenStart=",
+			drag_start_pos,
+		" screenEnd=",
+			release_screen_pos,
+		" flickWorld=",
+			flick_world,
+		" dx=",
+			dx_world,
+		" dz=",
+			dz_world,
+		" dragLen=",
+			drag_len,
+		" inputDistance=",
+			input_distance,
+		" force=",
+			forward_force,
+		" rawZ=",
+			raw_target_z,
+		" assistedZ=",
+			assisted_target_z,
+		" rawTarget=",
+			raw_world_target,
+		" assistedTarget=",
+			final_world_target,
+		" targetCup=",
+			target_name,
+		" targetDistance=",
+			nearest_distance,
+		" aimAssist=",
+			aim_assist,
+		" branch=",
+			arc_branch,
+		" impulse=",
+			Vector3(
+				fx_impulse,
+				fy_impulse,
+				fz_impulse
+			)
 	])
 
 	var min_wait_time: float = 1.0
@@ -1208,31 +2235,57 @@ func _ios_throw_release(release_screen_pos: Vector2) -> void:
 	var elapsed: float = 0.0
 
 	while is_instance_valid(thrown_ball):
-		await get_tree().create_timer(0.1).timeout
+		await get_tree().create_timer(
+			0.1
+		).timeout
+
 		elapsed += 0.1
 
 		if elapsed < min_wait_time:
 			continue
 
-		var speed: float = thrown_ball.linear_velocity.length()
+		var speed: float = (
+			thrown_ball.linear_velocity.length()
+		)
+
 		var too_slow: bool = speed < 0.08
-		var out_of_play: bool = thrown_ball.global_position.y < -1.2 or thrown_ball.global_position.z > 0.75 or thrown_ball.global_position.z < -2.6
+
+		var out_of_play: bool = (
+			thrown_ball.global_position.y < -1.2 or
+			thrown_ball.global_position.z > 0.75 or
+			thrown_ball.global_position.z < -2.6
+		)
 
 		if too_slow:
 			still_time += 0.1
 		else:
 			still_time = 0.0
 
-		if still_time >= 0.4 or out_of_play or elapsed >= max_wait_time:
+		if (
+			still_time >= 0.4 or
+			out_of_play or
+			elapsed >= max_wait_time
+		):
 			OpLog.i(LOG_TAG, [
-				"throw_resolved elapsed=", elapsed,
-				" speed=", speed,
-				" stillTime=", still_time,
-				" outOfPlay=", out_of_play,
-				" pos=", thrown_ball.global_position if is_instance_valid(thrown_ball) else Vector3.ZERO
+				"throw_resolved elapsed=",
+					elapsed,
+				" speed=",
+					speed,
+				" stillTime=",
+					still_time,
+				" outOfPlay=",
+					out_of_play,
+				" pos=",
+					thrown_ball.global_position
+					if is_instance_valid(
+						thrown_ball
+					)
+					else Vector3.ZERO
 			])
+
 			if is_instance_valid(thrown_ball):
 				thrown_ball.remove()
 			else:
 				throw_finished()
+
 			return

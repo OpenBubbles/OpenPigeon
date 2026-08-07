@@ -233,7 +233,7 @@ func get_tower_target_width_px() -> float:
 	return IOS_TOWER_HALF_W_UNITS * 2.0 * get_pixels_per_board_unit()
 
 func get_tower_target_height_px() -> float:
-	# Always 134 iOS units tall — the visible pillar above the plateau,
+	# Always 134 iOS units tall - the visible pillar above the plateau,
 	# constant regardless of H.
 	return IOS_TOWER_VISUAL_HEIGHT_UNITS * get_pixels_per_board_unit()
 

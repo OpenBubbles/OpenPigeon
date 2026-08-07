@@ -95,7 +95,7 @@ class SettingsSheet(
     private var currentSliderBaseColor: Int = Color.GRAY
     private var brightnessProgress: Int = 100
 
-    // Shader cache — only rebuilt on color change
+    // Shader cache - only rebuilt on color change
     private var cachedTrackShader: Shader? = null
     private var cachedTrackColor: Int = -1
     private var cachedTrackWidth: Float = 0f
@@ -104,7 +104,7 @@ class SettingsSheet(
     private var gradientThumbDrawable: GradientDrawable? = null
     private var gradientThumbView: View? = null
 
-    // Thumb diameter in px — set once in buildGradientSlider, used in positionThumb
+    // Thumb diameter in px - set once in buildGradientSlider, used in positionThumb
     private var thumbDiameterPx: Int = 0
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -507,7 +507,7 @@ class SettingsSheet(
         pickerScroll.addView(pickerRow)
         card.addView(pickerScroll)
 
-        // Colour swatches — centered
+        // Colour swatches - centered
         colorRowContainer = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -630,7 +630,7 @@ class SettingsSheet(
         container.addView(track)
         container.addView(thumb)
 
-        // Touch — x is relative to the padded track area
+        // Touch - x is relative to the padded track area
         container.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {

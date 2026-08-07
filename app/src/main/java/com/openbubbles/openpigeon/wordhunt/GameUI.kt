@@ -74,6 +74,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.zIndex
@@ -1158,6 +1159,166 @@ class GameUI {
     }
 
     @Composable
+    private fun WordPathPopup(
+        board: String,
+        gridSize: Int,
+        invalid: Set<Int>,
+        path: List<Int>,
+        onDismiss: () -> Unit,
+    ) {
+        val pathCells = path.toSet()
+
+        val fade = remember { Animatable(0f) }
+
+        LaunchedEffect(Unit) {
+            fade.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = 160,
+                    easing = LinearOutSlowInEasing,
+                ),
+            )
+        }
+
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    alpha = fade.value
+                }
+                .background(
+                    Color(
+                        0x99000000,
+                    ),
+                )
+                .clickable(
+                    onClick = onDismiss,
+                )
+                .zIndex(
+                    3f,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            val boardSide = minOf(
+                maxWidth * 0.66f,
+                maxHeight * 0.44f,
+            )
+
+            Box(
+                modifier = Modifier
+                    .clip(
+                        RoundedCornerShape(
+                            10.dp,
+                        ),
+                    )
+                    .background(
+                        Color(
+                            0xfffdfdfd,
+                        ),
+                    )
+                    .padding(
+                        10.dp,
+                    ),
+            ) {
+                Box(
+                    modifier = Modifier.size(
+                        boardSide,
+                    ),
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        repeat(gridSize) { row ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(
+                                        1f,
+                                    ),
+                            ) {
+                                repeat(gridSize) { col ->
+                                    val index = row * gridSize + col
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .weight(
+                                                1f,
+                                            )
+                                            .padding(
+                                                2.dp,
+                                            )
+                                            .clip(
+                                                RoundedCornerShape(
+                                                    4.dp,
+                                                ),
+                                            )
+                                            .background(
+                                                when {
+                                                    invalid.contains(index) -> Color.Transparent
+                                                    pathCells.contains(index) -> Color(0xffE0B052)
+                                                    else -> Color(0xffF2DE8A)
+                                                },
+                                            ),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        if (!invalid.contains(index)) {
+                                            Text(
+                                                text = board[index].toString(),
+                                                color = Color(
+                                                    0xff385334,
+                                                ),
+                                                fontSize = (boardSide.value / gridSize * 0.42f).sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontFamily = interFamily,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Canvas(
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        val step = size.width / gridSize
+
+                        val centres = path.map { index ->
+                            Offset(
+                                x = (index % gridSize + 0.5f) * step,
+                                y = (index / gridSize + 0.5f) * step,
+                            )
+                        }
+
+                        for (i in 0 until centres.size - 1) {
+                            drawLine(
+                                color = Color(
+                                    0xcc2C4128,
+                                ),
+                                start = centres[i],
+                                end = centres[i + 1],
+                                strokeWidth = step * 0.13f,
+                                cap = StrokeCap.Round,
+                            )
+                        }
+
+                        centres.firstOrNull()?.let { start ->
+                            drawCircle(
+                                color = Color(
+                                    0xcc2C4128,
+                                ),
+                                radius = step * 0.17f,
+                                center = start,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
     fun AllWordsScreen(
         score: () -> MutableMap<String, String>,
         onBack: () -> Unit,
@@ -1177,6 +1338,25 @@ class GameUI {
                 "|",
             )?.toSet() ?: emptySet()
         }
+
+        val paths = scoreData["all_paths"]?.takeIf {
+            it.isNotBlank()
+        }?.split(
+            "|",
+        ) ?: emptyList()
+
+        val board = scoreData["board"].orEmpty()
+
+        val gridSize = scoreData["grid_size"]?.toIntOrNull()
+            ?: kotlin.math.sqrt(board.length.toFloat()).toInt().coerceAtLeast(1)
+
+        val invalidCells = remember(scoreData["invalid_cells"]) {
+            WordHuntSolver.decodePath(
+                scoreData["invalid_cells"].orEmpty(),
+            ).toSet()
+        }
+
+        var selected by remember { mutableIntStateOf(-1) }
 
         val listScroll = rememberScrollState()
 
@@ -1218,11 +1398,15 @@ class GameUI {
                             vertical = 7.dp,
                         ),
                 ) {
-                    words.forEach { word ->
+                    words.forEachIndexed { index, word ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selected = index
+                                },
                         ) {
                             WordBox(
                                 word = word,
@@ -1268,6 +1452,20 @@ class GameUI {
                     ),
                     contentDescription = "Back",
                     modifier = Modifier.fillMaxSize(),
+                )
+            }
+
+            if (selected >= 0 && board.length >= gridSize * gridSize) {
+                WordPathPopup(
+                    board = board,
+                    gridSize = gridSize,
+                    invalid = invalidCells,
+                    path = WordHuntSolver.decodePath(
+                        paths.getOrElse(selected) { "" },
+                    ),
+                    onDismiss = {
+                        selected = -1
+                    },
                 )
             }
         }

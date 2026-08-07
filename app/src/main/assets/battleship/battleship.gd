@@ -1611,7 +1611,7 @@ func send_update():
 func my_battleground_ready():
 	print("[MY_BATTLEGROUND_READY] Entered")
 	if spectator_mode:
-		print("[MY_BATTLEGROUND_READY] Spectator — skipping turn flow.")
+		print("[MY_BATTLEGROUND_READY] Spectator - skipping turn flow.")
 		return
 	if theirBattleground.is_empty():
 		print("[MY_BATTLEGROUND_READY] TheirBattleground is empty → sending update immediately.")

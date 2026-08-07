@@ -2,9 +2,9 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d3epayn4s82iw"
-path.s3tc="res://.godot/imported/background2.jpeg-3269ed52b8d41429e727536d60c316f3.s3tc.ctex"
-path.etc2="res://.godot/imported/background2.jpeg-3269ed52b8d41429e727536d60c316f3.etc2.ctex"
+uid="uid://crdy3s168p578"
+path.s3tc="res://.godot/imported/hoop.png-f69284864a58c24c9b26589f13100d19.s3tc.ctex"
+path.etc2="res://.godot/imported/hoop.png-f69284864a58c24c9b26589f13100d19.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
@@ -12,8 +12,8 @@ metadata={
 
 [deps]
 
-source_file="res://darts/background2.jpeg"
-dest_files=["res://.godot/imported/background2.jpeg-3269ed52b8d41429e727536d60c316f3.s3tc.ctex", "res://.godot/imported/background2.jpeg-3269ed52b8d41429e727536d60c316f3.etc2.ctex"]
+source_file="res://basketball/hoop.png"
+dest_files=["res://.godot/imported/hoop.png-f69284864a58c24c9b26589f13100d19.s3tc.ctex", "res://.godot/imported/hoop.png-f69284864a58c24c9b26589f13100d19.etc2.ctex"]
 
 [params]
 

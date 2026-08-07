@@ -1,0 +1,73 @@
+OpenPigeon Asset License 1.0
+
+Required Notice: Copyright (C) 2023-2026 OpenPigeon Contributors.
+All rights reserved except as expressly granted below.
+
+1. SCOPE
+
+This license governs the "Assets": all files in this repository with the
+extensions .png .jpg .jpeg .webp .svg .otf .ttf .ogg .wav .obj .mtl .fbx
+.gltf .bin .tres, and all files under app/src/main/res/drawable/,
+app/src/main/res/drawable-nodpi/, app/src/main/res/mipmap-*/, and
+app/src/main/res/font/.
+
+Scene files (.tscn, .scn), shader files (.gdshader), Godot import metadata
+(.import, .uid), and all source code are NOT Assets. Those files are governed
+by LICENSE.
+
+The following files are EXCLUDED from this license and remain under their
+own terms as recorded in THIRD-PARTY-NOTICES.md:
+
+    app/src/main/res/font/*
+    app/src/main/res/raw/ofl_*.txt
+    app/src/main/assets/basketball/OFL-DSEG.txt
+    app/src/main/assets/archery/sky1.png
+    app/src/main/assets/basketball/balldimpled.png
+    app/src/main/assets/archery/arrow/**
+    app/src/main/assets/addons/**
+
+This license applies only to releases after the tag v1-final-agpl. Assets as
+they existed in earlier releases were published under AGPL-3.0 and remain
+available under that license to anyone who received them.
+
+
+2. GRANT
+
+Subject to Section 3, you may view, reproduce, and modify the Assets solely
+as required to build, test, and privately run OpenPigeon or a private
+modification of OpenPigeon.
+
+
+3. RESTRICTIONS
+
+You may not distribute, publish, sublicense, sell, lease, or otherwise make
+the Assets available to any third party, in original or modified form,
+whether alone or as part of any software, dataset, or other work.
+
+You may not use the Assets to train, fine-tune, or evaluate any machine
+learning model.
+
+You may not remove or alter any copyright, attribution, or licensing notice
+associated with the Assets.
+
+
+4. RESERVATION
+
+All rights not expressly granted in Section 2 are reserved. Distribution
+rights are available only under a separate written agreement. Contact
+support@openbubbles.app.
+
+
+5. TERMINATION
+
+This license terminates automatically if you breach Section 3. It may be
+reinstated in writing by the copyright holders.
+
+
+6. NO WARRANTY
+
+THE ASSETS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY
+ARISING FROM, OUT OF, OR IN CONNECTION WITH THE ASSETS OR THEIR USE.

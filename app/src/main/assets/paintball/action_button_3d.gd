@@ -153,7 +153,16 @@ func _on_mouse_exited() -> void:
 func _on_area_input_event(_camera: Camera3D, event: InputEvent, _pos: Vector3, _normal: Vector3, _shape_idx: int) -> void:
 	if not _click_enabled:
 		return
-
+	
+	OpLog.i("ActionButton3D", [
+		"area_input name=", name,
+		" clickEnabled=", _click_enabled,
+		" visible=", visible,
+		" inTree=", is_visible_in_tree(),
+		" event=", event.get_class(),
+		" pickable=", _area.input_ray_pickable
+	])
+	
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			_press()
