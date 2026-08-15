@@ -45,14 +45,7 @@ If you're unsure whether something is allowed, ask: **support@openbubbles.app**.
 
        git submodule update --init --recursive
 
-2. Obtain the Player.IO game ID and shared secret:
-    - Register a free account at <https://playerio.com>
-    - Create a game, and note its game ID and shared secret for step 3
-
-   This is required only for Crazy 8 multiplayer. Every other game runs without
-   it, but the build will not proceed until the file is present.
-
-3. Copy `config.properties.example` to `config.properties` in the repository
+2. Copy `config.properties.example` to `config.properties` in the repository
    root and fill in your own Player.IO credentials:
 
        PIO_GAME_ID=your-game-id
@@ -62,13 +55,23 @@ If you're unsure whether something is allowed, ask: **support@openbubbles.app**.
    commit it. The build fails with an explanatory message if it is missing or if
    either value is blank.
 
-4. Point Gradle at your Godot binary. Rename your Godot executable to
-   `godot.exe` and add this line to `local.properties` (under Gradle Scripts in
-   Android Studio):
+3. Obtain the Player.IO Android SDK. It is proprietary and cannot be
+   redistributed, so it is not in this repository:
 
-       godot.path=C\:\\Users\\you\\path\\to\\godot.exe
+    - Register a free account at <https://playerio.com>
+    - Create a game, and note its game ID and shared secret for step 2
+    - Download the Android SDK
+    - Place `PlayerIO.aar` at `app/libs/PlayerIO.aar`
 
-   Note the doubled backslashes. Restart Android Studio afterwards.
+   This is required only for Crazy 8 multiplayer. Every other game runs without
+   it, but the build will not proceed until the file is present.
+
+4. Point Gradle to your Godot binary. Add `godot.path` to `local.properties` (found under Gradle Scripts in Android Studio):
+
+   - **Windows:** `godot.path=C:\\path\\to\\godot.exe` *(Note: Use double backslashes `\\`)*
+   - **macOS:** `godot.path=/Applications/Godot.app/Contents/MacOS/Godot`
+
+   Restart Android Studio after updating `local.properties`.
 
 5. Open `app/src/main/assets` in the Godot editor once, so the import cache is
    generated.
