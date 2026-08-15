@@ -7,6 +7,7 @@ class_name CheckersBoardTop
 @onready var player_avatar_display: Control = %PlayerAvatarDisplay
 @onready var opp_avatar_display: Control = %OppAvatarDisplay
 @onready var send_button: Button = %SendButton
+@onready var turn_hint_label: Label = %TurnHintLabel
 @onready var sent_label: Label = %SentLabel
 @onready var win_loss_label: Label = %WinLossLabel
 @onready var player_piece_icon: TextureRect = %PlayerPiece
@@ -50,9 +51,8 @@ const CHECKERS_BASE_PIECE_ICON_SIZE := Vector2(
 	64.0,
 )
 
-const CHECKERS_BASE_PIECE_TOP_SPACER := 40.0
 const CHECKERS_BASE_OPPONENT_AVATAR_SPACER := 26.0
-const CHECKERS_BASE_YOU_FONT_SIZE := 18.0
+const CHECKERS_BASE_YOU_FONT_SIZE := 21.0
 
 const CHECKERS_BASE_MENU_BUTTON_SIZE := Vector2(
 	64.0,
@@ -68,11 +68,15 @@ const CHECKERS_BASE_SEND_BUTTON_SIZE := Vector2(
 
 const CHECKERS_BASE_SEND_BUTTON_FONT_SIZE := 28.0
 
+const CHECKERS_BASE_TURN_HINT_WIDTH := 320.0
+const CHECKERS_BASE_TURN_HINT_FONT_SIZE := 21.0
+
 const CHECKERS_LANDSCAPE_AVATAR_MIN_SCALE := 2.05
 const CHECKERS_LANDSCAPE_AVATAR_MAX_SCALE := 2.35
 
 const CHECKERS_BASE_TOP_MARGIN_LEFT := 20.0
-const CHECKERS_BASE_TOP_MARGIN_TOP := 10.0
+const CHECKERS_PORTRAIT_TOP_MARGIN := 40.0
+const CHECKERS_LANDSCAPE_TOP_MARGIN := 10.0
 const CHECKERS_BASE_BOTTOM_SIDE_MARGIN := 40.0
 const CHECKERS_BASE_BOTTOM_MARGIN := 30.0
 
@@ -145,7 +149,7 @@ var clicked_piece: Sprite2D
 var moves: Dictionary[Vector2, Sprite2D] = {}
 var has_moved: bool = false
 var prev_moves: Array[Vector2] = []
-var prev_jumps: Array[Sprite2D] = []
+var prev_jumps: Array[Dictionary] = []
 var chain_jump_piece: Sprite2D = null
 var checking_for_jumps: bool = false
 var must_jump: bool = false
@@ -170,7 +174,7 @@ func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
 	
 func _get_dev_data() -> String:
-	return '{"isYourTurn":1,"player":"1","replay":"board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0|move:6,5,7,4|board:0,2,0,2,0,2,0,2,2,0,2,0,2,0,2,0,0,2,0,2,0,2,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,1,0,1,0,1,0,1,1,0,1,0,1,0,1,0"}'
+	return '{"isYourTurn":true,"myPlayerId":"p2uid","player":"1","player1":"p1uid","player2":"p2uid","sender":"p1uid","mode":"n","replay":"board:0,0,0,0,0,0,0,0,2,0,0,0,0,0,3,0,0,2,0,0,0,0,0,0,0,0,2,0,3,0,0,0,0,0,0,4,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0,0,0,0,0|board:0,0,0,0,0,0,0,0,2,0,0,0,0,0,3,0,0,2,0,0,0,0,0,0,0,0,2,0,3,0,0,0,0,0,0,4,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0,0,0,0,0"}'
 
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
@@ -195,6 +199,11 @@ func _on_game_ready() -> void:
 		send_button.scale = Vector2(1.0, 1.0)
 		if not send_button.pressed.is_connected(Callable(self, "_on_send_pressed")):
 			send_button.pressed.connect(_on_send_pressed)
+	
+	if is_instance_valid(turn_hint_label):
+		turn_hint_label.visible = false
+		turn_hint_label.modulate.a = 0.0
+		turn_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_initialize_checkers_responsive_layout()
 	if player == 0 or replay == "":
 		return
@@ -364,14 +373,14 @@ func send_game_checkers() -> void:
 		OpLog.w(LOG_TAG, ["send_game_checkers skipped prevMoves=", prev_moves.size()])
 		return
 
-	var steps: Array = []	# each = { "kind": "move"/"attack", "A1": Vector2i, "A2": Vector2i }
+	var steps: Array = []
 	for i in range(0, prev_moves.size(), 2):
 		var p1: Vector2 = prev_moves[i]
 		var p2: Vector2 = prev_moves[i + 1]
 		var A1: Vector2i = _logical_to_abs(int(p1.x), int(p1.y))
 		var A2: Vector2i = _logical_to_abs(int(p2.x), int(p2.y))
-		var kind: String = ("attack" if abs(int(p1.x - p2.x)) > 1 else "move")
-		steps.append({ "kind": kind, "A1": A1, "A2": A2 })
+		var kind: String = "attack" if absi(int(p1.x - p2.x)) > 1 else "move"
+		steps.append({"kind": kind, "A1": A1, "A2": A2})
 
 	var pre_board_str: String = _get_nth_board_str(replay, 1)
 	if pre_board_str == "":
@@ -382,29 +391,34 @@ func send_game_checkers() -> void:
 			var piece := get_node_or_null("PiecesRoot/%d,%d" % [x, y]) as Sprite2D
 			if piece == null:
 				continue
-			var col := get_piece_color(piece)
+
+			var col: String = get_piece_color(piece)
 			if col == "unknown" or is_checker_king(piece):
 				continue
-			if (col == "red" and y == 0):
+
+			if col == "red" and y == 0:
 				set_checker_king(piece, "red")
-			elif (col == "black" and y == 7):
+			elif col == "black" and y == 7:
 				set_checker_king(piece, "black")
 
 	var post_board_str: String = _current_board_string()
 
 	var red_left := false
 	var black_left := false
+
 	for yy in range(8):
 		for xx in range(8):
 			var pc := get_node_or_null("PiecesRoot/%d,%d" % [xx, yy]) as Sprite2D
 			if pc == null:
 				continue
-			var c := get_piece_color(pc)
+
+			var c: String = get_piece_color(pc)
 			if c == "red":
 				red_left = true
 			elif c == "black":
 				black_left = true
-	var game_is_over := (red_left and not black_left) or (black_left and not red_left)
+
+	var game_is_over: bool = (red_left and not black_left) or (black_left and not red_left)
 
 	var parts: Array[String] = []
 	if pre_board_str != "":
@@ -417,37 +431,23 @@ func send_game_checkers() -> void:
 
 	parts.append("board:" + post_board_str)
 
-	var new_replay := String("|").join(parts)
-	var payload: Dictionary = { "replay": new_replay }
-	var avatar_key := ("avatar1" if player == 1 else "avatar2")
+	var new_replay: String = String("|").join(parts)
+	var payload: Dictionary = {"replay": new_replay}
+	var avatar_key: String = "avatar1" if player == 1 else "avatar2"
 
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
 
-	var wl := check_win_loss()
+	var wl: String = check_win_loss()
 	if wl != "":
 		payload["winner"] = my_player + "|" + ("1" if wl == "win" else "-1")
 
-	var out_json := JSON.stringify(payload)
+	var ended_game: bool = game_is_over or wl != ""
+	var out_json: String = JSON.stringify(payload)
+
 	OpLog.event(LOG_TAG, ["send_game_out steps=", steps.size(), " winLoss=", wl, " gameOver=", game_is_over, " raw=", out_json])
 	send_game_data(out_json)
 
-	if game_is_over or wl != "":
-		game_over = true
-		stop_waiting_animation()
-		if is_instance_valid(sent_label):
-			sent_label.visible = false
-			sent_label.modulate.a = 1.0
-		clear_highlights()
-		clicked_piece = null
-		has_moved = false
-		moves.clear()
-		chain_jump_piece = null
-		prev_jumps.clear()
-		prev_moves.clear()
-		return
-
-	play_sent_animation()
 	clear_highlights()
 	clicked_piece = null
 	has_moved = false
@@ -455,7 +455,33 @@ func send_game_checkers() -> void:
 	chain_jump_piece = null
 	prev_jumps.clear()
 	prev_moves.clear()
-		
+
+	if ended_game:
+		game_over = true
+		stop_waiting_animation()
+
+		if sent_tween != null and sent_tween.is_running():
+			sent_tween.kill()
+
+		if is_instance_valid(sent_label):
+			sent_label.visible = false
+			sent_label.modulate.a = 1.0
+
+		if is_instance_valid(send_button):
+			send_button.visible = false
+			send_button.disabled = true
+
+		if is_instance_valid(turn_hint_label):
+			turn_hint_label.visible = false
+			turn_hint_label.modulate.a = 0.0
+
+		if wl != "":
+			await game_over_visual(wl)
+
+		return
+
+	play_sent_animation()
+
 func _on_board_resized() -> void:
 	_recalculate_board_layout_from_board()
 	_apply_board_orientation()
@@ -1066,36 +1092,16 @@ func _apply_checkers_responsive_layout() -> void:
 
 		avatar_button.queue_redraw()
 
-	var piece_icon_size := (
-		CHECKERS_BASE_PIECE_ICON_SIZE *
-		avatar_scale
-	)
+	var piece_icon_size := CHECKERS_BASE_PIECE_ICON_SIZE * avatar_scale
 
-	player_piece_icon.custom_minimum_size = (
-		piece_icon_size
-	)
+	player_piece_icon.custom_minimum_size = piece_icon_size
+	opp_piece_icon.custom_minimum_size = piece_icon_size
+	player_piece_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	opp_piece_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 
-	opp_piece_icon.custom_minimum_size = (
-		piece_icon_size
-	)
-
-	player_piece_top_spacer.custom_minimum_size = Vector2(
-		0.0,
-		CHECKERS_BASE_PIECE_TOP_SPACER *
-			avatar_scale,
-	)
-
-	opp_piece_top_spacer.custom_minimum_size = Vector2(
-		0.0,
-		CHECKERS_BASE_PIECE_TOP_SPACER *
-			avatar_scale,
-	)
-
-	opponent_avatar_top_spacer.custom_minimum_size = Vector2(
-		0.0,
-		CHECKERS_BASE_OPPONENT_AVATAR_SPACER *
-			avatar_scale,
-	)
+	player_piece_top_spacer.custom_minimum_size = Vector2.ZERO
+	opp_piece_top_spacer.custom_minimum_size = Vector2.ZERO
+	opponent_avatar_top_spacer.custom_minimum_size = Vector2(0.0, CHECKERS_BASE_OPPONENT_AVATAR_SPACER * avatar_scale)
 
 	you_label.add_theme_font_size_override(
 		"font_size",
@@ -1171,6 +1177,35 @@ func _apply_checkers_responsive_layout() -> void:
 		send_size *
 		0.5
 	)
+	
+	if is_instance_valid(turn_hint_label):
+		var hint_width: float = minf(
+			CHECKERS_BASE_TURN_HINT_WIDTH *
+				avatar_scale,
+			maxf(
+				checkers_scene_root.size.x - 32.0,
+				120.0,
+			),
+		)
+
+		var hint_size := Vector2(
+			hint_width,
+			send_size.y,
+		)
+
+		turn_hint_label.custom_minimum_size = hint_size
+		turn_hint_label.size = hint_size
+
+		turn_hint_label.add_theme_font_size_override(
+			"font_size",
+			maxi(
+				roundi(
+					CHECKERS_BASE_TURN_HINT_FONT_SIZE *
+						avatar_scale
+				),
+				1,
+			),
+		)
 
 	# ---------------------------------------------------------
 	# Landscape positioning or portrait restoration
@@ -1182,10 +1217,7 @@ func _apply_checkers_responsive_layout() -> void:
 			avatar_scale
 		)
 
-		var top_margin := (
-			CHECKERS_BASE_TOP_MARGIN_TOP *
-			avatar_scale
-		)
+		var top_margin := CHECKERS_LANDSCAPE_TOP_MARGIN * avatar_scale
 
 		checkers_top_hud_margin.add_theme_constant_override(
 			"margin_left",
@@ -1207,27 +1239,9 @@ func _apply_checkers_responsive_layout() -> void:
 			false,
 		)
 
-		var avatar_stack_height := (
-			CHECKERS_BASE_AVATAR_SIZE.y *
-				avatar_scale +
-			CHECKERS_BASE_YOU_FONT_SIZE *
-				avatar_scale
-		)
-
-		var piece_stack_height := (
-			CHECKERS_BASE_PIECE_TOP_SPACER *
-				avatar_scale +
-			CHECKERS_BASE_PIECE_ICON_SIZE.y *
-				avatar_scale
-		)
-
-		var top_hud_height := (
-			maxf(
-				avatar_stack_height,
-				piece_stack_height,
-			) +
-			top_margin
-		)
+		var avatar_stack_height: float = (CHECKERS_BASE_AVATAR_SIZE.y + maxf(CHECKERS_BASE_YOU_FONT_SIZE, CHECKERS_BASE_OPPONENT_AVATAR_SPACER)) * avatar_scale
+		var piece_stack_height: float = CHECKERS_BASE_PIECE_ICON_SIZE.y * avatar_scale
+		var top_hud_height: float = maxf(avatar_stack_height, piece_stack_height) + top_margin
 
 		checkers_top_hud_margin.offset_left = 0.0
 		checkers_top_hud_margin.offset_top = 0.0
@@ -1239,7 +1253,7 @@ func _apply_checkers_responsive_layout() -> void:
 		var bottom_side_margin := (
 			CHECKERS_BASE_BOTTOM_SIDE_MARGIN *
 			avatar_scale
-		)
+		) 
 
 		var bottom_margin := (
 			CHECKERS_BASE_BOTTOM_MARGIN *
@@ -1289,12 +1303,7 @@ func _apply_checkers_responsive_layout() -> void:
 			),
 		)
 
-		checkers_top_hud_margin.add_theme_constant_override(
-			"margin_top",
-			roundi(
-				CHECKERS_BASE_TOP_MARGIN_TOP,
-			),
-		)
+		checkers_top_hud_margin.add_theme_constant_override("margin_top", roundi(CHECKERS_PORTRAIT_TOP_MARGIN))
 
 		checkers_top_hud_margin.add_theme_constant_override(
 			"margin_right",
@@ -1484,6 +1493,28 @@ func _finish_checkers_responsive_layout(
 
 	send_button.position = home_position
 
+	if is_instance_valid(turn_hint_label):
+		var hint_home_position := Vector2(
+			(
+				root_rect.size.x -
+				turn_hint_label.size.x
+			) *
+			0.5,
+			home_position.y +
+				(
+					send_button.size.y -
+						turn_hint_label.size.y
+				) *
+				0.5,
+		)
+
+		turn_hint_label.set_meta(
+			"th_home_pos",
+			hint_home_position,
+		)
+
+		turn_hint_label.position = hint_home_position
+
 	var should_show_send := (
 		has_moved and
 		isTurn and
@@ -1498,6 +1529,23 @@ func _finish_checkers_responsive_layout(
 		if should_show_send
 		else 0.0
 	)
+
+	if is_instance_valid(turn_hint_label):
+		var should_show_hint := (
+			not has_moved and
+			isTurn and
+			not waitingForOpponent and
+			not spectator_mode and
+			not game_over
+		)
+
+		turn_hint_label.text = _turn_hint_text()
+		turn_hint_label.visible = should_show_hint
+		turn_hint_label.modulate.a = (
+			1.0
+			if should_show_hint
+			else 0.0
+		)
 
 	_clear_checkers_win_bursts()
 
@@ -1516,7 +1564,114 @@ func _visual_to_logical(gx: int, gy: int) -> Vector2i:
 	var lx := gx if (player == 2 and not spectator_mode) else (7 - gx)
 	var ly := (7 - gy) if (player == 2 and not spectator_mode) else gy
 	return Vector2i(lx, ly)
-	
+
+func _turn_hint_text() -> String:
+	if rule_mandatory_jumps and must_jump:
+		return "Capture your opponent's piece"
+
+	return "Move one of your pieces"
+
+
+func _animate_turn_hint(
+	should_show: bool,
+) -> void:
+	if not is_instance_valid(turn_hint_label):
+		return
+
+	turn_hint_label.text = _turn_hint_text()
+
+	if not turn_hint_label.has_meta("th_home_pos"):
+		turn_hint_label.set_meta(
+			"th_home_pos",
+			turn_hint_label.position,
+		)
+
+	var home_pos: Vector2 = (
+		turn_hint_label.get_meta("th_home_pos")
+	)
+
+	var off_pos := Vector2(
+		home_pos.x,
+		checkers_scene_root.size.y +
+			turn_hint_label.size.y +
+			24.0,
+	)
+
+	if turn_hint_label.has_meta("th_tween"):
+		var old_tween: Variant = (
+			turn_hint_label.get_meta("th_tween")
+		)
+
+		if (
+			old_tween is Tween and
+			(old_tween as Tween).is_running()
+		):
+			(old_tween as Tween).kill()
+
+	var tween := create_tween()
+
+	turn_hint_label.set_meta(
+		"th_tween",
+		tween,
+	)
+
+	if should_show:
+		turn_hint_label.visible = true
+		turn_hint_label.position = off_pos
+		turn_hint_label.modulate.a = 0.0
+
+		tween.tween_property(
+			turn_hint_label,
+			"position",
+			home_pos,
+			0.35,
+		).set_ease(
+			Tween.EASE_OUT,
+		).set_trans(
+			Tween.TRANS_QUAD,
+		)
+
+		tween.parallel().tween_property(
+			turn_hint_label,
+			"modulate:a",
+			1.0,
+			0.35,
+		)
+	else:
+		if not turn_hint_label.visible:
+			turn_hint_label.position = home_pos
+			turn_hint_label.modulate.a = 0.0
+			return
+
+		tween.tween_property(
+			turn_hint_label,
+			"position",
+			off_pos,
+			0.20,
+		).set_ease(
+			Tween.EASE_IN,
+		).set_trans(
+			Tween.TRANS_QUAD,
+		)
+
+		tween.parallel().tween_property(
+			turn_hint_label,
+			"modulate:a",
+			0.0,
+			0.20,
+		)
+
+		tween.tween_callback(
+			func() -> void:
+				if not is_instance_valid(
+					turn_hint_label
+				):
+					return
+
+				turn_hint_label.visible = false
+				turn_hint_label.position = home_pos
+		)
+
 func _animate_send_button(
 	should_show: bool,
 ) -> void:
@@ -1645,6 +1800,8 @@ func _post_replay_ready() -> void:
 	_scan_row(5)
 
 	_compute_mandatory_jumps()
+	_update_send_button()
+
 	if rule_mandatory_jumps and must_jump and chain_jump_piece == null:
 		_show_mandatory_jump_previews()
 
@@ -1695,18 +1852,20 @@ func _revert_temp_move_if_any() -> void:
 			move_piece(piece_to_revert, from_v.x, from_v.y, 0.0)
 
 	if prev_jumps.size() > 0:
-		for jumped in prev_jumps:
-			if jumped == null or not is_instance_valid(jumped):
+		for captured_data: Dictionary in prev_jumps:
+			var jx: int = int(captured_data.get("x", -1))
+			var jy: int = int(captured_data.get("y", -1))
+			var value: String = String(captured_data.get("value", ""))
+
+			if jx < 0 or jx > 7 or jy < 0 or jy > 7 or value == "":
 				continue
 
-			var parts := String(jumped.name).replace("_captured_", "").split(",")
-			if parts.size() == 2:
-				jumped.name = "%s,%s" % [parts[0], parts[1]]
-			jumped.self_modulate.a = 1.0
-			jumped.visible = true
+			var old_captured := get_node_or_null("PiecesRoot/_captured_%d,%d" % [jx, jy]) as Sprite2D
+			if old_captured != null:
+				old_captured.visible = false
 
-			if jumped.get_parent() == null and pieces_root != null:
-				pieces_root.add_child(jumped)
+			if get_node_or_null("PiecesRoot/%d,%d" % [jx, jy]) == null:
+				_spawn_piece(value, jx, jy)
 
 	prev_moves.clear()
 	prev_jumps.clear()
@@ -1716,8 +1875,9 @@ func _revert_temp_move_if_any() -> void:
 	moves.clear()
 
 	clear_highlights()
-	_update_send_button()
+
 	_compute_mandatory_jumps()
+	_update_send_button()
 
 	if rule_mandatory_jumps and must_jump:
 		_show_mandatory_jump_previews()
@@ -1725,12 +1885,33 @@ func _revert_temp_move_if_any() -> void:
 	input_locked = false
 	
 func _update_send_button() -> void:
-	if not is_instance_valid(send_button):
-		return
-	if has_moved:
+	var can_act := (
+		isTurn and
+		not waitingForOpponent and
+		not spectator_mode and
+		not game_over
+	)
+
+	var show_send := (
+		can_act and
+		has_moved and
+		chain_jump_piece == null
+	)
+
+	var show_hint := (
+		can_act and
+		not has_moved
+	)
+
+	if show_send:
+		_animate_turn_hint(false)
 		_animate_send_button(true)
+	elif show_hint:
+		_animate_send_button(false)
+		_animate_turn_hint(true)
 	else:
 		_animate_send_button(false)
+		_animate_turn_hint(false)
 	
 func _on_board_gui_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
@@ -1763,12 +1944,25 @@ func _on_board_gui_input(event: InputEvent) -> void:
 
 	var clicked_piece_on_cell := get_node_or_null("PiecesRoot/%d,%d" % [lx, ly]) as Sprite2D
 
-	if has_moved and chain_jump_piece == null:
+	if has_moved:
+		# During a required multi-jump, only the same piece can continue.
+		if chain_jump_piece != null:
+			if clicked_piece_on_cell == chain_jump_piece:
+				_revert_temp_move_if_any()
+				return
+
+			if clicked_piece_on_cell == null:
+				_try_commit_move(chain_jump_piece, lx, ly)
+			return
+
+		# Normal temporary move: tapping the moved piece cancels it.
 		if clicked_piece_on_cell != null and check_player(clicked_piece_on_cell):
 			var moved_to := Vector2i(int(prev_moves[-1].x), int(prev_moves[-1].y))
+
 			if _get_piece_pos(clicked_piece_on_cell) == moved_to:
 				_revert_temp_move_if_any()
 				return
+
 			_revert_temp_move_if_any()
 			_select_piece(clicked_piece_on_cell)
 			return
@@ -1944,81 +2138,247 @@ func _get_legal_targets_for_piece(piece: Sprite2D, jumps_only: bool = false) -> 
 
 	return out
 	
-func _try_commit_move(piece: Sprite2D, to_lx: int, to_ly: int) -> void:
+func _try_commit_move(
+	piece: Sprite2D,
+	to_lx: int,
+	to_ly: int,
+) -> void:
 	if input_locked:
 		return
+
 	if piece == null or not is_instance_valid(piece):
 		return
+
 	if not check_player(piece):
 		return
-	if not isTurn or waitingForOpponent or spectator_mode or game_over:
-		return
-	if chain_jump_piece != null and piece != chain_jump_piece:
+
+	if (
+		not isTurn or
+		waitingForOpponent or
+		spectator_mode or
+		game_over
+	):
 		return
 
-	var from_pos: Vector2i = _get_piece_pos(piece)
+	if (
+		chain_jump_piece != null and
+		piece != chain_jump_piece
+	):
+		return
+
+	var from_pos: Vector2i = (
+		_get_piece_pos(
+			piece,
+		)
+	)
+
 	if from_pos == Vector2i(-1, -1):
 		return
 
-	var legal: Dictionary = _get_legal_targets_for_piece(piece, chain_jump_piece != null)
-	var target := Vector2i(to_lx, to_ly)
+	var legal: Dictionary = (
+		_get_legal_targets_for_piece(
+			piece,
+			chain_jump_piece != null,
+		)
+	)
+
+	var target := Vector2i(
+		to_lx,
+		to_ly,
+	)
+
 	if not legal.has(target):
 		return
 
+	# Remember whether this move is part of a mandatory
+	# capture sequence BEFORE changing the board.
+	var was_required_jump: bool = (
+		rule_mandatory_jumps and
+		(
+			must_jump or
+			chain_jump_piece != null
+		)
+	)
+
 	input_locked = true
+
 	clear_highlights()
-	_stop_all_jump_pulses(piece)
+	_stop_all_jump_pulses(
+		piece,
+	)
 
-	var was_jump: bool = abs(from_pos.x - to_lx) == 2 and abs(from_pos.y - to_ly) == 2
-	dbg(["commit_move from=", from_pos, " to=", target, " jump=", was_jump])
+	var was_jump: bool = (
+		absi(
+			from_pos.x -
+				to_lx
+		) == 2 and
+		absi(
+			from_pos.y -
+				to_ly
+		) == 2
+	)
 
-	prev_moves.append(Vector2(from_pos.x, from_pos.y))
-	prev_moves.append(Vector2(to_lx, to_ly))
+	dbg(
+		[
+			"commit_move from=",
+			from_pos,
+			" to=",
+			target,
+			" jump=",
+			was_jump,
+			" required=",
+			was_required_jump,
+		]
+	)
+
+	prev_moves.append(
+		Vector2(
+			from_pos.x,
+			from_pos.y,
+		)
+	)
+
+	prev_moves.append(
+		Vector2(
+			to_lx,
+			to_ly,
+		)
+	)
+
 	has_moved = true
 
-	var move_tw: Tween = move_piece(piece, to_lx, to_ly)
+	var move_tw: Tween = move_piece(
+		piece,
+		to_lx,
+		to_ly,
+	)
+
 	var jump_tw: Tween = null
 
 	if was_jump:
-		jump_tw = jump_piece(from_pos.x, from_pos.y, to_lx, to_ly)
+		jump_tw = jump_piece(
+			from_pos.x,
+			from_pos.y,
+			to_lx,
+			to_ly,
+		)
+
 		chain_jump_piece = piece
 	else:
 		chain_jump_piece = null
 
-	if move_tw != null and move_tw.is_running():
+	if (
+		move_tw != null and
+		move_tw.is_running()
+	):
 		await move_tw.finished
-	if jump_tw != null and jump_tw.is_running():
+
+	if (
+		jump_tw != null and
+		jump_tw.is_running()
+	):
 		await jump_tw.finished
 
-	if piece == null or not is_instance_valid(piece):
+	if (
+		piece == null or
+		not is_instance_valid(piece)
+	):
 		input_locked = false
 		return
 
 	clicked_piece = piece
+
 	_compute_mandatory_jumps()
 
 	if was_jump:
-		var follow_ups: Dictionary = _get_legal_targets_for_piece(piece, true)
+		var follow_ups: Dictionary = (
+			_get_legal_targets_for_piece(
+				piece,
+				true,
+			)
+		)
+
+		# Mandatory multi-jump:
+		# this same checker MUST continue.
 		if follow_ups.size() > 0:
 			moves.clear()
+
 			for k in follow_ups.keys():
 				var v: Vector2i = k
-				moves[Vector2(v.x, v.y)] = piece
-				_add_move_highlight(v.x, v.y)
-			_show_selected_highlight_at(to_lx, to_ly)
+
+				moves[
+					Vector2(
+						v.x,
+						v.y,
+					)
+				] = piece
+
+				_add_move_highlight(
+					v.x,
+					v.y,
+				)
+
+			_show_selected_highlight_at(
+				to_lx,
+				to_ly,
+			)
+
+			# Because chain_jump_piece is still set,
+			# Send remains hidden.
 			_update_send_button()
+
 			input_locked = false
 			return
 
+	# There are no additional captures available.
 	chain_jump_piece = null
 	clicked_piece = piece
 	moves.clear()
+
 	_clear_move_highlights()
-	_show_selected_highlight_at(to_lx, to_ly)
+
+	_show_selected_highlight_at(
+		to_lx,
+		to_ly,
+	)
+
+	if (
+		was_jump and
+		was_required_jump
+	):
+		_animate_turn_hint(
+			false,
+		)
+
+		_animate_send_button(
+			false,
+		)
+
+		input_locked = false
+
+		OpLog.i(
+			LOG_TAG,
+			[
+				"required_jump_complete auto_send steps=",
+				floori(
+					float(
+						prev_moves.size()
+					) /
+					2.0
+				),
+			],
+		)
+
+		call_deferred(
+			"_on_send_pressed",
+		)
+
+		return
 
 	_update_send_button()
+
 	input_locked = false
-	
+
 func _rebuild_from_replay() -> void:
 	OpLog.i(LOG_TAG, ["rebuild_start turn=", isTurn, " spectator=", spectator_mode, " replayLen=", replay.length(), " boards=", replay.count("board:"), " moves=", replay.count("move:") + replay.count("attack:")])
 	replay_locked = true
@@ -2195,9 +2555,15 @@ func _rebuild_from_replay() -> void:
 	if wl != "":
 		game_over = true
 		stop_waiting_animation()
+
 		if is_instance_valid(send_button):
 			send_button.visible = false
 			send_button.disabled = true
+
+		if is_instance_valid(turn_hint_label):
+			turn_hint_label.visible = false
+			turn_hint_label.modulate.a = 0.0
+
 		game_over_visual(wl)
 	else:
 		game_over = false
@@ -2583,22 +2949,41 @@ func check_win_loss() -> String:
 		return "win"
 
 	return ""
-	
+
+func _piece_board_value(piece: Sprite2D) -> String:
+	if piece == null or not is_instance_valid(piece):
+		return ""
+
+	var color: String = get_piece_color(piece)
+
+	if color == "red":
+		return "3" if is_checker_king(piece) else "1"
+	if color == "black":
+		return "4" if is_checker_king(piece) else "2"
+
+	return ""
+
 func jump_piece(prev_x: int, prev_y: int, new_x: int, new_y: int, anim_delay: float = 0.0, replay_mode: bool = false) -> Tween:
-	var x_step := 1 if new_x > prev_x else -1
-	var y_step := 1 if new_y > prev_y else -1
-	var jx := prev_x + x_step
-	var jy := prev_y + y_step
+	var x_step: int = 1 if new_x > prev_x else -1
+	var y_step: int = 1 if new_y > prev_y else -1
+	var jx: int = prev_x + x_step
+	var jy: int = prev_y + y_step
 
 	var jumped_piece := get_node_or_null("PiecesRoot/%d,%d" % [jx, jy]) as Sprite2D
 	if jumped_piece == null:
 		return null
 
+	if not replay_mode:
+		var captured_value: String = _piece_board_value(jumped_piece)
+		if captured_value != "":
+			prev_jumps.append({"x": jx, "y": jy, "value": captured_value})
+
 	jumped_piece.name = "_captured_%d,%d" % [jx, jy]
 
 	var tween := jumped_piece.get_tree().create_tween()
-	var modulate_color := jumped_piece.self_modulate
+	var modulate_color: Color = jumped_piece.self_modulate
 	modulate_color.a = 0.0
+
 	tween.tween_interval(anim_delay)
 	tween.tween_property(jumped_piece, "self_modulate", modulate_color, 0.2).set_trans(Tween.TRANS_LINEAR)
 	tween.tween_callback(func():
@@ -2606,11 +2991,8 @@ func jump_piece(prev_x: int, prev_y: int, new_x: int, new_y: int, anim_delay: fl
 			jumped_piece.queue_free()
 	)
 
-	if not replay_mode:
-		prev_jumps.append(jumped_piece)
-
 	return tween
-	
+
 func move_piece(piece: Sprite2D, x: int, y: int, anim_delay: float = 0.0) -> Tween:
 	var new_pos := _cell_pos(x, y)
 	var tween := piece.get_tree().create_tween()
@@ -2740,6 +3122,10 @@ func play_sent_animation() -> void:
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
+
+		if game_over or spectator_mode:
+			stop_waiting_animation()
+		else:
 			start_waiting_animation()
 	)
 	

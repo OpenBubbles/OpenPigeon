@@ -19,6 +19,23 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
+fun getAdbExecutable(project: Project): String {
+    val localProps = Properties()
+    val localPropsFile = project.rootProject.file("local.properties")
+
+    if (localPropsFile.exists()) {
+        localPropsFile.inputStream().use { localProps.load(it) }
+        val sdkDir = localProps.getProperty("sdk.dir")
+
+        if (!sdkDir.isNullOrBlank()) {
+            val adbName = if (System.getProperty("os.name").startsWith("Windows", true)) "adb.exe" else "adb"
+            return File(sdkDir, "platform-tools/$adbName").absolutePath
+        }
+    }
+
+    return "adb"
+}
+
 fun getGodotExecutable(project: Project): String {
     val localProps = Properties()
     val localPropsFile = project.rootProject.file("local.properties")
@@ -31,6 +48,7 @@ fun getGodotExecutable(project: Project): String {
 }
 
 val godotCmd = getGodotExecutable(project)
+val adbCmd = getAdbExecutable(project)
 val skipGodot = project.hasProperty("skipGodot")
 
 val playerIoAar = file("libs/PlayerIO.aar")
@@ -715,5 +733,26 @@ tasks.configureEach {
         "lintVitalAnalyzeRelease",
         "lintVitalReportRelease",
         "packageRelease" -> dependsOn(prepareGodotReleaseAssets)
+    }
+}
+
+val waitForDebugDevice by tasks.registering(Exec::class) {
+    group = "install"
+    description = "Waits for an ADB device after the debug APK has finished building."
+    dependsOn("assembleDebug")
+    commandLine(adbCmd, "wait-for-device")
+}
+
+val installDebugAfterBuild by tasks.registering(Exec::class) {
+    group = "install"
+    description = "Builds OpenPigeon completely, then installs it over ADB."
+    dependsOn(waitForDebugDevice)
+
+    val debugApk = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk")
+
+    doFirst {
+        val apk = debugApk.get().asFile
+        if (!apk.exists()) throw GradleException("Debug APK was not created: ${apk.absolutePath}")
+        commandLine(adbCmd, "install", "-r", apk.absolutePath)
     }
 }
