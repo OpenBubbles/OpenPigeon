@@ -72,7 +72,9 @@ If you're unsure whether something is allowed, ask: **support@openbubbles.app**.
 5. Open `app/src/main/assets` in the Godot editor once, so the import cache is
    generated.
 
-6. Build and install from Android Studio.
+6. In Godot, navigate to **Editor → Editor Settings → Search for ADB → Disable Shutdown ADB on Exit**. This allows the project to correctly build to the phone.
+
+7. Build and install from Android Studio.
 
 ### Testing in OpenBubbles
 
