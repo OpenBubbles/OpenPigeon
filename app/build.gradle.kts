@@ -5,8 +5,13 @@ import java.util.Properties
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.Sync
 import org.gradle.api.tasks.Exec
-import org.gradle.kotlin.dsl.named
-import org.gradle.kotlin.dsl.register
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URI
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.zip.ZipFile
 
 plugins {
     alias(libs.plugins.androidApplication)
@@ -29,22 +34,346 @@ val godotCmd = getGodotExecutable(project)
 val skipGodot = project.hasProperty("skipGodot")
 
 val playerIoAar = file("libs/PlayerIO.aar")
+
+val playerIoExpectedVersion = "3.9.0"
+val playerIoDownloadPageUrl = "https://playerio.com/download/"
+val playerIoSdkUrl =
+    "https://playerio.com/download/PlayerIO%20SDK.zip"
+
+val playerIoSdkZip =
+    layout.buildDirectory.file(
+        "tmp/playerio/PlayerIO-SDK.zip"
+    )
+
+fun openPlayerIoConnection(
+    url: String
+): HttpURLConnection {
+    return (
+            URI(url)
+                .toURL()
+                .openConnection() as HttpURLConnection
+            ).apply {
+            instanceFollowRedirects = true
+            connectTimeout = 15_000
+            readTimeout = 120_000
+            requestMethod = "GET"
+
+            setRequestProperty(
+                "User-Agent",
+                "OpenPigeon-Gradle"
+            )
+        }
+}
+
+fun verifyPlayerIoAar(
+    aarFile: File
+) {
+    if (!aarFile.isFile) {
+        throw GradleException(
+            "PlayerIO AAR was not created: ${aarFile.absolutePath}"
+        )
+    }
+
+    if (aarFile.length() < 1024L) {
+        throw GradleException(
+            "Downloaded PlayerIO AAR is unexpectedly small " +
+                    "(${aarFile.length()} bytes)."
+        )
+    }
+
+    try {
+        ZipFile(aarFile).use { aar ->
+            if (aar.getEntry("AndroidManifest.xml") == null) {
+                throw GradleException(
+                    "PlayerIO.aar does not contain AndroidManifest.xml."
+                )
+            }
+
+            if (aar.getEntry("classes.jar") == null) {
+                throw GradleException(
+                    "PlayerIO.aar does not contain classes.jar."
+                )
+            }
+        }
+    } catch (error: GradleException) {
+        throw error
+    } catch (error: Exception) {
+        throw GradleException(
+            "PlayerIO.aar is not a valid Android AAR.",
+            error
+        )
+    }
+}
+
+fun replaceFileAtomically(
+    source: File,
+    destination: File
+) {
+    destination.parentFile.mkdirs()
+
+    try {
+        Files.move(
+            source.toPath(),
+            destination.toPath(),
+            StandardCopyOption.REPLACE_EXISTING,
+            StandardCopyOption.ATOMIC_MOVE
+        )
+    } catch (_: AtomicMoveNotSupportedException) {
+        Files.move(
+            source.toPath(),
+            destination.toPath(),
+            StandardCopyOption.REPLACE_EXISTING
+        )
+    }
+}
+
+val preparePlayerIoSdk by tasks.registering {
+    group = "setup"
+
+    description =
+        "Downloads and extracts the PlayerIO Android SDK when PlayerIO.aar is missing."
+
+    outputs.file(playerIoAar)
+
+    doLast {
+        if (playerIoAar.exists()) {
+            verifyPlayerIoAar(
+                playerIoAar
+            )
+
+            logger.lifecycle(
+                "Using existing PlayerIO SDK: ${playerIoAar.absolutePath}"
+            )
+
+            return@doLast
+        }
+
+        logger.lifecycle(
+            "PlayerIO.aar is not installed. " +
+                    "Preparing PlayerIO SDK v$playerIoExpectedVersion..."
+        )
+
+        val versionConnection =
+            openPlayerIoConnection(
+                playerIoDownloadPageUrl
+            )
+
+        val downloadPage = try {
+            val responseCode =
+                versionConnection.responseCode
+
+            if (responseCode !in 200..299) {
+                throw GradleException(
+                    "Unable to verify the PlayerIO SDK version. " +
+                            "playerio.com returned HTTP $responseCode."
+                )
+            }
+
+            versionConnection
+                .inputStream
+                .bufferedReader()
+                .use {
+                    it.readText()
+                }
+        } finally {
+            versionConnection.disconnect()
+        }
+
+        if (
+            !downloadPage.contains(
+                "v$playerIoExpectedVersion"
+            )
+        ) {
+            throw GradleException(
+                """
+                PlayerIO's download page no longer advertises SDK v$playerIoExpectedVersion.
+
+                OpenPigeon intentionally will not download a different PlayerIO SDK automatically
+                because Crazy 8 has been tested against v$playerIoExpectedVersion.
+
+                Check https://playerio.com/download/ and update OpenPigeon's PlayerIO version
+                only after the newer SDK has been tested with Crazy 8.
+                """.trimIndent()
+            )
+        }
+
+        val sdkZip =
+            playerIoSdkZip
+                .get()
+                .asFile
+
+        sdkZip.parentFile.mkdirs()
+
+        val partialZip =
+            File(
+                sdkZip.parentFile,
+                "${sdkZip.name}.part"
+            )
+
+        partialZip.delete()
+        sdkZip.delete()
+
+        logger.lifecycle(
+            "Downloading PlayerIO SDK v$playerIoExpectedVersion..."
+        )
+
+        val downloadConnection =
+            openPlayerIoConnection(
+                playerIoSdkUrl
+            )
+
+        try {
+            val responseCode =
+                downloadConnection.responseCode
+
+            if (responseCode !in 200..299) {
+                throw GradleException(
+                    "PlayerIO SDK download failed with HTTP $responseCode."
+                )
+            }
+
+            downloadConnection
+                .inputStream
+                .buffered()
+                .use { input ->
+
+                    partialZip
+                        .outputStream()
+                        .buffered()
+                        .use { output ->
+
+                            input.copyTo(
+                                output
+                            )
+                        }
+                }
+        } catch (error: Exception) {
+            partialZip.delete()
+
+            if (error is GradleException) {
+                throw error
+            }
+
+            throw GradleException(
+                "Unable to download the PlayerIO SDK.",
+                error
+            )
+        } finally {
+            downloadConnection.disconnect()
+        }
+
+        if (
+            !partialZip.exists() ||
+            partialZip.length() < 1024L
+        ) {
+            partialZip.delete()
+
+            throw GradleException(
+                "PlayerIO SDK download was empty or incomplete."
+            )
+        }
+
+        replaceFileAtomically(
+            partialZip,
+            sdkZip
+        )
+
+        playerIoAar.parentFile.mkdirs()
+
+        val temporaryAar =
+            File(
+                playerIoAar.parentFile,
+                "${playerIoAar.name}.part"
+            )
+
+        temporaryAar.delete()
+
+        try {
+            ZipFile(
+                sdkZip
+            ).use { sdk ->
+                val aarEntry =
+                    sdk.entries()
+                        .asSequence()
+                        .firstOrNull { entry ->
+
+                            if (entry.isDirectory) {
+                                false
+                            } else {
+                                val path =
+                                    entry.name.replace(
+                                        '\\',
+                                        '/'
+                                    )
+
+                                path == "Android/PlayerIO.aar" ||
+                                        path.endsWith(
+                                            "/Android/PlayerIO.aar"
+                                        )
+                            }
+                        }
+                        ?: throw GradleException(
+                            "The PlayerIO SDK ZIP does not contain Android/PlayerIO.aar."
+                        )
+
+                sdk.getInputStream(
+                    aarEntry
+                ).use { input ->
+
+                    temporaryAar
+                        .outputStream()
+                        .buffered()
+                        .use { output ->
+
+                            input.copyTo(
+                                output
+                            )
+                        }
+                }
+            }
+
+            verifyPlayerIoAar(
+                temporaryAar
+            )
+
+            replaceFileAtomically(
+                temporaryAar,
+                playerIoAar
+            )
+
+            logger.lifecycle(
+                "PlayerIO SDK v$playerIoExpectedVersion installed at " +
+                        playerIoAar.absolutePath
+            )
+        } catch (error: Exception) {
+            temporaryAar.delete()
+
+            if (error is GradleException) {
+                throw error
+            }
+
+            throw GradleException(
+                "Unable to extract PlayerIO.aar from the PlayerIO SDK.",
+                error
+            )
+        } finally {
+            temporaryAar.delete()
+            sdkZip.delete()
+        }
+    }
+}
+
+val playerIoDependency =
+    files(
+        playerIoAar
+    ).builtBy(
+        preparePlayerIoSdk
+    )
+
 if (!playerIoAar.exists()) {
-    throw GradleException(
-        """
-        Missing required dependency: app/libs/PlayerIO.aar
-
-        The Player.IO Android SDK is proprietary and cannot be redistributed,
-        so it is not included in this repository. Crazy8 multiplayer requires it.
-
-          1. Register a free account at https://playerio.com
-          2. Create a game and note its game ID and shared secret
-          3. Download the Android SDK and place PlayerIO.aar at:
-             ${playerIoAar.absolutePath}
-          4. Create config.properties in the repository root (see below)
-
-        See CONTRIBUTING.md and THIRD-PARTY-NOTICES.md.
-        """.trimIndent()
+    logger.lifecycle(
+        "PlayerIO.aar is not present yet. " +
+                "Gradle will download it automatically when required."
     )
 }
 
@@ -189,7 +518,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.ui.graphics.android)
     implementation(libs.androidx.media3.common.ktx)
-    implementation(files(playerIoAar))
+    implementation(playerIoDependency)
     implementation(libs.androidx.ui)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
