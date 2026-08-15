@@ -353,7 +353,7 @@ func _on_send_pressed() -> void:
 		dbg(["send_pressed blocked hasMoved=", has_moved, " prevMoves=", prev_moves.size()])
 		return
 
-	OpLog.i(LOG_TAG, ["send_pressed moves=", prev_moves.size() / 2])
+	OpLog.i(LOG_TAG, ["send_pressed moves=", floori(float(prev_moves.size()) / 2.0)])
 
 	isTurn = false
 	_animate_send_button(false)
@@ -597,6 +597,125 @@ func _clear_pieces() -> void:
 	clicked_piece = null
 	has_moved = false
 	chain_jump_piece = null
+
+func _board_value_side(value: String) -> int:
+	match value:
+		"1", "3":
+			return 1 # red
+		"2", "4":
+			return 2 # black
+		_:
+			return 0
+
+func _infer_single_move_from_boards(
+	initial_board: PackedStringArray,
+	final_board: PackedStringArray,
+) -> String:
+	if initial_board.size() < 64 or final_board.size() < 64:
+		return ""
+
+	var candidates: Array[Dictionary] = []
+
+	for side in [1, 2]:
+		var removed: Array[int] = []
+		var added: Array[int] = []
+
+		for idx in range(64):
+			var before := String(initial_board[idx])
+			var after := String(final_board[idx])
+
+			if before == after:
+				continue
+
+			var before_side := _board_value_side(before)
+			var after_side := _board_value_side(after)
+
+			if before_side == side and after_side != side:
+				removed.append(idx)
+
+			if after_side == side and before_side != side:
+				added.append(idx)
+
+		if removed.size() == 1 and added.size() == 1:
+			candidates.append({
+				"from": removed[0],
+				"to": added[0],
+			})
+
+	if candidates.size() != 1:
+		return ""
+
+	var candidate: Dictionary = candidates[0]
+
+	var from_idx := int(candidate["from"])
+	var to_idx := int(candidate["to"])
+
+	var from_x: int = from_idx % 8
+	var from_y: int = floori(float(from_idx) / 8.0)
+	var to_x: int = to_idx % 8
+	var to_y: int = floori(float(to_idx) / 8.0)
+
+	var dx: int = absi(from_x - to_x)
+	var dy: int = absi(from_y - to_y)
+
+	var kind: String = ""
+
+	if dx == 1 and dy == 1:
+		kind = "move"
+	elif dx == 2 and dy == 2:
+		kind = "attack"
+	else:
+		return ""
+
+	return "%s:%d,%d,%d,%d" % [
+		kind,
+		from_x,
+		from_y,
+		to_x,
+		to_y,
+	]
+
+func _apply_board_snapshot(
+	board_values: PackedStringArray,
+) -> void:
+	if board_values.size() < 64:
+		OpLog.w(
+			LOG_TAG,
+			[
+				"apply_board_snapshot invalid size=",
+				board_values.size(),
+			],
+		)
+		return
+
+	_prepare_scene_once()
+	_clear_pieces()
+
+	selected_highlight = null
+
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	for ay in range(8):
+		for ax in range(8):
+			var idx := ay * 8 + ax
+			var value := String(board_values[idx])
+
+			if value == "0":
+				continue
+
+			var logical := _abs_to_logical(
+				ax,
+				ay,
+			)
+
+			_spawn_piece(
+				value,
+				logical.x,
+				logical.y,
+			)
+
+	await get_tree().process_frame
 
 func _apply_bg_for_dark(is_dark: bool) -> void:
 	if is_instance_valid(background):
@@ -1944,6 +2063,35 @@ func _rebuild_from_replay() -> void:
 		final_board = initial_board
 	if initial_board.is_empty():
 		OpLog.w(LOG_TAG, ["rebuild has no board entries raw=", replay])
+	
+	if (
+		replay_moves.is_empty()
+		and not initial_board.is_empty()
+		and not final_board.is_empty()
+		and initial_board != final_board
+	):
+		var inferred_move := _infer_single_move_from_boards(
+			initial_board,
+			final_board,
+		)
+
+		if inferred_move != "":
+			replay_moves.append(
+				inferred_move,
+			)
+
+			OpLog.i(
+				LOG_TAG,
+				[
+					"rebuild inferred board-only replay move=",
+					inferred_move,
+				],
+			)
+		else:
+			OpLog.w(
+				LOG_TAG,
+				"rebuild could not infer board-only replay move; final snapshot will be applied",
+			)
 
 	if not initial_board.is_empty():
 		for ay in range(8):
@@ -1998,6 +2146,39 @@ func _rebuild_from_replay() -> void:
 
 	await get_tree().process_frame
 	await get_tree().process_frame
+
+	if not final_board.is_empty():
+		var expected_board := ",".join(
+			final_board,
+		)
+
+		var actual_board := _current_board_string()
+
+		if actual_board != expected_board:
+			OpLog.w(
+				LOG_TAG,
+				[
+					"rebuild final board mismatch; applying authoritative snapshot",
+					" replayMoves=",
+					replay_moves.size(),
+					" actual=",
+					actual_board,
+					" expected=",
+					expected_board,
+				],
+			)
+
+			await _apply_board_snapshot(
+				final_board,
+			)
+
+			OpLog.i(
+				LOG_TAG,
+				[
+					"rebuild final snapshot applied ",
+					_piece_summary(),
+				],
+			)
 
 	_compute_mandatory_jumps()
 
@@ -2351,7 +2532,7 @@ func export_replay() -> String:
 	var boardStr := ",".join(board_values)
 
 	var move_str := "|"
-	var step_count := prev_moves.size() / 2
+	var step_count: int = floori(float(prev_moves.size()) / 2.0)
 	for i in range(0, prev_moves.size(), 2):
 		var p1: Vector2 = prev_moves[i]
 		var p2: Vector2 = prev_moves[i + 1]
