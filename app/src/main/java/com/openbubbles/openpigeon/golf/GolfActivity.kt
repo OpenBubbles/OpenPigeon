@@ -179,7 +179,7 @@ class GolfActivity : AppCompatActivity() {
     private var dualReplayOpponentDisplayedStrokes = 0
     private var dualReplayMineBaseStrokes = 0
     private var dualReplayOpponentBaseStrokes = 0
-
+    private var replayStrokeHudLocked = false
     private var dualReplayOpponentBallCourse: PointF? = null
     private val dualReplayMineVelocityCourse = PointF(0f, 0f)
     private val dualReplayOpponentVelocityCourse = PointF(0f, 0f)
@@ -1415,7 +1415,7 @@ class GolfActivity : AppCompatActivity() {
     }
 
     private fun updateStrokeHud(data: GolfGameData? = gameData) {
-        if (!::localStrokeLabel.isInitialized || !::opponentStrokeLabel.isInitialized) return
+        if (!::localStrokeLabel.isInitialized || !::opponentStrokeLabel.isInitialized || replayStrokeHudLocked) return
 
         attachStrokeCountersToAvatarAnchors()
         syncStrokeCounterTextSizing()
@@ -1437,7 +1437,7 @@ class GolfActivity : AppCompatActivity() {
         }
 
         val localCount = totalStrokesThroughHole(localReplayForHud, mapNum)
-        val opponentCount = totalStrokesThroughHole(opponentReplay, mapNum)
+        val opponentCount = totalStrokesBeforeHole(opponentReplay, mapNum)
 
         setStrokeHudCounts(
             localCount = localCount, opponentCount = opponentCount
@@ -2401,6 +2401,8 @@ class GolfActivity : AppCompatActivity() {
             val replayData = replayMapNumCandidate?.let { replayMapNum ->
                 parsed.copy(mapNum = replayMapNum)
             }
+
+            replayStrokeHudLocked = shouldReplay
 
             OpenPigeonLog.i(
                 TAG,
@@ -3930,6 +3932,8 @@ class GolfActivity : AppCompatActivity() {
     private fun startDualReplayFromData(
         data: GolfGameData,
     ) {
+        replayStrokeHudLocked = true
+
         val g = currentMap ?: return
 
         val p1Shots = GolfReplay.segmentAt(data.replay, data.mapNum)
@@ -4362,6 +4366,7 @@ class GolfActivity : AppCompatActivity() {
         dualReplayWaitingToFire = false
         dualReplayPausedByLifecycle = false
         dualReplayRemainingFireDelayMs = 0L
+        replayStrokeHudLocked = false
 
         renderer.removeCallbacks(dualReplayTick)
         renderer.clearReplayAimPreview()
@@ -4426,6 +4431,8 @@ class GolfActivity : AppCompatActivity() {
                 opponentCount = dualReplayOpponentBaseStrokes + dualReplayOpponentShots.size
             )
         }
+
+        replayStrokeHudLocked = false
 
         if (mapNum + 1 < holeCount) {
             if (immediateAdvance) {
