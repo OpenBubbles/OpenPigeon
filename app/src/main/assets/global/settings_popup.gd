@@ -1454,6 +1454,113 @@ func make_game_switch_card(title: String, subtitle: String, initial_on: bool, on
 
 	return card
 
+func make_game_option_card(title: String, subtitle: String, items: Array[String], selected_index: int, on_selected: Callable) -> Control:
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.custom_minimum_size = Vector2(0, 62)
+
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = Color(0.10, 0.10, 0.12, 0.54)
+	card_style.border_color = Color(1.0, 1.0, 1.0, 0.14)
+	card_style.border_width_left = 1
+	card_style.border_width_top = 1
+	card_style.border_width_right = 1
+	card_style.border_width_bottom = 1
+	card_style.corner_radius_top_left = 16
+	card_style.corner_radius_top_right = 16
+	card_style.corner_radius_bottom_left = 16
+	card_style.corner_radius_bottom_right = 16
+	card_style.content_margin_left = 12
+	card_style.content_margin_right = 12
+	card_style.content_margin_top = 8
+	card_style.content_margin_bottom = 8
+	card.add_theme_stylebox_override("panel", card_style)
+
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	card.add_child(row)
+
+	var copy := VBoxContainer.new()
+	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_child(copy)
+
+	var title_label := Label.new()
+	title_label.text = title
+	title_label.add_theme_font_size_override("font_size", 16)
+	title_label.add_theme_color_override("font_color", Color.WHITE)
+	copy.add_child(title_label)
+
+	var subtitle_label := Label.new()
+	subtitle_label.text = subtitle
+	subtitle_label.add_theme_font_size_override("font_size", 12)
+	subtitle_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.62))
+	copy.add_child(subtitle_label)
+
+	var option := OptionButton.new()
+	option.custom_minimum_size = Vector2(130, 40)
+	option.size_flags_horizontal = Control.SIZE_SHRINK_END
+	option.focus_mode = Control.FOCUS_NONE
+	option.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	option.fit_to_longest_item = false
+	option.add_theme_font_size_override("font_size", 15)
+	option.add_theme_color_override("font_color", Color.WHITE)
+
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.12, 0.12, 0.14, 0.88)
+	normal.border_color = Color(1.0, 1.0, 1.0, 0.20)
+	normal.border_width_left = 1
+	normal.border_width_top = 1
+	normal.border_width_right = 1
+	normal.border_width_bottom = 1
+	normal.corner_radius_top_left = 12
+	normal.corner_radius_top_right = 12
+	normal.corner_radius_bottom_left = 12
+	normal.corner_radius_bottom_right = 12
+	normal.content_margin_left = 12
+	normal.content_margin_right = 12
+
+	var hover := normal.duplicate() as StyleBoxFlat
+	hover.bg_color = Color(0.17, 0.17, 0.20, 0.94)
+
+	option.add_theme_stylebox_override("normal", normal)
+	option.add_theme_stylebox_override("hover", hover)
+	option.add_theme_stylebox_override("pressed", hover)
+	option.add_theme_stylebox_override("focus", hover)
+
+	for i in range(items.size()):
+		option.add_item(items[i], i)
+
+	if not items.is_empty():
+		option.select(clampi(selected_index, 0, items.size() - 1))
+
+	option.item_selected.connect(func(index: int) -> void:
+		if on_selected.is_valid():
+			on_selected.call(index)
+	)
+
+	var popup_menu := option.get_popup()
+	popup_menu.add_theme_font_size_override("font_size", 15)
+	popup_menu.add_theme_color_override("font_color", Color(0.95, 0.95, 0.95, 1.0))
+	popup_menu.add_theme_color_override("font_hover_color", Color.WHITE)
+
+	var popup_style := StyleBoxFlat.new()
+	popup_style.bg_color = Color(0.10, 0.10, 0.12, 0.98)
+	popup_style.border_color = Color(1.0, 1.0, 1.0, 0.18)
+	popup_style.border_width_left = 1
+	popup_style.border_width_top = 1
+	popup_style.border_width_right = 1
+	popup_style.border_width_bottom = 1
+	popup_style.corner_radius_top_left = 10
+	popup_style.corner_radius_top_right = 10
+	popup_style.corner_radius_bottom_left = 10
+	popup_style.corner_radius_bottom_right = 10
+	popup_menu.add_theme_stylebox_override("panel", popup_style)
+
+	row.add_child(option)
+	return card
 
 func _make_game_switch_button() -> Button:
 	var btn := Button.new()

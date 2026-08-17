@@ -433,17 +433,7 @@ const DEFAULT_CUP_STYLE: int = 1
 const DEFAULT_CUP_INNER_ID: int = 1
 const DEFAULT_CUP_TINT := Color.WHITE
 const EXPECTED_TEXTURE_SIZE := Vector2i(600, 300)
-const CUP_OUTER_TEXTURE_MAP := {
-	1: "res://pong/cups/cup1.png",
-}
-
-const CUP_INNER_TEXTURE_MAP := {
-	1: "res://pong/cups/cup1_inner.png",
-}
-
-const CUP_STYLE_INNER_MAP := {
-	1: 1,
-}
+const CUP_STYLE_COUNT: int = 21
 
 @export_range(1, 999, 1) var cup_style: int = DEFAULT_CUP_STYLE
 @export var cup_tint: Color = DEFAULT_CUP_TINT
@@ -627,7 +617,7 @@ func _register_instance() -> void:
 func set_cup_style(style: int, tint: Color = Color.WHITE) -> void:
 	var resolved_style := _resolve_cup_style(style)
 	cup_style = resolved_style
-	cup_tint = tint
+	cup_tint = tint if resolved_style == DEFAULT_CUP_STYLE else Color.WHITE
 
 	var style_textures := _get_style_textures(resolved_style)
 	outer_texture = style_textures.outer
@@ -646,15 +636,13 @@ func set_cup_style(style: int, tint: Color = Color.WHITE) -> void:
 	else:
 		_apply_material_textures()
 
-
 func set_cup_tint(tint: Color) -> void:
-	cup_tint = tint
+	cup_tint = tint if cup_style == DEFAULT_CUP_STYLE else Color.WHITE
 
 	if _outer_material == null:
 		_build_materials()
 	else:
 		_apply_material_textures()
-
 
 func set_cup_textures(outer: Texture2D, inner: Texture2D) -> void:
 	outer_texture = outer
@@ -673,26 +661,16 @@ func set_cup_textures(outer: Texture2D, inner: Texture2D) -> void:
 	else:
 		_apply_material_textures()
 
-
 static func has_cup_style(style: int) -> bool:
-	return CUP_OUTER_TEXTURE_MAP.has(style)
-
+	return style >= 1 and style <= CUP_STYLE_COUNT
 
 static func available_cup_styles(max_style: int = 999) -> Array[int]:
 	var styles: Array[int] = []
-
-	for key in CUP_OUTER_TEXTURE_MAP.keys():
-		var style := int(key)
-		if style <= max_style:
-			styles.append(style)
-
-	styles.sort()
+	for style in range(1, mini(CUP_STYLE_COUNT, max_style) + 1): styles.append(style)
 	return styles
-
 
 static func clear_style_texture_cache() -> void:
 	_style_texture_cache.clear()
-
 
 static func _resolve_cup_style(style: int) -> int:
 	if has_cup_style(style):
@@ -708,15 +686,15 @@ static func _resolve_cup_style(style: int) -> int:
 
 
 static func _cup_outer_path(style: int) -> String:
-	return String(CUP_OUTER_TEXTURE_MAP.get(style, ""))
+	return "%s/cup%d.png" % [CUP_TEXTURE_DIR, style]
 
 
 static func _inner_id_for_style(style: int) -> int:
-	return int(CUP_STYLE_INNER_MAP.get(style, DEFAULT_CUP_INNER_ID))
+	return style
 
 
 static func _cup_inner_path_from_id(inner_id: int) -> String:
-	return String(CUP_INNER_TEXTURE_MAP.get(inner_id, ""))
+	return "%s/cup%d_inner.png" % [CUP_TEXTURE_DIR, inner_id]
 
 
 static func _cup_inner_path(style: int) -> String:

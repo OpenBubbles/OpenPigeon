@@ -4,6 +4,15 @@ class_name PongBall
 const LOG_TAG := "PongBall"
 const DEBUG_PONG_BALL := false
 
+const BALL_TEXTURE_DIR := "res://pong/balls"
+const DEFAULT_BALL_STYLE: int = 1
+const BALL_STYLE_COUNT: int = 21
+
+@export_range(1, BALL_STYLE_COUNT, 1) var ball_style: int = DEFAULT_BALL_STYLE
+
+var _ball_material: StandardMaterial3D
+static var _ball_texture_cache: Dictionary = {}
+
 func dbg(parts: Variant) -> void:
 	if DEBUG_PONG_BALL:
 		OpLog.d(LOG_TAG, parts)
@@ -55,7 +64,48 @@ func _ready() -> void:
 	self.max_contacts_reported = 8
 	
 	_replay_every = maxi(1, roundi(Engine.physics_ticks_per_second / 30.0))
+	set_ball_style(ball_style)
 
+func set_ball_style(style: int) -> void:
+	ball_style = clampi(style, 1, BALL_STYLE_COUNT)
+
+	var sphere := get_node_or_null("CSGSphere3D") as GeometryInstance3D
+	if sphere == null:
+		OpLog.w(LOG_TAG, ["ball_style_missing_mesh style=", ball_style])
+		return
+
+	if _ball_material == null:
+		_ball_material = StandardMaterial3D.new()
+		_ball_material.roughness = 1.0
+		_ball_material.metallic = 0.0
+
+	var path := "%s/ball%d.png" % [BALL_TEXTURE_DIR, ball_style]
+	var texture: Texture2D = _ball_texture_cache.get(path) as Texture2D
+
+	if texture == null and ResourceLoader.exists(path):
+		texture = ResourceLoader.load(path) as Texture2D
+		if texture != null:
+			_ball_texture_cache[path] = texture
+
+	if texture == null:
+		var fallback_path := "%s/ball%d.png" % [BALL_TEXTURE_DIR, DEFAULT_BALL_STYLE]
+		OpLog.w(LOG_TAG, ["ball_style_missing style=", ball_style, " path=", path, " fallback=", fallback_path])
+
+		if _ball_texture_cache.has(fallback_path):
+			texture = _ball_texture_cache[fallback_path] as Texture2D
+		elif ResourceLoader.exists(fallback_path):
+			texture = ResourceLoader.load(fallback_path) as Texture2D
+			if texture != null:
+				_ball_texture_cache[fallback_path] = texture
+
+	_ball_material.albedo_texture = texture
+	sphere.material_override = _ball_material
+
+static func available_ball_styles() -> Array[int]:
+	var styles: Array[int] = []
+	for style in range(1, BALL_STYLE_COUNT + 1):
+		styles.append(style)
+	return styles
 
 func _physics_process(delta: float) -> void:
 	if not is_mine:

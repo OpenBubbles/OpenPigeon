@@ -23,13 +23,18 @@ const CUP_STYLE_SETTINGS_PATH := "user://settings.cfg"
 const CUP_STYLE_SETTINGS_SECTION := "beer"
 const CUP_STYLE_SETTINGS_FALLBACK_SECTION := "pong"
 const CUP_STYLE_SETTINGS_KEY := "cup_style"
+const BALL_STYLE_SETTINGS_KEY := "ball_style"
+
 const DEFAULT_CUP_STYLE: int = 1
+const DEFAULT_BALL_STYLE: int = 1
+const BALL_STYLE_COUNT: int = 21
 
 # my_cups is the rack the active player shoots into, while replay_cups is the rack nearest the local player.
 const LOCAL_CUP_TINT := Color(0.92, 0.08, 0.10, 1.0)
 const OPPONENT_CUP_TINT := Color(0.08, 0.30, 0.95, 1.0)
 
 var current_cup_style: int = DEFAULT_CUP_STYLE
+var current_ball_style: int = DEFAULT_BALL_STYLE
 
 func dbg(parts: Variant) -> void:
 	if DEBUG_PONG:
@@ -203,6 +208,42 @@ func _get_dev_data() -> String:
 
 func _get_settings_avatar_display() -> Control:
 	return player_avatar_display
+
+func _add_settings_rows(_container, popup_script) -> void:
+	var ball_items: Array[String] = []
+	var cup_items: Array[String] = []
+
+	for style in range(1, BALL_STYLE_COUNT + 1):
+		ball_items.append("Ball %d" % style)
+
+	for style in range(1, Cups.CUP_STYLE_COUNT + 1):
+		cup_items.append("Cup %d" % style)
+
+	var ball_row: Control = popup_script.make_game_option_card(
+		"Balls",
+		"Choose your ball",
+		ball_items,
+		current_ball_style - 1,
+		func(index: int) -> void:
+			var style: int = index + 1
+			SettingsManager.set_setting(CUP_STYLE_SETTINGS_SECTION, BALL_STYLE_SETTINGS_KEY, style)
+			_apply_ball_style(style, "settings")
+	)
+
+	popup_script.add_custom_setting(ball_row)
+
+	var cup_row: Control = popup_script.make_game_option_card(
+		"Cups",
+		"Choose your cups",
+		cup_items,
+		current_cup_style - 1,
+		func(index: int) -> void:
+			var style: int = index + 1
+			SettingsManager.set_setting(CUP_STYLE_SETTINGS_SECTION, CUP_STYLE_SETTINGS_KEY, style)
+			_apply_cup_style(style, "settings")
+	)
+
+	popup_script.add_custom_setting(cup_row)
 
 func _get_rules_title() -> String:
 	return "Cup Pong"
@@ -600,13 +641,13 @@ func _on_cuppong_menu_help_pressed() -> void:
 	_hide_cuppong_menu()
 	call_deferred("_on_rules_button_pressed")
 
-func _read_cup_style_setting() -> Dictionary:
+func _read_style_setting(key: String, default_style: int) -> Dictionary:
 	var config := ConfigFile.new()
 	var load_error := config.load(CUP_STYLE_SETTINGS_PATH)
 
 	if load_error != OK:
 		return {
-			"style": DEFAULT_CUP_STYLE,
+			"style": default_style,
 			"source": "default(load_error=%d)" % load_error,
 		}
 
@@ -614,32 +655,27 @@ func _read_cup_style_setting() -> Dictionary:
 		CUP_STYLE_SETTINGS_SECTION,
 		CUP_STYLE_SETTINGS_FALLBACK_SECTION,
 	]:
-		if config.has_section_key(section, CUP_STYLE_SETTINGS_KEY):
+		if config.has_section_key(section, key):
 			return {
-				"style": maxi(
-					1,
-					int(
-						config.get_value(
-							section,
-							CUP_STYLE_SETTINGS_KEY,
-							DEFAULT_CUP_STYLE
-						)
-					)
-				),
-				"source": "%s/%s" % [
-					section,
-					CUP_STYLE_SETTINGS_KEY
-				],
+				"style": maxi(1, int(config.get_value(section, key, default_style))),
+				"source": "%s/%s" % [section, key],
 			}
 
 	return {
-		"style": DEFAULT_CUP_STYLE,
+		"style": default_style,
 		"source": "default(missing_key)",
 	}
 
 
+func _read_cup_style_setting() -> Dictionary:
+	return _read_style_setting(CUP_STYLE_SETTINGS_KEY, DEFAULT_CUP_STYLE)
+
+
+func _read_ball_style_setting() -> Dictionary:
+	return _read_style_setting(BALL_STYLE_SETTINGS_KEY, DEFAULT_BALL_STYLE)
+
 func _apply_cup_style(style: int, source: String = "runtime") -> void:
-	current_cup_style = maxi(style, DEFAULT_CUP_STYLE)
+	current_cup_style = clampi(style, 1, Cups.CUP_STYLE_COUNT)
 
 	# my_cups is the target/opponent rack in the current Cup Pong flow.
 	if is_instance_valid(my_cups):
@@ -665,6 +701,17 @@ func _apply_cup_style(style: int, source: String = "runtime") -> void:
 		" available=", Cups.available_cup_styles()
 	])
 
+func _apply_ball_style(style: int, source: String = "runtime") -> void:
+	current_ball_style = clampi(style, 1, BALL_STYLE_COUNT)
+
+	for child: Node in get_children():
+		if child is PongBall:
+			(child as PongBall).set_ball_style(current_ball_style)
+
+	OpLog.i(LOG_TAG, [
+		"ball_style_applied style=", current_ball_style,
+		" source=", source
+	])
 
 func refresh_cup_style_from_settings() -> void:
 	var setting := _read_cup_style_setting()
@@ -673,6 +720,17 @@ func refresh_cup_style_from_settings() -> void:
 		String(setting.source)
 	)
 
+func refresh_ball_style_from_settings() -> void:
+	var setting := _read_ball_style_setting()
+	_apply_ball_style(
+		int(setting.style),
+		String(setting.source)
+	)
+
+
+func refresh_custom_styles_from_settings() -> void:
+	refresh_cup_style_from_settings()
+	refresh_ball_style_from_settings()
 
 func _apply_physics_tick_rate() -> void:
 	if not _physics_tick_rate_overridden:
@@ -785,7 +843,7 @@ func _on_game_ready() -> void:
 
 	_stabilized_mats.clear()
 	_stabilize_geometry(self)
-	refresh_cup_style_from_settings()
+	refresh_custom_styles_from_settings()
 
 	Engine.physics_jitter_fix = 0.5
 
@@ -1394,6 +1452,7 @@ func _process_game_state():
 			new_ball.collision_mask = 0
 
 			add_child(new_ball)
+			new_ball.set_ball_style(current_ball_style)
 			preview_ball = new_ball
 	_apply_debug_hides()
 	_dump_cup_state("cupstate_mine", my_cups)
@@ -1629,6 +1688,7 @@ func spawn_ball(is_replay: bool = false) -> RigidBody3D:
 		ball_ready = true
 
 	add_child(new_ball)
+	new_ball.set_ball_style(current_ball_style)
 	current_ball = new_ball
 	dbg([
 		"spawn_ball replay=", is_replay,
