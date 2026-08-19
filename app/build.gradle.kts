@@ -1,16 +1,12 @@
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.Properties
-import org.gradle.api.tasks.PathSensitivity
-import org.gradle.api.tasks.Sync
-import org.gradle.api.tasks.Exec
-import java.io.File
 import java.net.HttpURLConnection
 import java.net.URI
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.Properties
 import java.util.zip.ZipFile
 
 plugins {
@@ -516,10 +512,8 @@ dependencies {
     implementation(libs.androidx.navigation.ui.ktx)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.androidx.ui.graphics.android)
     implementation(libs.androidx.media3.common.ktx)
     implementation(playerIoDependency)
-    implementation(libs.androidx.ui)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -529,6 +523,9 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2025.05.00")
     implementation(composeBom)
     androidTestImplementation(composeBom)
+    implementation("androidx.compose.runtime:runtime")
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test:runner:1.5.2")
     androidTestImplementation("androidx.test:rules:1.5.0")

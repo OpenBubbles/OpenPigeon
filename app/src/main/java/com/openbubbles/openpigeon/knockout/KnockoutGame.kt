@@ -3,23 +3,12 @@ package com.openbubbles.openpigeon.knockout
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.dp
-import androidx.glance.GlanceModifier
-import androidx.glance.Image
 import androidx.glance.ImageProvider
-import androidx.glance.action.ActionParameters
-import androidx.glance.action.actionParametersOf
-import androidx.glance.action.clickable
-import androidx.glance.appwidget.action.actionRunCallback
-import androidx.glance.layout.Box
-import androidx.glance.layout.Row
-import androidx.glance.layout.padding
-import com.openbubbles.openpigeon.ConfigureCallback
+import com.openbubbles.openpigeon.ConfigImageOption
 import com.openbubbles.openpigeon.DynamicPreviewGame
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
-import com.openbubbles.openpigeon.RenderConfigOption
-import com.openbubbles.openpigeon.godot.GodotGameActivity
+import com.openbubbles.openpigeon.RenderConfigImageOption
 import com.openbubbles.openpigeon.util.OpenPigeonLog
 import kotlin.math.PI
 import kotlin.math.cos
@@ -49,37 +38,38 @@ class KnockoutGame : Game, DynamicPreviewGame {
     override fun gameClass(): Class<*> = KnockoutActivity::class.java
 
     @Composable
-    override fun Configuration(context: Context?) {
-        val maps = listOf("Map 1", "Map 2", "Map 3")
-        val selectedMode = maps[mode - 1]
-        val keyboardModeImages = arrayOf(
-            R.drawable.kom1ph,
-            R.drawable.kom2ph,
-            R.drawable.kom3ph
+    override fun Configuration(
+        context: Context?,
+    ) {
+        val maps = listOf(
+            "Map 1",
+            "Map 2",
+            "Map 3",
         )
-        Box(modifier = GlanceModifier.padding(16.dp)) {
-            Row(modifier = GlanceModifier.padding(horizontal = 8.dp)) {
-                keyboardModeImages.forEachIndexed { index, image ->
-                    Image(
-                        ImageProvider(image),
-                        "Mode",
-                        modifier = GlanceModifier
-                            .defaultWeight()
-                            .padding(horizontal = 8.dp)
-                            .clickable(
-                                onClick = actionRunCallback<ConfigureCallback>(
-                                    actionParametersOf(
-                                        ActionParameters.Key<String>("game_name") to getName(),
-                                        ActionParameters.Key<String>("configName") to "Map",
-                                        ActionParameters.Key<String>("configVal") to maps[index]
-                                    )
-                                )
-                            )
-                    )
-                }
-            }
-            RenderConfigOption(this, "Map", maps, selectedMode)
-        }
+
+        val selectedMode = maps[
+            (mode - 1).coerceIn(0, maps.lastIndex)
+        ]
+
+        RenderConfigImageOption(
+            game = this,
+            name = "Map",
+            options = listOf(
+                ConfigImageOption(
+                    label = "Map 1",
+                    image = ImageProvider(R.drawable.kom1ph),
+                ),
+                ConfigImageOption(
+                    label = "Map 2",
+                    image = ImageProvider(R.drawable.kom2ph),
+                ),
+                ConfigImageOption(
+                    label = "Map 3",
+                    image = ImageProvider(R.drawable.kom3ph),
+                ),
+            ),
+            selected = selectedMode,
+        )
     }
 
     override fun setConfigOption(name: String, value: String) {

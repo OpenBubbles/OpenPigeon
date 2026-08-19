@@ -2,10 +2,6 @@ package com.openbubbles.openpigeon.basketball
 
 import android.content.Context
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.dp
-import androidx.glance.GlanceModifier
-import androidx.glance.layout.Box
-import androidx.glance.layout.padding
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
@@ -37,9 +33,12 @@ class BasketballGame : Game {
     override fun Configuration(
         context: Context?,
     ) {
-        Box(modifier = GlanceModifier.padding(16.dp)) {
-            RenderConfigOption(this, "Game Mode", listOf("Normal", "Moving"), if (gameDifficulty) "Moving" else "Normal")
-        }
+        RenderConfigOption(
+            game = this,
+            name = "Game Mode",
+            options = listOf("Normal", "Moving"),
+            selected = if (gameDifficulty) "Moving" else "Normal",
+        )
     }
 
     override fun setConfigOption(name: String, value: String) {

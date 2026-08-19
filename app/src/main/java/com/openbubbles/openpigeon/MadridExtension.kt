@@ -362,7 +362,6 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
 }
 
-
 class ChooseGameCallback : ActionCallback {
     override suspend fun onAction(
         context: Context,
@@ -403,8 +402,6 @@ class GoBackCallback : ActionCallback {
         }
     }
 }
-
-private val gameName = ActionParameters.Key<String>("game_name")
 
 @Composable
 fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: GlanceModifier = GlanceModifier) {
@@ -733,18 +730,67 @@ fun RenderKeyboard(extension: MadridExtension?) {
 }
 
 @Composable
-fun RenderKeyboardConfig(extension: MadridExtension?, game: Game) {
-    Column(modifier = GlanceModifier.fillMaxHeight().padding(1.dp)) {
-        Box(contentAlignment = Alignment.CenterStart) {
-            Row(horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+fun RenderKeyboardConfig(
+    extension: MadridExtension?,
+    game: Game,
+) {
+    Column(
+        modifier = GlanceModifier
+            .fillMaxHeight()
+            .padding(1.dp),
+    ) {
+        Box(
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .height(50.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Row(
                 modifier = GlanceModifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Vertical.CenterVertically) {
-                Image(ImageProvider(game.gamePoster(null)), game.getName(), modifier = GlanceModifier.width(50.dp).padding(8.dp).wrapContentHeight())
-                Text(game.displayName(), style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray), fontWeight = FontWeight.Bold))
+                horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+                verticalAlignment = Alignment.Vertical.CenterVertically,
+            ) {
+                Image(
+                    provider = ImageProvider(game.gamePoster(null)),
+                    contentDescription = game.displayName(),
+                    modifier = GlanceModifier
+                        .width(42.dp)
+                        .height(42.dp)
+                        .padding(5.dp)
+                        .cornerRadius(5.dp),
+                    contentScale = ContentScale.Crop,
+                )
+
+                Text(
+                    text = game.displayName(),
+                    style = TextStyle(
+                        fontSize = 21.sp,
+                        color = ColorProvider(Color.Gray),
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
             }
-            Image(ImageProvider(R.drawable.ios_back), "Back", modifier = GlanceModifier.padding(start = 10.dp)
-                .clickable(onClick = actionRunCallback<GoBackCallback>()))
+
+            Image(
+                provider = ImageProvider(R.drawable.ios_back),
+                contentDescription = "Back",
+                modifier = GlanceModifier
+                    .padding(start = 8.dp)
+                    .width(30.dp)
+                    .height(40.dp)
+                    .clickable(
+                        onClick = actionRunCallback<GoBackCallback>(),
+                    ),
+            )
         }
+
+        Spacer(
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(Color(0xFF303034)),
+        )
+
         game.Configuration(extension?.context)
     }
 }
@@ -914,157 +960,5 @@ fun RenderKeyboardConfigPreview() {
 fun RenderKeyboardPreview() {
     Box(modifier = GlanceModifier.background(Color.Black)) {
         RenderKeyboard(null)
-    }
-}
-
-private val configName = ActionParameters.Key<String>("configName")
-private val configVal = ActionParameters.Key<String>("configVal")
-class ConfigureCallback : ActionCallback {
-    override suspend fun onAction(
-        context: Context,
-        glanceId: GlanceId,
-        parameters: ActionParameters
-    ) {
-        val game = parameters[gameName]?.let { MadridExtension.findByName(it) } ?: return
-
-        game.setConfigOption(parameters[configName]!!, parameters[configVal]!!)
-
-        val message = game.buildGameMessage(context, game.getNewGameData(context) ?: return, null)
-        MadridExtension.currentKeyboardHandle?.addMessage(message)
-
-        if (game.isConfigurable()) {
-            MadridExtensionService.extension?.updateKeyboard()
-        }
-    }
-}
-
-@Composable
-fun RenderConfigOption(
-    game: Game,
-    name: String,
-    options: List<String>,
-    selected: String,
-) {
-    val useMultipleRows = options.size >= 6
-
-    Column(
-        modifier = GlanceModifier.padding(
-            horizontal = 8.dp,
-            vertical = 8.dp,
-        ),
-    ) {
-        Text(
-            name.uppercase(),
-            style = TextStyle(
-                color = ColorProvider(Color.Gray),
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
-            ),
-        )
-
-        Spacer(
-            modifier = GlanceModifier
-                .height(2.dp)
-                .background(Color.Gray)
-                .fillMaxWidth(),
-        )
-
-        if (useMultipleRows) {
-            val optionRows = options.chunked(3)
-
-            optionRows.forEachIndexed { rowIndex, rowOptions ->
-                RenderConfigOptionRow(
-                    game = game,
-                    name = name,
-                    options = rowOptions,
-                    selected = selected,
-                    fontSize = 16.sp,
-                )
-
-                if (rowIndex < optionRows.lastIndex) {
-                    Spacer(
-                        modifier = GlanceModifier.height(6.dp),
-                    )
-                }
-            }
-        } else {
-            RenderConfigOptionRow(
-                game = game,
-                name = name,
-                options = options,
-                selected = selected,
-                fontSize = 18.sp,
-            )
-        }
-    }
-}
-
-
-@Composable
-private fun RenderConfigOptionRow(
-    game: Game,
-    name: String,
-    options: List<String>,
-    selected: String,
-    fontSize: androidx.compose.ui.unit.TextUnit,
-) {
-    Row(
-        verticalAlignment = Alignment.Vertical.CenterVertically,
-        modifier = GlanceModifier.fillMaxWidth(),
-    ) {
-        options.forEachIndexed { index, option ->
-            Box(
-                modifier = GlanceModifier
-                    .defaultWeight()
-                    .clickable(
-                        onClick = actionRunCallback<
-                                ConfigureCallback
-                                >(
-                            actionParametersOf(
-                                gameName to game.getName(),
-                                configName to name,
-                                configVal to option,
-                            ),
-                        ),
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    option,
-                    style = TextStyle(
-                        fontWeight =
-                            if (selected == option) {
-                                FontWeight.Bold
-                            } else {
-                                FontWeight.Normal
-                            },
-                        color = ColorProvider(Color.Gray),
-                        fontSize = fontSize,
-                        textAlign = TextAlign.Center,
-                    ),
-                    modifier = GlanceModifier.padding(
-                        vertical = 4.dp,
-                    ),
-                )
-            }
-
-            if (index < options.lastIndex) {
-                Spacer(
-                    modifier = GlanceModifier
-                        .width(1.dp)
-                        .height(15.dp)
-                        .background(Color.Gray),
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalGlancePreviewApi::class)
-@Preview(widthDp = 400, heightDp = 300)
-@Composable
-fun RenderConfigOptionPreview() {
-    Box(modifier = GlanceModifier.background(Color.Black).fillMaxSize()) {
-        RenderConfigOption(BasketballGame(), "Game Mode", listOf("8 Ball", "8 Ball+"), "8 Ball")
     }
 }

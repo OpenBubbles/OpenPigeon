@@ -3,10 +3,6 @@ package com.openbubbles.openpigeon.checkers
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.dp
-import androidx.glance.GlanceModifier
-import androidx.glance.layout.Box
-import androidx.glance.layout.padding
 import com.openbubbles.openpigeon.DynamicPreviewGame
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
@@ -39,14 +35,12 @@ class CheckersGame : Game, DynamicPreviewGame {
     override fun Configuration(
         context: Context?,
     ) {
-        Box(modifier = GlanceModifier.padding(16.dp)) {
-            RenderConfigOption(
-                this,
-                "Game Mode",
-                listOf("Checkers", "Newbie Checkers"),
-                mode
-            )
-        }
+        RenderConfigOption(
+            game = this,
+            name = "Game Mode",
+            options = listOf("Checkers", "Newbie Checkers"),
+            selected = mode,
+        )
     }
 
     override fun playName(): String {

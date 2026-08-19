@@ -13,6 +13,8 @@ import java.util.UUID
 import androidx.core.content.edit
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
+import com.openbubbles.openpigeon.util.OpenPigeonLog
+import androidx.core.graphics.scale
 
 interface Game {
 
@@ -192,10 +194,40 @@ interface Game {
 
         var imageEncoded: String? = null
         if (bm != null) {
+            val maxPreviewDimension = 384
+            val scale = minOf(
+                1f,
+                maxPreviewDimension.toFloat() / bm.width,
+                maxPreviewDimension.toFloat() / bm.height
+            )
+
+            val previewBitmap = if (scale < 1f) {
+                bm.scale(
+                    (bm.width * scale).toInt().coerceAtLeast(1),
+                    (bm.height * scale).toInt().coerceAtLeast(1)
+                )
+            } else {
+                bm
+            }
+
             val baos = ByteArrayOutputStream()
-            bm.compress(Bitmap.CompressFormat.JPEG, 55, baos)
-            val b = baos.toByteArray()
-            imageEncoded = Base64.encodeToString(b, Base64.NO_WRAP)
+            previewBitmap.compress(Bitmap.CompressFormat.JPEG, 50, baos)
+
+            val jpegBytes = baos.toByteArray()
+            imageEncoded = Base64.encodeToString(jpegBytes, Base64.NO_WRAP)
+
+            OpenPigeonLog.i(
+                "MadridSize",
+                "PREVIEW game=${getName()} " +
+                        "source=${bm.width}x${bm.height} " +
+                        "encoded=${previewBitmap.width}x${previewBitmap.height} " +
+                        "jpegBytes=${jpegBytes.size} " +
+                        "base64Bytes=${imageEncoded.toByteArray(Charsets.UTF_8).size}"
+            )
+
+            if (previewBitmap !== bm) {
+                previewBitmap.recycle()
+            }
         }
 
         return MadridMessage().apply {

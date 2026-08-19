@@ -2,10 +2,6 @@ package com.openbubbles.openpigeon.darts
 
 import android.content.Context
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.dp
-import androidx.glance.GlanceModifier
-import androidx.glance.layout.Box
-import androidx.glance.layout.padding
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
@@ -44,9 +40,12 @@ class DartsGame : Game {
     override fun Configuration(
         context: Context?,
     ) {
-        Box(modifier = GlanceModifier.padding(16.dp)) {
-            RenderConfigOption(this, "Game Mode", listOf("101", "201", "301"), gameMode)
-        }
+        RenderConfigOption(
+            game = this,
+            name = "Game Mode",
+            options = listOf("101", "201", "301"),
+            selected = gameMode,
+        )
     }
 
     override fun setConfigOption(name: String, value: String) {

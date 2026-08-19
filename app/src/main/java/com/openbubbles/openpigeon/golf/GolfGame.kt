@@ -3,34 +3,15 @@ package com.openbubbles.openpigeon.golf
 import android.content.Context
 import android.graphics.BitmapFactory
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.glance.GlanceModifier
-import androidx.glance.Image
 import androidx.glance.ImageProvider
-import androidx.glance.action.ActionParameters
-import androidx.glance.action.actionParametersOf
-import androidx.glance.action.clickable
-import androidx.glance.appwidget.action.actionRunCallback
-import androidx.glance.layout.Alignment
-import androidx.glance.layout.Box
-import androidx.glance.layout.Column
-import androidx.glance.layout.Row
-import androidx.glance.layout.Spacer
-import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.height
-import androidx.glance.layout.padding
-import androidx.glance.layout.size
-import androidx.glance.text.FontWeight
-import androidx.glance.text.Text
-import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
-import com.openbubbles.openpigeon.ConfigureCallback
+import androidx.glance.layout.ContentScale
+import com.openbubbles.openpigeon.ConfigImageOption
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
+import com.openbubbles.openpigeon.RenderConfigImageOption
 import com.openbubbles.openpigeon.util.OpenPigeonLog
 import kotlin.random.Random
-import androidx.compose.ui.unit.sp
 
 class GolfGame : Game {
     companion object {
@@ -90,74 +71,30 @@ class GolfGame : Game {
             "GolfGame.Configuration holes=$holes contextNull=${context == null}"
         )
 
-        Column(
-            modifier = GlanceModifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Text(
-                text = "GAME MODE",
-                style = TextStyle(
-                    color = ColorProvider(Color.White),
-                    fontWeight = FontWeight.Medium
-                )
-            )
-
-            Spacer(modifier = GlanceModifier.height(10.dp))
-
-            Row(modifier = GlanceModifier.fillMaxWidth()) {
-                options.forEach { (holeCount, label) ->
-                    val isSelected = holes == holeCount
-
-                    Box(
-                        modifier = GlanceModifier
-                            .defaultWeight()
-                            .padding(horizontal = 8.dp)
-                            .clickable(
-                                onClick = actionRunCallback<ConfigureCallback>(
-                                    actionParametersOf(
-                                        ActionParameters.Key<String>("game_name") to getName(),
-                                        ActionParameters.Key<String>("configName") to CONFIG_GAME_MODE,
-                                        ActionParameters.Key<String>("configVal") to label
-                                    )
-                                )
-                            )
-                    ) {
-                        Column(
-                            modifier = GlanceModifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.Horizontal.CenterHorizontally
-                        ) {
-                            Text(
-                                text = label,
-                                style = TextStyle(
-                                    color = ColorProvider(
-                                        if (isSelected) {
-                                            Color.White
-                                        } else {
-                                            Color(0xFFB8B8B8)
-                                        }
-                                    ),
-                                    fontSize = 17.sp,
-                                    fontWeight = if (isSelected) {
-                                        FontWeight.Bold
-                                    } else {
-                                        FontWeight.Medium
-                                    }
-                                )
-                            )
-
-                            Spacer(modifier = GlanceModifier.height(8.dp))
-
-                            Image(
-                                provider = golfPoleImageProvider,
-                                contentDescription = label,
-                                modifier = GlanceModifier.size(38.dp)
-                            )
-                        }
-                    }
-                }
+        val selectedMode =
+            if (holes == 5) {
+                MODE_5_HOLES
+            } else {
+                MODE_3_HOLES
             }
-        }
+
+        RenderConfigImageOption(
+            game = this,
+            name = "Game Mode",
+            options = listOf(
+                ConfigImageOption(
+                    label = MODE_3_HOLES,
+                    image = golfPoleImageProvider,
+                ),
+                ConfigImageOption(
+                    label = MODE_5_HOLES,
+                    image = golfPoleImageProvider,
+                ),
+            ),
+            selected = selectedMode,
+            imageHeight = 42.dp,
+            contentScale = ContentScale.Fit,
+        )
     }
 
     override fun setConfigOption(name: String, value: String) {

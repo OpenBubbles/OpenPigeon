@@ -3,24 +3,14 @@ package com.openbubbles.openpigeon.wordhunt
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
-import androidx.glance.GlanceModifier
-import androidx.glance.Image
 import androidx.glance.ImageProvider
-import androidx.glance.action.ActionParameters
-import androidx.glance.action.actionParametersOf
-import androidx.glance.action.clickable
-import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.layout.Column
-import androidx.glance.layout.Row
-import androidx.glance.layout.Spacer
-import androidx.glance.layout.height
-import androidx.glance.layout.padding
-import com.openbubbles.openpigeon.ConfigureCallback
+import com.openbubbles.openpigeon.ConfigImageOption
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
+import com.openbubbles.openpigeon.RenderConfigImageOption
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.wordgames.WordGameLanguages
-import androidx.glance.layout.fillMaxWidth
 
 class WordHuntGame : Game {
 
@@ -61,59 +51,34 @@ class WordHuntGame : Game {
             "Map 4",
         )
 
-        val keyboardModeImages = arrayOf(
-            R.drawable.wordhunt_kb_mode1,
-            R.drawable.wordhunt_kb_mode2,
-            R.drawable.wordhunt_kb_mode3,
-            R.drawable.wordhunt_kb_mode4,
-        )
+        val selectedMode = maps[
+            (mode - 1).coerceIn(0, maps.lastIndex)
+        ]
 
-        Column(
-            modifier = GlanceModifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = 12.dp,
-                    vertical = 6.dp,
+        Column {
+            RenderConfigImageOption(
+                game = this@WordHuntGame,
+                name = "Map",
+                options = listOf(
+                    ConfigImageOption(
+                        label = "Map 1",
+                        image = ImageProvider(R.drawable.wordhunt_kb_mode1),
+                    ),
+                    ConfigImageOption(
+                        label = "Map 2",
+                        image = ImageProvider(R.drawable.wordhunt_kb_mode2),
+                    ),
+                    ConfigImageOption(
+                        label = "Map 3",
+                        image = ImageProvider(R.drawable.wordhunt_kb_mode3),
+                    ),
+                    ConfigImageOption(
+                        label = "Map 4",
+                        image = ImageProvider(R.drawable.wordhunt_kb_mode4),
+                    ),
                 ),
-        ) {
-            /*
-             * The images are the map selector. Do not render another
-             * RenderConfigOption for Map underneath them.
-             */
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-            ) {
-                keyboardModeImages.forEachIndexed { index, image ->
-                    Image(
-                        provider = ImageProvider(image),
-                        contentDescription = maps[index],
-                        modifier = GlanceModifier
-                            .defaultWeight()
-                            .height(70.dp)
-                            .padding(horizontal = 4.dp)
-                            .clickable(
-                                onClick = actionRunCallback<
-                                        ConfigureCallback
-                                        >(
-                                    actionParametersOf(
-                                        ActionParameters.Key<String>(
-                                            "game_name",
-                                        ) to getName(),
-                                        ActionParameters.Key<String>(
-                                            "configName",
-                                        ) to "Map",
-                                        ActionParameters.Key<String>(
-                                            "configVal",
-                                        ) to maps[index],
-                                    ),
-                                ),
-                            ),
-                    )
-                }
-            }
-
-            Spacer(
-                modifier = GlanceModifier.height(4.dp),
+                selected = selectedMode,
+                imageHeight = 58.dp,
             )
 
             RenderConfigOption(

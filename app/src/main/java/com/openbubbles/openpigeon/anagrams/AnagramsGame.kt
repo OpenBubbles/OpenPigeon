@@ -2,18 +2,13 @@ package com.openbubbles.openpigeon.anagrams
 
 import android.content.Context
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.dp
-import androidx.glance.GlanceModifier
-import androidx.glance.layout.padding
+import androidx.glance.layout.Column
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
 import com.openbubbles.openpigeon.godot.GodotGameActivity
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
-import androidx.glance.layout.Column
-import androidx.glance.layout.Spacer
-import androidx.glance.layout.height
 import com.openbubbles.openpigeon.wordgames.WordGameLanguage
 import com.openbubbles.openpigeon.wordgames.WordGameLanguages
 
@@ -47,25 +42,19 @@ class AnagramsGame : Game {
     override fun Configuration(
         context: Context?,
     ) {
-        Column(
-            modifier = GlanceModifier.padding(16.dp),
-        ) {
+        Column {
             RenderConfigOption(
-                this@AnagramsGame,
-                "Game Mode",
-                listOf("6 Letters", "7 Letters"),
-                mode,
-            )
-
-            Spacer(
-                modifier = GlanceModifier.height(12.dp),
+                game = this@AnagramsGame,
+                name = "Game Mode",
+                options = listOf("6 Letters", "7 Letters"),
+                selected = mode,
             )
 
             RenderConfigOption(
-                this@AnagramsGame,
-                "Language",
-                WordGameLanguages.configurationOptions,
-                language,
+                game = this@AnagramsGame,
+                name = "Language",
+                options = WordGameLanguages.configurationOptions,
+                selected = language,
             )
         }
     }

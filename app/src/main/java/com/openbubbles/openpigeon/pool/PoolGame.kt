@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
 import androidx.glance.layout.Box
 import androidx.glance.layout.padding
+import androidx.glance.layout.Column
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
@@ -27,11 +28,20 @@ open class PoolGame : Game {
     override fun Configuration(
         context: Context?,
     ) {
-        Box(modifier = GlanceModifier.padding(16.dp)) {
-            RenderConfigOption(this, "Game Mode", listOf("8 Ball", "8 Ball+"), plusMode)
-        }
-        Box(modifier = GlanceModifier.padding(16.dp)) {
-            RenderConfigOption(this, "Difficulty", listOf("Normal", "Hard"), difficulty)
+        Column {
+            RenderConfigOption(
+                game = this@PoolGame,
+                name = "Game Mode",
+                options = listOf("8 Ball", "8 Ball+"),
+                selected = plusMode,
+            )
+
+            RenderConfigOption(
+                game = this@PoolGame,
+                name = "Difficulty",
+                options = listOf("Normal", "Hard"),
+                selected = difficulty,
+            )
         }
     }
 
@@ -143,10 +153,15 @@ class NineBallGame : PoolGame() {
     }
 
     @Composable
-    override fun Configuration(context: Context?) {
-        Box(modifier = GlanceModifier.padding(16.dp)) {
-            RenderConfigOption(this, "Difficulty", listOf("Normal", "Hard"), difficulty)
-        }
+    override fun Configuration(
+        context: Context?,
+    ) {
+        RenderConfigOption(
+            game = this,
+            name = "Difficulty",
+            options = listOf("Normal", "Hard"),
+            selected = difficulty,
+        )
     }
 
     override fun setConfigOption(name: String, value: String) {

@@ -2,10 +2,6 @@ package com.openbubbles.openpigeon.battleship
 
 import android.content.Context
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.dp
-import androidx.glance.GlanceModifier
-import androidx.glance.layout.Box
-import androidx.glance.layout.padding
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.RenderConfigOption
@@ -36,9 +32,12 @@ class BattleshipGame : Game {
     override fun Configuration(
         context: Context?,
     ) {
-        Box(modifier = GlanceModifier.padding(16.dp)) {
-            RenderConfigOption(this, "Game Mode", listOf("10x10", "9x9", "8x8"), battleshipSize)
-        }
+        RenderConfigOption(
+            game = this,
+            name = "Game Mode",
+            options = listOf("10x10", "9x9", "8x8"),
+            selected = battleshipSize,
+        )
     }
 
     override fun setConfigOption(name: String, value: String) {

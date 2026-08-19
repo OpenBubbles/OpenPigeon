@@ -1,38 +1,19 @@
 package com.openbubbles.openpigeon.shuffle
 
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
-import androidx.glance.GlanceModifier
-import androidx.glance.layout.padding
+import androidx.glance.ImageProvider
+import com.openbubbles.openpigeon.ConfigImageOption
+import com.openbubbles.openpigeon.DynamicPreviewGame
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
+import com.openbubbles.openpigeon.RenderConfigImageOption
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.AvatarView
-import kotlin.random.Random
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.sp
-import androidx.glance.Image
-import androidx.glance.ImageProvider
-import androidx.glance.action.ActionParameters
-import androidx.glance.action.actionParametersOf
-import androidx.glance.action.clickable
-import androidx.glance.appwidget.action.actionRunCallback
-import androidx.glance.background
-import androidx.glance.layout.Column
-import androidx.glance.layout.Row
-import androidx.glance.layout.Spacer
-import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.height
-import androidx.glance.text.TextAlign
-import androidx.glance.text.FontWeight
-import androidx.glance.text.Text
-import androidx.glance.text.TextStyle
-import androidx.glance.color.ColorProvider
-import com.openbubbles.openpigeon.ConfigureCallback
-import android.graphics.Bitmap
-import com.openbubbles.openpigeon.DynamicPreviewGame
 import com.openbubbles.openpigeon.util.OpenPigeonLog
+import kotlin.random.Random
 
 class ShuffleGame : Game, DynamicPreviewGame {
     override fun getVersion(): String {
@@ -57,130 +38,30 @@ class ShuffleGame : Game, DynamicPreviewGame {
     override fun Configuration(
         context: Context?,
     ) {
-        val boardValues = listOf(
-            "1",
-            "3",
-            "2",
-        )
-
-        val boardImages = listOf(
-            R.drawable.shuffle_map_1,
-            R.drawable.shuffle_map_3,
-            R.drawable.shuffle_map_2,
-        )
-
-        Column(
-            modifier = GlanceModifier.padding(
-                horizontal = 16.dp,
-                vertical = 12.dp,
+        RenderConfigImageOption(
+            game = this,
+            name = "Game Mode",
+            settingName = "Map",
+            options = listOf(
+                ConfigImageOption(
+                    label = "Map 1",
+                    image = ImageProvider(R.drawable.shuffle_map_1),
+                    value = "1",
+                ),
+                ConfigImageOption(
+                    label = "Map 2",
+                    image = ImageProvider(R.drawable.shuffle_map_3),
+                    value = "3",
+                ),
+                ConfigImageOption(
+                    label = "Map 3",
+                    image = ImageProvider(R.drawable.shuffle_map_2),
+                    value = "2",
+                ),
             ),
-        ) {
-            Text(
-                text = "Game Mode",
-                style = TextStyle(
-                    color = ColorProvider(
-                        day = Color.Gray,
-                        night = Color.Gray,
-                    ),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                ),
-            )
-
-            Spacer(
-                modifier = GlanceModifier.fillMaxWidth().height(
-                    2.dp,
-                ).background(
-                    Color.Gray,
-                ),
-            )
-
-            Row(
-                modifier = GlanceModifier.fillMaxWidth().padding(
-                    top = 10.dp,
-                ),
-            ) {
-                boardImages.forEachIndexed { index, imageResource ->
-                    val boardValue = boardValues[index]
-
-                    val selected = mapMode == boardValue
-
-                    val labelColor = if (selected) {
-                        Color.White
-                    } else {
-                        Color(
-                            0xFF9A9A9A,
-                        )
-                    }
-
-                    Column(
-                        modifier = GlanceModifier.defaultWeight().padding(
-                            horizontal = 6.dp,
-                        ),
-                    ) {
-                        Text(
-                            text = "Map ${index + 1}",
-                            modifier = GlanceModifier.fillMaxWidth(),
-                            style = TextStyle(
-                                color = ColorProvider(
-                                    day = labelColor,
-                                    night = labelColor,
-                                ),
-                                fontWeight = if (selected) {
-                                    FontWeight.Bold
-                                } else {
-                                    FontWeight.Normal
-                                },
-                                fontSize = 14.sp,
-                                textAlign = TextAlign.Center,
-                            ),
-                        )
-
-                        Spacer(
-                            modifier = GlanceModifier.height(
-                                6.dp,
-                            ),
-                        )
-
-                        Image(
-                            provider = ImageProvider(
-                                imageResource,
-                            ),
-                            contentDescription = "Shuffleboard Map ${index + 1}",
-                            modifier = GlanceModifier.fillMaxWidth().height(
-                                108.dp,
-                            ).clickable(
-                                onClick = actionRunCallback<ConfigureCallback>(
-                                    actionParametersOf(
-                                        ActionParameters.Key<String>(
-                                            "game_name",
-                                        ) to getName(),
-                                        ActionParameters.Key<String>(
-                                            "configName",
-                                        ) to "Map",
-                                        ActionParameters.Key<String>(
-                                            "configVal",
-                                        ) to boardValue,
-                                    ),
-                                ),
-                            ),
-                        )
-
-                        Spacer(
-                            modifier = GlanceModifier.fillMaxWidth().height(
-                                4.dp,
-                            ).background(
-                                if (selected) {
-                                    Color.White
-                                } else {
-                                    Color.Transparent
-                                },
-                            ),
-                        )
-                    }
-                }
-            }
-        }
+            selected = mapMode,
+            imageHeight = 86.dp,
+        )
     }
 
     override fun setConfigOption(

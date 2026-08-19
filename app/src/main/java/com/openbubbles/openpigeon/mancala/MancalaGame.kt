@@ -3,10 +3,7 @@ package com.openbubbles.openpigeon.mancala
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.dp
-import androidx.glance.GlanceModifier
-import androidx.glance.layout.Box
-import androidx.glance.layout.padding
+import androidx.glance.layout.Column
 import com.openbubbles.openpigeon.DynamicPreviewGame
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
@@ -41,12 +38,20 @@ class MancalaGame : Game, DynamicPreviewGame {
     override fun Configuration(
         context: Context?,
     ) {
-        Box(modifier = GlanceModifier.padding(16.dp)) {
-            RenderConfigOption(this, "Game Mode", listOf("Capture", "Avalanche"), gameMode)
-        }
+        Column {
+            RenderConfigOption(
+                game = this@MancalaGame,
+                name = "Game Mode",
+                options = listOf("Capture", "Avalanche"),
+                selected = gameMode,
+            )
 
-        Box(modifier = GlanceModifier.padding(16.dp)) {
-            RenderConfigOption(this, "Difficulty", listOf("Normal", "Random"), gameDifficulty)
+            RenderConfigOption(
+                game = this@MancalaGame,
+                name = "Difficulty",
+                options = listOf("Normal", "Random"),
+                selected = gameDifficulty,
+            )
         }
     }
 

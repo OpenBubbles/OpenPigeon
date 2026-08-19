@@ -1,33 +1,14 @@
 package com.openbubbles.openpigeon.wordgames
 
 import android.content.Context
-import com.openbubbles.openpigeon.util.OpenPigeonLog
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.glance.GlanceModifier
-import androidx.glance.Image
 import androidx.glance.ImageProvider
-import androidx.glance.action.ActionParameters
-import androidx.glance.action.actionParametersOf
-import androidx.glance.action.clickable
-import androidx.glance.appwidget.action.actionRunCallback
-import androidx.glance.appwidget.cornerRadius
-import androidx.glance.layout.Box
-import androidx.glance.layout.Row
-import androidx.glance.layout.Column
-import androidx.glance.layout.padding
-import androidx.glance.layout.height
-import androidx.glance.layout.Alignment
-import androidx.glance.text.FontWeight
-import androidx.glance.text.Text
-import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
-import androidx.compose.ui.graphics.Color
-import com.openbubbles.openpigeon.ChooseGameCallback
 import com.openbubbles.openpigeon.Game
+import com.openbubbles.openpigeon.GameImageChoice
 import com.openbubbles.openpigeon.GameNotFound
 import com.openbubbles.openpigeon.R
+import com.openbubbles.openpigeon.RenderGameChoiceTiles
 import com.openbubbles.openpigeon.anagrams.AnagramsGame
 import com.openbubbles.openpigeon.wordbites.WordbitesGame
 import com.openbubbles.openpigeon.wordhunt.WordHuntGame
@@ -44,74 +25,30 @@ class WordGames : Game {
     }
 
     @Composable
-    override fun Configuration(context: Context?) {
-        OpenPigeonLog.d(TAG, "Configuration() composable ENTER")
-
-        val choices = listOf(
-            GameChoice(
-                game = AnagramsGame(),
-                label = "Anagrams",
-                previewRes = R.drawable.anagrams_6l
+    override fun Configuration(
+        context: Context?,
+    ) {
+        RenderGameChoiceTiles(
+            title = "Choose Game",
+            choices = listOf(
+                GameImageChoice(
+                    game = AnagramsGame(),
+                    label = "Anagrams",
+                    image = ImageProvider(R.drawable.anagrams_6l),
+                ),
+                GameImageChoice(
+                    game = WordHuntGame(),
+                    label = "Word Hunt",
+                    image = ImageProvider(R.drawable.wordhunt),
+                ),
+                GameImageChoice(
+                    game = WordbitesGame(),
+                    label = "Word Bites",
+                    image = ImageProvider(R.drawable.wordbites),
+                ),
             ),
-            GameChoice(
-                game = WordHuntGame(),
-                label = "Word Hunt",
-                previewRes = R.drawable.wordhunt
-            ),
-            GameChoice(
-                game = WordbitesGame(),
-                label = "Word Bites",
-                previewRes = R.drawable.wordbites
-            ),
+            imageHeight = 74.dp,
         )
-
-        Box(modifier = GlanceModifier.padding(16.dp)) {
-            Row(modifier = GlanceModifier.padding(horizontal = 8.dp)) {
-                choices.forEach { choice ->
-                    OpenPigeonLog.d(
-                        TAG,
-                        "Rendering choice: gameName=${choice.game.getName()}, label=${choice.label}"
-                    )
-
-                    Box(
-                        modifier = GlanceModifier
-                            .defaultWeight()
-                            .padding(horizontal = 8.dp)
-                            .clickable(
-                                onClick = actionRunCallback<ChooseGameCallback>(
-                                    actionParametersOf(
-                                        ActionParameters.Key<String>("game_name") to choice.game.getName()
-                                    )
-                                )
-                            )
-                    ) {
-                        Column(
-                            modifier = GlanceModifier.padding(vertical = 4.dp),
-                            horizontalAlignment = Alignment.Horizontal.CenterHorizontally
-                        ) {
-                            Image(
-                                provider = ImageProvider(choice.previewRes),
-                                contentDescription = choice.label,
-                                modifier = GlanceModifier
-                                    .height(100.dp)
-                                    .cornerRadius(8.dp)
-                            )
-                            Text(
-                                text = choice.label,
-                                style = TextStyle(
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = ColorProvider(Color.White)
-                                ),
-                                modifier = GlanceModifier.padding(top = 4.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        OpenPigeonLog.d(TAG, "Configuration() composable EXIT")
     }
 
     override fun setConfigOption(name: String, value: String) {
@@ -140,10 +77,4 @@ class WordGames : Game {
     override fun getDefaultReplay(): String {
         return "{}"
     }
-
-    private data class GameChoice(
-        val game: Game,
-        val label: String,
-        val previewRes: Int,
-    )
 }

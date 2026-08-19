@@ -3,10 +3,6 @@ package com.openbubbles.openpigeon.dots
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.unit.dp
-import androidx.glance.GlanceModifier
-import androidx.glance.layout.Box
-import androidx.glance.layout.padding
 import com.openbubbles.openpigeon.DynamicPreviewGame
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
@@ -39,14 +35,12 @@ class DotsGame : Game, DynamicPreviewGame {
     override fun Configuration(
         context: Context?,
     ) {
-        Box(modifier = GlanceModifier.padding(16.dp)) {
-            RenderConfigOption(
-                this,
-                "Board Size",
-                listOf("4x4", "5x5", "6x6"),
-                boardsize
-            )
-        }
+        RenderConfigOption(
+            game = this,
+            name = "Board Size",
+            options = listOf("4x4", "5x5", "6x6"),
+            selected = boardsize,
+        )
     }
 
     override fun setConfigOption(name: String, value: String) {
