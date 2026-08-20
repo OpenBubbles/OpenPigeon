@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.core.view.isVisible
 
 @Composable
 fun TurnRecoveryOverlay(
@@ -107,8 +108,7 @@ class TurnRecoveryOverlayController internal constructor(
     }
 
     fun isShowingRetry(): Boolean {
-        return composeView.visibility ==
-                View.VISIBLE &&
+        return composeView.isVisible &&
                 visibleState.value
     }
 

@@ -2972,18 +2972,13 @@ class GolfActivity : AppCompatActivity() {
 
         val ball = runtimeBallCourse ?: currentMap?.ballStart1 ?: return
         val replayRotationCourse = -aim.rotation
-
         val velocityVisual = GolfShot.launchVelocityVisual(aim)
-        val velocityCourse = renderer.visualDeltaToCourseDelta(
-            dxVisual = velocityVisual.x, dyVisual = velocityVisual.y
-        )
+        val velocityCourse = renderer.visualDeltaToCourseDelta(dxVisual = velocityVisual.x, dyVisual = velocityVisual.y)
 
-        localReplay = GolfReplay.appendShot(
-            replay = localReplay, holeIndex = mapNum, shot = GolfReplay.Shot(
-                dist = aim.dist, rotation = replayRotationCourse
-            )
-        )
+        lastShotStartCourse = PointF(ball.x, ball.y)
+        lastShotVelocityCourse.set(velocityCourse.x, velocityCourse.y)
 
+        localReplay = GolfReplay.appendShot(replay = localReplay, holeIndex = mapNum, shot = GolfReplay.Shot(dist = aim.dist, rotation = replayRotationCourse))
         updateStrokeHud()
 
         GolfTrace.localLaunch(
@@ -3000,21 +2995,16 @@ class GolfActivity : AppCompatActivity() {
             replay = localReplay
         )
 
-        runtimeVelocityCourse.set(
-            velocityCourse.x, velocityCourse.y
-        )
-
+        runtimeVelocityCourse.set(velocityCourse.x, velocityCourse.y)
         runtimeBallCourse = PointF(ball.x, ball.y)
         renderer.setRuntimeBallCourse(runtimeBallCourse)
         renderer.setShotCamera(runtimeBallCourse, 0f)
 
-        OpenPigeonLog.i(
-            TAG,
-            "launch aimDist=${aim.dist} " + "aimRotVisual=${aim.rotation} " + "replayRotCourse=$replayRotationCourse " + "velVisual=(${velocityVisual.x},${velocityVisual.y}) " + "velCourse=(${runtimeVelocityCourse.x},${runtimeVelocityCourse.y}) " + "localReplayLen=${localReplay.length}"
-        )
+        saveGolfProgress("shot", ball)
+
+        OpenPigeonLog.i(TAG, "launch aimDist=${aim.dist} aimRotVisual=${aim.rotation} replayRotCourse=$replayRotationCourse velVisual=(${velocityVisual.x},${velocityVisual.y}) velCourse=(${runtimeVelocityCourse.x},${runtimeVelocityCourse.y}) localReplayLen=${localReplay.length}")
 
         stateLabel.text = "Shot dist=${"%.1f".format(aim.dist)}"
-
         startBallPhysics()
     }
 

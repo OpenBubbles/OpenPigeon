@@ -59,6 +59,10 @@ var _dict_words: Array[String] = []
 var _words_scroll: ScrollContainer = null
 var _is_dragging_words := false
 var _last_drag_pos := Vector2.ZERO
+var recovered_turn_started := false
+var recovered_deadline_ms: int = 0
+var recovered_words: Array[String] = []
+var recovery_pending_send := false
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
@@ -132,6 +136,19 @@ func _on_game_ready() -> void:
 
 	if not game_screen.time_up.is_connected(_on_game_time_up):
 		game_screen.time_up.connect(_on_game_time_up)
+	
+	if not game_screen.progress_changed.is_connected(_save_anagrams_progress):
+		game_screen.progress_changed.connect(_save_anagrams_progress)
+
+	if appPlugin:
+		var complete_callable := Callable(self, "_on_anagrams_send_complete")
+		var failed_callable := Callable(self, "_on_anagrams_send_failed")
+
+		if appPlugin.has_signal("send_game_complete") and not appPlugin.is_connected("send_game_complete", complete_callable):
+			appPlugin.connect("send_game_complete", complete_callable)
+
+		if appPlugin.has_signal("send_game_failed") and not appPlugin.is_connected("send_game_failed", failed_callable):
+			appPlugin.connect("send_game_failed", failed_callable)
 	if not view_words_button.pressed.is_connected(_on_view_words_pressed):
 		view_words_button.pressed.connect(_on_view_words_pressed)
 	if is_instance_valid(full_word_list):
@@ -218,6 +235,91 @@ func _on_words_scroll_gui_input(event: InputEvent) -> void:
 		_words_scroll.scroll_vertical -= int(event.relative.y)
 		get_viewport().set_input_as_handled()
 		return
+
+func _save_anagrams_progress_snapshot(deadline_ms: int, words: Array[String]) -> void:
+	if appPlugin == null or spectator_mode or my_has_data or deadline_ms <= 0:
+		return
+
+	var progress := {
+		"started": "1",
+		"deadline": str(deadline_ms),
+		"words": "|".join(words)
+	}
+
+	var saved := bool(appPlugin.saveTurnProgress(JSON.stringify(progress)))
+
+	OpLog.i(LOG_TAG, [
+		"recovery_saved saved=", saved,
+		" deadline=", deadline_ms,
+		" words=", words.size()
+	])
+
+func _save_anagrams_progress() -> void:
+	if not is_instance_valid(game_screen):
+		return
+
+	var words: Array[String] = []
+
+	for entry in game_screen.get_word_history():
+		if entry is Dictionary and entry.has("word"):
+			words.append(String(entry["word"]))
+
+	_save_anagrams_progress_snapshot(game_screen.get_deadline_ms(), words)
+
+func _load_anagrams_recovery() -> void:
+	recovered_turn_started = false
+	recovered_deadline_ms = 0
+	recovered_words.clear()
+	recovery_pending_send = false
+
+	if appPlugin == null or spectator_mode or my_has_data or game_over:
+		return
+
+	recovery_pending_send = bool(appPlugin.hasPendingSend())
+
+	var raw_progress := String(appPlugin.getTurnProgress())
+	if raw_progress == "":
+		return
+
+	var parsed: Variant = JSON.parse_string(raw_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		OpLog.w(LOG_TAG, ["recovery_parse_failed raw=", raw_progress])
+		return
+
+	var progress: Dictionary = parsed
+	recovered_deadline_ms = int(String(progress.get("deadline", "0")))
+	recovered_turn_started = String(progress.get("started", "")) == "1" and recovered_deadline_ms > 0
+
+	var saved_words := String(progress.get("words", ""))
+	if saved_words != "":
+		for word in saved_words.split("|", false):
+			var normalized := String(word).strip_edges().to_upper()
+			if normalized != "":
+				recovered_words.append(normalized)
+
+	OpLog.i(LOG_TAG, [
+		"recovery_loaded started=", recovered_turn_started,
+		" pending=", recovery_pending_send,
+		" deadline=", recovered_deadline_ms,
+		" words=", recovered_words.size()
+	])
+
+func _populate_recovered_scoreboard() -> void:
+	var entries: Array = []
+	var recovered_score := 0
+
+	for word in recovered_words:
+		var points := _compute_word_score(word.length())
+		if points <= 0:
+			continue
+
+		entries.append({
+			"word": word,
+			"points": points
+		})
+		recovered_score += points
+
+	_populate_scoreboard(true, entries, entries.size(), recovered_score)
 
 func _set_game_data(raw_text: String) -> void:
 	OpLog.event(LOG_TAG, ["set_game_data_in raw=", raw_text])
@@ -438,7 +540,16 @@ func _set_game_data(raw_text: String) -> void:
 		" win_loss_state=", win_loss_state
 	])
 
+	_load_anagrams_recovery()
+
+	if recovery_pending_send:
+		_populate_recovered_scoreboard()
+
 	_init_screens()
+
+	if recovered_turn_started and not recovery_pending_send and not spectator_mode and not my_has_data and not game_over:
+		await game_screen.start_game(recovered_deadline_ms, recovered_words)
+
 	_sync_waiting_animation()
 
 	OpLog.i(LOG_TAG, [
@@ -544,12 +655,17 @@ func _apply_score_box_style(box: PanelContainer) -> void:
 func _init_screens() -> void:
 	screens = [intro_screen, game_screen, score_screen, words_screen]
 
-	var should_show_intro := not game_over and not spectator_mode and not my_has_data
-	current_screen = 0 if should_show_intro else 2
+	if game_over or spectator_mode or my_has_data or recovery_pending_send:
+		current_screen = 2
+	elif recovered_turn_started:
+		current_screen = 1
+	else:
+		current_screen = 0
 
 	OpLog.i(LOG_TAG, [
 		"init_screens current_screen=", current_screen,
-		" should_show_intro=", should_show_intro,
+		" recovered=", recovered_turn_started,
+		" pending=", recovery_pending_send,
 		" game_over=", game_over,
 		" spectator=", spectator_mode,
 		" my_has_data=", my_has_data
@@ -557,7 +673,7 @@ func _init_screens() -> void:
 
 	for i in screens.size():
 		var node := screens[i]
-		node.visible = (i == current_screen)
+		node.visible = i == current_screen
 		node.position = Vector2.ZERO
 
 func _switch_to_screen(next: int) -> void:
@@ -740,8 +856,20 @@ func _build_all_possible_words() -> Array:
 	return result
 
 func _on_start_button_pressed() -> void:
-	await _switch_to_screen(1)      # GameScreen
-	game_screen.start_game()
+	if spectator_mode or my_has_data:
+		return
+
+	var deadline_ms: int = int(Time.get_unix_time_from_system() * 1000.0) + int(game_screen.get_total_time_sec()) * 1000
+	var empty_words: Array[String] = []
+	
+	_save_anagrams_progress_snapshot(deadline_ms, empty_words)
+
+	recovered_turn_started = true
+	recovered_deadline_ms = deadline_ms
+	recovered_words.clear()
+
+	await _switch_to_screen(1)
+	await game_screen.start_game(deadline_ms)
 	
 func _on_back_button_pressed() -> void:
 	await _switch_to_screen(2)      # ScoreScreen
@@ -789,8 +917,8 @@ func _on_game_time_up() -> void:
 	])
 
 	_populate_scoreboard(true)
-	send_game()
-	await _switch_to_screen(2)      # ScoreScreen
+	await _switch_to_screen(2)
+	await send_game()
 
 func send_game() -> void:
 	await get_tree().process_frame
@@ -802,7 +930,6 @@ func send_game() -> void:
 	var final_score: int = game_screen.get_final_score()
 	var total_words: int = game_screen.get_word_count()
 	var history: Array = game_screen.get_word_history()
-
 	var word_strings: Array[String] = []
 
 	for entry in history:
@@ -810,20 +937,25 @@ func send_game() -> void:
 			word_strings.append(String(entry["word"]))
 
 	var words_joined := "|".join(word_strings)
-
 	var score_key := "score1" if my_player == 1 else "score2"
 	var words_key := "words1" if my_player == 1 else "words2"
 	var words_list_key := "words_list1" if my_player == 1 else "words_list2"
 
-	var payload: Dictionary = {}
+	if my_player == 1:
+		p1_score_s = str(final_score)
+	elif my_player == 2:
+		p2_score_s = str(final_score)
 
-	payload["lang"] = game_language
+	game_ended = await check_win()
 
-	payload[score_key] = str(final_score)
-	payload[words_key] = str(total_words)
-	payload[words_list_key] = words_joined
+	var payload: Dictionary = {
+		"lang": game_language,
+		score_key: str(final_score),
+		words_key: str(total_words),
+		words_list_key: words_joined
+	}
 
-	var avatar_key := ("avatar1" if my_player == 1 else "avatar2")
+	var avatar_key := "avatar1" if my_player == 1 else "avatar2"
 
 	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
 		payload[avatar_key] = player_avatar_display.get_avatar_data_string()
@@ -837,13 +969,13 @@ func send_game() -> void:
 
 	my_has_data = true
 	is_my_turn = false
+	recovered_turn_started = false
 
 	var json := JSON.stringify(payload)
 
 	OpLog.event(LOG_TAG, [
 		"send_game_out my_player=", my_player,
 		" language=", game_language,
-		" dictionary=", dictionary_path,
 		" final_score=", final_score,
 		" total_words=", total_words,
 		" word_list_len=", words_joined.length(),
@@ -853,21 +985,13 @@ func send_game() -> void:
 		" raw=", json
 	])
 
+	if not game_over:
+		_show_sent_label_immediately()
+
 	send_game_data(json)
 
-	game_ended = await check_win()
-
-	if not game_ended:
-		OpLog.d(LOG_TAG, "send_game_no_win_detected")
-	else:
-		OpLog.event(LOG_TAG, [
-			"send_game_after_check_win game_ended=", game_ended,
-			" winner=", winner,
-			" win_loss_state=", win_loss_state
-		])
-
-	if not game_over:
-		play_sent_animation()
+	if appPlugin == null and not game_over:
+		_on_anagrams_send_complete()
 
 func check_win() -> bool:
 	OpLog.d(LOG_TAG, [
@@ -973,38 +1097,52 @@ func check_win() -> bool:
 
 	return true
 
-func play_sent_animation() -> void:
+func _show_sent_label_immediately() -> void:
 	if not is_instance_valid(sent_label):
-		OpLog.w(LOG_TAG, "sent_animation_missing_label")
+		return
+
+	stop_waiting_animation()
+
+	if sent_label_tween and sent_label_tween.is_running():
+		sent_label_tween.kill()
+
+	sent_label.text = "Sent"
+	sent_label.visible = true
+	sent_label.modulate.a = 1.0
+	sent_label.scale = Vector2.ONE
+
+func _on_anagrams_send_complete() -> void:
+	recovery_pending_send = false
+
+	if game_over or not is_instance_valid(sent_label):
 		return
 
 	if sent_label_tween and sent_label_tween.is_running():
 		sent_label_tween.kill()
 
-	sent_label_tween = create_tween().set_parallel(false)
-
-	sent_label.text = "Sent"
+	sent_label.text = "Sent ✔"
 	sent_label.visible = true
-	sent_label.modulate.a = 0.0
-	sent_label.scale = Vector2.ONE
-	sent_label.pivot_offset = sent_label.get_size() / 2.0
+	sent_label.modulate.a = 1.0
 
-	sent_label_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
-	sent_label_tween.tween_interval(0.6)
-	sent_label_tween.tween_callback(func():
-		if is_instance_valid(sent_label):
-			sent_label.text = "Sent ✔"
-	)
+	sent_label_tween = create_tween()
 	sent_label_tween.tween_interval(2.0)
 	sent_label_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
-
 	sent_label_tween.tween_callback(func():
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
-
 		_sync_waiting_animation()
 	)
+
+func _on_anagrams_send_failed() -> void:
+	if sent_label_tween and sent_label_tween.is_running():
+		sent_label_tween.kill()
+
+	if is_instance_valid(sent_label):
+		sent_label.visible = false
+		sent_label.modulate.a = 1.0
+
+	stop_waiting_animation()
 
 func _populate_scoreboard(
 	is_player: bool = true,

@@ -3,13 +3,10 @@
 package com.openbubbles.openpigeon
 
 import android.annotation.SuppressLint
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
-import android.os.Binder
-import com.openbubbles.openpigeon.util.OpenPigeonLog
 import android.widget.RemoteViews
 import android.widget.Toast
 import androidx.compose.runtime.Composable
@@ -17,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.glance.ExperimentalGlanceApi
 import androidx.glance.GlanceId
@@ -47,8 +45,6 @@ import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.width
 import androidx.glance.layout.wrapContentHeight
-import androidx.glance.preview.ExperimentalGlancePreviewApi
-import androidx.glance.preview.Preview
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
@@ -71,28 +67,27 @@ import com.openbubbles.openpigeon.crazy8.Crazy8Game
 import com.openbubbles.openpigeon.darts.DartsGame
 import com.openbubbles.openpigeon.dots.DotsGame
 import com.openbubbles.openpigeon.fill.FillerGame
+import com.openbubbles.openpigeon.golf.GolfGame
 import com.openbubbles.openpigeon.gomoku.GomokuGame
 import com.openbubbles.openpigeon.knockout.KnockoutGame
 import com.openbubbles.openpigeon.mancala.MancalaGame
 import com.openbubbles.openpigeon.paintball.PaintGame
 import com.openbubbles.openpigeon.pong.PongGame
+import com.openbubbles.openpigeon.pool.NineBallGame
 import com.openbubbles.openpigeon.pool.PoolGame
 import com.openbubbles.openpigeon.questions.QuestionsGame
 import com.openbubbles.openpigeon.reversi.ReversiGame
 import com.openbubbles.openpigeon.settings.AvatarSettingsActivity
+import com.openbubbles.openpigeon.shuffle.ShuffleGame
 import com.openbubbles.openpigeon.tanks.TanksGame
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import com.openbubbles.openpigeon.wordbites.WordbitesGame
 import com.openbubbles.openpigeon.wordgames.WordGames
 import com.openbubbles.openpigeon.wordhunt.WordHuntGame
 import kotlinx.coroutines.runBlocking
-import org.json.JSONObject
 import kotlin.math.ceil
 import kotlin.math.min
 import kotlin.math.roundToInt
-import androidx.core.content.edit
-import com.openbubbles.openpigeon.golf.GolfGame
-import com.openbubbles.openpigeon.pool.NineBallGame
-import com.openbubbles.openpigeon.shuffle.ShuffleGame
 
 private const val KEYBOARD_DEFAULT_HEIGHT_DP = 300
 private const val KEYBOARD_EXPANDED_HEIGHT_DP = 380
@@ -107,7 +102,6 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
     companion object {
         var currentKeyboardHandle: IKeyboardHandle? = null
-        var broadcastReceiver: BroadcastReceiver? = null
 
         val activeSessions: MutableMap<String, GameSession> = mutableMapOf()
 
@@ -147,10 +141,6 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
                 activeSessions[id] = GameSession(handle)
             }
             return activeSessions[id]!!
-        }
-
-        fun whichGame(game: JSONObject): Game? {
-            return findByName(game.getString("game"))
         }
 
         fun findByName(name: String): Game? {
@@ -812,7 +802,6 @@ fun RenderLiveExtension(
     val captionAreaDp =
         if (previewSubcaption != null) 58 else 46
 
-    val boardWidthDp = previewWidthDp
     val boardHeightDp = (previewHeightDp - captionAreaDp)
         .coerceAtLeast(1)
 
@@ -822,7 +811,7 @@ fun RenderLiveExtension(
         ?.density
         ?: 1f
 
-    val boardWidthPx = (boardWidthDp * density)
+    val boardWidthPx = (previewWidthDp * density)
         .roundToInt()
         .coerceAtLeast(1)
 
@@ -933,32 +922,5 @@ fun RenderLiveExtension(
                 )
             }
         }
-    }
-}
-
-@OptIn(ExperimentalGlancePreviewApi::class)
-@Preview(widthDp = 200, heightDp = 250)
-@Composable
-fun RenderLiveExtensionPreview() {
-    Box(modifier = GlanceModifier.background(Color.Black)) {
-        RenderLiveExtension(null, null, null)
-    }
-}
-
-@OptIn(ExperimentalGlancePreviewApi::class)
-@Preview(widthDp = 400, heightDp = 300)
-@Composable
-fun RenderKeyboardConfigPreview() {
-    Box(modifier = GlanceModifier.background(Color.Black)) {
-        RenderKeyboardConfig(null, PoolGame())
-    }
-}
-
-@OptIn(ExperimentalGlancePreviewApi::class)
-@Preview(widthDp = 400, heightDp = 300)
-@Composable
-fun RenderKeyboardPreview() {
-    Box(modifier = GlanceModifier.background(Color.Black)) {
-        RenderKeyboard(null)
     }
 }

@@ -79,6 +79,8 @@ var last_replay_raw: String = ""
 var set_award_in_progress: bool = false
 var send_winner: String = ""
 var local_index: int = 1
+var recovery_pending_send: bool = false
+var restoring_recovery: bool = false
 
 var current_wind_angle: Vector2
 var current_wind_power: float
@@ -287,6 +289,14 @@ func _on_game_ready() -> void:
 		" arrow=", is_instance_valid(arrow),
 		" ", _score_summary()
 	])
+	
+	if appPlugin:
+		var complete_callable := Callable(self, "_on_archery_send_complete")
+		var failed_callable := Callable(self, "_on_archery_send_failed")
+		if appPlugin.has_signal("send_game_complete") and not appPlugin.is_connected("send_game_complete", complete_callable):
+			appPlugin.connect("send_game_complete", complete_callable)
+		if appPlugin.has_signal("send_game_failed") and not appPlugin.is_connected("send_game_failed", failed_callable):
+			appPlugin.connect("send_game_failed", failed_callable)
 
 func check_winner(completed_round: int = set_num) -> bool:
 	OpLog.i(LOG_TAG, ["check_winner round=", completed_round, " ", _score_summary()])
@@ -371,7 +381,134 @@ func check_winner(completed_round: int = set_num) -> bool:
 		send_winner = my_uuid + "|-1"
 		OpLog.i(LOG_TAG, ["game_end result=lose round=", completed_round, " ", _score_summary()])
 		return true
-		
+
+func _encode_recovery_moves(values: Array[Vector3]) -> String:
+	var parts: Array[String] = []
+	for pos in values:
+		parts.append("%.6f,%.6f,%.6f" % [pos.x, pos.y, pos.z])
+	return ";".join(parts)
+
+func _decode_recovery_moves(raw: String) -> Array[Vector3]:
+	var result: Array[Vector3] = []
+	if raw.is_empty():
+		return result
+	for item in raw.split(";", false):
+		var xyz := String(item).split(",", false)
+		if xyz.size() == 3:
+			result.append(Vector3(float(xyz[0]), float(xyz[1]), float(xyz[2])))
+	return result
+
+func _encode_recovery_state(values: Array[int]) -> String:
+	var parts: Array[String] = []
+	for value in values:
+		parts.append(str(value))
+	return ",".join(parts)
+
+func _save_archery_progress(committed_moves: Array[Vector3], shots_before: int) -> void:
+	if appPlugin == null or spectator_mode or game_over:
+		return
+	var progress := {
+		"phase": "shot",
+		"moves": _encode_recovery_moves(committed_moves),
+		"shotsBefore": str(shots_before),
+		"setNum": str(set_num),
+		"youScore": str(you_score),
+		"oppScore": str(opp_score),
+		"youSets": str(you_set_wins),
+		"oppSets": str(opp_set_wins),
+		"preState": _encode_recovery_state(turn_pre_state)
+	}
+	var saved := bool(appPlugin.saveTurnProgress(JSON.stringify(progress)))
+	OpLog.i(LOG_TAG, ["recovery_saved saved=", saved, " shotsBefore=", shots_before, " moves=", committed_moves.size()])
+
+func _restore_prior_archery_arrows(saved_moves: Array[Vector3]) -> void:
+	if saved_moves.size() <= 1:
+		return
+	for i in range(saved_moves.size() - 1):
+		var pos := saved_moves[i]
+		if (pos.x < -0.9 or pos.x > 0.9) or (pos.y < 0.45 or pos.y > 2.26):
+			continue
+		var restored_arrow := arrow.spawn()
+		restored_arrow.position = pos
+		restored_arrow.rotation.x = 0.0
+		shots.append(restored_arrow)
+
+func _restore_archery_recovery() -> bool:
+	if appPlugin == null or spectator_mode or game_over or not isTurn:
+		return false
+
+	recovery_pending_send = bool(appPlugin.hasPendingSend())
+	if recovery_pending_send:
+		current_arrow = null
+		_hide_wind_panel(0.0)
+		stop_waiting_animation()
+		return true
+
+	var raw_progress := String(appPlugin.getTurnProgress())
+	if raw_progress.is_empty():
+		return false
+
+	var parsed: Variant = JSON.parse_string(raw_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+
+	var progress: Dictionary = parsed
+	if String(progress.get("phase", "")) != "shot":
+		return false
+
+	var saved_moves := _decode_recovery_moves(String(progress.get("moves", "")))
+	if saved_moves.is_empty():
+		return false
+
+	for arrow_i in shots:
+		if is_instance_valid(arrow_i):
+			arrow_i.queue_free()
+
+	shots.clear()
+	if is_instance_valid(current_arrow):
+		current_arrow.queue_free()
+	current_arrow = null
+
+	num_shots = int(String(progress.get("shotsBefore", "0")))
+	set_num = int(String(progress.get("setNum", str(set_num))))
+	you_score = int(String(progress.get("youScore", str(you_score))))
+	opp_score = int(String(progress.get("oppScore", str(opp_score))))
+	you_set_wins = int(String(progress.get("youSets", str(you_set_wins))))
+	opp_set_wins = int(String(progress.get("oppSets", str(opp_set_wins))))
+
+	var pre_state_raw := String(progress.get("preState", ""))
+	turn_pre_state = convert_to_int_arr(pre_state_raw)
+	has_turn_pre_state = not turn_pre_state.is_empty()
+
+	moves = saved_moves.duplicate()
+	update_set_number(set_num)
+	update_distance()
+	_update_set_score_labels()
+	_restore_prior_archery_arrows(saved_moves)
+
+	var last_pos := saved_moves[-1]
+	var recovered_arrow := arrow.spawn()
+	shots.append(recovered_arrow)
+	restoring_recovery = true
+	_hide_wind_panel(0.0)
+	cam_follow_dart()
+
+	recovered_arrow.shoot(last_pos, func() -> void:
+		var pts: int = target.calc_score(recovered_arrow)
+		var hit_pos: Vector3 = recovered_arrow.global_transform.origin
+		_spawn_score_popup(hit_pos, pts, _get_score_color(pts))
+		if pts > 0:
+			add_score(pts)
+		num_shots += 1
+		await get_tree().create_timer(1.0).timeout
+		await cam_reset_pos()
+		restoring_recovery = false
+		_process_game_state()
+	)
+
+	OpLog.i(LOG_TAG, ["recovery_restore shotsBefore=", num_shots, " moves=", saved_moves.size(), " lastPos=", last_pos])
+	return true
+
 func _process_game_state() -> void:
 	if game_over:
 		OpLog.i(LOG_TAG, ["process_state skipped game_over=true ", _score_summary()])
@@ -1258,6 +1395,9 @@ func _set_game_data(new_replay: String) -> void:
 		OpLog.w(LOG_TAG, "set_game_data suppress process_state duplicate replay")
 		return
 
+	if _restore_archery_recovery():
+		return
+
 	_process_game_state()
 
 func add_score(score: int, you: bool = true) -> void:
@@ -1532,6 +1672,8 @@ func shoot_dart() -> void:
 		dbg(["shot_wind_not_applied angleLen=", current_wind_angle.length(), " power=", current_wind_power])
 
 	var shot_arrow := current_arrow
+	moves.append(shot_pos)
+	_save_archery_progress(moves, num_shots)
 	shot_arrow.shoot(shot_pos, func() -> void:
 		var pts: int = target.calc_score(shot_arrow)
 		var hit_pos: Vector3 = shot_arrow.global_transform.origin
@@ -1557,7 +1699,6 @@ func shoot_dart() -> void:
 
 	cam_follow_dart()
 	shots.append(shot_arrow)
-	moves.append(shot_pos)
 	OpLog.i(LOG_TAG, ["shot_recorded moves=", moves.size(), " pos=", shot_pos])
 	current_arrow = null
 	
@@ -1636,33 +1777,39 @@ func convert_to_float_arr(cstr: String) -> Array[float]:
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
-		OpLog.w(LOG_TAG, "play_sent_animation skipped: sent_label invalid")
 		return
-	
+	stop_waiting_animation()
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()
-
-	sent_tween = create_tween().set_parallel(false)
-
 	sent_label.text = "Sent"
 	sent_label.visible = true
-	sent_label.modulate.a = 0.0
+	sent_label.modulate.a = 1.0
 	sent_label.scale = Vector2.ONE
 	sent_label.pivot_offset = sent_label.get_size() / 2.0
 
-	sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
-	sent_tween.tween_interval(0.6)
-	sent_tween.tween_callback(func():
-		if is_instance_valid(sent_label):
-			sent_label.text = "Sent ✔"
-	)
+func _on_archery_send_complete() -> void:
+	recovery_pending_send = false
+	if game_over or not is_instance_valid(sent_label):
+		return
+	if sent_tween and sent_tween.is_running():
+		sent_tween.kill()
+	sent_label.text = "Sent ✔"
+	sent_label.visible = true
+	sent_label.modulate.a = 1.0
+	sent_tween = create_tween()
 	sent_tween.tween_interval(2.0)
 	sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
-
 	sent_tween.tween_callback(func():
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
 			start_waiting_animation()
 	)
-	
+
+func _on_archery_send_failed() -> void:
+	if sent_tween and sent_tween.is_running():
+		sent_tween.kill()
+	if is_instance_valid(sent_label):
+		sent_label.visible = false
+		sent_label.modulate.a = 1.0
+	stop_waiting_animation()

@@ -13,6 +13,7 @@ import android.view.animation.DecelerateInterpolator
 import android.widget.*
 import androidx.core.view.isVisible
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.graphics.toColorInt
 
 class SettingsSheet(
     private val context: Context, private val rootFrame: FrameLayout
@@ -34,13 +35,13 @@ class SettingsSheet(
     )
 
     // ── Colors ───────────────────────────────────────────────────────────────
-    private val COL_CARD = Color.parseColor("#1e1e2e")
-    private val COL_HANDLE = Color.parseColor("#555566")
-    private val COL_LABEL = Color.parseColor("#aaaacc")
-    private val COL_TAB_SEL = Color.parseColor("#a78bfa")
-    private val COL_TAB_UNSEL = Color.parseColor("#666688")
-    private val COL_SEL_BORDER = Color.parseColor("#a78bfa")
-    private val COL_DIVIDER = Color.parseColor("#333355")
+    private val COL_CARD = "#1e1e2e".toColorInt()
+    private val COL_HANDLE = "#555566".toColorInt()
+    private val COL_LABEL = "#aaaacc".toColorInt()
+    private val COL_TAB_SEL = "#a78bfa".toColorInt()
+    private val COL_TAB_UNSEL = "#666688".toColorInt()
+    private val COL_SEL_BORDER = "#a78bfa".toColorInt()
+    private val COL_DIVIDER = "#333355".toColorInt()
 
     // ── Views ─────────────────────────────────────────────────────────────────
     private val dimView: View
@@ -426,7 +427,7 @@ class SettingsSheet(
             setHintTextColor(COL_LABEL)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#2a2a3a"))
+                setColor("#2a2a3a".toColorInt())
                 cornerRadius = dpf(10f)
                 setStroke(dp(1f), COL_DIVIDER)
             }
@@ -463,7 +464,7 @@ class SettingsSheet(
             )
             setPadding(dp(8f), 0, dp(8f), 0)
         }
-        Tab.values().forEach { tab ->
+        Tab.entries.forEach { tab ->
             val tv = TextView(context).apply {
                 text = when (tab) {
                     Tab.CLOTHING -> "Clothes"
@@ -507,7 +508,7 @@ class SettingsSheet(
         pickerScroll.addView(pickerRow)
         card.addView(pickerScroll)
 
-        // Colour swatches - centered
+        // Color swatches - centered
         colorRowContainer = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -1158,7 +1159,7 @@ class SettingsSheet(
         "#ee7c09",
         "#f11f06",
         "#d3292c"
-    ).map { Color.parseColor(it) }
+    ).map { it.toColorInt() }
 
     private fun skinTones() = listOf(
         "#ffbd9a",
@@ -1172,7 +1173,7 @@ class SettingsSheet(
         "#f8cf55",
         "#f6820c",
         "#c34126"
-    ).map { Color.parseColor(it) }
+    ).map { it.toColorInt() }
 
     private fun hairColors() = listOf(
         "#f8cf55",
@@ -1186,7 +1187,7 @@ class SettingsSheet(
         "#a348c7",
         "#699bff",
         "#82b941"
-    ).map { Color.parseColor(it) }
+    ).map { it.toColorInt() }
 
     private fun clothingColors() = listOf(
         "#7c7c7c",
@@ -1200,5 +1201,5 @@ class SettingsSheet(
         "#ee7c09",
         "#f11f06",
         "#d3292c"
-    ).map { Color.parseColor(it) }
+    ).map { it.toColorInt() }
 }
