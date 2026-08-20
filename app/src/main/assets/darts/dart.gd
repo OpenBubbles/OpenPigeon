@@ -157,6 +157,21 @@ func _update_flight_rotation(delta: float) -> void:
 	var spin_basis := Basis(flight_direction, _spin_angle)
 	basis = spin_basis * aligned_basis
 
+func restore_hit(
+	p_end_pos: Vector3,
+	hit: Array[int]
+) -> void:
+	start_pos = position
+	end_pos = p_end_pos
+	position = p_end_pos
+
+	replay_hit = hit.duplicate()
+
+	finished = true
+	_flying = false
+	_flight_elapsed = FLIGHT_DURATION
+
+	transparency = 0.0
 
 func _quaternion_from_to(
 	from_direction: Vector3,

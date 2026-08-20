@@ -1,5 +1,6 @@
 package com.openbubbles.openpigeon.settings
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.*
 import android.graphics.BitmapFactory
@@ -9,6 +10,9 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import kotlin.math.roundToInt
+import androidx.core.graphics.toColorInt
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.withClip
 
 class AvatarView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
@@ -65,18 +69,18 @@ class AvatarView @JvmOverloads constructor(
     // ── Draw state ────────────────────────────────────────────────────────────
     data class DrawState(
         val bgStyle: String = "Plain",
-        val bgColor: Int = Color.parseColor("#4e5d89"),
+        @SuppressLint("UseKtx") val bgColor: Int = "#4e5d89".toColorInt(),
         val bgBrightness: Float = 0f,
         val fshapeStyle: String = "Default",
-        val fshapeColor: Int = Color.parseColor("#e0ac69"),
+        val fshapeColor: Int = "#e0ac69".toColorInt(),
         val fshapeBrightness: Float = 0f,
         val hairStyle: String = "hair1",
-        val hairColor: Int = Color.parseColor("#2c232b"),
+        val hairColor: Int = "#2c232b".toColorInt(),
         val hairBrightness: Float = 0f,
         val eyesStyle: String = "eyes1",
         val mouthStyle: String = "mouth1",
         val clothingStyle: String = "clothing1",
-        val clothingColor: Int = Color.parseColor("#a03c3c"),
+        val clothingColor: Int = "#a03c3c".toColorInt(),
         val clothingBrightness: Float = 0f,
         val headAccessoryStyle: String = "hat_0",
         val faceAccessoryStyle: String = "face_1"
@@ -142,15 +146,15 @@ class AvatarView @JvmOverloads constructor(
             fun <T> List<T>.safeGet(idx: Int) = getOrElse(idx) { first() }
 
             var bgStyle = "Plain"
-            var bgColor = Color.parseColor("#4e5d89")
+            var bgColor = "#4e5d89".toColorInt()
             var fshapeStyle = "Default"
-            var fshapeColor = Color.parseColor("#e0ac69")
+            var fshapeColor = "#e0ac69".toColorInt()
             var hairStyle = "hair1"
-            var hairColor = Color.parseColor("#2c232b")
+            var hairColor = "#2c232b".toColorInt()
             var eyesStyle = "eyes1"
             var mouthStyle = "mouth1"
             var clothingStyle = "clothing1"
-            var clothingColor = Color.parseColor("#a03c3c")
+            var clothingColor = "#a03c3c".toColorInt()
             var headAccessoryStyle = "hat_0"
             var faceAccessoryStyle = "face_1"
 
@@ -390,7 +394,7 @@ class AvatarView @JvmOverloads constructor(
         // Render avatar at actual view size
         if (cachedBitmap == null || cachedBitmap!!.width != w || cachedBitmap!!.height != h) {
             cachedBitmap?.recycle()
-            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val bmp = createBitmap(w, h)
             renderFully(Canvas(bmp), w.toFloat(), h.toFloat(), currentState)
             cachedBitmap = bmp
         }
@@ -413,17 +417,16 @@ class AvatarView @JvmOverloads constructor(
         clipPath.reset()
         clipPath.addRoundRect(pillRect, pillRect.width() * 0.38f, pillRect.height() * 0.48f, Path.Direction.CW)
 
-        canvas.save()
-        canvas.clipPath(clipPath)
-        canvas.drawColor(applyBrightness(s.bgColor, s.bgBrightness))
+        canvas.withClip(clipPath) {
+            drawColor(applyBrightness(s.bgColor, s.bgBrightness))
 
-        if (s.bgStyle != "Plain") {
-            bgRegions[s.bgStyle]?.let { src ->
-                AvatarBitmapCache.bmBackground?.let { canvas.drawBitmap(it, src, pillRect, drawPaint) }
+            if (s.bgStyle != "Plain") {
+                bgRegions[s.bgStyle]?.let { src ->
+                    AvatarBitmapCache.bmBackground?.let { drawBitmap(it, src, pillRect, drawPaint) }
+                }
             }
-        }
 
-        canvas.restore()
+        }
 
         val skinFinal = applyBrightness(s.fshapeColor, s.fshapeBrightness)
         val hairFinal = applyBrightness(s.hairColor, s.hairBrightness)

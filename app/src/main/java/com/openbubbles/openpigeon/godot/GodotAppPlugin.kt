@@ -25,6 +25,9 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
     companion object {
         val SET_GAME_DATA_SIGNAL = SignalInfo("set_game_data", String::class.java)
         val SWITCH_GAME_SIGNAL = SignalInfo("switch_game", String::class.java)
+        val SEND_GAME_COMPLETE_SIGNAL = SignalInfo("send_game_complete")
+
+        val SEND_GAME_FAILED_SIGNAL = SignalInfo("send_game_failed")
     }
 
     init {
@@ -37,7 +40,12 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
 
     override fun getPluginName() = "AppPlugin"
 
-    override fun getPluginSignals() = setOf(SET_GAME_DATA_SIGNAL, SWITCH_GAME_SIGNAL)
+    override fun getPluginSignals() = setOf(
+        SET_GAME_DATA_SIGNAL,
+        SWITCH_GAME_SIGNAL,
+        SEND_GAME_COMPLETE_SIGNAL,
+        SEND_GAME_FAILED_SIGNAL,
+    )
 
     @UsedByGodot
     fun godotLog(level: String, tag: String, message: String) {
@@ -132,25 +140,197 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
     }
 
     @UsedByGodot
-    fun updateGameData(updates: String) {
-        OpenPigeonLog.d("openpigeon-${gameActivity.baseGame.getName()}", "updateGameData: $updates")
-        val gameSessionIPC = gameActivity.gameSessionIPC!!
-        val currentMessage = gameSessionIPC.getCurrentMessage(gameActivity.sessionId)
+    fun updateGameData(
+        updates: String,
+    ): Boolean {
+        OpenPigeonLog.d(
+            "openpigeon-${gameActivity.baseGame.getName()}",
+            "updateGameData: $updates",
+        )
+
+        val gameSessionIPC =
+            gameActivity.gameSessionIPC
+
+        if (gameSessionIPC == null) {
+            OpenPigeonLog.w(
+                "GodotAppPlugin",
+                "updateGameData failed: GameSessionIPC unavailable",
+            )
+
+            emitSignal(
+                SEND_GAME_FAILED_SIGNAL.name,
+            )
+
+            return false
+        }
+
+        val currentMessage =
+            gameSessionIPC.getCurrentMessage(
+                gameActivity.sessionId,
+            )
+
+        if (currentMessage.isEmpty()) {
+            emitSignal(
+                SEND_GAME_FAILED_SIGNAL.name,
+            )
+
+            return false
+        }
+
+        val sender =
+            gameSessionIPC.getSenderUUID(
+                gameActivity.sessionId,
+            )
 
         val msgUpdates = mapOf(
-            "player" to if (currentMessage["player"] == "2") "1" else "2",
-            "num" to (currentMessage["num"]?.toInt()!! + 1).toString(),
-            "sender" to gameSessionIPC.getSenderUUID(gameActivity.sessionId)
+            "player" to if (
+                currentMessage["player"] == "2"
+            ) {
+                "1"
+            } else {
+                "2"
+            },
+            "num" to (
+                    (currentMessage["num"]?.toIntOrNull() ?: 0) + 1
+                    ).toString(),
+            "sender" to sender,
         ).toMutableMap()
 
-        val parsed = JSONObject(updates)
-        for (update in parsed.keys()) {
-            msgUpdates[update] = parsed.getString(update)
+        val parsed = try {
+            JSONObject(updates)
+        } catch (throwable: Throwable) {
+            OpenPigeonLog.e(
+                "GodotAppPlugin",
+                "Invalid update JSON",
+                throwable,
+            )
+
+            emitSignal(
+                SEND_GAME_FAILED_SIGNAL.name,
+            )
+
+            return false
         }
 
-        gameActivity.gameSessionIPC!!.updateSession(msgUpdates, gameActivity.sessionId) {
-            OpenPigeonLog.i("openpigeon-${gameActivity.baseGame.getName()}", "Game session updated")
+        for (update in parsed.keys()) {
+            msgUpdates[update] =
+                parsed.getString(update)
         }
+
+        val dispatched =
+            gameSessionIPC.updateSession(
+                msgUpdates,
+                gameActivity.sessionId,
+            ) {
+                OpenPigeonLog.i(
+                    "openpigeon-${gameActivity.baseGame.getName()}",
+                    "Game session updated",
+                )
+
+                emitSignal(
+                    SEND_GAME_COMPLETE_SIGNAL.name,
+                )
+            }
+
+        if (!dispatched) {
+            emitSignal(
+                SEND_GAME_FAILED_SIGNAL.name,
+            )
+        }
+
+        return dispatched
+    }
+
+    @UsedByGodot
+    fun saveTurnProgress(
+        progressJson: String,
+    ): Boolean {
+        val ipc =
+            gameActivity.gameSessionIPC
+                ?: return false
+
+        val parsed = try {
+            JSONObject(
+                progressJson,
+            )
+        } catch (throwable: Throwable) {
+            OpenPigeonLog.e(
+                "GodotAppPlugin",
+                "Invalid turn recovery JSON",
+                throwable,
+            )
+
+            return false
+        }
+
+        val progress =
+            mutableMapOf<String, String>()
+
+        for (key in parsed.keys()) {
+            progress[key] =
+                parsed.optString(
+                    key,
+                    "",
+                )
+        }
+
+        return ipc.saveTurnProgress(
+            gameActivity.sessionId,
+            progress,
+        )
+    }
+
+    @UsedByGodot
+    fun getTurnProgress(): String {
+        val ipc =
+            gameActivity.gameSessionIPC
+                ?: return "{}"
+
+        return JSONObject(
+            ipc.getTurnProgress(
+                gameActivity.sessionId,
+            ),
+        ).toString()
+    }
+
+    @UsedByGodot
+    fun hasPendingSend(): Boolean {
+        return gameActivity
+            .gameSessionIPC
+            ?.hasPendingSend(
+                gameActivity.sessionId,
+            ) == true
+    }
+
+    @UsedByGodot
+    fun retryPendingSend(): Boolean {
+        val ipc =
+            gameActivity.gameSessionIPC
+
+        if (ipc == null) {
+            emitSignal(
+                SEND_GAME_FAILED_SIGNAL.name,
+            )
+
+            return false
+        }
+
+        val dispatched =
+            ipc.retryPendingSend(
+                gameActivity.sessionId,
+            ) {
+                emitSignal(
+                    SEND_GAME_COMPLETE_SIGNAL.name,
+                )
+            }
+
+        if (!dispatched) {
+            emitSignal(
+                SEND_GAME_FAILED_SIGNAL.name,
+            )
+        }
+
+        return dispatched
     }
 
     @UsedByGodot

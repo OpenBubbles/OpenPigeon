@@ -23,6 +23,8 @@ var game_settings_category: String = ""
 var _startup_cover: CanvasLayer
 var _startup_reveal_queued: bool = false
 var _startup_revealed: bool = false
+var _turn_retry_ui: Dictionary = {}
+var _send_check_serial: int = 0
 
 func _create_startup_cover() -> void:
 	_startup_cover = CanvasLayer.new()
@@ -114,6 +116,37 @@ func _ready() -> void:
 		appPlugin = Engine.get_singleton("AppPlugin")
 	else:
 		appPlugin = null
+	
+	if appPlugin:
+		_turn_retry_ui = GameUtils.create_send_retry_overlay(
+			self,
+			Callable(
+				self,
+				"_retry_saved_send"
+			)
+		)
+
+		if appPlugin.has_signal(
+			"send_game_complete"
+		):
+			appPlugin.connect(
+				"send_game_complete",
+				Callable(
+					self,
+					"_on_send_game_complete"
+				)
+			)
+
+		if appPlugin.has_signal(
+			"send_game_failed"
+		):
+			appPlugin.connect(
+				"send_game_failed",
+				Callable(
+					self,
+					"_on_send_game_failed"
+				)
+			)
 
 	if appPlugin:
 		var receive_callable := Callable(
@@ -138,6 +171,9 @@ func _ready() -> void:
 
 	if appPlugin:
 		appPlugin.onReady()
+		call_deferred(
+			"_refresh_turn_recovery_state"
+		)
 	else:
 		var dev := _get_dev_data()
 
@@ -210,10 +246,152 @@ func _on_dot_timer_timeout() -> void:
 	waiting_label.text = BASE_WAIT_TEXT + ".".repeat(dot_count)
 
 func send_game_data(json: String) -> void:
-	if appPlugin:
-		appPlugin.updateGameData(json)
+	if not appPlugin:
+		print(
+			"No app plugin (local test): ",
+			json
+		)
+		return
+
+	var dispatched: bool = bool(
+		appPlugin.updateGameData(
+			json
+		)
+	)
+
+	if not dispatched:
+		_show_send_retry(
+			false
+		)
+		return
+
+	_send_check_serial += 1
+
+	_check_pending_send_after_delay(
+		_send_check_serial
+	)
+
+func save_turn_progress(
+	data: Dictionary
+) -> void:
+	if not appPlugin:
+		return
+
+	appPlugin.saveTurnProgress(
+		JSON.stringify(
+			data
+		)
+	)
+
+
+func get_saved_turn_progress() -> Dictionary:
+	if not appPlugin:
+		return {}
+
+	var raw: String = String(
+		appPlugin.getTurnProgress()
+	)
+
+	if raw.is_empty():
+		return {}
+
+	var parsed: Variant = JSON.parse_string(
+		raw
+	)
+
+	if typeof(parsed) == TYPE_DICTIONARY:
+		return parsed
+
+	return {}
+
+
+func has_pending_send() -> bool:
+	return (
+		appPlugin != null and
+		bool(
+			appPlugin.hasPendingSend()
+		)
+	)
+
+
+func _refresh_turn_recovery_state() -> void:
+	if has_pending_send():
+		_show_send_retry(
+			false
+		)
 	else:
-		print("No app plugin (local test): ", json)
+		_hide_send_retry()
+
+
+func _retry_saved_send() -> void:
+	if not appPlugin:
+		return
+
+	_show_send_retry(
+		true
+	)
+
+	var dispatched: bool = bool(
+		appPlugin.retryPendingSend()
+	)
+
+	if not dispatched:
+		_show_send_retry(
+			false
+		)
+		return
+
+	_send_check_serial += 1
+
+	_check_pending_send_after_delay(
+		_send_check_serial
+	)
+
+
+func _on_send_game_complete() -> void:
+	_send_check_serial += 1
+	_hide_send_retry()
+
+
+func _on_send_game_failed() -> void:
+	_send_check_serial += 1
+	_show_send_retry(
+		false
+	)
+
+
+func _show_send_retry(
+	sending: bool
+) -> void:
+	GameUtils.set_send_retry_overlay_state(
+		_turn_retry_ui,
+		true,
+		sending
+	)
+
+
+func _hide_send_retry() -> void:
+	GameUtils.set_send_retry_overlay_state(
+		_turn_retry_ui,
+		false,
+		false
+	)
+
+
+func _check_pending_send_after_delay(
+	serial: int
+) -> void:
+	await get_tree().create_timer(
+		8.0
+	).timeout
+
+	if serial != _send_check_serial:
+		return
+
+	if has_pending_send():
+		_show_send_retry(
+			false
+		)
 
 func _load_game_specific_settings() -> void:
 	var saved_volume: float = float(SettingsManager.get_setting(game_settings_category, "master_volume", 0.75))

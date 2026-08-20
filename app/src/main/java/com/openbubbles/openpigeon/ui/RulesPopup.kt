@@ -7,9 +7,17 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
-import android.view.*
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.view.animation.OvershootInterpolator
-import android.widget.*
+import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import androidx.core.graphics.toColorInt
 import androidx.core.view.isVisible
 
 object RulesPopup {
@@ -26,12 +34,16 @@ object RulesPopup {
     }
 
     // ── dp helpers ────────────────────────────────────────────────────────────
-    private fun dp(context: Context, v: Float) = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, v, context.resources.displayMetrics).toInt()
-    private fun dpf(context: Context, v: Float) = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, v, context.resources.displayMetrics)
-    private fun sp(context: Context, v: Float) = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_SP, v, context.resources.displayMetrics)
+    private fun dp(
+        context: Context,
+        value: Float,
+    ): Int {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            value,
+            context.resources.displayMetrics,
+        ).toInt()
+    }
 
     fun show(
         context: Context,
@@ -60,8 +72,8 @@ object RulesPopup {
             layoutParams = FrameLayout.LayoutParams(popupW, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER)
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#2a2a3e"))
-                cornerRadius = dpf(context, 16f)
+                setColor("#2a2a3e".toColorInt())
+                cornerRadius = dp(context, 16f).toFloat()
             }
             setPopupLayer(this, Z_RULES_CARD)
             clipToOutline = true
@@ -75,12 +87,21 @@ object RulesPopup {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(context, 52f))
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#1e1e2e"))
-                // Only round the top corners
+                setColor("#1e1e2e".toColorInt())
+
+                val radius =
+                    dp(context, 16f).toFloat()
+
                 cornerRadii = floatArrayOf(
-                    dpf(context,16f), dpf(context,16f),
-                    dpf(context,16f), dpf(context,16f),
-                    0f, 0f, 0f, 0f)
+                    radius,
+                    radius,
+                    radius,
+                    radius,
+                    0f,
+                    0f,
+                    0f,
+                    0f,
+                )
             }
         }
 
@@ -109,8 +130,7 @@ object RulesPopup {
                     .use { BitmapFactory.decodeStream(it) }
                 setImageBitmap(bm)
             } catch (_: Exception) {
-                // Fallback text button
-                (this as? ImageButton)?.setImageDrawable(null)
+                setImageDrawable(null)
             }
             contentDescription = "Close"
         }
@@ -120,9 +140,11 @@ object RulesPopup {
         // ── Scrollable body ───────────────────────────────────────────────────
         val scroll = ScrollView(context).apply {
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f).also {
-                // Max height enforced by measuring in a post{}
-            }
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f,
+            )
+
             isVerticalScrollBarEnabled = true
         }
 
@@ -148,7 +170,7 @@ object RulesPopup {
             if (section.body.isNotBlank()) {
                 val tv = TextView(context).apply {
                     text = section.body
-                    setTextColor(Color.parseColor("#ccccdd"))
+                    setTextColor("#ccccdd".toColorInt())
                     textSize = 13f
                     setLineSpacing(0f, 1.3f)
                 }
@@ -192,10 +214,20 @@ object RulesPopup {
 
         // After layout, clamp scroll height to 80% of screen
         card.post {
-            val titleH  = titleBar.height
-            val bodyH   = body.height + dp(context, 2f) // tiny buffer
-            val totalH  = titleH + bodyH
-            val clampedScrollH = (maxH - titleH).coerceAtMost(bodyH)
+            val titleH =
+                titleBar.height
+
+            val bodyH =
+                body.height + dp(
+                    context,
+                    2f,
+                )
+
+            val clampedScrollH =
+                (maxH - titleH)
+                    .coerceAtMost(
+                        bodyH,
+                    )
 
             scroll.layoutParams = (scroll.layoutParams as LinearLayout.LayoutParams).also {
                 it.height = clampedScrollH

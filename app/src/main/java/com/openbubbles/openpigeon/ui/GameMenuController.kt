@@ -23,12 +23,6 @@ enum class GameMenuPlacement(
     val isTop: Boolean,
     val isEnd: Boolean,
 ) {
-    TOP_START(
-        Gravity.TOP or Gravity.START,
-        true,
-        false,
-    ),
-
     TOP_END(
         Gravity.TOP or Gravity.END,
         true,
@@ -232,7 +226,7 @@ class GameMenuController(
 
                 OpenPigeonLog.e(
                     "GameMenu",
-                    "Unable to start updated music " + "for game=$gameId " + "asset=$assetPath",
+                    "Unable to start updated music for game=$gameId asset=$assetPath",
                 )
             }
         }
@@ -282,11 +276,6 @@ class GameMenuController(
         )
     }
 
-
-    fun isMenuOpen(): Boolean {
-        return menuOpen
-    }
-
     private fun createMusicPlayer(
         assetPath: String?,
     ): LoopingWavPlayer? {
@@ -296,38 +285,6 @@ class GameMenuController(
                 assetPath = path,
             )
         }
-    }
-
-    fun addGlobalBooleanSetting(
-        label: String,
-        key: String,
-        default: Boolean,
-        onChanged: (Boolean) -> Unit,
-    ) {
-        sheet.addBooleanSetting(
-            label = label,
-            scope = SettingScope.Global,
-            key = key,
-            default = default,
-            onChanged = onChanged,
-        )
-    }
-
-    fun addGameBooleanSetting(
-        label: String,
-        key: String,
-        default: Boolean,
-        onChanged: (Boolean) -> Unit,
-    ) {
-        sheet.addBooleanSetting(
-            label = label,
-            scope = SettingScope.Game(
-                gameId,
-            ),
-            key = key,
-            default = default,
-            onChanged = onChanged,
-        )
     }
 
     fun openSettings() {

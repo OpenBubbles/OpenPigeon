@@ -275,8 +275,7 @@ object SettingsData {
             preferences.getInt(
                 META_BRIDGE_VERSION,
                 0,
-            ) <
-                    BRIDGE_VERSION
+            ) < BRIDGE_VERSION
 
         if (firstBridgeRun) {
             readCfgSnapshot()
@@ -302,7 +301,7 @@ object SettingsData {
                     META_BRIDGE_VERSION,
                     BRIDGE_VERSION,
                 )
-                .commit()
+                .apply()
 
             flushToGodot()
         }
@@ -370,7 +369,7 @@ object SettingsData {
             preferencesEditor,
         ).block()
 
-        preferencesEditor.commit()
+        preferencesEditor.apply()
 
         flushToGodot()
     }
@@ -389,6 +388,7 @@ object SettingsData {
         }
     }
 
+    @Suppress("unused")
     fun putInt(
         scope: SettingScope,
         key: String,
@@ -470,6 +470,7 @@ object SettingsData {
         }
     }
 
+    @Suppress("unused")
     fun getInt(
         scope: SettingScope,
         key: String,
@@ -650,7 +651,7 @@ object SettingsData {
                     META_CFG_HASH,
                     snapshot.hash,
                 )
-                .commit()
+                .apply()
 
             OpenPigeonLog.d(
                 TAG,
@@ -811,7 +812,7 @@ object SettingsData {
         }
 
         if (changed) {
-            editor.commit()
+            editor.apply()
         }
 
         return changed
@@ -900,7 +901,7 @@ object SettingsData {
                     META_CFG_HASH,
                     snapshot.hash,
                 )
-                .commit()
+                .apply()
         } catch (throwable: Throwable) {
             OpenPigeonLog.e(
                 TAG,

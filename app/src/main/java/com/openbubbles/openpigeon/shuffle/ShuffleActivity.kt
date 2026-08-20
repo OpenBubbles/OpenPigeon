@@ -30,6 +30,9 @@ import androidx.core.view.isVisible
 import android.graphics.Color
 import android.graphics.Typeface
 import android.view.ViewGroup
+import com.openbubbles.openpigeon.ui.TurnRecoveryOverlayController
+import com.openbubbles.openpigeon.ui.attachTurnRecoveryOverlay
+import com.openbubbles.openpigeon.R
 
 class ShuffleActivity : AppCompatActivity() {
     private var sessionId: String = ""
@@ -50,6 +53,21 @@ class ShuffleActivity : AppCompatActivity() {
 
     private lateinit var rootFrame: FrameLayout
     private lateinit var renderer: ShuffleRenderer
+
+    private lateinit var turnRecoveryOverlay:
+            TurnRecoveryOverlayController
+
+    private val recoveryHandler =
+        Handler(
+            Looper.getMainLooper(),
+        )
+
+    private var recoveryCheckRunnable: Runnable? =
+        null
+
+    private var recoveryRetryInFlight =
+        false
+
     private var rendererHasInitialData = false
     private lateinit var myAvatarAnchor: FrameLayout
     private lateinit var opponentAvatarAnchor: FrameLayout
@@ -82,40 +100,57 @@ class ShuffleActivity : AppCompatActivity() {
 
     private var stateLabelVisual = StateLabelVisual.Hidden
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    override fun onCreate(
+        savedInstanceState: Bundle?,
+    ) {
+        super.onCreate(
+            savedInstanceState,
+        )
 
-        requestWindowFeature(Window.FEATURE_NO_TITLE)
+        requestWindowFeature(
+            Window.FEATURE_NO_TITLE,
+        )
+
         supportActionBar?.hide()
+
         enableEdgeToEdge()
 
-        rootFrame = FrameLayout(
-            this,
-        ).apply {
-            clipChildren = false
+        rootFrame =
+            FrameLayout(
+                this,
+            ).apply {
+                clipChildren =
+                    false
 
-            clipToPadding = false
-        }
+                clipToPadding =
+                    false
+            }
 
         setContentView(
             rootFrame,
         )
 
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(android.R.id.content)) { _, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(
+            findViewById(
+                android.R.id.content,
+            ),
+        ) { _, insets ->
             insets
         }
 
-        renderer = ShuffleRenderer(
-            this,
-        ).apply {
-            visibility = View.INVISIBLE
+        renderer =
+            ShuffleRenderer(
+                this,
+            ).apply {
+                visibility =
+                    View.INVISIBLE
 
-            onLaunchReplayReady = { stagedReplay ->
-                handleLocalLaunchReplay(
-                    stagedReplay,
-                )
+                onLaunchReplayReady = { stagedReplay ->
+                    handleLocalLaunchReplay(
+                        stagedReplay,
+                    )
+                }
             }
-        }
 
         rootFrame.addView(
             renderer,
@@ -128,23 +163,316 @@ class ShuffleActivity : AppCompatActivity() {
         createAvatarHud()
 
         renderer.onTopHudAlphaChanged = { alpha ->
-            myAvatarAnchor.alpha = alpha
-            opponentAvatarAnchor.alpha = alpha
+            myAvatarAnchor.alpha =
+                alpha
+
+            opponentAvatarAnchor.alpha =
+                alpha
 
             if (::youLabel.isInitialized) {
-                youLabel.alpha = if (spectatorMode) 0f else alpha
+                youLabel.alpha =
+                    if (spectatorMode) {
+                        0f
+                    } else {
+                        alpha
+                    }
             }
 
             if (::spectatorLabel.isInitialized) {
-                spectatorLabel.alpha = alpha
+                spectatorLabel.alpha =
+                    alpha
             }
         }
 
         createStateLabel()
+
         createSpectatorLabel()
+
         hideStateLabelNow()
+
+        setupTurnRecoveryOverlay()
+
         setupGameMenu()
+
         startGameSession()
+    }
+
+    private fun setupTurnRecoveryOverlay() {
+        turnRecoveryOverlay =
+            attachTurnRecoveryOverlay(
+                parent = rootFrame,
+                onRetry = {
+                    retryPendingShuffleSend()
+                },
+            )
+    }
+
+    private fun showTurnRecoveryRetry() {
+        recoveryRetryInFlight =
+            false
+
+        if (!isGameOver()) {
+            hideStateLabelNow()
+        }
+
+        if (::turnRecoveryOverlay.isInitialized) {
+            turnRecoveryOverlay.showRetry()
+        }
+    }
+
+    private fun hideTurnRecoveryRetry() {
+        if (::turnRecoveryOverlay.isInitialized) {
+            turnRecoveryOverlay.hideRetry()
+        }
+    }
+
+    private fun cancelPendingRecoveryCheck() {
+        recoveryCheckRunnable?.let { runnable ->
+            recoveryHandler.removeCallbacks(
+                runnable,
+            )
+        }
+
+        recoveryCheckRunnable =
+            null
+    }
+
+    private fun schedulePendingSendCheck() {
+        cancelPendingRecoveryCheck()
+
+        val check =
+            Runnable {
+                recoveryCheckRunnable =
+                    null
+
+                recoveryRetryInFlight =
+                    false
+
+                val stillPending =
+                    try {
+                        gameSessionIPC?.hasPendingSend(
+                            sessionId,
+                        ) == true
+                    } catch (throwable: Throwable) {
+                        OpenPigeonLog.e(
+                            "ShuffleActivity",
+                            "Unable to check pending Shuffleboard send",
+                            throwable,
+                        )
+
+                        true
+                    }
+
+                if (stillPending) {
+                    OpenPigeonLog.w(
+                        "ShuffleActivity",
+                        "Automatic send was not confirmed; enabling manual SEND GAME",
+                    )
+
+                    showTurnRecoveryRetry()
+                } else {
+                    hideTurnRecoveryRetry()
+                }
+            }
+
+        recoveryCheckRunnable =
+            check
+
+        recoveryHandler.postDelayed(
+            check,
+            8000L,
+        )
+    }
+
+    private fun retryPendingShuffleSend() {
+        if (recoveryRetryInFlight) {
+            return
+        }
+
+        val ipc =
+            gameSessionIPC
+
+        if (
+            ipc == null ||
+            sessionId.isBlank()
+        ) {
+            showTurnRecoveryRetry()
+            return
+        }
+
+        cancelPendingRecoveryCheck()
+
+        recoveryRetryInFlight =
+            true
+
+        hideTurnRecoveryRetry()
+
+        if (!isGameOver()) {
+            renderer.showSentThenWaiting()
+
+            showSendingLabelImmediately()
+        }
+
+        val dispatched =
+            ipc.retryPendingSend(
+                sessionId,
+            ) {
+                runOnUiThread {
+                    recoveryRetryInFlight =
+                        false
+
+                    cancelPendingRecoveryCheck()
+
+                    hideTurnRecoveryRetry()
+
+                    if (!isGameOver()) {
+                        showSentCheckThenWaitingAnimation()
+                    }
+                }
+            }
+
+        if (!dispatched) {
+            recoveryRetryInFlight =
+                false
+
+            showTurnRecoveryRetry()
+
+            return
+        }
+
+        schedulePendingSendCheck()
+    }
+
+    private fun restoreShuffleRecovery(
+        remoteMessage: Map<String, String>,
+    ) {
+        val ipc =
+            gameSessionIPC
+
+        if (
+            ipc == null ||
+            sessionId.isBlank()
+        ) {
+            handleMessage(
+                remoteMessage,
+            )
+
+            return
+        }
+
+        val recovery =
+            try {
+                ipc.getTurnRecovery(
+                    sessionId,
+                )
+            } catch (throwable: Throwable) {
+                OpenPigeonLog.e(
+                    "ShuffleActivity",
+                    "Unable to load Shuffleboard recovery",
+                    throwable,
+                )
+
+                null
+            }
+
+        if (recovery == null) {
+            hideTurnRecoveryRetry()
+
+            handleMessage(
+                remoteMessage,
+            )
+
+            return
+        }
+
+        if (recovery.sendAttempted) {
+            val pendingDisplay =
+                remoteMessage
+                    .toMutableMap()
+                    .apply {
+                        putAll(
+                            recovery.pendingUpdates,
+                        )
+                    }
+
+            OpenPigeonLog.i(
+                "ShuffleActivity",
+                "Restoring pending Shuffleboard send",
+            )
+
+            handleMessage(
+                pendingDisplay,
+            )
+
+            if (!isGameOver()) {
+                renderer.showSentThenWaiting()
+
+                hideStateLabelNow()
+            }
+
+            showTurnRecoveryRetry()
+
+            return
+        }
+
+        val savedReplay =
+            recovery.progress[
+                "replay"
+            ].orEmpty()
+
+        if (savedReplay.isBlank()) {
+            handleMessage(
+                remoteMessage,
+            )
+
+            return
+        }
+
+        val opponentHadShot =
+            recovery.progress[
+                "opponentHadShot"
+            ].equals(
+                "true",
+                ignoreCase = true,
+            )
+
+        val restoredMessage =
+            remoteMessage
+                .toMutableMap()
+                .apply {
+                    put(
+                        "replay",
+                        savedReplay,
+                    )
+                }
+
+        OpenPigeonLog.i(
+            "ShuffleActivity",
+            "Restoring committed Shuffleboard launch " +
+                    "opponentHadShot=$opponentHadShot " +
+                    "replayLen=${savedReplay.length}",
+        )
+
+        handleMessage(
+            restoredMessage,
+        )
+
+        if (
+            !opponentHadShot &&
+            !spectatorMode &&
+            !isGameOver()
+        ) {
+            renderer.post {
+                if (
+                    !isFinishing &&
+                    !isDestroyed
+                ) {
+                    sendReplayToOpponent(
+                        savedReplay,
+                    )
+                }
+            }
+        }
     }
 
     private fun setupGameMenu() {
@@ -228,19 +556,30 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun startGameSession() {
-        sessionId = intent.getStringExtra("SESSION") ?: ""
+        sessionId =
+            intent.getStringExtra(
+                "SESSION",
+            ) ?: ""
 
-        val directData = extractMessageData(intent)
+        val directData =
+            extractMessageData(
+                intent,
+            )
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "startGameSession sessionIdBlank=${sessionId.isBlank()} " + "extras=${
-                intent.extras?.keySet()?.sorted().orEmpty()
-            } " + "dataUri=${intent.data} directKeys=${directData.keys.sorted()} " + "directMode=${directData["mode"]} directMap=${directData["map"]}"
+            "startGameSession " +
+                    "sessionIdBlank=${sessionId.isBlank()} " +
+                    "extras=${intent.extras?.keySet()?.sorted().orEmpty()} " +
+                    "dataUri=${intent.data} " +
+                    "directKeys=${directData.keys.sorted()} " +
+                    "directMode=${directData["mode"]} " +
+                    "directMap=${directData["map"]}",
         )
 
         if (sessionId.isBlank()) {
-            if (hasUsableShuffleData(
+            if (
+                hasUsableShuffleData(
                     directData,
                 )
             ) {
@@ -261,68 +600,150 @@ class ShuffleActivity : AppCompatActivity() {
             return
         }
 
-        GameSessionIPC(applicationContext) { ipc ->
-            gameSessionIPC = ipc
+        GameSessionIPC(
+            applicationContext,
+        ) { ipc ->
+            gameSessionIPC =
+                ipc
 
-            val currentMessage = try {
-                OpenPigeonLog.i(
-                    "ShuffleActivity",
-                    "IPC getCurrentMessage start sessionIdBlank=${sessionId.isBlank()}"
-                )
+            val currentMessage =
+                try {
+                    OpenPigeonLog.i(
+                        "ShuffleActivity",
+                        "IPC getCurrentMessage start sessionIdBlank=${sessionId.isBlank()}",
+                    )
 
-                ipc.getCurrentMessage(sessionId)
-            } catch (t: Throwable) {
-                OpenPigeonLog.e("ShuffleActivity", "IPC getCurrentMessage failed", t)
-                emptyMap()
-            }
+                    ipc.getCurrentMessage(
+                        sessionId,
+                    )
+                } catch (throwable: Throwable) {
+                    OpenPigeonLog.e(
+                        "ShuffleActivity",
+                        "IPC getCurrentMessage failed",
+                        throwable,
+                    )
+
+                    emptyMap()
+                }
 
             OpenPigeonLog.i(
-                "ShuffleActivity", "IPC currentMessage ${messageSummary(currentMessage)}"
+                "ShuffleActivity",
+                "IPC currentMessage ${messageSummary(currentMessage)}",
             )
 
             if (currentMessage.isNotEmpty()) {
                 try {
-                    ipc.lockMsgHandle(sessionId)
-                } catch (t: Throwable) {
-                    OpenPigeonLog.e("ShuffleActivity", "IPC lockMsgHandle failed", t)
-                }
-
-                try {
-                    ipc.setSuppressNotifications(sessionId, true)
-                } catch (t: Throwable) {
+                    ipc.lockMsgHandle(
+                        sessionId,
+                    )
+                } catch (throwable: Throwable) {
                     OpenPigeonLog.e(
-                        "ShuffleActivity", "IPC setSuppressNotifications(true) failed", t
+                        "ShuffleActivity",
+                        "IPC lockMsgHandle failed",
+                        throwable,
                     )
                 }
 
                 try {
-                    ipc.onMessageUpdated(sessionId) { msg ->
+                    ipc.setSuppressNotifications(
+                        sessionId,
+                        true,
+                    )
+                } catch (throwable: Throwable) {
+                    OpenPigeonLog.e(
+                        "ShuffleActivity",
+                        "IPC setSuppressNotifications(true) failed",
+                        throwable,
+                    )
+                }
+
+                try {
+                    ipc.onMessageUpdated(
+                        sessionId,
+                    ) { callbackMessage ->
                         OpenPigeonLog.i(
-                            "ShuffleActivity", "IPC onMessageUpdated ${messageSummary(msg)}"
+                            "ShuffleActivity",
+                            "IPC onMessageUpdated ${messageSummary(callbackMessage)}",
                         )
 
                         runOnUiThread {
-                            handleMessage(msg)
+                            val updatedMessage =
+                                try {
+                                    ipc.getCurrentMessage(
+                                        sessionId,
+                                    ).ifEmpty {
+                                        callbackMessage
+                                    }
+                                } catch (throwable: Throwable) {
+                                    OpenPigeonLog.e(
+                                        "ShuffleActivity",
+                                        "Unable to refresh updated Shuffleboard message",
+                                        throwable,
+                                    )
+
+                                    callbackMessage
+                                }
+
+                            handleMessage(
+                                updatedMessage,
+                            )
+
+                            val stillPending =
+                                try {
+                                    ipc.hasPendingSend(
+                                        sessionId,
+                                    )
+                                } catch (throwable: Throwable) {
+                                    OpenPigeonLog.e(
+                                        "ShuffleActivity",
+                                        "Unable to check pending send after message update",
+                                        throwable,
+                                    )
+
+                                    false
+                                }
+
+                            if (!stillPending) {
+                                recoveryRetryInFlight =
+                                    false
+
+                                cancelPendingRecoveryCheck()
+
+                                hideTurnRecoveryRetry()
+                            } else if (
+                                ::turnRecoveryOverlay.isInitialized &&
+                                turnRecoveryOverlay.isShowingRetry()
+                            ) {
+                                turnRecoveryOverlay.showRetry()
+                            }
                         }
                     }
-                } catch (t: Throwable) {
-                    OpenPigeonLog.e("ShuffleActivity", "IPC onMessageUpdated failed", t)
+                } catch (throwable: Throwable) {
+                    OpenPigeonLog.e(
+                        "ShuffleActivity",
+                        "IPC onMessageUpdated failed",
+                        throwable,
+                    )
                 }
 
                 runOnUiThread {
-                    handleMessage(currentMessage)
+                    restoreShuffleRecovery(
+                        currentMessage,
+                    )
                 }
             } else {
                 runOnUiThread {
                     if (lastMessage.isEmpty()) {
-                        val fallbackMessage = if (hasUsableShuffleData(
-                                directData,
-                            )
-                        ) {
-                            directData
-                        } else {
-                            defaultLocalMessage()
-                        }
+                        val fallbackMessage =
+                            if (
+                                hasUsableShuffleData(
+                                    directData,
+                                )
+                            ) {
+                                directData
+                            } else {
+                                defaultLocalMessage()
+                            }
 
                         OpenPigeonLog.w(
                             "ShuffleActivity",
@@ -722,7 +1143,10 @@ class ShuffleActivity : AppCompatActivity() {
     private fun handleLocalLaunchReplay(
         stagedReplayValue: String,
     ) {
-        if (spectatorMode || isGameOver()) {
+        if (
+            spectatorMode ||
+            isGameOver()
+        ) {
             OpenPigeonLog.w(
                 "ShuffleActivity",
                 "Ignoring local launch while spectating or after game over",
@@ -731,39 +1155,81 @@ class ShuffleActivity : AppCompatActivity() {
             return
         }
 
-        val stagedReplay = stagedReplayValue.trim()
+        val stagedReplay =
+            stagedReplayValue.trim()
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "handleLocalLaunchReplay " + "endsWithPipe=${stagedReplay.endsWith("|")} " + "rawLength=${stagedReplayValue.length} " + "formattedLength=${stagedReplay.length}",
+            "handleLocalLaunchReplay " +
+                    "endsWithPipe=${stagedReplay.endsWith("|")} " +
+                    "rawLength=${stagedReplayValue.length} " +
+                    "formattedLength=${stagedReplay.length}",
         )
 
-        if (!isYourTurn(lastMessage)) {
+        if (
+            !isYourTurn(
+                lastMessage,
+            )
+        ) {
             OpenPigeonLog.w(
                 "ShuffleActivity",
                 "Ignoring local launch because it is not our turn",
             )
 
             renderer.showWaitingForOpponent()
+
             showWaitingLabelAnimated()
+
             return
         }
 
-        val opponentPlayer = 3 - localPlayer
+        val opponentPlayer =
+            3 - localPlayer
 
-        val opponentAlreadyHasShot = renderer.hasShotForPlayer(
-            opponentPlayer,
-        )
+        val opponentAlreadyHasShot =
+            renderer.hasShotForPlayer(
+                opponentPlayer,
+            )
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "handleLocalLaunchReplay localPlayer=$localPlayer opponent=$opponentPlayer opponentAlreadyHasShot=$opponentAlreadyHasShot " + "replay=${
-                stagedReplay.take(420)
-            }",
+            "handleLocalLaunchReplay " +
+                    "localPlayer=$localPlayer " +
+                    "opponent=$opponentPlayer " +
+                    "opponentAlreadyHasShot=$opponentAlreadyHasShot " +
+                    "replay=${stagedReplay.take(420)}",
         )
+
+        if (sessionId.isNotBlank()) {
+            val saved =
+                try {
+                    gameSessionIPC?.saveTurnProgress(
+                        sessionId,
+                        mapOf(
+                            "phase" to "launch",
+                            "replay" to stagedReplay,
+                            "opponentHadShot" to opponentAlreadyHasShot.toString(),
+                        ),
+                    ) == true
+                } catch (throwable: Throwable) {
+                    OpenPigeonLog.e(
+                        "ShuffleActivity",
+                        "Unable to save committed Shuffleboard launch",
+                        throwable,
+                    )
+
+                    false
+                }
+
+            OpenPigeonLog.i(
+                "ShuffleActivity",
+                "Saved committed Shuffleboard launch recovery=$saved",
+            )
+        }
 
         if (opponentAlreadyHasShot) {
             hideStateLabelNow()
+
             renderer.showPlaying()
 
             renderer.playRoundFromReplay(
@@ -828,139 +1294,223 @@ class ShuffleActivity : AppCompatActivity() {
     private fun sendReplayToOpponent(
         stagedReplay: String,
     ) {
-        if (spectatorMode || isGameOver()) {
+        if (
+            spectatorMode ||
+            isGameOver()
+        ) {
             return
         }
 
-        val currentMessage = try {
-            if (sessionId.isNotBlank()) {
-                gameSessionIPC?.getCurrentMessage(sessionId).orEmpty()
-            } else {
+        val currentMessage =
+            try {
+                if (sessionId.isNotBlank()) {
+                    gameSessionIPC
+                        ?.getCurrentMessage(
+                            sessionId,
+                        )
+                        .orEmpty()
+                } else {
+                    emptyMap()
+                }
+            } catch (throwable: Throwable) {
+                OpenPigeonLog.e(
+                    "ShuffleActivity",
+                    "getCurrentMessage before send failed",
+                    throwable,
+                )
+
                 emptyMap()
             }
-        } catch (throwable: Throwable) {
-            OpenPigeonLog.e(
-                "ShuffleActivity",
-                "getCurrentMessage before send failed",
-                throwable,
+
+        val sourceMessage =
+            currentMessage.ifEmpty {
+                lastMessage
+            }
+
+        val myId =
+            localUserId(
+                sourceMessage,
             )
 
-            emptyMap()
-        }
+        val myAvatarKey =
+            if (localPlayer == 1) {
+                "avatar1"
+            } else {
+                "avatar2"
+            }
 
-        val sourceMessage = currentMessage.ifEmpty {
-            lastMessage
-        }
+        val sourceNum =
+            sourceMessage["num"]
+                ?.toIntOrNull()
+                ?: 0
 
-        val myId = localUserId(sourceMessage)
+        val cachedNum =
+            lastMessage["num"]
+                ?.toIntOrNull()
+                ?: 0
 
-        val myAvatarKey = if (localPlayer == 1) {
-            "avatar1"
-        } else {
-            "avatar2"
-        }
+        val nextNum =
+            maxOf(
+                sourceNum,
+                cachedNum,
+            ) + 1
 
-        val sourceNum = sourceMessage["num"]?.toIntOrNull() ?: 0
+        val player1Id =
+            (
+                    sourceMessage["player1"]
+                        ?: lastMessage["player1"]
+                    ).orEmpty()
 
-        val cachedNum = lastMessage["num"]?.toIntOrNull() ?: 0
+        val player2Id =
+            (
+                    sourceMessage["player2"]
+                        ?: lastMessage["player2"]
+                    ).orEmpty()
 
-        val nextNum = maxOf(
-            sourceNum,
-            cachedNum,
-        ) + 1
+        val resolvedMode =
+            (
+                    sourceMessage["mode"]
+                        ?: lastMessage["mode"]
+                    )
+                ?.toIntOrNull()
+                ?.coerceIn(
+                    1,
+                    3,
+                )
+                ?: 1
 
-        val player1Id = (sourceMessage["player1"] ?: lastMessage["player1"]).orEmpty()
-
-        val player2Id = (sourceMessage["player2"] ?: lastMessage["player2"]).orEmpty()
-
-        val resolvedMode = (sourceMessage["mode"] ?: lastMessage["mode"])?.toIntOrNull()?.coerceIn(
-            1,
-            3,
-        ) ?: 1
-
-        val updates = mutableMapOf(
-            "game" to "shuffle",
-            "mode" to resolvedMode.toString(),
-
-            "map" to (sourceMessage["map"] ?: lastMessage["map"] ?: defaultMapForMode(
-                resolvedMode,
-            )),
-            "player" to localPlayer.toString(),
-            "num" to nextNum.toString(),
-            "sender" to myId,
-            "replay" to stagedReplay,
-            myAvatarKey to AvatarView.buildAvatarString(),
-        )
+        val updates =
+            mutableMapOf(
+                "game" to "shuffle",
+                "mode" to resolvedMode.toString(),
+                "map" to (
+                        sourceMessage["map"]
+                            ?: lastMessage["map"]
+                            ?: defaultMapForMode(
+                                resolvedMode,
+                            )
+                        ),
+                "player" to localPlayer.toString(),
+                "num" to nextNum.toString(),
+                "sender" to myId,
+                "replay" to stagedReplay,
+                myAvatarKey to AvatarView.buildAvatarString(),
+            )
 
         if (localPlayer == 1) {
-            updates["player1"] = myId
+            updates["player1"] =
+                myId
 
             if (player2Id.isNotBlank()) {
-                updates["player2"] = player2Id
+                updates["player2"] =
+                    player2Id
             }
         } else {
             if (player1Id.isNotBlank()) {
-                updates["player1"] = player1Id
+                updates["player1"] =
+                    player1Id
             }
 
-            updates["player2"] = myId
+            updates["player2"] =
+                myId
         }
 
-        lastMessage = sourceMessage.toMutableMap().apply {
-            putAll(updates)
-        }
+        lastMessage =
+            sourceMessage
+                .toMutableMap()
+                .apply {
+                    putAll(
+                        updates,
+                    )
+                }
 
-        lastOutgoingReplay = stagedReplay
+        lastOutgoingReplay =
+            stagedReplay
 
-        ignoreNextOutgoingReplayEcho = true
+        ignoreNextOutgoingReplayEcho =
+            true
 
         renderer.showSentThenWaiting()
+
         showSendingLabelImmediately()
 
         OpenPigeonLog.i(
             "ShuffleActivity",
-            "sendReplayToOpponent localPlayer=$localPlayer num=$nextNum " + "replay=${
-                stagedReplay.take(420)
-            }",
+            "sendReplayToOpponent " +
+                    "localPlayer=$localPlayer " +
+                    "num=$nextNum " +
+                    "replay=${stagedReplay.take(420)}",
         )
 
-        val ipc = gameSessionIPC
+        val ipc =
+            gameSessionIPC
 
-        if (ipc == null || sessionId.isBlank()) {
+        if (
+            ipc == null ||
+            sessionId.isBlank()
+        ) {
             OpenPigeonLog.w(
                 "ShuffleActivity",
-                "No IPC/session available; " + "showing sent/waiting locally",
+                "No IPC/session available for Shuffleboard send",
             )
 
-            showSentCheckThenWaitingAnimation()
+            showTurnRecoveryRetry()
+
             return
         }
 
-        ipc.updateSession(
-            updates,
-            sessionId,
-        ) {
-            OpenPigeonLog.i(
+        val dispatched =
+            ipc.updateSession(
+                updates,
+                sessionId,
+            ) {
+                OpenPigeonLog.i(
+                    "ShuffleActivity",
+                    "Shuffle session updated num=$nextNum",
+                )
+
+                runOnUiThread {
+                    recoveryRetryInFlight =
+                        false
+
+                    cancelPendingRecoveryCheck()
+
+                    hideTurnRecoveryRetry()
+
+                    showSentCheckThenWaitingAnimation()
+                }
+            }
+
+        if (!dispatched) {
+            OpenPigeonLog.w(
                 "ShuffleActivity",
-                "Shuffle session updated num=$nextNum",
+                "Automatic Shuffleboard send failed immediately",
             )
 
-            runOnUiThread {
-                showSentCheckThenWaitingAnimation()
-            }
+            showTurnRecoveryRetry()
+
+            return
         }
+        schedulePendingSendCheck()
     }
 
     private fun sendWinnerResultIfNeeded(
         state: String,
     ) {
-        if (spectatorMode || state.isBlank()) {
+        if (
+            spectatorMode ||
+            state.isBlank()
+        ) {
             return
         }
 
-        val ipc = gameSessionIPC
+        val ipc =
+            gameSessionIPC
 
-        if (ipc == null || sessionId.isBlank()) {
+        if (
+            ipc == null ||
+            sessionId.isBlank()
+        ) {
             OpenPigeonLog.w(
                 "ShuffleActivity",
                 "Winner not sent because IPC or session is unavailable",
@@ -970,13 +1520,18 @@ class ShuffleActivity : AppCompatActivity() {
         }
 
         try {
-            val current = ipc.getCurrentMessage(
-                sessionId,
-            ).ifEmpty {
-                lastMessage
-            }
+            val current =
+                ipc.getCurrentMessage(
+                    sessionId,
+                ).ifEmpty {
+                    lastMessage
+                }
 
-            if (current["winner"].orEmpty().isNotBlank()) {
+            if (
+                current["winner"]
+                    .orEmpty()
+                    .isNotBlank()
+            ) {
                 OpenPigeonLog.i(
                     "ShuffleActivity",
                     "Winner already exists: ${current["winner"]}",
@@ -985,130 +1540,184 @@ class ShuffleActivity : AppCompatActivity() {
                 return
             }
 
-            val myId = ipc.getSenderUUID(
-                sessionId,
-            ).takeIf {
-                it.isNotBlank()
-            }.orEmpty()
+            val myId =
+                ipc.getSenderUUID(
+                    sessionId,
+                ).takeIf {
+                    it.isNotBlank()
+                }.orEmpty()
 
             if (myId.isBlank()) {
                 return
             }
 
-            val resolvedMode = (current["mode"] ?: lastMessage["mode"])?.toIntOrNull()?.coerceIn(
-                1,
-                3,
-            ) ?: 1
-
-            val currentNum = current["num"]?.toIntOrNull() ?: 0
-
-            val cachedNum = lastMessage["num"]?.toIntOrNull() ?: 0
-
-            val finalReplay = renderer.completedRoundReplayForSend()
-
-            val outgoing = current.toMutableMap().apply {
-                put(
-                    "game",
-                    "shuffle",
-                )
-
-                put(
-                    "game_name",
-                    "Shuffleboard",
-                )
-
-                put(
-                    "mode",
-                    resolvedMode.toString(),
-                )
-
-                put(
-                    "map",
-                    current["map"] ?: lastMessage["map"] ?: defaultMapForMode(
-                        resolvedMode,
-                    ),
-                )
-
-                put(
-                    "player",
-                    localPlayer.toString(),
-                )
-
-                put(
-                    "num",
-                    (maxOf(
-                        currentNum,
-                        cachedNum,
-                    ) + 1).toString(),
-                )
-
-                put(
-                    "sender",
-                    myId,
-                )
-
-                put(
-                    "replay",
-                    finalReplay,
-                )
-
-                put(
-                    "winner",
-                    "$myId|${
-                        state.toIntOrNull()?.coerceIn(
-                            -1,
-                            1,
-                        ) ?: 0
-                    }",
-                )
-
-                put(
-                    if (localPlayer == 1) {
-                        "avatar1"
-                    } else {
-                        "avatar2"
-                    },
-                    AvatarView.buildAvatarString(),
-                )
-
-                if (localPlayer == 1) {
-                    put(
-                        "player1",
-                        myId,
+            val resolvedMode =
+                (
+                        current["mode"]
+                            ?: lastMessage["mode"]
+                        )
+                    ?.toIntOrNull()
+                    ?.coerceIn(
+                        1,
+                        3,
                     )
-                } else {
-                    put(
-                        "player2",
-                        myId,
-                    )
-                }
+                    ?: 1
 
-                remove(
-                    "isYourTurn",
-                )
-            }
+            val currentNum =
+                current["num"]
+                    ?.toIntOrNull()
+                    ?: 0
 
-            lastMessage = outgoing
+            val cachedNum =
+                lastMessage["num"]
+                    ?.toIntOrNull()
+                    ?: 0
 
-            lastMessageWinner = outgoing["winner"].orEmpty()
+            val finalReplay =
+                renderer.completedRoundReplayForSend()
 
-            lastOutgoingReplay = finalReplay
+            val outgoing =
+                current
+                    .toMutableMap()
+                    .apply {
+                        put(
+                            "game",
+                            "shuffle",
+                        )
 
-            ignoreNextOutgoingReplayEcho = true
+                        put(
+                            "game_name",
+                            "Shuffleboard",
+                        )
+
+                        put(
+                            "mode",
+                            resolvedMode.toString(),
+                        )
+
+                        put(
+                            "map",
+                            current["map"]
+                                ?: lastMessage["map"]
+                                ?: defaultMapForMode(
+                                    resolvedMode,
+                                ),
+                        )
+
+                        put(
+                            "player",
+                            localPlayer.toString(),
+                        )
+
+                        put(
+                            "num",
+                            (
+                                    maxOf(
+                                        currentNum,
+                                        cachedNum,
+                                    ) + 1
+                                    ).toString(),
+                        )
+
+                        put(
+                            "sender",
+                            myId,
+                        )
+
+                        put(
+                            "replay",
+                            finalReplay,
+                        )
+
+                        put(
+                            "winner",
+                            "$myId|${
+                                state
+                                    .toIntOrNull()
+                                    ?.coerceIn(
+                                        -1,
+                                        1,
+                                    )
+                                    ?: 0
+                            }",
+                        )
+
+                        put(
+                            if (localPlayer == 1) {
+                                "avatar1"
+                            } else {
+                                "avatar2"
+                            },
+                            AvatarView.buildAvatarString(),
+                        )
+
+                        if (localPlayer == 1) {
+                            put(
+                                "player1",
+                                myId,
+                            )
+                        } else {
+                            put(
+                                "player2",
+                                myId,
+                            )
+                        }
+
+                        remove(
+                            "isYourTurn",
+                        )
+                    }
+
+            lastMessage =
+                outgoing
+
+            lastMessageWinner =
+                outgoing["winner"]
+                    .orEmpty()
+
+            lastOutgoingReplay =
+                finalReplay
+
+            ignoreNextOutgoingReplayEcho =
+                true
 
             OpenPigeonLog.i(
                 "ShuffleActivity",
-                "Sending Shuffleboard winner " + "winner=${outgoing["winner"]} " + "scores=${renderer.currentScores()} " + "replayLen=${finalReplay.length}",
+                "Sending Shuffleboard winner " +
+                        "winner=${outgoing["winner"]} " +
+                        "scores=${renderer.currentScores()} " +
+                        "replayLen=${finalReplay.length}",
             )
 
-            ipc.updateSession(
-                outgoing,
-                sessionId,
-            ) {
-                OpenPigeonLog.i(
+            val dispatched =
+                ipc.updateSession(
+                    outgoing,
+                    sessionId,
+                ) {
+                    OpenPigeonLog.i(
+                        "ShuffleActivity",
+                        "Shuffleboard winner update completed",
+                    )
+
+                    runOnUiThread {
+                        recoveryRetryInFlight =
+                            false
+
+                        cancelPendingRecoveryCheck()
+
+                        hideTurnRecoveryRetry()
+                    }
+                }
+
+            if (!dispatched) {
+                OpenPigeonLog.w(
                     "ShuffleActivity",
-                    "Shuffleboard winner update completed",
+                    "Shuffleboard winner send failed immediately",
                 )
+
+                showTurnRecoveryRetry()
+            } else {
+                schedulePendingSendCheck()
             }
         } catch (throwable: Throwable) {
             OpenPigeonLog.e(
@@ -1116,6 +1725,19 @@ class ShuffleActivity : AppCompatActivity() {
                 "Unable to send Shuffleboard winner",
                 throwable,
             )
+
+            val stillPending =
+                try {
+                    ipc.hasPendingSend(
+                        sessionId,
+                    )
+                } catch (_: Throwable) {
+                    false
+                }
+
+            if (stillPending) {
+                showTurnRecoveryRetry()
+            }
         }
     }
 
@@ -1578,19 +2200,36 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun createAvatarHud() {
-        myAvatarAnchor = FrameLayout(this).apply {
-            clipChildren = false
-            clipToPadding = false
-        }
+        myAvatarAnchor =
+            FrameLayout(
+                this,
+            ).apply {
+                clipChildren = false
+                clipToPadding = false
+            }
 
-        opponentAvatarAnchor = FrameLayout(this).apply {
-            clipChildren = false
-            clipToPadding = false
-        }
+        opponentAvatarAnchor =
+            FrameLayout(
+                this,
+            ).apply {
+                clipChildren = false
+                clipToPadding = false
+            }
 
-        val avatarWidth = dp(64f).toInt()
-        val avatarHeight = dp(46f).toInt()
-        val avatarTop = dp(52f).toInt()
+        val avatarWidth =
+            dp(
+                64f,
+            ).toInt()
+
+        val avatarHeight =
+            dp(
+                46f,
+            ).toInt()
+
+        val avatarTop =
+            dp(
+                52f,
+            ).toInt()
 
         rootFrame.addView(
             myAvatarAnchor,
@@ -1599,8 +2238,13 @@ class ShuffleActivity : AppCompatActivity() {
                 avatarHeight,
                 Gravity.TOP or Gravity.START,
             ).apply {
-                leftMargin = dp(10f).toInt()
-                topMargin = avatarTop
+                leftMargin =
+                    dp(
+                        10f,
+                    ).toInt()
+
+                topMargin =
+                    avatarTop
             },
         )
 
@@ -1611,38 +2255,92 @@ class ShuffleActivity : AppCompatActivity() {
                 avatarHeight,
                 Gravity.TOP or Gravity.END,
             ).apply {
-                rightMargin = dp(10f).toInt()
-                topMargin = avatarTop
+                rightMargin =
+                    dp(
+                        10f,
+                    ).toInt()
+
+                topMargin =
+                    avatarTop
             },
         )
 
-        youLabel = TextView(this).apply {
-            text = "You"
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER_VERTICAL
-            includeFontPadding = false
-            setShadowLayer(
-                2.5f,
-                0f,
-                dp(1f),
-                Color.argb(210, 0, 0, 0),
-            )
+        youLabel =
+            TextView(
+                this,
+            ).apply {
+                text =
+                    getString(
+                        R.string.shuffle_you,
+                    )
 
-            val labelLayer = dp(24f)
-            elevation = labelLayer
-            translationZ = labelLayer
-        }
+                textSize =
+                    12f
+
+                typeface =
+                    Typeface.DEFAULT_BOLD
+
+                gravity =
+                    Gravity.CENTER_VERTICAL
+
+                includeFontPadding =
+                    false
+
+                setShadowLayer(
+                    2.5f,
+                    0f,
+                    dp(
+                        1f,
+                    ),
+                    Color.argb(
+                        210,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+
+                val labelLayer =
+                    dp(
+                        24f,
+                    )
+
+                elevation =
+                    labelLayer
+
+                translationZ =
+                    labelLayer
+            }
 
         rootFrame.addView(
             youLabel,
             FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
-                dp(22f).toInt(),
+                dp(
+                    22f,
+                ).toInt(),
                 Gravity.TOP or Gravity.START,
             ).apply {
-                leftMargin = dp(10f).toInt() + avatarWidth + dp(8f).toInt()
-                topMargin = avatarTop + ((avatarHeight - dp(22f).toInt()) / 2) - dp(6f).toInt()
+                leftMargin =
+                    dp(
+                        10f,
+                    ).toInt() +
+                            avatarWidth +
+                            dp(
+                                8f,
+                            ).toInt()
+
+                topMargin =
+                    avatarTop +
+                            (
+                                    avatarHeight -
+                                            dp(
+                                                22f,
+                                            ).toInt()
+                                    ) / 2 -
+                            dp(
+                                6f,
+                            ).toInt()
             },
         )
     }
@@ -1853,52 +2551,89 @@ class ShuffleActivity : AppCompatActivity() {
         )
     }
 
-    private fun extractMessageData(intent: Intent?): Map<String, String> {
-        val out = mutableMapOf<String, String>()
+    @Suppress("DEPRECATION")
+    private fun extractMessageData(
+        intent: Intent?,
+    ): Map<String, String> {
+        val out =
+            mutableMapOf<String, String>()
 
-        val dataUri = intent?.data
+        val dataUri =
+            intent?.data
 
         if (dataUri != null) {
             try {
-                for (name in dataUri.queryParameterNames) {
-                    out[name] = dataUri.getQueryParameter(name) ?: ""
+                for (
+                name in
+                dataUri.queryParameterNames
+                ) {
+                    out[name] =
+                        dataUri.getQueryParameter(
+                            name,
+                        ) ?: ""
                 }
-            } catch (t: Throwable) {
-                OpenPigeonLog.e("ShuffleActivity", "Failed to parse intent.data=$dataUri", t)
+            } catch (throwable: Throwable) {
+                OpenPigeonLog.e(
+                    "ShuffleActivity",
+                    "Failed to parse intent.data=$dataUri",
+                    throwable,
+                )
             }
         }
 
-        val extras = intent?.extras
+        val extras =
+            intent?.extras
 
         if (extras != null) {
-            for (key in extras.keySet()) {
-                when (val value = extras.get(key)) {
+            for (
+            key in
+            extras.keySet()
+            ) {
+                when (
+                    val value =
+                        extras.get(
+                            key,
+                        )
+                ) {
                     is String -> {
-                        out[key] = value
+                        out[key] =
+                            value
 
-                        if (value.startsWith("data://")) {
-                            parsePackedDataUri(value, out)
+                        if (
+                            value.startsWith(
+                                "data://",
+                            )
+                        ) {
+                            parsePackedDataUri(
+                                value,
+                                out,
+                            )
                         }
                     }
 
                     is ArrayList<*> -> {
-                        val first = value.firstOrNull()
-                        if (first != null) {
-                            out[key] = first.toString()
-                        }
+                        value
+                            .firstOrNull()
+                            ?.let { first ->
+                                out[key] =
+                                    first.toString()
+                            }
                     }
 
                     is Array<*> -> {
-                        val first = value.firstOrNull()
-                        if (first != null) {
-                            out[key] = first.toString()
-                        }
+                        value
+                            .firstOrNull()
+                            ?.let { first ->
+                                out[key] =
+                                    first.toString()
+                            }
                     }
 
+                    null -> Unit
+
                     else -> {
-                        if (value != null) {
-                            out[key] = value.toString()
-                        }
+                        out[key] =
+                            value.toString()
                     }
                 }
             }
@@ -2043,6 +2778,16 @@ class ShuffleActivity : AppCompatActivity() {
 
 
     override fun onDestroy() {
+        cancelPendingRecoveryCheck()
+
+        recoveryHandler.removeCallbacksAndMessages(
+            null,
+        )
+
+        if (::turnRecoveryOverlay.isInitialized) {
+            turnRecoveryOverlay.destroy()
+        }
+
         if (::avatarWinBurstController.isInitialized) {
             avatarWinBurstController.destroy()
         }
@@ -2076,41 +2821,51 @@ class ShuffleActivity : AppCompatActivity() {
     }
 
     private fun createSpectatorLabel() {
-        spectatorLabel = TextView(
-            this,
-        ).apply {
-            text = "Spectating..."
+        spectatorLabel =
+            TextView(
+                this,
+            ).apply {
+                text =
+                    getString(
+                        R.string.shuffle_spectating,
+                    )
 
-            visibility = View.GONE
+                visibility =
+                    View.GONE
 
-            setTextColor(
-                Color.WHITE,
-            )
+                setTextColor(
+                    Color.WHITE,
+                )
 
-            textSize = 28f
+                textSize =
+                    28f
 
-            gravity = Gravity.CENTER
+                gravity =
+                    Gravity.CENTER
 
-            textAlignment = View.TEXT_ALIGNMENT_CENTER
+                textAlignment =
+                    View.TEXT_ALIGNMENT_CENTER
 
-            typeface = Typeface.DEFAULT_BOLD
+                typeface =
+                    Typeface.DEFAULT_BOLD
 
-            includeFontPadding = false
+                includeFontPadding =
+                    false
 
-            setShadowLayer(
-                3f,
-                0f,
-                dp(
-                    1.5f,
-                ),
-                Color.argb(
-                    150,
-                    0,
-                    0,
-                    0,
-                ),
-            )
-        }
+                setShadowLayer(
+                    3f,
+                    0f,
+                    dp(
+                        1.5f,
+                    ),
+                    Color.argb(
+                        150,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+            }
 
         rootFrame.addView(
             spectatorLabel,
@@ -2119,9 +2874,10 @@ class ShuffleActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP or Gravity.CENTER_HORIZONTAL,
             ).apply {
-                topMargin = dp(
-                    86f,
-                ).toInt()
+                topMargin =
+                    dp(
+                        86f,
+                    ).toInt()
             },
         )
     }
@@ -2199,31 +2955,66 @@ class ShuffleActivity : AppCompatActivity() {
         )
     }
 
-    private fun startWaitingDots(label: TextView) {
-        var dots = 1
+    private fun startWaitingDots(
+        label: TextView,
+    ) {
+        var dots =
+            1
 
-        waitingDotsRunnable?.let { stateLabelHandler.removeCallbacks(it) }
-
-        val runnable = object : Runnable {
-            override fun run() {
-                if (waitingDotsRunnable !== this) return
-
-                if (label.isVisible) {
-                    label.text = "WAITING FOR OPPONENT" + ".".repeat(dots)
-                    dots = if (dots >= 3) 1 else dots + 1
-                }
-
-                stateLabelHandler.postDelayed(this, 900L)
-            }
+        waitingDotsRunnable?.let { runnable ->
+            stateLabelHandler.removeCallbacks(
+                runnable,
+            )
         }
 
-        waitingDotsRunnable = runnable
-        stateLabelHandler.post(runnable)
+        val runnable =
+            object : Runnable {
+                override fun run() {
+                    if (
+                        waitingDotsRunnable !==
+                        this
+                    ) {
+                        return
+                    }
+
+                    if (label.isVisible) {
+                        label.text =
+                            getString(
+                                R.string.shuffle_waiting_dots,
+                                ".".repeat(
+                                    dots,
+                                ),
+                            )
+
+                        dots =
+                            if (dots >= 3) {
+                                1
+                            } else {
+                                dots + 1
+                            }
+                    }
+
+                    stateLabelHandler.postDelayed(
+                        this,
+                        900L,
+                    )
+                }
+            }
+
+        waitingDotsRunnable =
+            runnable
+
+        stateLabelHandler.post(
+            runnable,
+        )
     }
 
     private fun showWaitingLabelAnimated() {
         runOnUiThread {
-            if (spectatorMode || isGameOver()) {
+            if (
+                spectatorMode ||
+                isGameOver()
+            ) {
                 if (isGameOver()) {
                     showGameOverLabel()
                 }
@@ -2231,13 +3022,17 @@ class ShuffleActivity : AppCompatActivity() {
                 return@runOnUiThread
             }
 
-            if (stateLabelVisual == StateLabelVisual.Waiting) {
+            if (
+                stateLabelVisual ==
+                StateLabelVisual.Waiting
+            ) {
                 return@runOnUiThread
             }
 
             stopStateLabelAnimation()
 
-            stateLabelVisual = StateLabelVisual.Waiting
+            stateLabelVisual =
+                StateLabelVisual.Waiting
 
             resetStateLabelLayout(
                 stateLabel,
@@ -2245,24 +3040,36 @@ class ShuffleActivity : AppCompatActivity() {
 
             stateLabel.bringToFront()
 
-            val waitingWidth = measureStateLabelWidth(
-                stateLabel,
-                "WAITING FOR OPPONENT...",
-            )
+            val waitingText =
+                getString(
+                    R.string.shuffle_waiting_dots,
+                    "...",
+                )
 
-            val params = stateLabel.layoutParams
+            val waitingWidth =
+                measureStateLabelWidth(
+                    stateLabel,
+                    waitingText,
+                )
 
-            params.width = waitingWidth
+            val params =
+                stateLabel.layoutParams
 
-            stateLabel.layoutParams = params
+            params.width =
+                waitingWidth
 
-            stateLabel.visibility = View.VISIBLE
+            stateLabel.layoutParams =
+                params
+
+            stateLabel.visibility =
+                View.VISIBLE
 
             startWaitingDots(
                 stateLabel,
             )
 
             myAvatarAnchor.bringToFront()
+
             opponentAvatarAnchor.bringToFront()
 
             if (::gameMenu.isInitialized) {
@@ -2275,128 +3082,300 @@ class ShuffleActivity : AppCompatActivity() {
 
     private fun showSendingLabelImmediately() {
         runOnUiThread {
+            if (isGameOver()) {
+                return@runOnUiThread
+            }
+
             stopStateLabelAnimation()
-            stateLabelVisual = StateLabelVisual.SentWaiting
 
-            sentWaitingSequenceActive = true
+            stateLabelVisual =
+                StateLabelVisual.SentWaiting
 
-            resetStateLabelLayout(stateLabel)
+            sentWaitingSequenceActive =
+                true
 
-            val sentWidth = measureStateLabelWidth(stateLabel, "Sent ✔")
+            resetStateLabelLayout(
+                stateLabel,
+            )
 
-            val params = stateLabel.layoutParams
-            params.width = sentWidth
-            stateLabel.layoutParams = params
+            val sentText =
+                getString(
+                    R.string.shuffle_sent_pending,
+                )
 
-            stateLabel.text = "Sent"
-            stateLabel.alpha = 1f
-            stateLabel.setTextColor(0xFFFFFFFF.toInt())
-            stateLabel.visibility = View.VISIBLE
+            val sentWidth =
+                measureStateLabelWidth(
+                    stateLabel,
+                    sentText,
+                )
+
+            val params =
+                stateLabel.layoutParams
+
+            params.width =
+                sentWidth
+
+            stateLabel.layoutParams =
+                params
+
+            stateLabel.text =
+                sentText
+
+            stateLabel.alpha =
+                1f
+
+            stateLabel.setTextColor(
+                0xFFFFFFFF.toInt(),
+            )
+
+            stateLabel.visibility =
+                View.VISIBLE
+
             stateLabel.bringToFront()
         }
     }
 
     private fun showSentCheckThenWaitingAnimation() {
         runOnUiThread {
-            stateLabelVisual = StateLabelVisual.SentWaiting
+            stateLabelVisual =
+                StateLabelVisual.SentWaiting
 
-            sentWaitingSequenceActive = true
+            sentWaitingSequenceActive =
+                true
 
-            waitingDotsRunnable?.let { stateLabelHandler.removeCallbacks(it) }
-            waitingDotsRunnable = null
+            waitingDotsRunnable?.let { runnable ->
+                stateLabelHandler.removeCallbacks(
+                    runnable,
+                )
+            }
+
+            waitingDotsRunnable =
+                null
 
             stateLabelAnimator?.cancel()
-            stateLabelAnimator = null
 
-            resetStateLabelLayout(stateLabel)
+            stateLabelAnimator =
+                null
 
-            val sentWidth = measureStateLabelWidth(stateLabel, "Sent ✔")
-            val waitingWidth = measureStateLabelWidth(stateLabel, "WAITING FOR OPPONENT...")
-
-            val params = stateLabel.layoutParams
-            params.width = sentWidth
-            stateLabel.layoutParams = params
-
-            val sentCheck = SpannableString("Sent ✔")
-            sentCheck.setSpan(
-                ForegroundColorSpan(0xFF7257D8.toInt()), 5, 6, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            resetStateLabelLayout(
+                stateLabel,
             )
 
-            stateLabel.text = sentCheck
-            stateLabel.alpha = 1f
-            stateLabel.setTextColor(0xFFFFFFFF.toInt())
-            stateLabel.visibility = View.VISIBLE
+            val sentText =
+                getString(
+                    R.string.shuffle_sent,
+                )
+
+            val waitingText =
+                getString(
+                    R.string.shuffle_waiting_dots,
+                    "...",
+                )
+
+            val sentWidth =
+                measureStateLabelWidth(
+                    stateLabel,
+                    sentText,
+                )
+
+            val waitingWidth =
+                measureStateLabelWidth(
+                    stateLabel,
+                    waitingText,
+                )
+
+            val params =
+                stateLabel.layoutParams
+
+            params.width =
+                sentWidth
+
+            stateLabel.layoutParams =
+                params
+
+            val sentCheck =
+                SpannableString(
+                    sentText,
+                )
+
+            val checkIndex =
+                sentText.indexOf(
+                    '✔',
+                )
+
+            if (checkIndex >= 0) {
+                sentCheck.setSpan(
+                    ForegroundColorSpan(
+                        0xFF7257D8.toInt(),
+                    ),
+                    checkIndex,
+                    checkIndex + 1,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+
+            stateLabel.text =
+                sentCheck
+
+            stateLabel.alpha =
+                1f
+
+            stateLabel.setTextColor(
+                0xFFFFFFFF.toInt(),
+            )
+
+            stateLabel.visibility =
+                View.VISIBLE
+
             stateLabel.bringToFront()
 
-            stateLabelHandler.postDelayed({
-                if (!sentWaitingSequenceActive) return@postDelayed
-
-                if (isGameOver()) {
-                    showGameOverLabel()
-                    return@postDelayed
-                }
-
-                stateLabel.bringToFront()
-
-                val oldWidth = stateLabel.width.takeIf { it > 0 } ?: sentWidth
-
-                val widthParams = stateLabel.layoutParams
-                widthParams.width = oldWidth
-                stateLabel.layoutParams = widthParams
-
-                stateLabel.animate().cancel()
-                stateLabel.alpha = 1f
-                stateLabel.text = "WAITING FOR OPPONENT."
-                stateLabel.setTextColor(0x00FFFFFF)
-                stateLabel.visibility = View.VISIBLE
-                stateLabel.bringToFront()
-
-                stateLabelAnimator = ValueAnimator.ofInt(oldWidth, waitingWidth).apply {
-                    duration = 420L
-
-                    addUpdateListener { animation ->
-                        val animatedParams = stateLabel.layoutParams
-                        animatedParams.width = animation.animatedValue as Int
-                        stateLabel.layoutParams = animatedParams
+            stateLabelHandler.postDelayed(
+                {
+                    if (!sentWaitingSequenceActive) {
+                        return@postDelayed
                     }
 
-                    addListener(object : android.animation.AnimatorListenerAdapter() {
-                        override fun onAnimationEnd(animation: android.animation.Animator) {
-                            if (!sentWaitingSequenceActive) return
+                    if (isGameOver()) {
+                        showGameOverLabel()
+                        return@postDelayed
+                    }
 
-                            stateLabelAnimator = null
+                    stateLabel.bringToFront()
 
-                            val finalParams = stateLabel.layoutParams
-                            finalParams.width = waitingWidth
-                            stateLabel.layoutParams = finalParams
+                    val oldWidth =
+                        stateLabel.width.takeIf {
+                            it > 0
+                        } ?: sentWidth
 
-                            ValueAnimator.ofInt(0, 255).apply {
-                                duration = 180L
+                    val widthParams =
+                        stateLabel.layoutParams
 
-                                addUpdateListener { textAnimation ->
-                                    val alpha = textAnimation.animatedValue as Int
-                                    stateLabel.setTextColor((alpha shl 24) or 0x00FFFFFF)
+                    widthParams.width =
+                        oldWidth
+
+                    stateLabel.layoutParams =
+                        widthParams
+
+                    stateLabel.animate()
+                        .cancel()
+
+                    stateLabel.alpha =
+                        1f
+
+                    stateLabel.text =
+                        getString(
+                            R.string.shuffle_waiting_dots,
+                            ".",
+                        )
+
+                    stateLabel.setTextColor(
+                        0x00FFFFFF,
+                    )
+
+                    stateLabel.visibility =
+                        View.VISIBLE
+
+                    stateLabel.bringToFront()
+
+                    stateLabelAnimator =
+                        ValueAnimator
+                            .ofInt(
+                                oldWidth,
+                                waitingWidth,
+                            )
+                            .apply {
+                                duration =
+                                    420L
+
+                                addUpdateListener { animation ->
+                                    val animatedParams =
+                                        stateLabel.layoutParams
+
+                                    animatedParams.width =
+                                        animation.animatedValue as Int
+
+                                    stateLabel.layoutParams =
+                                        animatedParams
                                 }
 
-                                addListener(object : android.animation.AnimatorListenerAdapter() {
-                                    override fun onAnimationEnd(animation: android.animation.Animator) {
-                                        if (sentWaitingSequenceActive) {
-                                            stateLabel.setTextColor(0xFFFFFFFF.toInt())
-                                            stateLabel.visibility = View.VISIBLE
-                                            stateLabel.bringToFront()
-                                            startWaitingDots(stateLabel)
+                                addListener(
+                                    object :
+                                        android.animation.AnimatorListenerAdapter() {
+                                        override fun onAnimationEnd(
+                                            animation: android.animation.Animator,
+                                        ) {
+                                            if (!sentWaitingSequenceActive) {
+                                                return
+                                            }
+
+                                            stateLabelAnimator =
+                                                null
+
+                                            val finalParams =
+                                                stateLabel.layoutParams
+
+                                            finalParams.width =
+                                                waitingWidth
+
+                                            stateLabel.layoutParams =
+                                                finalParams
+
+                                            ValueAnimator
+                                                .ofInt(
+                                                    0,
+                                                    255,
+                                                )
+                                                .apply {
+                                                    duration =
+                                                        180L
+
+                                                    addUpdateListener { textAnimation ->
+                                                        val alpha =
+                                                            textAnimation.animatedValue as Int
+
+                                                        stateLabel.setTextColor(
+                                                            (alpha shl 24) or
+                                                                    0x00FFFFFF,
+                                                        )
+                                                    }
+
+                                                    addListener(
+                                                        object :
+                                                            android.animation.AnimatorListenerAdapter() {
+                                                            override fun onAnimationEnd(
+                                                                animation: android.animation.Animator,
+                                                            ) {
+                                                                if (
+                                                                    sentWaitingSequenceActive
+                                                                ) {
+                                                                    stateLabel.setTextColor(
+                                                                        0xFFFFFFFF.toInt(),
+                                                                    )
+
+                                                                    stateLabel.visibility =
+                                                                        View.VISIBLE
+
+                                                                    stateLabel.bringToFront()
+
+                                                                    startWaitingDots(
+                                                                        stateLabel,
+                                                                    )
+                                                                }
+                                                            }
+                                                        },
+                                                    )
+
+                                                    start()
+                                                }
                                         }
-                                    }
-                                })
+                                    },
+                                )
 
                                 start()
                             }
-                        }
-                    })
-
-                    start()
-                }
-            }, 1000L)
+                },
+                1000L,
+            )
         }
     }
 

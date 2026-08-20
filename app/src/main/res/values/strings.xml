@@ -8,4 +8,10 @@
 
     <string name="game_name">Game</string>
     <string name="game_explanation">This game is fabulous!</string>
+    <string name="shuffle_you">You</string>
+    <string name="shuffle_spectating">Spectating...</string>
+    <string name="shuffle_waiting">WAITING FOR OPPONENT</string>
+    <string name="shuffle_waiting_dots">WAITING FOR OPPONENT%1$s</string>
+    <string name="shuffle_sent_pending">Sent</string>
+    <string name="shuffle_sent">Sent ✔</string>
 </resources>

@@ -32,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.openbubbles.openpigeon.wordhunt.WordHuntSolver.encodeCell
+import kotlin.time.Duration.Companion.seconds
 
 class WordHuntActivity : AppCompatActivity() {
     private val baseGame: Game = WordHuntGame()
@@ -52,6 +53,200 @@ class WordHuntActivity : AppCompatActivity() {
     private var gameOpenedLogged = false
     private var localPlayer: Int? = null
     private var spectatorMode: Boolean = false
+    private val pendingSendState =
+        mutableStateOf(false)
+
+    private var sendAttemptInFlight = false
+
+    private var gameDeadlineMs: Long = 0L
+    private var recoveredTurnStarted: Boolean = false
+
+    private fun saveWordHuntProgress() {
+        if (
+            spectatorMode ||
+            gameDeadlineMs <= 0L ||
+            !::gameState.isInitialized
+        ) {
+            return
+        }
+
+        gameSessionIPC?.saveTurnProgress(
+            sessionId,
+            mapOf(
+                "started" to "1",
+                "deadline" to gameDeadlineMs.toString(),
+                "words" to gameState
+                    .sortedWords()
+                    .joinToString("|"),
+            ),
+        )
+    }
+
+    private fun restoreWordHuntRecovery(
+        recovery: com.openbubbles.openpigeon.TurnRecoveryRecord?,
+    ) {
+        sendAttemptInFlight = false
+
+        if (recovery == null) {
+            pendingSendState.value = false
+            return
+        }
+
+        val progress = recovery.progress
+
+        val words = progress["words"]
+            ?.takeIf {
+                it.isNotBlank()
+            }
+            ?.split("|")
+            .orEmpty()
+
+        gameState.restoreFoundWords(
+            words,
+        )
+
+        gameDeadlineMs =
+            progress["deadline"]
+                ?.toLongOrNull()
+                ?: 0L
+
+        recoveredTurnStarted =
+            progress["started"] == "1" &&
+                    gameDeadlineMs > 0L
+
+        pendingSendState.value =
+            recovery.sendAttempted
+    }
+
+    private fun startCountdownFromDeadline() {
+        gameTimer?.cancel()
+
+        val remaining =
+            gameDeadlineMs -
+                    System.currentTimeMillis()
+
+        if (remaining <= 0L) {
+            gameState.setSecondsLeft(
+                0,
+            )
+
+            endGame()
+            return
+        }
+
+        gameState.isGameActive = true
+
+        gameState.setSecondsLeft(
+            ((remaining + 999L) / 1000L)
+                .toInt(),
+        )
+
+        gameTimer = object : CountDownTimer(
+            remaining,
+            1000L,
+        ) {
+            override fun onTick(
+                millisUntilFinished: Long,
+            ) {
+                gameState.setSecondsLeft(
+                    ((millisUntilFinished + 999L) / 1000L)
+                        .toInt(),
+                )
+            }
+
+            override fun onFinish() {
+                endGame()
+            }
+        }.start()
+    }
+
+    private fun schedulePendingSendCheck() {
+        lifecycleScope.launch {
+            kotlinx.coroutines.delay(
+                8.seconds,
+            )
+
+            val stillPending =
+                gameSessionIPC?.hasPendingSend(
+                    sessionId,
+                ) == true
+
+            sendAttemptInFlight =
+                false
+
+            pendingSendState.value =
+                stillPending
+
+            if (stillPending) {
+                OpenPigeonLog.w(
+                    "WordHunt",
+                    "Automatic send was not confirmed; enabling manual SEND GAME",
+                )
+            }
+        }
+    }
+
+    private fun retryPendingSend() {
+        if (sendAttemptInFlight) {
+            return
+        }
+
+        val ipc =
+            gameSessionIPC
+
+        if (ipc == null) {
+            pendingSendState.value =
+                true
+
+            return
+        }
+
+        pendingSendState.value =
+            false
+
+        sendAttemptInFlight =
+            true
+
+        val dispatched =
+            ipc.retryPendingSend(
+                sessionId,
+            ) {
+                runOnUiThread {
+                    sendAttemptInFlight =
+                        false
+
+                    pendingSendState.value =
+                        false
+
+                    val refreshed =
+                        ipc.getCurrentMessage(
+                            sessionId,
+                        )
+
+                    if (refreshed.isNotEmpty()) {
+                        currentMessage =
+                            refreshed
+
+                        if (::currentMessageState.isInitialized) {
+                            currentMessageState.value =
+                                refreshed
+                        }
+                    }
+                }
+            }
+
+        if (!dispatched) {
+            sendAttemptInFlight =
+                false
+
+            pendingSendState.value =
+                true
+
+            return
+        }
+
+        schedulePendingSendCheck()
+    }
 
     private fun logGameOpened(
         msg: Map<String, String>,
@@ -299,78 +494,121 @@ class WordHuntActivity : AppCompatActivity() {
         enableEdgeToEdge()
         supportActionBar?.hide()
 
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-//            val controller = window.insetsController
-//            controller?.hide(WindowInsets.Type.systemBars())
-//            controller?.systemBarsBehavior =
-//                WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-//        } else {
-//            @Suppress("DEPRECATION")
-//            window.decorView.systemUiVisibility =
-//                (View.SYSTEM_UI_FLAG_FULLSCREEN
-//                        or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-//                        or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-//                        or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-//                        or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-//                        or View.SYSTEM_UI_FLAG_LAYOUT_STABLE)
-//        }
+        sessionId =
+            intent.getStringExtra(
+                "SESSION",
+            )!!
 
-        sessionId = intent.getStringExtra("SESSION")!!
+        AvatarData.init(
+            this,
+        )
 
-        AvatarData.init(this)
         lateinit var startDestination: String
-        GameSessionIPC(applicationContext) ipcReady@{ gameSessionIPC ->
-            // This is called when the service is bound
-            this.gameSessionIPC = gameSessionIPC
-            currentMessage = gameSessionIPC.getCurrentMessage(sessionId)
+
+        GameSessionIPC(
+            applicationContext,
+        ) ipcReady@{ gameSessionIPC ->
+            this.gameSessionIPC =
+                gameSessionIPC
+
+            currentMessage =
+                gameSessionIPC.getCurrentMessage(
+                    sessionId,
+                )
+
             OpenPigeonLog.i(
-                "WordHunt", "currentMessage loaded keys=${currentMessage.keys.sorted()}"
+                "WordHunt",
+                "currentMessage loaded keys=${currentMessage.keys.sorted()}",
             )
 
-            if (currentMessage.isNotEmpty()) {
-                gameSessionIPC.lockMsgHandle(sessionId)
-                gameSessionIPC.setSuppressNotifications(sessionId, true)
-                gameSessionIPC.onMessageUpdated(
-                    sessionId,
-                ) {
-                    synchronized(this) {
-                        OpenPigeonLog.i(
-                            "WordHunt",
-                            "Message updated in background",
-                        )
+            if (currentMessage.isEmpty()) {
+                OpenPigeonLog.e(
+                    "openpigeon-${baseGame.getName()}",
+                    "$sessionId does not exist!",
+                )
 
-                        runOnUiThread {
-                            val updatedMessage = (gameSessionIPC.getCurrentMessage(
+                finish()
+                return@ipcReady
+            }
+
+            gameSessionIPC.lockMsgHandle(
+                sessionId,
+            )
+
+            gameSessionIPC.setSuppressNotifications(
+                sessionId,
+                true,
+            )
+
+            gameSessionIPC.onMessageUpdated(
+                sessionId,
+            ) {
+                synchronized(this) {
+                    OpenPigeonLog.i(
+                        "WordHunt",
+                        "Message updated in background",
+                    )
+
+                    runOnUiThread {
+                        val updatedMessage =
+                            gameSessionIPC.getCurrentMessage(
                                 sessionId,
-                            ))
+                            )
 
-                            currentMessage = updatedMessage
+                        if (updatedMessage.isNotEmpty()) {
+                            currentMessage =
+                                updatedMessage
 
                             if (::currentMessageState.isInitialized) {
-                                currentMessageState.value = (updatedMessage)
+                                currentMessageState.value =
+                                    updatedMessage
                             }
+                        }
 
-                            if (spectatorMode && ::navController.isInitialized && navController.currentDestination?.route != GameUI.Screen.Score.route) {
-                                navController.navigate(
-                                    GameUI.Screen.Score.route,
-                                ) {
-                                    launchSingleTop = true
-                                }
+                        if (
+                            !gameSessionIPC.hasPendingSend(
+                                sessionId,
+                            )
+                        ) {
+                            sendAttemptInFlight =
+                                false
+
+                            pendingSendState.value =
+                                false
+                        }
+
+                        if (
+                            spectatorMode &&
+                            ::navController.isInitialized &&
+                            navController.currentDestination?.route !=
+                            GameUI.Screen.Score.route &&
+                            navController.currentDestination?.route !=
+                            GameUI.Screen.AllWords.route
+                        ) {
+                            navController.navigate(
+                                GameUI.Screen.Score.route,
+                            ) {
+                                launchSingleTop =
+                                    true
                             }
                         }
                     }
                 }
+            }
 
-                val senderId = gameSessionIPC.getSenderUUID(
+            val senderId =
+                gameSessionIPC.getSenderUUID(
                     sessionId,
                 )
 
-                spectatorMode = isSpectator(
+            spectatorMode =
+                isSpectator(
                     message = currentMessage,
                     senderId = senderId,
                 )
 
-                val player: Int? = if (spectatorMode) {
+            val player: Int? =
+                if (spectatorMode) {
                     null
                 } else {
                     resolveLocalPlayer(
@@ -379,30 +617,56 @@ class WordHuntActivity : AppCompatActivity() {
                     )
                 }
 
-                if (!spectatorMode && player == null) {
-                    OpenPigeonLog.w(
-                        "WordHunt",
-                        "Unable to resolve player slot. " + "sender=$senderId " + "player1=${currentMessage["player1"].orEmpty()} " + "player2=${currentMessage["player2"].orEmpty()}",
-                    )
+            if (
+                !spectatorMode &&
+                player == null
+            ) {
+                OpenPigeonLog.w(
+                    "WordHunt",
+                    "Unable to resolve player slot. " +
+                            "sender=$senderId " +
+                            "player1=${currentMessage["player1"].orEmpty()} " +
+                            "player2=${currentMessage["player2"].orEmpty()}",
+                )
 
-                    finish()
-                    return@ipcReady
-                }
+                finish()
+                return@ipcReady
+            }
 
-                localPlayer = player
+            localPlayer =
+                player
 
-                setupGame()
+            setupGame()
 
-                startDestination = when {
+            val recovery =
+                gameSessionIPC.getTurnRecovery(
+                    sessionId,
+                )
+
+            restoreWordHuntRecovery(
+                recovery,
+            )
+
+            startDestination =
+                when {
                     spectatorMode -> {
                         GameUI.Screen.Score.route
                     }
 
-                    player != null && hasPlayerSubmitted(
-                        message = currentMessage,
-                        player = player,
-                    ) -> {
+                    pendingSendState.value -> {
                         GameUI.Screen.Score.route
+                    }
+
+                    player != null &&
+                            hasPlayerSubmitted(
+                                message = currentMessage,
+                                player = player,
+                            ) -> {
+                        GameUI.Screen.Score.route
+                    }
+
+                    recoveredTurnStarted -> {
+                        GameUI.Screen.Game.route
                     }
 
                     else -> {
@@ -410,37 +674,60 @@ class WordHuntActivity : AppCompatActivity() {
                     }
                 }
 
-                logGameOpened(
-                    msg = currentMessage,
-                    player = player,
+            logGameOpened(
+                msg = currentMessage,
+                player = player,
+                startDestination = startDestination,
+            )
+
+            setContent {
+                currentMessageState =
+                    remember {
+                        mutableStateOf(
+                            currentMessage,
+                        )
+                    }
+
+                navController =
+                    rememberNavController()
+
+                gameUI.WordHuntNavigation(
+                    navController = navController,
                     startDestination = startDestination,
+                    gameState = gameState,
+                    spectatorMode = spectatorMode,
+                    onGameStart = {
+                        startGameTimer()
+                    },
+                    onExit = {
+                        finish()
+                    },
+                    pendingSend = pendingSendState.value,
+                    onRetrySend = {
+                        retryPendingSend()
+                    },
+                    score = {
+                        getScoreData(
+                            currentMessageState.value,
+                        )
+                    },
                 )
+            }
 
-                setContent {
-                    currentMessageState = remember { mutableStateOf(currentMessage) }
-
-                    navController = rememberNavController()
-                    gameUI.WordHuntNavigation(
-                        navController = navController,
-                        startDestination = startDestination,
-                        gameState = gameState,
-                        spectatorMode = spectatorMode,
-                        onGameStart = {
-                            startGameTimer()
-                        },
-                        score = {
-                            getScoreData(
-                                currentMessageState.value,
-                            )
-                        },
+            if (
+                recoveredTurnStarted &&
+                !pendingSendState.value &&
+                startDestination ==
+                GameUI.Screen.Game.route
+            ) {
+                window.decorView.post {
+                    startGameTimer(
+                        resuming = true,
                     )
                 }
-
-                setupWordHuntMenu()
-            } else {
-                OpenPigeonLog.e("openpigeon-${baseGame.getName()}", "$sessionId does not exist!")
-                finish()
             }
+
+            setupWordHuntMenu()
         }
     }
 
@@ -462,6 +749,10 @@ class WordHuntActivity : AppCompatActivity() {
             dictionary = dictionary,
             mode = selectedMode,
         )
+
+        gameState.onProgressChanged = {
+            saveWordHuntProgress()
+        }
 
         val letters = currentMessage["letters"].orEmpty()
 
@@ -510,62 +801,95 @@ class WordHuntActivity : AppCompatActivity() {
         )
     }
 
-    private fun startGameTimer() {
+    private fun startGameTimer(
+        resuming: Boolean = false,
+    ) {
         if (spectatorMode) {
             OpenPigeonLog.i(
                 "WordHunt",
                 "startGameTimer skipped for spectator",
             )
 
-            gameState.isGameActive = false
+            gameState.isGameActive =
+                false
+
             gameTimer?.cancel()
 
-            if (::navController.isInitialized && navController.currentDestination?.route != GameUI.Screen.Score.route) {
+            if (
+                ::navController.isInitialized &&
+                navController.currentDestination?.route !=
+                GameUI.Screen.Score.route
+            ) {
                 navController.navigate(
                     GameUI.Screen.Score.route,
                 ) {
-                    launchSingleTop = true
+                    launchSingleTop =
+                        true
                 }
             }
 
             return
         }
 
-        val ipc = gameSessionIPC ?: return
+        if (
+            pendingSendState.value ||
+            sendAttemptInFlight
+        ) {
+            gameState.isGameActive =
+                false
 
-        val player = localPlayer ?: return
+            gameTimer?.cancel()
 
-        val latestMessage = ipc.getCurrentMessage(
-            sessionId,
-        )
-
-        currentMessage = latestMessage
-
-        if (::currentMessageState.isInitialized) {
-            currentMessageState.value = latestMessage
+            return
         }
 
-        val senderId = ipc.getSenderUUID(
-            sessionId,
-        )
+        val ipc =
+            gameSessionIPC ?: return
 
-        val registeredPlayerId = latestMessage["player$player"].orEmpty()
+        val player =
+            localPlayer ?: return
 
-        /*
-         * The empty slot may have been claimed while this activity was open.
-         */
-        if (registeredPlayerId.isNotBlank() && registeredPlayerId != senderId) {
+        val latestMessage =
+            ipc.getCurrentMessage(
+                sessionId,
+            )
+
+        if (latestMessage.isNotEmpty()) {
+            currentMessage =
+                latestMessage
+
+            if (::currentMessageState.isInitialized) {
+                currentMessageState.value =
+                    latestMessage
+            }
+        }
+
+        val senderId =
+            ipc.getSenderUUID(
+                sessionId,
+            )
+
+        val registeredPlayerId =
+            currentMessage[
+                "player$player"
+            ].orEmpty()
+
+        if (
+            registeredPlayerId.isNotBlank() &&
+            registeredPlayerId != senderId
+        ) {
             OpenPigeonLog.w(
                 "WordHunt",
-                "Blocked game start because player slot $player " + "belongs to another ID.",
+                "Blocked game start because player slot $player belongs to another ID.",
             )
 
             finish()
             return
         }
 
-        if (hasPlayerSubmitted(
-                message = latestMessage,
+        if (
+            hasPlayerSubmitted(
+                message = currentMessage,
                 player = player,
             )
         ) {
@@ -574,16 +898,23 @@ class WordHuntActivity : AppCompatActivity() {
                 "Blocked duplicate attempt for player=$player sender=$senderId",
             )
 
+            gameState.isGameActive =
+                false
+
+            gameTimer?.cancel()
+
             if (::navController.isInitialized) {
                 navController.navigate(
                     GameUI.Screen.Score.route,
                 ) {
-                    launchSingleTop = true
+                    launchSingleTop =
+                        true
 
                     popUpTo(
-                        GameUI.Screen.Intro.route,
+                        GameUI.Screen.Game.route,
                     ) {
-                        inclusive = true
+                        inclusive =
+                            true
                     }
                 }
             }
@@ -591,28 +922,21 @@ class WordHuntActivity : AppCompatActivity() {
             return
         }
 
-        gameState.isGameActive = true
-
-        gameTimer?.cancel()
-
-        gameTimer = object : CountDownTimer(
-            GAME_DURATION,
-            1000,
+        if (
+            !resuming ||
+            gameDeadlineMs <= 0L
         ) {
-            override fun onTick(
-                millisUntilFinished: Long,
-            ) {
-                val secondsLeft = (millisUntilFinished / 1000).toInt()
+            gameDeadlineMs =
+                System.currentTimeMillis() +
+                        GAME_DURATION
 
-                gameState.setSecondsLeft(
-                    secondsLeft,
-                )
-            }
+            recoveredTurnStarted =
+                true
 
-            override fun onFinish() {
-                endGame()
-            }
-        }.start()
+            saveWordHuntProgress()
+        }
+
+        startCountdownFromDeadline()
     }
 
     private fun populatedBoard(letterPool: String): Array<CharArray> {
@@ -637,46 +961,77 @@ class WordHuntActivity : AppCompatActivity() {
             gameTimer?.cancel()
 
             if (::gameState.isInitialized) {
-                gameState.isGameActive = false
+                gameState.isGameActive =
+                    false
             }
 
             return
         }
 
-        val ipc = gameSessionIPC ?: return
+        if (
+            sendAttemptInFlight ||
+            pendingSendState.value
+        ) {
+            gameState.isGameActive =
+                false
 
-        val player = localPlayer ?: run {
-            OpenPigeonLog.e(
-                "WordHunt",
-                "Cannot finish game because localPlayer was not resolved.",
-            )
+            gameTimer?.cancel()
 
             return
         }
 
-        gameState.isGameActive = false
+        val ipc =
+            gameSessionIPC ?: return
+
+        val player =
+            localPlayer ?: run {
+                OpenPigeonLog.e(
+                    "WordHunt",
+                    "Cannot finish game because localPlayer was not resolved.",
+                )
+
+                return
+            }
+
+        gameState.isGameActive =
+            false
+
         gameTimer?.cancel()
 
-        currentMessage = ipc.getCurrentMessage(
-            sessionId,
-        )
+        val latestMessage =
+            ipc.getCurrentMessage(
+                sessionId,
+            )
 
-        val senderId = ipc.getSenderUUID(
-            sessionId,
-        )
+        if (latestMessage.isNotEmpty()) {
+            currentMessage =
+                latestMessage
+        }
 
-        val registeredPlayerId = currentMessage["player$player"].orEmpty()
+        val senderId =
+            ipc.getSenderUUID(
+                sessionId,
+            )
 
-        if (registeredPlayerId.isNotBlank() && registeredPlayerId != senderId) {
+        val registeredPlayerId =
+            currentMessage[
+                "player$player"
+            ].orEmpty()
+
+        if (
+            registeredPlayerId.isNotBlank() &&
+            registeredPlayerId != senderId
+        ) {
             OpenPigeonLog.e(
                 "WordHunt",
-                "Refusing to submit player=$player because the slot belongs " + "to another ID.",
+                "Refusing to submit player=$player because the slot belongs to another ID.",
             )
 
             return
         }
 
-        if (hasPlayerSubmitted(
+        if (
+            hasPlayerSubmitted(
                 message = currentMessage,
                 player = player,
             )
@@ -686,106 +1041,232 @@ class WordHuntActivity : AppCompatActivity() {
                 "Duplicate submission blocked for player=$player sender=$senderId",
             )
 
-            currentMessageState.value = currentMessage
+            sendAttemptInFlight =
+                false
 
-            navController.navigate(
-                GameUI.Screen.Score.route,
-            ) {
-                launchSingleTop = true
+            pendingSendState.value =
+                false
+
+            if (::currentMessageState.isInitialized) {
+                currentMessageState.value =
+                    currentMessage
+            }
+
+            if (::navController.isInitialized) {
+                navController.navigate(
+                    GameUI.Screen.Score.route,
+                ) {
+                    launchSingleTop =
+                        true
+
+                    popUpTo(
+                        GameUI.Screen.Game.route,
+                    ) {
+                        inclusive =
+                            true
+                    }
+                }
             }
 
             return
         }
 
-        val opponent = if (player == 1) {
-            2
-        } else {
-            1
-        }
-        val score1 = currentMessage["score1"]
-        val score2 = currentMessage["score2"]
-        val scores = arrayOf(score1, score2)
+        val opponent =
+            if (player == 1) {
+                2
+            } else {
+                1
+            }
 
-        val updates = mutableMapOf(
-            "sender" to senderId,
-            "player$player" to senderId,
-            "avatar$player" to AvatarView.buildAvatarString(),
-            "score$player" to gameState.score.toString(),
-            "words$player" to gameState.wordCount.toString(),
-            "words_list$player" to gameState.sortedWords().joinToString("|"),
+        val score1 =
+            currentMessage["score1"]
+
+        val score2 =
+            currentMessage["score2"]
+
+        val scores =
+            arrayOf(
+                score1,
+                score2,
+            )
+
+        val updates =
+            mutableMapOf(
+                "sender" to senderId,
+                "player$player" to senderId,
+                "avatar$player" to AvatarView.buildAvatarString(),
+                "score$player" to gameState.score.toString(),
+                "words$player" to gameState.wordCount.toString(),
+                "words_list$player" to gameState
+                    .sortedWords()
+                    .joinToString("|"),
+            )
+
+        currentMessage["lang"]
+            ?.takeIf {
+                it.isNotBlank()
+            }
+            ?.let { languageCode ->
+                updates["lang"] =
+                    languageCode
+            }
+
+        currentMessage["subcaption"]
+            ?.takeIf {
+                it.isNotBlank()
+            }
+            ?.let { subcaption ->
+                updates["subcaption"] =
+                    subcaption
+            }
+
+        if (
+            !score1.isNullOrBlank() ||
+            !score2.isNullOrBlank()
+        ) {
+            val opponentScore =
+                scores[
+                    opponent - 1
+                ]?.toIntOrNull()
+
+            if (opponentScore != null) {
+                updates["winner"] =
+                    "$senderId|${
+                        when {
+                            gameState.score < opponentScore -> {
+                                "-1"
+                            }
+
+                            gameState.score > opponentScore -> {
+                                "1"
+                            }
+
+                            else -> {
+                                "0"
+                            }
+                        }
+                    }"
+            }
+        }
+
+        OpenPigeonLog.i(
+            "Word List",
+            gameState
+                .sortedWords()
+                .joinToString("|"),
         )
 
-        currentMessage["lang"]?.takeIf { it.isNotBlank() }?.let { languageCode ->
-            updates["lang"] = languageCode
-        }
-
-        currentMessage["subcaption"]?.takeIf { it.isNotBlank() }?.let { subcaption ->
-            updates["subcaption"] = subcaption
-        }
-
-        if (!score2.isNullOrBlank() || !score1.isNullOrBlank()) {
-            updates["winner"] = "$senderId|${
-                if (gameState.score < scores[opponent - 1]!!.toInt()) {
-                    "-1"
-                } else if (gameState.score > scores[opponent - 1]!!.toInt()) {
-                    "1"
-                } else {
-                    "0"
-                }
-            }"
-        }
-
-        OpenPigeonLog.i("Word List", gameState.sortedWords().joinToString("|"))
-        ipc.updateSession(
-            updates,
-            sessionId,
+        if (
+            ::navController.isInitialized &&
+            navController.currentDestination?.route !=
+            GameUI.Screen.Score.route
         ) {
-            runOnUiThread {
-                val refreshedMessage = runCatching {
-                    ipc.getCurrentMessage(
-                        sessionId,
-                    )
-                }.getOrElse { error ->
-                    OpenPigeonLog.e(
-                        "WordHunt",
-                        "Failed to refresh the message after submitting the score.",
-                        error,
-                    )
+            navController.navigate(
+                GameUI.Screen.Score.route,
+            ) {
+                launchSingleTop =
+                    true
 
-                    currentMessage + updates
-                }
-
-                currentMessage = refreshedMessage
-
-                if (::currentMessageState.isInitialized) {
-                    currentMessageState.value = refreshedMessage
-                }
-
-                runCatching {
-                    ipc.unlockMsgHandle(
-                        sessionId,
-                    )
-                }.onFailure { error ->
-                    OpenPigeonLog.e(
-                        "WordHunt",
-                        "Could not unlock the message handle after submitting the score.",
-                        error,
-                    )
-                }
-
-                if (
-                    !isFinishing &&
-                    !isDestroyed &&
-                    ::navController.isInitialized &&
-                    navController.currentDestination?.route != GameUI.Screen.Score.route
+                popUpTo(
+                    GameUI.Screen.Game.route,
                 ) {
-                    navController.navigate(
-                        GameUI.Screen.Score.route,
+                    inclusive =
+                        true
+                }
+            }
+        }
+
+        sendAttemptInFlight =
+            true
+
+        pendingSendState.value =
+            false
+
+        val dispatched =
+            ipc.updateSession(
+                updates,
+                sessionId,
+            ) {
+                runOnUiThread {
+                    sendAttemptInFlight =
+                        false
+
+                    pendingSendState.value =
+                        false
+
+                    val refreshedMessage =
+                        runCatching {
+                            ipc.getCurrentMessage(
+                                sessionId,
+                            )
+                        }.getOrElse { error ->
+                            OpenPigeonLog.e(
+                                "WordHunt",
+                                "Failed to refresh the message after submitting the score.",
+                                error,
+                            )
+
+                            currentMessage +
+                                    updates
+                        }
+
+                    currentMessage =
+                        refreshedMessage
+
+                    if (::currentMessageState.isInitialized) {
+                        currentMessageState.value =
+                            refreshedMessage
+                    }
+
+                    runCatching {
+                        ipc.unlockMsgHandle(
+                            sessionId,
+                        )
+                    }.onFailure { error ->
+                        OpenPigeonLog.e(
+                            "WordHunt",
+                            "Could not unlock the message handle after submitting the score.",
+                            error,
+                        )
+                    }
+
+                    if (
+                        !isFinishing &&
+                        !isDestroyed &&
+                        ::navController.isInitialized &&
+                        navController.currentDestination?.route !=
+                        GameUI.Screen.Score.route
                     ) {
-                        launchSingleTop = true
+                        navController.navigate(
+                            GameUI.Screen.Score.route,
+                        ) {
+                            launchSingleTop =
+                                true
+
+                            popUpTo(
+                                GameUI.Screen.Game.route,
+                            ) {
+                                inclusive =
+                                    true
+                            }
+                        }
                     }
                 }
             }
+
+        if (!dispatched) {
+            sendAttemptInFlight =
+                false
+
+            OpenPigeonLog.w(
+                "WordHunt",
+                "Automatic send failed immediately; enabling manual SEND GAME",
+            )
+
+            pendingSendState.value =
+                true
+        } else {
+            schedulePendingSendCheck()
         }
     }
 
@@ -925,8 +1406,11 @@ class WordHuntActivity : AppCompatActivity() {
             gameMenu.onResume()
         }
 
-        if (gameSessionIPC != null) {
-            gameSessionIPC?.setSuppressNotifications(
+        val ipc =
+            gameSessionIPC
+
+        if (ipc != null) {
+            ipc.setSuppressNotifications(
                 sessionId,
                 true,
             )
@@ -935,6 +1419,19 @@ class WordHuntActivity : AppCompatActivity() {
                 "openpigeon-${baseGame.getName()}",
                 "onResume called before gameSessionIPC was initialized!",
             )
+        }
+
+        if (
+            ::gameState.isInitialized &&
+            ::navController.isInitialized &&
+            recoveredTurnStarted &&
+            gameDeadlineMs > 0L &&
+            !pendingSendState.value &&
+            !sendAttemptInFlight &&
+            navController.currentDestination?.route ==
+            GameUI.Screen.Game.route
+        ) {
+            startCountdownFromDeadline()
         }
     }
 

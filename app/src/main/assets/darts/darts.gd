@@ -2045,6 +2045,16 @@ func _set_game_data(new_replay: String):
 		" p2_pre=", p2_pre_score
 	])
 
+	if (is_my_turn and not spectator_mode):
+		var saved_progress = get_saved_turn_progress()
+
+		if not saved_progress.is_empty():
+			await _restore_darts_turn_progress(
+				saved_progress
+			)
+
+			return
+
 	_process_game_state()
 
 func _get_turn_dart_limit() -> int:
@@ -2176,7 +2186,8 @@ func _process_game_state():
 						" num_shots=", num_shots
 					])
 					num_shots = _get_turn_dart_limit()
-
+				
+				_save_darts_turn_progress()
 				_process_game_state()
 			)
 		else:
@@ -2200,6 +2211,165 @@ func _process_game_state():
 			start_waiting_animation()
 		else:
 			stop_waiting_animation()
+
+func _restore_darts_turn_progress(
+	data: Dictionary
+) -> void:
+	var saved_replay := String(
+		data.get(
+			"replay",
+			""
+		)
+	)
+
+	if saved_replay.is_empty():
+		_process_game_state()
+		return
+
+	var parsed := parse_replay(
+		saved_replay
+	)
+
+	if (
+		not parsed.has("pre_state") or
+		not parsed.has("post_state")
+	):
+		OpLog.w(
+			LOG_TAG,
+			"recovery replay missing state"
+		)
+
+		_process_game_state()
+		return
+
+	var pre_state: Array = parsed[
+		"pre_state"
+	]
+
+	var post_state: Array = parsed[
+		"post_state"
+	]
+
+	if (
+		pre_state.size() < 2 or
+		post_state.size() < 2
+	):
+		_process_game_state()
+		return
+
+	reset_game_board()
+
+	p1_pre_score = int(
+		pre_state[0]
+	)
+
+	p2_pre_score = int(
+		pre_state[1]
+	)
+
+	set_score(
+		1,
+		int(post_state[0]),
+		false
+	)
+
+	set_score(
+		2,
+		int(post_state[1]),
+		false
+	)
+
+	my_moves.clear()
+
+	var moves: Array = parsed.get(
+		"moves",
+		[]
+	)
+
+	for raw_move in moves:
+		var move: Array = raw_move
+
+		my_moves.append(
+			move.duplicate()
+		)
+
+		var restored_dart: Dart = spawn_dart(
+			false
+		)
+
+		if not is_instance_valid(
+			restored_dart
+		):
+			continue
+
+		var hit: Array[int] = [
+			int(move[3]),
+			int(move[4]),
+			int(move[5]),
+		]
+
+		restored_dart.restore_hit(
+			Vector3(
+				float(move[1]),
+				float(move[2]),
+				DART_BOARD_PLANE_Z
+			),
+			hit
+		)
+
+	replay_played = true
+
+	if not replay.is_empty():
+		last_replay_played = replay
+
+	OpLog.event(
+		LOG_TAG,
+		[
+			"turn_recovery_restored moves=",
+			my_moves.size(),
+			" p1=",
+			p1_score,
+			" p2=",
+			p2_score,
+			" pending_send=",
+			has_pending_send()
+		]
+	)
+
+	if has_pending_send():
+		_show_send_retry(
+			false
+		)
+
+		return
+
+	_process_game_state()
+
+	if (
+		data.has("pending_x") and
+		data.has("pending_y")
+	):
+		await get_tree().process_frame
+
+		if (
+			is_instance_valid(current_dart) and
+			current_dart.is_mine
+		):
+			var saved_target := Vector3(
+				float(data["pending_x"]),
+				float(data["pending_y"]),
+				DART_BOARD_PLANE_Z
+			)
+
+			_stop_dart_idle()
+
+			current_dart.throw(
+				saved_target
+			)
+
+			current_dart = null
+
+			_update_dart_indicator()
 
 func _show_result(result_code: int) -> void:
 	match_result = result_code
@@ -2312,13 +2482,55 @@ func check_win() -> bool:
 
 	return false
 
-func send_replay():
-	var moves_str = ""
+func _build_local_turn_replay() -> String:
+	var moves_str := ""
 
 	for move in my_moves:
-		moves_str += "move:" + str(int(move[0])) + "," + str("%0.6f" % move[1]) + "," + str("%0.6f" % move[2]) + "," + str(int(move[3])) + "," + str(int(move[4])) + "," + str(int(move[5])) + "|"
+		moves_str += (
+			"move:" +
+			str(int(move[0])) + "," +
+			str("%0.6f" % move[1]) + "," +
+			str("%0.6f" % move[2]) + "," +
+			str(int(move[3])) + "," +
+			str(int(move[4])) + "," +
+			str(int(move[5])) + "|"
+		)
 
-	var replay_out: String = "state:" + str(p1_pre_score) + "," + str(p2_pre_score) + "|" + moves_str + "state:" + str(p1_score) + "," + str(p2_score)
+	return (
+		"state:" +
+		str(p1_pre_score) + "," +
+		str(p2_pre_score) + "|" +
+		moves_str +
+		"state:" +
+		str(p1_score) + "," +
+		str(p2_score)
+	)
+
+
+func _save_darts_turn_progress(
+	pending_throw = null
+) -> void:
+	var data := {
+		"replay": _build_local_turn_replay()
+	}
+
+	if pending_throw is Vector2:
+		data["pending_x"] = (
+			"%0.6f" %
+			float(pending_throw.x)
+		)
+
+		data["pending_y"] = (
+			"%0.6f" %
+			float(pending_throw.y)
+		)
+
+	save_turn_progress(
+		data
+	)
+
+func send_replay():
+	var replay_out: String = _build_local_turn_replay()
 
 	var result = {
 		"replay": replay_out
@@ -2784,6 +2996,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					])
 
 					_stop_dart_idle()
+					_save_darts_turn_progress(Vector2(shot_coords.x, shot_coords.y))
 					current_dart.throw(Vector3(shot_coords.x, shot_coords.y, 0.067))
 					current_dart = null
 					_update_dart_indicator()

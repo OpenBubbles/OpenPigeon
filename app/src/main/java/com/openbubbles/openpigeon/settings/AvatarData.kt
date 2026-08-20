@@ -1,7 +1,7 @@
 package com.openbubbles.openpigeon.settings
 
 import android.content.Context
-import android.graphics.Color
+import androidx.core.graphics.toColorInt
 
 object AvatarData {
     private val background = SettingScope.Section(
@@ -70,9 +70,7 @@ object AvatarData {
         get() = SettingsData.getColor(
             background,
             "color",
-            Color.parseColor(
-                "#4e5d89",
-            ),
+            "#4e5d89".toColorInt(),
         )
         set(value) {
             SettingsData.putColor(
@@ -114,9 +112,7 @@ object AvatarData {
         get() = SettingsData.getColor(
             faceShape,
             "color",
-            Color.parseColor(
-                "#e0ac69",
-            ),
+            "#e0ac69".toColorInt(),
         )
         set(value) {
             SettingsData.putColor(
@@ -172,9 +168,7 @@ object AvatarData {
         get() = SettingsData.getColor(
             hairFront,
             "color",
-            Color.parseColor(
-                "#2c232b",
-            ),
+            "#2c232b".toColorInt(),
         )
         set(value) {
             SettingsData.edit {
@@ -272,9 +266,7 @@ object AvatarData {
         get() = SettingsData.getColor(
             clothing,
             "color",
-            Color.parseColor(
-                "#a03c3c",
-            ),
+            "#a03c3c".toColorInt(),
         )
         set(value) {
             SettingsData.putColor(
@@ -344,7 +336,4 @@ object AvatarData {
             )
         }
 
-    fun writeCfg() {
-        SettingsData.flushToGodot()
-    }
 }

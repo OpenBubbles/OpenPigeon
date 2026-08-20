@@ -104,18 +104,44 @@ class GameSession(var handle: IMessageViewHandle) {
             modifiedUpdated["caption"] = game.getSubtitle(context, modifiedUpdated)
         }
 
+        TurnRecoveryStore.markSendAttempted(
+            context = context,
+            sessionId = mySession,
+            game = game.getName(),
+            baseMessage = currentMessage,
+            updates = updates,
+        )
+
         val update = game.buildGameMessage(
             context,
             modifiedUpdated,
             currentSession = mySession
         )
 
-        handle.updateMessage(update, object : ITaskCompleteCallback.Stub() {
-            override fun complete() {
-                currentMessage = modifiedUpdated
-                finished()
-            }
-        })
+        try {
+            handle.updateMessage(
+                update,
+                object : ITaskCompleteCallback.Stub() {
+                    override fun complete() {
+                        currentMessage = modifiedUpdated
+
+                        TurnRecoveryStore.clear(
+                            context,
+                            mySession,
+                            "message_update_confirmed",
+                        )
+
+                        finished()
+                    }
+                },
+            )
+        } catch (throwable: Throwable) {
+            OpenPigeonLog.e(
+                "GameSession",
+                "updateMessage failed session=$mySession; keeping recovery",
+                throwable,
+            )
+        }
     }
 
     fun getGame(): Game? {

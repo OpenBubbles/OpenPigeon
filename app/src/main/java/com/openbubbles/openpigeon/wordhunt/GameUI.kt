@@ -1,6 +1,14 @@
 package com.openbubbles.openpigeon.wordhunt
 
+import android.content.Context
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -8,28 +16,43 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import kotlin.time.Duration.Companion.milliseconds
-import java.util.Locale
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
@@ -43,6 +66,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.ExperimentalTextApi
@@ -59,28 +83,20 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
+import androidx.compose.ui.zIndex
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import kotlin.math.pow
 import com.openbubbles.openpigeon.R
+import com.openbubbles.openpigeon.settings.AvatarWinBurstOverlay
+import com.openbubbles.openpigeon.ui.TurnRecoveryOverlay
 import kotlinx.coroutines.delay
+import java.util.Locale
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.sqrt
 import kotlin.random.Random
-import android.content.Context
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.zIndex
-import androidx.compose.foundation.layout.requiredSize
-import com.openbubbles.openpigeon.settings.AvatarWinBurstOverlay
-import androidx.compose.ui.geometry.Offset
+import kotlin.time.Duration.Companion.milliseconds
 
 class GameUI {
     private lateinit var tilePositions: Array<Array<TilePosition>>
@@ -114,6 +130,9 @@ class GameUI {
         gameState: WordHuntGameState,
         spectatorMode: Boolean,
         onGameStart: () -> Unit,
+        onExit: () -> Unit,
+        pendingSend: Boolean,
+        onRetrySend: () -> Unit,
         score: () -> MutableMap<String, String>,
     ) {
         Box(
@@ -147,6 +166,8 @@ class GameUI {
                         )
                     },
                     popExitTransition = { null }) {
+                    BackHandler(onBack = onExit)
+
                     IntroScreen(
                         onStartClicked = {
                             navController.navigate(
@@ -183,6 +204,8 @@ class GameUI {
                         AnimatedContentTransitionScope.SlideDirection.Right, tween(450)
                     )
                 }) {
+                    BackHandler(onBack = onExit)
+
                     GameScreen(
                         gameState = gameState
                     )
@@ -201,6 +224,8 @@ class GameUI {
                         AnimatedContentTransitionScope.SlideDirection.Right, tween(450)
                     )
                 }) {
+                    BackHandler(onBack = onExit)
+
                     ScoreScreen(
                         score = score,
                         spectatorMode = spectatorMode,
@@ -221,14 +246,31 @@ class GameUI {
                         AnimatedContentTransitionScope.SlideDirection.Right, tween(450)
                     )
                 }) {
+                    val returnToScore = {
+                        if (!navController.popBackStack(
+                                Screen.Score.route,
+                                inclusive = false,
+                            )
+                        ) {
+                            navController.navigate(Screen.Score.route) {
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+
+                    BackHandler(onBack = returnToScore)
+
                     AllWordsScreen(
                         score = score,
-                        onBack = {
-                            navController.popBackStack()
-                        },
+                        onBack = returnToScore,
                     )
                 }
             }
+
+            TurnRecoveryOverlay(
+                visible = pendingSend,
+                onRetry = onRetrySend,
+            )
         }
     }
 
@@ -344,66 +386,154 @@ class GameUI {
     }
 
     @Composable
-    fun GameScreen(gameState: WordHuntGameState) {
-        val context = LocalContext.current
-        val validWordTrigger = gameState.validWordTrigger
+    fun GameScreen(
+        gameState: WordHuntGameState,
+    ) {
+        val context =
+            LocalContext.current
 
-        LaunchedEffect(validWordTrigger) {
+        val validWordTrigger =
+            gameState.validWordTrigger
+
+        LaunchedEffect(
+            validWordTrigger,
+        ) {
             if (validWordTrigger > 0) {
-                vibrateStrongTap(context)
+                vibrateStrongTap(
+                    context,
+                )
             }
         }
 
         tilePositions =
-            Array(gameState.mode.gridSize) { Array(gameState.mode.gridSize) { TilePosition() } }
+            Array(
+                gameState.mode.gridSize,
+            ) {
+                Array(
+                    gameState.mode.gridSize,
+                ) {
+                    TilePosition()
+                }
+            }
 
         BoxWithConstraints(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
         ) {
-            val landscape = maxWidth > maxHeight
-            val boardSide = if (landscape) minOf(maxHeight * 0.9f, maxWidth * 0.55f) else 350.dp
-            val gutter = (maxWidth - boardSide) / 2
-            val scoreScale = if (landscape) (gutter * 0.9f) / 300.dp else 1f
+            val availableWidth =
+                this.maxWidth
+
+            val availableHeight =
+                this.maxHeight
+
+            val landscape =
+                availableWidth >
+                        availableHeight
+
+            val boardSide =
+                if (landscape) {
+                    minOf(
+                        availableHeight * 0.9f,
+                        availableWidth * 0.55f,
+                    )
+                } else {
+                    350.dp
+                }
+
+            val gutter =
+                (
+                        availableWidth -
+                                boardSide
+                        ) / 2
+
+            val scoreScale =
+                if (landscape) {
+                    (
+                            gutter *
+                                    0.9f
+                            ) / 300.dp
+                } else {
+                    1f
+                }
 
             ScoreDisplay(
                 gameState = gameState,
-                scale = scoreScale,
                 modifier = if (landscape) {
                     Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = gutter * 0.05f)
+                        .align(
+                            Alignment.CenterStart,
+                        )
+                        .padding(
+                            start =
+                                gutter * 0.05f,
+                        )
                 } else {
                     Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 50.dp)
-                }
+                        .align(
+                            Alignment.TopCenter,
+                        )
+                        .padding(
+                            top = 50.dp,
+                        )
+                },
+                scale = scoreScale,
             )
 
             GameBoard(
-                board = gameState.board(),
-                gameState = gameState,
-                boardSide = boardSide,
+                board =
+                    gameState.board(),
+                gameState =
+                    gameState,
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .offset(x = 0.dp, y = if (landscape) 0.dp else 80.dp)
+                    .align(
+                        Alignment.Center,
+                    )
+                    .offset(
+                        x = 0.dp,
+                        y = if (landscape) {
+                            0.dp
+                        } else {
+                            80.dp
+                        },
+                    ),
+                boardSide =
+                    boardSide,
             )
 
-            if (gameState.currentWord != "") {
+            if (
+                gameState.currentWord
+                    .isNotEmpty()
+            ) {
                 CurrentWordDisplay(
-                    gameState = gameState,
+                    gameState =
+                        gameState,
                     modifier = Modifier
-                        .align(Alignment.Center)
-                        .offset(x = 0.dp, y = (-150).dp)
-                        .zIndex(2f)
+                        .align(
+                            Alignment.Center,
+                        )
+                        .offset(
+                            x = 0.dp,
+                            y = (-150).dp,
+                        )
+                        .zIndex(
+                            2f,
+                        ),
                 )
             }
 
             AwardedWordPopup(
-                gameState = gameState,
+                gameState =
+                    gameState,
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .offset(x = 0.dp, y = (-150).dp)
-                    .zIndex(2f)
+                    .align(
+                        Alignment.Center,
+                    )
+                    .offset(
+                        x = 0.dp,
+                        y = (-150).dp,
+                    )
+                    .zIndex(
+                        2f,
+                    ),
             )
         }
     }
@@ -421,7 +551,9 @@ class GameUI {
 
     @Composable
     private fun ScoreDisplay(
-        gameState: WordHuntGameState, scale: Float = 1f, modifier: Modifier = Modifier
+        gameState: WordHuntGameState,
+        modifier: Modifier = Modifier,
+        scale: Float = 1f,
     ) {
         var displayedScore by remember { mutableIntStateOf(gameState.score) }
 
@@ -547,8 +679,8 @@ class GameUI {
     fun GameBoard(
         board: Array<CharArray>,
         gameState: WordHuntGameState,
+        modifier: Modifier = Modifier,
         boardSide: Dp = 350.dp,
-        modifier: Modifier = Modifier
     ) {
         Box(
             modifier = modifier.size(boardSide)
@@ -849,8 +981,8 @@ class GameUI {
         BoxWithConstraints(
             modifier = modifier.fillMaxSize(),
         ) {
-            val screenWidth = maxWidth
-            val screenHeight = maxHeight
+            val screenWidth = this.maxWidth
+            val screenHeight = this.maxHeight
             val landscape = screenWidth > screenHeight
             val avatarScale = if (landscape) 0.62f else 1f
 
@@ -1200,8 +1332,8 @@ class GameUI {
             contentAlignment = Alignment.Center,
         ) {
             val boardSide = minOf(
-                maxWidth * 0.66f,
-                maxHeight * 0.44f,
+                this.maxWidth * 0.66f,
+                this.maxHeight * 0.44f,
             )
 
             Box(
@@ -1348,7 +1480,7 @@ class GameUI {
         val board = scoreData["board"].orEmpty()
 
         val gridSize = scoreData["grid_size"]?.toIntOrNull()
-            ?: kotlin.math.sqrt(board.length.toFloat()).toInt().coerceAtLeast(1)
+            ?: sqrt(board.length.toFloat()).toInt().coerceAtLeast(1)
 
         val invalidCells = remember(scoreData["invalid_cells"]) {
             WordHuntSolver.decodePath(

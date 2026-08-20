@@ -9,6 +9,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.isVisible
 
 private const val WIN_BURST_WIDTH_DP =
     136f
@@ -292,7 +293,7 @@ class AvatarWinBurstController(
 
         if (
             shownResult == safeResult &&
-            layer.visibility == View.VISIBLE
+            layer.isVisible
         ) {
             dimView?.bringToFront()
             layer.bringToFront()

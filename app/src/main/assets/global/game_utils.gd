@@ -292,3 +292,165 @@ static func stop_music(game: Node) -> void:
 	var mp := game.get_node_or_null("MusicPlayer") as AudioStreamPlayer
 	if mp:
 		mp.stop()
+
+# ---------- Turn recovery ----------
+
+static func create_send_retry_overlay(
+	game: Node,
+	on_retry: Callable
+) -> Dictionary:
+	var layer := CanvasLayer.new()
+	layer.name = "TurnRecoveryLayer"
+	layer.layer = 5000
+	game.add_child(layer)
+
+	var root := Control.new()
+	root.name = "TurnRecoveryRoot"
+	root.set_anchors_and_offsets_preset(
+		Control.PRESET_FULL_RECT
+	)
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.visible = false
+	layer.add_child(root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.0, 0.0, 0.0, 0.35)
+	dim.set_anchors_and_offsets_preset(
+		Control.PRESET_FULL_RECT
+	)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(dim)
+
+	var button := Button.new()
+	button.name = "SendGameButton"
+	button.text = "SEND GAME"
+	button.focus_mode = Control.FOCUS_NONE
+	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+
+	button.set_anchors_preset(
+		Control.PRESET_CENTER
+	)
+
+	button.offset_left = -90.0
+	button.offset_top = -26.0
+	button.offset_right = 90.0
+	button.offset_bottom = 26.0
+
+	button.add_theme_font_size_override(
+		"font_size",
+		17
+	)
+
+	button.add_theme_color_override(
+		"font_color",
+		Color.BLACK
+	)
+
+	button.add_theme_color_override(
+		"font_hover_color",
+		Color.BLACK
+	)
+
+	button.add_theme_color_override(
+		"font_pressed_color",
+		Color.BLACK
+	)
+
+	button.add_theme_color_override(
+		"font_disabled_color",
+		Color(0.35, 0.35, 0.35)
+	)
+
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color.WHITE
+	normal.corner_radius_top_left = 12
+	normal.corner_radius_top_right = 12
+	normal.corner_radius_bottom_left = 12
+	normal.corner_radius_bottom_right = 12
+
+	var hover := normal.duplicate()
+	hover.bg_color = Color(
+		0.94,
+		0.94,
+		0.94
+	)
+
+	var pressed := normal.duplicate()
+	pressed.bg_color = Color(
+		0.86,
+		0.86,
+		0.86
+	)
+
+	var disabled := normal.duplicate()
+	disabled.bg_color = Color(
+		0.82,
+		0.82,
+		0.82
+	)
+
+	button.add_theme_stylebox_override(
+		"normal",
+		normal
+	)
+
+	button.add_theme_stylebox_override(
+		"hover",
+		hover
+	)
+
+	button.add_theme_stylebox_override(
+		"pressed",
+		pressed
+	)
+
+	button.add_theme_stylebox_override(
+		"disabled",
+		disabled
+	)
+
+	if on_retry.is_valid():
+		button.pressed.connect(
+			func():
+				on_retry.call()
+		)
+
+	root.add_child(
+		button
+	)
+
+	return {
+		"layer": layer,
+		"root": root,
+		"button": button,
+	}
+
+
+static func set_send_retry_overlay_state(
+	ui: Dictionary,
+	visible: bool,
+	sending: bool
+) -> void:
+	var root := ui.get(
+		"root"
+	) as Control
+
+	var button := ui.get(
+		"button"
+	) as Button
+
+	if not is_instance_valid(root):
+		return
+
+	root.visible = visible
+
+	if not is_instance_valid(button):
+		return
+
+	button.disabled = sending
+	button.text = (
+		"SENDING..."
+		if sending
+		else
+		"SEND GAME"
+	)

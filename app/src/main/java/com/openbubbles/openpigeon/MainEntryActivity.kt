@@ -7,7 +7,7 @@ import android.widget.Toast
 import androidx.core.net.toUri
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
-// used for google play open
+// used for Google Play open
 class MainEntryActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -21,10 +21,10 @@ class MainEntryActivity : Activity() {
             MaterialAlertDialogBuilder(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
                 .setTitle("OpenBubbles not installed")
                 .setMessage("To use iMessage, OpenPigeon requires OpenBubbles. Learn how to get started at openbubbles.app")
-                .setNegativeButton("Cancel") { dialog, which ->
+                .setNegativeButton("Cancel") { _, _ ->
                     finishAndRemoveTask()
                 }
-                .setPositiveButton("Open") { dialog, which ->
+                .setPositiveButton("Open") { _, _ ->
                     val intent = Intent(Intent.ACTION_VIEW)
                     intent.data = "https://openbubbles.app".toUri()
                     intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK

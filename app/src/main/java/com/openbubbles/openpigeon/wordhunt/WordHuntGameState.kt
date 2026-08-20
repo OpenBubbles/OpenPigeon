@@ -9,6 +9,7 @@ import java.util.Locale
 
 class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHuntActivity.GameMode) {
     var isGameActive: Boolean = false
+    var onProgressChanged: (() -> Unit)? = null
     private val _selectedPositions = mutableStateListOf<Pair<Int, Int>>()
     val selectedPositions: List<Pair<Int, Int>> = _selectedPositions
 
@@ -116,13 +117,34 @@ class WordHuntGameState(private val dictionary: WordDictionary, val mode: WordHu
 
         if (checkWord(word) == "VALID") {
             val points = calculatePoints(word)
+
             _foundWords.add(word)
             _score.intValue += points
+
             _lastAwardedText.value = "$word +$points"
             _lastAwardedTrigger.intValue += 1
+
+            onProgressChanged?.invoke()
         }
 
         updateWordStatus()
+    }
+
+    fun restoreFoundWords(
+        words: List<String>,
+    ) {
+        _foundWords.clear()
+
+        words
+            .filter { it.isNotBlank() }
+            .distinct()
+            .forEach {
+                _foundWords.add(it)
+            }
+
+        _score.intValue = _foundWords.sumOf {
+            calculatePoints(it)
+        }
     }
 
     // Check if two positions are adjacent

@@ -99,9 +99,9 @@ class GodotGameActivity : GodotActivity() {
                     if(yourTurn) {
                         OpenPigeonLog.i(
                             "openpigeon-${baseGame.getName()}",
-                            "onMessageUpdated -> isYourTurn: ${yourTurn}, message: $new"
+                            "onMessageUpdated -> isYourTurn: ${true}, message: $new"
                         )
-                        sendGameData(yourTurn, new.toMutableMap())
+                        sendGameData(true, new.toMutableMap())
                     }
                 }
             } else {
