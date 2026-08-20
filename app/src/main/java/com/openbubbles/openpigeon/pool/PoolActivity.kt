@@ -71,7 +71,8 @@ import com.openbubbles.openpigeon.ui.GameMenuPlacement
 import androidx.core.graphics.withSave
 import kotlin.math.exp
 import com.openbubbles.openpigeon.settings.AvatarWinBurstController
-
+import com.openbubbles.openpigeon.ui.TurnRecoveryOverlayController
+import com.openbubbles.openpigeon.ui.attachTurnRecoveryOverlay
 
 class PoolActivity : AppCompatActivity() {
     lateinit var sessionId: String
@@ -79,6 +80,25 @@ class PoolActivity : AppCompatActivity() {
     var baseGame = PoolGame()
 
     private lateinit var gameMenu: GameMenuController
+
+    private lateinit var turnRecoveryOverlay:
+            TurnRecoveryOverlayController
+
+    private val recoveryHandler =
+        Handler(
+            Looper.getMainLooper(),
+        )
+
+    private var recoveryCheckRunnable: Runnable? = null
+
+    private var recoveryRetryInFlight = false
+
+    private var restoringTurnRecovery = false
+
+    private var restoringLastShotReplay = false
+    private var recoveryTurnStartBalls = ""
+    private var lastShotStartBalls = ""
+    private var lastShotStartIsFirst = false
 
     @Volatile
     private var darkMode = false
@@ -1102,6 +1122,168 @@ class PoolActivity : AppCompatActivity() {
     val cueBallMaxY = 400f - cueBallPlacementRadius
     val breakLineX = 221f
 
+    private fun setupTurnRecoveryOverlay(
+        parent: ViewGroup,
+    ) {
+        turnRecoveryOverlay =
+            attachTurnRecoveryOverlay(
+                parent = parent,
+                onRetry = {
+                    retryPendingPoolSend()
+                },
+            )
+    }
+
+    private fun hideTurnRecoveryRetry() {
+        if (::turnRecoveryOverlay.isInitialized) {
+            turnRecoveryOverlay.hideRetry()
+        }
+    }
+
+    private fun showTurnRecoveryRetry() {
+        recoveryRetryInFlight =
+            false
+
+        runOnUiThread {
+            if (!isGameOver()) {
+                hideStateLabel()
+            }
+
+            mode =
+                PoolMode.Disabled
+
+            setCueUiVisible(
+                false,
+            )
+
+            if (::renderer.isInitialized) {
+                renderer.setCueVisible(
+                    false,
+                )
+            }
+
+            if (::turnRecoveryOverlay.isInitialized) {
+                turnRecoveryOverlay.showRetry()
+            }
+        }
+    }
+
+    private fun cancelPendingRecoveryCheck() {
+        recoveryCheckRunnable?.let { runnable ->
+            recoveryHandler.removeCallbacks(
+                runnable,
+            )
+        }
+
+        recoveryCheckRunnable =
+            null
+    }
+
+    private fun schedulePendingSendCheck() {
+        cancelPendingRecoveryCheck()
+
+        val check =
+            Runnable {
+                recoveryCheckRunnable =
+                    null
+
+                recoveryRetryInFlight =
+                    false
+
+                val stillPending =
+                    try {
+                        gameSessionIPC?.hasPendingSend(
+                            sessionId,
+                        ) == true
+                    } catch (throwable: Throwable) {
+                        OpenPigeonLog.e(
+                            "PoolRecovery",
+                            "Unable to check pending Pool send",
+                            throwable,
+                        )
+
+                        true
+                    }
+
+                if (stillPending) {
+                    OpenPigeonLog.w(
+                        "PoolRecovery",
+                        "Automatic send was not confirmed; enabling manual SEND GAME",
+                    )
+
+                    showTurnRecoveryRetry()
+                } else {
+                    hideTurnRecoveryRetry()
+                }
+            }
+
+        recoveryCheckRunnable =
+            check
+
+        recoveryHandler.postDelayed(
+            check,
+            8000L,
+        )
+    }
+
+    private fun retryPendingPoolSend() {
+        if (recoveryRetryInFlight) {
+            return
+        }
+
+        val ipc =
+            gameSessionIPC
+
+        if (
+            ipc == null ||
+            sessionId.isBlank()
+        ) {
+            showTurnRecoveryRetry()
+            return
+        }
+
+        cancelPendingRecoveryCheck()
+
+        recoveryRetryInFlight =
+            true
+
+        hideTurnRecoveryRetry()
+
+        if (!isGameOver()) {
+            showSendingLabelImmediately()
+        }
+
+        val dispatched =
+            ipc.retryPendingSend(
+                sessionId,
+            ) {
+                runOnUiThread {
+                    recoveryRetryInFlight =
+                        false
+
+                    cancelPendingRecoveryCheck()
+
+                    hideTurnRecoveryRetry()
+
+                    if (isGameOver()) {
+                        showGameOverLabel()
+                    } else {
+                        playSentThenWaitingAnimation()
+                    }
+                }
+            }
+
+        if (!dispatched) {
+            recoveryRetryInFlight =
+                false
+
+            showTurnRecoveryRetry()
+
+            return
+        }
+
+        schedulePendingSendCheck()
+    }
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -1121,6 +1303,10 @@ class PoolActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(contentRoot) { _, insets ->
             insets
         }
+
+        setupTurnRecoveryOverlay(
+            contentRoot,
+        )
 
         applyStateLabelBackground(findViewById(R.id.state_label))
         gameAvatarAnchor = findViewById(
@@ -1298,7 +1484,10 @@ class PoolActivity : AppCompatActivity() {
                     }
                     // snap back and hit
                     val hit = BallHit(renderer.cueRot, power, setSpinX, setSpinY, iAmStripes)
+                    lastShotStartBalls = exportBalls(false)
+                    lastShotStartIsFirst = isFirst
                     outgoingReplayHits.add(hit)
+                    savePoolTurnProgress("shot", lastShotStartBalls)
                     animateShoot(power, hit)
                 }
 
@@ -1437,42 +1626,104 @@ class PoolActivity : AppCompatActivity() {
 
         sessionId = intent.getStringExtra("SESSION")!!
 
-        GameSessionIPC(applicationContext) { gameSessionIPC ->
-            this.gameSessionIPC = gameSessionIPC
-            val currentMessage = gameSessionIPC.getCurrentMessage(sessionId)
-            if (currentMessage.isNotEmpty()) {
-                logGameOpened(currentMessage)
+        GameSessionIPC(
+            applicationContext,
+        ) { ipc ->
+            gameSessionIPC =
+                ipc
 
-                gameSessionIPC.lockMsgHandle(sessionId)
-                gameSessionIPC.setSuppressNotifications(sessionId, true)
-                gameSessionIPC.onMessageUpdated(sessionId) {
-                    OpenPigeonLog.i("what", "sdf")
-                    synchronized(this) {
-                        handleMessage(it)
+            val currentMessage =
+                ipc.getCurrentMessage(
+                    sessionId,
+                )
+
+            if (currentMessage.isEmpty()) {
+                OpenPigeonLog.e(
+                    "openpigeon-${baseGame.getName()}",
+                    "$sessionId does not exist!",
+                )
+
+                finish()
+                return@GameSessionIPC
+            }
+
+            logGameOpened(
+                currentMessage,
+            )
+
+            ipc.lockMsgHandle(
+                sessionId,
+            )
+
+            ipc.setSuppressNotifications(
+                sessionId,
+                true,
+            )
+
+            ipc.onMessageUpdated(sessionId) { callbackMessage ->
+                synchronized(this) {
+                    OpenPigeonLog.i("PoolMsg", "Live update num=${callbackMessage["num"]} sender=${callbackMessage["sender"]} replayLen=${callbackMessage["replay"]?.length ?: 0}")
+                    handleMessage(callbackMessage)
+
+                    val stillPending = try {
+                        ipc.hasPendingSend(sessionId)
+                    } catch (throwable: Throwable) {
+                        OpenPigeonLog.e("PoolRecovery", "Unable to check pending Pool send", throwable)
+                        false
+                    }
+
+                    if (!stillPending) {
+                        recoveryRetryInFlight = false
+                        cancelPendingRecoveryCheck()
+                        hideTurnRecoveryRetry()
+                    } else if (::turnRecoveryOverlay.isInitialized && turnRecoveryOverlay.isShowingRetry()) {
+                        turnRecoveryOverlay.showRetry()
                     }
                 }
-                handleMessage(currentMessage)
-            } else {
-                OpenPigeonLog.e("openpigeon-${baseGame.getName()}", "$sessionId does not exist!")
-                finish()
             }
+
+            restorePoolRecovery(
+                currentMessage,
+            )
         }
     }
 
     override fun onDestroy() {
-        poolActivityClosing = true
+        poolActivityClosing =
+            true
+
+        cancelPendingRecoveryCheck()
+
+        recoveryHandler.removeCallbacksAndMessages(
+            null,
+        )
+
         cancelCueInertia()
-        disableSend = true
-        skipReplayRequested = true
-        mode = PoolMode.Disabled
+
+        disableSend =
+            true
+
+        skipReplayRequested =
+            true
+
+        mode =
+            PoolMode.Disabled
+
         stopStateLabelAnimation()
+
         stopNineBallBarRefresh()
 
         cancelAllShots()
+
         cancelAllShots = {}
 
         if (::renderer.isInitialized) {
-            renderer.running = false
+            renderer.running =
+                false
+        }
+
+        if (::turnRecoveryOverlay.isInitialized) {
+            turnRecoveryOverlay.destroy()
         }
 
         if (::avatarWinBurstController.isInitialized) {
@@ -1483,13 +1734,22 @@ class PoolActivity : AppCompatActivity() {
             gameMenu.destroy()
         }
 
-        OpenPigeonLog.i("Table", "Destroying")
+        OpenPigeonLog.i(
+            "Table",
+            "Destroying",
+        )
 
         synchronized(this) {
             if (table != 0L) {
-                val oldTable = table
-                table = 0L
-                destroyPoolTable(oldTable)
+                val oldTable =
+                    table
+
+                table =
+                    0L
+
+                destroyPoolTable(
+                    oldTable,
+                )
             }
         }
 
@@ -1879,7 +2139,9 @@ class PoolActivity : AppCompatActivity() {
 
     var cancelAllShots: () -> Unit = { }
     fun playNextReplay() {
-        if (poolActivityClosing || table == 0L || skipReplayRequested || replayHits.isEmpty()) return
+        if (restoringTurnRecovery || poolActivityClosing || table == 0L || skipReplayRequested || replayHits.isEmpty()) {
+            return
+        }
         mode = PoolMode.ReplayAiming
         if (!skipReplayFadeStarted) {
             skipReplayFadeStarted = true
@@ -2026,7 +2288,7 @@ class PoolActivity : AppCompatActivity() {
         setCueDrawAmount(0.0f)
         closeCuePopup()
 
-        outgoingReplayHits.clear()
+        if (!restoringLastShotReplay) outgoingReplayHits.clear()
         replayHits.clear()
 
         runOnUiThread {
@@ -2083,6 +2345,12 @@ class PoolActivity : AppCompatActivity() {
         }
 
         buildBalls(finalBalls, null)
+
+        if (restoringLastShotReplay) {
+            finalBalls = recoveryTurnStartBalls
+            recoveryTurnStartBalls = ""
+            restoringLastShotReplay = false
+        }
 
         traceVisualRoll(
             reason = "finishReplay_after_buildBalls", force = true
@@ -2202,6 +2470,11 @@ class PoolActivity : AppCompatActivity() {
 
                 if (!scratch && winState == null && sunkNumberedBalls.isNotEmpty()) {
                     updateNineBallBar()
+
+                    savePoolTurnProgress(
+                        phase = "aim",
+                    )
+
                     mode = PoolMode.Aiming
                     runOnUiThread {
                         setCueUiVisible(true)
@@ -2244,7 +2517,13 @@ class PoolActivity : AppCompatActivity() {
                         val hasMoreBalls =
                             stripes == null || poolBalls.count { !it.sunk && ((stripes && it.isStripe) || (!stripes && it.isSolid)) } != 0
                         if (!hasMoreBalls) {
-                            call8Ball = true
+                            call8Ball =
+                                true
+
+                            savePoolTurnProgress(
+                                phase = "aim",
+                            )
+
                             mode = PoolMode.Aiming
                             runOnUiThread {
                                 val label = findViewById<TextView>(R.id.state_label)
@@ -2253,6 +2532,10 @@ class PoolActivity : AppCompatActivity() {
                             }
                             return
                         }
+
+                        savePoolTurnProgress(
+                            phase = "aim",
+                        )
 
                         mode = PoolMode.Aiming
                         runOnUiThread {
@@ -2320,20 +2603,50 @@ class PoolActivity : AppCompatActivity() {
             }
 
             if (winState == null) {
-                setCueUiVisible(false)
+                setCueUiVisible(
+                    false,
+                )
+
                 showSendingLabelImmediately()
             } else {
                 showGameOverLabel()
             }
 
-            ipc.updateSession(msgUpdates, sessionId) {
-                OpenPigeonLog.i("openpigeon-${baseGame.getName()}", "Game session updated")
+            val dispatched =
+                ipc.updateSession(
+                    msgUpdates,
+                    sessionId,
+                ) {
+                    OpenPigeonLog.i(
+                        "openpigeon-${baseGame.getName()}",
+                        "Game session updated",
+                    )
 
-                if (winState == null) {
-                    playSentThenWaitingAnimation()
-                } else {
-                    showGameOverLabel()
+                    runOnUiThread {
+                        recoveryRetryInFlight =
+                            false
+
+                        cancelPendingRecoveryCheck()
+
+                        hideTurnRecoveryRetry()
+
+                        if (winState == null) {
+                            playSentThenWaitingAnimation()
+                        } else {
+                            showGameOverLabel()
+                        }
+                    }
                 }
+
+            if (!dispatched) {
+                OpenPigeonLog.w(
+                    "PoolRecovery",
+                    "Automatic Pool send failed immediately",
+                )
+
+                showTurnRecoveryRetry()
+            } else {
+                schedulePendingSendCheck()
             }
         }
     }
@@ -3405,6 +3718,344 @@ class PoolActivity : AppCompatActivity() {
             anchor.post {
                 updatePoolYouLabelLayer()
             }
+        }
+    }
+
+    private fun recoveryStripesValue(
+        value: Boolean?,
+    ): String {
+        return when (value) {
+            true -> "1"
+            false -> "0"
+            null -> "n"
+        }
+    }
+
+    private fun recoveryStripesValue(
+        value: String?,
+    ): Boolean? {
+        return when (value) {
+            "1" -> true
+            "0" -> false
+            else -> null
+        }
+    }
+
+    private fun encodeRecoveryHit(
+        hit: BallHit,
+    ): String {
+        return listOf(
+            hit.direction.toString(),
+            hit.power.toString(),
+            hit.spinX.toString(),
+            hit.spinY.toString(),
+            recoveryStripesValue(
+                hit.wasStripes,
+            ),
+        ).joinToString(
+            ",",
+        )
+    }
+
+    private fun decodeRecoveryHit(
+        raw: String,
+    ): BallHit? {
+        val parts =
+            raw.split(
+                ",",
+            )
+
+        if (parts.size != 5) {
+            return null
+        }
+
+        val direction =
+            parts[0].toFloatOrNull()
+                ?: return null
+
+        val power =
+            parts[1].toFloatOrNull()
+                ?: return null
+
+        val spinX =
+            parts[2].toFloatOrNull()
+                ?: return null
+
+        val spinY =
+            parts[3].toFloatOrNull()
+                ?: return null
+
+        return BallHit(
+            direction = direction,
+            power = power,
+            spinX = spinX,
+            spinY = spinY,
+            wasStripes = recoveryStripesValue(
+                parts[4],
+            ),
+        )
+    }
+
+    private fun encodeRecoveryHits(): String {
+        return outgoingReplayHits.joinToString(
+            ";",
+        ) { hit ->
+            encodeRecoveryHit(
+                hit,
+            )
+        }
+    }
+
+    private fun decodeRecoveryHits(
+        raw: String,
+    ): List<BallHit> {
+        if (raw.isBlank()) {
+            return emptyList()
+        }
+
+        return raw
+            .split(
+                ";",
+            )
+            .mapNotNull {
+                decodeRecoveryHit(
+                    it,
+                )
+            }
+    }
+
+    private fun savePoolTurnProgress(phase: String, currentBalls: String = exportBalls(false)) {
+        if (spectatorMode || sessionId.isBlank()) return
+        val ipc = gameSessionIPC ?: return
+        val calledPocketValue = if (calledPocket.size >= 2) "${calledPocket[0]},${calledPocket[1]}" else ""
+
+        val saved = ipc.saveTurnProgress(
+            sessionId,
+            mapOf(
+                "phase" to phase,
+                "currentBalls" to currentBalls,
+                "turnStartBalls" to finalBalls,
+                "shotStartBalls" to lastShotStartBalls,
+                "shotStartIsFirst" to lastShotStartIsFirst.toString(),
+                "hits" to encodeRecoveryHits(),
+                "stripes" to recoveryStripesValue(iAmStripes),
+                "isFirst" to isFirst.toString(),
+                "wasFirst" to wasFirst.toString(),
+                "scratch" to scratch.toString(),
+                "call8Ball" to call8Ball.toString(),
+                "calledPocket" to calledPocketValue,
+            ),
+        )
+
+        OpenPigeonLog.i("PoolRecovery", "Saved progress phase=$phase hits=${outgoingReplayHits.size} currentBallsLen=${currentBalls.length} saved=$saved")
+    }
+
+    private fun restorePoolTurnProgress(progress: Map<String, String>): Boolean {
+        val phase = progress["phase"].orEmpty()
+        val currentBalls = progress["currentBalls"].orEmpty()
+        if (currentBalls.isBlank() || phase.isBlank()) return false
+
+        val restoredHits = decodeRecoveryHits(progress["hits"].orEmpty())
+        if (phase == "shot" && restoredHits.isEmpty()) return false
+
+        val shotStartBalls = progress["shotStartBalls"].orEmpty()
+        val replayLastShot = phase == "aim" && shotStartBalls.isNotBlank() && restoredHits.isNotEmpty()
+        val turnStartBalls = progress["turnStartBalls"]?.takeIf { it.isNotBlank() } ?: currentBalls
+
+        OpenPigeonLog.i("PoolRecovery", "Restoring Pool progress phase=$phase hits=${restoredHits.size} replayLastShot=$replayLastShot currentBallsLen=${currentBalls.length}")
+
+        cancelAllShots()
+        cancelAllShots = {}
+        replayHits.clear()
+        outgoingReplayHits.clear()
+        outgoingReplayHits.addAll(restoredHits)
+        replaying = false
+        skipReplayRequested = false
+        skipReplayFadeStarted = false
+        disableSend = false
+
+        finalBalls = turnStartBalls
+        lastShotStartBalls = shotStartBalls
+        lastShotStartIsFirst = progress["shotStartIsFirst"]?.toBooleanStrictOrNull() ?: false
+        iAmStripes = recoveryStripesValue(progress["stripes"])
+        isFirst = progress["isFirst"]?.toBooleanStrictOrNull() ?: false
+        wasFirst = progress["wasFirst"]?.toBooleanStrictOrNull() ?: false
+        scratch = progress["scratch"]?.toBooleanStrictOrNull() ?: false
+        call8Ball = progress["call8Ball"]?.toBooleanStrictOrNull() ?: false
+        calledPocket = progress["calledPocket"]?.split(",")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 } ?: emptyList()
+
+        renderer.resetFrameReadySignal()
+        clearBalls(table)
+        poolBalls.clear()
+        cueBall = null
+
+        if (replayLastShot) {
+            val hit = restoredHits.last()
+            recoveryTurnStartBalls = turnStartBalls
+            finalBalls = currentBalls
+            isFirst = lastShotStartIsFirst
+            replaying = true
+            restoringLastShotReplay = true
+            skipReplayFadeStarted = true
+
+            buildBalls(shotStartBalls, currentBalls)
+            updateBallTypeUi()
+
+            if (!renderer.isAlive) renderer.start()
+
+            runOnUiThread {
+                hideSkipReplayButton("recovery_last_shot")
+                hideStateLabel()
+                setCueUiVisible(false)
+                renderer.setCueVisible(false)
+            }
+
+            replayHits.add(hit)
+
+            renderer.notifyWhenFrameReady {
+                restoringTurnRecovery = false
+                playNextReplay()
+            }
+
+            return true
+        }
+
+        buildBalls(currentBalls, null)
+        updateBallTypeUi()
+
+        if (!renderer.isAlive) renderer.start()
+
+        if (phase == "shot") {
+            val hit = restoredHits.last()
+            mode = PoolMode.Disabled
+
+            runOnUiThread {
+                hideSkipReplayButton("recovery_shot")
+                hideStateLabel()
+                setCueUiVisible(false)
+                renderer.setCueVisible(true)
+                renderer.cueRot = hit.direction
+                cueBall?.let { renderer.cuePos = floatArrayOf(it.x, it.y) }
+                setSpinX = hit.spinX
+                setSpinY = hit.spinY
+                syncCueDots()
+            }
+
+            renderer.notifyWhenFrameReady {
+                restoringTurnRecovery = false
+                animateShoot(hit.power, hit)
+            }
+
+            return true
+        }
+
+        mode = PoolMode.Aiming
+
+        renderer.notifyWhenFrameReady {
+            restoringTurnRecovery = false
+
+            runOnUiThread {
+                hideSkipReplayButton("recovery_aim")
+                hideStateLabel()
+                setCueUiVisible(true)
+                renderer.setCueVisible(true)
+
+                if (call8Ball && calledPocket.isEmpty()) {
+                    val label = findViewById<TextView>(R.id.state_label)
+                    label.visibility = View.VISIBLE
+                    label.text = TEXT_CHOOSE_POCKET
+                }
+            }
+        }
+
+        return true
+    }
+
+    private fun restorePoolRecovery(
+        remoteMessage: Map<String, String>,
+    ) {
+        val ipc =
+            gameSessionIPC
+
+        if (
+            ipc == null ||
+            sessionId.isBlank()
+        ) {
+            handleMessage(
+                remoteMessage,
+            )
+
+            return
+        }
+
+        val recovery =
+            try {
+                ipc.getTurnRecovery(
+                    sessionId,
+                )
+            } catch (throwable: Throwable) {
+                OpenPigeonLog.e(
+                    "PoolRecovery",
+                    "Unable to load Pool recovery",
+                    throwable,
+                )
+
+                null
+            }
+
+        if (recovery == null) {
+            hideTurnRecoveryRetry()
+
+            handleMessage(
+                remoteMessage,
+            )
+
+            return
+        }
+
+        if (recovery.sendAttempted) {
+            val pendingDisplay =
+                remoteMessage
+                    .toMutableMap()
+                    .apply {
+                        putAll(
+                            recovery.pendingUpdates,
+                        )
+                    }
+
+            OpenPigeonLog.i(
+                "PoolRecovery",
+                "Restoring pending Pool send",
+            )
+
+            handleMessage(
+                pendingDisplay,
+            )
+
+            showTurnRecoveryRetry()
+
+            return
+        }
+
+        restoringTurnRecovery =
+            true
+
+        handleMessage(
+            remoteMessage,
+        )
+
+        if (
+            !restorePoolTurnProgress(
+                recovery.progress,
+            )
+        ) {
+            restoringTurnRecovery =
+                false
+
+            OpenPigeonLog.w(
+                "PoolRecovery",
+                "Saved Pool progress could not be restored; using remote state",
+            )
         }
     }
 

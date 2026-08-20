@@ -7,47 +7,47 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
-import android.view.Gravity
-import android.view.MotionEvent
-import android.view.SurfaceView
-import android.view.View
-import android.view.Window
-import android.widget.Button
-import android.widget.FrameLayout
-import android.widget.ImageButton
-import android.widget.LinearLayout
-import android.widget.TextView
-import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import com.openbubbles.openpigeon.R
-import com.openbubbles.openpigeon.godot.GameSessionIPC
-import com.openbubbles.openpigeon.settings.AvatarData
-import com.openbubbles.openpigeon.settings.AvatarView
-import com.openbubbles.openpigeon.util.OpenPigeonLog
-import java.nio.FloatBuffer
-import android.view.animation.OvershootInterpolator
 import android.os.Handler
 import android.os.Looper
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
-import android.util.TypedValue
-import kotlin.math.ceil
-import android.widget.ImageView
-import kotlin.math.PI
-import android.os.Build
-import android.view.ViewOutlineProvider
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.SurfaceView
+import android.view.View
 import android.view.ViewGroup
-import androidx.core.view.isVisible
+import android.view.ViewOutlineProvider
+import android.view.Window
+import android.view.animation.OvershootInterpolator
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.toColorInt
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
+import com.openbubbles.openpigeon.R
+import com.openbubbles.openpigeon.godot.GameSessionIPC
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
+import com.openbubbles.openpigeon.settings.AvatarWinBurstController
 import com.openbubbles.openpigeon.ui.GameMenuController
 import com.openbubbles.openpigeon.ui.GameMenuPlacement
 import com.openbubbles.openpigeon.ui.RulesPopup
-import com.openbubbles.openpigeon.settings.AvatarWinBurstController
-
+import com.openbubbles.openpigeon.ui.TurnRecoveryOverlayController
+import com.openbubbles.openpigeon.ui.attachTurnRecoveryOverlay
+import com.openbubbles.openpigeon.util.OpenPigeonLog
+import java.nio.FloatBuffer
+import kotlin.math.PI
+import kotlin.math.ceil
 
 class KnockoutActivity : AppCompatActivity() {
     enum class Mode { Disabled, Aiming, Playing }
@@ -59,6 +59,12 @@ class KnockoutActivity : AppCompatActivity() {
 
     private lateinit var avatarWinBurstController: AvatarWinBurstController
     private lateinit var spectatorLabel: TextView
+
+    private lateinit var turnRecoveryOverlay: TurnRecoveryOverlayController
+    private val recoveryHandler = Handler(Looper.getMainLooper())
+    private var recoveryCheckRunnable: Runnable? = null
+    private var recoveryRetryInFlight = false
+    private var lastLocalLaunchBoard: KnockoutBoard? = null
 
     @Volatile
     var spectatorMode = false
@@ -187,6 +193,225 @@ class KnockoutActivity : AppCompatActivity() {
     external fun setKnockoutMap(table: Long, mapMode: Int, boardScale: Float)
     external fun consumeKnockoutMushroomHits(table: Long): Int
 
+    private fun setupTurnRecoveryOverlay(parent: ViewGroup) {
+        turnRecoveryOverlay = attachTurnRecoveryOverlay(parent) { retryPendingKnockoutSend() }
+    }
+
+    private fun hideTurnRecoveryRetry() {
+        if (::turnRecoveryOverlay.isInitialized) turnRecoveryOverlay.hideRetry()
+    }
+
+    private fun showTurnRecoveryRetry() {
+        recoveryRetryInFlight = false
+        runOnUiThread {
+            mode = Mode.Disabled
+            setPowerHintVisible(false)
+            setLaunchButtonVisible(false)
+            if (!isGameOver()) hideStateLabelNow()
+            if (::turnRecoveryOverlay.isInitialized) turnRecoveryOverlay.showRetry()
+        }
+    }
+
+    private fun cancelPendingRecoveryCheck() {
+        recoveryCheckRunnable?.let { recoveryHandler.removeCallbacks(it) }
+        recoveryCheckRunnable = null
+    }
+
+    private fun schedulePendingSendCheck() {
+        cancelPendingRecoveryCheck()
+        val check = Runnable {
+            recoveryCheckRunnable = null
+            recoveryRetryInFlight = false
+            val stillPending = try {
+                gameSessionIPC?.hasPendingSend(sessionId) == true
+            } catch (throwable: Throwable) {
+                OpenPigeonLog.e("KnockoutRecovery", "Unable to check pending send", throwable)
+                true
+            }
+
+            if (stillPending) showTurnRecoveryRetry() else hideTurnRecoveryRetry()
+        }
+        recoveryCheckRunnable = check
+        recoveryHandler.postDelayed(check, 8000L)
+    }
+
+    private fun retryPendingKnockoutSend() {
+        if (recoveryRetryInFlight) return
+        val ipc = gameSessionIPC
+        if (ipc == null || sessionId.isBlank()) {
+            showTurnRecoveryRetry()
+            return
+        }
+
+        cancelPendingRecoveryCheck()
+        recoveryRetryInFlight = true
+        hideTurnRecoveryRetry()
+        if (!isGameOver()) showSendingLabelImmediately()
+
+        val dispatched = ipc.retryPendingSend(sessionId) {
+            runOnUiThread {
+                recoveryRetryInFlight = false
+                cancelPendingRecoveryCheck()
+                hideTurnRecoveryRetry()
+                if (isGameOver()) showGameOverLabel() else showSentCheckThenWaitingAnimation()
+            }
+        }
+
+        if (!dispatched) {
+            recoveryRetryInFlight = false
+            showTurnRecoveryRetry()
+            return
+        }
+
+        schedulePendingSendCheck()
+    }
+
+    private fun buildKnockoutRoundReplay(launchBoard: KnockoutBoard, postBoard: KnockoutBoard? = null): String {
+        val tokens = mutableListOf(KnockoutReplayToken.BoardToken(launchBoard), KnockoutReplayToken.ShootToken)
+        if (postBoard != null) tokens += KnockoutReplayToken.BoardToken(postBoard)
+        return KnockoutReplayParser.serializeTokens(tokens)
+    }
+
+    private fun saveKnockoutProgress(
+        phase: String,
+        tokens: List<KnockoutReplayToken> = localOutgoingTokens.toList(),
+        lastRoundReplay: String = "",
+        winnerState: String = ""
+    ) {
+        if (spectatorMode || sessionId.isBlank()) return
+        val ipc = gameSessionIPC ?: return
+        val boardReplay = currentBoard?.let { KnockoutReplayParser.serializeTokens(listOf(KnockoutReplayToken.BoardToken(it))) }.orEmpty()
+        val saved = ipc.saveTurnProgress(
+            sessionId,
+            mapOf(
+                "phase" to phase,
+                "outgoingReplay" to KnockoutReplayParser.serializeTokens(tokens),
+                "boardReplay" to boardReplay,
+                "lastRoundReplay" to lastRoundReplay,
+                "winnerState" to winnerState
+            )
+        )
+        OpenPigeonLog.i("KnockoutRecovery", "Saved phase=$phase tokens=${tokens.size} saved=$saved")
+    }
+
+    private fun cancelKnockoutPlaybackForRecovery() {
+        shrinkAnimator?.cancel()
+        shrinkAnimator = null
+        replayArrowAnimator?.cancel()
+        replayArrowAnimator = null
+        playHandler.removeCallbacksAndMessages(null)
+        pendingTokens.clear()
+        selectedPiece = null
+        showAllReplayArrows = false
+        replayArrowAlpha = 0f
+        playSource = PlaySource.None
+        mode = Mode.Disabled
+    }
+
+    private fun restoreKnockoutProgress(progress: Map<String, String>): Boolean {
+        val phase = progress["phase"].orEmpty()
+        val outgoingReplay = progress["outgoingReplay"].orEmpty()
+
+        val outgoingParsed = if (outgoingReplay.isNotBlank()) {
+            runCatching { KnockoutReplayParser.parse(outgoingReplay) }.getOrNull()
+        } else null
+
+        localOutgoingTokens.clear()
+        outgoingParsed?.tokens?.let { localOutgoingTokens.addAll(it) }
+
+        introPopupDismissed = true
+        gateAimingForIntro = false
+        hideIntroPopup()
+
+        when (phase) {
+            "send" -> {
+                if (localOutgoingTokens.isEmpty()) return false
+                val tokens = localOutgoingTokens.toList()
+                sendReplayTokens(tokens)
+                localOutgoingTokens.clear()
+                return true
+            }
+
+            "playing" -> {
+                val launchBoard = outgoingParsed?.boards?.lastOrNull() ?: return false
+                lastLocalLaunchBoard = launchBoard
+                currentBoard = launchBoard
+                playBoard(launchBoard, PlaySource.LocalLaunch)
+                return true
+            }
+
+            "aim" -> {
+                val lastRoundReplay = progress["lastRoundReplay"].orEmpty()
+
+                if (lastRoundReplay.isNotBlank()) {
+                    val parsed = runCatching { KnockoutReplayParser.parse(lastRoundReplay) }.getOrNull()
+                    if (parsed != null && parsed.tokens.isNotEmpty() && parsed.boards.isNotEmpty()) {
+                        pendingTokens = parsed.tokens.toMutableList()
+                        playSource = PlaySource.None
+                        processPendingReplayQueue()
+                        return true
+                    }
+                }
+
+                val boardReplay = progress["boardReplay"].orEmpty()
+                val board = if (boardReplay.isNotBlank()) runCatching { KnockoutReplayParser.parse(boardReplay).boards.lastOrNull() }.getOrNull() else null
+                if (board == null) return false
+
+                currentBoard = board
+                buildBoard(board)
+                setModeForBoard(board)
+                return true
+            }
+
+            "winner" -> {
+                if (localOutgoingTokens.isEmpty()) return false
+                val tokens = localOutgoingTokens.toList()
+                val winnerState = progress["winnerState"].orEmpty()
+                sendReplayTokens(tokens, winnerState.takeIf { it.isNotBlank() }, false)
+                localOutgoingTokens.clear()
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private fun restoreKnockoutRecovery(remoteMessage: Map<String, String>) {
+        val ipc = gameSessionIPC
+        if (ipc == null || sessionId.isBlank()) {
+            handleMessage(remoteMessage)
+            return
+        }
+
+        val recovery = try {
+            ipc.getTurnRecovery(sessionId)
+        } catch (throwable: Throwable) {
+            OpenPigeonLog.e("KnockoutRecovery", "Unable to load recovery", throwable)
+            null
+        }
+
+        if (recovery == null) {
+            hideTurnRecoveryRetry()
+            handleMessage(remoteMessage)
+            return
+        }
+
+        if (recovery.sendAttempted) {
+            val pendingDisplay = remoteMessage.toMutableMap().apply { putAll(recovery.pendingUpdates) }
+            handleMessage(pendingDisplay)
+            cancelKnockoutPlaybackForRecovery()
+            showTurnRecoveryRetry()
+            return
+        }
+
+        handleMessage(remoteMessage)
+        cancelKnockoutPlaybackForRecovery()
+
+        if (!restoreKnockoutProgress(recovery.progress)) {
+            handleMessage(remoteMessage)
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -250,6 +475,7 @@ class KnockoutActivity : AppCompatActivity() {
         )
         waterView?.visibility = if (darkMode) View.GONE else View.VISIBLE
         createSpectatorLabel(rootFrame)
+        setupTurnRecoveryOverlay(rootFrame)
 
         gameMenu = GameMenuController(
             activity = this,
@@ -327,33 +553,48 @@ class KnockoutActivity : AppCompatActivity() {
         updateAvatarHud()
         findViewById<Button>(R.id.knockoutLaunchButton)?.setOnClickListener { launchCurrentAims() }
         findViewById<Button>(R.id.knockoutIntroButton)?.setOnClickListener { dismissIntroPopupAndEnableAiming() }
-        surface.setOnTouchListener { _, event -> handleTouch(event) }
+        surface.setOnTouchListener { _, event -> handleTouch(event); true }
 
         sessionId = intent.getStringExtra("SESSION") ?: ""
         GameSessionIPC(applicationContext) { ipc ->
             gameSessionIPC = ipc
-            val currentMessage =
-                if (sessionId.isNotEmpty()) ipc.getCurrentMessage(sessionId) else emptyMap()
+            val currentMessage = if (sessionId.isNotEmpty()) ipc.getCurrentMessage(sessionId) else emptyMap()
+
             if (currentMessage.isNotEmpty()) {
                 ipc.lockMsgHandle(sessionId)
                 ipc.setSuppressNotifications(sessionId, true)
+
                 ipc.onMessageUpdated(sessionId) { msg ->
                     runOnUiThread {
                         synchronized(this) {
                             handleMessage(msg)
+
+                            val stillPending = try {
+                                ipc.hasPendingSend(sessionId)
+                            } catch (throwable: Throwable) {
+                                OpenPigeonLog.e("KnockoutRecovery", "Unable to check pending send after update", throwable)
+                                false
+                            }
+
+                            if (!stillPending) {
+                                recoveryRetryInFlight = false
+                                cancelPendingRecoveryCheck()
+                                hideTurnRecoveryRetry()
+                            } else if (::turnRecoveryOverlay.isInitialized && turnRecoveryOverlay.isShowingRetry()) {
+                                turnRecoveryOverlay.showRetry()
+                            }
                         }
                     }
                 }
-                synchronized(this) { handleMessage(currentMessage) }
+
+                runOnUiThread {
+                    synchronized(this) {
+                        restoreKnockoutRecovery(currentMessage)
+                    }
+                }
             } else {
                 synchronized(this) {
-                    handleMessage(
-                        mapOf(
-                            "replay" to KnockoutReplayParser.emptyDefault(),
-                            "isYourTurn" to "true",
-                            "player" to "1"
-                        )
-                    )
+                    handleMessage(mapOf("replay" to KnockoutReplayParser.emptyDefault(), "isYourTurn" to "true", "player" to "1"))
                 }
             }
         }
@@ -791,7 +1032,7 @@ class KnockoutActivity : AppCompatActivity() {
         spectatorLabel = TextView(
             this,
         ).apply {
-            text = "Spectating..."
+            text = getString(R.string.spectating)
             visibility = View.GONE
             setTextColor(Color.WHITE)
             textSize = 28f
@@ -1569,29 +1810,19 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun launchCurrentAims() {
-        if (spectatorMode || isGameOver() || mode != Mode.Aiming || closing || table == 0L) {
-            return
-        }
+        if (spectatorMode || isGameOver() || mode != Mode.Aiming || closing || table == 0L) return
 
-        val baseBoard = currentBoard ?: KnockoutReplayParser.boardFromLivePieces(
-            boardIndex, pieces, zeroPower = false
-        )
-
+        val baseBoard = currentBoard ?: KnockoutReplayParser.boardFromLivePieces(boardIndex, pieces, zeroPower = false)
         val launchBoard = KnockoutReplayParser.applyLiveAimsToBoard(baseBoard, player, pieces)
         currentBoard = launchBoard
 
-        OpenPigeonLog.i(
-            "KnockoutNative",
-            "launchCurrentAims player=$player boardIndex=${launchBoard.index} " + "complete=${
-                KnockoutReplayParser.isBoardComplete(launchBoard)
-            } " + "stagedTokens=${localOutgoingTokens.size}"
-        )
+        OpenPigeonLog.i("KnockoutNative", "launchCurrentAims player=$player boardIndex=${launchBoard.index} complete=${KnockoutReplayParser.isBoardComplete(launchBoard)} stagedTokens=${localOutgoingTokens.size}")
 
         if (!KnockoutReplayParser.isBoardComplete(launchBoard)) {
             val tokensToSend = mutableListOf<KnockoutReplayToken>()
             tokensToSend += localOutgoingTokens
             tokensToSend += KnockoutReplayToken.BoardToken(launchBoard)
-
+            saveKnockoutProgress("send", tokensToSend)
             sendReplayTokens(tokensToSend)
             localOutgoingTokens.clear()
             return
@@ -1603,6 +1834,8 @@ class KnockoutActivity : AppCompatActivity() {
         localOutgoingTokens += KnockoutReplayToken.BoardToken(launchBoard)
         localOutgoingTokens += KnockoutReplayToken.ShootToken
 
+        lastLocalLaunchBoard = launchBoard
+        saveKnockoutProgress("playing", localOutgoingTokens.toList(), buildKnockoutRoundReplay(launchBoard))
         playBoard(launchBoard, PlaySource.LocalLaunch)
     }
 
@@ -1694,14 +1927,12 @@ class KnockoutActivity : AppCompatActivity() {
         val nextSetup = KnockoutReplayParser.clearAims(postBoard)
 
         localOutgoingTokens += KnockoutReplayToken.BoardToken(postBoard)
+
+        val launchBoard = lastLocalLaunchBoard
+        val lastRoundReplay = if (launchBoard != null) buildKnockoutRoundReplay(launchBoard, postBoard) else ""
         val finalWinLossState = winLossStateForBoard(postBoard)
 
         if (finalWinLossState.isNotBlank()) {
-            OpenPigeonLog.i(
-                "KnockoutNative",
-                "Game ended locally. winnerState=$finalWinLossState postIndex=${postBoard.index}"
-            )
-
             gameEnded = true
             winLossState = finalWinLossState
             mode = Mode.Disabled
@@ -1709,38 +1940,27 @@ class KnockoutActivity : AppCompatActivity() {
             applyPostBoardAndShrink(postBoard) {
                 playSource = PlaySource.None
                 currentBoard = postBoard
-
                 showAllReplayArrows = false
                 replayArrowAlpha = 0f
-
                 setPowerHintVisible(false)
                 setLaunchButtonVisible(false)
-
-                sendReplayTokens(
-                    tokens = localOutgoingTokens.toList(),
-                    winnerState = finalWinLossState,
-                    showSentLabel = false
-                )
-
+                saveKnockoutProgress("winner", localOutgoingTokens.toList(), lastRoundReplay, finalWinLossState)
+                sendReplayTokens(localOutgoingTokens.toList(), finalWinLossState, false)
                 localOutgoingTokens.clear()
+                lastLocalLaunchBoard = null
                 showGameOverLabel()
             }
 
             return
         }
 
-        OpenPigeonLog.i(
-            "KnockoutNative",
-            "finishLocalLaunchRound stagedTokens=${localOutgoingTokens.size} " + "postIndex=${postBoard.index} nextSetupPieces=${nextSetup.pieces.size}"
-        )
-
         applyPostBoardAndShrink(nextSetup) {
             playSource = PlaySource.None
             currentBoard = nextSetup
-
             showAllReplayArrows = false
             replayArrowAlpha = 0f
-
+            saveKnockoutProgress("aim", localOutgoingTokens.toList(), lastRoundReplay)
+            lastLocalLaunchBoard = null
             setModeForBoard(nextSetup)
         }
     }
@@ -1793,23 +2013,15 @@ class KnockoutActivity : AppCompatActivity() {
         winnerState: String? = null,
         showSentLabel: Boolean = true
     ) {
-        if (spectatorMode) {
-            OpenPigeonLog.w(
-                "KnockoutNative",
-                "Ignoring sendReplayTokens while spectating",
-            )
-
-            return
-        }
+        if (spectatorMode) return
 
         val replay = KnockoutReplayParser.serializeTokens(tokens)
         val currentMessage = gameSessionIPC?.getCurrentMessage(sessionId).orEmpty()
         val myId = localUserId(currentMessage.ifEmpty { lastMessage })
         val myAvatarKey = if (player == 1) "avatar1" else "avatar2"
         val nextNum = ((currentMessage["num"] ?: lastMessage["num"])?.toIntOrNull() ?: 0) + 1
-
-        val p1 = (currentMessage["player1"] ?: player1Id)
-        val p2 = (currentMessage["player2"] ?: player2Id)
+        val p1 = currentMessage["player1"] ?: player1Id
+        val p2 = currentMessage["player2"] ?: player2Id
 
         val msg = mutableMapOf(
             "game" to "knock",
@@ -1829,81 +2041,62 @@ class KnockoutActivity : AppCompatActivity() {
         }
 
         val cleanWinnerState = winnerState?.takeIf { it.isNotBlank() }
-
-        if (cleanWinnerState != null) {
-            msg["winner"] = "$myId|$cleanWinnerState"
-        }
-
-        OpenPigeonLog.i("KnockoutNative", "send replay=$replay")
+        if (cleanWinnerState != null) msg["winner"] = "$myId|$cleanWinnerState"
 
         lastOutgoingReplay = replay
         ignoreNextOutgoingReplayEcho = true
-
         mode = Mode.Disabled
-
         setLaunchButtonVisible(false)
         setPowerHintVisible(false)
 
         if (cleanWinnerState != null || isGameOver()) {
             showAllReplayArrows = false
             replayArrowAlpha = 0f
-
             if (cleanWinnerState != null) {
                 gameEnded = true
                 winLossState = cleanWinnerState
             }
-
             showGameOverLabel()
         } else {
             showAllReplayArrows = true
             replayArrowAlpha = 1f
-
-            if (showSentLabel) {
-                showSendingLabelImmediately()
-            }
+            if (showSentLabel) showSendingLabelImmediately()
         }
 
         val ipc = gameSessionIPC
-        if (ipc == null) {
-            OpenPigeonLog.w("KnockoutNative", "No IPC available")
-
-            if (showSentLabel && cleanWinnerState == null) {
-                showSentCheckThenWaitingAnimation()
-            } else {
-                showGameOverLabel()
-            }
-
+        if (ipc == null || sessionId.isBlank()) {
+            showTurnRecoveryRetry()
             return
         }
 
-        ipc.updateSession(msg, sessionId) {
-            OpenPigeonLog.i("KnockoutNative", "Session updated")
-
-            if (showSentLabel && cleanWinnerState == null) {
-                showSentCheckThenWaitingAnimation()
-            } else {
-                showGameOverLabel()
+        val dispatched = ipc.updateSession(msg, sessionId) {
+            runOnUiThread {
+                recoveryRetryInFlight = false
+                cancelPendingRecoveryCheck()
+                hideTurnRecoveryRetry()
+                if (showSentLabel && cleanWinnerState == null) showSentCheckThenWaitingAnimation() else showGameOverLabel()
             }
         }
+
+        if (!dispatched) {
+            showTurnRecoveryRetry()
+            return
+        }
+
+        schedulePendingSendCheck()
     }
 
-    private fun handleTouch(event: MotionEvent): Boolean {
+    private fun handleTouch(event: MotionEvent) {
         if (spectatorMode) {
             selectedPiece = null
-            return true
+            return
         }
 
-        if (isGameOver()) {
-            return true
-        }
+        if (isGameOver()) return
+
         if (mode != Mode.Aiming || gateAimingForIntro) {
-            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                OpenPigeonLog.i(
-                    "KnockoutNative",
-                    "touch ignored mode=$mode gateAimingForIntro=$gateAimingForIntro player=$player"
-                )
-            }
-            return true
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) OpenPigeonLog.i("KnockoutNative", "touch ignored mode=$mode gateAimingForIntro=$gateAimingForIntro player=$player")
+            return
         }
 
         val world = renderer.screenToWorld(event.x, event.y)
@@ -1918,25 +2111,15 @@ class KnockoutActivity : AppCompatActivity() {
                     dx * dx + dy * dy
                 }?.takeIf { it.containsWorldPoint(wx, wy) }
 
-                OpenPigeonLog.i(
-                    "KnockoutNative",
-                    "touch down world=($wx,$wy) selected=${selectedPiece?.traceId} " + "player=$player mine=${pieces.count { it.player == player && it.alive }}"
-                )
-
+                OpenPigeonLog.i("KnockoutNative", "touch down world=($wx,$wy) selected=${selectedPiece?.traceId} player=$player mine=${pieces.count { it.player == player && it.alive }}")
                 selectedPiece?.setAimFromWorld(wx, wy)
             }
 
-            MotionEvent.ACTION_MOVE -> {
-                selectedPiece?.setAimFromWorld(wx, wy)
-            }
-
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                selectedPiece = null
-            }
+            MotionEvent.ACTION_MOVE -> selectedPiece?.setAimFromWorld(wx, wy)
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> selectedPiece = null
         }
 
         updateStateLabel()
-        return true
     }
 
     private fun currentBoardWithLiveAims(): KnockoutBoard {
@@ -2184,16 +2367,10 @@ class KnockoutActivity : AppCompatActivity() {
         }
     }
 
-    private fun stateLabelDp(value: Float): Int {
-        return TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics
-        ).toInt()
-    }
-
     private fun applyStateLabelBackground(label: TextView) {
         label.background = GradientDrawable().apply {
             setColor(0xBB000000.toInt())
-            cornerRadius = stateLabelDp(14f).toFloat()
+            cornerRadius = dp(14f).toInt().toFloat()
         }
         label.maxLines = 1
     }
@@ -2273,7 +2450,7 @@ class KnockoutActivity : AppCompatActivity() {
                 if (waitingDotsRunnable !== this) return
 
                 if (label.isVisible) {
-                    label.text = "WAITING FOR OPPONENT" + ".".repeat(dots)
+                    label.text = "WAITING FOR OPPONENT${".".repeat(dots)}"
                     dots = if (dots >= 3) 1 else dots + 1
                 }
 
@@ -2938,6 +3115,9 @@ class KnockoutActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         closing = true
+        cancelPendingRecoveryCheck()
+        recoveryHandler.removeCallbacksAndMessages(null)
+        if (::turnRecoveryOverlay.isInitialized) turnRecoveryOverlay.destroy()
 
         if (::avatarWinBurstController.isInitialized) {
             avatarWinBurstController.destroy()

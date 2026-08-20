@@ -2827,7 +2827,7 @@ class ShuffleActivity : AppCompatActivity() {
             ).apply {
                 text =
                     getString(
-                        R.string.shuffle_spectating,
+                        R.string.spectating,
                     )
 
                 visibility =

@@ -46,6 +46,8 @@ import androidx.core.view.isVisible
 import com.openbubbles.openpigeon.ui.GameMenuController
 import com.openbubbles.openpigeon.ui.GameMenuPlacement
 import com.openbubbles.openpigeon.settings.AvatarWinBurstController
+import com.openbubbles.openpigeon.ui.TurnRecoveryOverlayController
+import com.openbubbles.openpigeon.ui.attachTurnRecoveryOverlay
 
 @SuppressLint("SetTextI18n")
 class GolfActivity : AppCompatActivity() {
@@ -85,6 +87,15 @@ class GolfActivity : AppCompatActivity() {
     private lateinit var zoomButton: AppCompatImageButton
     private lateinit var settingsButton: AppCompatImageButton
     private lateinit var gameMenu: GameMenuController
+
+    private lateinit var turnRecoveryOverlay: TurnRecoveryOverlayController
+    private val recoveryHandler = Handler(Looper.getMainLooper())
+    private var recoveryCheckRunnable: Runnable? = null
+    private var recoveryRetryInFlight = false
+    private var lastShotStartCourse: PointF? = null
+    private val lastShotVelocityCourse = PointF(0f, 0f)
+    private var restoringLastShot = false
+    private var recoverySettledBallCourse: PointF? = null
 
     private lateinit var debugMenuItem: TextView
     private var debugUiEnabled = false
@@ -254,6 +265,76 @@ class GolfActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupTurnRecoveryOverlay() {
+        turnRecoveryOverlay = attachTurnRecoveryOverlay(root) { retryPendingGolfSend() }
+    }
+
+    private fun hideTurnRecoveryRetry() {
+        if (::turnRecoveryOverlay.isInitialized) turnRecoveryOverlay.hideRetry()
+    }
+
+    private fun showTurnRecoveryRetry() {
+        recoveryRetryInFlight = false
+        runOnUiThread {
+            stopStateLabelAnimation()
+            hideAimReadyUi(immediate = true)
+            if (::turnRecoveryOverlay.isInitialized) turnRecoveryOverlay.showRetry()
+        }
+    }
+
+    private fun cancelPendingRecoveryCheck() {
+        recoveryCheckRunnable?.let { recoveryHandler.removeCallbacks(it) }
+        recoveryCheckRunnable = null
+    }
+
+    private fun schedulePendingSendCheck() {
+        cancelPendingRecoveryCheck()
+        val check = Runnable {
+            recoveryCheckRunnable = null
+            recoveryRetryInFlight = false
+            val stillPending = try {
+                gameSessionIPC?.hasPendingSend(sessionId) == true
+            } catch (t: Throwable) {
+                OpenPigeonLog.e(TAG, "Unable to check pending Golf send", t)
+                true
+            }
+            if (stillPending) showTurnRecoveryRetry() else hideTurnRecoveryRetry()
+        }
+        recoveryCheckRunnable = check
+        recoveryHandler.postDelayed(check, 8000L)
+    }
+
+    private fun retryPendingGolfSend() {
+        if (recoveryRetryInFlight) return
+        val ipc = gameSessionIPC
+        if (ipc == null || sessionId.isBlank()) {
+            showTurnRecoveryRetry()
+            return
+        }
+
+        cancelPendingRecoveryCheck()
+        recoveryRetryInFlight = true
+        hideTurnRecoveryRetry()
+        if (!gameOverShown) showSendingLabelImmediately()
+
+        val dispatched = ipc.retryPendingSend(sessionId) {
+            runOnUiThread {
+                recoveryRetryInFlight = false
+                cancelPendingRecoveryCheck()
+                hideTurnRecoveryRetry()
+                if (!gameOverShown) playSentThenWaitingAnimation()
+            }
+        }
+
+        if (!dispatched) {
+            recoveryRetryInFlight = false
+            showTurnRecoveryRetry()
+            return
+        }
+
+        schedulePendingSendCheck()
+    }
+
     private fun restoreSavedGolfState(savedInstanceState: Bundle?) {
         if (savedInstanceState == null) {
             OpenPigeonLog.i(TAG, "restoreSavedGolfState skipped savedInstanceState=null")
@@ -311,6 +392,143 @@ class GolfActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
     }
 
+    private fun saveGolfProgress(phase: String, ball: PointF? = runtimeBallCourse) {
+        if (spectatorMode || sessionId.isBlank()) return
+        val ipc = gameSessionIPC ?: return
+        val start = lastShotStartCourse
+        val values = mutableMapOf(
+            "phase" to phase,
+            "localReplay" to localReplay,
+            "seed" to seed.toString(),
+            "mode" to mode,
+            "holeCount" to holeCount.toString(),
+            "mapNum" to mapNum.toString(),
+            "ballX" to (ball?.x?.toString() ?: ""),
+            "ballY" to (ball?.y?.toString() ?: ""),
+            "shotStartX" to (start?.x?.toString() ?: ""),
+            "shotStartY" to (start?.y?.toString() ?: ""),
+            "shotVelocityX" to lastShotVelocityCourse.x.toString(),
+            "shotVelocityY" to lastShotVelocityCourse.y.toString(),
+            "ballInHole" to ballInHole.toString(),
+            "flagPulled" to flagPulled.toString()
+        )
+        val saved = ipc.saveTurnProgress(sessionId, values)
+        OpenPigeonLog.i(TAG, "Golf recovery saved phase=$phase replayLen=${localReplay.length} saved=$saved")
+    }
+
+    private fun cancelGolfPlaybackForRecovery() {
+        stopBallPhysics(clearVelocity = true)
+        stopDualReplay()
+        stopStateLabelAnimation()
+        isAiming = false
+        activeAim = GolfShot.Aim.NONE
+        renderer.clearAimPreview()
+        holeOverlay.animate().cancel()
+        holeIntroContainer.animate().cancel()
+        holeTitle.animate().cancel()
+        holePoleImage.animate().cancel()
+        holeOverlay.visibility = View.GONE
+        holeOverlay.alpha = 0f
+    }
+
+    private fun restoreGolfTurnProgress(progress: Map<String, String>): Boolean {
+        val phase = progress["phase"].orEmpty()
+        val savedReplay = progress["localReplay"].orEmpty()
+        if (phase.isBlank() || savedReplay.isBlank()) return false
+
+        seed = progress["seed"]?.toIntOrNull() ?: seed
+        mode = progress["mode"].orEmpty().ifBlank { mode }
+        holeCount = progress["holeCount"]?.toIntOrNull() ?: holeCount
+        mapNum = progress["mapNum"]?.toIntOrNull()?.coerceIn(0, (holeCount - 1).coerceAtLeast(0)) ?: mapNum
+        localReplay = savedReplay
+        waitingForOpponent = false
+        roundResultSent = false
+        ballInHole = false
+        flagPulled = false
+
+        val ballX = progress["ballX"]?.toFloatOrNull()
+        val ballY = progress["ballY"]?.toFloatOrNull()
+        val startX = progress["shotStartX"]?.toFloatOrNull()
+        val startY = progress["shotStartY"]?.toFloatOrNull()
+        val velocityX = progress["shotVelocityX"]?.toFloatOrNull()
+        val velocityY = progress["shotVelocityY"]?.toFloatOrNull()
+
+        cancelGolfPlaybackForRecovery()
+
+        generateAndShowMap(showIntro = false, source = "turn recovery", afterIntro = {
+            if (startX != null && startY != null && velocityX != null && velocityY != null) {
+                lastShotStartCourse = PointF(startX, startY)
+                lastShotVelocityCourse.set(velocityX, velocityY)
+                runtimeBallCourse = PointF(startX, startY)
+                runtimeVelocityCourse.set(velocityX, velocityY)
+                restoringLastShot = phase == "aim"
+                recoverySettledBallCourse = if (phase == "aim" && ballX != null && ballY != null) PointF(ballX, ballY) else null
+                ballInHole = false
+                flagPulled = false
+                renderer.setRuntimeBallCourse(runtimeBallCourse)
+                renderer.setHoleState(flagPulled = false, ballInHole = false)
+                renderer.clearAimPreview()
+                hideAimReadyUi(immediate = true)
+                focusCameraOnCurrentBall()
+                startBallPhysics()
+                return@generateAndShowMap
+            }
+
+            if (phase == "aim" && ballX != null && ballY != null) {
+                runtimeBallCourse = PointF(ballX, ballY)
+                renderer.setRuntimeBallCourse(runtimeBallCourse)
+                renderer.setHoleState(flagPulled = false, ballInHole = false)
+                updateStrokeHud()
+                updateAimReadyUi()
+                focusCameraOnCurrentBall()
+                return@generateAndShowMap
+            }
+
+            if (phase == "roundComplete") {
+                sendCurrentGolfState()
+                return@generateAndShowMap
+            }
+
+            updateAimReadyUi()
+        })
+
+        return true
+    }
+
+    private fun restoreGolfRecovery(remoteMessage: Map<String, String>) {
+        val ipc = gameSessionIPC
+        if (ipc == null || sessionId.isBlank()) {
+            handleMessage(remoteMessage)
+            return
+        }
+
+        val recovery = try {
+            ipc.getTurnRecovery(sessionId)
+        } catch (t: Throwable) {
+            OpenPigeonLog.e(TAG, "Unable to load Golf recovery", t)
+            null
+        }
+
+        if (recovery == null) {
+            hideTurnRecoveryRetry()
+            handleMessage(remoteMessage)
+            return
+        }
+
+        if (recovery.sendAttempted) {
+            val pendingDisplay = remoteMessage.toMutableMap().apply { putAll(recovery.pendingUpdates) }
+            handleMessage(pendingDisplay)
+            showTurnRecoveryRetry()
+            return
+        }
+
+        handleMessage(remoteMessage)
+
+        if (!restoreGolfTurnProgress(recovery.progress)) {
+            OpenPigeonLog.w(TAG, "Unable to restore Golf turn progress")
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         val startedAt = SystemClock.elapsedRealtime()
@@ -329,6 +547,7 @@ class GolfActivity : AppCompatActivity() {
             OpenPigeonLog.i(TAG, "onCreate: buildLayout complete rootChildren=${root.childCount}")
 
             setupGameMenu()
+            setupTurnRecoveryOverlay()
 
             gameAvatarAnchor.post {
                 normalizeAvatarAnchor(gameAvatarAnchor)
@@ -419,12 +638,24 @@ class GolfActivity : AppCompatActivity() {
                     try {
                         OpenPigeonLog.i(TAG, "IPC onMessageUpdated registration start")
                         ipc.onMessageUpdated(sessionId) { msg ->
-                            OpenPigeonLog.i(
-                                TAG, "IPC onMessageUpdated callback ${messageSummary(msg)}"
-                            )
+                            OpenPigeonLog.i(TAG, "IPC onMessageUpdated callback ${messageSummary(msg)}")
                             runOnUiThread {
-                                OpenPigeonLog.i(TAG, "UI handleMessage from update start")
                                 handleMessage(msg)
+
+                                val stillPending = try {
+                                    ipc.hasPendingSend(sessionId)
+                                } catch (t: Throwable) {
+                                    OpenPigeonLog.e(TAG, "Unable to check pending Golf send after update", t)
+                                    false
+                                }
+
+                                if (!stillPending) {
+                                    recoveryRetryInFlight = false
+                                    cancelPendingRecoveryCheck()
+                                    hideTurnRecoveryRetry()
+                                } else if (::turnRecoveryOverlay.isInitialized && turnRecoveryOverlay.isShowingRetry()) {
+                                    turnRecoveryOverlay.showRetry()
+                                }
                             }
                         }
                         OpenPigeonLog.i(TAG, "IPC onMessageUpdated registration complete")
@@ -433,8 +664,8 @@ class GolfActivity : AppCompatActivity() {
                     }
 
                     runOnUiThread {
-                        OpenPigeonLog.i(TAG, "UI handleMessage currentMessage start")
-                        handleMessage(currentMessage)
+                        OpenPigeonLog.i(TAG, "UI restoreGolfRecovery currentMessage start")
+                        restoreGolfRecovery(currentMessage)
                     }
                 } else {
                     runOnUiThread {
@@ -1269,37 +1500,16 @@ class GolfActivity : AppCompatActivity() {
     }
 
     private fun sendWinnerResultIfNeeded(localResult: Int) {
-        if (spectatorMode) {
-            OpenPigeonLog.i(
-                TAG, "sendWinnerResultIfNeeded skipped for spectator"
-            )
-            return
-        }
-
+        if (spectatorMode) return
         val ipc = gameSessionIPC
-        if (ipc == null || sessionId.isBlank()) {
-            OpenPigeonLog.w(
-                TAG,
-                "sendWinnerResultIfNeeded skipped ipcNull=${ipc == null} sessionBlank=${sessionId.isBlank()}"
-            )
-            return
-        }
+        if (ipc == null || sessionId.isBlank()) return
 
         try {
             val myId = ipc.getSenderUUID(sessionId).takeIf { it.isNotBlank() }.orEmpty()
-            if (myId.isBlank()) {
-                OpenPigeonLog.w(TAG, "sendWinnerResultIfNeeded skipped blank sender id")
-                return
-            }
+            if (myId.isBlank()) return
 
             val current = ipc.getCurrentMessage(sessionId).ifEmpty { lastMessage }
-
-            if (current["winner"].orEmpty().isNotBlank()) {
-                OpenPigeonLog.i(
-                    TAG, "sendWinnerResultIfNeeded skipped existing winner=${current["winner"]}"
-                )
-                return
-            }
+            if (current["winner"].orEmpty().isNotBlank()) return
 
             val outgoing = current.toMutableMap()
             outgoing["game"] = "golf"
@@ -1307,16 +1517,19 @@ class GolfActivity : AppCompatActivity() {
             outgoing["sender"] = myId
             outgoing["winner"] = "$myId|${localResult.coerceIn(-1, 1)}"
 
-            OpenPigeonLog.i(
-                TAG,
-                "sendWinnerResultIfNeeded winner=${outgoing["winner"]} keys=${outgoing.keys.sorted()}"
-            )
-
-            ipc.updateSession(outgoing, sessionId) {
-                OpenPigeonLog.i(TAG, "sendWinnerResultIfNeeded updateSession callback")
+            val dispatched = ipc.updateSession(outgoing, sessionId) {
+                runOnUiThread {
+                    recoveryRetryInFlight = false
+                    cancelPendingRecoveryCheck()
+                    hideTurnRecoveryRetry()
+                }
             }
+
+            if (!dispatched) showTurnRecoveryRetry() else schedulePendingSendCheck()
         } catch (t: Throwable) {
             OpenPigeonLog.e(TAG, "sendWinnerResultIfNeeded failed result=$localResult", t)
+            val pending = try { ipc.hasPendingSend(sessionId) } catch (_: Throwable) { false }
+            if (pending) showTurnRecoveryRetry()
         }
     }
 
@@ -2457,10 +2670,7 @@ class GolfActivity : AppCompatActivity() {
                 )
 
                 if (waitingDisplayMapNum != null && waitingDisplayMapNum != parsed.mapNum) {
-                    OpenPigeonLog.i(
-                        TAG,
-                        "handleMessage correcting waiting display map " + "from parsedMapNum=${parsed.mapNum} to waitingDisplayMapNum=$waitingDisplayMapNum " + "messageFromMe=$messageFromMe localPlayer=$localPlayer " + "rawNum=${parsed.rawNum} replayLen=${parsed.replay.length} replay2Len=${parsed.replay2.length}"
-                    )
+                    OpenPigeonLog.i(TAG, "handleMessage correcting waiting display map from parsedMapNum=${parsed.mapNum} to waitingDisplayMapNum=$waitingDisplayMapNum localPlayer=$localPlayer rawNum=${parsed.rawNum} replayLen=${parsed.replay.length} replay2Len=${parsed.replay2.length}")
 
                     parsed = parsed.copy(mapNum = waitingDisplayMapNum)
                     gameData = parsed
@@ -2951,8 +3161,11 @@ class GolfActivity : AppCompatActivity() {
             )
 
             stopBallPhysics(clearVelocity = true)
+            restoringLastShot = false
+            recoverySettledBallCourse = null
 
             if (!roundResultSent) {
+                saveGolfProgress("roundComplete", ball)
                 roundResultSent = true
                 sendCompletedRoundState()
             }
@@ -2961,13 +3174,25 @@ class GolfActivity : AppCompatActivity() {
         }
 
         if (stoppedByMotion && !ballInHole) {
-            OpenPigeonLog.i(
-                TAG,
-                "physics stop ball=(${ball.x},${ball.y}) " + "velocity=(${runtimeVelocityCourse.x},${runtimeVelocityCourse.y}) " + "flagPulled=$flagPulled"
-            )
+            OpenPigeonLog.i(TAG, "physics stop ball=(${ball.x},${ball.y}) velocity=(${runtimeVelocityCourse.x},${runtimeVelocityCourse.y}) flagPulled=$flagPulled")
 
             stopBallPhysics(clearVelocity = true)
+
+            if (restoringLastShot) {
+                recoverySettledBallCourse?.let {
+                    ball.x = it.x
+                    ball.y = it.y
+                    runtimeBallCourse = PointF(it.x, it.y)
+                    renderer.setRuntimeBallCourse(runtimeBallCourse)
+                }
+                restoringLastShot = false
+                recoverySettledBallCourse = null
+            }
+
+            saveGolfProgress("aim", runtimeBallCourse)
+            updateStrokeHud()
             updateAimReadyUi()
+            focusCameraOnCurrentBall()
         }
     }
 
@@ -3247,43 +3472,51 @@ class GolfActivity : AppCompatActivity() {
         }
     }
 
-    private fun playSentThenWaitingAnimation() {
+    private fun showSendingLabelImmediately() {
         runOnUiThread {
             stopStateLabelAnimation()
             showWaitingOverlay()
             sentWaitingSequenceActive = true
-
             resetWaitingLabelLayout(waitingLabel)
 
             val sentWidth = measureWaitingLabelWidth(waitingLabel, "Sent ✔")
-            val waitingWidth = measureWaitingLabelWidth(waitingLabel, "WAITING FOR OPPONENT...")
-
             val params = waitingLabel.layoutParams
             params.width = sentWidth
             waitingLabel.layoutParams = params
 
             waitingLabel.text = "Sent"
-            waitingLabel.alpha = 0f
+            waitingLabel.alpha = 1f
             waitingLabel.setTextColor(Color.WHITE)
             waitingLabel.visibility = View.VISIBLE
+            waitingLabel.bringToFront()
+        }
+    }
 
-            waitingLabel.animate().alpha(1f).setDuration(250L).start()
+    private fun playSentThenWaitingAnimation() {
+        runOnUiThread {
+            stopStateLabelAnimation()
+            showWaitingOverlay()
+            sentWaitingSequenceActive = true
+            resetWaitingLabelLayout(waitingLabel)
 
-            stateLabelHandler.postDelayed({
-                if (!sentWaitingSequenceActive) return@postDelayed
+            val sentWidth = measureWaitingLabelWidth(waitingLabel, "Sent ✔")
+            val waitingWidth = measureWaitingLabelWidth(waitingLabel, "WAITING FOR OPPONENT...")
+            val params = waitingLabel.layoutParams
+            params.width = sentWidth
+            waitingLabel.layoutParams = params
 
-                val sentCheck = SpannableString("Sent ✔")
-                sentCheck.setSpan(
-                    ForegroundColorSpan(0xFF7257D8.toInt()), 5, 6, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-                waitingLabel.text = sentCheck
-            }, 1000L)
+            val sentCheck = SpannableString("Sent ✔")
+            sentCheck.setSpan(ForegroundColorSpan(0xFF7257D8.toInt()), 5, 6, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            waitingLabel.text = sentCheck
+            waitingLabel.alpha = 1f
+            waitingLabel.setTextColor(Color.WHITE)
+            waitingLabel.visibility = View.VISIBLE
+            waitingLabel.bringToFront()
 
             stateLabelHandler.postDelayed({
                 if (!sentWaitingSequenceActive) return@postDelayed
 
                 val oldWidth = waitingLabel.width.takeIf { it > 0 } ?: sentWidth
-
                 val widthParams = waitingLabel.layoutParams
                 widthParams.width = oldWidth
                 waitingLabel.layoutParams = widthParams
@@ -3296,30 +3529,23 @@ class GolfActivity : AppCompatActivity() {
                 stateLabelAnimator = ValueAnimator.ofInt(oldWidth, waitingWidth).apply {
                     duration = 420L
 
-                    addUpdateListener { animation ->
+                    addUpdateListener {
                         val animatedParams = waitingLabel.layoutParams
-                        animatedParams.width = animation.animatedValue as Int
+                        animatedParams.width = it.animatedValue as Int
                         waitingLabel.layoutParams = animatedParams
                     }
 
                     addListener(object : AnimatorListenerAdapter() {
                         override fun onAnimationEnd(animation: Animator) {
                             if (!sentWaitingSequenceActive) return
-
                             stateLabelAnimator = null
-
                             val finalParams = waitingLabel.layoutParams
                             finalParams.width = waitingWidth
                             waitingLabel.layoutParams = finalParams
 
                             ValueAnimator.ofInt(0, 255).apply {
                                 duration = 180L
-
-                                addUpdateListener { textAnimation ->
-                                    val alpha = textAnimation.animatedValue as Int
-                                    waitingLabel.setTextColor((alpha shl 24) or 0x00FFFFFF)
-                                }
-
+                                addUpdateListener { textAnimation -> waitingLabel.setTextColor(((textAnimation.animatedValue as Int) shl 24) or 0x00FFFFFF) }
                                 addListener(object : AnimatorListenerAdapter() {
                                     override fun onAnimationEnd(animation: Animator) {
                                         if (sentWaitingSequenceActive) {
@@ -3328,7 +3554,6 @@ class GolfActivity : AppCompatActivity() {
                                         }
                                     }
                                 })
-
                                 start()
                             }
                         }
@@ -3336,7 +3561,7 @@ class GolfActivity : AppCompatActivity() {
 
                     start()
                 }
-            }, 2000L)
+            }, 1000L)
         }
     }
 
@@ -3369,38 +3594,21 @@ class GolfActivity : AppCompatActivity() {
     private fun sendCurrentGolfState() {
         val ipc = gameSessionIPC
         if (ipc == null || sessionId.isBlank()) {
-            OpenPigeonLog.w(
-                TAG,
-                "sendCurrentGolfState skipped ipcNull=${ipc == null} sessionBlank=${sessionId.isBlank()}"
-            )
-            stateLabel.text = "No IPC session - visual only"
+            OpenPigeonLog.w(TAG, "sendCurrentGolfState skipped ipcNull=${ipc == null} sessionBlank=${sessionId.isBlank()}")
             return
         }
 
         try {
             val current = ipc.getCurrentMessage(sessionId).ifEmpty { lastMessage }
-            val currentData = GolfGameData.fromMessage(
-                msg = current, previous = gameData
-            )
-
+            val currentData = GolfGameData.fromMessage(current, previous = gameData)
             val myId = ipc.getSenderUUID(sessionId).takeIf { it.isNotBlank() }.orEmpty()
-
-            val localPlayer = localPlayerNumberFor(
-                data = currentData, current = current
-            )
-
-            val existingPlayer1 =
-                current["player1"].orEmpty().ifBlank { currentData.player1Id }.ifBlank { player1Id }
-
-            val existingPlayer2 =
-                current["player2"].orEmpty().ifBlank { currentData.player2Id }.ifBlank { player2Id }
-
+            val localPlayer = localPlayerNumberFor(currentData, current)
+            val existingPlayer1 = current["player1"].orEmpty().ifBlank { currentData.player1Id }.ifBlank { player1Id }
+            val existingPlayer2 = current["player2"].orEmpty().ifBlank { currentData.player2Id }.ifBlank { player2Id }
             val existingAvatar1 = current["avatar1"].orEmpty()
             val existingAvatar2 = current["avatar2"].orEmpty()
-
             val existingReplay = currentData.replay
             val existingReplay2 = currentData.replay2
-
             val outgoing = current.toMutableMap()
 
             outgoing["game"] = "golf"
@@ -3416,74 +3624,54 @@ class GolfActivity : AppCompatActivity() {
             if (localPlayer == 1) {
                 outgoing["player1"] = myId
                 outgoing["avatar1"] = safeBuildAvatarString(existingAvatar1)
-
-                if (existingPlayer2.isNotBlank()) {
-                    outgoing["player2"] = existingPlayer2
-                }
-                if (existingAvatar2.isNotBlank()) {
-                    outgoing["avatar2"] = existingAvatar2
-                }
-
+                if (existingPlayer2.isNotBlank()) outgoing["player2"] = existingPlayer2
+                if (existingAvatar2.isNotBlank()) outgoing["avatar2"] = existingAvatar2
                 val p1ReplayToSend = localReplay.ifBlank { existingReplay }
-
-                if (p1ReplayToSend.isNotBlank()) {
-                    outgoing["replay"] = p1ReplayToSend
-                }
-
-                if (existingReplay2.isNotBlank()) {
-                    outgoing["replay2"] = existingReplay2
-                }
+                if (p1ReplayToSend.isNotBlank()) outgoing["replay"] = p1ReplayToSend
+                if (existingReplay2.isNotBlank()) outgoing["replay2"] = existingReplay2
             } else {
-                if (existingPlayer1.isNotBlank()) {
-                    outgoing["player1"] = existingPlayer1
-                }
-                if (existingAvatar1.isNotBlank()) {
-                    outgoing["avatar1"] = existingAvatar1
-                }
-
+                if (existingPlayer1.isNotBlank()) outgoing["player1"] = existingPlayer1
+                if (existingAvatar1.isNotBlank()) outgoing["avatar1"] = existingAvatar1
                 outgoing["player2"] = myId
                 outgoing["avatar2"] = safeBuildAvatarString(existingAvatar2)
-
                 val p2ReplayToSend = localReplay.ifBlank { existingReplay2 }
-
-                if (existingReplay.isNotBlank()) {
-                    outgoing["replay"] = existingReplay
-                }
-
-                if (p2ReplayToSend.isNotBlank()) {
-                    outgoing["replay2"] = p2ReplayToSend
-                }
+                if (existingReplay.isNotBlank()) outgoing["replay"] = existingReplay
+                if (p2ReplayToSend.isNotBlank()) outgoing["replay2"] = p2ReplayToSend
             }
 
-            if (outgoing["replay"].isNullOrBlank()) {
-                outgoing.remove("replay")
-            }
-            if (outgoing["replay2"].isNullOrBlank()) {
-                outgoing.remove("replay2")
-            }
+            if (outgoing["replay"].isNullOrBlank()) outgoing.remove("replay")
+            if (outgoing["replay2"].isNullOrBlank()) outgoing.remove("replay2")
 
-            gameData = GolfGameData.fromMessage(
-                msg = outgoing, previous = currentData
-            )
+            gameData = GolfGameData.fromMessage(outgoing, previous = currentData)
+            waitingForOpponent = true
+            hideAimReadyUi()
+            focusCameraOnCurrentBall()
+            showSendingLabelImmediately()
 
-            OpenPigeonLog.i(
-                TAG,
-                "sendCurrentGolfState roundComplete=true localPlayer=$localPlayer " + "myId=$myId p1=${outgoing["player1"].orEmpty()} p2=${outgoing["player2"].orEmpty()} " + "num=${outgoing["num"]} replayLen=${outgoing["replay"].orEmpty().length} " + "replay2Len=${outgoing["replay2"].orEmpty().length} keys=${outgoing.keys.sorted()}"
-            )
+            OpenPigeonLog.i(TAG, "sendCurrentGolfState roundComplete=true localPlayer=$localPlayer myId=$myId p1=${outgoing["player1"].orEmpty()} p2=${outgoing["player2"].orEmpty()} num=${outgoing["num"]} replayLen=${outgoing["replay"].orEmpty().length} replay2Len=${outgoing["replay2"].orEmpty().length}")
 
-            ipc.updateSession(outgoing, sessionId) {
-                OpenPigeonLog.i(TAG, "sendCurrentGolfState updateSession callback")
-
+            val dispatched = ipc.updateSession(outgoing, sessionId) {
                 runOnUiThread {
+                    recoveryRetryInFlight = false
+                    cancelPendingRecoveryCheck()
+                    hideTurnRecoveryRetry()
                     waitingForOpponent = true
                     hideAimReadyUi()
                     focusCameraOnCurrentBall()
                     playSentThenWaitingAnimation()
                 }
             }
+
+            if (!dispatched) {
+                showTurnRecoveryRetry()
+                return
+            }
+
+            schedulePendingSendCheck()
         } catch (t: Throwable) {
             OpenPigeonLog.e(TAG, "sendCurrentGolfState failed roundComplete=true", t)
-            stateLabel.text = "Mini Golf send failed"
+            val pending = try { ipc.hasPendingSend(sessionId) } catch (_: Throwable) { false }
+            if (pending) showTurnRecoveryRetry()
         }
     }
 
@@ -4723,6 +4911,7 @@ class GolfActivity : AppCompatActivity() {
 
 
     private fun applyOverlayOrdering() {
+        if (::turnRecoveryOverlay.isInitialized && turnRecoveryOverlay.isShowingRetry()) turnRecoveryOverlay.showRetry()
         if (::gameMenu.isInitialized) {
             gameMenu.bringToFront()
         }
@@ -4837,6 +5026,10 @@ class GolfActivity : AppCompatActivity() {
         )
 
         activityExiting = true
+
+        cancelPendingRecoveryCheck()
+        recoveryHandler.removeCallbacksAndMessages(null)
+        if (::turnRecoveryOverlay.isInitialized) turnRecoveryOverlay.destroy()
 
         if (::renderer.isInitialized) {
             stopDebugVisualTrace(
