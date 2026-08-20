@@ -152,6 +152,17 @@ func shoot(
 		LIVE_BALL_LIFETIME_SECONDS,
 	)
 
+func shoot_recovery(target_x: float, saved_shot_at: float, saved_replay_x: float) -> void:
+	shotAt = saved_shot_at
+	shotX = saved_replay_x
+	didGoInReplay = null
+	didGoIn = false
+	didHitHoop = false
+	var x_velocity := target_x - position.x
+	_start_dynamic_shot(Vector3(x_velocity, SHOT_Y_VELOCITY, SHOT_Z_VELOCITY), true)
+	_start_despawn_timer(LIVE_BALL_LIFETIME_SECONDS)
+	OpLog.i(LOG_TAG, ["recovery_shot player=", player, " targetX=", target_x, " shotAt=", shotAt, " savedReplayX=", shotX, " velocityX=", x_velocity])
+
 func begin_replay_shot(
 	x_velocity: float,
 	saved_replay_x: float,
@@ -374,6 +385,7 @@ func despawn() -> void:
 			BasketballGame.myReplay += "|"
 
 		BasketballGame.myReplay += replay_entry
+		BasketballGame.mark_basketball_shot_finished(int(get_meta("shot_num", 0)), didGoIn)
 	else:
 		dbg(
 			[

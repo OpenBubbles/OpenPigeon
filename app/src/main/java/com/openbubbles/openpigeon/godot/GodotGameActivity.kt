@@ -12,6 +12,7 @@ import com.openbubbles.openpigeon.R
 import org.godotengine.godot.Godot
 import org.godotengine.godot.GodotActivity
 import org.godotengine.godot.plugin.GodotPlugin
+import org.json.JSONObject
 
 class GodotGameActivity : GodotActivity() {
     lateinit var baseGame: Game
@@ -132,10 +133,25 @@ class GodotGameActivity : GodotActivity() {
     }
 
     private fun sendGameData(isYourTurn: Boolean, message: MutableMap<String, String>) {
-        if (message["replay"].isNullOrEmpty()) {
-            message["replay"] = baseGame.getDefaultReplay()
+        if (message["replay"].isNullOrEmpty()) message["replay"] = baseGame.getDefaultReplay()
+
+        val ipc = gameSessionIPC ?: return
+        val recovery = try {
+            ipc.getTurnRecovery(sessionId)
+        } catch (t: Throwable) {
+            OpenPigeonLog.e("openpigeon-${baseGame.getName()}", "Unable to load turn recovery", t)
+            null
         }
-        getOrCreateAppPlugin().setGameData(isYourTurn, gameSessionIPC!!.getSenderUUID(sessionId), message)
+
+        message["_recoveryPending"] = (recovery?.sendAttempted == true).toString()
+        message["_recoveryProgress"] = if (recovery != null && recovery.progress.isNotEmpty()) JSONObject(recovery.progress).toString() else ""
+
+        OpenPigeonLog.i(
+            "openpigeon-${baseGame.getName()}",
+            "Sending Godot recovery snapshot pending=${recovery?.sendAttempted == true} progressKeys=${recovery?.progress?.keys.orEmpty()}"
+        )
+
+        getOrCreateAppPlugin().setGameData(isYourTurn, ipc.getSenderUUID(sessionId), message)
     }
 
     override fun getHostPlugins(godot: Godot): Set<GodotPlugin> {

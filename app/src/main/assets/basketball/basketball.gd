@@ -257,6 +257,17 @@ var oppScore = 0
 var myScore = 0
 var myReplay = ""
 
+var recovery_deadline_ms: int = 0
+var recovery_round_start_score: int = 0
+var recovery_shots: Array[Dictionary] = []
+var recovery_restore_in_progress: bool = false
+var recovery_pending_send: bool = false
+var recovery_loaded: bool = false
+var recovery_check_scheduled: bool = false
+var recovery_allow_waiting: bool = false
+var recovery_snapshot_pending: bool = false
+var recovery_snapshot_progress: String = ""
+
 var isWaiting = false
 var receivedMessage = null
 var drag_start_pos: Vector2 = Vector2.ZERO
@@ -298,7 +309,15 @@ func _on_game_ready() -> void:
 			start_button.pressed.connect(start_button_pressed)
 		if is_instance_valid(skip_button):
 			skip_button.pressed.connect(skipReplay)
-			
+
+		if appPlugin:
+			var complete_callable := Callable(self, "_on_basketball_send_complete")
+			var failed_callable := Callable(self, "_on_basketball_send_failed")
+			if appPlugin.has_signal("send_game_complete") and not appPlugin.is_connected("send_game_complete", complete_callable):
+				appPlugin.connect("send_game_complete", complete_callable)
+			if appPlugin.has_signal("send_game_failed") and not appPlugin.is_connected("send_game_failed", failed_callable):
+				appPlugin.connect("send_game_failed", failed_callable)
+
 	OpLog.i(LOG_TAG, [
 		"game_ready localMode=", appPlugin == null,
 		" dataSet=", gameDataSet,
@@ -310,7 +329,7 @@ func _on_game_ready() -> void:
 	if not gameDataSet:
 		return
 
-	refresh_ui_state()
+	_schedule_basketball_recovery_check()
 
 func _configure_avatar_rendering(
 	avatar_button: TextureButton,
@@ -1736,8 +1755,244 @@ func _apply_basketball_mode() -> void:
 		hard_mode,
 	)
 
+func _recovery_now_ms() -> int:
+	return int(Time.get_unix_time_from_system() * 1000.0)
+
+func _sync_recovery_elapsed() -> void:
+	if recovery_deadline_ms <= 0:
+		return
+	var remaining_ms: int = maxi(0, recovery_deadline_ms - _recovery_now_ms())
+	elapsedTime = clampf(45.0 - float(remaining_ms) / 1000.0, 0.0, 45.0)
+
+func _save_basketball_progress() -> void:
+	if appPlugin == null or spectator_mode or turnNum == null:
+		return
+	var progress := {"phase": "round", "deadline": str(recovery_deadline_ms), "turn": str(turnNum), "roundStartScore": str(recovery_round_start_score), "shots": recovery_shots}
+	var saved := bool(appPlugin.saveTurnProgress(JSON.stringify(progress)))
+	OpLog.i(LOG_TAG, ["recovery_saved saved=", saved, " shots=", recovery_shots.size(), " deadline=", recovery_deadline_ms])
+
+func _recovery_shot_index(shot_num: int) -> int:
+	for i in range(recovery_shots.size()):
+		if int(recovery_shots[i].get("num", 0)) == shot_num:
+			return i
+	return -1
+
+func _max_recovery_shot_num() -> int:
+	var result := 0
+	for shot in recovery_shots:
+		result = maxi(result, int(shot.get("num", 0)))
+	return result
+
+func _build_recovery_replay() -> String:
+	var entries: Array[String] = []
+	for shot in recovery_shots:
+		if not bool(shot.get("finished", false)):
+			continue
+		var time_tick := int(float(shot.get("time", 0.0)) * REPLAY_FRAME_RATE)
+		var saved_x := float(shot.get("savedX", 0.0))
+		var result := 1 if int(shot.get("result", 0)) == 1 else 0
+		entries.append("%d,%0.3f,0,%d" % [time_tick, saved_x, result])
+	return "|".join(entries)
+
+func _recovery_score() -> int:
+	var result: int = recovery_round_start_score
+
+	for shot in recovery_shots:
+		if bool(shot.get("finished", false)) and int(shot.get("result", -1)) == 1:
+			result += 1
+
+	return result
+
+func _record_basketball_release(shot_num: int, target_x: float, saved_x: float) -> void:
+	recovery_shots.append({"num": shot_num, "time": elapsedTime, "hoop": hoop_time, "target": target_x, "savedX": saved_x, "result": -1, "finished": false})
+	_save_basketball_progress()
+
+func mark_basketball_shot_scored(shot_num: int) -> void:
+	var index := _recovery_shot_index(shot_num)
+	if index < 0:
+		return
+	recovery_shots[index]["result"] = 1
+	_save_basketball_progress()
+
+func mark_basketball_shot_finished(shot_num: int, did_go_in: bool) -> void:
+	var index := _recovery_shot_index(shot_num)
+	if index < 0:
+		return
+	recovery_shots[index]["result"] = 1 if did_go_in else 0
+	recovery_shots[index]["finished"] = true
+	_save_basketball_progress()
+
+func _launch_recovered_basketball_shot(shot: Dictionary) -> void:
+	if player == null or not recovery_restore_in_progress:
+		return
+	var local_player_num := int(player)
+	var shot_num := int(shot.get("num", 1))
+	ballNum[local_player_num] = shot_num
+	var recovered_ball := spawnBall(local_player_num)
+	if not is_instance_valid(recovered_ball):
+		return
+	elapsedTime = float(shot.get("time", 0.0))
+	hoop_time = int(shot.get("hoop", int(elapsedTime * REPLAY_FRAME_RATE)))
+	_hoop_acc = 0.0
+	if game_mode == "h" and is_instance_valid(moving_hoop_root):
+		_set_moving_hoop_x(_hoop_x_at_tick(hoop_time))
+	recovered_ball.shoot_recovery(float(shot.get("target", 0.0)), elapsedTime, float(shot.get("savedX", 0.0)))
+	if currentBall.get(local_player_num) == recovered_ball:
+		currentBall[local_player_num] = null
+
+func _finish_basketball_recovery() -> void:
+	recovery_restore_in_progress = false
+	_sync_recovery_elapsed()
+	ballNum[int(player)] = _max_recovery_shot_num() + 1
+	if recovery_deadline_ms > _recovery_now_ms() and not is_instance_valid(currentBall.get(int(player))):
+		spawnBall(int(player))
+	updateStrokeRecoveryUi()
+
+func updateStrokeRecoveryUi() -> void:
+	if is_instance_valid(youScoreLabel):
+		youScoreLabel.text = str(myScore).pad_zeros(2)
+	if is_instance_valid(timeRemainingLabel):
+		var remaining_seconds := int(ceil(maxf(0.0, 45.0 - elapsedTime)))
+		timeRemainingLabel.text = "00:" + str(remaining_seconds).pad_zeros(2)
+
+func _replay_unfinished_basketball_shots() -> void:
+	var unfinished: Array[Dictionary] = []
+	for shot in recovery_shots:
+		if not bool(shot.get("finished", false)):
+			unfinished.append(shot)
+	if unfinished.is_empty():
+		_finish_basketball_recovery()
+		return
+	var previous_time := float(unfinished[0].get("time", 0.0))
+	for shot in unfinished:
+		var shot_time := float(shot.get("time", previous_time))
+		var delay := maxf(0.0, shot_time - previous_time)
+		if delay > 0.0:
+			await get_tree().create_timer(delay).timeout
+		if not recovery_restore_in_progress:
+			return
+		_launch_recovered_basketball_shot(shot)
+		previous_time = shot_time
+	await get_tree().create_timer(2.6).timeout
+	if recovery_restore_in_progress:
+		_finish_basketball_recovery()
+
+func _schedule_basketball_recovery_check(allow_waiting: bool = false) -> void:
+	recovery_allow_waiting = recovery_allow_waiting or allow_waiting
+
+	if recovery_check_scheduled:
+		return
+
+	recovery_check_scheduled = true
+	call_deferred("_run_basketball_recovery_check")
+
+func _run_basketball_recovery_check() -> void:
+	recovery_check_scheduled = false
+
+	if not is_inside_tree() or not _ui_initialized or not gameDataSet:
+		return
+
+	var recovered: bool = _restore_basketball_recovery()
+
+	if recovered:
+		recovery_allow_waiting = false
+		return
+
+	allow_waiting_from_loaded_data = recovery_allow_waiting
+	recovery_allow_waiting = false
+	refresh_ui_state()
+	allow_waiting_from_loaded_data = false
+
+func _restore_basketball_recovery() -> bool:
+	if recovery_loaded or not _ui_initialized or spectator_mode or game_over or not isTurn:
+		return false
+
+	recovery_pending_send = recovery_snapshot_pending
+
+	OpLog.i(LOG_TAG, ["recovery_snapshot pending=", recovery_pending_send, " progressLen=", recovery_snapshot_progress.length()])
+
+	if recovery_pending_send:
+		recovery_loaded = true
+		gamePlaying = false
+		replayPlaying = false
+		round_container.visible = false
+		stop_waiting_animation()
+		return true
+
+	var raw_progress := recovery_snapshot_progress
+	if raw_progress.is_empty():
+		return false
+
+	var parsed: Variant = JSON.parse_string(raw_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		OpLog.w(LOG_TAG, ["recovery_snapshot invalid JSON len=", raw_progress.length()])
+		return false
+
+	var progress: Dictionary = parsed
+
+	if String(progress.get("phase", "")) != "round":
+		return false
+
+	if int(String(progress.get("turn", "-1"))) != int(turnNum):
+		OpLog.i(LOG_TAG, ["recovery_snapshot stale savedTurn=", progress.get("turn", ""), " currentTurn=", turnNum])
+		return false
+
+	recovery_deadline_ms = int(String(progress.get("deadline", "0")))
+	recovery_round_start_score = int(String(progress.get("roundStartScore", "0")))
+	recovery_shots.clear()
+
+	var raw_shots_value: Variant = progress.get("shots", [])
+	var raw_shots: Array = []
+
+	if typeof(raw_shots_value) == TYPE_ARRAY:
+		raw_shots = raw_shots_value
+	elif typeof(raw_shots_value) == TYPE_STRING:
+		var parsed_shots: Variant = JSON.parse_string(String(raw_shots_value))
+		if typeof(parsed_shots) == TYPE_ARRAY:
+			raw_shots = parsed_shots
+
+	for value in raw_shots:
+		if typeof(value) == TYPE_DICTIONARY:
+			var shot: Dictionary = value
+			recovery_shots.append(shot.duplicate(true))
+
+	recovery_loaded = true
+	recovery_restore_in_progress = true
+	gamePlaying = true
+	replayPlaying = false
+	replayFinished = false
+	receivedMessage = null
+	_score_run_id += 1
+	_scored_shot_keys.clear()
+
+	clearBalls()
+
+	ballNum = {
+		1: 1,
+		2: 1,
+	}
+
+	myScore = _recovery_score()
+	myReplay = _build_recovery_replay()
+
+	if is_instance_valid(youScoreLabel):
+		youScoreLabel.text = str(myScore).pad_zeros(2)
+
+	if is_instance_valid(round_container):
+		round_container.visible = false
+
+	if is_instance_valid(waiting_blur):
+		waiting_blur.visible = false
+
+	stop_waiting_animation()
+
+	OpLog.i(LOG_TAG, ["recovery_loaded turn=", turnNum, " shots=", recovery_shots.size(), " score=", myScore, " replayShots=", _replay_shot_count(myReplay), " deadline=", recovery_deadline_ms])
+
+	_replay_unfinished_basketball_shots()
+	return true
+
 func _get_local_active_ball() -> BasketballBall:
-	if spectator_mode:
+	if spectator_mode or recovery_restore_in_progress:
 		return null
 
 	if player == null:
@@ -1938,9 +2193,9 @@ func _launch_ball_from_drag(
 		],
 	)
 
-	active_ball.shoot(
-		target_x,
-	)
+	var saved_replay_x := get_saved_replay_x(target_x)
+	_record_basketball_release(shot_number, target_x, saved_replay_x)
+	active_ball.shoot(target_x)
 
 	if (
 		currentBall.get(
@@ -2500,9 +2755,9 @@ func _check_ball_score_crossing(
 		],
 	)
 
-	incrementScore(
-		ball_player,
-	)
+	incrementScore(ball_player)
+	if not replayPlaying and player != null and ball_player == int(player):
+		mark_basketball_shot_scored(int(ball.get_meta("shot_num", 0)))
 
 func skipReplay():
 	OpLog.i(LOG_TAG, ["skip_replay pressed turnNum=", turnNum])
@@ -3246,6 +3501,10 @@ func _set_game_data(
 		)
 
 		return
+	
+	var recovery_pending_value: Variant = parsed.get("_recoveryPending", "false")
+	recovery_snapshot_pending = String(recovery_pending_value).to_lower() == "true"
+	recovery_snapshot_progress = String(parsed.get("_recoveryProgress", ""))
 
 	if gamePlaying or replayPlaying:
 		OpLog.i(
@@ -3659,12 +3918,7 @@ func _set_game_data(
 		],
 	)
 
-	if not saved:
-		allow_waiting_from_loaded_data = true
-
-		refresh_ui_state()
-
-		allow_waiting_from_loaded_data = false
+	_schedule_basketball_recovery_check(not saved)
 
 func sendGameData(
 	completed_score: int,
@@ -3962,6 +4216,10 @@ func startGame() -> void:
 
 	myReplay = ""
 	elapsedTime = 0.0
+	recovery_deadline_ms = _recovery_now_ms() + 45000
+	recovery_round_start_score = myScore
+	recovery_shots.clear()
+	recovery_loaded = true
 	gamePlaying = true
 	replayPlaying = false
 	replayFinished = false
@@ -3989,7 +4247,9 @@ func startGame() -> void:
 		_set_moving_hoop_x(
 			0.0,
 		)
-
+	
+	_save_basketball_progress()
+	
 	spawnBall(
 		player,
 	)
@@ -4156,7 +4416,14 @@ func _process(
 	if not gamePlaying and not replayPlaying:
 		return
 
-	elapsedTime += delta
+	if recovery_restore_in_progress:
+		elapsedTime += delta
+		return
+
+	if recovery_deadline_ms > 0:
+		_sync_recovery_elapsed()
+	else:
+		elapsedTime += delta
 
 	var remaining_seconds := int(
 		ceil(
@@ -4302,34 +4569,40 @@ func _process(
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):
-		OpLog.w(LOG_TAG, "play_sent_animation skipped: sent_label invalid")
 		return
+	stop_waiting_animation()
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()
-
-	sent_tween = create_tween().set_parallel(false)
-
 	sent_label.text = "Sent"
 	sent_label.visible = true
-	sent_label.modulate.a = 0.0
+	sent_label.modulate.a = 1.0
 	sent_label.scale = Vector2.ONE
 	sent_label.pivot_offset = sent_label.get_size() / 2.0
 
-	sent_tween.tween_property(sent_label, "modulate:a", 1.0, 0.3)
-	sent_tween.tween_interval(0.6)
-	sent_tween.tween_callback(func():
-		if is_instance_valid(sent_label):
-			sent_label.text = "Sent ✔"
-	)
+func _on_basketball_send_complete() -> void:
+	recovery_pending_send = false
+	if game_over or not is_instance_valid(sent_label):
+		return
+	if sent_tween and sent_tween.is_running():
+		sent_tween.kill()
+	sent_label.text = "Sent ✔"
+	sent_label.visible = true
+	sent_label.modulate.a = 1.0
+	sent_tween = create_tween()
 	sent_tween.tween_interval(2.0)
 	sent_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
-
 	sent_tween.tween_callback(func():
 		if is_instance_valid(sent_label):
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
-
 		if not replayPlaying and not gamePlaying and isTurn == false:
 			start_waiting_animation()
 	)
-	
+
+func _on_basketball_send_failed() -> void:
+	if sent_tween and sent_tween.is_running():
+		sent_tween.kill()
+	if is_instance_valid(sent_label):
+		sent_label.visible = false
+		sent_label.modulate.a = 1.0
+	stop_waiting_animation()

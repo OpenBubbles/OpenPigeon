@@ -70,6 +70,13 @@ var _ship_creation_draws_consumed: bool = false
 var _popup_input_blocked: bool = false
 var _on_opponent_board := false
 
+var turn_num: String = ""
+var recovery_snapshot_pending: bool = false
+var recovery_snapshot_progress: String = ""
+var recovery_loaded: bool = false
+var recovery_shots: Array[String] = []
+var recovery_restore_in_progress: bool = false
+
 const SHIP_TEMPLATES := {
 	8:  "pos:2,3&num:0,0,0,0&rot:0|pos:1,0&num:0,0,0&rot:1|pos:4,2&num:0,0,0&rot:1|pos:7,4&num:0,0,0&rot:0|pos:0,4&num:0,0&rot:0|pos:5,6&num:0,0&rot:0|pos:5,0&num:0,0&rot:1",
 	9:  "pos:2,0&num:0,0,0,0&rot:0|pos:5,7&num:0,0,0,0&rot:1|pos:0,5&num:0,0,0,0&rot:0|pos:8,3&num:0,0,0&rot:0|pos:2,5&num:0,0,0&rot:0|pos:4,0&num:0,0,0&rot:0|pos:0,0&num:0,0,0&rot:0|pos:6,0&num:0,0,0&rot:0",
@@ -336,6 +343,15 @@ func _set_game_data(new_replay: String) -> void:
 		OpLog.e(LOG_TAG, ["set_game_data invalid JSON parsed=", parsed, " raw=", new_replay])
 		return
 
+	turn_num = String(parsed.get("num", ""))
+	recovery_snapshot_pending = String(parsed.get("_recoveryPending", "false")).to_lower() == "true"
+	recovery_snapshot_progress = String(parsed.get("_recoveryProgress", ""))
+	recovery_loaded = false
+	recovery_shots.clear()
+	recovery_restore_in_progress = false
+
+	OpLog.i(LOG_TAG, ["recovery_snapshot_received pending=", recovery_snapshot_pending, " progressLen=", recovery_snapshot_progress.length(), " turn=", turn_num])
+
 	_data_token += 1
 	var data_token := _data_token
 
@@ -574,12 +590,13 @@ func _set_game_data(new_replay: String) -> void:
 			for ship in bg.ships:
 				ship.visible = false
 	var my_ships_encoded := (s1 if player == 1 else s2)
+	var has_recovery_progress := not recovery_snapshot_progress.is_empty()
 
-	if not spectator_mode and my_ships_encoded.is_empty():
+	if not spectator_mode and my_ships_encoded.is_empty() and not has_recovery_progress:
 		OpLog.i(LOG_TAG, ["init_board randomize localPlayer=", player, " board=", myBattleground.name])
 		_randomize_my_ships(bsize)
 	else:
-		dbg(["init_board not_randomizing spectator=", spectator_mode, " shipsEmpty=", my_ships_encoded.is_empty(), " player=", player])
+		dbg(["init_board not_randomizing spectator=", spectator_mode, " shipsEmpty=", my_ships_encoded.is_empty(), " recovery=", has_recovery_progress, " player=", player])
 	if spectator_mode and not greplay.is_empty():
 		OpLog.i(
 			LOG_TAG,
@@ -639,23 +656,43 @@ func _set_game_data(new_replay: String) -> void:
 
 		stop_waiting_animation()
 
+		if await _restore_battleship_recovery(true, greplay):
+			OpLog.i(LOG_TAG, "turn_flow recovered_local_shots_skip_opponent_replay")
+			return
+
 		if not greplay.is_empty():
 			OpLog.i(LOG_TAG, ["turn_flow play_replay moves=", replay.size()])
 
 			_set_setup_mode(false)
+
 			if is_instance_valid(start_button):
 				start_button.disabled = true
+
 			if is_instance_valid(shuffle_button):
 				shuffle_button.disabled = true
 				shuffle_button.modulate.a = 0.0
+
 			if is_instance_valid(state):
 				state.text = ""
 
-			await play_replay(greplay)
+			await play_replay(greplay, false)
 
 			if data_token != _data_token:
 				return
+
+			if await _restore_battleship_recovery():
+				return
+
+			await get_tree().create_timer(1.0).timeout
+
+			if data_token != _data_token:
+				return
+
+			my_battleground_ready()
 		else:
+			if await _restore_battleship_recovery():
+				return
+
 			OpLog.i(LOG_TAG, "turn_flow initial_setup")
 			_set_setup_mode(true)
 
@@ -733,6 +770,27 @@ func _set_game_data(new_replay: String) -> void:
 			start_waiting_animation()
 			myBattleground.process_mode = Node.PROCESS_MODE_DISABLED
 			theirBattleground.process_mode = Node.PROCESS_MODE_DISABLED
+
+func _apply_replay_state(preplay: String) -> void:
+	if preplay.is_empty() or not is_instance_valid(myBattleground):
+		return
+
+	for move in preplay.split("|", false):
+		var parts := move.split(",", false)
+		if parts.size() < 2:
+			continue
+
+		var x := int(parts[0])
+		var wire_y := int(parts[1])
+		var local_y := _flip_y_index(wire_y, myBattleground.rows)
+		var grid := Vector2(x, local_y)
+
+		if grid.x < 0 or grid.x >= myBattleground.columns or grid.y < 0 or grid.y >= myBattleground.rows:
+			continue
+
+		myBattleground.replay_fire(grid)
+
+	OpLog.i(LOG_TAG, ["recovery_applied_opponent_state moves=", preplay.split("|", false).size()])
 
 func play_replay(preplay: String, enter_turn_after: bool = true) -> void:
 	var moves := preplay.split("|", false)
@@ -1529,6 +1587,22 @@ func _set_board_active(container: Control, board: BattleGround, active: bool) ->
 	else:
 		board.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
 
+func _save_battleship_progress() -> void:
+	if recovery_restore_in_progress or spectator_mode or not isTurn or not is_instance_valid(myBattleground):
+		return
+
+	var progress := {
+		"phase": "attack",
+		"turn": turn_num,
+		"ships": myBattleground.encode_ships(),
+		"shots": recovery_shots
+	}
+
+	if appPlugin != null:
+		appPlugin.saveTurnProgress(JSON.stringify(progress))
+
+	OpLog.i(LOG_TAG, ["recovery_saved turn=", turn_num, " shots=", recovery_shots.size(), " shipsLen=", String(progress["ships"]).length()])
+
 func send_update():
 	OpLog.i(LOG_TAG, ["send_update_start player=", player, " isEnd=", is_end, " winner=", winner])
 
@@ -2109,7 +2183,15 @@ func _on_fire_button_pressed() -> void:
 		OpLog.w(LOG_TAG, ["fire_no_target grid=", grid])
 		return
 
-	OpLog.i(LOG_TAG, ["fire_start grid=", grid])
+	var top_x := int(grid.x)
+	var top_y := _flip_y_index(int(grid.y), theirBattleground.rows)
+	var move_str := "%d,%d" % [top_x, top_y]
+
+	replay.append(move_str)
+	recovery_shots.append(move_str)
+	_save_battleship_progress()
+
+	OpLog.i(LOG_TAG, ["fire_start grid=", grid, " wire=", move_str, " committedShots=", recovery_shots.size()])
 	
 	if is_instance_valid(fire_button):
 		fire_button.disabled = true
@@ -2125,13 +2207,6 @@ func _on_fire_button_pressed() -> void:
 	dbg("fire bomb_animation_start")
 	await _play_bomb_fall_animation_for_board(theirBattleground, grid, false, 2.0)
 	dbg("fire bomb_animation_done")
-
-	var top_x := int(grid.x)
-	var rows := theirBattleground.rows
-	var top_y := _flip_y_index(int(grid.y), rows)
-
-	var move_str := "%d,%d" % [top_x, top_y]
-	replay.append(move_str)
 
 	dbg(["fire replay=", replay])
 
@@ -2196,6 +2271,152 @@ func _on_fire_button_pressed() -> void:
 				label_tween.tween_property(choose_target_label, "modulate:a", 1.0, 1.0)
 				
 			OpLog.i(LOG_TAG, "fire_hit_extra_turn")
+
+func _restore_battleship_recovery(require_committed_shot: bool = false, opponent_replay: String = "") -> bool:
+	if recovery_loaded or spectator_mode or not isTurn:
+		return false
+
+	if recovery_snapshot_pending:
+		recovery_loaded = true
+		fireMode = false
+		_set_setup_mode(false)
+
+		if is_instance_valid(fire_button):
+			fire_button.visible = false
+			fire_button.disabled = true
+
+		if is_instance_valid(choose_target_label):
+			choose_target_label.visible = false
+
+		if is_instance_valid(myBattleground):
+			myBattleground.can_attack = false
+
+		if is_instance_valid(theirBattleground):
+			theirBattleground.can_attack = false
+
+		stop_waiting_animation()
+		OpLog.i(LOG_TAG, "recovery_pending_send")
+		return true
+
+	if recovery_snapshot_progress.is_empty():
+		return false
+
+	var parsed: Variant = JSON.parse_string(recovery_snapshot_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		OpLog.w(LOG_TAG, ["recovery_invalid_json len=", recovery_snapshot_progress.length()])
+		return false
+
+	var progress: Dictionary = parsed
+
+	if String(progress.get("phase", "")) != "attack":
+		return false
+
+	var saved_turn := String(progress.get("turn", ""))
+	if not saved_turn.is_empty() and not turn_num.is_empty() and saved_turn != turn_num:
+		OpLog.i(LOG_TAG, ["recovery_stale savedTurn=", saved_turn, " currentTurn=", turn_num])
+		return false
+
+	var restored_shots: Array[String] = []
+	var raw_shots: Variant = progress.get("shots", [])
+
+	if typeof(raw_shots) == TYPE_ARRAY:
+		for value in raw_shots:
+			restored_shots.append(String(value))
+	elif typeof(raw_shots) == TYPE_STRING:
+		var parsed_shots: Variant = JSON.parse_string(String(raw_shots))
+		if typeof(parsed_shots) == TYPE_ARRAY:
+			for value in parsed_shots:
+				restored_shots.append(String(value))
+
+	if require_committed_shot and restored_shots.is_empty():
+		return false
+
+	if require_committed_shot and not opponent_replay.is_empty():
+		_apply_replay_state(opponent_replay)
+
+	recovery_loaded = true
+	recovery_restore_in_progress = true
+	recovery_shots.clear()
+	recovery_shots.append_array(restored_shots)
+
+	var saved_ships := String(progress.get("ships", ""))
+
+	if is_instance_valid(myBattleground) and myBattleground.ships.is_empty() and not saved_ships.is_empty():
+		myBattleground.from_encoded(saved_ships)
+
+	replay.clear()
+	for move in recovery_shots:
+		replay.append(move)
+
+	_set_setup_mode(false)
+	stop_waiting_animation()
+
+	OpLog.i(LOG_TAG, ["recovery_loaded turn=", turn_num, " shots=", recovery_shots.size(), " shipsLen=", saved_ships.length()])
+
+	if is_instance_valid(theirBattleground) and theirBattleground.is_empty():
+		recovery_restore_in_progress = false
+		send_update()
+		return true
+
+	if recovery_shots.is_empty():
+		recovery_restore_in_progress = false
+		my_battleground_ready()
+		return true
+
+	theirBattleground.set_attack()
+	theirBattleground.can_attack = false
+	show_battleground(false)
+
+	var last_hit := true
+
+	for move in recovery_shots:
+		var parts := move.split(",", false)
+		if parts.size() < 2:
+			continue
+
+		var x := int(parts[0])
+		var wire_y := int(parts[1])
+		var grid := Vector2(x, _flip_y_index(wire_y, theirBattleground.rows))
+
+		if grid.x < 0 or grid.x >= theirBattleground.columns or grid.y < 0 or grid.y >= theirBattleground.rows:
+			continue
+
+		await _play_bomb_fall_animation_for_board(theirBattleground, grid, false, 2.0)
+		last_hit = theirBattleground.fire(grid)
+
+	recovery_restore_in_progress = false
+
+	if theirBattleground.is_over():
+		mark_end(true)
+		send_update()
+		return true
+
+	if not last_hit:
+		await get_tree().create_timer(1.0).timeout
+		send_update()
+		return true
+
+	fireMode = true
+	theirBattleground.set_attack()
+
+	if is_instance_valid(state):
+		state.visible = false
+		state.text = ""
+
+	if is_instance_valid(start_button):
+		start_button.visible = false
+		start_button.disabled = true
+
+	if is_instance_valid(shuffle_button):
+		shuffle_button.visible = false
+		shuffle_button.disabled = true
+		shuffle_button.modulate.a = 0.0
+
+	if is_instance_valid(choose_target_label):
+		choose_target_label.visible = true
+
+	OpLog.i(LOG_TAG, "recovery_hit_extra_turn")
+	return true
 
 func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2, from_right: bool, plane_duration: float = 2.0) -> void:
 	if not is_instance_valid(board):
@@ -2432,6 +2653,8 @@ func _on_start_button_pressed() -> void:
 		)
 		return
 
+	recovery_shots.clear()
+	_save_battleship_progress()
 	myBattleground.placing_items = false
 
 	for ship in myBattleground.ships:
