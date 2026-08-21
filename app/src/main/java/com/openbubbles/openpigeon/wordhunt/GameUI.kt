@@ -134,6 +134,7 @@ class GameUI {
         pendingSend: Boolean,
         onRetrySend: () -> Unit,
         score: () -> MutableMap<String, String>,
+        onRefresh: () -> Unit = {},
     ) {
         Box(
             modifier = Modifier.fillMaxSize()
@@ -229,6 +230,7 @@ class GameUI {
                     ScoreScreen(
                         score = score,
                         spectatorMode = spectatorMode,
+                        onRefresh = onRefresh,
                         onShowAllWords = {
                             navController.navigate(
                                 Screen.AllWords.route,
@@ -966,6 +968,7 @@ class GameUI {
         score: () -> MutableMap<String, String>,
         spectatorMode: Boolean = false,
         onShowAllWords: () -> Unit = {},
+        onRefresh: () -> Unit = {},
     ) {
         val scoreData = score()
 
@@ -1197,6 +1200,13 @@ class GameUI {
                     (scoreData["words1"].isNullOrBlank() || scoreData["words2"].isNullOrBlank())
                 } else {
                     scoreData["words2"].isNullOrBlank()
+                }
+
+                LaunchedEffect(isWaiting) {
+                    while (isWaiting) {
+                        delay(1000.milliseconds)
+                        onRefresh()
+                    }
                 }
 
                 if (bothPlayersFinished) {

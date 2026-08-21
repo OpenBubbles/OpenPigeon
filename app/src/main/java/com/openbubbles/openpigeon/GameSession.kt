@@ -50,8 +50,8 @@ class GameSession(var handle: IMessageViewHandle) {
             recordWinIfApplicable(newMessage)
         }
 
-        messageUpdated(newMessage)
         currentMessage = newMessage
+        messageUpdated(newMessage)
     }
 
     private fun recordWinIfApplicable(message: Map<String, String>) {

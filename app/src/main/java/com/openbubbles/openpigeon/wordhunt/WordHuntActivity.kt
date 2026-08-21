@@ -27,6 +27,7 @@ import com.openbubbles.openpigeon.wordgames.WordGameLanguages
 import kotlin.random.Random
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.runtime.neverEqualPolicy
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -223,15 +224,9 @@ class WordHuntActivity : AppCompatActivity() {
                             sessionId,
                         )
 
-                    if (refreshed.isNotEmpty()) {
-                        currentMessage =
-                            refreshed
-
-                        if (::currentMessageState.isInitialized) {
-                            currentMessageState.value =
-                                refreshed
-                        }
-                    }
+                    mergeIntoCurrentMessage(
+                        refreshed,
+                    )
                 }
             }
 
@@ -546,30 +541,43 @@ class WordHuntActivity : AppCompatActivity() {
                 synchronized(this) {
                     OpenPigeonLog.i(
                         "WordHunt",
-                        "Message updated in background",
+                        "DEBUG UPDATE callback received thread=${Thread.currentThread().name}",
                     )
 
                     runOnUiThread {
+                        OpenPigeonLog.i(
+                            "WordHunt",
+                            "DEBUG UPDATE UI route=${
+                                if (::navController.isInitialized) {
+                                    navController.currentDestination?.route
+                                } else {
+                                    "not_initialized"
+                                }
+                            } localPlayer=$localPlayer spectator=$spectatorMode",
+                        )
+
                         val updatedMessage =
                             gameSessionIPC.getCurrentMessage(
                                 sessionId,
                             )
 
                         if (updatedMessage.isNotEmpty()) {
-                            currentMessage =
-                                updatedMessage
-
-                            if (::currentMessageState.isInitialized) {
-                                currentMessageState.value =
-                                    updatedMessage
-                            }
+                            mergeIntoCurrentMessage(
+                                updatedMessage,
+                            )
                         }
 
-                        if (
-                            !gameSessionIPC.hasPendingSend(
+                        val hasPendingSend =
+                            gameSessionIPC.hasPendingSend(
                                 sessionId,
                             )
-                        ) {
+
+                        OpenPigeonLog.i(
+                            "WordHunt",
+                            "DEBUG UPDATE pendingSend=$hasPendingSend sendAttemptInFlight=$sendAttemptInFlight",
+                        )
+
+                        if (!hasPendingSend) {
                             sendAttemptInFlight =
                                 false
 
@@ -684,7 +692,8 @@ class WordHuntActivity : AppCompatActivity() {
                 currentMessageState =
                     remember {
                         mutableStateOf(
-                            currentMessage,
+                            currentMessage.toMap(),
+                            neverEqualPolicy(),
                         )
                     }
 
@@ -707,9 +716,28 @@ class WordHuntActivity : AppCompatActivity() {
                         retryPendingSend()
                     },
                     score = {
-                        getScoreData(
-                            currentMessageState.value,
+                        val source =
+                            currentMessageState.value
+
+                        val result =
+                            getScoreData(
+                                source,
+                            )
+
+                        OpenPigeonLog.i(
+                            "WordHunt",
+                            "DEBUG COMPOSE score result " +
+                                    "score1=${result["score1"]} " +
+                                    "score2=${result["score2"]} " +
+                                    "words1=${result["words1"]} " +
+                                    "words2=${result["words2"]} " +
+                                    "winnerSlot=${result["winner_slot"]}",
                         )
+
+                        result
+                    },
+                    onRefresh = {
+                        applyLatestMessage()
                     },
                 )
             }
@@ -854,15 +882,9 @@ class WordHuntActivity : AppCompatActivity() {
                 sessionId,
             )
 
-        if (latestMessage.isNotEmpty()) {
-            currentMessage =
-                latestMessage
-
-            if (::currentMessageState.isInitialized) {
-                currentMessageState.value =
-                    latestMessage
-            }
-        }
+        mergeIntoCurrentMessage(
+            latestMessage,
+        )
 
         val senderId =
             ipc.getSenderUUID(
@@ -1003,10 +1025,9 @@ class WordHuntActivity : AppCompatActivity() {
                 sessionId,
             )
 
-        if (latestMessage.isNotEmpty()) {
-            currentMessage =
-                latestMessage
-        }
+        mergeIntoCurrentMessage(
+            latestMessage,
+        )
 
         val senderId =
             ipc.getSenderUUID(
@@ -1156,6 +1177,10 @@ class WordHuntActivity : AppCompatActivity() {
                 .joinToString("|"),
         )
 
+        mergeIntoCurrentMessage(
+            updates,
+        )
+
         if (
             ::navController.isInitialized &&
             navController.currentDestination?.route !=
@@ -1206,21 +1231,34 @@ class WordHuntActivity : AppCompatActivity() {
                                 error,
                             )
 
-                            currentMessage +
-                                    updates
+                            emptyMap()
                         }
 
-                    currentMessage =
-                        refreshedMessage
+                    mergeIntoCurrentMessage(
+                        updates,
+                    )
 
-                    if (::currentMessageState.isInitialized) {
-                        currentMessageState.value =
-                            refreshedMessage
-                    }
+                    mergeIntoCurrentMessage(
+                        refreshedMessage,
+                    )
 
                     runCatching {
                         ipc.unlockMsgHandle(
                             sessionId,
+                        )
+
+                        OpenPigeonLog.i(
+                            "WordHunt",
+                            "DEBUG HANDLE unlocking after local submit",
+                        )
+
+                        ipc.unlockMsgHandle(
+                            sessionId,
+                        )
+
+                        OpenPigeonLog.i(
+                            "WordHunt",
+                            "DEBUG HANDLE unlocked after local submit",
                         )
                     }.onFailure { error ->
                         OpenPigeonLog.e(
@@ -1344,6 +1382,19 @@ class WordHuntActivity : AppCompatActivity() {
             1
         }
 
+        OpenPigeonLog.i(
+            "WordHunt",
+            "DEBUG SCORE MAP " +
+                    "localPlayer=$localPlayer " +
+                    "client=$client opponent=$opponent " +
+                    "player1=${msg["player1"]} " +
+                    "player2=${msg["player2"]} " +
+                    "score1=${msg["score1"]} " +
+                    "score2=${msg["score2"]} " +
+                    "words1=${msg["words1"]} " +
+                    "words2=${msg["words2"]}",
+        )
+
         val localScore = scores[client - 1] ?: gameState.score.toString()
 
         val opponentScore = scores[opponent - 1]
@@ -1365,6 +1416,18 @@ class WordHuntActivity : AppCompatActivity() {
                 }
             }
         }.orEmpty()
+
+        OpenPigeonLog.i(
+            "WordHunt",
+            "DEBUG SCORE RESULT " +
+                    "localScore=$localScore " +
+                    "opponentScore=$opponentScore " +
+                    "localWords=${msg["words$client"]} " +
+                    "opponentWords=${msg["words$opponent"]} " +
+                    "localList=${msg["words_list$client"]?.take(80)} " +
+                    "opponentList=${msg["words_list$opponent"]?.take(80)} " +
+                    "winnerSlot=$winnerSlot",
+        )
 
         return mutableMapOf(
             "score1" to localScore,
@@ -1399,12 +1462,101 @@ class WordHuntActivity : AppCompatActivity() {
         )
     }
 
+    private fun mergeIntoCurrentMessage(
+        candidate: Map<String, String>,
+    ) {
+        if (candidate.isEmpty()) {
+            OpenPigeonLog.w(
+                "WordHunt",
+                "DEBUG MERGE candidate empty",
+            )
+
+            return
+        }
+
+        val merged =
+            buildMap {
+                if (::currentMessage.isInitialized) {
+                    putAll(
+                        currentMessage,
+                    )
+                }
+
+                candidate
+                    .filterValues {
+                        it.isNotBlank()
+                    }
+                    .forEach { (
+                                   key,
+                                   value,
+                               ) ->
+                        put(
+                            key,
+                            value,
+                        )
+                    }
+            }
+
+        currentMessage =
+            merged.toMap()
+
+        if (::currentMessageState.isInitialized) {
+            currentMessageState.value =
+                merged.toMap()
+
+        } else {
+            OpenPigeonLog.w(
+                "WordHunt",
+                "DEBUG MERGE compose state not initialized",
+            )
+        }
+    }
+
+    private fun applyLatestMessage() {
+        val ipc =
+            gameSessionIPC ?: return
+
+        OpenPigeonLog.i(
+            "WordHunt",
+            "DEBUG REFRESH requested route=${
+                if (::navController.isInitialized) {
+                    navController.currentDestination?.route
+                } else {
+                    "not_initialized"
+                }
+            }",
+        )
+
+        val latest =
+            runCatching {
+                ipc.getCurrentMessage(
+                    sessionId,
+                )
+            }.onFailure { error ->
+                OpenPigeonLog.e(
+                    "WordHunt",
+                    "DEBUG REFRESH getCurrentMessage failed",
+                    error,
+                )
+            }.getOrNull().orEmpty()
+
+        if (latest.isEmpty()) {
+            return
+        }
+
+        mergeIntoCurrentMessage(
+            latest,
+        )
+    }
+
     override fun onResume() {
         super.onResume()
 
         if (::gameMenu.isInitialized) {
             gameMenu.onResume()
         }
+
+        applyLatestMessage()
 
         val ipc =
             gameSessionIPC
