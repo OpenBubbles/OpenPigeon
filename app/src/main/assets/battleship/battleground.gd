@@ -36,6 +36,7 @@ func set_attack() -> void:
 
 	for ship in ships:
 		ship.visible = ship.is_sunk()
+		ship.set_conflict(false)
 
 var ship_grid: Array[Patrolboat] = []
 var grid_state: Array[GridState] = []
@@ -153,11 +154,10 @@ func from_encoded(encoded: String):
 	for encodedShip in encoded.split("|"):
 		if encodedShip.is_empty():
 			continue
-		dbg(["from_encoded ship=", encodedShip])
 		var ship := ship_class.instantiate() as Patrolboat
 		add_child(ship)
-		ship.decode_ship(encodedShip, self)
 		ships.append(ship)
+		ship.decode_ship(encodedShip, self)
 
 func grid_to_coord(gridpos: Vector2) -> Vector2:
 	var cell_width: float = rect_size.x / columns
@@ -233,20 +233,66 @@ func get_state_for_grid(x: int, y: int) -> GridState:
 	return GridState.NONE
 
 func update_grid_states():
-	var changed := false
+	if ship_grid.is_empty():
+		return
+
+	var previous := grid_state.duplicate()
+	var conflicting: Dictionary = {}
 	var conflict := false
+
+	for i in range(ship_grid.size()):
+		ship_grid[i] = null
+		ship_part[i] = 0
+		grid_state[i] = GridState.NONE
+
+	for ship in ships:
+		if not is_instance_valid(ship) or ship.current_grid_pos == Vector2(-1, -1):
+			continue
+
+		for i in range(ship.my_len):
+			var cell := ship.index_to_grid(i)
+			var idx := int(cell.y) * columns + int(cell.x)
+
+			if idx < 0 or idx >= ship_grid.size():
+				continue
+
+			if ship_grid[idx] != null:
+				grid_state[idx] = GridState.CONFLICT
+				conflicting[ship] = true
+				conflicting[ship_grid[idx]] = true
+				conflict = true
+				continue
+
+			ship_grid[idx] = ship
+			ship_part[idx] = i
+
 	for x in range(columns):
 		for y in range(rows):
-			var state := get_state_for_grid(x, y)
-			var actual_state := grid_state[y * columns + x]
-			if actual_state != state:
-				grid_state[y * columns + x] = state
-				changed = true
-			if state == GridState.CONFLICT:
+			var idx := y * columns + x
+			var boat := ship_grid[idx]
+
+			if boat == null:
+				continue
+
+			for neighbour in get_grid_neighbours(x, y):
+				var other := ship_grid[int(neighbour.y) * columns + int(neighbour.x)]
+
+				if other == null or other == boat:
+					continue
+
+				grid_state[idx] = GridState.CONFLICT
+				conflicting[boat] = true
+				conflicting[other] = true
 				conflict = true
+
+	for ship in ships:
+		if is_instance_valid(ship):
+			ship.set_conflict(conflicting.has(ship))
+
 	has_conflict = conflict
 	is_valid.emit(not has_conflict)
-	if changed:
+
+	if previous != grid_state:
 		queue_redraw()
 
 func set_size(size: int):

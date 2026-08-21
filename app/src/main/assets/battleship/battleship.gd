@@ -2119,55 +2119,29 @@ func _apply_bullets_from_payload(bg: BattleGround, wire_bullets: String) -> void
 	bg.from_bullets(local_bullets)
 
 func _flip_ships_encoded_vertical(encoded: String, rows: int) -> String:
-	print("FLIP SHIPS ENCODED VERTICAL CALLED!")
 	if encoded.is_empty():
 		return encoded
-	print("FLIP SHIPS ENCODED VERTICAL NOT EMPTY!")
-	var pieces := encoded.split("|", false)
+
 	var flipped_pieces: Array[String] = []
 
-	for piece in pieces:
+	for piece in encoded.split("|", false):
 		if piece.is_empty():
 			continue
 
-		var sections := piece.split("&", false)
-		var x := 0
-		var y := 0
-		var rot := 0
-		var length := 1
+		var sections := PackedStringArray()
 
-		for section in sections:
+		for section in piece.split("&", false):
 			if section.begins_with("pos:"):
 				var coords := section.substr(4).split(",", false)
 				if coords.size() >= 2:
-					x = coords[0].to_int()
-					y = coords[1].to_int()
-			elif section.begins_with("rot:"):
-				rot = section.substr(4).to_int()
-			elif section.begins_with("num:"):
-				length = section.substr(4).split(",", false).size()
+					sections.append("pos:%d,%d" % [
+						coords[0].to_int(),
+						(rows - 1) - coords[1].to_int()
+					])
+					continue
+			sections.append(section)
 
-		var new_y := 0
-		if rot == 1:
-			new_y = (rows - 1) - y
-		else:
-			new_y = (rows - 1) - (y + length - 1)
-
-		var new_sections: Array[String] = []
-		for section in sections:
-			print("Updating Sections!")
-			if section.begins_with("pos:"):
-				new_sections.append("pos:%d,%d" % [x, new_y])
-			elif section.begins_with("num:") and rot == 0:
-				var nums = section.substr(4).split(",", false)
-				print("FLIPPING VERTICAL SHIP NUM FROM: ", nums)
-				nums.reverse()
-				print("TO: ", nums)
-				new_sections.append("num:" + ",".join(nums))
-			else:
-				new_sections.append(section)
-
-		flipped_pieces.append("&".join(new_sections))
+		flipped_pieces.append("&".join(sections))
 
 	return "|".join(flipped_pieces)
 
@@ -2669,15 +2643,14 @@ func _on_battle_ground_is_valid(valid: bool) -> void:
 	if not is_instance_valid(start_button):
 		return
 
-	var can_start := (
-		valid and
+	var in_setup := (
 		_can_edit_ship_placement() and
 		is_instance_valid(myBattleground) and
 		myBattleground.placing_items
 	)
 
-	start_button.disabled = not can_start
-	start_button.visible = can_start
+	start_button.disabled = not (valid and in_setup)
+	start_button.visible = in_setup
 
 func _haptic_explosion(strength: float = 1.0, duration_ms: int = 45) -> void:
 	if not (OS.has_feature("android") or OS.has_feature("ios")):
