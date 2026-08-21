@@ -5,6 +5,9 @@ const AvatarWinAnimScene: PackedScene = preload("res://global/avatar_textures/av
 const RULES_POPUP_SCENE: PackedScene = preload("res://global/RulesPopup.tscn")
 const SETTINGS_POPUP_SCENE: PackedScene = preload("res://global/settings_popup.tscn")
 
+const SEND_PULSE_SCALE: float = 1.5
+const SEND_PULSE_TIME: float = 1.2
+
 # ---------- Avatars ----------
 
 static func _parse_avatar_string(data_string: String) -> Dictionary:
@@ -419,12 +422,36 @@ static func create_send_retry_overlay(
 		button
 	)
 
+	button.pivot_offset = Vector2(
+		90.0,
+		26.0
+	)
+
+	var pulse := game.create_tween()
+	pulse.set_loops()
+
+	pulse.tween_property(
+		button,
+		"scale",
+		Vector2.ONE * SEND_PULSE_SCALE,
+		SEND_PULSE_TIME
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	pulse.tween_property(
+		button,
+		"scale",
+		Vector2.ONE,
+		SEND_PULSE_TIME
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+	pulse.stop()
+
 	return {
 		"layer": layer,
 		"root": root,
 		"button": button,
+		"pulse": pulse,
 	}
-
 
 static func set_send_retry_overlay_state(
 	ui: Dictionary,
@@ -454,3 +481,16 @@ static func set_send_retry_overlay_state(
 		else
 		"SEND GAME"
 	)
+
+	var pulse := ui.get(
+		"pulse"
+	) as Tween
+
+	if not is_instance_valid(pulse):
+		return
+
+	if visible and not sending:
+		pulse.play()
+	else:
+		pulse.stop()
+		button.scale = Vector2.ONE
