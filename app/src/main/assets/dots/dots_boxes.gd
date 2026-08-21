@@ -45,6 +45,13 @@ var prev_lines_cache: Array = []
 var last_replay_sent: String = ""
 var _loading_replay: bool = false
 
+var recovery_turn_num: String = ""
+var recovery_snapshot_pending := false
+var recovery_snapshot_progress := ""
+var recovery_loaded := false
+var recovery_restore_in_progress := false
+var recovery_committing_send := false
+
 var _send_button_home_global := Vector2.ZERO
 var _send_button_home_ready := false
 var _send_button_target_visible := false
@@ -238,6 +245,18 @@ func _set_game_data(raw_text: String) -> void:
 		return
 
 	var res: Dictionary = parsed
+	
+	recovery_turn_num = String(res.get("num", ""))
+	recovery_snapshot_pending = String(res.get("_recoveryPending", "false")).to_lower() == "true"
+	recovery_snapshot_progress = String(res.get("_recoveryProgress", ""))
+	recovery_loaded = false
+	recovery_restore_in_progress = false
+
+	OpLog.i(LOG_TAG, [
+		"recovery_snapshot pending=", recovery_snapshot_pending,
+		" progressLen=", recovery_snapshot_progress.length(),
+		" turn=", recovery_turn_num
+	])
 
 	game_over = false
 	game_ended = false
@@ -351,6 +370,9 @@ func _set_game_data(raw_text: String) -> void:
 
 	is_my_turn = is_your_turn
 
+	if await _restore_dots_recovery():
+		return
+
 	game_ended = await check_win()
 
 	if game_ended:
@@ -371,6 +393,41 @@ func _set_game_data(raw_text: String) -> void:
 		" my_score=", my_score,
 		" opp_score=", opp_score,
 		" turn_steps=", _turn_steps.size()
+	])
+
+func _save_dots_progress(phase: String = "active") -> void:
+	if recovery_restore_in_progress or spectator_mode or not is_my_turn or appPlugin == null:
+		return
+
+	var serialized_steps: Array[String] = []
+
+	for step in _turn_steps:
+		if not step.has("line"):
+			continue
+
+		var line: Array = step["line"]
+		var squares: Array = step.get("squares", [])
+		var square_parts: Array[String] = []
+
+		for sq in squares:
+			square_parts.append("%d,%d,%d" % [int(sq[0]), int(sq[1]), int(sq[2])])
+
+		serialized_steps.append("%d,%d,%d,%d,%d;%s" % [
+			int(line[0]), int(line[1]), int(line[2]), int(line[3]), int(line[4]), ":".join(square_parts)
+		])
+
+	var progress := {
+		"phase": phase,
+		"turn": recovery_turn_num,
+		"steps": "|".join(serialized_steps)
+	}
+
+	appPlugin.saveTurnProgress(JSON.stringify(progress))
+
+	OpLog.i(LOG_TAG, [
+		"recovery_saved phase=", phase,
+		" steps=", _turn_steps.size(),
+		" turn=", recovery_turn_num
 	])
 
 func _remove_dots_win_burst_proxy(
@@ -525,8 +582,6 @@ func _load_pre_state_and_replay(replay_str: String) -> void:
 
 func _set_is_my_turn(v: bool) -> void:
 	is_my_turn = v
-	if v:
-		_turn_steps.clear()
 	_apply_turn_state()
 	
 func _apply_turn_state() -> void:
@@ -1823,10 +1878,17 @@ func _on_send_pressed() -> void:
 
 	var committed: bool = false
 
+	recovery_committing_send = true
+
 	if is_instance_valid(grid) and grid.has_method("commit_temp_line_now"):
 		committed = bool(grid.call("commit_temp_line_now"))
 	else:
 		OpLog.w(LOG_TAG, "grid_missing_commit_temp_line_now")
+
+	if committed:
+		_save_dots_progress("sending")
+
+	recovery_committing_send = false
 
 	OpLog.i(LOG_TAG, ["commit_temp_line_now committed=", committed])
 
@@ -1839,6 +1901,150 @@ func _on_send_pressed() -> void:
 
 	if has_method("send_game"):
 		call_deferred("send_game")
+
+func _parse_recovery_steps(raw_steps: String) -> Array:
+	var result: Array = []
+
+	if raw_steps.is_empty():
+		return result
+
+	for raw_step in raw_steps.split("|", false):
+		var sides := raw_step.split(";", true, 1)
+		var line_values := _csv_to_ints(String(sides[0]))
+
+		if line_values.size() < 5:
+			continue
+
+		var step := {
+			"line": [
+				line_values[0],
+				line_values[1],
+				line_values[2],
+				line_values[3],
+				line_values[4]
+			],
+			"squares": []
+		}
+
+		if sides.size() > 1 and String(sides[1]) != "":
+			for raw_square in String(sides[1]).split(":", false):
+				var square_values := _csv_to_ints(raw_square)
+				if square_values.size() >= 3:
+					step["squares"].append([
+						square_values[0],
+						square_values[1],
+						square_values[2]
+					])
+
+		result.append(step)
+
+	return result
+
+func _restore_dots_recovery() -> bool:
+	if recovery_loaded or spectator_mode or not is_my_turn or game_over:
+		return false
+
+	if recovery_snapshot_pending:
+		recovery_loaded = true
+		is_my_turn = false
+
+		if is_instance_valid(grid):
+			grid.call_deferred("set_input_enabled", false)
+
+		_update_send_button_visibility(false)
+		stop_waiting_animation()
+
+		OpLog.i(LOG_TAG, "recovery_pending_send")
+		return true
+
+	if recovery_snapshot_progress.is_empty():
+		return false
+
+	var parsed: Variant = JSON.parse_string(recovery_snapshot_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+
+	var progress: Dictionary = parsed
+	var phase := String(progress.get("phase", ""))
+
+	if phase != "active" and phase != "sending":
+		return false
+
+	var saved_turn := String(progress.get("turn", ""))
+	if not saved_turn.is_empty() and not recovery_turn_num.is_empty() and saved_turn != recovery_turn_num:
+		OpLog.i(LOG_TAG, [
+			"recovery_stale savedTurn=", saved_turn,
+			" currentTurn=", recovery_turn_num
+		])
+		return false
+
+	var steps := _parse_recovery_steps(String(progress.get("steps", "")))
+	if steps.is_empty():
+		return false
+
+	recovery_loaded = true
+	recovery_restore_in_progress = true
+	_loading_replay = true
+	_turn_steps.clear()
+
+	var restored_lines: Array = opponent_post_lines.duplicate(true)
+	var restored_squares: Array = opponent_post_squares.duplicate(true)
+
+	for step in steps:
+		if step.has("line"):
+			restored_lines.append(step["line"])
+
+		if step.has("squares"):
+			restored_squares.append_array(step["squares"])
+
+		_turn_steps.append(step.duplicate(true))
+
+	if is_instance_valid(grid) and grid.has_method("load_lines_and_squares_state"):
+		grid.call("load_lines_and_squares_state", restored_lines, restored_squares)
+
+	_loading_replay = false
+	recovery_restore_in_progress = false
+
+	OpLog.i(LOG_TAG, [
+		"recovery_restored phase=", phase,
+		" steps=", _turn_steps.size(),
+		" lines=", restored_lines.size(),
+		" squares=", restored_squares.size()
+	])
+
+	if phase == "sending":
+		is_my_turn = false
+
+		if is_instance_valid(grid):
+			grid.call("set_input_enabled", false)
+
+		_update_send_button_visibility(false)
+		stop_waiting_animation()
+		call_deferred("send_game")
+		return true
+
+	is_my_turn = true
+
+	if is_instance_valid(grid):
+		grid.set("player", player)
+		grid.call("set_input_enabled", true)
+		grid.call("clear_temp_line")
+
+	_update_send_button_visibility(false)
+	stop_waiting_animation()
+
+	game_ended = await check_win()
+
+	if game_ended:
+		game_over = true
+		is_my_turn = false
+
+		if is_instance_valid(grid):
+			grid.call("set_input_enabled", false)
+
+		call_deferred("send_game")
+
+	return true
 
 func send_game() -> void:
 	await get_tree().process_frame
@@ -1934,6 +2140,9 @@ func send_game() -> void:
 	_turn_steps.clear()
 
 func _on_line_committed_bl(p: int, x1: int, y1: int, x2: int, y2: int) -> void:
+	if recovery_restore_in_progress:
+		return
+
 	var mv := [p, x1, y1, x2, y2]
 
 	for step in _turn_steps:
@@ -1949,20 +2158,27 @@ func _on_line_committed_bl(p: int, x1: int, y1: int, x2: int, y2: int) -> void:
 		" turn_steps=", _turn_steps.size()
 	])
 
+	_save_dots_progress("sending" if recovery_committing_send else "active")
+
 func _on_square_completed_bl(p: int, x_bl: int, y_bl: int) -> void:
+	if recovery_restore_in_progress:
+		return
+
 	if _turn_steps.size() > 0:
 		var sq := [p, x_bl, y_bl]
 		_turn_steps[_turn_steps.size() - 1]["squares"].append(sq)
 
 		OpLog.event(LOG_TAG, [
 			"square_completed player=", p,
-			" square=", sq,
+			"square=", sq,
 			" current_step=", _turn_steps[_turn_steps.size() - 1]
 		])
+
+		_save_dots_progress("sending" if recovery_committing_send else "active")
 	else:
 		OpLog.w(LOG_TAG, [
 			"square_completed_without_turn_step player=", p,
-			" x=", x_bl,
+			"x=", x_bl,
 			" y=", y_bl
 		])
 

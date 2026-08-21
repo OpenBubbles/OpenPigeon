@@ -87,13 +87,58 @@ func ingest_replay_string(replay_str: String) -> void:
 	g._replay_segments = replay_str.split("|", false)
 	g._last_replay_str = "|".join(g._replay_segments)
 
-	# Apply the first queued segment to set HP/positions/pending shot state
+	if g.recovery_skip_visual_replay:
+		advance_replay_silently_for_locked_recovery()
+		return
+
 	var first_seg: String = String(g._replay_segments[0])
 	var first_state: Dictionary = parse_replay_state(first_seg)
 	apply_loaded_replay_segment(first_state)
 
-	# Autoplay any leading FULL segments
 	prime_autoplay_if_loaded_segment_ready()
+
+func advance_replay_silently_for_locked_recovery() -> void:
+	OpLog.i("Paintball", [
+		"recovery_silent_replay_start segments=",
+		g._replay_segments.size()
+	])
+
+	while g._replay_segments.size() > 0:
+		var head_state: Dictionary = parse_replay_state(String(g._replay_segments[0]))
+
+		if not replay_is_full_round(head_state):
+			break
+
+		OpLog.i("Paintball", [
+			"recovery_silent_replay_drop_full head=",
+			String(g._replay_segments[0])
+		])
+
+		g._replay_segments.remove_at(0)
+
+	rebuild_last_replay_str_from_segments()
+
+	g._is_replay_playback = false
+	g._replay_auto_pending = false
+
+	if g._replay_segments.size() > 0:
+		var current_state: Dictionary = parse_replay_state(String(g._replay_segments[0]))
+
+		OpLog.i("Paintball", [
+			"recovery_silent_replay_apply_current head=",
+			String(g._replay_segments[0])
+		])
+
+		apply_loaded_replay_segment(current_state)
+	else:
+		OpLog.i("Paintball", "recovery_silent_replay_no_current_head")
+
+	OpLog.i("Paintball", [
+		"recovery_silent_replay_done segments=",
+		g._replay_segments.size(),
+		" pendingEnemy=",
+		g._pending_enemy_shot
+	])
 
 func replay_build_after_my_fire(my_pos_int: int, my_target_int: int) -> String:
 	var hp := hp_as_p1_order()

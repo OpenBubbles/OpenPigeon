@@ -35,6 +35,12 @@ var _is_dragging_aim: bool = false
 var can_interact: bool = true
 var has_replay: bool = false
 
+var recovery_turn_num: String = ""
+var recovery_snapshot_pending := false
+var recovery_snapshot_progress := ""
+var recovery_loaded := false
+var recovery_restore_in_progress := false
+
 var game_over: bool = false
 var winner: String = ""
 var win_loss_state: String = ""
@@ -320,6 +326,12 @@ func _set_game_data(raw_text: String) -> void:
 
 	var data: Dictionary = parsed as Dictionary
 
+	recovery_turn_num = String(data.get("num", ""))
+	recovery_snapshot_pending = String(data.get("_recoveryPending", "false")).to_lower() == "true"
+	recovery_snapshot_progress = String(data.get("_recoveryProgress", ""))
+	recovery_loaded = false
+	recovery_restore_in_progress = false
+
 	if my_uuid != "":
 		data["myPlayerId"] = my_uuid
 
@@ -382,6 +394,8 @@ func _set_game_data(raw_text: String) -> void:
 
 	if winner_payload != "":
 		_apply_winner_payload(winner_payload, p1_id, p2_id)
+	else:
+		call_deferred("_restore_tanks_recovery")
 	
 	OpLog.i(LOG_TAG, ["set_game_data_done ", _state_summary()])
 
@@ -885,6 +899,103 @@ func _on_turn_changed(v: bool) -> void:
 			_start_waiting_for_opponent()	
 	
 	_update_aim_label_visibility()
+
+func _save_tanks_shot(play_rot: float, send_rot: float, power: float) -> void:
+	if recovery_restore_in_progress or core == null or core.spectator_mode or not core.is_my_turn or appPlugin == null:
+		return
+
+	var progress := {
+		"phase": "shot",
+		"turn": recovery_turn_num,
+		"player": str(core.player),
+		"playRot": str(play_rot),
+		"sendRot": str(send_rot),
+		"power": str(power)
+	}
+
+	appPlugin.saveTurnProgress(JSON.stringify(progress))
+	OpLog.i(LOG_TAG, ["recovery_saved player=", core.player, " playRot=", play_rot, " sendRot=", send_rot, " power=", power])
+
+func _restore_tanks_recovery() -> bool:
+	await get_tree().process_frame
+
+	if recovery_loaded or core == null or core.spectator_mode or not core.is_my_turn or game_over or has_replay:
+		return false
+
+	if recovery_snapshot_pending:
+		recovery_loaded = true
+		can_interact = false
+		_is_playing_round = false
+		await _set_ui_visible(false)
+		stop_waiting_animation()
+		OpLog.i(LOG_TAG, "recovery_pending_send")
+		return true
+
+	if recovery_snapshot_progress.is_empty():
+		return false
+
+	var parsed: Variant = JSON.parse_string(recovery_snapshot_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+
+	var progress: Dictionary = parsed
+	if String(progress.get("phase", "")) != "shot":
+		return false
+
+	var saved_turn := String(progress.get("turn", ""))
+	if not saved_turn.is_empty() and not recovery_turn_num.is_empty() and saved_turn != recovery_turn_num:
+		return false
+
+	var shot_player := int(String(progress.get("player", str(core.player))))
+	var play_rot := float(String(progress.get("playRot", "0")))
+	var send_rot := float(String(progress.get("sendRot", "0")))
+	var power := float(String(progress.get("power", "0.5")))
+
+	if shot_player != core.player:
+		return false
+
+	recovery_loaded = true
+	recovery_restore_in_progress = true
+	_is_playing_round = true
+	can_interact = false
+	await _set_ui_visible(false)
+
+	var wind_val := float(core.current_board.get("wind", 0.0))
+	var pre_shot_board: Dictionary = core.current_board.duplicate(true)
+	pre_shot_board["tank%drot" % core.player] = send_rot
+	pre_shot_board["tank%dpower" % core.player] = power
+
+	await _execute_shot(core.player, play_rot, power, wind_val)
+
+	var post_shot_board: Dictionary = core.current_board.duplicate(true)
+	post_shot_board["tank%drot" % core.player] = send_rot
+	post_shot_board["tank%dpower" % core.player] = power
+	core.set_my_aim(send_rot, power)
+
+	var replay_string := "board:" + core._compose_board_kv(pre_shot_board)
+	replay_string += "|shoot:" + str(core.player)
+	replay_string += "|board:" + core._compose_board_kv(post_shot_board)
+
+	var payload := {"replay": replay_string}
+	var avatar_key := "avatar1" if core.player == 1 else "avatar2"
+	if is_instance_valid(player_avatar_display) and player_avatar_display.has_method("get_avatar_data_string"):
+		var avatar_str: String = str(player_avatar_display.get_avatar_data_string())
+		if avatar_str != "":
+			payload[avatar_key] = avatar_str
+
+	var finished := _finish_round_or_show_result()
+	recovery_restore_in_progress = false
+	_send_payload(payload)
+
+	if not finished:
+		core.is_my_turn = false
+		can_interact = false
+		_is_playing_round = false
+		_update_aim_label_visibility()
+		play_sent_animation()
+
+	OpLog.i(LOG_TAG, ["recovery_restored_shot player=", shot_player, " power=", power])
+	return true
 
 func _send_payload(payload: Dictionary) -> bool:
 	if game_over and win_loss_state != "":
@@ -1442,6 +1553,8 @@ func _on_replay_action(_action: Dictionary) -> void:
 	
 	_is_playing_round = false
 	has_replay = false
+	if await _restore_tanks_recovery():
+		return
 	can_interact = true
 	_on_turn_changed(core.is_my_turn)
 
@@ -1770,6 +1883,7 @@ func _on_send_pressed() -> void:
 	var my_send_rot: float = _protocol_rot_from_visual_deg(core.player, my_send_deg)
 	var my_pwr: float = power_slider.value / 100.0
 	var wind_val: float = float(core.current_board.get("wind", 0.0))
+	_save_tanks_shot(my_play_rot, my_send_rot, my_pwr)
 	
 	OpLog.i(LOG_TAG, [
 		"send_pressed player=", core.player,

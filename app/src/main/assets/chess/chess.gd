@@ -245,6 +245,12 @@ var dialogs: ChessDialogs = ChessDialogs.new()
 
 var is_processing_game_data: bool = false   # Prevents concurrent _set_game_data() calls
 
+var recovery_turn_num: String = ""
+var recovery_snapshot_pending := false
+var recovery_snapshot_progress := ""
+var recovery_loaded := false
+var recovery_restore_in_progress := false
+
 ## Property wrapper for animation state
 var is_animating: bool:
 	get: return animations.is_animating()
@@ -390,7 +396,7 @@ func _set_game_data(raw: String) -> void:
 	# Always release the guard flag (guaranteed cleanup)
 	is_processing_game_data = false
 	_log_data.info("_set_game_data complete")
-	
+
 ## Internal implementation of _set_game_data - separated to ensure guard flag cleanup
 func _set_game_data_impl(raw: String) -> void:
 	var orientation_changed: bool = false  # Track if board orientation changes
@@ -402,6 +408,18 @@ func _set_game_data_impl(raw: String) -> void:
 	if typeof(data) != TYPE_DICTIONARY:
 		_log_data.error("set_game_data invalid JSON type=%s raw=%s" % [str(typeof(data)), raw])
 		return
+
+	recovery_turn_num = String(data.get("num", ""))
+	recovery_snapshot_pending = String(data.get("_recoveryPending", "false")).to_lower() == "true"
+	recovery_snapshot_progress = String(data.get("_recoveryProgress", ""))
+	recovery_loaded = false
+	recovery_restore_in_progress = false
+
+	_log_data.info("recovery_snapshot pending=%s progressLen=%d turn=%s" % [
+		str(recovery_snapshot_pending),
+		recovery_snapshot_progress.length(),
+		recovery_turn_num
+	])
 
 	if typeof(data) == TYPE_DICTIONARY:
 		_log_data.debug("_set_game_data: dictionary keys = %s" % str(data.keys()))
@@ -713,6 +731,9 @@ func _set_game_data_impl(raw: String) -> void:
 		_build_board_ui()
 		_refresh_board_ui()
 
+	if await _restore_chess_recovery():
+		return
+	
 	# Update the centralized BaseGame waiting animation.
 	if spectator_mode:
 		stop_waiting_animation()
@@ -720,6 +741,40 @@ func _set_game_data_impl(raw: String) -> void:
 		start_waiting_animation()
 	else:
 		stop_waiting_animation()
+
+func _save_chess_pending(from_sq: Vector2i, to_sq: Vector2i, promotion_piece: String = "") -> void:
+	if recovery_restore_in_progress or spectator_mode or not isTurn or appPlugin == null:
+		return
+
+	var progress := {
+		"phase": "pending",
+		"turn": recovery_turn_num,
+		"fromX": str(from_sq.x),
+		"fromY": str(from_sq.y),
+		"toX": str(to_sq.x),
+		"toY": str(to_sq.y),
+		"promotion": promotion_piece
+	}
+
+	appPlugin.saveTurnProgress(JSON.stringify(progress))
+
+	_log_game.info("recovery_saved move=%s->%s promo=%s" % [
+		_square_name(from_sq),
+		_square_name(to_sq),
+		promotion_piece
+	])
+
+
+func _save_chess_idle() -> void:
+	if recovery_restore_in_progress or spectator_mode or not isTurn or appPlugin == null:
+		return
+
+	var progress := {
+		"phase": "idle",
+		"turn": recovery_turn_num
+	}
+
+	appPlugin.saveTurnProgress(JSON.stringify(progress))
 
 func _update_turn_flags() -> void:
 	# canonicalize interaction flags based on board 'turn' and local 'my_color'
@@ -2216,10 +2271,11 @@ func _on_promotion_choice(piece: String) -> void:
 	if promotion_pending_from != Vector2i(-1, -1) and promotion_pending_to != Vector2i(-1, -1):
 		_log_ui.info("_on_promotion_choice: executing promotion move %s -> %s with piece %s" % [_square_name(promotion_pending_from), _square_name(promotion_pending_to), piece])
 		_set_pending(promotion_pending_from, promotion_pending_to)
+		_save_chess_pending(promotion_pending_from, promotion_pending_to, piece)
 
-		# Animate the promotion move
 		await _animate_player_move(promotion_pending_from, promotion_pending_to)
 
+		promotion_choice = piece
 		_execute_move(promotion_pending_from, promotion_pending_to)
 		_show_undo_arrow(_get_pending_from())
 		# Send button enabled after move
@@ -2266,10 +2322,87 @@ func _undo_pending() -> void:
 	_log_ui.debug("_undo_pending: reverting to snapshot via game_board")
 	if game_board:
 		game_board.undo_pending()
+
+	_save_chess_idle()
 	_hide_undo_arrow()
 	_update_send_button_visibility(false)
 	_update_turn_flags()
 	_refresh_board_ui()
+
+func _restore_chess_recovery() -> bool:
+	if recovery_loaded or spectator_mode or not isTurn or game_over:
+		return false
+
+	if recovery_snapshot_pending:
+		recovery_loaded = true
+		waitingForOpponent = true
+		isTurn = false
+		_update_send_button_visibility(false)
+		stop_waiting_animation()
+
+		_log_game.info("recovery_pending_send")
+		return true
+
+	if recovery_snapshot_progress.is_empty():
+		return false
+
+	var parsed: Variant = JSON.parse_string(recovery_snapshot_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		_log_game.warn("recovery invalid JSON")
+		return false
+
+	var progress: Dictionary = parsed
+
+	if String(progress.get("phase", "")) != "pending":
+		return false
+
+	var saved_turn := String(progress.get("turn", ""))
+	if not saved_turn.is_empty() and not recovery_turn_num.is_empty() and saved_turn != recovery_turn_num:
+		_log_game.info("recovery stale savedTurn=%s currentTurn=%s" % [saved_turn, recovery_turn_num])
+		return false
+
+	var from_sq := Vector2i(
+		int(String(progress.get("fromX", "-1"))),
+		int(String(progress.get("fromY", "-1")))
+	)
+
+	var to_sq := Vector2i(
+		int(String(progress.get("toX", "-1"))),
+		int(String(progress.get("toY", "-1")))
+	)
+
+	var promo := String(progress.get("promotion", ""))
+
+	if from_sq.x < 0 or from_sq.x > 7 or from_sq.y < 0 or from_sq.y > 7:
+		return false
+	if to_sq.x < 0 or to_sq.x > 7 or to_sq.y < 0 or to_sq.y > 7:
+		return false
+
+	recovery_loaded = true
+	recovery_restore_in_progress = true
+
+	_set_pending(from_sq, to_sq)
+
+	if promo != "":
+		promotion_choice = promo
+
+	_execute_move(from_sq, to_sq)
+
+	recovery_restore_in_progress = false
+
+	_show_undo_arrow(from_sq)
+	_update_send_button_visibility(true)
+	_clear_selection()
+	_refresh_board_ui()
+	stop_waiting_animation()
+
+	_log_game.info("recovery_restored move=%s->%s promo=%s" % [
+		_square_name(from_sq),
+		_square_name(to_sq),
+		promo
+	])
+
+	return true
 
 # ---------- Input gating ----------
 func _input(event: InputEvent) -> void:
@@ -2402,6 +2535,8 @@ func _handle_move_tap(sq: Vector2i, piece: String) -> void:
 
 			# Execute normal move with pending state
 			_set_pending(selected, sq)
+			_save_chess_pending(selected, sq)
+
 			await _animate_player_move(selected, _get_pending_to())
 			_execute_move(selected, _get_pending_to())
 			_show_undo_arrow(_get_pending_from())

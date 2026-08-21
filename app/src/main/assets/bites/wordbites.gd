@@ -64,6 +64,11 @@ var _words_loading_overlay: Control = null
 var _words_loading_tween: Tween = null
 var my_has_data := false
 
+var recovered_turn_started := false
+var recovered_deadline_ms: int = 0
+var recovered_words: Array[String] = []
+var recovery_pending_send := false
+
 var _words_scroll_container: ScrollContainer = null
 var _words_pointer_down := false
 var _words_is_dragging := false
@@ -202,6 +207,19 @@ func _on_game_ready() -> void:
 		if not game_screen.time_up.is_connected(_on_game_time_up):
 			game_screen.time_up.connect(_on_game_time_up)
 
+		if not game_screen.progress_changed.is_connected(_save_wordbites_progress):
+			game_screen.progress_changed.connect(_save_wordbites_progress)
+
+	if appPlugin:
+		var complete_callable := Callable(self, "_on_wordbites_send_complete")
+		var failed_callable := Callable(self, "_on_wordbites_send_failed")
+
+		if appPlugin.has_signal("send_game_complete") and not appPlugin.is_connected("send_game_complete", complete_callable):
+			appPlugin.connect("send_game_complete", complete_callable)
+
+		if appPlugin.has_signal("send_game_failed") and not appPlugin.is_connected("send_game_failed", failed_callable):
+			appPlugin.connect("send_game_failed", failed_callable)
+
 	if is_instance_valid(view_words_button):
 		if not view_words_button.pressed.is_connected(_on_view_words_pressed):
 			view_words_button.pressed.connect(_on_view_words_pressed)
@@ -224,6 +242,99 @@ func _on_game_ready() -> void:
 	
 	_set_game_language(game_language)
 
+func _sync_waiting_animation() -> void:
+	if spectator_mode or game_over or recovery_pending_send:
+		stop_waiting_animation()
+	elif my_has_data:
+		start_waiting_animation()
+	else:
+		stop_waiting_animation()
+
+func _save_wordbites_progress_snapshot(deadline_ms: int, words: Array[String]) -> void:
+	if appPlugin == null or spectator_mode or my_has_data or deadline_ms <= 0:
+		return
+
+	var progress := {
+		"started": "1",
+		"deadline": str(deadline_ms),
+		"words": "|".join(words)
+	}
+
+	var saved := bool(appPlugin.saveTurnProgress(JSON.stringify(progress)))
+
+	OpLog.i(LOG_TAG, [
+		"recovery_saved saved=", saved,
+		" deadline=", deadline_ms,
+		" words=", words.size()
+	])
+
+func _save_wordbites_progress() -> void:
+	if not is_instance_valid(game_screen):
+		return
+
+	var words: Array[String] = []
+
+	for entry in game_screen.get_word_history():
+		if entry is Dictionary and entry.has("word"):
+			words.append(String(entry["word"]))
+
+	_save_wordbites_progress_snapshot(game_screen.get_deadline_ms(), words)
+
+func _load_wordbites_recovery(pending: bool, raw_progress: String) -> void:
+	recovered_turn_started = false
+	recovered_deadline_ms = 0
+	recovered_words.clear()
+	recovery_pending_send = false
+
+	if spectator_mode or my_has_data or game_over:
+		return
+
+	recovery_pending_send = pending
+
+	if raw_progress.is_empty():
+		return
+
+	var parsed: Variant = JSON.parse_string(raw_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		OpLog.w(LOG_TAG, ["recovery_parse_failed raw=", raw_progress])
+		return
+
+	var progress: Dictionary = parsed
+	recovered_deadline_ms = int(String(progress.get("deadline", "0")))
+	recovered_turn_started = String(progress.get("started", "")) == "1" and recovered_deadline_ms > 0
+
+	var saved_words := String(progress.get("words", ""))
+
+	if saved_words != "":
+		for word in saved_words.split("|", false):
+			var normalized := String(word).strip_edges().to_upper()
+			if normalized != "":
+				recovered_words.append(normalized)
+
+	OpLog.i(LOG_TAG, [
+		"recovery_loaded started=", recovered_turn_started,
+		" pending=", recovery_pending_send,
+		" deadline=", recovered_deadline_ms,
+		" words=", recovered_words.size()
+	])
+
+func _populate_recovered_scoreboard() -> void:
+	var entries: Array = []
+	var recovered_score := 0
+
+	for word in recovered_words:
+		var points := _compute_word_score(word.length())
+		if points <= 0:
+			continue
+
+		entries.append({
+			"word": word,
+			"points": points
+		})
+		recovered_score += points
+
+	_populate_scoreboard(true, entries, entries.size(), recovered_score)
+
 func _set_game_data(raw_text: String) -> void:
 	OpLog.event(LOG_TAG, ["set_game_data_in raw=", raw_text])
 
@@ -236,6 +347,17 @@ func _set_game_data(raw_text: String) -> void:
 		return
 
 	var d: Dictionary = res
+	
+	var recovery_pending_value: Variant = d.get("_recoveryPending", "false")
+	var recovery_snapshot_pending := String(recovery_pending_value).to_lower() == "true"
+	var recovery_snapshot_progress := String(d.get("_recoveryProgress", ""))
+
+	OpLog.i(LOG_TAG, [
+		"recovery_snapshot_received pending=",
+		recovery_snapshot_pending,
+		" progressLen=",
+		recovery_snapshot_progress.length()
+	])
 
 	game_over = false
 	game_ended = false
@@ -449,19 +571,25 @@ func _set_game_data(raw_text: String) -> void:
 	else:
 		game_ended = check_win()
 
+	_load_wordbites_recovery(recovery_snapshot_pending, recovery_snapshot_progress)
+
+	if recovery_pending_send:
+		_populate_recovered_scoreboard()
+
 	_init_screens()
 
-	if game_over:
-		stop_waiting_animation()
-	elif my_has_data:
-		start_waiting_animation()
-	else:
-		stop_waiting_animation()
+	if recovered_turn_started and not recovery_pending_send and not spectator_mode and not my_has_data and not game_over:
+		await game_screen.start_game(recovered_deadline_ms, recovered_words)
+
+	_sync_waiting_animation()
 
 	OpLog.i(LOG_TAG, [
 		"set_game_data_done player=", player,
 		" spectator=", spectator_mode,
 		" my_has_data=", my_has_data,
+		" recovered=", recovered_turn_started,
+		" pending=", recovery_pending_send,
+		" recovery_words=", recovered_words.size(),
 		" game_over=", game_over,
 		" game_ended=", game_ended,
 		" winner=", winner
@@ -728,12 +856,17 @@ func _apply_score_box_style(box: PanelContainer) -> void:
 func _init_screens() -> void:
 	screens = [intro_screen, game_screen, score_screen, words_screen]
 
-	var should_show_intro := not game_over and not spectator_mode and not my_has_data
-	current_screen = 0 if should_show_intro else 2
+	if game_over or spectator_mode or my_has_data or recovery_pending_send:
+		current_screen = 2
+	elif recovered_turn_started:
+		current_screen = 1
+	else:
+		current_screen = 0
 
 	OpLog.i(LOG_TAG, [
 		"init_screens current_screen=", current_screen,
-		" should_show_intro=", should_show_intro,
+		" recovered=", recovered_turn_started,
+		" pending=", recovery_pending_send,
 		" game_over=", game_over,
 		" spectator=", spectator_mode,
 		" my_has_data=", my_has_data
@@ -741,7 +874,7 @@ func _init_screens() -> void:
 
 	for i in screens.size():
 		var node := screens[i]
-		node.visible = (i == current_screen)
+		node.visible = i == current_screen
 		node.position = Vector2.ZERO
 
 func _switch_to_screen(next: int) -> void:
@@ -1513,8 +1646,20 @@ func _dismiss_word_popup(overlay: Control) -> void:
 	overlay.queue_free()
 
 func _on_start_button_pressed() -> void:
-	await _switch_to_screen(1)      # GameScreen
-	game_screen.start_game()
+	if spectator_mode or my_has_data:
+		return
+
+	var deadline_ms: int = int(Time.get_unix_time_from_system() * 1000.0) + int(game_screen.get_total_time_sec()) * 1000
+	var empty_words: Array[String] = []
+
+	_save_wordbites_progress_snapshot(deadline_ms, empty_words)
+
+	recovered_turn_started = true
+	recovered_deadline_ms = deadline_ms
+	recovered_words.clear()
+
+	await _switch_to_screen(1)
+	await game_screen.start_game(deadline_ms)
 	
 func _on_back_button_pressed() -> void:
 	await _switch_to_screen(2)      # ScoreScreen
@@ -2320,6 +2465,9 @@ func send_game() -> void:
 			" win_loss_state=", win_loss_state
 		])
 
+	my_has_data = true
+	recovered_turn_started = false
+
 	var json := JSON.stringify(payload)
 
 	OpLog.event(LOG_TAG, [
@@ -2333,12 +2481,13 @@ func send_game() -> void:
 		" raw=", json
 	])
 
+	if not game_over:
+		_show_sent_label_immediately()
+
 	send_game_data(json)
 
-	if game_over:
-		stop_waiting_animation()
-	else:
-		play_sent_animation()
+	if appPlugin == null and not game_over:
+		_on_wordbites_send_complete()
 
 func _show_result_from_state(state: String, spectator_winner_player: int = 0) -> void:
 	game_over = true
@@ -2498,6 +2647,53 @@ func check_win() -> bool:
 		_show_result_from_state("0")
 
 	return true
+
+func _show_sent_label_immediately() -> void:
+	if not is_instance_valid(sent_label):
+		return
+
+	stop_waiting_animation()
+
+	if sent_label_tween and sent_label_tween.is_running():
+		sent_label_tween.kill()
+
+	sent_label.text = "Sent"
+	sent_label.visible = true
+	sent_label.modulate.a = 1.0
+	sent_label.scale = Vector2.ONE
+
+func _on_wordbites_send_complete() -> void:
+	recovery_pending_send = false
+
+	if game_over or not is_instance_valid(sent_label):
+		return
+
+	if sent_label_tween and sent_label_tween.is_running():
+		sent_label_tween.kill()
+
+	sent_label.text = "Sent ✔"
+	sent_label.visible = true
+	sent_label.modulate.a = 1.0
+
+	sent_label_tween = create_tween()
+	sent_label_tween.tween_interval(2.0)
+	sent_label_tween.tween_property(sent_label, "modulate:a", 0.0, 0.5)
+	sent_label_tween.tween_callback(func():
+		if is_instance_valid(sent_label):
+			sent_label.visible = false
+			sent_label.modulate.a = 1.0
+		_sync_waiting_animation()
+	)
+
+func _on_wordbites_send_failed() -> void:
+	if sent_label_tween and sent_label_tween.is_running():
+		sent_label_tween.kill()
+
+	if is_instance_valid(sent_label):
+		sent_label.visible = false
+		sent_label.modulate.a = 1.0
+
+	stop_waiting_animation()
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(sent_label):

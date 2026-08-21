@@ -56,6 +56,12 @@ const BOUNCE_SCALE_FACTOR: float = 1.3 # Stones will scale to 120% of their base
 const BOUNCE_DURATION: float = 0.01 # Duration for the initial bounce at pickup (for the very first pickup)
 var sent_tween: Tween
 
+var recovery_turn_num: String = ""
+var recovery_snapshot_pending := false
+var recovery_snapshot_progress := ""
+var recovery_loaded := false
+var recovery_restore_in_progress := false
+
 var _is_animating: bool = false
 var moves_made: Array = []
 var prev_board_str: String = ""
@@ -295,8 +301,17 @@ func _set_game_data(raw_text: String) -> void:
 		OpLog.e(LOG_TAG, ["set_game_data_parse_failed raw=", raw_text])
 		return
 
+	recovery_turn_num = String(res.get("num", ""))
+	recovery_snapshot_pending = String(res.get("_recoveryPending", "false")).to_lower() == "true"
+	recovery_snapshot_progress = String(res.get("_recoveryProgress", ""))
+	recovery_loaded = false
+	recovery_restore_in_progress = false
+
 	OpLog.i(LOG_TAG, [
-		"set_game_data_parsed keys=", (res as Dictionary).keys()
+		"set_game_data_parsed keys=", (res as Dictionary).keys(),
+		" recoveryPending=", recovery_snapshot_pending,
+		" recoveryProgressLen=", recovery_snapshot_progress.length(),
+		" recoveryTurn=", recovery_turn_num
 	])
 	
 	_skip_replay_animation = false
@@ -515,7 +530,10 @@ func _set_game_data(raw_text: String) -> void:
 		" replay_moves=", replay_moves.size(),
 		" prev_board_len=", prev_board_str.length()
 	])
-
+	
+	if await _restore_mancala_recovery():
+		return
+	
 	await check_win()
 
 	if game_over:
@@ -717,6 +735,7 @@ func _on_pit_clicked(idx: int) -> void:
 
 	var pit_offset: int = idx if idx < 6 else idx - 7
 	moves_made.append(str(player) + "," + str(pit_offset))
+	_save_mancala_progress()
 
 	_is_animating = true
 
@@ -764,6 +783,97 @@ func _on_pit_clicked(idx: int) -> void:
 	_is_animating = false
 	if is_my_turn:
 		_start_pit_highlights()
+
+func _restore_mancala_recovery() -> bool:
+	if recovery_loaded or spectator_mode or not is_my_turn or game_over:
+		return false
+
+	if recovery_snapshot_pending:
+		recovery_loaded = true
+		is_my_turn = false
+		_stop_pit_highlights()
+		stop_waiting_animation()
+		return true
+
+	if recovery_snapshot_progress.is_empty():
+		return false
+
+	var parsed: Variant = JSON.parse_string(recovery_snapshot_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+
+	var progress: Dictionary = parsed
+
+	if String(progress.get("phase", "")) != "active":
+		return false
+
+	var saved_turn := String(progress.get("turn", ""))
+	if not saved_turn.is_empty() and not recovery_turn_num.is_empty() and saved_turn != recovery_turn_num:
+		return false
+
+	var raw_moves := String(progress.get("moves", ""))
+	if raw_moves.is_empty():
+		return false
+
+	var saved_moves: Array[String] = []
+	for move in raw_moves.split("|", false):
+		saved_moves.append(String(move))
+
+	recovery_loaded = true
+	recovery_restore_in_progress = true
+	moves_made.clear()
+
+	for move_string in saved_moves:
+		var parts := move_string.split(",", false)
+		if parts.size() < 2:
+			continue
+
+		var move_player := int(parts[0])
+		var pit_offset := int(parts[1])
+		var actual_pit := pit_offset if move_player == 1 else pit_offset + 7
+
+		player_str = move_player
+		moves_made.append(move_string)
+
+		_is_animating = true
+		await _sow_from(actual_pit)
+		_is_animating = false
+
+		if game_over:
+			break
+
+	recovery_restore_in_progress = false
+	player_str = player
+
+	if game_over:
+		_end_turn()
+		return true
+
+	var store_idx := 6 if player == 1 else 13
+
+	if _last_sown_pit == store_idx:
+		is_my_turn = true
+		_start_pit_highlights()
+	else:
+		is_my_turn = false
+		_stop_pit_highlights()
+		_end_turn()
+
+	OpLog.i(LOG_TAG, ["recovery_restored moves=", moves_made.size(), " freeTurn=", _last_sown_pit == store_idx])
+	return true
+
+func _save_mancala_progress() -> void:
+	if recovery_restore_in_progress or spectator_mode or not is_my_turn or appPlugin == null:
+		return
+
+	var progress := {
+		"phase": "active",
+		"turn": recovery_turn_num,
+		"moves": "|".join(moves_made)
+	}
+
+	appPlugin.saveTurnProgress(JSON.stringify(progress))
+	OpLog.i(LOG_TAG, ["recovery_saved moves=", moves_made.size(), " turn=", recovery_turn_num])
 
 func _add_stone_to_pit(pit_idx: int, stone_node: Node2D, stone_label: int) -> void:
 	var pit_container := pit_nodes[pit_idx].get_node("StonesContainer") as Node2D

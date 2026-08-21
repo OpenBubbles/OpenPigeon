@@ -167,6 +167,12 @@ var turn_owner: int = 1
 var my_player: String = ""
 var suppress_next_click: bool = false
 
+var recovery_turn_num: String = ""
+var recovery_snapshot_pending := false
+var recovery_snapshot_progress := ""
+var recovery_restore_in_progress := false
+var recovery_loaded := false
+
 @export_range(0.3, 1.0, 0.01) var piece_fill: float = 0.78
 @export var board_inset: int = 0
 
@@ -1873,6 +1879,7 @@ func _revert_temp_move_if_any() -> void:
 	chain_jump_piece = null
 	clicked_piece = null
 	moves.clear()
+	_save_checkers_idle()
 
 	clear_highlights()
 
@@ -2137,7 +2144,43 @@ func _get_legal_targets_for_piece(piece: Sprite2D, jumps_only: bool = false) -> 
 				out[Vector2i(adj.x, adj.y)] = true
 
 	return out
-	
+
+func _save_checkers_progress() -> void:
+	if recovery_restore_in_progress or spectator_mode or not isTurn or appPlugin == null:
+		return
+
+	var saved_moves: Array[String] = []
+
+	for i in range(0, prev_moves.size(), 2):
+		if i + 1 >= prev_moves.size():
+			break
+
+		var a: Vector2 = prev_moves[i]
+		var b: Vector2 = prev_moves[i + 1]
+		saved_moves.append("%d,%d,%d,%d" % [int(a.x), int(a.y), int(b.x), int(b.y)])
+
+	var progress := {
+		"phase": "pending" if not saved_moves.is_empty() else "idle",
+		"turn": recovery_turn_num,
+		"moves": "|".join(saved_moves)
+	}
+
+	appPlugin.saveTurnProgress(JSON.stringify(progress))
+	OpLog.i(LOG_TAG, ["recovery_saved phase=", progress["phase"], " moves=", saved_moves.size()])
+
+
+func _save_checkers_idle() -> void:
+	if recovery_restore_in_progress or spectator_mode or appPlugin == null:
+		return
+
+	var progress := {
+		"phase": "idle",
+		"turn": recovery_turn_num,
+		"moves": ""
+	}
+
+	appPlugin.saveTurnProgress(JSON.stringify(progress))
+
 func _try_commit_move(
 	piece: Sprite2D,
 	to_lx: int,
@@ -2246,6 +2289,7 @@ func _try_commit_move(
 	)
 
 	has_moved = true
+	_save_checkers_progress()
 
 	var move_tw: Tween = move_piece(
 		piece,
@@ -2369,15 +2413,82 @@ func _try_commit_move(
 			],
 		)
 
-		call_deferred(
-			"_on_send_pressed",
-		)
-
+		if not recovery_restore_in_progress:
+			call_deferred("_on_send_pressed")
 		return
 
 	_update_send_button()
 
 	input_locked = false
+
+func _restore_checkers_recovery() -> bool:
+	if recovery_loaded or spectator_mode or not isTurn or game_over:
+		return false
+
+	if recovery_snapshot_pending:
+		recovery_loaded = true
+		waitingForOpponent = true
+		input_locked = true
+
+		if is_instance_valid(send_button):
+			send_button.visible = false
+			send_button.disabled = true
+
+		if is_instance_valid(turn_hint_label):
+			turn_hint_label.visible = false
+
+		stop_waiting_animation()
+		OpLog.i(LOG_TAG, "recovery_pending_send")
+		return true
+
+	if recovery_snapshot_progress.is_empty():
+		return false
+
+	var parsed: Variant = JSON.parse_string(recovery_snapshot_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+
+	var progress: Dictionary = parsed
+
+	if String(progress.get("phase", "")) != "pending":
+		return false
+
+	var saved_turn := String(progress.get("turn", ""))
+	if not saved_turn.is_empty() and not recovery_turn_num.is_empty() and saved_turn != recovery_turn_num:
+		OpLog.i(LOG_TAG, ["recovery_stale savedTurn=", saved_turn, " currentTurn=", recovery_turn_num])
+		return false
+
+	var raw_moves := String(progress.get("moves", ""))
+	if raw_moves.is_empty():
+		return false
+
+	var restored_moves: Array[String] = raw_moves.split("|", false)
+
+	recovery_loaded = true
+	recovery_restore_in_progress = true
+
+	OpLog.i(LOG_TAG, ["recovery_restore moves=", restored_moves.size()])
+
+	for move_string in restored_moves:
+		var p := move_string.split(",", false)
+		if p.size() < 4:
+			continue
+
+		var from_pos := Vector2i(int(p[0]), int(p[1]))
+		var to_pos := Vector2i(int(p[2]), int(p[3]))
+		var piece := get_node_or_null("PiecesRoot/%d,%d" % [from_pos.x, from_pos.y]) as Sprite2D
+
+		if piece == null:
+			OpLog.w(LOG_TAG, ["recovery missing piece from=", from_pos])
+			continue
+
+		await _try_commit_move(piece, to_pos.x, to_pos.y)
+
+	recovery_restore_in_progress = false
+	input_locked = false
+
+	OpLog.i(LOG_TAG, ["recovery_restored steps=", floori(float(prev_moves.size()) / 2.0), " chain=", chain_jump_piece != null])
+	return true
 
 func _rebuild_from_replay() -> void:
 	OpLog.i(LOG_TAG, ["rebuild_start turn=", isTurn, " spectator=", spectator_mode, " replayLen=", replay.length(), " boards=", replay.count("board:"), " moves=", replay.count("move:") + replay.count("attack:")])
@@ -2578,6 +2689,9 @@ func _rebuild_from_replay() -> void:
 	input_locked = false
 
 	if isTurn and not spectator_mode and not game_over:
+		if await _restore_checkers_recovery():
+			return
+
 		call_deferred("_post_replay_ready")
 		
 func _make_radial_highlight_node() -> Sprite2D:
@@ -2634,6 +2748,14 @@ func _set_game_data(new_replay: String) -> void:
 		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", new_replay])
 		return
 	var data: Dictionary = data_raw
+	
+	recovery_turn_num = String(data.get("num", ""))
+	recovery_snapshot_pending = String(data.get("_recoveryPending", "false")).to_lower() == "true"
+	recovery_snapshot_progress = String(data.get("_recoveryProgress", ""))
+	recovery_restore_in_progress = false
+	recovery_loaded = false
+
+	OpLog.i(LOG_TAG, ["recovery_snapshot pending=", recovery_snapshot_pending, " progressLen=", recovery_snapshot_progress.length(), " turn=", recovery_turn_num])
 
 	isTurn = bool(data.get("isYourTurn", false))
 	replay = String(data.get("replay", ""))

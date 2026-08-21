@@ -1,5 +1,6 @@
 extends Control
 signal time_up
+signal progress_changed
 
 const LETTER_BG: Texture2D = preload("res://anagrams/letter_bg.png")
 
@@ -47,6 +48,8 @@ var _pieces: Array = []
 
 var tile_size: Vector2 = Vector2.ZERO
 var remaining_time: int = TOTAL_TIME_SEC
+var game_deadline_ms: int = 0
+var time_up_emitted := false
 var board_cell_size: Vector2 = Vector2.ZERO
 var board_occupied: Array = []	# [row][col] -> tile Control or null
 
@@ -170,38 +173,71 @@ func _update_word_score_labels() -> void:
 	if score_label:
 		score_label.text = "SCORE: %04d" % displayed_score
 
+func _now_ms() -> int:
+	return int(Time.get_unix_time_from_system() * 1000.0)
 
-func start_game() -> void:
-	if (
-		word_dict.is_empty() or
-		_loaded_dictionary_path != dictionary_path
-	):
+func _sync_remaining_time() -> void:
+	if game_deadline_ms <= 0:
+		remaining_time = TOTAL_TIME_SEC
+	else:
+		var remaining_ms := maxi(0, game_deadline_ms - _now_ms())
+		remaining_time = int((remaining_ms + 999) / 1000)
+	_update_timer_label()
+
+func get_deadline_ms() -> int:
+	return game_deadline_ms
+
+func get_total_time_sec() -> int:
+	return TOTAL_TIME_SEC
+
+func start_game(deadline_ms: int = 0, restored_words: Array[String] = []) -> void:
+	if word_dict.is_empty() or _loaded_dictionary_path != dictionary_path:
 		_load_dictionary()
 
 	selected_indices.clear()
-
 	await get_tree().process_frame
+
 	score = 0
 	displayed_score = 0
 	word_count = 0
 	used_words.clear()
 	word_history.clear()
+	time_up_emitted = false
+	game_deadline_ms = deadline_ms if deadline_ms > 0 else _now_ms() + TOTAL_TIME_SEC * 1000
+
+	for raw_word in restored_words:
+		var word := String(raw_word).strip_edges().to_upper()
+		if word == "" or used_words.has(word):
+			continue
+
+		var points := _get_word_score(word.length())
+		if points <= 0:
+			continue
+
+		used_words[word] = true
+		word_count += 1
+		word_history.append({
+			"word": word,
+			"points": points
+		})
+		score += points
+
+	displayed_score = score
 	_update_word_score_labels()
 	seen_orders.clear()
-
-	remaining_time = TOTAL_TIME_SEC
-	_update_timer_label()
+	_reset_board_state(false)
+	_sync_remaining_time()
 
 	game_timer.stop()
-	game_timer.start()
-	
-	_reset_board_state(false)
 
+	if remaining_time <= 0:
+		call_deferred("_on_time_up")
+	else:
+		game_timer.start()
 
 func _set_displayed_score(value: float) -> void:
 	displayed_score = int(round(value))
 	_update_word_score_labels()
-
 
 func _add_score(points: int, word: String) -> void:
 	if points <= 0:
@@ -383,7 +419,7 @@ func _get_word_score(wlen: int) -> int:
 	elif wlen == 4:
 		return 400
 	elif wlen == 5:
-		return 1200
+		return 800
 	elif wlen == 6:
 		return 1400
 	elif wlen == 7:
@@ -498,6 +534,7 @@ func _process_found_word_with_fx(raw_word: String, row: int, col: int, horizonta
 	var start_pos := _word_center_position(row, col, length, horizontal)
 
 	_score_board_word(word, start_pos)
+	progress_changed.emit()
 
 func get_final_score() -> int:
 	return score
@@ -511,13 +548,14 @@ func get_word_history() -> Array:
 	return word_history.duplicate(true)
 
 func _on_game_timer_timeout() -> void:
-	if remaining_time > 0:
-		remaining_time -= 1
-		_update_timer_label()
+	if time_up_emitted:
+		return
 
-		if remaining_time <= 0:
-			game_timer.stop()
-			_on_time_up()
+	_sync_remaining_time()
+
+	if remaining_time <= 0:
+		game_timer.stop()
+		_on_time_up()
 
 func _update_timer_label() -> void:
 	var mins := int(floor(float(remaining_time) / 60.0))
@@ -525,6 +563,20 @@ func _update_timer_label() -> void:
 	timer_label.text = "[font_size={24px}]%02d:%02d[/font_size]" % [mins, secs]
 
 func _on_time_up() -> void:
+	if time_up_emitted:
+		return
+
+	time_up_emitted = true
+	game_timer.stop()
+	remaining_time = 0
+	_update_timer_label()
+
+	OpLog.event(LOG_TAG, [
+		"time_up score=", score,
+		" word_count=", word_count,
+		" used_words=", used_words.size()
+	])
+
 	emit_signal("time_up")
 
 func _debug_print_order(label: String, tile_buttons: Array, key: String) -> void:

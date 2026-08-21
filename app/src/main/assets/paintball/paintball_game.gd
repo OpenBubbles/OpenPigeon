@@ -153,6 +153,13 @@ var _player_lane: ActionButton3D.Lane = ActionButton3D.Lane.CENTER
 var _selected_shoot: ActionButton3D = null
 var _move_tween: Tween = null
 
+var recovery_turn_num: String = ""
+var recovery_snapshot_pending := false
+var recovery_snapshot_progress := ""
+var recovery_loaded := false
+var recovery_restore_in_progress := false
+var recovery_skip_visual_replay := false
+
 # -------------------------------------------------------------------
 # Round / sequence flags
 # -------------------------------------------------------------------
@@ -584,6 +591,20 @@ func _set_game_data(raw_text: String) -> void:
 	if typeof(parsed) != TYPE_DICTIONARY:
 		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", raw_text])
 		return
+
+	recovery_turn_num = String(parsed.get("num", ""))
+	recovery_snapshot_pending = String(parsed.get("_recoveryPending", "false")).to_lower() == "true"
+	recovery_snapshot_progress = String(parsed.get("_recoveryProgress", ""))
+	recovery_loaded = false
+	recovery_restore_in_progress = false
+	recovery_skip_visual_replay = _get_paintball_recovery_phase() == "locked"
+
+	OpLog.i(LOG_TAG, [
+		"recovery_snapshot pending=", recovery_snapshot_pending,
+		" phase=", _get_paintball_recovery_phase(),
+		" skipVisualReplay=", recovery_skip_visual_replay,
+		" progressLen=", recovery_snapshot_progress.length()
+	])
 		
 	_ensure_modules()
 
@@ -607,14 +628,13 @@ func _set_game_data(raw_text: String) -> void:
 	if states != null:
 		states.set_game_data(raw_text)
 
-	if replay != null and replay.has_method("on_payload_loaded"):
-		replay.call("on_payload_loaded")
-
 	if ui != null:
 		ui.apply_hearts_from_hp()
 
 	if winner != "":
 		_apply_winner_payload(winner)
+	elif await _restore_paintball_recovery():
+		return
 		
 	OpLog.i(LOG_TAG, [
 		"set_game_data_done winner=", winner,
@@ -684,6 +704,7 @@ func _on_button_clicked(b: ActionButton3D) -> void:
 
 	if b.kind == ActionButton3D.ButtonKind.MOVE:
 		buttons.move_player_to_button(b)
+		call_deferred("_save_paintball_selection", "selection")
 		return
 
 	if b.kind == ActionButton3D.ButtonKind.SHOOT:
@@ -700,7 +721,120 @@ func _on_button_clicked(b: ActionButton3D) -> void:
 		])
 
 		ui.show_fire_button(true)
+		_save_paintball_selection("selection")
 		return
+
+func _get_paintball_recovery_phase() -> String:
+	if recovery_snapshot_progress.is_empty():
+		return ""
+
+	var parsed: Variant = JSON.parse_string(recovery_snapshot_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return ""
+
+	return String((parsed as Dictionary).get("phase", ""))
+
+func _save_paintball_selection(phase: String = "selection") -> void:
+	if recovery_restore_in_progress or spectator_mode or not is_my_turn or appPlugin == null:
+		return
+
+	var target_lane := -1
+	if is_instance_valid(_selected_shoot):
+		target_lane = int(_selected_shoot.lane)
+
+	var progress := {
+		"phase": phase,
+		"turn": recovery_turn_num,
+		"moveLane": str(int(_player_lane)),
+		"targetLane": str(target_lane)
+	}
+
+	appPlugin.saveTurnProgress(JSON.stringify(progress))
+	OpLog.i(LOG_TAG, ["recovery_saved phase=", phase, " moveLane=", int(_player_lane), " targetLane=", target_lane])
+
+func _restore_paintball_recovery() -> bool:
+	if recovery_loaded or spectator_mode or not is_my_turn or game_over:
+		return false
+
+	if recovery_snapshot_pending:
+		recovery_loaded = true
+		is_my_turn = false
+		_show_fire_button(false)
+		_set_all_buttons_clickable(false)
+		stop_waiting_animation()
+		OpLog.i(LOG_TAG, "recovery_pending_send")
+		return true
+
+	if recovery_snapshot_progress.is_empty():
+		return false
+
+	var parsed: Variant = JSON.parse_string(recovery_snapshot_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+
+	var progress: Dictionary = parsed
+	var phase := String(progress.get("phase", ""))
+
+	if phase != "selection" and phase != "locked":
+		return false
+
+	var saved_turn := String(progress.get("turn", ""))
+	if not saved_turn.is_empty() and not recovery_turn_num.is_empty() and saved_turn != recovery_turn_num:
+		return false
+
+	return await _apply_paintball_recovery(progress)
+
+func _apply_paintball_recovery(progress: Dictionary) -> bool:
+	var phase := String(progress.get("phase", ""))
+	var move_lane := int(String(progress.get("moveLane", "-1")))
+	var target_lane := int(String(progress.get("targetLane", "-1")))
+
+	recovery_loaded = true
+	recovery_restore_in_progress = true
+
+	if _move_btn_by_lane.has(move_lane):
+		var move_button: ActionButton3D = _move_btn_by_lane[move_lane]
+
+		if is_instance_valid(move_button):
+			buttons.move_player_to_button(move_button)
+
+			while _move_tween != null and _move_tween.is_valid() and _move_tween.is_running():
+				await get_tree().process_frame
+
+	if target_lane >= 0 and _shoot_btn_by_lane.has(target_lane):
+		_selected_shoot = _shoot_btn_by_lane[target_lane]
+
+		if is_instance_valid(_selected_shoot):
+			_require_new_shoot_selection = false
+			_aim_target_world = _selected_shoot.global_position + Vector3(0.0, 0.7, 0.0)
+			buttons.update_shoot_selection_visuals(_selected_shoot)
+
+			if phase == "selection":
+				ui.show_fire_button(true)
+
+	recovery_restore_in_progress = false
+
+	OpLog.i(LOG_TAG, [
+		"recovery_restored phase=", phase,
+		" moveLane=", move_lane,
+		" targetLane=", target_lane,
+		" pendingEnemy=", _pending_enemy_shot
+	])
+
+	if phase == "locked":
+		_show_fire_button(false)
+		_set_all_buttons_clickable(false)
+
+		await get_tree().process_frame
+
+		OpLog.i(LOG_TAG, [
+			"recovery_locked_starting_round pendingEnemy=",
+			_pending_enemy_shot
+		])
+
+		_on_fire_pressed()
+
+	return true
 
 # -------------------------------------------------------------------
 # Fire pressed gatekeeper
@@ -741,6 +875,7 @@ func _on_fire_pressed() -> void:
 
 	var my_pos_int: int = states.lane_to_pos_enc(_player_lane)
 	var my_target_int: int = states.lane_to_target_enc(_selected_shoot.lane)
+	_save_paintball_selection("locked")
 
 	if _pending_enemy_shot:
 		var my_pos_key: String = "pos1" if playernum == 1 else "pos2"

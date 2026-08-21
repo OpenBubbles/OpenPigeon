@@ -59,6 +59,11 @@ var _piece_motion_tween: Tween
 var _local_piece_icon_hidden := false
 var board_state: PackedInt32Array = PackedInt32Array()
 var winner : String = ""
+var recovery_turn_num: String = ""
+var recovery_snapshot_pending := false
+var recovery_snapshot_progress := ""
+var recovery_loaded := false
+var recovery_restore_in_progress := false
 var _highlighted_column: int = -1
 var _column_highlight_rect: ColorRect
 var _column_highlight_tween: Tween
@@ -217,6 +222,18 @@ func _set_game_data(new_replay: String) -> void:
 		return
 
 	var data: Dictionary = parsed
+	
+	recovery_turn_num = String(data.get("num", ""))
+	recovery_snapshot_pending = String(data.get("_recoveryPending", "false")).to_lower() == "true"
+	recovery_snapshot_progress = String(data.get("_recoveryProgress", ""))
+	recovery_loaded = false
+	recovery_restore_in_progress = false
+
+	OpLog.i(LOG_TAG, [
+		"recovery_snapshot pending=", recovery_snapshot_pending,
+		" progressLen=", recovery_snapshot_progress.length(),
+		" turn=", recovery_turn_num
+	])
 	
 	_connect_active_win_burst_avatar = null
 	_clear_connect_win_bursts()
@@ -390,7 +407,8 @@ func _finish_replay_turn_state() -> void:
 		OpLog.event(LOG_TAG, "finish_replay_board_full_draw")
 		_finalize_draw()
 		return
-
+	if _restore_connect4_recovery():
+		return
 	can_interact = (not spectator_mode) and isTurn
 	waitingForOpponent = (not spectator_mode) and (not isTurn)
 
@@ -582,6 +600,25 @@ func _spawn_piece_drop_anim(x: int, pid: int, y: int, apply_id: int) -> void:
 	_check_and_finalize_from_board()
 	_finish_replay_turn_state()
 
+func _save_connect4_progress(col: int, row: int) -> void:
+	if recovery_restore_in_progress or spectator_mode or not isTurn or appPlugin == null:
+		return
+
+	var progress := {
+		"phase": "pending",
+		"turn": recovery_turn_num,
+		"col": str(col),
+		"row": str(row)
+	}
+
+	appPlugin.saveTurnProgress(JSON.stringify(progress))
+
+	OpLog.i(LOG_TAG, [
+		"recovery_saved col=", col,
+		" row=", row,
+		" turn=", recovery_turn_num
+	])
+
 func _place_or_move_piece_to_column(col: int, from_drag: bool) -> void:
 	if _is_blocking_menu_open():
 		OpLog.w(LOG_TAG, ["place_blocked menu_open col=", col, " from_drag=", from_drag])
@@ -652,6 +689,7 @@ func _place_or_move_piece_to_column(col: int, from_drag: bool) -> void:
 		droppedPiece.name = "%d,%d" % [col, row]
 		_set_local_piece_icon_hidden(true)
 		board_state[_idx(col, row)] = pid
+		_save_connect4_progress(col, row)
 
 		if from_drag:
 			droppedPiece.position = _slot_pos(col, row)
@@ -661,6 +699,7 @@ func _place_or_move_piece_to_column(col: int, from_drag: bool) -> void:
 	else:
 		droppedPiece.name = "%d,%d" % [col, row]
 		board_state[_idx(col, row)] = pid
+		_save_connect4_progress(col, row)
 		await _animate_pending_piece_to_slot(droppedPiece, col, row)
 
 	if _check_and_finalize_from_board():
@@ -674,6 +713,85 @@ func _place_or_move_piece_to_column(col: int, from_drag: bool) -> void:
 		await send_game()
 	else:
 		_update_send_button_visibility(true)
+
+func _restore_connect4_recovery() -> bool:
+	if recovery_loaded or spectator_mode or not isTurn or game_over:
+		return false
+
+	if recovery_snapshot_pending:
+		recovery_loaded = true
+		can_interact = false
+		waitingForOpponent = true
+		_update_send_button_visibility(false)
+		stop_waiting_animation()
+		OpLog.i(LOG_TAG, "recovery_pending_send")
+		return true
+
+	if recovery_snapshot_progress.is_empty():
+		return false
+
+	var parsed: Variant = JSON.parse_string(recovery_snapshot_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+
+	var progress: Dictionary = parsed
+
+	if String(progress.get("phase", "")) != "pending":
+		return false
+
+	var saved_turn := String(progress.get("turn", ""))
+	if not saved_turn.is_empty() and not recovery_turn_num.is_empty() and saved_turn != recovery_turn_num:
+		OpLog.i(LOG_TAG, [
+			"recovery_stale savedTurn=", saved_turn,
+			" currentTurn=", recovery_turn_num
+		])
+		return false
+
+	var col := int(String(progress.get("col", "-1")))
+	var row := int(String(progress.get("row", "-1")))
+
+	if col < 0 or col >= BOARD_W or row < 0 or row >= BOARD_H:
+		return false
+
+	if board_state[_idx(col, row)] != 0:
+		OpLog.w(LOG_TAG, ["recovery_slot_not_empty col=", col, " row=", row])
+		return false
+
+	recovery_loaded = true
+	recovery_restore_in_progress = true
+
+	var color := getPlayerColor()
+	var pid := 1 if color == PIECE_YELLOW else 2
+
+	board_state[_idx(col, row)] = pid
+	droppedPiece = _make_board_piece_for_column(col, color)
+	droppedPiece.name = "%d,%d" % [col, row]
+	droppedPiece.position = _slot_pos(col, row)
+	droppedPiece.z_index = 5
+	droppedPiece.set_freeze_enabled(true)
+
+	var col_shape := droppedPiece.get_child(1) as CollisionShape2D
+	col_shape.disabled = false
+
+	_set_local_piece_icon_hidden(true)
+	_highlight_last(droppedPiece)
+
+	recovery_restore_in_progress = false
+	can_interact = true
+	waitingForOpponent = false
+	stop_waiting_animation()
+
+	if _check_and_finalize_from_board():
+		_update_send_button_visibility(false)
+		call_deferred("send_game")
+	elif _is_board_full():
+		_finalize_draw()
+		call_deferred("send_game")
+	else:
+		_update_send_button_visibility(true)
+
+	OpLog.i(LOG_TAG, ["recovery_restored col=", col, " row=", row])
+	return true
 
 func send_game() -> void:
 	if _is_blocking_menu_open():

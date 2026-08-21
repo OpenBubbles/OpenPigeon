@@ -7,6 +7,7 @@ const DEBUG_PONG_BALL := false
 const BALL_TEXTURE_DIR := "res://pong/balls"
 const DEFAULT_BALL_STYLE: int = 1
 const BALL_STYLE_COUNT: int = 21
+const BALL_TEXTURE_ROTATION := Vector3(0.0, 90.0, 60.0)
 
 @export_range(1, BALL_STYLE_COUNT, 1) var ball_style: int = DEFAULT_BALL_STYLE
 
@@ -73,6 +74,8 @@ func set_ball_style(style: int) -> void:
 	if sphere == null:
 		OpLog.w(LOG_TAG, ["ball_style_missing_mesh style=", ball_style])
 		return
+
+	sphere.rotation_degrees = BALL_TEXTURE_ROTATION
 
 	if _ball_material == null:
 		_ball_material = StandardMaterial3D.new()

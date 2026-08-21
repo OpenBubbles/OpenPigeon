@@ -98,6 +98,16 @@ var start_replay_boards: String = "0,1,2,3,4,5,6,7,8,9&0,1,2,3,4,5,6,7,8,9"
 var preview_ball: PongBall = null
 var num_balls: int = 2
 var throws: Array[Dictionary] = []
+
+var recovery_turn_num: String = ""
+var recovery_snapshot_pending := false
+var recovery_snapshot_progress := ""
+var recovery_loaded := false
+var recovery_restore_in_progress := false
+var recovery_key: String = ""
+var _turn_base_boards: String = ""
+const RECOVERY_STORE_PATH := "user://cuppong_recovery.cfg"
+var current_throw_impulse: Vector3 = Vector3.ZERO
 var redemption: bool = false
 var played_replay: bool = false
 var lost: bool = false
@@ -869,6 +879,27 @@ func _set_game_data(new_replay: String):
 		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", new_replay])
 		return
 
+	recovery_turn_num = String(parsed.get("num", ""))
+	recovery_key = "%s:%s:%s" % [
+		String(parsed.get("id", "")),
+		String(parsed.get("seed", "0")),
+		recovery_turn_num
+	]
+	recovery_snapshot_pending = String(parsed.get("_recoveryPending", "false")).to_lower() == "true"
+	recovery_snapshot_progress = _read_recovery_store()
+	recovery_loaded = false
+	recovery_restore_in_progress = false
+	_turn_base_boards = ""
+
+	if recovery_snapshot_progress.is_empty():
+		recovery_snapshot_progress = String(parsed.get("_recoveryProgress", ""))
+
+	OpLog.i(LOG_TAG, [
+		"recovery_input key=", recovery_key,
+		" pending=", recovery_snapshot_pending,
+		" progressLen=", recovery_snapshot_progress.length()
+	])
+
 	dbg(["set_game_data parsed=", parsed])
 	
 	if not is_instance_valid(my_cups):
@@ -887,6 +918,9 @@ func _set_game_data(new_replay: String):
 		])
 		call_deferred("_set_game_data", new_replay)
 		return
+	
+	my_cups.reset_cups([0,1,2,3,4,5,6,7,8,9])
+	replay_cups.reset_cups([0,1,2,3,4,5,6,7,8,9])
 	
 	is_my_turn = parsed["isYourTurn"]
 	player = int(parsed["player"])
@@ -1399,14 +1433,28 @@ func _process_game_state():
 				my_cups.random_positions.clear()
 				replay_cups.random_positions.clear()
 
-			my_cups.prev_cups = my_board
-			my_cups.set_cups_in_play(my_board)
-			replay_cups.set_cups_in_play(other_board)
+			if is_my_turn and _has_cuppong_recovery_throw():
+				OpLog.i(LOG_TAG, [
+					"recovery_skip_opponent_replay throwsPresent=true",
+					" finalBoards=", start_replay_boards
+				])
 
-			if is_my_turn:
+				_apply_cuppong_post_opponent_board(parsed_replay)
+
+				played_replay = true
 				stop_waiting_animation()
-				playReplay(parsed_replay)
-				return
+
+				if _restore_cuppong_recovery():
+					return
+			else:
+				my_cups.prev_cups = my_board.duplicate()
+				my_cups.reset_cups(my_board)
+				replay_cups.reset_cups(other_board)
+
+				if is_my_turn:
+					stop_waiting_animation()
+					playReplay(parsed_replay)
+					return
 		else:
 			if check_winner():
 				return
@@ -1418,23 +1466,14 @@ func _process_game_state():
 			return
 
 		if len(replay_cups.cups_in_play) == 0:
-			if is_instance_valid(redemption_label):
-				if redemption_tween and redemption_tween.is_running():
-					redemption_tween.kill()
+			if redemption_tween and redemption_tween.is_running():
+				redemption_tween.kill()
 
-				redemption_label.visible = true
-				redemption_label.modulate.a = 1.0
-
-				redemption_tween = create_tween().set_parallel(false)
-				redemption_tween.tween_interval(2.0)
-				redemption_tween.tween_property(redemption_label, "modulate:a", 0.0, 0.5)
-				redemption_tween.tween_callback(func():
-					if is_instance_valid(redemption_label):
-						redemption_label.visible = false
-						redemption_label.modulate.a = 1.0
-				)
-
+			redemption_tween = _flash_label(redemption_label)
 			redemption = true
+
+	if _restore_cuppong_recovery():
+		return
 
 	if check_winner():
 		return
@@ -1443,17 +1482,11 @@ func _process_game_state():
 		if current_ball == null:
 			current_ball = spawn_ball()
 
-		if throws.size() == 0 and num_balls > 0 and preview_ball == null:
-			var new_ball: PongBall = ball.duplicate()
-			new_ball.position = player_ball_start_pos + second_ball_offset
-			new_ball.freeze = true
-			new_ball.is_mine = true
-			new_ball.collision_layer = 0
-			new_ball.collision_mask = 0
+		_ensure_preview_ball()
 
-			add_child(new_ball)
-			new_ball.set_ball_style(current_ball_style)
-			preview_ball = new_ball
+		if throws.is_empty():
+			_capture_turn_baseline()
+
 	_apply_debug_hides()
 	_dump_cup_state("cupstate_mine", my_cups)
 	_dump_cup_state("cupstate_replay", replay_cups)
@@ -1467,6 +1500,410 @@ func _process_game_state():
 		" myCups={", _cup_summary(my_cups), "}",
 		" replayCups={", _cup_summary(replay_cups), "}"
 	])
+
+func _vec3_str(v: Vector3) -> String:
+	return "%s,%s,%s" % [str(v.x), str(v.y), str(v.z)]
+
+func _str_vec3(raw: String) -> Vector3:
+	var parts := raw.split(",", false)
+	if parts.size() < 3:
+		return Vector3.INF
+	return Vector3(float(parts[0]), float(parts[1]), float(parts[2]))
+
+func _board_string(cups: Cups) -> String:
+	var parts := PackedStringArray()
+	for cup_idx in cups.cups_in_play:
+		parts.append(str(cup_idx))
+	return ",".join(parts)
+
+func _flash_label(target: Label) -> Tween:
+	if not is_instance_valid(target):
+		return null
+
+	target.visible = true
+	target.modulate.a = 1.0
+
+	var tween := create_tween().set_parallel(false)
+	tween.tween_interval(2.0)
+	tween.tween_property(target, "modulate:a", 0.0, 0.5)
+	tween.tween_callback(func():
+		if is_instance_valid(target):
+			target.visible = false
+			target.modulate.a = 1.0
+	)
+	return tween
+
+func _tween_ball_path(node: PongBall, poses: Array, release_on_jump: bool = false) -> Tween:
+	var tween := create_tween()
+	var previous: Vector3 = node.position
+	var count: int = 0
+
+	for value in poses:
+		if not value is Vector3:
+			continue
+
+		if previous.distance_to(value) > 0.5:
+			if release_on_jump:
+				tween.tween_callback(func():
+					if is_instance_valid(node):
+						node.linear_velocity = Vector3(0.0, -1.0, -1.0)
+						node.freeze = false
+				)
+				count += 1
+			break
+
+		tween.tween_property(node, "position", value, REPLAY_FRAME_DURATION).set_trans(Tween.TRANS_LINEAR)
+		previous = value
+		count += 1
+
+	if count == 0:
+		tween.kill()
+		return null
+
+	return tween
+
+func _await_throw_settle(thrown_ball: PongBall) -> void:
+	var still_time: float = 0.0
+	var elapsed: float = 0.0
+
+	while is_instance_valid(thrown_ball):
+		await get_tree().create_timer(0.1).timeout
+		elapsed += 0.1
+
+		if elapsed < 1.0 or not is_instance_valid(thrown_ball):
+			continue
+
+		var speed: float = thrown_ball.linear_velocity.length()
+		var pos: Vector3 = thrown_ball.global_position
+		var out_of_play: bool = pos.y < -1.2 or pos.z > 0.75 or pos.z < -2.6
+
+		still_time = still_time + 0.1 if speed < 0.08 else 0.0
+
+		if still_time >= 0.4 or out_of_play or elapsed >= 5.0:
+			OpLog.i(LOG_TAG, [
+				"throw_resolved elapsed=", elapsed,
+				" speed=", speed,
+				" stillTime=", still_time,
+				" outOfPlay=", out_of_play,
+				" pos=", pos
+			])
+
+			if is_instance_valid(thrown_ball):
+				thrown_ball.remove()
+			else:
+				throw_finished()
+			return
+
+func _send_turn() -> void:
+	var outgoing := export_replay()
+	OpLog.event(LOG_TAG, ["send_game_out raw=", outgoing])
+	_clear_recovery_store()
+	send_game_data(outgoing)
+
+	is_my_turn = false
+	ball_ready = false
+	current_ball = null
+	dragging = false
+
+	if not game_over:
+		play_sent_animation()
+
+func _write_recovery_store(json: String) -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("cuppong", "key", recovery_key)
+	cfg.set_value("cuppong", "progress", json)
+	cfg.save(RECOVERY_STORE_PATH)
+
+func _read_recovery_store() -> String:
+	var cfg := ConfigFile.new()
+
+	if cfg.load(RECOVERY_STORE_PATH) != OK:
+		return ""
+
+	if String(cfg.get_value("cuppong", "key", "")) != recovery_key:
+		return ""
+
+	return String(cfg.get_value("cuppong", "progress", ""))
+
+func _clear_recovery_store() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("cuppong", "key", "")
+	cfg.set_value("cuppong", "progress", "")
+	cfg.save(RECOVERY_STORE_PATH)
+
+func _boards_string() -> String:
+	return "%s&%s" % [_board_string(my_cups), _board_string(replay_cups)]
+
+func _capture_turn_baseline() -> void:
+	_turn_base_boards = _boards_string()
+	OpLog.i(LOG_TAG, ["recovery_baseline base=", _turn_base_boards])
+
+func _apply_recovery_boards(raw: String, label: String) -> void:
+	var parts := raw.split("&", true)
+
+	if parts.size() < 2:
+		OpLog.w(LOG_TAG, ["recovery_boards_skipped label=", label, " raw=", raw])
+		return
+
+	my_cups.reset_cups(_parse_cuppong_board(String(parts[0])))
+	replay_cups.reset_cups(_parse_cuppong_board(String(parts[1])))
+
+	OpLog.i(LOG_TAG, [
+		"recovery_boards label=", label,
+		" raw=", raw,
+		" my=", my_cups.cups_in_play,
+		" opp=", replay_cups.cups_in_play
+	])
+
+func _encode_poses(poses: Array) -> String:
+	var out := ""
+
+	for pos in poses:
+		if pos is Vector3:
+			out += conv((pos.x + 3.0) / 6.0)
+			out += conv((pos.y + 2.0) * 0.25)
+			out += conv((pos.z + 4.0) * 0.125)
+
+	return out
+
+func _decode_poses(raw: String) -> Array:
+	var out: Array = []
+
+	for idx in range(0, raw.length() - 5, 6):
+		out.append(Vector3(
+			convback(raw.substr(idx, 2)) * 6.0 - 3.0,
+			convback(raw.substr(idx + 2, 2)) * 4.0 - 2.0,
+			convback(raw.substr(idx + 4, 2)) * 8.0 - 4.0
+		))
+
+	return out
+
+func _serialize_cuppong_throws() -> Array:
+	var result: Array = []
+
+	for move in throws:
+		result.append("%d,%s,%s,%s,%s" % [
+			int(move.get("cup", -1)),
+			str(float(move.get("ix", 0.0))),
+			str(float(move.get("iy", 0.0))),
+			str(float(move.get("iz", 0.0))),
+			_encode_poses(move.get("poses", []))
+		])
+
+	return result
+
+func _deserialize_cuppong_throws(raw: Variant) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+
+	if typeof(raw) != TYPE_ARRAY:
+		return result
+
+	for entry in raw:
+		var parts := String(entry).split(",", true)
+
+		if parts.size() < 5:
+			continue
+
+		result.append({
+			"poses": _decode_poses(String(parts[4])),
+			"cup": int(parts[0]),
+			"ix": float(parts[1]),
+			"iy": float(parts[2]),
+			"iz": float(parts[3])
+		})
+
+	return result
+
+func _save_cuppong_progress(phase: String, impulse: Vector3 = Vector3.ZERO, start: Vector3 = Vector3.INF) -> void:
+	if recovery_restore_in_progress or spectator_mode or not is_my_turn or game_over:
+		return
+
+	if _turn_base_boards.is_empty():
+		_capture_turn_baseline()
+
+	var progress := {
+		"phase": phase,
+		"turn": recovery_turn_num,
+		"throws": _serialize_cuppong_throws(),
+		"numBalls": num_balls,
+		"redemption": redemption,
+		"base": _turn_base_boards,
+		"now": _boards_string()
+	}
+
+	if phase == "throw":
+		progress["start"] = _vec3_str(start if start.is_finite() else player_ball_start_pos)
+		progress["impulse"] = _vec3_str(impulse)
+
+	var json := JSON.stringify(progress)
+	_write_recovery_store(json)
+
+	if appPlugin != null:
+		appPlugin.saveTurnProgress(json)
+
+	OpLog.i(LOG_TAG, [
+		"recovery_saved phase=", phase,
+		" throws=", throws.size(),
+		" numBalls=", num_balls,
+		" base=", _turn_base_boards,
+		" now=", progress["now"],
+		" bytes=", json.length()
+	])
+
+func _restore_cuppong_recovery() -> bool:
+	if recovery_loaded or spectator_mode or not is_my_turn or game_over:
+		return false
+
+	if recovery_snapshot_pending:
+		recovery_loaded = true
+		ball_ready = false
+		current_ball = null
+		dragging = false
+		stop_waiting_animation()
+		OpLog.i(LOG_TAG, "recovery_pending_send")
+		return true
+
+	if recovery_snapshot_progress.is_empty():
+		return false
+
+	var parsed: Variant = JSON.parse_string(recovery_snapshot_progress)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+
+	var progress: Dictionary = parsed
+	var phase := String(progress.get("phase", ""))
+
+	if phase != "active" and phase != "throw":
+		return false
+
+	var saved_turn := String(progress.get("turn", ""))
+	if not saved_turn.is_empty() and not recovery_turn_num.is_empty() and saved_turn != recovery_turn_num:
+		return false
+
+	recovery_loaded = true
+	recovery_restore_in_progress = true
+
+	throws = _deserialize_cuppong_throws(progress.get("throws", []))
+	num_balls = int(progress.get("numBalls", num_balls))
+	redemption = bool(progress.get("redemption", redemption))
+
+	for child in get_children():
+		if child is PongBall and child != ball:
+			child.queue_free()
+
+	current_ball = null
+	preview_ball = null
+	ball_ready = false
+	dragging = false
+
+	OpLog.i(LOG_TAG, [
+		"recovery_loaded phase=", phase,
+		" throws=", throws.size(),
+		" numBalls=", num_balls,
+		" myCupsBaseline=", my_cups.cups_in_play if is_instance_valid(my_cups) else [],
+		" replayCupsBaseline=", replay_cups.cups_in_play if is_instance_valid(replay_cups) else []
+	])
+
+	call_deferred("_run_cuppong_recovery", progress)
+	return true
+
+func _run_cuppong_recovery(progress: Dictionary) -> void:
+	var phase := String(progress.get("phase", ""))
+
+	_turn_base_boards = String(progress.get("base", ""))
+	_apply_recovery_boards(_turn_base_boards, "base")
+
+	camera.position = _cam_pos(CUPPONG_CAM_THROW)
+
+	await _replay_recovered_local_throws()
+
+	_apply_recovery_boards(String(progress.get("now", "")), "now")
+
+	if not redemption and throws.size() + (1 if phase == "throw" else 0) == 1:
+		num_balls = maxi(num_balls, 1)
+
+	recovery_restore_in_progress = false
+
+	OpLog.i(LOG_TAG, [
+		"recovery_resume phase=", phase,
+		" throws=", throws.size(),
+		" numBalls=", num_balls,
+		" myCups=", my_cups.cups_in_play,
+		" oppCups=", replay_cups.cups_in_play
+	])
+
+	if phase == "throw":
+		var start := _str_vec3(String(progress.get("start", "")))
+
+		if not start.is_finite():
+			start = player_ball_start_pos
+
+		current_throw_impulse = _str_vec3(String(progress.get("impulse", "")))
+
+		if not current_throw_impulse.is_finite():
+			current_throw_impulse = Vector3.ZERO
+
+		_ensure_preview_ball()
+
+		var thrown_ball: PongBall = ball.duplicate()
+		thrown_ball.position = start
+		thrown_ball.freeze = false
+		thrown_ball.is_mine = true
+		thrown_ball.thrown = true
+
+		add_child(thrown_ball)
+		thrown_ball.set_ball_style(current_ball_style)
+
+		thrown_ball.linear_velocity = Vector3.ZERO
+		thrown_ball.angular_velocity = Vector3.ZERO
+		thrown_ball.apply_impulse(current_throw_impulse)
+
+		await _await_throw_settle(thrown_ball)
+		return
+
+	if num_balls > 0:
+		current_ball = spawn_ball()
+	else:
+		_send_turn()
+
+func _replay_recovered_local_throws() -> void:
+	if throws.is_empty():
+		return
+
+	OpLog.i(LOG_TAG, [
+		"recovery_local_replay_start throws=", throws.size(),
+		" targetCups=", my_cups.cups_in_play
+	])
+
+	for move: Dictionary in throws:
+		var poses: Array = move.get("poses", [])
+		var cup_idx := int(move.get("cup", -1))
+
+		if not poses.is_empty():
+			var replay_ball: PongBall = ball.duplicate()
+			replay_ball.position = poses[0]
+			replay_ball.freeze = true
+			replay_ball.is_mine = false
+			replay_ball.collision_layer = 0
+			replay_ball.collision_mask = 0
+
+			add_child(replay_ball)
+			replay_ball.set_ball_style(current_ball_style)
+
+			var tween := _tween_ball_path(replay_ball, poses)
+
+			if tween != null:
+				await tween.finished
+
+			replay_ball.queue_free()
+
+		if cup_idx >= 0:
+			my_cups.remove_cup(cup_idx + 1)
+			await get_tree().create_timer(0.45).timeout
+
+		await get_tree().create_timer(0.25).timeout
+
+	OpLog.i(LOG_TAG, ["recovery_local_replay_done targetCups=", my_cups.cups_in_play])
 
 func _should_award_balls_back() -> bool:
 	if throws.size() < 2:
@@ -1500,12 +1937,13 @@ func throw_finished():
 		" redemption=", redemption,
 		" myCups=", my_cups.cups_in_play if is_instance_valid(my_cups) else []
 	])
-	
-	var rack_cleared: bool = (
-		is_instance_valid(my_cups)
-		and my_cups.cups_in_play.is_empty()
-	)
 
+	if throws.size() > 0:
+		throws[-1]["ix"] = current_throw_impulse.x
+		throws[-1]["iy"] = current_throw_impulse.y
+		throws[-1]["iz"] = current_throw_impulse.z
+
+	var rack_cleared: bool = is_instance_valid(my_cups) and my_cups.cups_in_play.is_empty()
 	var award_balls_back: bool = _should_award_balls_back()
 
 	OpLog.i(LOG_TAG, [
@@ -1516,45 +1954,19 @@ func throw_finished():
 	])
 
 	if award_balls_back:
-		if is_instance_valid(balls_back_label):
-			if balls_back_tween and balls_back_tween.is_running():
-				balls_back_tween.kill()
+		if balls_back_tween and balls_back_tween.is_running():
+			balls_back_tween.kill()
 
-			balls_back_label.visible = true
-			balls_back_label.modulate.a = 1.0
-
-			balls_back_tween = create_tween().set_parallel(false)
-			balls_back_tween.tween_interval(2.0)
-			balls_back_tween.tween_property(
-				balls_back_label,
-				"modulate:a",
-				0.0,
-				0.5
-			)
-			balls_back_tween.tween_callback(func():
-				if is_instance_valid(balls_back_label):
-					balls_back_label.visible = false
-					balls_back_label.modulate.a = 1.0
-			)
-
+		balls_back_tween = _flash_label(balls_back_label)
 		num_balls = 2
 	elif rack_cleared:
 		num_balls = 0
 
 	if redemption and throws.size() > 0:
-		var last_cup: int = int(throws[-1].get("cup", -1))
-
-		if last_cup == -1:
+		if int(throws[-1].get("cup", -1)) == -1:
 			lost = true
-
-			var outgoing := export_replay()
 			_handle_game_over_i_lost()
-
-			OpLog.event(LOG_TAG, [
-				"send_game_out redemption_loss raw=", outgoing
-			])
-
-			send_game_data(outgoing)
+			_send_turn()
 			return
 
 		if rack_cleared:
@@ -1569,55 +1981,84 @@ func throw_finished():
 
 			num_balls = 0
 
-	if num_balls > 0 and not game_over:
-		if preview_ball != null and is_instance_valid(preview_ball):
-			var b := preview_ball
-			preview_ball = null
+	if game_over:
+		return
 
-			b.freeze = true
-			b.collision_layer = 0
-			b.collision_mask = 0
+	_save_cuppong_progress("active")
 
-			var tween := create_tween()
-			tween.tween_property(
-				b, "position", player_ball_start_pos, 0.35
-			).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	if num_balls <= 0:
+		_send_turn()
+		return
 
-			tween.tween_callback(func():
-				if is_instance_valid(b):
-					b.freeze = false
-					b.is_mine = true
-					b.collision_layer = ball.collision_layer
-					b.collision_mask = ball.collision_mask
-					current_ball = b
-					ball_ready = true
-					num_balls -= 1
-			)
-		else:
-			current_ball = spawn_ball()
-	elif not game_over:
-		var outgoing := export_replay()
-		OpLog.event(LOG_TAG, ["send_game_out turn_end raw=", outgoing])
-		send_game_data(outgoing)
-		is_my_turn = false
-		ball_ready = false
-		current_ball = null
-		dragging = false
+	if preview_ball != null and is_instance_valid(preview_ball):
+		var b := preview_ball
+		preview_ball = null
 
-		if not game_over:
-			play_sent_animation()
+		b.freeze = true
+		b.collision_layer = 0
+		b.collision_mask = 0
 
-func export_board(exp_player: int):
-	var board: Array
-	if player == exp_player:
-		board = my_cups.cups_in_play
+		var tween := create_tween()
+		tween.tween_property(b, "position", player_ball_start_pos, 0.35).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		tween.tween_callback(func():
+			if is_instance_valid(b):
+				b.freeze = false
+				b.is_mine = true
+				b.collision_layer = ball.collision_layer
+				b.collision_mask = ball.collision_mask
+				current_ball = b
+				ball_ready = true
+				num_balls -= 1
+		)
 	else:
-		board = replay_cups.cups_in_play
-	
-	var result = ""
-	for cup_idx in board:
-		result += str(cup_idx)+","
-	return result.substr(0, len(result)-1)
+		current_ball = spawn_ball()
+
+func _apply_post_replay_board_state() -> void:
+	if start_replay_boards.is_empty():
+		return
+
+	var boards := start_replay_boards.split("&", true)
+
+	if boards.size() < 2:
+		OpLog.w(LOG_TAG, [
+			"post_replay_board_invalid raw=",
+			start_replay_boards
+		])
+		return
+
+	var p1_board: Array = _parse_cuppong_board(String(boards[0]))
+	var p2_board: Array = _parse_cuppong_board(String(boards[1]))
+
+	var my_board: Array
+	var other_board: Array
+
+	if player == 1:
+		my_board = p1_board
+		other_board = p2_board
+	else:
+		my_board = p2_board
+		other_board = p1_board
+
+	OpLog.i(LOG_TAG, [
+		"post_replay_board_apply player=", player,
+		" myBoard=", my_board,
+		" otherBoard=", other_board,
+		" beforeMy=", my_cups.cups_in_play,
+		" beforeReplay=", replay_cups.cups_in_play
+	])
+
+	my_cups.reset_cups(my_board)
+	replay_cups.reset_cups(other_board)
+
+	OpLog.i(LOG_TAG, [
+		"post_replay_board_applied myCups=",
+		my_cups.cups_in_play,
+		" replayCups=",
+		replay_cups.cups_in_play
+	])
+
+func export_board(exp_player: int) -> String:
+	return _board_string(my_cups if player == exp_player else replay_cups)
 
 func export_replay() -> String:
 	var replay_str = str("board:", start_replay_boards, "|")
@@ -1658,6 +2099,75 @@ func export_replay() -> String:
 	])
 	return out_json
 
+func _has_cuppong_recovery_throw() -> bool:
+	if recovery_snapshot_progress.is_empty():
+		return false
+
+	var parsed: Variant = JSON.parse_string(recovery_snapshot_progress)
+
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+
+	var progress: Dictionary = parsed
+	var phase := String(progress.get("phase", ""))
+
+	if phase == "throw":
+		return true
+
+	if phase == "active":
+		var saved_throws: Variant = progress.get("throws", [])
+
+		if typeof(saved_throws) == TYPE_ARRAY:
+			return not (saved_throws as Array).is_empty()
+
+	return false
+
+func _parse_cuppong_board(raw: String) -> Array:
+	var result: Array = []
+
+	if raw.is_empty():
+		return result
+
+	for value in raw.split(",", false):
+		if not String(value).is_empty():
+			result.append(int(value))
+
+	return result
+
+func _apply_cuppong_post_opponent_board(parsed_replay: Dictionary) -> void:
+	var p1_board: Array = parsed_replay.get("p1_board", []).duplicate()
+	var p2_board: Array = parsed_replay.get("p2_board", []).duplicate()
+
+	if not start_replay_boards.is_empty():
+		var boards := start_replay_boards.split("&", true)
+
+		if boards.size() > 0:
+			p1_board = _parse_cuppong_board(String(boards[0]))
+
+		if boards.size() > 1:
+			p2_board = _parse_cuppong_board(String(boards[1]))
+
+	var my_board: Array
+	var other_board: Array
+
+	if player == 1:
+		my_board = p1_board
+		other_board = p2_board
+	else:
+		my_board = p2_board
+		other_board = p1_board
+
+	my_cups.prev_cups = my_board.duplicate()
+	my_cups.reset_cups(my_board)
+	replay_cups.reset_cups(other_board)
+
+	OpLog.i(LOG_TAG, [
+		"recovery_baseline_applied my=", my_board,
+		" other=", other_board,
+		" myCups=", my_cups.cups_in_play,
+		" replayCups=", replay_cups.cups_in_play
+	])
+
 func conv(input_float: float) -> String:
 	var max_encoded_integer_value = CHARMAP_LEN * CHARMAP_LEN - 1
 	var combined_idx_float = input_float * float(max_encoded_integer_value)
@@ -1675,6 +2185,21 @@ func convback(enc: String) -> float:
 	var first_idx = CHARMAP.find(enc[0])
 	var second_idx = CHARMAP.find(enc[1])
 	return float(second_idx + first_idx * CHARMAP_LEN) / float(CHARMAP_LEN * CHARMAP_LEN - 1)
+
+func _ensure_preview_ball() -> void:
+	if not throws.is_empty() or num_balls <= 0 or preview_ball != null:
+		return
+
+	var new_ball: PongBall = ball.duplicate()
+	new_ball.position = player_ball_start_pos + second_ball_offset
+	new_ball.freeze = true
+	new_ball.is_mine = true
+	new_ball.collision_layer = 0
+	new_ball.collision_mask = 0
+
+	add_child(new_ball)
+	new_ball.set_ball_style(current_ball_style)
+	preview_ball = new_ball
 
 func spawn_ball(is_replay: bool = false) -> RigidBody3D:
 	var new_ball: PongBall = ball.duplicate()
@@ -1700,8 +2225,16 @@ func spawn_ball(is_replay: bool = false) -> RigidBody3D:
 
 func playReplay(parsed: Dictionary):
 	camera.position = _cam_pos(CUPPONG_CAM_REPLAY)
-	
+
 	var moves = parsed["moves"]
+
+	if moves.is_empty():
+		OpLog.i(LOG_TAG, "play_replay_no_moves_apply_final_board")
+
+		_apply_post_replay_board_state()
+		played_replay = true
+		_process_game_state()
+		return
 	
 	OpLog.i(LOG_TAG, [
 		"play_replay_start moves=", moves.size(),
@@ -1735,29 +2268,13 @@ func playReplay(parsed: Dictionary):
 
 		new_ball.position = move_cleaned[0]
 		
-		var tween = create_tween()
-		
-		var current_pos: Vector3 = new_ball.position
-		
-		for i in range(len(move_cleaned)):
-			var next_val = move_cleaned[i]
-			if next_val is Vector3:
-				var next_pos = next_val
-				
-				if current_pos.distance_to(next_pos) > 0.5:
-					tween.tween_callback(func():
-						new_ball.linear_velocity = Vector3(0.0, -1, -1)
-						new_ball.freeze = false
-					)
-					break
-
-				tween.tween_property(
-					new_ball, "position", next_pos, REPLAY_FRAME_DURATION
-				).set_trans(Tween.TRANS_LINEAR)
-				current_pos = next_pos
-
+		var tween := _tween_ball_path(new_ball, move_cleaned, true)
 		var is_final_move: bool = (idx + 1 == len(moves))
-		tween.finished.connect(_on_replay_finished.bind(new_ball, move, is_final_move))
+
+		if tween == null:
+			_on_replay_finished(new_ball, move, is_final_move)
+		else:
+			tween.finished.connect(_on_replay_finished.bind(new_ball, move, is_final_move))
 
 func _on_replay_finished(new_ball: PongBall, move: Array, final_move: bool):
 	if move[-1] is int:
@@ -1786,8 +2303,14 @@ func _on_replay_finished(new_ball: PongBall, move: Array, final_move: bool):
 
 		await cam_tween.finished
 		
+		_apply_post_replay_board_state()
+
 		OpLog.i(LOG_TAG, [
-			"play_replay_done replayCups={", _cup_summary(replay_cups), "}"
+			"play_replay_done myCups={",
+			_cup_summary(my_cups),
+			"} replayCups={",
+			_cup_summary(replay_cups),
+			"}"
 		])
 
 		played_replay = true
@@ -2011,8 +2534,8 @@ func _throw_release(
 	dragging = false
 
 	var flick_world: Vector3 = (
-		_drag_world_filtered -
-		_drag_world_current
+		_drag_world_current -
+		_drag_world_filtered
 	)
 
 	flick_world.y = 0.0
@@ -2230,18 +2753,14 @@ func _throw_release(
 		)
 
 	var thrown_ball: PongBall = current_ball
+	var committed_impulse := Vector3(fx_impulse, fy_impulse, fz_impulse)
+	current_throw_impulse = committed_impulse
+	_save_cuppong_progress("throw", committed_impulse, thrown_ball.position)
 
 	thrown_ball.freeze = false
 	thrown_ball.linear_velocity = Vector3.ZERO
 	thrown_ball.angular_velocity = Vector3.ZERO
-
-	thrown_ball.apply_impulse(
-		Vector3(
-			fx_impulse,
-			fy_impulse,
-			fz_impulse
-		)
-	)
+	thrown_ball.apply_impulse(committed_impulse)
 
 	thrown_ball.thrown = true
 
@@ -2289,63 +2808,4 @@ func _throw_release(
 			)
 	])
 
-	var min_wait_time: float = 1.0
-	var max_wait_time: float = 5.0
-	var still_time: float = 0.0
-	var elapsed: float = 0.0
-
-	while is_instance_valid(thrown_ball):
-		await get_tree().create_timer(
-			0.1
-		).timeout
-
-		elapsed += 0.1
-
-		if elapsed < min_wait_time:
-			continue
-
-		var speed: float = (
-			thrown_ball.linear_velocity.length()
-		)
-
-		var too_slow: bool = speed < 0.08
-
-		var out_of_play: bool = (
-			thrown_ball.global_position.y < -1.2 or
-			thrown_ball.global_position.z > 0.75 or
-			thrown_ball.global_position.z < -2.6
-		)
-
-		if too_slow:
-			still_time += 0.1
-		else:
-			still_time = 0.0
-
-		if (
-			still_time >= 0.4 or
-			out_of_play or
-			elapsed >= max_wait_time
-		):
-			OpLog.i(LOG_TAG, [
-				"throw_resolved elapsed=",
-					elapsed,
-				" speed=",
-					speed,
-				" stillTime=",
-					still_time,
-				" outOfPlay=",
-					out_of_play,
-				" pos=",
-					thrown_ball.global_position
-					if is_instance_valid(
-						thrown_ball
-					)
-					else Vector3.ZERO
-			])
-
-			if is_instance_valid(thrown_ball):
-				thrown_ball.remove()
-			else:
-				throw_finished()
-
-			return
+	await _await_throw_settle(thrown_ball)
