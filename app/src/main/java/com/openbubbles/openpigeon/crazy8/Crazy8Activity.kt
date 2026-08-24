@@ -3,111 +3,138 @@ package com.openbubbles.openpigeon.crazy8
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
+import android.graphics.BitmapFactory
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.Build
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.os.SystemClock
-import com.openbubbles.openpigeon.util.OpenPigeonLog
-import androidx.core.content.edit
+import android.util.Base64
+import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.animation.core.LinearEasing
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
+import androidx.core.content.edit
+import androidx.core.graphics.drawable.toDrawable
+import com.openbubbles.openpigeon.BuildConfig
+import com.openbubbles.openpigeon.R
+import com.openbubbles.openpigeon.godot.GameSessionIPC
+import com.openbubbles.openpigeon.settings.AvatarData
+import com.openbubbles.openpigeon.settings.AvatarView
+import com.openbubbles.openpigeon.settings.AvatarWinBurstOverlay
 import com.openbubbles.openpigeon.ui.GameMenuController
 import com.openbubbles.openpigeon.ui.GameMenuPlacement
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.VectorConverter
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.foundation.layout.BoxWithConstraints
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Path
-import kotlin.math.sqrt
-import kotlinx.coroutines.delay
-import com.openbubbles.openpigeon.godot.GameSessionIPC
+import com.openbubbles.openpigeon.ui.RulesPopup
+import com.openbubbles.openpigeon.util.OpenPigeonLog
 import com.playerio.Callback
 import com.playerio.Client
 import com.playerio.Connection
@@ -116,53 +143,23 @@ import com.playerio.Message
 import com.playerio.MessageListener
 import com.playerio.PlayerIO
 import com.playerio.PlayerIOError
-import kotlin.math.min
-import androidx.core.graphics.drawable.toDrawable
-import android.util.Base64
-import androidx.compose.runtime.snapshots.SnapshotStateMap
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.unit.Density
-import kotlin.math.abs
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
-import com.openbubbles.openpigeon.BuildConfig
-import android.graphics.BitmapFactory
-import android.widget.FrameLayout
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.IconButton
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.viewinterop.AndroidView
-import com.openbubbles.openpigeon.settings.AvatarData
-import com.openbubbles.openpigeon.settings.AvatarView
-import kotlin.apply
-import kotlin.toString
-import androidx.compose.ui.res.painterResource
-import com.openbubbles.openpigeon.R
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.zIndex
-import com.openbubbles.openpigeon.ui.RulesPopup
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.unit.IntOffset
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.min
 import kotlin.math.roundToInt
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
+import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.time.Duration.Companion.milliseconds
-import androidx.compose.foundation.layout.requiredSize
-import com.openbubbles.openpigeon.settings.AvatarWinBurstOverlay
 
 class CrazyParticipant(
     name: String,
@@ -170,16 +167,18 @@ class CrazyParticipant(
     val isMe: Boolean,
     ready: Boolean,
     avatar: String = "",
+    wins: Int = 0,
 ) {
     var name by mutableStateOf(name)
     var ready by mutableStateOf(ready)
     var cardCount by mutableIntStateOf(0)
     var avatar by mutableStateOf(avatar)
+    var wins by mutableIntStateOf(wins)
 }
 
 data class CrazyMessage(val message: String, val sender: CrazyParticipant)
 
-data class CrazyCard(val rank: Int, val file: Int) {
+data class CrazyCard(val rank: Int, val file: Int, val wireFile: Int = file) {
     companion object {
         private fun normalizeFile(file: Int): Int {
             return when (file) {
@@ -193,16 +192,14 @@ data class CrazyCard(val rank: Int, val file: Int) {
 
         fun parse(data: String): CrazyCard {
             val parts = data.split(",")
-            return CrazyCard(parts[0].toInt(), normalizeFile(parts[1].toInt()))
+            val wireFile = parts[1].toInt()
+            return CrazyCard(parts[0].toInt(), normalizeFile(wireFile), wireFile)
         }
     }
 
     fun isCompatibleWith(other: CrazyCard): Boolean {
-        // equal rank
         if (other.rank == rank) return true
-        // equal file
         if (other.file == file) return true
-        // wildcard
         if (other.rank == 5 || rank == 5) return true
         return false
     }
@@ -220,7 +217,7 @@ data class CrazyCard(val rank: Int, val file: Int) {
     }
 
     fun encode(): String {
-        return "$rank,$file"
+        return "$rank,$wireFile"
     }
 }
 
@@ -234,6 +231,7 @@ class CrazyGame(
     var turn by mutableStateOf(turn)
     var card by mutableStateOf(card)
     var clockwise by mutableStateOf(clockwise)
+    var penaltyFile by mutableIntStateOf(0)
 }
 
 private const val CRAZY8_VERBOSE_LOGS = false
@@ -333,6 +331,7 @@ private fun buildCrazyGameFromSections(
     cardStateSection: String,
     turnId: Int,
     clockwise: Boolean,
+    chain: Int = 0,
 ): CrazyGame {
     val participantIds = participantIdsSection.split(",").mapNotNull {
         it.toIntOrNull()
@@ -369,13 +368,16 @@ private fun buildCrazyGameFromSections(
         ),
     )
 
-    return CrazyGame(
+    val game = CrazyGame(
         participants = gameParticipants,
         turn = turn,
         card = currentCard,
         hand = myCards,
         clockwise = clockwise,
     )
+
+    game.penaltyFile = if (chain > 0 && currentCard.file in 13..14) currentCard.file else 0
+    return game
 }
 
 private fun <T> showTimedFx(
@@ -501,7 +503,8 @@ class Crazy8Activity : ComponentActivity() {
     fun onSettingsClosed() {
         refreshSettingsSheetValues()
 
-        val currentPacked = legacyAvatarStringForCrazy8(name ?: "Player")
+        val roomWins = participants.find { it.id == myId }?.wins ?: 0
+        val currentPacked = legacyAvatarStringForCrazy8(name ?: "Player", roomWins)
         if (currentPacked != settingsIdentityBeforeOpen) {
             sendAvatarUpdate()
         }
@@ -589,7 +592,7 @@ class Crazy8Activity : ComponentActivity() {
                     OpenPigeonLog.e("Crazy8", "Async operation failed", e)
                 }
             }
-        } catch (e: RejectedExecutionException) {
+        } catch (_: RejectedExecutionException) {
             OpenPigeonLog.w("Crazy8", "Dropped async send after executor shutdown")
         }
     }
@@ -910,14 +913,19 @@ class Crazy8Activity : ComponentActivity() {
     @Volatile
     var lastBroadcastedAvatar: String? = null
 
+    @Volatile
+    var lastKnownWins: Int = 0
+
     fun applyPackedIdentityUpdate(senderId: Int, packed: String, includeSelf: Boolean = false) {
         val updatedAvatar = avatarStringForLobby(packed)
         val updatedName = extractCrazy8DisplayName(packed)
+        val updatedWins = extractCrazy8Wins(packed)
 
         participants.find { it.id == senderId }?.let { participant ->
             if (includeSelf || !participant.isMe) {
                 participant.avatar = updatedAvatar
                 participant.name = updatedName
+                participant.wins = maxOf(participant.wins, updatedWins)
             }
         }
 
@@ -925,13 +933,19 @@ class Crazy8Activity : ComponentActivity() {
             if (includeSelf || !participant.isMe) {
                 participant.avatar = updatedAvatar
                 participant.name = updatedName
+                participant.wins = maxOf(participant.wins, updatedWins)
             }
         }
     }
 
     fun sendAvatarUpdate() {
         val connection = currentConnection ?: return
-        val packed = legacyAvatarStringForCrazy8(name ?: "Player")
+        val roomWins = maxOf(
+            participants.find { it.id == myId }?.wins ?: 0,
+            lastKnownWins,
+        )
+        lastKnownWins = roomWins
+        val packed = legacyAvatarStringForCrazy8(name ?: "Player", roomWins)
         if (packed == lastBroadcastedAvatar) return
 
         lastBroadcastedAvatar = packed
@@ -957,6 +971,7 @@ class Crazy8Activity : ComponentActivity() {
             isMe = id == myId,
             ready = ready,
             avatar = avatarStringForLobby(data),
+            wins = extractCrazy8Wins(data),
         )
     }
 
@@ -971,6 +986,7 @@ class Crazy8Activity : ComponentActivity() {
             existing.name = incoming.name
             existing.avatar = incoming.avatar
             existing.ready = incoming.ready
+            existing.wins = maxOf(existing.wins, incoming.wins)
         }
     }
 
@@ -1048,12 +1064,6 @@ class Crazy8Activity : ComponentActivity() {
         connection.send("p")
         lastBroadcastedAvatar = null
 
-        if (myId != 0) {
-            val packed = legacyAvatarStringForCrazy8(name ?: "Player")
-            applyPackedIdentityUpdate(myId, packed, includeSelf = true)
-        }
-
-        sendAvatarUpdate()
         connection.addMessageListener("*", object : MessageListener() {
             override fun onMessage(message: Message?) {
                 if (CRAZY8_VERBOSE_LOGS) {
@@ -1068,8 +1078,6 @@ class Crazy8Activity : ComponentActivity() {
                             val parts = it.split("&")
                             parseParticipant(parts[0].toInt(), parts[1], parts[2] == "1")
                         }.distinctBy { it.id })
-                        val currentPacked = legacyAvatarStringForCrazy8(name ?: "Player")
-                        applyPackedIdentityUpdate(myId, currentPacked, includeSelf = true)
                         if (message.type == "game_list") {
                             label = null
                             val reverse = message.getBoolean(5)
@@ -1084,7 +1092,8 @@ class Crazy8Activity : ComponentActivity() {
                                 participantIdsSection = message.getString(2),
                                 cardStateSection = message.getString(3),
                                 turnId = message.getInt(4),
-                                clockwise = !reverse
+                                clockwise = !reverse,
+                                chain = chain,
                             )
                         }
                     }
@@ -1129,6 +1138,8 @@ class Crazy8Activity : ComponentActivity() {
                             game.turn = nextTurn
 
                             val move = message.getString(1).split("|")
+                            val moveType = move.getOrNull(1)
+                            val hasForcedDraw = moveType == "c"
                             var playedFile = -1
 
                             if (move[0] != "-1,-1") {
@@ -1156,7 +1167,7 @@ class Crazy8Activity : ComponentActivity() {
                                 moved.cardCount -= 1
                                 if (moved.cardCount == 0) {
                                     winnerParticipantId = moved.id
-
+                                    moved.wins += 1
                                     label = "${if (moved.isMe) "You" else moved.name} won!"
 
                                     Handler(
@@ -1180,19 +1191,23 @@ class Crazy8Activity : ComponentActivity() {
                             if (move.size == 1) {
                                 // handled
                             } else if (move[1] == "d") {
-                                moved.cardCount += move.size - 2 // card, d
+                                val addedCount = move.size - 2
+                                moved.cardCount += addedCount
+
+                                val penaltyCount = (addedCount - 1).coerceAtLeast(0)
+                                if (penaltyCount > 0) {
+                                    this@Crazy8Activity.turnConeForceAroundKey += 1
+                                    this@Crazy8Activity.showPenaltyFx(playerId = moved.id, text = "+$penaltyCount")
+                                }
+
                                 if (moved.isMe) {
-                                    val drawnCards =
-                                        move.slice(2..<move.size).map { CrazyCard.parse(it) }
+                                    val drawnCards = move.slice(2..<move.size).map { CrazyCard.parse(it) }
                                     game.hand.addAll(drawnCards)
                                     sortCrazyHandInPlace(game.hand)
 
                                     val firstDrawnCard = drawnCards.firstOrNull()
 
-                                    if (firstDrawnCard != null && shouldAutoPlayDrawnCard(
-                                            firstDrawnCard, game.card
-                                        )
-                                    ) {
+                                    if (firstDrawnCard != null && nextTurn.id == moved.id) {
                                         if (firstDrawnCard.rank == 5) {
                                             pendingAutoWildDraw = firstDrawnCard
                                         } else {
@@ -1200,24 +1215,32 @@ class Crazy8Activity : ComponentActivity() {
                                         }
                                     }
                                 }
-                            } else if (move[1] == "c") {
+                            } else if (moveType == "c") {
                                 val added = game.participants.find { it.id == move[2].toInt() }!!
-                                val addedCount = move.size - 3 // card, c, id
+                                val drawnCards = move.drop(3).filter { it.isNotBlank() }.map { CrazyCard.parse(it) }
+                                val addedCount = drawnCards.size
                                 added.cardCount += addedCount
 
-                                if (addedCount > 0 && (playedFile == 13 || playedFile == 14)) {
+                                if (addedCount > 1) {
                                     this@Crazy8Activity.turnConeForceAroundKey += 1
                                     this@Crazy8Activity.showPenaltyFx(
-                                        playerId = added.id, text = "+$addedCount"
+                                        playerId = added.id,
+                                        text = "+$addedCount"
                                     )
                                 }
 
                                 if (added.isMe) {
-                                    game.hand.addAll(
-                                        move.slice(3..<move.size).map { CrazyCard.parse(it) })
+                                    game.hand.addAll(drawnCards)
                                     sortCrazyHandInPlace(game.hand)
                                 }
                             }
+
+                            game.penaltyFile = if (!hasForcedDraw && playedFile in 13..14) playedFile else 0
+
+                            OpenPigeonLog.i(
+                                "Crazy8",
+                                "move mover=${moved.id} next=${nextTurn.id} played=$playedFile forcedDraw=$hasForcedDraw penaltyFile=${game.penaltyFile} parts=${move.size} raw=${message.getString(1)}",
+                            )
                         }
                     }
 
@@ -1641,6 +1664,7 @@ fun rememberAssetBitmap(context: Context, path: String): androidx.compose.ui.gra
     return imageState.value
 }
 
+@SuppressLint("UnusedBoxWithConstraintsScope")
 @Composable
 fun RenderLobbyAvatar(
     avatarData: String,
@@ -1654,81 +1678,74 @@ fun RenderLobbyAvatar(
         },
         contentAlignment = Alignment.Center,
     ) {
-        val previewWidth =
-            maxWidth * previewScale
-
-        val fullAvatarHeight =
-            previewWidth * (140f / 96f)
-
-        val verticalCorrection =
-            fullAvatarHeight * 0.25f
+        val previewWidth = this.maxWidth * previewScale
+        val fullAvatarHeight = previewWidth * (140f / 96f)
+        val verticalCorrection = fullAvatarHeight * 0.25f
 
         AndroidView(
             modifier = Modifier
-                .offset(
-                    x = horizontalInset,
-                    y = -verticalCorrection,
-                )
-                .requiredSize(
-                    width = previewWidth,
-                    height = fullAvatarHeight,
-                )
+                .offset(x = horizontalInset, y = -verticalCorrection)
+                .requiredSize(width = previewWidth, height = fullAvatarHeight)
                 .graphicsLayer {
                     clip = false
                 }
-                .zIndex(
-                    3f,
-                ),
+                .zIndex(3f),
             factory = { context ->
-                AvatarView(
-                    context,
-                ).apply {
-                    setBackgroundColor(
-                        android.graphics.Color.TRANSPARENT,
-                    )
-
+                AvatarView(context).apply {
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     alpha = 1f
                     elevation = 0f
 
                     try {
-                        applyFromOpponentString(
-                            avatarData,
-                        )
-
+                        applyFromOpponentString(avatarData)
                         tag = avatarData
                     } catch (e: Exception) {
-                        OpenPigeonLog.e(
-                            "Crazy8",
-                            "Failed to render lobby avatar",
-                            e,
-                        )
-
+                        OpenPigeonLog.e("Crazy8", "Failed to render lobby avatar", e)
                         showPlaceholder()
                     }
                 }
             },
             update = { view ->
-                val lastApplied =
-                    view.tag as? String
+                val lastApplied = view.tag as? String
 
                 if (lastApplied != avatarData) {
                     try {
-                        view.applyFromOpponentString(
-                            avatarData,
-                        )
-
+                        view.applyFromOpponentString(avatarData)
                         view.tag = avatarData
                     } catch (e: Exception) {
-                        OpenPigeonLog.e(
-                            "Crazy8",
-                            "Failed to update lobby avatar",
-                            e,
-                        )
-
+                        OpenPigeonLog.e("Crazy8", "Failed to update lobby avatar", e)
                         view.showPlaceholder()
                     }
                 }
             },
+        )
+    }
+}
+
+@Composable
+fun CrazyWinMedal(
+    wins: Int,
+    modifier: Modifier = Modifier,
+) {
+    if (wins <= 0) return
+
+    Box(
+        modifier = modifier.size(40.dp, 48.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.crazymedal),
+            contentDescription = "$wins wins",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Fit,
+        )
+
+        Text(
+            text = wins.toString(),
+            color = Color(0xFF8A6A1F),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.offset(y = 6.dp),
         )
     }
 }
@@ -2109,12 +2126,6 @@ private fun cardScaleForHand(game: CrazyGame): Float {
     } * playerTightness
 }
 
-private fun shouldAutoPlayDrawnCard(
-    drawnCard: CrazyCard, currentCard: CrazyCard
-): Boolean {
-    return drawnCard.isCompatibleWith(currentCard)
-}
-
 data class CrazyHeadFx(
     val key: Int, val playerId: Int, val text: String? = null, val skip: Boolean = false
 )
@@ -2197,39 +2208,10 @@ private fun crazyOpponentSeats(
     )
 
     return when (count) {
-        2 -> {
-            listOf(
-                leftMid,
-                rightMid,
-            )
-        }
-
-        3 -> {
-            listOf(
-                top,
-                leftMid,
-                rightMid,
-            )
-        }
-
-        4 -> {
-            listOf(
-                top,
-                leftMid,
-                rightMid,
-                bottomLeft,
-            )
-        }
-
-        else -> {
-            listOf(
-                top,
-                leftMid,
-                rightMid,
-                bottomLeft,
-                bottomRight,
-            )
-        }
+        2 -> listOf(leftMid, rightMid)
+        3 -> listOf(leftMid, top, rightMid)
+        4 -> listOf(bottomLeft, leftMid, top, rightMid)
+        else -> listOf(bottomLeft, leftMid, top, rightMid, bottomRight)
     }
 }
 
@@ -2272,7 +2254,10 @@ fun RenderGame(
     val perf = buildCrazyPerfProfile(game)
     val handKeys = buildCrazyHandInstanceKeys(game.hand)
     val handSignature = handKeys.joinToString("|")
-    val handPlayable = game.hand.map { it.isCompatibleWith(game.card) }
+    val handPlayable = game.hand.map {
+        if (game.penaltyFile != 0) it.file == game.penaltyFile
+        else it.isCompatibleWith(game.card)
+    }
     val selectedWildcardIndex = selectedWildcardKey.value?.let { handKeys.indexOf(it) } ?: -1
 
     val avatarWidth = 64.dp
@@ -2399,7 +2384,9 @@ fun RenderGame(
         if (drewAndMustWaitThisTurn) return
         if (label != null) return
         if (game.turn != me) return
-        if (!card.isCompatibleWith(game.card)) return
+        if (game.penaltyFile != 0) {
+            if (card.file != game.penaltyFile) return
+        } else if (!card.isCompatibleWith(game.card)) return
 
         if (card.rank == 5) {
             selectedKey.value = null
@@ -2916,6 +2903,14 @@ fun RenderGame(
                                         1f,
                                     ),
                             )
+
+                            CrazyWinMedal(
+                                wins = participant.wins,
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .offset(x = 20.dp)
+                                    .zIndex(2f),
+                            )
                         }
 
                         Text(
@@ -2950,9 +2945,8 @@ fun RenderGame(
                         drawPileCenter = updatedCenter(drawPileCenter, coords)
                     }) {
                     RenderDrawPile(shouldPulse = game.turn == me && label == null && !interactionLocked && !drawInFlight && game.hand.none {
-                        it.isCompatibleWith(
-                            game.card
-                        )
+                        if (game.penaltyFile != 0) it.file == game.penaltyFile
+                        else it.isCompatibleWith(game.card)
                     }, onClick = {
                         if (interactionLocked) return@RenderDrawPile
                         if (drawInFlight) return@RenderDrawPile
@@ -3040,6 +3034,14 @@ fun RenderGame(
                             .zIndex(
                                 1f,
                             ),
+                    )
+
+                    CrazyWinMedal(
+                        wins = me.wins,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .offset(x = 20.dp)
+                            .zIndex(2f),
                     )
                 }
 
@@ -3342,7 +3344,7 @@ fun RenderGame(
                     )
 
                     for (slot in 0..3) {
-                        val newCard = CrazyCard(slot, wildcardBaseCard.file)
+                        val newCard = CrazyCard(slot, wildcardBaseCard.file, wildcardBaseCard.wireFile)
 
                         val cardOffset = when (slot) {
                             0 -> Modifier.offset(y = (-110).dp)
@@ -3451,20 +3453,21 @@ fun RenderGame(
             },
         )
 
-        if (label != null) {
-            Text(
-                label,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .navigationBarsPadding()
-                    .statusBarsPadding()
-                    .background(Color(0x88000000))
-                    .padding(10.dp)
-                    .zIndex(12f),
-                fontSize = 20.sp,
-                color = Color.White
-            )
-        }
+            if (label != null) {
+                Text(
+                    label,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .navigationBarsPadding()
+                        .statusBarsPadding()
+                        .background(Color(0xFFFFD600), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                        .zIndex(12f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+            }
         }
 
             activity?.lobbySpeechBubbles?.forEach { entry ->
@@ -4039,22 +4042,27 @@ fun RenderWaiting(
                             }
                         }
 
-                        RenderLobbyAvatar(
-                            avatarData = participant.avatar,
-                            previewScale = 0.8f,
-                            horizontalInset = 2.dp,
+                        Box(
                             modifier = Modifier
-                                .align(
-                                    Alignment.CenterStart,
-                                )
-                                .size(
-                                    width = 72.dp,
-                                    height = 52.dp,
-                                )
-                                .zIndex(
-                                    4f,
-                                ),
-                        )
+                                .align(Alignment.CenterStart)
+                                .size(width = 72.dp, height = 52.dp)
+                                .zIndex(4f),
+                        ) {
+                            RenderLobbyAvatar(
+                                avatarData = participant.avatar,
+                                previewScale = 0.8f,
+                                horizontalInset = 2.dp,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            CrazyWinMedal(
+                                wins = participant.wins,
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .offset(x = 15.dp)
+                                    .zIndex(5f),
+                            )
+                        }
 
                         if (!bubbleText.isNullOrBlank()) {
                             LobbyAvatarSpeechBubble(
@@ -4192,6 +4200,11 @@ fun RenderWaiting(
     }
 }
 
+private fun extractCrazy8Wins(data: String): Int {
+    val legacy = decodeCrazy8PackedAvatarString(data)
+    return Regex("""(?:^|`)w,(\d+)""").find(legacy)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+}
+
 private fun extractCrazy8DisplayName(data: String): String {
     val legacy = decodeCrazy8PackedAvatarString(data)
     return Regex("""(?:^|`)n,([^`]+)""").find(legacy)?.groupValues?.getOrNull(1) ?: "Player"
@@ -4262,11 +4275,17 @@ private fun decodeCrazy8PackedAvatarString(data: String): String {
     if (data.contains("`n,")) return data
 
     if (data.length < 34) {
-        return "b,4`e,0`m,2`a,0`w,0`bg,0.0,0.0,0.0`bc,0.0,0.0,0.0`g,0`s,0`d,0`h,3`c,2`hc,0.0,0.0,0.0`cc,0.290639,0.935341,0.083265`n,$data"
+        val tick = data.lastIndexOf('`')
+        val wins = if (tick == -1) 0 else data.substring(tick + 1).toIntOrNull() ?: 0
+        val shortName = if (tick == -1 || wins == 0) data else data.substring(0, tick)
+        return "b,4`e,0`m,2`a,0`w,$wins`bg,0.0,0.0,0.0`bc,0.0,0.0,0.0`g,0`s,0`d,0`h,3`c,2`hc,0.0,0.0,0.0`cc,0.290639,0.935341,0.083265`n,$shortName"
     }
 
     val token = data.substring(0, 34)
-    val name = data.substring(34)
+    val tail = data.substring(34)
+    val tick = tail.lastIndexOf('`')
+    val tailWins = if (tick == -1) null else tail.substring(tick + 1).toIntOrNull()
+    val name = if (tailWins == null) tail else tail.substring(0, tick)
 
     val b = crazy8CharToInt(token.substring(0, 1))
     val e = crazy8CharToInt(token.substring(1, 2))
@@ -4301,7 +4320,7 @@ private fun decodeCrazy8PackedAvatarString(data: String): String {
         append("`e,$e")
         append("`m,$m")
         append("`a,$a")
-        append("`w,$w")
+        append("`w,${tailWins ?: w}")
         append("`bg,$bgR,$bgG,$bgB")
         append("`bc,$bcR,$bcG,$bcB")
         append("`g,$g")
@@ -4315,7 +4334,7 @@ private fun decodeCrazy8PackedAvatarString(data: String): String {
     }
 }
 
-private fun legacyAvatarStringForCrazy8(playerName: String): String {
+private fun legacyAvatarStringForCrazy8(playerName: String, roomWins: Int? = null): String {
     val modern = AvatarView.buildAvatarString()
     val values = mutableMapOf<String, String>()
 
@@ -4342,7 +4361,7 @@ private fun legacyAvatarStringForCrazy8(playerName: String): String {
         v(
             "acc", "0"
         )
-    }`" + "w,${v("wins", "0")}`" + "bg,${
+    }`" + "w,${roomWins ?: v("wins", "0").toIntOrNull() ?: 0}`" + "bg,${
         color3(
             "bg_color", "0.0,0.0,0.0"
         )
