@@ -5,6 +5,7 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.*
 import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
@@ -14,6 +15,16 @@ import android.widget.*
 import androidx.core.view.isVisible
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.graphics.toColorInt
+import kotlin.math.min
+
+private class SettingsMaxHeightScrollView(context: Context) : ScrollView(context) {
+    var maxHeightPx: Int = Int.MAX_VALUE
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val cappedHeight = if (maxHeightPx == Int.MAX_VALUE) heightMeasureSpec else View.MeasureSpec.makeMeasureSpec(maxHeightPx, View.MeasureSpec.AT_MOST)
+        super.onMeasure(widthMeasureSpec, cappedHeight)
+    }
+}
 
 class SettingsSheet(
     private val context: Context, private val rootFrame: FrameLayout
@@ -46,6 +57,8 @@ class SettingsSheet(
     // ── Views ─────────────────────────────────────────────────────────────────
     private val dimView: View
     private val card: LinearLayout
+    private val contentScroll: SettingsMaxHeightScrollView
+    private val content: LinearLayout
 
     private lateinit var mainPreview: AvatarView
     private lateinit var headerRow: LinearLayout
@@ -63,6 +76,7 @@ class SettingsSheet(
     private lateinit var brightnessContainer: FrameLayout
     private lateinit var controlsSection: LinearLayout
     private lateinit var controlsContainer: LinearLayout
+    private lateinit var miscRowsContainer: LinearLayout
 
     // In-game avatars
     private var gameAvatarView: AvatarView? = null
@@ -87,10 +101,11 @@ class SettingsSheet(
     var onClosed: (() -> Unit)? = null
     private var hasNotifiedClosed = false
 
-    private enum class Tab { BACKGROUND, BODY, HAIR, FACE, CLOTHING, HATS }
+    private enum class Tab { BACKGROUND, BODY, HAIR, FACE, CLOTHING, HATS, MISC }
 
     private var currentTab = Tab.HAIR
     private val tabViews = mutableMapOf<Tab, TextView>()
+    private var miscTabAdded = false
 
     // Slider state
     private var currentSliderBaseColor: Int = Color.GRAY
@@ -108,27 +123,34 @@ class SettingsSheet(
     // Thumb diameter in px - set once in buildGradientSlider, used in positionThumb
     private var thumbDiameterPx: Int = 0
 
-    // ── Public API ────────────────────────────────────────────────────────────
+    sealed class PickerPreview {
+        data class Asset(val path: String) : PickerPreview()
+        data class DrawableResource(val resourceId: Int) : PickerPreview()
+        data class Custom(val createView: (Context) -> View) : PickerPreview()
+    }
+
+    data class PickerItem(val id: String, val label: String = "", val preview: PickerPreview)
+
+    private data class StringSettingBinding(
+        val scope: SettingScope,
+        val key: String,
+        val default: String,
+        val applyValue: (String) -> Unit,
+        val onChanged: (String) -> Unit,
+    )
+
+    private val stringSettingBindings = mutableListOf<StringSettingBinding>()
+
     fun addGameControl(label: String, controlView: View) {
+        addGameControl(label, "", controlView)
+    }
+
+    fun addGameControl(label: String, subtitle: String, controlView: View) {
         if (!::controlsSection.isInitialized) return
         controlsSection.isVisible = true
-        card.setPadding(0, 0, 0, 0)
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).also { it.bottomMargin = dp(8f) }
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        row.addView(TextView(context).apply {
-            text = label; setTextColor(COL_LABEL); textSize = 13f
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        controlView.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        row.addView(controlView)
-        controlsContainer.addView(row)
+        content.setPadding(0, 0, 0, 0)
+        controlsContainer.addView(buildGameControlCard(label, subtitle, controlView))
+        updateResponsiveLayout()
     }
 
     fun addBooleanSetting(
@@ -137,98 +159,278 @@ class SettingsSheet(
         key: String,
         default: Boolean,
         onChanged: (Boolean) -> Unit,
+    ): SwitchCompat = addBooleanSetting(label, "", scope, key, default, onChanged)
+
+    fun addBooleanSetting(
+        label: String,
+        subtitle: String,
+        scope: SettingScope,
+        key: String,
+        default: Boolean,
+        onChanged: (Boolean) -> Unit,
     ): SwitchCompat {
-        SettingsData.init(
-            context,
-        )
-
-        val control = SwitchCompat(
-            context,
-        )
-
-        val binding = BooleanSettingBinding(
-            scope = scope,
-            key = key,
-            default = default,
-            switch = control,
-            onChanged = onChanged,
-        )
-
+        SettingsData.init(context)
+        val control = SwitchCompat(context)
+        val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+        control.thumbTintList = ColorStateList(states, intArrayOf(Color.WHITE, Color.WHITE))
+        control.trackTintList = ColorStateList(states, intArrayOf(COL_TAB_SEL, "#444455".toColorInt()))
+        val binding = BooleanSettingBinding(scope, key, default, control, onChanged)
         control.setOnCheckedChangeListener { _, checked ->
-            if (binding.suppressCallback) {
-                return@setOnCheckedChangeListener
-            }
-
-            SettingsData.putBoolean(
-                scope = binding.scope,
-                key = binding.key,
-                value = checked,
-            )
-
-            binding.onChanged(
-                checked,
-            )
+            if (binding.suppressCallback) return@setOnCheckedChangeListener
+            SettingsData.putBoolean(binding.scope, binding.key, checked)
+            binding.onChanged(checked)
         }
-
         booleanSettingBindings += binding
-
-        addGameControl(
-            label,
-            control,
-        )
-
-        refreshBooleanSetting(
-            binding,
-        )
-
+        addGameControl(label, subtitle, control)
+        refreshBooleanSetting(binding)
         return control
     }
 
-
-    fun refreshGameControls(
-        refreshFromGodot: Boolean = true,
-    ) {
-        if (refreshFromGodot) {
-            SettingsData.refreshFromGodot()
+    fun addOptionSetting(
+        label: String,
+        subtitle: String,
+        scope: SettingScope,
+        key: String,
+        items: List<Pair<String, String>>,
+        default: String,
+        onChanged: (String) -> Unit,
+    ): Spinner {
+        SettingsData.init(context)
+        val spinner = Spinner(context)
+        val labels = items.map { it.second }
+        val adapter = ArrayAdapter(context, android.R.layout.simple_spinner_item, labels).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        spinner.adapter = adapter
+        spinner.background = GradientDrawable().apply { setColor("#2a2a3a".toColorInt()); cornerRadius = dpf(10f); setStroke(dp(1f), COL_DIVIDER) }
+        spinner.setPadding(dp(10f), 0, dp(10f), 0)
+        spinner.minimumWidth = dp(130f)
+        var suppress = true
+        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (suppress || position !in items.indices) return
+                val selected = items[position].first
+                SettingsData.putString(scope, key, selected)
+                onChanged(selected)
+            }
         }
-
-        booleanSettingBindings.forEach(
-            ::refreshBooleanSetting,
-        )
+        val binding = StringSettingBinding(scope, key, default, { value ->
+            val index = items.indexOfFirst { it.first == value }.let { if (it >= 0) it else items.indexOfFirst { it.first == default }.coerceAtLeast(0) }
+            suppress = true
+            if (items.isNotEmpty()) spinner.setSelection(index, false)
+            suppress = false
+        }, onChanged)
+        stringSettingBindings += binding
+        addGameControl(label, subtitle, spinner)
+        refreshStringSetting(binding)
+        return spinner
     }
 
+    fun addPickerSetting(
+        title: String,
+        subtitle: String,
+        scope: SettingScope,
+        key: String,
+        items: List<PickerItem>,
+        default: String,
+        onChanged: (String) -> Unit,
+    ): View {
+        SettingsData.init(context)
+
+        val section = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also {
+                it.bottomMargin = dp(12f)
+            }
+        }
+
+        section.addView(TextView(context).apply {
+            text = title
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        })
+
+        if (subtitle.isNotBlank()) {
+            section.addView(TextView(context).apply {
+                text = subtitle
+                setTextColor(COL_LABEL)
+                textSize = 11f
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also {
+                    it.topMargin = dp(2f)
+                }
+            })
+        }
+
+        val scroll = HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(108f)).also {
+                it.topMargin = dp(6f)
+            }
+        }
+
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(2f), dp(2f), dp(2f))
+        }
+
+        scroll.addView(row)
+        section.addView(scroll)
+
+        val cells = linkedMapOf<String, View>()
+
+        fun applySelection(value: String) {
+            cells.forEach { (id, cell) ->
+                cell.background = pickerBorder(id == value)
+            }
+        }
+
+        for (item in items) {
+            val cell = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(dp(90f), dp(100f)).also {
+                    it.rightMargin = dp(8f)
+                }
+                setPadding(dp(5f), dp(5f), dp(5f), dp(4f))
+            }
+
+            val previewHost = FrameLayout(context).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(74f), dp(74f))
+                clipChildren = false
+                clipToPadding = false
+            }
+
+            previewHost.addView(createPickerPreview(item.preview))
+            cell.addView(previewHost)
+
+            if (item.label.isNotBlank()) {
+                cell.addView(TextView(context).apply {
+                    text = item.label
+                    setTextColor(Color.WHITE)
+                    textSize = 10f
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also {
+                        it.topMargin = dp(2f)
+                    }
+                })
+            }
+
+            cell.setOnClickListener {
+                SettingsData.putString(scope, key, item.id)
+                applySelection(item.id)
+                onChanged(item.id)
+            }
+
+            cells[item.id] = cell
+            row.addView(cell)
+        }
+
+        val binding = StringSettingBinding(scope, key, default, ::applySelection, onChanged)
+        stringSettingBindings += binding
+
+        miscRowsContainer.addView(section)
+        ensureMiscTab()
+        refreshStringSetting(binding)
+        updateResponsiveLayout()
+        return section
+    }
+
+    fun refreshGameControls(refreshFromGodot: Boolean = true) {
+        if (refreshFromGodot) SettingsData.refreshFromGodot()
+        booleanSettingBindings.forEach(::refreshBooleanSetting)
+        stringSettingBindings.forEach(::refreshStringSetting)
+    }
 
     fun refreshFromStorage() {
         SettingsData.refreshFromGodot()
-
-        refreshGameControls(
-            refreshFromGodot = false,
-        )
-
+        refreshGameControls(refreshFromGodot = false)
         refreshHeaderAvatar()
     }
 
-
-    private fun refreshBooleanSetting(
-        binding: BooleanSettingBinding,
-    ) {
-        val enabled = SettingsData.getBoolean(
-            scope = binding.scope,
-            key = binding.key,
-            default = binding.default,
-        )
-
+    private fun refreshBooleanSetting(binding: BooleanSettingBinding) {
+        val enabled = SettingsData.getBoolean(binding.scope, binding.key, binding.default)
         binding.suppressCallback = true
-
-        if (binding.switch.isChecked != enabled) {
-            binding.switch.isChecked = enabled
-        }
-
+        if (binding.switch.isChecked != enabled) binding.switch.isChecked = enabled
         binding.suppressCallback = false
+        binding.onChanged(enabled)
+    }
 
-        binding.onChanged(
-            enabled,
-        )
+    private fun refreshStringSetting(binding: StringSettingBinding) {
+        val value = SettingsData.getString(binding.scope, binding.key, binding.default)
+        binding.applyValue(value)
+        binding.onChanged(value)
+    }
+
+    private fun buildGameCard(): LinearLayout = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.bottomMargin = dp(8f) }
+        background = GradientDrawable().apply { setColor("#1a1a24".toColorInt()); cornerRadius = dpf(16f); setStroke(dp(1f), "#47475f".toColorInt()) }
+        setPadding(dp(12f), dp(10f), dp(12f), dp(10f))
+    }
+
+    private fun buildGameCopy(title: String, subtitle: String): LinearLayout = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_VERTICAL
+        addView(TextView(context).apply { text = title; setTextColor(Color.WHITE); textSize = 16f })
+        if (subtitle.isNotBlank()) addView(TextView(context).apply { text = subtitle; setTextColor(COL_LABEL); textSize = 12f; setPadding(0, dp(2f), 0, 0) })
+    }
+
+    private fun buildGameControlCard(title: String, subtitle: String, controlView: View): View {
+        val card = buildGameCard()
+        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val copy = buildGameCopy(title, subtitle).apply { layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }
+        row.addView(copy)
+        if (controlView.parent is ViewGroup) (controlView.parent as ViewGroup).removeView(controlView)
+        controlView.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.leftMargin = dp(12f) }
+        row.addView(controlView)
+        card.addView(row)
+        return card
+    }
+
+    private fun pickerBorder(selected: Boolean) = GradientDrawable().apply {
+        setColor(if (selected) "#2a2640".toColorInt() else "#20202c".toColorInt())
+        cornerRadius = dpf(12f)
+        setStroke(dp(if (selected) 2f else 1f), if (selected) COL_SEL_BORDER else "#3b3b50".toColorInt())
+    }
+
+    private fun createPickerPreview(preview: PickerPreview): View {
+        val view = when (preview) {
+            is PickerPreview.Asset -> ImageView(context).apply {
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                try { context.assets.open(preview.path).use { setImageBitmap(BitmapFactory.decodeStream(it)) } } catch (_: Exception) { setImageDrawable(null) }
+            }
+            is PickerPreview.DrawableResource -> ImageView(context).apply { scaleType = ImageView.ScaleType.FIT_CENTER; setImageResource(preview.resourceId) }
+            is PickerPreview.Custom -> preview.createView(context)
+        }
+        if (view.parent is ViewGroup) (view.parent as ViewGroup).removeView(view)
+        view.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER)
+        return view
+    }
+
+    private fun createTabView(tab: Tab): TextView = TextView(context).apply {
+        text = when (tab) {
+            Tab.CLOTHING -> "Clothes"
+            Tab.HATS -> "Acc"
+            Tab.MISC -> "Misc"
+            else -> tab.name.lowercase().replaceFirstChar { it.uppercase() }
+        }
+        textSize = 10f
+        setTextColor(if (tab == currentTab) COL_TAB_SEL else COL_TAB_UNSEL)
+        gravity = Gravity.CENTER
+        layoutParams = LinearLayout.LayoutParams(0, dp(36f), 1f)
+        setPadding(dp(1f), 0, dp(1f), 0)
+        setOnClickListener { selectTab(tab) }
+    }
+
+    private fun ensureMiscTab() {
+        if (miscTabAdded || !::tabBar.isInitialized) return
+        val view = createTabView(Tab.MISC)
+        tabViews[Tab.MISC] = view
+        tabBar.addView(view)
+        miscTabAdded = true
     }
 
     fun attachGameAvatar(gameRoot: FrameLayout) {
@@ -357,31 +559,35 @@ class SettingsSheet(
         }
         card = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM
-            )
-            background = GradientDrawable().apply {
-                setColor(COL_CARD)
-                cornerRadii = floatArrayOf(dpf(22f), dpf(22f), dpf(22f), dpf(22f), 0f, 0f, 0f, 0f)
-            }
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
             setSheetLayer(this, Z_SETTINGS_CARD)
             clipToOutline = true
             outlineProvider = ViewOutlineProvider.BACKGROUND
-
             isClickable = true
             isFocusable = true
             setOnClickListener { }
         }
+        contentScroll = SettingsMaxHeightScrollView(context).apply {
+            isFillViewport = false
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT)
+        }
+        contentScroll.addView(content)
+        card.addView(contentScroll)
         buildCardContent()
         setupDragToDismiss()
+        rootFrame.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> if (isOpen) updateResponsiveLayout() }
     }
 
     // ── Card content ──────────────────────────────────────────────────────────
     private fun buildCardContent() {
         // Handle
-        card.addView(View(context).apply {
+        content.addView(View(context).apply {
             layoutParams = LinearLayout.LayoutParams(dp(40f), dp(4f)).also {
                 it.gravity = Gravity.CENTER_HORIZONTAL
                 it.topMargin = dp(12f); it.bottomMargin = dp(8f)
@@ -454,7 +660,7 @@ class SettingsSheet(
         headerNameContainer.addView(headerNameEdit)
         headerRow.addView(mainPreview)
         headerRow.addView(headerNameContainer)
-        card.addView(headerRow)
+        content.addView(headerRow)
 
         // Tab bar
         tabBar = LinearLayout(context).apply {
@@ -464,31 +670,35 @@ class SettingsSheet(
             )
             setPadding(dp(8f), 0, dp(8f), 0)
         }
-        Tab.entries.forEach { tab ->
-            val tv = TextView(context).apply {
-                text = when (tab) {
-                    Tab.CLOTHING -> "Clothes"
-                    Tab.HATS -> "Acc"
-                    else -> tab.name.lowercase().replaceFirstChar { it.uppercase() }
-                }
-                textSize = 10f
-                setTextColor(COL_TAB_UNSEL)
-                gravity = Gravity.CENTER
-                layoutParams = LinearLayout.LayoutParams(0, dp(36f), 1f)
-                setPadding(dp(1f), 0, dp(1f), 0)
-                setOnClickListener { selectTab(tab) }
-            }
-            tabViews[tab] = tv; tabBar.addView(tv)
+        listOf(Tab.BACKGROUND, Tab.BODY, Tab.HAIR, Tab.FACE, Tab.CLOTHING, Tab.HATS).forEach { tab ->
+            val tv = createTabView(tab)
+            tabViews[tab] = tv
+            tabBar.addView(tv)
         }
-        card.addView(tabBar)
+        content.addView(tabBar)
 
         // Divider
-        card.addView(View(context).apply {
+        content.addView(View(context).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(1f)
             ).also { it.leftMargin = dp(12f); it.rightMargin = dp(12f) }
             setBackgroundColor(COL_DIVIDER)
         })
+
+        miscRowsContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also {
+                it.leftMargin = dp(12f)
+                it.rightMargin = dp(12f)
+                it.topMargin = dp(10f)
+                it.bottomMargin = dp(4f)
+            }
+            isVisible = false
+        }
+        content.addView(miscRowsContainer)
 
         // Primary picker scroll
         pickerScroll = HorizontalScrollView(context).apply {
@@ -506,7 +716,7 @@ class SettingsSheet(
             setPadding(dp(12f), dp(4f), dp(12f), dp(4f))
         }
         pickerScroll.addView(pickerRow)
-        card.addView(pickerScroll)
+        content.addView(pickerScroll)
 
         // Color swatches - centered
         colorRowContainer = LinearLayout(context).apply {
@@ -524,11 +734,11 @@ class SettingsSheet(
             setPadding(0, dp(4f), 0, dp(4f))
         }
         colorRowContainer.addView(colorRow)
-        card.addView(colorRowContainer)
+        content.addView(colorRowContainer)
 
         // Gradient brightness slider
         brightnessContainer = buildGradientSlider()
-        card.addView(brightnessContainer)
+        content.addView(brightnessContainer)
 
         // Game controls section
         controlsSection = LinearLayout(context).apply {
@@ -560,7 +770,7 @@ class SettingsSheet(
             )
         }
         controlsSection.addView(controlsContainer)
-        card.addView(controlsSection)
+        content.addView(controlsSection)
     }
 
     private fun buildGradientSlider(): FrameLayout {
@@ -729,13 +939,13 @@ class SettingsSheet(
 
     // ── Extra row management ──────────────────────────────────────────────────
     private fun removeExtraRows() {
-        extraRows.forEach { if (it.parent === card) card.removeView(it) }
+        extraRows.forEach { if (it.parent === content) content.removeView(it) }
         extraRows.clear()
     }
 
     private fun addExtraRow(view: View) {
-        val insertAt = card.indexOfChild(pickerScroll) + 1 + extraRows.size
-        card.addView(view, insertAt)
+        val insertAt = content.indexOfChild(pickerScroll) + 1 + extraRows.size
+        content.addView(view, insertAt)
         extraRows.add(view)
     }
 
@@ -746,6 +956,8 @@ class SettingsSheet(
         tabViews.forEach { (t, tv) ->
             tv.setTextColor(if (t == tab) COL_TAB_SEL else COL_TAB_UNSEL)
         }
+        miscRowsContainer.isVisible = tab == Tab.MISC
+        pickerScroll.isVisible = tab != Tab.MISC
         buildPickerFor(tab)
     }
 
@@ -755,6 +967,8 @@ class SettingsSheet(
         colorRow.removeAllViews()
         hideBrightnessSlider()
         colorRowContainer.isVisible = false
+        miscRowsContainer.isVisible = tab == Tab.MISC
+        pickerScroll.isVisible = tab != Tab.MISC
 
         when (tab) {
             Tab.BACKGROUND -> {
@@ -873,9 +1087,14 @@ class SettingsSheet(
 
                 addExtraRow(faceAccessoryScroll)
             }
+
+            Tab.MISC -> {
+                miscRowsContainer.isVisible = true
+                pickerScroll.isVisible = false
+            }
         }
 
-        card.setPadding(0, 0, 0, if (controlsSection.isVisible) 0 else dp(20f))
+        content.setPadding(0, 0, 0, if (controlsSection.isVisible) 0 else dp(20f))
     }
 
     private fun onColorSwatchPicked(color: Int) {
@@ -941,6 +1160,7 @@ class SettingsSheet(
         Tab.FACE -> "eyes${i + 1}"
         Tab.CLOTHING -> "clothing${i + 1}"
         Tab.HATS -> "hat_$i"
+        Tab.MISC -> ""
     }
 
     // ── Preview state ─────────────────────────────────────────────────────────
@@ -1004,6 +1224,24 @@ class SettingsSheet(
                 }
             })
         }
+    }
+
+    private fun updateResponsiveLayout() {
+        val width = rootFrame.width
+        val height = rootFrame.height
+        if (width <= 0 || height <= 0) return
+        val landscape = width > height
+        val targetWidth = if (landscape) min((width * 0.92f).toInt(), dp(1100f)) else FrameLayout.LayoutParams.MATCH_PARENT
+        val maxHeight = (height * if (landscape) 0.92f else 0.94f).toInt()
+        contentScroll.maxHeightPx = maxHeight
+        contentScroll.requestLayout()
+        card.layoutParams = FrameLayout.LayoutParams(targetWidth, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).also { it.bottomMargin = if (landscape) dp(10f) else 0 }
+        card.background = GradientDrawable().apply {
+            setColor(COL_CARD)
+            val r = dpf(22f)
+            cornerRadii = if (landscape) floatArrayOf(r, r, r, r, r, r, r, r) else floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+        }
+        card.requestLayout()
     }
 
     // ── Drag-to-dismiss ───────────────────────────────────────────────────────
@@ -1074,6 +1312,7 @@ class SettingsSheet(
 
         rootFrame.addView(dimView)
         rootFrame.addView(card)
+        updateResponsiveLayout()
 
         dimView.isVisible = true
 
@@ -1081,6 +1320,7 @@ class SettingsSheet(
 
         card.post {
             promoteSheet()
+            updateResponsiveLayout()
 
             card.translationY = card.height.toFloat()
             refreshMainPreview()

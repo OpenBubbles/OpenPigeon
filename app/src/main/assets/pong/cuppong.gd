@@ -35,6 +35,16 @@ const OPPONENT_CUP_TINT := Color(0.08, 0.30, 0.95, 1.0)
 
 var current_cup_style: int = DEFAULT_CUP_STYLE
 var current_ball_style: int = DEFAULT_BALL_STYLE
+const CUP_SETTINGS_PREVIEW_YAW: float = 180.0
+const BALL_SETTINGS_PREVIEW_YAW: float = 0.0
+const BALL_SETTINGS_PREVIEW_PITCH: float = -55.0
+const SETTINGS_PREVIEW_VIEWPORT_SIZE: int = 128
+
+var _settings_preview_texture_cache: Dictionary = {}
+var _settings_preview_waiters: Dictionary = {}
+var _settings_preview_render_queue: Array[Dictionary] = []
+var _settings_preview_queue_running: bool = false
+var _settings_preview_prewarm_started: bool = false
 
 func dbg(parts: Variant) -> void:
 	if DEBUG_PONG:
@@ -220,40 +230,346 @@ func _get_settings_avatar_display() -> Control:
 	return player_avatar_display
 
 func _add_settings_rows(_container, popup_script) -> void:
-	var ball_items: Array[String] = []
-	var cup_items: Array[String] = []
+	var cup_items: Array[Dictionary] = []
+	var ball_items: Array[Dictionary] = []
 
-	for style in range(1, BALL_STYLE_COUNT + 1):
-		ball_items.append("Ball %d" % style)
+	for style: int in range(1, Cups.CUP_STYLE_COUNT + 1):
+		cup_items.append({
+			"id": str(style),
+			"style": style,
+		})
 
-	for style in range(1, Cups.CUP_STYLE_COUNT + 1):
-		cup_items.append("Cup %d" % style)
+	for style: int in range(1, BALL_STYLE_COUNT + 1):
+		ball_items.append({
+			"id": str(style),
+			"style": style,
+		})
 
-	var ball_row: Control = popup_script.make_game_option_card(
+	var cup_row: Control = popup_script.make_game_picker_card(
+		"Cups",
+		"Choose your cup style",
+		cup_items,
+		str(current_cup_style),
+		func(selected_id: String) -> void:
+			var style: int = clampi(selected_id.to_int(), 1, Cups.CUP_STYLE_COUNT)
+			SettingsManager.set_setting(CUP_STYLE_SETTINGS_SECTION, CUP_STYLE_SETTINGS_KEY, style)
+			_apply_cup_style(style, "settings"),
+		Callable(self, "_make_cuppong_cup_settings_preview")
+	)
+
+	popup_script.add_custom_setting(cup_row)
+
+	var ball_row: Control = popup_script.make_game_picker_card(
 		"Balls",
-		"Choose your ball",
+		"Choose your ball style",
 		ball_items,
-		current_ball_style - 1,
-		func(index: int) -> void:
-			var style: int = index + 1
+		str(current_ball_style),
+		func(selected_id: String) -> void:
+			var style: int = clampi(selected_id.to_int(), 1, BALL_STYLE_COUNT)
 			SettingsManager.set_setting(CUP_STYLE_SETTINGS_SECTION, BALL_STYLE_SETTINGS_KEY, style)
-			_apply_ball_style(style, "settings")
+			_apply_ball_style(style, "settings"),
+		Callable(self, "_make_cuppong_ball_settings_preview")
 	)
 
 	popup_script.add_custom_setting(ball_row)
 
-	var cup_row: Control = popup_script.make_game_option_card(
-		"Cups",
-		"Choose your cups",
-		cup_items,
-		current_cup_style - 1,
-		func(index: int) -> void:
-			var style: int = index + 1
-			SettingsManager.set_setting(CUP_STYLE_SETTINGS_SECTION, CUP_STYLE_SETTINGS_KEY, style)
-			_apply_cup_style(style, "settings")
-	)
+func _make_cuppong_ball_settings_preview(item: Dictionary) -> Control:
+	var style: int = clampi(int(item.get("style", DEFAULT_BALL_STYLE)), 1, BALL_STYLE_COUNT)
+	return _make_cuppong_cached_settings_preview("ball", style)
 
-	popup_script.add_custom_setting(cup_row)
+
+func _make_cuppong_cup_settings_preview(item: Dictionary) -> Control:
+	var style: int = clampi(int(item.get("style", DEFAULT_CUP_STYLE)), 1, Cups.CUP_STYLE_COUNT)
+	return _make_cuppong_cached_settings_preview("cup", style)
+
+func _cuppong_settings_preview_key(preview_kind: String, style: int) -> String:
+	return "%s:%d" % [preview_kind, style]
+
+
+func _make_cuppong_cached_settings_preview(preview_kind: String, style: int) -> Control:
+	var texture_rect := TextureRect.new()
+	texture_rect.custom_minimum_size = Vector2(70.0, 70.0)
+	texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var key: String = _cuppong_settings_preview_key(preview_kind, style)
+
+	if _settings_preview_texture_cache.has(key):
+		texture_rect.texture = _settings_preview_texture_cache[key] as Texture2D
+		return texture_rect
+
+	if not _settings_preview_waiters.has(key):
+		_settings_preview_waiters[key] = []
+
+	var waiters: Array = _settings_preview_waiters[key]
+	waiters.append(weakref(texture_rect))
+	_settings_preview_waiters[key] = waiters
+
+	_queue_cuppong_settings_preview(preview_kind, style)
+	return texture_rect
+
+
+func _queue_cuppong_settings_preview(preview_kind: String, style: int) -> void:
+	var key: String = _cuppong_settings_preview_key(preview_kind, style)
+
+	if _settings_preview_texture_cache.has(key):
+		return
+
+	for queued: Dictionary in _settings_preview_render_queue:
+		if String(queued.get("key", "")) == key:
+			return
+
+	_settings_preview_render_queue.append({
+		"key": key,
+		"kind": preview_kind,
+		"style": style,
+	})
+
+	if not _settings_preview_queue_running:
+		_settings_preview_queue_running = true
+		call_deferred("_process_cuppong_settings_preview_queue")
+
+
+func _process_cuppong_settings_preview_queue() -> void:
+	while not _settings_preview_render_queue.is_empty():
+		var entry: Dictionary = _settings_preview_render_queue.pop_front()
+		var key: String = String(entry.get("key", ""))
+		var preview_kind: String = String(entry.get("kind", ""))
+		var style: int = int(entry.get("style", 1))
+
+		if _settings_preview_texture_cache.has(key):
+			continue
+
+		var texture: Texture2D = await _render_cuppong_settings_preview_texture(preview_kind, style)
+
+		if texture != null:
+			_settings_preview_texture_cache[key] = texture
+			_update_cuppong_settings_preview_waiters(key, texture)
+
+		await get_tree().process_frame
+
+	_settings_preview_queue_running = false
+
+
+func _update_cuppong_settings_preview_waiters(key: String, texture: Texture2D) -> void:
+	if not _settings_preview_waiters.has(key):
+		return
+
+	var waiters: Array = _settings_preview_waiters[key]
+
+	for waiter in waiters:
+		var texture_rect: TextureRect = null
+
+		if waiter is WeakRef:
+			var ref_obj: Object = (waiter as WeakRef).get_ref()
+			if ref_obj is TextureRect:
+				texture_rect = ref_obj as TextureRect
+		elif waiter is TextureRect:
+			texture_rect = waiter as TextureRect
+
+		if is_instance_valid(texture_rect):
+			texture_rect.texture = texture
+
+	_settings_preview_waiters.erase(key)
+
+
+func _prewarm_cuppong_settings_previews() -> void:
+	if _settings_preview_prewarm_started:
+		return
+
+	_settings_preview_prewarm_started = true
+
+	for style: int in range(1, Cups.CUP_STYLE_COUNT + 1):
+		_queue_cuppong_settings_preview("cup", style)
+
+	for style: int in range(1, BALL_STYLE_COUNT + 1):
+		_queue_cuppong_settings_preview("ball", style)
+
+func _render_cuppong_settings_preview_texture(preview_kind: String, style: int) -> Texture2D:
+	var model: Node3D = _build_cuppong_settings_preview_model(preview_kind, style)
+	if not is_instance_valid(model):
+		return null
+
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(SETTINGS_PREVIEW_VIEWPORT_SIZE, SETTINGS_PREVIEW_VIEWPORT_SIZE)
+	viewport.transparent_bg = true
+	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	viewport.world_3d = World3D.new()
+	add_child(viewport)
+
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color(0.0, 0.0, 0.0, 0.0)
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color.WHITE
+	environment.ambient_light_energy = 1.25
+	viewport.world_3d.environment = environment
+
+	var scene_root := Node3D.new()
+	viewport.add_child(scene_root)
+
+	var model_root := Node3D.new()
+	scene_root.add_child(model_root)
+	model_root.add_child(model)
+
+	var camera_node := Camera3D.new()
+	camera_node.projection = Camera3D.PROJECTION_ORTHOGONAL
+	camera_node.current = true
+	scene_root.add_child(camera_node)
+
+	var key_light := DirectionalLight3D.new()
+	key_light.light_energy = 1.35
+	key_light.rotation_degrees = Vector3(-38.0, -30.0, 0.0)
+	scene_root.add_child(key_light)
+
+	var fill_light := DirectionalLight3D.new()
+	fill_light.light_energy = 0.55
+	fill_light.rotation_degrees = Vector3(20.0, 145.0, 0.0)
+	scene_root.add_child(fill_light)
+
+	await get_tree().process_frame
+
+	var bounds: AABB = _cuppong_settings_preview_bounds(model_root, preview_kind)
+	var visible_width: float = bounds.size.x
+	var visible_height: float = bounds.size.y
+
+	if visible_width < 0.001 or visible_height < 0.001:
+		visible_width = 1.0
+		visible_height = 1.0
+	else:
+		model_root.position = -bounds.get_center()
+
+	var fill: float = 0.84
+	if preview_kind == "ball":
+		fill = 0.96
+	elif preview_kind == "cup":
+		fill = 0.86
+
+	var fit_extent: float = maxf(visible_width, visible_height)
+	var camera_size: float = fit_extent / fill
+
+	camera_node.size = camera_size
+	camera_node.near = 0.01
+	camera_node.far = maxf(10.0, fit_extent * 10.0)
+	camera_node.position = Vector3(0.0, 0.0, maxf(2.0, fit_extent * 4.0))
+	camera_node.look_at(Vector3.ZERO, Vector3.UP)
+
+	await RenderingServer.frame_post_draw
+
+	var image: Image = viewport.get_texture().get_image()
+	viewport.queue_free()
+
+	if image == null or image.is_empty():
+		return null
+
+	return ImageTexture.create_from_image(image)
+
+func _build_cuppong_settings_preview_model(preview_kind: String, style: int) -> Node3D:
+	if preview_kind == "ball":
+		if not is_instance_valid(ball):
+			return null
+
+		var duplicated: Node = ball.duplicate()
+		if not duplicated is PongBall:
+			if is_instance_valid(duplicated):
+				duplicated.queue_free()
+			return null
+
+		var preview_ball := duplicated as PongBall
+		preview_ball.freeze = true
+		preview_ball.collision_layer = 0
+		preview_ball.collision_mask = 0
+		preview_ball.position = Vector3.ZERO
+		preview_ball.rotation_degrees = Vector3(BALL_SETTINGS_PREVIEW_PITCH, BALL_SETTINGS_PREVIEW_YAW, 0.0)
+		preview_ball.visible = true
+		preview_ball.set_ball_style(clampi(style, 1, BALL_STYLE_COUNT))
+		_cuppong_settings_preview_disable_runtime(preview_ball)
+		return preview_ball
+
+	var source_rack: Cups = null
+	if is_instance_valid(replay_cups):
+		source_rack = replay_cups
+	elif is_instance_valid(my_cups):
+		source_rack = my_cups
+
+	if source_rack == null:
+		return null
+
+	var duplicated_rack: Node = source_rack.duplicate()
+	if not duplicated_rack is Cups:
+		if is_instance_valid(duplicated_rack):
+			duplicated_rack.queue_free()
+		return null
+
+	var preview_rack := duplicated_rack as Cups
+	var found_cup: bool = false
+
+	for child: Node in preview_rack.get_children():
+		if child is Node3D and child.name != &"cupremoved":
+			var cup_node := child as Node3D
+			if not found_cup:
+				cup_node.visible = true
+				found_cup = true
+			else:
+				cup_node.visible = false
+
+	if not found_cup:
+		preview_rack.queue_free()
+		return null
+
+	preview_rack.transform = Transform3D.IDENTITY
+	preview_rack.rotation_degrees = Vector3(0.0, CUP_SETTINGS_PREVIEW_YAW, 0.0)
+	preview_rack.visible = true
+	preview_rack.set_cup_style(clampi(style, 1, Cups.CUP_STYLE_COUNT), LOCAL_CUP_TINT)
+	_cuppong_settings_preview_disable_runtime(preview_rack)
+	return preview_rack
+
+func _cuppong_settings_preview_bounds(root: Node3D, preview_kind: String) -> AABB:
+	var bounds := AABB()
+	var has_bounds: bool = false
+	var root_inverse: Transform3D = root.global_transform.affine_inverse()
+	var visual_nodes: Array[Node] = root.find_children("*", "VisualInstance3D", true, false)
+
+	for found: Node in visual_nodes:
+		var visual := found as VisualInstance3D
+		if visual == null or not visual.is_visible_in_tree():
+			continue
+
+		var node_name: String = visual.name.to_lower()
+		if preview_kind == "ball" and ("shadow" in node_name or "trail" in node_name or "aim" in node_name or "indicator" in node_name):
+			continue
+
+		var local_bounds: AABB = visual.get_aabb()
+		if local_bounds.size.length_squared() <= 0.000001:
+			continue
+
+		var to_root: Transform3D = root_inverse * visual.global_transform
+		var visual_bounds: AABB = to_root * local_bounds
+
+		if has_bounds:
+			bounds = bounds.merge(visual_bounds)
+		else:
+			bounds = visual_bounds
+			has_bounds = true
+
+	return bounds
+
+func _cuppong_settings_preview_disable_runtime(node: Node) -> void:
+	node.process_mode = Node.PROCESS_MODE_DISABLED
+
+	if node is RigidBody3D:
+		var body: RigidBody3D = node as RigidBody3D
+		body.freeze = true
+		body.collision_layer = 0
+		body.collision_mask = 0
+	elif node is CollisionObject3D:
+		var collision_object: CollisionObject3D = node as CollisionObject3D
+		collision_object.collision_layer = 0
+		collision_object.collision_mask = 0
+
+	for child: Node in node.get_children():
+		_cuppong_settings_preview_disable_runtime(child)
 
 func _get_rules_title() -> String:
 	return "Cup Pong"
@@ -854,6 +1170,7 @@ func _on_game_ready() -> void:
 	_stabilized_mats.clear()
 	_stabilize_geometry(self)
 	refresh_custom_styles_from_settings()
+	call_deferred("_prewarm_cuppong_settings_previews")
 
 	Engine.physics_jitter_fix = 0.5
 

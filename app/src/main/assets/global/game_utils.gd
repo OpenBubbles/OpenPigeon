@@ -204,7 +204,7 @@ static func open_settings_popup(game: Node, media_plugin, settings_button: Butto
 	await bump.finished
 
 	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.5)
+	dim.color = Color(0, 0, 0, 0.627)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	var popup_script: SettingsPopup = SETTINGS_POPUP_SCENE.instantiate() as SettingsPopup
@@ -217,11 +217,9 @@ static func open_settings_popup(game: Node, media_plugin, settings_button: Butto
 	root.move_child(dim, root.get_child_count() - 2)
 	popup_script.setup_popup(dim)
 
-	# Music row, common to every game.
 	if media_plugin:
 		var music_toggled := func(enabled: bool) -> void:
 			media_plugin.setMusicEnabled(enabled)
-
 			if enabled:
 				start_music(game, music_stream, media_plugin)
 			else:
@@ -233,10 +231,8 @@ static func open_settings_popup(game: Node, media_plugin, settings_button: Butto
 			media_plugin.isMusicEnabled(),
 			music_toggled
 		)
-
 		popup_script.add_custom_setting(music_row)
 
-	# Per-game extra rows / signal hookups.
 	if add_rows.is_valid():
 		add_rows.call(popup_script.custom_settings_container, popup_script)
 
@@ -256,23 +252,20 @@ static func open_settings_popup(game: Node, media_plugin, settings_button: Butto
 	popup.set_as_top_level(true)
 	popup.visible = true
 	await game.get_tree().process_frame
+	await game.get_tree().process_frame
 
 	var vp := game.get_viewport().get_visible_rect().size
-	var combined_size: Vector2 = (popup as Control).get_combined_minimum_size()
-	var min_w: float = min(vp.x * 0.92, 420.0)
-	var max_w: float = min(vp.x * 0.92, 640.0)
-	var w: float = clampf(combined_size.x, min_w, max_w)
-	var h: float = combined_size.y
+	var popup_size := popup_script.get_responsive_popup_size(vp)
+	var target_position := popup_script.get_responsive_target_position(vp, popup_size)
+	popup.size = popup_size
+	popup.position = Vector2(target_position.x, vp.y + 8.0)
 
-	popup.size = Vector2(w, h)
-	popup.position = Vector2((vp.x - w) / 2.0, vp.y)
-
-	var target_y: float = max(20.0, vp.y - h - 50.0)
 	var slide := game.create_tween()
-	slide.tween_property(popup, "position", Vector2((vp.x - w) / 2.0, target_y), 0.5)\
-		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
-
-	popup.grab_focus()
+	slide.tween_property(popup, "position", target_position, 0.32).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	await slide.finished
+	if is_instance_valid(popup_script):
+		popup_script.set_responsive_layout_active(true)
+		popup.grab_focus()
 
 # ---------- Music ----------
 

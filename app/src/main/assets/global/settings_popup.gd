@@ -33,7 +33,8 @@ const THUMB_PRESS_MODE := BaseButton.ACTION_MODE_BUTTON_PRESS
 const DEADZONE_PX := 4
 var _scroll_pos_by_tab: Dictionary[String, Vector2] = {}
 
-const SETTINGS_LANDSCAPE_UI_SCALE: float = 1.5
+const SETTINGS_LANDSCAPE_UI_SCALE: float = 1.0
+const SETTINGS_PICKER_DRAG_THRESHOLD: float = 7.0
 
 const SETTINGS_RICH_TEXT_FONT_ITEMS := [
 	"normal_font_size",
@@ -68,6 +69,12 @@ const SETTINGS_BASE_POSITION_META := (
 )
 
 var _settings_layout_refresh_queued: bool = false
+var _responsive_scroll: ScrollContainer = null
+var _responsive_body: Control = null
+var _responsive_layout_active: bool = false
+var _misc_settings_container: VBoxContainer = null
+var _misc_tab_index: int = -1
+var _misc_preview_loading: bool = false
 
 func _remember_scroll_positions() -> void:
 	for child in properties_box.get_children():
@@ -91,7 +98,7 @@ func _restore_scroll(sc: ScrollContainer) -> void:
 func _ready() -> void:
 	print("SettingsPopup: _ready() called.")
 
-	self.custom_minimum_size.x = 400
+	self.custom_minimum_size.x = 0
 
 	if (
 		SettingsManager and
@@ -160,15 +167,7 @@ func _ready() -> void:
 	_queue_settings_layout_refresh()
 
 func _settings_ui_scale() -> float:
-	var viewport_size: Vector2 = (
-		get_viewport_rect().size
-	)
-
-	return (
-		SETTINGS_LANDSCAPE_UI_SCALE
-		if viewport_size.x > viewport_size.y
-		else 1.0
-	)
+	return SETTINGS_LANDSCAPE_UI_SCALE
 
 
 func _on_settings_control_added(
@@ -443,32 +442,83 @@ func _refresh_settings_switches(
 
 
 func _apply_settings_orientation_layout() -> void:
-	var scale_factor: float = (
-		_settings_ui_scale()
-	)
-
-	_scale_settings_control_recursive(
-		self,
-		scale_factor
-	)
-
 	if is_instance_valid(theme_option_button):
-		var popup_menu := (
-			theme_option_button.get_popup()
-		)
-
+		var popup_menu := theme_option_button.get_popup()
 		if popup_menu != null:
-			popup_menu.add_theme_font_size_override(
-				"font_size",
-				int(
-					round(
-						15.0 *
-						scale_factor
-					)
-				)
-			)
-
+			popup_menu.add_theme_font_size_override("font_size", 15)
 	_refresh_settings_switches(self)
+	if _responsive_layout_active:
+		_apply_responsive_popup_geometry()
+
+func _find_responsive_body() -> Control:
+	if is_instance_valid(_responsive_body):
+		return _responsive_body
+	for child in get_children():
+		if child is Control and child != _responsive_scroll:
+			_responsive_body = child as Control
+			return _responsive_body
+	return null
+
+func _ensure_responsive_scroll() -> void:
+	if is_instance_valid(_responsive_scroll):
+		return
+	var body := _find_responsive_body()
+	if not is_instance_valid(body):
+		return
+	remove_child(body)
+	_responsive_scroll = ScrollContainer.new()
+	_responsive_scroll.name = "ResponsiveSettingsScroll"
+	_responsive_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_responsive_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_responsive_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_responsive_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_responsive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_responsive_scroll)
+	_responsive_scroll.add_child(body)
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+
+func get_responsive_popup_size(viewport_size: Vector2) -> Vector2:
+	var landscape := viewport_size.x > viewport_size.y
+	var body := _find_responsive_body()
+	var preferred := get_combined_minimum_size()
+	if is_instance_valid(body):
+		preferred = body.get_combined_minimum_size() + Vector2(20.0, 20.0)
+
+	var popup_width: float
+	if landscape:
+		popup_width = minf(viewport_size.x * 0.92, 1100.0)
+		popup_width = maxf(popup_width, minf(viewport_size.x * 0.84, 640.0))
+	else:
+		var width_limit: float = minf(viewport_size.x * 0.94, 640.0)
+		var min_width: float = minf(width_limit, minf(viewport_size.x * 0.90, 400.0))
+		popup_width = clampf(preferred.x, min_width, width_limit)
+
+	var max_height: float = viewport_size.y * (0.92 if landscape else 0.94)
+	var popup_height: float = minf(preferred.y, max_height)
+	if preferred.y > max_height:
+		_ensure_responsive_scroll()
+		popup_height = max_height
+	return Vector2(popup_width, max(120.0, popup_height))
+
+
+func get_responsive_target_position(viewport_size: Vector2, popup_size: Vector2) -> Vector2:
+	var landscape := viewport_size.x > viewport_size.y
+	var bottom_margin := 10.0 if landscape else 0.0
+	return Vector2((viewport_size.x - popup_size.x) * 0.5, max(0.0, viewport_size.y - popup_size.y - bottom_margin))
+
+func set_responsive_layout_active(enabled: bool) -> void:
+	_responsive_layout_active = enabled
+	if enabled:
+		_apply_responsive_popup_geometry()
+
+func _apply_responsive_popup_geometry() -> void:
+	if not is_inside_tree():
+		return
+	var viewport_size := get_viewport_rect().size
+	var popup_size := get_responsive_popup_size(viewport_size)
+	size = popup_size
+	position = get_responsive_target_position(viewport_size, popup_size)
 
 func close_popup():
 	if not SettingsManager.suppress_avatar_changed:
@@ -484,14 +534,15 @@ func close_popup():
 			dim_rect.queue_free()
 	)
 
-func _setup_theme_button():
-	if theme_previews_enabled:
+func _setup_theme_button() -> void:
+	if is_instance_valid(theme_dropdown_container):
+		theme_dropdown_container.hide()
+
+	if is_instance_valid(theme_option_button):
 		theme_option_button.hide()
-		preview_box.show()
-	else:
-		theme_option_button.show()
+
+	if is_instance_valid(preview_box):
 		preview_box.hide()
-		_populate_theme_dropdown()
 
 func _populate_theme_dropdown():
 	if not is_instance_valid(theme_option_button):
@@ -703,7 +754,10 @@ func _on_avatar_tab_changed(tab_index: int, restored_scroll: Variant = null):
 
 	_remember_scroll_positions()
 	for child in properties_box.get_children():
-		child.queue_free()
+		if child == _misc_settings_container:
+			properties_box.remove_child(child)
+		else:
+			child.queue_free()
 
 	current_brightness_slider = null
 	match tab_name:
@@ -713,6 +767,11 @@ func _on_avatar_tab_changed(tab_index: int, restored_scroll: Variant = null):
 		"Face": _populate_face_properties()
 		"Cloth": _populate_clothing_properties()
 		"Acc.": _populate_accessories_properties()
+		"Misc":
+			if is_instance_valid(_misc_settings_container):
+				properties_box.add_child(_misc_settings_container)
+				_misc_settings_container.visible = true
+				call_deferred("_load_misc_previews")
 
 	if restored_scroll != null:
 		for child in properties_box.get_children():
@@ -720,8 +779,9 @@ func _on_avatar_tab_changed(tab_index: int, restored_scroll: Variant = null):
 				child.call_deferred("set", "scroll_horizontal", int(restored_scroll.x))
 				child.call_deferred("set", "scroll_vertical", int(restored_scroll.y))
 				break
-	
+
 	_queue_settings_layout_refresh()
+
 
 func _on_avatar_preview_setting_changed(value, category: String, key: String):
 	_set_avatar_value(category, key, value)
@@ -896,6 +956,97 @@ func _update_selected_color_dot_border(parent_hbox: HBoxContainer, selected_colo
 					new_stylebox.border_width_left = 2; new_stylebox.border_width_top = 2; new_stylebox.border_width_right = 2; new_stylebox.border_width_bottom = 2
 				child.add_theme_stylebox_override("normal", new_stylebox)
 
+func _begin_game_picker_drag(scroll: ScrollContainer) -> void:
+	scroll.set_meta("_settings_picker_drag_active", true)
+	scroll.set_meta("_settings_picker_dragged", false)
+	scroll.set_meta("_settings_picker_drag_distance", 0.0)
+
+
+func _move_game_picker_drag(scroll: ScrollContainer, relative_x: float) -> void:
+	if not bool(scroll.get_meta("_settings_picker_drag_active", false)):
+		return
+
+	var distance: float = float(scroll.get_meta("_settings_picker_drag_distance", 0.0)) + absf(relative_x)
+	scroll.set_meta("_settings_picker_drag_distance", distance)
+
+	if distance >= SETTINGS_PICKER_DRAG_THRESHOLD:
+		scroll.set_meta("_settings_picker_dragged", true)
+
+	if not bool(scroll.get_meta("_settings_picker_dragged", false)):
+		return
+
+	scroll.scroll_horizontal -= int(round(relative_x))
+	get_viewport().set_input_as_handled()
+
+
+func _end_game_picker_drag(scroll: ScrollContainer, on_tap: Callable = Callable()) -> void:
+	if not bool(scroll.get_meta("_settings_picker_drag_active", false)):
+		return
+
+	var dragged: bool = bool(scroll.get_meta("_settings_picker_dragged", false))
+	scroll.set_meta("_settings_picker_drag_active", false)
+
+	if not dragged and on_tap.is_valid():
+		on_tap.call()
+
+	get_viewport().set_input_as_handled()
+
+
+func _on_game_picker_item_input(event: InputEvent, scroll: ScrollContainer, on_tap: Callable) -> void:
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index != MOUSE_BUTTON_LEFT:
+			return
+
+		if mouse_event.pressed:
+			_begin_game_picker_drag(scroll)
+		else:
+			_end_game_picker_drag(scroll, on_tap)
+
+	elif event is InputEventMouseMotion:
+		var motion := event as InputEventMouseMotion
+		if (motion.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			_move_game_picker_drag(scroll, motion.relative.x)
+
+	elif event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed:
+			_begin_game_picker_drag(scroll)
+		else:
+			_end_game_picker_drag(scroll, on_tap)
+
+	elif event is InputEventScreenDrag:
+		var drag := event as InputEventScreenDrag
+		_move_game_picker_drag(scroll, drag.relative.x)
+
+
+func _on_game_picker_scroll_input(event: InputEvent, scroll: ScrollContainer) -> void:
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index != MOUSE_BUTTON_LEFT:
+			return
+
+		if mouse_event.pressed:
+			_begin_game_picker_drag(scroll)
+		else:
+			_end_game_picker_drag(scroll)
+
+	elif event is InputEventMouseMotion:
+		var motion := event as InputEventMouseMotion
+		if (motion.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			_move_game_picker_drag(scroll, motion.relative.x)
+
+	elif event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed:
+			_begin_game_picker_drag(scroll)
+		else:
+			_end_game_picker_drag(scroll)
+
+	elif event is InputEventScreenDrag:
+		var drag := event as InputEventScreenDrag
+		_move_game_picker_drag(scroll, drag.relative.x)
+
 func _update_brightness_slider_gradient(color: Color):
 	if not is_instance_valid(current_brightness_slider): return
 	var gradient = Gradient.new()
@@ -1032,6 +1183,9 @@ func _exit_tree():
 	print("SettingsPopup: _exit_tree() called.")
 	if is_instance_valid(dim_rect):
 		dim_rect.queue_free()
+	if is_instance_valid(_misc_settings_container) and _misc_settings_container.get_parent() == null:
+		_misc_settings_container.queue_free()
+
 
 func setup_popup(
 	dimmer: ColorRect
@@ -1084,7 +1238,7 @@ func _apply_dark_mode_visuals(enabled: bool, instant: bool) -> void:
 		sb = StyleBoxFlat.new()
 		add_theme_stylebox_override("panel", sb)
 
-	var target := Color(0.3,0.3,0.3,0.9) if enabled else Color(0.7,0.7,0.7,0.9)
+	var target := Color(0.1176, 0.1176, 0.1804, 0.98)
 
 	if instant:
 		sb.bg_color = target
@@ -1402,8 +1556,8 @@ func make_game_switch_card(title: String, subtitle: String, initial_on: bool, on
 	card.custom_minimum_size = Vector2(0, 62)
 
 	var card_style := StyleBoxFlat.new()
-	card_style.bg_color = Color(0.10, 0.10, 0.12, 0.54)
-	card_style.border_color = Color(1.0, 1.0, 1.0, 0.14)
+	card_style.bg_color = Color(0.102, 0.102, 0.141, 1.0)
+	card_style.border_color = Color(0.278, 0.278, 0.373, 1.0)
 	card_style.border_width_left = 1
 	card_style.border_width_top = 1
 	card_style.border_width_right = 1
@@ -1438,7 +1592,7 @@ func make_game_switch_card(title: String, subtitle: String, initial_on: bool, on
 	var subtitle_label := Label.new()
 	subtitle_label.text = subtitle
 	subtitle_label.add_theme_font_size_override("font_size", 12)
-	subtitle_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.62))
+	subtitle_label.add_theme_color_override("font_color", Color(0.667, 0.667, 0.800, 1.0))
 	copy.add_child(subtitle_label)
 
 	var switch := _make_game_switch_button()
@@ -1460,8 +1614,8 @@ func make_game_option_card(title: String, subtitle: String, items: Array[String]
 	card.custom_minimum_size = Vector2(0, 62)
 
 	var card_style := StyleBoxFlat.new()
-	card_style.bg_color = Color(0.10, 0.10, 0.12, 0.54)
-	card_style.border_color = Color(1.0, 1.0, 1.0, 0.14)
+	card_style.bg_color = Color(0.102, 0.102, 0.141, 1.0)
+	card_style.border_color = Color(0.278, 0.278, 0.373, 1.0)
 	card_style.border_width_left = 1
 	card_style.border_width_top = 1
 	card_style.border_width_right = 1
@@ -1496,7 +1650,7 @@ func make_game_option_card(title: String, subtitle: String, items: Array[String]
 	var subtitle_label := Label.new()
 	subtitle_label.text = subtitle
 	subtitle_label.add_theme_font_size_override("font_size", 12)
-	subtitle_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.62))
+	subtitle_label.add_theme_color_override("font_color", Color(0.667, 0.667, 0.800, 1.0))
 	copy.add_child(subtitle_label)
 
 	var option := OptionButton.new()
@@ -1562,6 +1716,241 @@ func make_game_option_card(title: String, subtitle: String, items: Array[String]
 	row.add_child(option)
 	return card
 
+func _make_game_picker_item_style(selected: bool, hovered: bool = false) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+
+	if selected:
+		style.bg_color = Color(0.165, 0.149, 0.251, 1.0)
+		style.border_color = Color(0.655, 0.545, 0.980, 1.0)
+	elif hovered:
+		style.bg_color = Color(0.155, 0.155, 0.210, 1.0)
+		style.border_color = Color(0.360, 0.360, 0.480, 1.0)
+	else:
+		style.bg_color = Color(0.125, 0.125, 0.173, 1.0)
+		style.border_color = Color(0.231, 0.231, 0.314, 1.0)
+
+	var border_width: int = 2 if selected else 1
+	style.border_width_left = border_width
+	style.border_width_top = border_width
+	style.border_width_right = border_width
+	style.border_width_bottom = border_width
+	style.corner_radius_top_left = 12
+	style.corner_radius_top_right = 12
+	style.corner_radius_bottom_left = 12
+	style.corner_radius_bottom_right = 12
+	style.content_margin_left = 6
+	style.content_margin_right = 6
+	style.content_margin_top = 6
+	style.content_margin_bottom = 5
+
+	return style
+
+func _resolve_game_picker_texture(item: Dictionary) -> Texture2D:
+	if item.has("texture"):
+		var texture_value = item["texture"]
+		if texture_value is Texture2D:
+			return texture_value as Texture2D
+		if texture_value is String and ResourceLoader.exists(String(texture_value)):
+			return load(String(texture_value)) as Texture2D
+	if item.has("texture_path") and ResourceLoader.exists(String(item["texture_path"])):
+		return load(String(item["texture_path"])) as Texture2D
+	return null
+
+func _ensure_misc_tab() -> void:
+	if _misc_tab_index >= 0:
+		return
+	if not is_instance_valid(avatar_tab_container):
+		return
+	avatar_tab_container.add_tab("Misc")
+	_misc_tab_index = avatar_tab_container.tab_count - 1
+
+
+func _ensure_misc_settings_container() -> VBoxContainer:
+	if is_instance_valid(_misc_settings_container):
+		return _misc_settings_container
+
+	_misc_settings_container = VBoxContainer.new()
+	_misc_settings_container.name = "MiscSettingsContainer"
+	_misc_settings_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_misc_settings_container.add_theme_constant_override("separation", 14)
+	return _misc_settings_container
+
+
+func add_misc_setting(control_node: Control) -> void:
+	if not is_instance_valid(control_node):
+		return
+
+	_ensure_misc_tab()
+	var container := _ensure_misc_settings_container()
+	if control_node.get_parent() != null:
+		control_node.reparent(container)
+	else:
+		container.add_child(control_node)
+
+	if avatar_tab_container.current_tab == _misc_tab_index and container.get_parent() != properties_box:
+		properties_box.add_child(container)
+
+	_queue_settings_layout_refresh()
+
+func make_game_picker_card(
+	title: String,
+	subtitle: String,
+	items: Array[Dictionary],
+	selected_id: String,
+	on_selected: Callable,
+	preview_factory: Callable = Callable()
+) -> Control:
+	var section := VBoxContainer.new()
+	section.set_meta("_settings_misc_picker", true)
+	section.add_theme_constant_override("separation", 2)
+
+	var title_label := Label.new()
+	title_label.text = title
+	title_label.add_theme_font_size_override("font_size", 14)
+	section.add_child(title_label)
+
+	if not subtitle.is_empty():
+		var subtitle_label := Label.new()
+		subtitle_label.text = subtitle
+		subtitle_label.modulate = Color(0.72, 0.72, 0.82, 1.0)
+		subtitle_label.add_theme_font_size_override("font_size", 11)
+		section.add_child(subtitle_label)
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0.0, 108.0)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.scroll_deadzone = int(SETTINGS_PICKER_DRAG_THRESHOLD)
+	scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	scroll.gui_input.connect(_on_game_picker_scroll_input.bind(scroll))
+	section.add_child(scroll)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_PASS
+	scroll.add_child(row)
+
+	var buttons: Array[Button] = []
+
+	var apply_selection := func(value: String) -> void:
+		for index: int in range(buttons.size()):
+			var option_button: Button = buttons[index]
+			var option_id: String = str(items[index].get("id", ""))
+			var selected: bool = option_id == value
+			option_button.add_theme_stylebox_override("normal", _make_game_picker_item_style(selected))
+			option_button.add_theme_stylebox_override("hover", _make_game_picker_item_style(selected, true))
+
+	for item: Dictionary in items:
+		var item_id: String = str(item.get("id", ""))
+
+		var button := Button.new()
+		button.custom_minimum_size = Vector2(90.0, 100.0)
+		button.focus_mode = Control.FOCUS_NONE
+		button.toggle_mode = false
+		button.clip_contents = true
+		button.mouse_filter = Control.MOUSE_FILTER_STOP
+		button.add_theme_stylebox_override("normal", _make_game_picker_item_style(item_id == selected_id))
+		button.add_theme_stylebox_override("hover", _make_game_picker_item_style(item_id == selected_id, true))
+		button.add_theme_stylebox_override("pressed", _make_game_picker_item_style(true, true))
+		button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+		var layout := VBoxContainer.new()
+		layout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		layout.add_theme_constant_override("separation", 2)
+		button.add_child(layout)
+
+		var preview_host := CenterContainer.new()
+		preview_host.custom_minimum_size = Vector2(74.0, 74.0)
+		preview_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		preview_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		preview_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layout.add_child(preview_host)
+
+		if preview_factory.is_valid():
+			preview_host.set_meta("_settings_preview_pending", true)
+			preview_host.set_meta("_settings_preview_factory", preview_factory)
+			preview_host.set_meta("_settings_preview_item", item)
+		else:
+			var texture: Texture2D = _resolve_game_picker_texture(item)
+
+			if texture != null:
+				var texture_rect := TextureRect.new()
+				texture_rect.texture = texture
+				texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				texture_rect.custom_minimum_size = Vector2(70.0, 70.0)
+				texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				preview_host.add_child(texture_rect)
+
+		var label_text: String = str(item.get("label", ""))
+		if not label_text.is_empty():
+			var item_label := Label.new()
+			item_label.text = label_text
+			item_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			item_label.add_theme_font_size_override("font_size", 10)
+			item_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			layout.add_child(item_label)
+
+		buttons.append(button)
+		row.add_child(button)
+
+		var select_item := func() -> void:
+			if on_selected.is_valid():
+				on_selected.call(item_id)
+			apply_selection.call(item_id)
+
+		button.gui_input.connect(_on_game_picker_item_input.bind(scroll, select_item))
+
+	return section
+
+func _load_misc_previews() -> void:
+	if _misc_preview_loading:
+		return
+
+	if not is_instance_valid(_misc_settings_container):
+		return
+
+	if _misc_tab_index < 0 or avatar_tab_container.current_tab != _misc_tab_index:
+		return
+
+	_misc_preview_loading = true
+
+	var pending_hosts: Array[Node] = _misc_settings_container.find_children("*", "CenterContainer", true, false)
+
+	for found: Node in pending_hosts:
+		if _misc_tab_index < 0 or avatar_tab_container.current_tab != _misc_tab_index:
+			break
+
+		var host := found as CenterContainer
+		if host == null or not host.has_meta("_settings_preview_pending"):
+			continue
+
+		var factory: Callable = host.get_meta("_settings_preview_factory", Callable())
+		var item_value: Variant = host.get_meta("_settings_preview_item", {})
+		var item: Dictionary = {}
+
+		if item_value is Dictionary:
+			item = item_value as Dictionary
+
+		host.remove_meta("_settings_preview_pending")
+		host.remove_meta("_settings_preview_factory")
+		host.remove_meta("_settings_preview_item")
+
+		if factory.is_valid():
+			var created: Variant = factory.call(item)
+
+			if created is Control:
+				var preview_control := created as Control
+				preview_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				host.add_child(preview_control)
+
+		await get_tree().process_frame
+
+	_misc_preview_loading = false
+	_queue_settings_layout_refresh()
+
 func _make_game_switch_button() -> Button:
 	var btn := Button.new()
 	btn.toggle_mode = true
@@ -1612,7 +2001,7 @@ func _update_game_switch_visual(btn: Button, enabled: bool, instant: bool) -> vo
 	var track := btn.get_theme_stylebox("normal", "Button") as StyleBoxFlat
 	if track:
 		var next_track := track.duplicate() as StyleBoxFlat
-		next_track.bg_color = Color(0.40, 0.32, 0.86, 1.0) if enabled else Color(0.22, 0.22, 0.24, 1.0)
+		next_track.bg_color = Color(0.655, 0.545, 0.980, 1.0) if enabled else Color(0.22, 0.22, 0.24, 1.0)
 		next_track.border_color = Color(1.0, 1.0, 1.0, 0.26) if enabled else Color(1.0, 1.0, 1.0, 0.18)
 		btn.add_theme_stylebox_override("normal", next_track)
 		btn.add_theme_stylebox_override("hover", next_track)
@@ -1637,7 +2026,13 @@ func _on_dim_rect_gui_input(event: InputEvent):
 		close_popup()
 
 func add_custom_setting(control_node: Control):
+	if not is_instance_valid(control_node):
+		return
+	if control_node.has_meta("_settings_misc_picker") and bool(control_node.get_meta("_settings_misc_picker")):
+		add_misc_setting(control_node)
+		return
 	if custom_settings_container:
 		custom_settings_container.add_child(control_node)
+		_queue_settings_layout_refresh()
 	else:
 		printerr("SettingsPopup: ERROR! custom_settings_container is null.")
