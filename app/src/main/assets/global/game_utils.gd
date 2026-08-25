@@ -231,7 +231,7 @@ static func open_settings_popup(game: Node, media_plugin, settings_button: Butto
 			media_plugin.isMusicEnabled(),
 			music_toggled
 		)
-		popup_script.add_custom_setting(music_row)
+		popup_script.add_global_setting(music_row)
 
 	if add_rows.is_valid():
 		add_rows.call(popup_script.custom_settings_container, popup_script)

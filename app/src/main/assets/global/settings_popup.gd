@@ -1775,6 +1775,16 @@ func _ensure_misc_settings_container() -> VBoxContainer:
 	_misc_settings_container.add_theme_constant_override("separation", 14)
 	return _misc_settings_container
 
+func add_global_setting(control_node: Control) -> void:
+	if not is_instance_valid(control_node) or not is_instance_valid(global_settings_container):
+		return
+
+	if control_node.get_parent() != null:
+		control_node.reparent(global_settings_container)
+	else:
+		global_settings_container.add_child(control_node)
+
+	_queue_settings_layout_refresh()
 
 func add_misc_setting(control_node: Control) -> void:
 	if not is_instance_valid(control_node):
@@ -1955,8 +1965,9 @@ func _make_game_switch_button() -> Button:
 	var btn := Button.new()
 	btn.toggle_mode = true
 	btn.focus_mode = Control.FOCUS_NONE
-	btn.custom_minimum_size = Vector2(66, 34)
+	btn.custom_minimum_size = Vector2(58, 30)
 	btn.size_flags_horizontal = Control.SIZE_SHRINK_END
+	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	btn.clip_contents = false
 
 	var track := StyleBoxFlat.new()
@@ -1966,10 +1977,10 @@ func _make_game_switch_button() -> Button:
 	track.border_width_top = 1
 	track.border_width_right = 1
 	track.border_width_bottom = 1
-	track.corner_radius_top_left = 17
-	track.corner_radius_top_right = 17
-	track.corner_radius_bottom_left = 17
-	track.corner_radius_bottom_right = 17
+	track.corner_radius_top_left = 15
+	track.corner_radius_top_right = 15
+	track.corner_radius_bottom_left = 15
+	track.corner_radius_bottom_right = 15
 	btn.add_theme_stylebox_override("normal", track)
 	btn.add_theme_stylebox_override("hover", track)
 	btn.add_theme_stylebox_override("pressed", track)
@@ -1978,21 +1989,24 @@ func _make_game_switch_button() -> Button:
 	var knob := PanelContainer.new()
 	knob.name = "Knob"
 	knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	knob.custom_minimum_size = Vector2(28, 28)
-	knob.size = Vector2(28, 28)
+	knob.custom_minimum_size = Vector2(24, 24)
+	knob.size = Vector2(24, 24)
 	knob.position = Vector2(3, 3)
 
 	var knob_style := StyleBoxFlat.new()
 	knob_style.bg_color = Color.WHITE
-	knob_style.corner_radius_top_left = 14
-	knob_style.corner_radius_top_right = 14
-	knob_style.corner_radius_bottom_left = 14
-	knob_style.corner_radius_bottom_right = 14
+	knob_style.corner_radius_top_left = 12
+	knob_style.corner_radius_top_right = 12
+	knob_style.corner_radius_bottom_left = 12
+	knob_style.corner_radius_bottom_right = 12
 	knob.add_theme_stylebox_override("panel", knob_style)
 	btn.add_child(knob)
 
-	return btn
+	btn.resized.connect(func() -> void:
+		_update_game_switch_visual(btn, btn.button_pressed, true)
+	)
 
+	return btn
 
 func _update_game_switch_visual(btn: Button, enabled: bool, instant: bool) -> void:
 	if not is_instance_valid(btn):
@@ -2012,14 +2026,14 @@ func _update_game_switch_visual(btn: Button, enabled: bool, instant: bool) -> vo
 	if not is_instance_valid(knob):
 		return
 
-	var target_x: float = btn.custom_minimum_size.x - knob.size.x - 3.0 if enabled else 3.0
+	var target_x: float = btn.size.x - knob.size.x - 3.0 if enabled else 3.0
 
 	if instant:
-		knob.position.x = target_x
+		knob.position = Vector2(target_x, (btn.size.y - knob.size.y) * 0.5)
 	else:
+		knob.position.y = (btn.size.y - knob.size.y) * 0.5
 		var tw := create_tween()
-		tw.tween_property(knob, "position:x", target_x, 0.16)\
-			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tw.tween_property(knob, "position:x", target_x, 0.16).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 func _on_dim_rect_gui_input(event: InputEvent):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
