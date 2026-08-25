@@ -28,10 +28,30 @@ var replay_moves: Array = []
 var current_theme_name: String = "Default"
 var winner_id
 
-var PitScene    : PackedScene = preload("res://mancala/pit.tscn")
-var StoreScene  : PackedScene = preload("res://mancala/store.tscn")
-var StoneScene : PackedScene = preload("res://mancala/stone.tscn")
+var PitScene: PackedScene = preload("res://mancala/pit.tscn")
+var StoreScene: PackedScene = preload("res://mancala/store.tscn")
+var StoneScene: PackedScene = preload("res://mancala/stone.tscn")
+const STONE_PREVIEW_TEXTURE: Texture2D = preload("res://mancala/stone.png")
 const MUSIC_STREAM := preload("res://global/audio/mancala.ogg")
+const MANCALA_SETTINGS_SECTION := "mancala"
+const MANCALA_THEME_SETTINGS_KEY := "theme"
+const MANCALA_THEME_NAMES := [
+	"Default",
+	"Retro",
+	"Penguin",
+	"Sakura Ink",
+	"Emerald Brass",
+	"Desert Dusk",
+	"Cotton Candy",
+	"Green & White",
+	"Red & White",
+	"Black & White",
+	"Pink & White",
+	"All White",
+	"Gamer",
+	"Ocean",
+	"Vintage",
+]
 
 @onready var player_avatar_display: TextureButton = %PlayerAvatarDisplay
 @onready var opp_avatar_display: TextureButton = %OppAvatarDisplay
@@ -169,6 +189,139 @@ func _get_dev_data() -> String:
 func _get_settings_avatar_display() -> Control:
 	return player_avatar_display
 
+func _add_settings_rows(_container, popup_script) -> void:
+	var items: Array[Dictionary] = []
+	var labels := {
+		"Default": "Default",
+		"Retro": "Retro",
+		"Penguin": "Penguin",
+		"Sakura Ink": "Sakura",
+		"Emerald Brass": "Emerald",
+		"Desert Dusk": "Desert",
+		"Cotton Candy": "Cotton",
+		"Green & White": "Green",
+		"Red & White": "Red",
+		"Black & White": "B&W",
+		"Pink & White": "Pink",
+		"All White": "White",
+		"Gamer": "Gamer",
+		"Ocean": "Ocean",
+		"Vintage": "Vintage",
+	}
+
+	for theme_name: String in MANCALA_THEME_NAMES:
+		items.append({
+			"id": theme_name,
+			"label": str(labels.get(theme_name, theme_name)),
+		})
+
+	var theme_row: Control = popup_script.make_game_picker_card(
+		"Theme",
+		"Choose your board and stone colors",
+		items,
+		current_theme_name,
+		func(selected_id: String) -> void:
+			_apply_mancala_theme(selected_id, true),
+		Callable(self, "_make_mancala_theme_settings_preview")
+	)
+
+	popup_script.add_custom_setting(theme_row)
+
+func _make_mancala_theme_settings_preview(item: Dictionary) -> Control:
+	var theme_name: String = str(item.get("id", "Default"))
+	var palette: Dictionary = _get_palette_for_theme(theme_name)
+
+	var preview := Control.new()
+	preview.custom_minimum_size = Vector2(70.0, 70.0)
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var bg := Panel.new()
+	bg.position = Vector2(2.0, 2.0)
+	bg.size = Vector2(66.0, 66.0)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var bg_style := StyleBoxFlat.new()
+	var bg_color: Color = palette.get("board_light", Color("#6d7c82")) as Color
+	bg_color.a = 0.42
+	bg_style.bg_color = bg_color
+	bg_style.corner_radius_top_left = 12
+	bg_style.corner_radius_top_right = 12
+	bg_style.corner_radius_bottom_left = 12
+	bg_style.corner_radius_bottom_right = 12
+	bg.add_theme_stylebox_override("panel", bg_style)
+	preview.add_child(bg)
+
+	var colors: Array[Color] = _mancala_preview_colors(palette)
+	var positions := [
+		Vector2(5.0, 20.0),
+		Vector2(22.0, 6.0),
+		Vector2(40.0, 18.0),
+		Vector2(10.0, 39.0),
+		Vector2(29.0, 37.0),
+		Vector2(43.0, 39.0),
+	]
+	var rotations := [-0.18, 0.12, -0.07, 0.20, -0.14, 0.09]
+
+	for i: int in range(positions.size()):
+		var stone := TextureRect.new()
+		stone.texture = STONE_PREVIEW_TEXTURE
+		stone.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		stone.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		stone.position = positions[i]
+		stone.size = Vector2(27.0, 27.0)
+		stone.pivot_offset = stone.size * 0.5
+		stone.rotation = rotations[i]
+		stone.modulate = colors[i % colors.size()]
+		stone.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		preview.add_child(stone)
+
+	return preview
+
+
+func _mancala_preview_colors(palette: Dictionary) -> Array[Color]:
+	var colors: Array[Color] = []
+
+	var variants: Variant = palette.get("primary_variants", null)
+	if variants is Array:
+		for value in variants:
+			if value is Color:
+				colors.append(value as Color)
+	else:
+		var primary: Variant = palette.get("primary", Color.WHITE)
+		if primary is Color:
+			colors.append(primary as Color)
+
+	var secondary: Variant = palette.get("secondary", Color.WHITE)
+	if secondary is Color:
+		colors.append(secondary as Color)
+
+	var accent: Variant = palette.get("accent", Color.WHITE)
+	if accent is Color:
+		colors.append(accent as Color)
+
+	if colors.is_empty():
+		colors.append(Color.WHITE)
+
+	return colors
+
+func _apply_mancala_theme(theme_name: String, save_setting: bool = false) -> void:
+	if not MANCALA_THEME_NAMES.has(theme_name):
+		theme_name = "Default"
+
+	current_theme_name = theme_name
+	current_palette = _get_palette_for_theme(theme_name)
+
+	if save_setting:
+		SettingsManager.set_setting(MANCALA_SETTINGS_SECTION, MANCALA_THEME_SETTINGS_KEY, theme_name)
+
+	_apply_board_sprite_modulate()
+	_apply_bg_for_dark(bool(SettingsManager.get_setting("global", "dark_mode", false)))
+
+	if pit_nodes.size() == PIT_COUNT and not _is_animating:
+		_refresh_all_pits()
+
+	OpLog.i(LOG_TAG, ["theme_applied theme=", theme_name, " saved=", save_setting])
+
 func _get_rules_title() -> String:
 	return "Mancala"
 	
@@ -236,9 +389,9 @@ func _on_game_ready() -> void:
 
 	_load_game_specific_settings()
 
-	var saved_theme: String = str(SettingsManager.get_setting("global", "theme", current_theme_name))
-	current_theme_name = saved_theme
-	current_palette = _get_palette_for_theme(saved_theme)
+	var saved_theme: String = str(SettingsManager.get_setting(MANCALA_SETTINGS_SECTION, MANCALA_THEME_SETTINGS_KEY, current_theme_name))
+	current_theme_name = saved_theme if MANCALA_THEME_NAMES.has(saved_theme) else "Default"
+	current_palette = _get_palette_for_theme(current_theme_name)
 
 	var is_dark := bool(SettingsManager.get_setting("global", "dark_mode", false))
 	_apply_board_sprite_modulate()
@@ -1870,122 +2023,6 @@ func _palette_color(key: String) -> Color:
 		return v
 	return Color(1, 1, 1)
 
-func _generate_theme_preview(theme_palette: Dictionary) -> Texture2D:
-	var preview_size := Vector2i(64, 64)
-
-	var vp := SubViewport.new()
-	vp.size = preview_size
-	vp.set_update_mode(SubViewport.UpdateMode.UPDATE_ONCE)
-	# --- ADD THIS LINE ---
-	vp.transparent_bg = true # Makes the viewport corners transparent
-	# --- END ADDITION ---
-
-	# Use a Panel with StyleBoxFlat for rounded corners
-	var bg_panel := Panel.new()
-	bg_panel.size = Vector2(preview_size)
-	bg_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	var bg_style := StyleBoxFlat.new()
-	var bg_color: Color = theme_palette.get("board_light", Color.GRAY)
-	bg_color.a = 0.4 # Set opacity to 40%
-	bg_style.bg_color = bg_color
-	bg_style.corner_radius_bottom_left = 8
-	bg_style.corner_radius_bottom_right = 8
-	bg_style.corner_radius_top_left = 8
-	bg_style.corner_radius_top_right = 8
-	
-	bg_panel.add_theme_stylebox_override("panel", bg_style)
-	vp.add_child(bg_panel)
-
-	var temp_pit := PitScene.instantiate()
-	var debug_label = temp_pit.find_child("Debug_num", true, false)
-	if debug_label: debug_label.visible = false
-	var count_label = temp_pit.find_child("CountLabel", true, false)
-	if count_label: count_label.visible = false
-	
-	var collision_shape_node := temp_pit.get_node("CollisionShape2D") as CollisionShape2D
-	var pit_local_center := collision_shape_node.position
-	var preview_scale := 0.75
-	
-	temp_pit.scale = Vector2.ONE * preview_scale
-	temp_pit.position = (Vector2(preview_size) * 0.5) - (pit_local_center * preview_scale)
-	vp.add_child(temp_pit)
-	
-	var all_stone_colors: Array[Color] = []
-	if theme_palette.has("primary_variants") and theme_palette["primary_variants"] is Array:
-		all_stone_colors.append_array(theme_palette["primary_variants"])
-	elif theme_palette.has("primary") and theme_palette["primary"] is Color:
-		all_stone_colors.append(theme_palette["primary"])
-	if theme_palette.has("secondary") and theme_palette["secondary"] is Color:
-		all_stone_colors.append(theme_palette["secondary"])
-	if theme_palette.has("accent") and theme_palette["accent"] is Color:
-		all_stone_colors.append(theme_palette["accent"])
-	if all_stone_colors.is_empty():
-		all_stone_colors.append(Color.WHITE)
-
-	var final_colors_to_render: Array[Color] = []
-	final_colors_to_render.append_array(all_stone_colors)
-	
-	var total_stone_count := randi_range(8, 12)
-	var remaining_stones_needed = total_stone_count - final_colors_to_render.size()
-
-	if remaining_stones_needed > 0 and not all_stone_colors.is_empty():
-		for i in range(remaining_stones_needed):
-			final_colors_to_render.append(all_stone_colors.pick_random())
-
-	final_colors_to_render.shuffle()
-
-	var stone_container := temp_pit.get_node("StonesContainer")
-	var pit_radius := (collision_shape_node.shape as CircleShape2D).radius
-	var layout_radius := pit_radius * SAFETY_SCALE_PIT
-	
-	for i in range(final_colors_to_render.size()):
-		var stone_color = final_colors_to_render[i]
-		var stone := StoneScene.instantiate() as Node2D
-		stone.scale = BASE_STONE_SCALE * 1.0
-		stone.modulate = stone_color
-		
-		var angle := float(i) * GOLDEN_ANGLE
-		var radius_factor := sqrt(float(i + 1) / float(final_colors_to_render.size()))
-		var radius := layout_radius * radius_factor * 0.9
-		stone.position = Vector2(cos(angle), sin(angle)) * radius
-		stone.rotation = randf_range(0, TAU)
-		
-		stone_container.add_child(stone)
-
-	add_child(vp)
-	await get_tree().process_frame
-	await get_tree().process_frame
-
-	var vp_tex := vp.get_texture()
-	var out_tex: Texture2D
-
-	if vp_tex == null:
-		var fallback_img := Image.create(preview_size.x, preview_size.y, false, Image.FORMAT_RGBA8)
-		fallback_img.fill(Color.MAGENTA)
-		out_tex = ImageTexture.create_from_image(fallback_img)
-	else:
-		var img := vp_tex.get_image()
-		out_tex = ImageTexture.create_from_image(img)
-	
-	vp.queue_free()
-	
-	return out_tex
-	
-func _get_mancala_themes() -> Dictionary:
-	var themes_data := {}
-	var theme_names := ["Default", "Retro", "Penguin", "Sakura Ink", "Emerald Brass", "Desert Dusk"]
-
-	for theme_name in theme_names:
-		var palette := _get_palette_for_theme(theme_name)
-		# Generate each preview image and wait for it to finish
-		var preview_tex := await _generate_theme_preview(palette)
-		# Store the generated texture object directly in the dictionary
-		themes_data[theme_name] = {"texture": preview_tex}
-	
-	OpLog.d(LOG_TAG, ["theme_previews_generated themes=", themes_data.keys()])
-	return themes_data
-	
 func _apply_board_sprite_modulate() -> void:
 	if not is_instance_valid(board_sprite): return
 	var c: Color = current_palette.get("board_sprite_modulate", Color(1, 1, 1)) as Color
@@ -2011,87 +2048,220 @@ func _get_palette_for_theme(themename: String) -> Dictionary:
 				"board_dark": Color("#202526"),
 				"board_sprite_modulate": Color(1, 1, 1)
 			}
+
 		"Retro":
 			return {
 				"primary_variants": [
-					Color("e80038ff"),  # apricot
+					Color("#e80038"),
 				],
-				"secondary": Color("ffb900ff"),   # umber (stones 2/12)
-				"accent":    Color("#2FA5A0"),   # turquoise (stones 3/13)
-
-				# board
-				"board_light": Color("#F1E5D1"), # pale sand
-				"board_dark":  Color("#2C1F1A"), # dusk
-				"board_sprite_modulate": Color("dbdfdeff"), # warm peach tint
-				"board_tint": Color("f6f5f1ff"),
+				"secondary": Color("#ffb900"),
+				"accent": Color("#2FA5A0"),
+				"board_light": Color("#F1E5D1"),
+				"board_dark": Color("#2C1F1A"),
+				"board_sprite_modulate": Color("#dbdfde"),
+				"board_tint": Color("#f6f5f1"),
 				"board_tint_strength": 0.07
 			}
+
 		"Penguin":
 			return {
-				#"primary": Color("#00e603"),
 				"primary_variants": [
-					Color("#00e603"),  # neon green
-					Color("#00c6cf"),  # punchy red
-					Color("#0083e3")   # electric purple
+					Color("#00e603"),
+					Color("#00c6cf"),
+					Color("#0083e3")
 				],
 				"secondary": Color("#e90008"),
 				"accent": Color("#c303c1"),
 				"board_light": Color("#00529b"),
-				"board_dark": Color("#00254dff"),
-				# bright yellow tint for the board image
+				"board_dark": Color("#00254d"),
 				"board_sprite_modulate": Color("#fdd22b")
 			}
+
 		"Sakura Ink":
 			return {
-				# blossom tones for stones 1/11
 				"primary_variants": [
-					Color("#F7BFCF"),  # rose
+					Color("#F7BFCF"),
 				],
-				"secondary": Color("#2A2E34"),   # ink charcoal (stones 2/12)
-				"accent":    Color("#4F65A3"),   # indigo (stones 3/13)
-
-				# board
-				"board_light": Color("#F3EDE8"), # warm parchment
-				"board_dark":  Color("#191C22"), # deep ink
-				"board_sprite_modulate": Color("#FFE8D1"), # ivory tint
-				"board_tint": Color("#FFFAF5"),           # feather-light warm overlay
+				"secondary": Color("#2A2E34"),
+				"accent": Color("#4F65A3"),
+				"board_light": Color("#F3EDE8"),
+				"board_dark": Color("#191C22"),
+				"board_sprite_modulate": Color("#FFE8D1"),
+				"board_tint": Color("#FFFAF5"),
 				"board_tint_strength": 0.05
 			}
 
 		"Emerald Brass":
 			return {
-				# lush greens for stones 1/11
 				"primary_variants": [
-					Color("#2FAF74"),  # emerald
-					Color("#1D8F5A"),  # forest
-					Color("#66C79E")   # jade
+					Color("#2FAF74"),
+					Color("#1D8F5A"),
+					Color("#66C79E")
 				],
-				"secondary": Color("#8C6B32"),   # brass (stones 2/12)
-				"accent":    Color("#2B8C7B"),   # teal (stones 3/13)
-
-				# board
-				"board_light": Color("#E7E3DA"), # linen
-				"board_dark":  Color("#13281F"), # evergreen
-				"board_sprite_modulate": Color("#D8B269"), # soft brass tint
+				"secondary": Color("#8C6B32"),
+				"accent": Color("#2B8C7B"),
+				"board_light": Color("#E7E3DA"),
+				"board_dark": Color("#13281F"),
+				"board_sprite_modulate": Color("#D8B269"),
 				"board_tint": Color("#F6F2E7"),
 				"board_tint_strength": 0.06
 			}
 
 		"Desert Dusk":
 			return {
-				# desert minerals for stones 1/11
 				"primary_variants": [
-					Color("#E8A66A"),  # apricot
+					Color("#E8A66A"),
 				],
-				"secondary": Color("#3A2C27"),   # umber (stones 2/12)
-				"accent":    Color("#2FA5A0"),   # turquoise (stones 3/13)
-
-				# board
-				"board_light": Color("#F1E5D1"), # pale sand
-				"board_dark":  Color("#2C1F1A"), # dusk
-				"board_sprite_modulate": Color("#FFD7A1"), # warm peach tint
+				"secondary": Color("#3A2C27"),
+				"accent": Color("#2FA5A0"),
+				"board_light": Color("#F1E5D1"),
+				"board_dark": Color("#2C1F1A"),
+				"board_sprite_modulate": Color("#FFD7A1"),
 				"board_tint": Color("#FFF3E1"),
 				"board_tint_strength": 0.07
 			}
+
+		"Cotton Candy":
+			return {
+				"primary_variants": [
+					Color("#AEB6C2"),
+					Color("#F59FC5"),
+					Color("#82BFF2")
+				],
+				"secondary": Color("#F59FC5"),
+				"accent": Color("#82BFF2"),
+				"board_light": Color("#E8EBF0"),
+				"board_dark": Color("#343943"),
+				"board_sprite_modulate": Color("#E6E8EF"),
+				"board_tint": Color("#F5EAF2"),
+				"board_tint_strength": 0.08
+			}
+
+		"Green & White":
+			return {
+				"primary_variants": [
+					Color("#188C4D"),
+					Color("#FFFFFF")
+				],
+				"secondary": Color("#FFFFFF"),
+				"accent": Color("#188C4D"),
+				"board_light": Color("#DCEBE1"),
+				"board_dark": Color("#153D29"),
+				"board_sprite_modulate": Color("#D9F0E0"),
+				"board_tint": Color("#FFFFFF"),
+				"board_tint_strength": 0.04
+			}
+
+		"Red & White":
+			return {
+				"primary_variants": [
+					Color("#D92D32"),
+					Color("#FFFFFF")
+				],
+				"secondary": Color("#FFFFFF"),
+				"accent": Color("#D92D32"),
+				"board_light": Color("#EFE2E2"),
+				"board_dark": Color("#4B181A"),
+				"board_sprite_modulate": Color("#F2D8D8"),
+				"board_tint": Color("#FFFFFF"),
+				"board_tint_strength": 0.04
+			}
+
+		"Black & White":
+			return {
+				"primary_variants": [
+					Color("#111111"),
+					Color("#FFFFFF")
+				],
+				"secondary": Color("#FFFFFF"),
+				"accent": Color("#111111"),
+				"board_light": Color("#DADADA"),
+				"board_dark": Color("#161616"),
+				"board_sprite_modulate": Color("#D8D8D8"),
+				"board_tint": Color("#FFFFFF"),
+				"board_tint_strength": 0.03
+			}
+
+		"Pink & White":
+			return {
+				"primary_variants": [
+					Color("#F15A9D"),
+					Color("#FFFFFF")
+				],
+				"secondary": Color("#FFFFFF"),
+				"accent": Color("#F15A9D"),
+				"board_light": Color("#F4E1EA"),
+				"board_dark": Color("#4A2034"),
+				"board_sprite_modulate": Color("#FFDCEB"),
+				"board_tint": Color("#FFF5FA"),
+				"board_tint_strength": 0.06
+			}
+
+		"All White":
+			return {
+				"primary_variants": [
+					Color("#FFFFFF"),
+					Color("#F2F2F2"),
+					Color("#E1E1E1")
+				],
+				"secondary": Color("#FFFFFF"),
+				"accent": Color("#ECECEC"),
+				"board_light": Color("#D7D7D7"),
+				"board_dark": Color("#454545"),
+				"board_sprite_modulate": Color("#F3F3F3"),
+				"board_tint": Color("#FFFFFF"),
+				"board_tint_strength": 0.08
+			}
+
+		"Gamer":
+			return {
+				"primary_variants": [
+					Color("#E53935"),
+					Color("#28C840"),
+					Color("#2585F5"),
+					Color("#FFD52A")
+				],
+				"secondary": Color("#2585F5"),
+				"accent": Color("#FFD52A"),
+				"board_light": Color("#30343A"),
+				"board_dark": Color("#101216"),
+				"board_sprite_modulate": Color("#B8BDC4"),
+				"board_tint": Color("#15181D"),
+				"board_tint_strength": 0.10
+			}
+
+		"Ocean":
+			return {
+				"primary_variants": [
+					Color("#0077B6"),
+					Color("#00B4D8"),
+					Color("#48CAE4"),
+					Color("#90E0C5")
+				],
+				"secondary": Color("#023E8A"),
+				"accent": Color("#90E0EF"),
+				"board_light": Color("#CBE9EB"),
+				"board_dark": Color("#082E3A"),
+				"board_sprite_modulate": Color("#B9E4E7"),
+				"board_tint": Color("#DDF7F5"),
+				"board_tint_strength": 0.07
+			}
+
+		"Vintage":
+			return {
+				"primary_variants": [
+					Color("#C92D32"),
+					Color("#009681"),
+					Color("7b4aa2ff")
+				],
+				"secondary": Color("#009681"),
+				"accent": Color("#7b4aa2ff"),
+				"board_light": Color("#D7D3C9"),
+				"board_dark": Color("#292B28"),
+				"board_sprite_modulate": Color("#D5D0C3"),
+				"board_tint": Color("#ECE7DA"),
+				"board_tint_strength": 0.06
+			}
+
 		_:
-			return current_palette
+			return _get_palette_for_theme("Default")
