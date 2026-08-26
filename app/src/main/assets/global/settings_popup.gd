@@ -32,9 +32,23 @@ const GRABBER_IMAGE_PATH = "res://global/hollow_grabber.png"
 const THUMB_PRESS_MODE := BaseButton.ACTION_MODE_BUTTON_PRESS
 const DEADZONE_PX := 4
 var _scroll_pos_by_tab: Dictionary[String, Vector2] = {}
+var _responsive_scroll_landscape_only: bool = false
 
-const SETTINGS_LANDSCAPE_UI_SCALE: float = 1.0
+const SETTINGS_LANDSCAPE_REFERENCE_SHORT_SIDE: float = 540.0
+const SETTINGS_LANDSCAPE_REFERENCE_SCALE: float = 2.1
+const SETTINGS_LANDSCAPE_MIN_SCALE: float = 2.0
+const SETTINGS_LANDSCAPE_MAX_SCALE: float = 2.5
 const SETTINGS_PICKER_DRAG_THRESHOLD: float = 7.0
+const SETTINGS_SCALE_MIN_SIZE_META := "_settings_scale_min_size"
+const SETTINGS_BASE_H_SIZE_FLAGS_META := "_settings_base_h_size_flags"
+const SETTINGS_BASE_V_SIZE_FLAGS_META := "_settings_base_v_size_flags"
+const SETTINGS_BASE_SLIDER_MIN_SIZE_META := "_settings_base_slider_min_size"
+const SETTINGS_MISC_PREVIEW_VISUAL_META := "_settings_misc_preview_visual"
+const SETTINGS_MISC_PREVIEW_BASE_SCALE_META := "_settings_misc_preview_base_scale"
+const SETTINGS_AVATAR_THUMBNAIL_META := "_settings_avatar_thumbnail"
+const SETTINGS_AVATAR_BASE_PREVIEW_META := "_settings_avatar_base_preview"
+const SETTINGS_SCALE_BOOST_META := "_settings_scale_boost"
+const SETTINGS_LANDSCAPE_PICKER_BOOST: float = 1.25
 
 const SETTINGS_RICH_TEXT_FONT_ITEMS := [
 	"normal_font_size",
@@ -54,6 +68,14 @@ const SETTINGS_MARGIN_ITEMS := [
 const SETTINGS_TAB_CONSTANT_ITEMS := [
 	"h_separation",
 	"tab_separation"
+]
+
+const SETTINGS_TAB_STYLEBOX_ITEMS := [
+	"tab_selected",
+	"tab_unselected",
+	"tab_hovered",
+	"tab_disabled",
+	"tab_focus"
 ]
 
 const SETTINGS_BASE_MIN_SIZE_META := (
@@ -166,9 +188,25 @@ func _ready() -> void:
 
 	_queue_settings_layout_refresh()
 
-func _settings_ui_scale() -> float:
-	return SETTINGS_LANDSCAPE_UI_SCALE
+func _is_settings_landscape() -> bool:
+	var viewport_size := get_viewport_rect().size
+	return viewport_size.x > viewport_size.y
 
+func _settings_ui_scale() -> float:
+	if not _is_settings_landscape():
+		return 1.0
+
+	var viewport_size := get_viewport_rect().size
+	var short_side := minf(viewport_size.x, viewport_size.y)
+	return clampf((short_side / SETTINGS_LANDSCAPE_REFERENCE_SHORT_SIDE) * SETTINGS_LANDSCAPE_REFERENCE_SCALE, SETTINGS_LANDSCAPE_MIN_SCALE, SETTINGS_LANDSCAPE_MAX_SCALE)
+
+func _mark_settings_scalable(control: Control, boosted: bool = false) -> void:
+	control.set_meta(SETTINGS_SCALE_MIN_SIZE_META, true)
+	if boosted:
+		control.set_meta(SETTINGS_SCALE_BOOST_META, true)
+
+func _settings_boosted_scale(scale_factor: float) -> float:
+	return scale_factor * SETTINGS_LANDSCAPE_PICKER_BOOST if scale_factor > 1.0 else scale_factor
 
 func _on_settings_control_added(
 	_node: Node
@@ -208,6 +246,16 @@ func _settings_meta_key(
 		item_name
 	]
 
+func _scale_settings_misc_preview_visual(control: Control, scale_factor: float) -> void:
+	if not control.has_meta(SETTINGS_MISC_PREVIEW_BASE_SCALE_META):
+		control.set_meta(SETTINGS_MISC_PREVIEW_BASE_SCALE_META, control.scale)
+
+	var base_scale: Vector2 = control.get_meta(SETTINGS_MISC_PREVIEW_BASE_SCALE_META)
+
+	if control.size.x > 0.0 and control.size.y > 0.0:
+		control.pivot_offset = control.size * 0.5
+
+	control.scale = base_scale * scale_factor
 
 func _scale_settings_font_item(
 	control: Control,
@@ -275,6 +323,22 @@ func _scale_settings_theme_constant(
 		)
 	)
 
+func _scale_settings_stylebox_margins(control: Control, stylebox_name: String, scale_factor: float) -> void:
+	var meta_key := _settings_meta_key("_settings_base_stylebox", stylebox_name)
+
+	if not control.has_meta(meta_key):
+		var current := control.get_theme_stylebox(stylebox_name)
+		if current == null:
+			return
+		control.set_meta(meta_key, current)
+
+	var base: StyleBox = control.get_meta(meta_key)
+	var scaled := base.duplicate() as StyleBox
+
+	for side: int in 4:
+		scaled.set_content_margin(side, base.get_margin(side) * scale_factor)
+
+	control.add_theme_stylebox_override(stylebox_name, scaled)
 
 func _scale_settings_minimum_size(
 	control: Control,
@@ -334,79 +398,80 @@ func _scale_button_child_geometry(
 	control.size = base_size * scale_factor
 	control.position = base_position * scale_factor
 
+func _configure_settings_avatar_thumbnail(avatar: TextureButton) -> void:
+	avatar.scale = Vector2.ONE
+	avatar.clip_contents = true
+	avatar.set_meta(SETTINGS_AVATAR_THUMBNAIL_META, true)
 
-func _scale_settings_control_recursive(
-	node: Node,
-	scale_factor: float
-) -> void:
+	var internal_viewport := avatar.get_node_or_null("SubViewportContainer/SubViewport") as SubViewport
+	if internal_viewport != null:
+		internal_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+
+	_scale_settings_avatar_thumbnail(avatar, _settings_ui_scale())
+
+func _scale_settings_avatar_thumbnail(avatar: Control, scale_factor: float) -> void:
+	var preview := avatar.get_node_or_null("SubViewportContainer") as SubViewportContainer
+	if preview == null:
+		return
+
+	if not preview.has_meta(SETTINGS_AVATAR_BASE_PREVIEW_META):
+		preview.set_meta(SETTINGS_AVATAR_BASE_PREVIEW_META, [
+			Vector4(preview.offset_left, preview.offset_top, preview.offset_right, preview.offset_bottom),
+			preview.scale,
+			preview.pivot_offset
+		])
+
+	var base: Array = preview.get_meta(SETTINGS_AVATAR_BASE_PREVIEW_META)
+	var base_offsets: Vector4 = base[0]
+	var base_w: float = base_offsets.z - base_offsets.x
+	var base_h: float = base_offsets.w - base_offsets.y
+
+	preview.pivot_offset = base[2] if scale_factor <= 1.0 else Vector2.ZERO
+	preview.scale = (base[1] as Vector2) * scale_factor
+	preview.offset_left = -base_w * 0.5 * scale_factor
+	preview.offset_right = preview.offset_left + base_w
+	preview.offset_top = -base_h * scale_factor
+	preview.offset_bottom = preview.offset_top + base_h
+
+func _scale_settings_control_recursive(node: Node, scale_factor: float) -> void:
 	var control := node as Control
 
 	if control != null:
-		_scale_settings_minimum_size(
-			control,
-			scale_factor
-		)
+		var item_scale := _settings_boosted_scale(scale_factor) if bool(control.get_meta(SETTINGS_SCALE_BOOST_META, false)) else scale_factor
+
+		if bool(control.get_meta(SETTINGS_SCALE_MIN_SIZE_META, false)):
+			_scale_settings_minimum_size(control, item_scale)
+
+		if bool(control.get_meta(SETTINGS_AVATAR_THUMBNAIL_META, false)):
+			_scale_settings_avatar_thumbnail(control, item_scale)
+
+		if bool(control.get_meta(SETTINGS_MISC_PREVIEW_VISUAL_META, false)):
+			_scale_settings_misc_preview_visual(control, item_scale)
+
+		if control is HSlider:
+			_scale_settings_slider(control as HSlider, item_scale)
 
 		if control is RichTextLabel:
-			for font_item: String in (
-				SETTINGS_RICH_TEXT_FONT_ITEMS
-			):
-				_scale_settings_font_item(
-					control,
-					font_item,
-					scale_factor
-				)
-		elif (
-			control is Label or
-			control is BaseButton or
-			control is LineEdit or
-			control is TextEdit or
-			control is TabBar
-		):
-			_scale_settings_font_item(
-				control,
-				"font_size",
-				scale_factor
-			)
+			for font_item: String in SETTINGS_RICH_TEXT_FONT_ITEMS:
+				_scale_settings_font_item(control, font_item, item_scale)
+		elif control is Label or control is BaseButton or control is LineEdit or control is TextEdit or control is TabBar:
+			_scale_settings_font_item(control, "font_size", item_scale)
 
 		if control is MarginContainer:
-			for margin_item: String in (
-				SETTINGS_MARGIN_ITEMS
-			):
-				_scale_settings_theme_constant(
-					control,
-					margin_item,
-					scale_factor
-				)
+			for margin_item: String in SETTINGS_MARGIN_ITEMS:
+				_scale_settings_theme_constant(control, margin_item, item_scale)
 
 		if control is BoxContainer:
-			_scale_settings_theme_constant(
-				control,
-				"separation",
-				scale_factor
-			)
+			_scale_settings_theme_constant(control, "separation", item_scale)
 
 		if control is TabBar:
-			for constant_item: String in (
-				SETTINGS_TAB_CONSTANT_ITEMS
-			):
-				_scale_settings_theme_constant(
-					control,
-					constant_item,
-					scale_factor
-				)
-
-		_scale_button_child_geometry(
-			control,
-			scale_factor
-		)
+			for constant_item: String in SETTINGS_TAB_CONSTANT_ITEMS:
+				_scale_settings_theme_constant(control, constant_item, item_scale)
+			for stylebox_item: String in SETTINGS_TAB_STYLEBOX_ITEMS:
+				_scale_settings_stylebox_margins(control, stylebox_item, item_scale)
 
 	for child: Node in node.get_children():
-		_scale_settings_control_recursive(
-			child,
-			scale_factor
-		)
-
+		_scale_settings_control_recursive(child, scale_factor)
 
 func _refresh_settings_switches(
 	node: Node
@@ -414,39 +479,32 @@ func _refresh_settings_switches(
 	var button := node as Button
 
 	if button != null:
-		var knob_wrap := button.get_node_or_null(
-			"KnobWrap"
-		)
-
-		var direct_knob := button.get_node_or_null(
-			"Knob"
-		)
-
-		if is_instance_valid(knob_wrap):
-			_layout_switch_children(button)
-
-			_update_switch_visual(
-				button,
-				button.button_pressed,
-				true
-			)
-		elif is_instance_valid(direct_knob):
-			_update_game_switch_visual(
-				button,
-				button.button_pressed,
-				true
-			)
+		_apply_switch_visual(button, button.button_pressed, true)
 
 	for child: Node in node.get_children():
 		_refresh_settings_switches(child)
 
+func _apply_switch_visual(btn: Button, enabled: bool, instant: bool) -> void:
+	if is_instance_valid(btn.get_node_or_null("KnobWrap")):
+		_layout_switch_children(btn)
+		_update_switch_visual(btn, enabled, instant)
+	elif is_instance_valid(btn.get_node_or_null("Knob")):
+		_update_game_switch_visual(btn, enabled, instant)
 
 func _apply_settings_orientation_layout() -> void:
+	var scale_factor := _settings_ui_scale()
+	var body := _find_responsive_body()
+
+	if is_instance_valid(body):
+		_scale_settings_control_recursive(body, scale_factor)
+
 	if is_instance_valid(theme_option_button):
 		var popup_menu := theme_option_button.get_popup()
 		if popup_menu != null:
-			popup_menu.add_theme_font_size_override("font_size", 15)
+			popup_menu.add_theme_font_size_override("font_size", int(round(15.0 * scale_factor)))
+
 	_refresh_settings_switches(self)
+
 	if _responsive_layout_active:
 		_apply_responsive_popup_geometry()
 
@@ -459,13 +517,23 @@ func _find_responsive_body() -> Control:
 			return _responsive_body
 	return null
 
-func _ensure_responsive_scroll() -> void:
+func _ensure_responsive_scroll(landscape_only: bool = false) -> void:
 	if is_instance_valid(_responsive_scroll):
+		if not landscape_only:
+			_responsive_scroll_landscape_only = false
 		return
+
 	var body := _find_responsive_body()
 	if not is_instance_valid(body):
 		return
+
+	if not body.has_meta(SETTINGS_BASE_H_SIZE_FLAGS_META):
+		body.set_meta(SETTINGS_BASE_H_SIZE_FLAGS_META, body.size_flags_horizontal)
+	if not body.has_meta(SETTINGS_BASE_V_SIZE_FLAGS_META):
+		body.set_meta(SETTINGS_BASE_V_SIZE_FLAGS_META, body.size_flags_vertical)
+
 	remove_child(body)
+
 	_responsive_scroll = ScrollContainer.new()
 	_responsive_scroll.name = "ResponsiveSettingsScroll"
 	_responsive_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -473,39 +541,70 @@ func _ensure_responsive_scroll() -> void:
 	_responsive_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_responsive_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_responsive_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	_responsive_scroll.scroll_deadzone = 10
+	_responsive_scroll_landscape_only = landscape_only
+
 	add_child(_responsive_scroll)
 	_responsive_scroll.add_child(body)
+
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 
+func _remove_responsive_scroll() -> void:
+	if not is_instance_valid(_responsive_scroll):
+		return
+
+	var body := _responsive_body
+
+	if is_instance_valid(body) and body.get_parent() == _responsive_scroll:
+		_responsive_scroll.remove_child(body)
+
+	if _responsive_scroll.get_parent() == self:
+		remove_child(_responsive_scroll)
+
+	_responsive_scroll.queue_free()
+	_responsive_scroll = null
+	_responsive_scroll_landscape_only = false
+
+	if is_instance_valid(body):
+		add_child(body)
+		if body.has_meta(SETTINGS_BASE_H_SIZE_FLAGS_META):
+			body.size_flags_horizontal = int(body.get_meta(SETTINGS_BASE_H_SIZE_FLAGS_META))
+		if body.has_meta(SETTINGS_BASE_V_SIZE_FLAGS_META):
+			body.size_flags_vertical = int(body.get_meta(SETTINGS_BASE_V_SIZE_FLAGS_META))
+
 func get_responsive_popup_size(viewport_size: Vector2) -> Vector2:
 	var landscape := viewport_size.x > viewport_size.y
+
+	if landscape:
+		_ensure_responsive_scroll(true)
+		return viewport_size * 0.90
+
+	if is_instance_valid(_responsive_scroll) and _responsive_scroll_landscape_only:
+		_remove_responsive_scroll()
+
 	var body := _find_responsive_body()
 	var preferred := get_combined_minimum_size()
 	if is_instance_valid(body):
 		preferred = body.get_combined_minimum_size() + Vector2(20.0, 20.0)
 
-	var popup_width: float
-	if landscape:
-		popup_width = minf(viewport_size.x * 0.92, 1100.0)
-		popup_width = maxf(popup_width, minf(viewport_size.x * 0.84, 640.0))
-	else:
-		var width_limit: float = minf(viewport_size.x * 0.94, 640.0)
-		var min_width: float = minf(width_limit, minf(viewport_size.x * 0.90, 400.0))
-		popup_width = clampf(preferred.x, min_width, width_limit)
+	var width_limit: float = minf(viewport_size.x * 0.94, 640.0)
+	var min_width: float = minf(width_limit, minf(viewport_size.x * 0.90, 400.0))
+	var popup_width: float = clampf(preferred.x, min_width, width_limit)
 
-	var max_height: float = viewport_size.y * (0.92 if landscape else 0.94)
+	var max_height: float = viewport_size.y * 0.94
 	var popup_height: float = minf(preferred.y, max_height)
+
 	if preferred.y > max_height:
-		_ensure_responsive_scroll()
+		_ensure_responsive_scroll(false)
 		popup_height = max_height
+
 	return Vector2(popup_width, max(120.0, popup_height))
 
-
 func get_responsive_target_position(viewport_size: Vector2, popup_size: Vector2) -> Vector2:
-	var landscape := viewport_size.x > viewport_size.y
-	var bottom_margin := 10.0 if landscape else 0.0
-	return Vector2((viewport_size.x - popup_size.x) * 0.5, max(0.0, viewport_size.y - popup_size.y - bottom_margin))
+	if viewport_size.x > viewport_size.y:
+		return (viewport_size - popup_size) * 0.5
+	return Vector2((viewport_size.x - popup_size.x) * 0.5, max(0.0, viewport_size.y - popup_size.y))
 
 func set_responsive_layout_active(enabled: bool) -> void:
 	_responsive_layout_active = enabled
@@ -583,8 +682,10 @@ func _populate_theme_previews():
 		var texture = ImageTexture.create_from_image(image)
 		
 		btn.texture_normal = texture
-		btn.stretch_mode = TextureButton.STRETCH_KEEP_CENTERED
+		btn.ignore_texture_size = true
+		btn.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 		btn.custom_minimum_size = Vector2(64, 64)
+		_mark_settings_scalable(btn)
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.mouse_filter = Control.MOUSE_FILTER_STOP
 		btn.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
@@ -732,9 +833,14 @@ func _setup_avatar_customizer():
 	main_avatar_preview = AvatarThumbnailScene.instantiate()
 	main_avatar_preview.is_display_only = true
 	main_avatar_preview.custom_minimum_size = Vector2(96, 140)
+	_mark_settings_scalable(main_avatar_preview)
+	_configure_settings_avatar_thumbnail(main_avatar_preview)
+
 	main_preview_container.custom_minimum_size.y = 140
+	_mark_settings_scalable(main_preview_container)
 	main_preview_container.add_child(main_avatar_preview)
 
+	_mark_settings_scalable(avatar_tab_container, true)
 	avatar_tab_container.tab_changed.connect(_on_avatar_tab_changed)
 	avatar_tab_container.add_tab("BG")
 	avatar_tab_container.add_tab("Body")
@@ -880,6 +986,7 @@ func _populate_accessories_properties():
 func _create_color_and_brightness_control(category: String, color_key: String, brightness_key: String, colors: PackedColorArray, default_color: Color, initial_brightness: float):
 	var vbox = VBoxContainer.new()
 	vbox.custom_minimum_size.y = 80
+	_mark_settings_scalable(vbox, true)
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vbox.add_theme_constant_override("separation", 5)
@@ -887,13 +994,14 @@ func _create_color_and_brightness_control(category: String, color_key: String, b
 	hbox_colors.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hbox_colors.add_theme_constant_override("separation", 5)
 	var diameter = 24
-	var radius = diameter * 0.5
+	var radius = 999
 	var spacer_left = Control.new()
 	spacer_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hbox_colors.add_child(spacer_left)
 	for color_value in colors:
 		var btn = Button.new()
 		btn.custom_minimum_size = Vector2(diameter, diameter)
+		_mark_settings_scalable(btn, true)
 		btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		var style_normal = StyleBoxFlat.new()
 		style_normal.bg_color = color_value
@@ -922,6 +1030,7 @@ func _create_color_and_brightness_control(category: String, color_key: String, b
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slider.min_value = -1.0; slider.max_value = 1.0; slider.step = 0.01
 	slider.value = initial_brightness
+	slider.set_meta(SETTINGS_SCALE_BOOST_META, true)
 	slider.value_changed.connect(_on_avatar_preview_setting_changed.bind(category, brightness_key))
 	vbox.add_child(slider)
 	current_brightness_slider = slider
@@ -959,25 +1068,34 @@ func _update_selected_color_dot_border(parent_hbox: HBoxContainer, selected_colo
 func _begin_game_picker_drag(scroll: ScrollContainer) -> void:
 	scroll.set_meta("_settings_picker_drag_active", true)
 	scroll.set_meta("_settings_picker_dragged", false)
-	scroll.set_meta("_settings_picker_drag_distance", 0.0)
+	scroll.set_meta("_settings_picker_drag_delta", Vector2.ZERO)
+	scroll.set_meta("_settings_picker_drag_axis", 0)
 
 
-func _move_game_picker_drag(scroll: ScrollContainer, relative_x: float) -> void:
+func _move_game_picker_drag(scroll: ScrollContainer, relative: Vector2) -> void:
 	if not bool(scroll.get_meta("_settings_picker_drag_active", false)):
 		return
 
-	var distance: float = float(scroll.get_meta("_settings_picker_drag_distance", 0.0)) + absf(relative_x)
-	scroll.set_meta("_settings_picker_drag_distance", distance)
+	var delta: Vector2 = Vector2(scroll.get_meta("_settings_picker_drag_delta", Vector2.ZERO)) + relative
+	scroll.set_meta("_settings_picker_drag_delta", delta)
 
-	if distance >= SETTINGS_PICKER_DRAG_THRESHOLD:
+	var axis: int = int(scroll.get_meta("_settings_picker_drag_axis", 0))
+
+	if axis == 0:
+		if delta.length() < SETTINGS_PICKER_DRAG_THRESHOLD:
+			return
+		axis = 1 if absf(delta.x) >= absf(delta.y) else 2
+		scroll.set_meta("_settings_picker_drag_axis", axis)
 		scroll.set_meta("_settings_picker_dragged", true)
 
-	if not bool(scroll.get_meta("_settings_picker_dragged", false)):
+	if axis == 1:
+		scroll.scroll_horizontal -= int(round(relative.x))
+	elif is_instance_valid(_responsive_scroll):
+		_responsive_scroll.scroll_vertical -= int(round(relative.y))
+	else:
 		return
 
-	scroll.scroll_horizontal -= int(round(relative_x))
 	get_viewport().set_input_as_handled()
-
 
 func _end_game_picker_drag(scroll: ScrollContainer, on_tap: Callable = Callable()) -> void:
 	if not bool(scroll.get_meta("_settings_picker_drag_active", false)):
@@ -1006,7 +1124,7 @@ func _on_game_picker_item_input(event: InputEvent, scroll: ScrollContainer, on_t
 	elif event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
 		if (motion.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
-			_move_game_picker_drag(scroll, motion.relative.x)
+			_move_game_picker_drag(scroll, motion.relative)
 
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
@@ -1017,7 +1135,7 @@ func _on_game_picker_item_input(event: InputEvent, scroll: ScrollContainer, on_t
 
 	elif event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
-		_move_game_picker_drag(scroll, drag.relative.x)
+		_move_game_picker_drag(scroll, drag.relative)
 
 
 func _on_game_picker_scroll_input(event: InputEvent, scroll: ScrollContainer) -> void:
@@ -1034,7 +1152,7 @@ func _on_game_picker_scroll_input(event: InputEvent, scroll: ScrollContainer) ->
 	elif event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
 		if (motion.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
-			_move_game_picker_drag(scroll, motion.relative.x)
+			_move_game_picker_drag(scroll, motion.relative)
 
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
@@ -1045,7 +1163,7 @@ func _on_game_picker_scroll_input(event: InputEvent, scroll: ScrollContainer) ->
 
 	elif event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
-		_move_game_picker_drag(scroll, drag.relative.x)
+		_move_game_picker_drag(scroll, drag.relative)
 
 func _update_brightness_slider_gradient(color: Color):
 	if not is_instance_valid(current_brightness_slider): return
@@ -1110,10 +1228,12 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 	var scroll_container := ScrollContainer.new()
 	scroll_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll_container.custom_minimum_size = Vector2(0, 150)
-	scroll_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	_mark_settings_scalable(scroll_container)
+	scroll_container.mouse_filter = Control.MOUSE_FILTER_STOP
 	scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll_container.scroll_deadzone = 8
+	scroll_container.scroll_deadzone = int(SETTINGS_PICKER_DRAG_THRESHOLD)
+	scroll_container.gui_input.connect(_on_game_picker_scroll_input.bind(scroll_container))
 
 	var list_key: String = "%s/%s/%s" % [
 		avatar_tab_container.get_tab_title(avatar_tab_container.current_tab),
@@ -1130,14 +1250,15 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 	var cfg_section := "avatar_hair_front" if category == "hair" else "avatar_" + category
 	var current_style_value = SettingsManager.get_setting(cfg_section, key, style_options[0])
 
-	const DRAG_THRESHOLD := 8.0
-
 	for style_name in style_options:
 		var thumbnail := AvatarThumbnailScene.instantiate()
 		thumbnail.custom_minimum_size = Vector2(96, 140)
+		_mark_settings_scalable(thumbnail)
 		thumbnail.controlled_by_data = true
+		thumbnail.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		_configure_settings_avatar_thumbnail(thumbnail)
 		thumbnail.focus_mode = Control.FOCUS_NONE
-		thumbnail.mouse_filter = Control.MOUSE_FILTER_PASS
+		thumbnail.mouse_filter = Control.MOUSE_FILTER_STOP
 		thumbnail.action_mode = BaseButton.ACTION_MODE_BUTTON_RELEASE
 		thumbnail.button_mask = MOUSE_BUTTON_MASK_LEFT
 		thumbnail.toggle_mode = false
@@ -1155,26 +1276,10 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 		if style_name == current_style_value:
 			thumbnail.set_selected(true)
 
-		thumbnail.set_meta("tap_start", Vector2.ZERO)
-		thumbnail.set_meta("dragging", false)
+		var select_item := func() -> void:
+			_on_avatar_setting_changed(category, key, style_name)
 
-		thumbnail.gui_input.connect(func(e: InputEvent) -> void:
-			if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
-				if e.pressed:
-					thumbnail.set_meta("tap_start", e.position)
-					thumbnail.set_meta("dragging", false)
-				else:
-					# Released: commit only if we didn't drag
-					if not bool(thumbnail.get_meta("dragging")):
-						_on_avatar_setting_changed(category, key, style_name)
-						get_viewport().set_input_as_handled()
-			elif e is InputEventMouseMotion:
-				if (e.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
-					var tap_start: Vector2 = thumbnail.get_meta("tap_start")
-					var is_dragging: bool = bool(thumbnail.get_meta("dragging"))
-					if not is_dragging and e.position.distance_to(tap_start) > DRAG_THRESHOLD:
-						thumbnail.set_meta("dragging", true)
-		)
+		thumbnail.gui_input.connect(_on_game_picker_item_input.bind(scroll_container, select_item))
 
 	_add_property_to_box(scroll_container)
 	_restore_scroll(scroll_container)
@@ -1247,41 +1352,39 @@ func _apply_dark_mode_visuals(enabled: bool, instant: bool) -> void:
 		tw.tween_property(sb, "bg_color", target, 0.25)
 		
 func _add_dark_mode_toggle():
-	var card := PanelContainer.new()
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-
-	var row := CenterContainer.new()
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.custom_minimum_size = Vector2(0, 40)
-
 	dark_mode_button = _make_switch_button()
-	row.add_child(dark_mode_button)
-	card.add_child(row)
+
+	var on_toggled := func(enabled: bool) -> void:
+		set_dark_mode(enabled, false)
+
+	var card := make_game_switch_card("Dark Mode", "Darken menus and popups", dark_mode_enabled, on_toggled, dark_mode_button)
 
 	if is_instance_valid(global_settings_container):
 		global_settings_container.add_child(card)
 	else:
 		printerr("SettingsPopup: GlobalSettingsContainer not found; cannot add dark mode toggle.")
 
-	dark_mode_button.toggled.connect(func(pressed: bool):
-		set_dark_mode(pressed, false)
-	)
-	
 func _make_switch_button() -> Button:
 	var btn := Button.new()
 	btn.toggle_mode = true
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.custom_minimum_size = Vector2(72, 36)
-	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_mark_settings_scalable(btn)
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_END
+	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	btn.clip_contents = false
 
 	var track := StyleBoxFlat.new()
-	track.bg_color = Color(0.75, 0.75, 0.78, 1.0)
-	track.corner_radius_top_left = 18
-	track.corner_radius_top_right = 18
-	track.corner_radius_bottom_left = 18
-	track.corner_radius_bottom_right = 18
+	track.bg_color = Color(0.22, 0.22, 0.24, 1.0)
+	track.border_color = Color(1.0, 1.0, 1.0, 0.18)
+	track.border_width_left = 1
+	track.border_width_top = 1
+	track.border_width_right = 1
+	track.border_width_bottom = 1
+	track.corner_radius_top_left = 999
+	track.corner_radius_top_right = 999
+	track.corner_radius_bottom_left = 999
+	track.corner_radius_bottom_right = 999
 	track.content_margin_left = 2; track.content_margin_right = 2
 	track.content_margin_top = 2; track.content_margin_bottom = 2
 	btn.add_theme_stylebox_override("normal", track)
@@ -1305,9 +1408,10 @@ func _make_switch_button() -> Button:
 	var kbox := StyleBoxFlat.new()
 	kbox.bg_color = Color(0, 0, 0, 1)
 	kbox.corner_radius_top_left = 16
-	kbox.corner_radius_top_right = 16
-	kbox.corner_radius_bottom_left = 16
-	kbox.corner_radius_bottom_right = 16
+	kbox.corner_radius_top_left = 999
+	kbox.corner_radius_top_right = 999
+	kbox.corner_radius_bottom_left = 999
+	kbox.corner_radius_bottom_right = 999
 	kbox.anti_aliasing = true
 	knob.add_theme_stylebox_override("panel", kbox)
 	knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1420,7 +1524,8 @@ func _update_switch_visual(btn: Button, on: bool, instant: bool):
 	var base := btn.get_theme_stylebox("normal", "Button") as StyleBoxFlat
 	if base:
 		var tdup := base.duplicate() as StyleBoxFlat
-		tdup.bg_color = Color(0.4, 0.4, 0.4, 1.0) if on else Color(0.85, 0.85, 0.85, 1.0)
+		tdup.bg_color = Color(0.655, 0.545, 0.980, 1.0) if on else Color(0.22, 0.22, 0.24, 1.0)
+		tdup.border_color = Color(1.0, 1.0, 1.0, 0.26) if on else Color(1.0, 1.0, 1.0, 0.18)
 		btn.add_theme_stylebox_override("normal", tdup)
 		btn.add_theme_stylebox_override("hover", tdup)
 		btn.add_theme_stylebox_override("pressed", tdup)
@@ -1435,8 +1540,8 @@ func _update_switch_visual(btn: Button, on: bool, instant: bool):
 	if is_instance_valid(moon): moon.move_to_front()
 	if is_instance_valid(sun): sun.move_to_front()
 
-	var left_x := 2.0
-	var right_x := btn.size.x - knob_wrap.size.x - 2.0
+	var left_x := 2.0 * _settings_ui_scale()
+	var right_x := btn.size.x - knob_wrap.size.x - left_x
 	var target_x := right_x if on else left_x
 
 	var knob_color := Color(0, 0, 0) if on else Color(1, 1, 1)
@@ -1550,10 +1655,11 @@ func _style_theme_dropdown() -> void:
 		popup_menu.add_theme_stylebox_override("panel", popup_style)
 
 
-func make_game_switch_card(title: String, subtitle: String, initial_on: bool, on_toggled: Callable) -> Control:
+func make_game_switch_card(title: String, subtitle: String, initial_on: bool, on_toggled: Callable, switch_button: Button = null) -> Control:
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.custom_minimum_size = Vector2(0, 62)
+	_mark_settings_scalable(card)
 
 	var card_style := StyleBoxFlat.new()
 	card_style.bg_color = Color(0.102, 0.102, 0.141, 1.0)
@@ -1595,16 +1701,16 @@ func make_game_switch_card(title: String, subtitle: String, initial_on: bool, on
 	subtitle_label.add_theme_color_override("font_color", Color(0.667, 0.667, 0.800, 1.0))
 	copy.add_child(subtitle_label)
 
-	var switch := _make_game_switch_button()
+	var switch := switch_button if switch_button != null else _make_game_switch_button()
 	switch.set_pressed_no_signal(initial_on)
 	switch.toggled.connect(func(enabled: bool) -> void:
-		_update_game_switch_visual(switch, enabled, false)
+		_apply_switch_visual(switch, enabled, false)
 		if on_toggled.is_valid():
 			on_toggled.call(enabled)
 	)
 
 	row.add_child(switch)
-	_update_game_switch_visual(switch, initial_on, true)
+	_apply_switch_visual(switch, initial_on, true)
 
 	return card
 
@@ -1612,6 +1718,7 @@ func make_game_option_card(title: String, subtitle: String, items: Array[String]
 	var card := PanelContainer.new()
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.custom_minimum_size = Vector2(0, 62)
+	_mark_settings_scalable(card)
 
 	var card_style := StyleBoxFlat.new()
 	card_style.bg_color = Color(0.102, 0.102, 0.141, 1.0)
@@ -1655,6 +1762,7 @@ func make_game_option_card(title: String, subtitle: String, items: Array[String]
 
 	var option := OptionButton.new()
 	option.custom_minimum_size = Vector2(130, 40)
+	_mark_settings_scalable(option)
 	option.size_flags_horizontal = Control.SIZE_SHRINK_END
 	option.focus_mode = Control.FOCUS_NONE
 	option.alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1715,6 +1823,39 @@ func make_game_option_card(title: String, subtitle: String, items: Array[String]
 
 	row.add_child(option)
 	return card
+
+func _scale_settings_slider(slider: HSlider, scale_factor: float) -> void:
+	if not slider.has_meta(SETTINGS_BASE_SLIDER_MIN_SIZE_META):
+		slider.set_meta(SETTINGS_BASE_SLIDER_MIN_SIZE_META, slider.custom_minimum_size)
+
+	var base_size: Vector2 = slider.get_meta(SETTINGS_BASE_SLIDER_MIN_SIZE_META)
+
+	if scale_factor <= 1.0:
+		slider.custom_minimum_size = base_size
+	else:
+		slider.custom_minimum_size = Vector2(base_size.x, maxf(base_size.y, 24.0) * scale_factor)
+
+	if not slider.has_theme_stylebox_override("slider"):
+		return
+
+	var bar := slider.get_theme_stylebox("slider") as StyleBoxTexture
+	if bar != null:
+		bar.texture_margin_top = 8.0 * scale_factor
+		bar.texture_margin_bottom = 8.0 * scale_factor
+		bar.texture_margin_left = 6.0 * scale_factor
+		bar.texture_margin_right = 6.0 * scale_factor
+
+	var grabber := _scaled_grabber_icon(scale_factor)
+	for icon_name: String in ["grabber", "grabber_highlight", "grabber_pressed"]:
+		slider.add_theme_icon_override(icon_name, grabber)
+
+func _scaled_grabber_icon(scale_factor: float) -> Texture2D:
+	var base_icon: Texture2D = load(GRABBER_IMAGE_PATH)
+	if scale_factor <= 1.0 or base_icon == null:
+		return base_icon
+	var image := base_icon.get_image()
+	image.resize(int(round(image.get_width() * scale_factor)), int(round(image.get_height() * scale_factor)), Image.INTERPOLATE_LANCZOS)
+	return ImageTexture.create_from_image(image)
 
 func _make_game_picker_item_style(selected: bool, hovered: bool = false) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -1817,6 +1958,7 @@ func make_game_picker_card(
 	var title_label := Label.new()
 	title_label.text = title
 	title_label.add_theme_font_size_override("font_size", 14)
+	_mark_settings_scalable(title_label, true)
 	section.add_child(title_label)
 
 	if not subtitle.is_empty():
@@ -1824,10 +1966,12 @@ func make_game_picker_card(
 		subtitle_label.text = subtitle
 		subtitle_label.modulate = Color(0.72, 0.72, 0.82, 1.0)
 		subtitle_label.add_theme_font_size_override("font_size", 11)
+		_mark_settings_scalable(subtitle_label, true)
 		section.add_child(subtitle_label)
 
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(0.0, 108.0)
+	_mark_settings_scalable(scroll, true)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1856,6 +2000,7 @@ func make_game_picker_card(
 
 		var button := Button.new()
 		button.custom_minimum_size = Vector2(90.0, 100.0)
+		_mark_settings_scalable(button, true)
 		button.focus_mode = Control.FOCUS_NONE
 		button.toggle_mode = false
 		button.clip_contents = true
@@ -1873,6 +2018,7 @@ func make_game_picker_card(
 
 		var preview_host := CenterContainer.new()
 		preview_host.custom_minimum_size = Vector2(74.0, 74.0)
+		_mark_settings_scalable(preview_host, true)
 		preview_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		preview_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		preview_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1891,6 +2037,7 @@ func make_game_picker_card(
 				texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 				texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 				texture_rect.custom_minimum_size = Vector2(70.0, 70.0)
+				_mark_settings_scalable(texture_rect, true)
 				texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				preview_host.add_child(texture_rect)
 
@@ -1954,9 +2101,16 @@ func _load_misc_previews() -> void:
 			if created is Control:
 				var preview_control := created as Control
 				preview_control.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				preview_control.set_meta(SETTINGS_MISC_PREVIEW_VISUAL_META, true)
+				preview_control.set_meta(SETTINGS_SCALE_BOOST_META, true)
 				host.add_child(preview_control)
 
-		await get_tree().process_frame
+				await get_tree().process_frame
+
+				if is_instance_valid(preview_control):
+					_scale_settings_misc_preview_visual(preview_control, _settings_boosted_scale(_settings_ui_scale()))
+			else:
+				await get_tree().process_frame
 
 	_misc_preview_loading = false
 	_queue_settings_layout_refresh()
@@ -1966,6 +2120,7 @@ func _make_game_switch_button() -> Button:
 	btn.toggle_mode = true
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.custom_minimum_size = Vector2(58, 30)
+	_mark_settings_scalable(btn)
 	btn.size_flags_horizontal = Control.SIZE_SHRINK_END
 	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	btn.clip_contents = false
@@ -2026,7 +2181,14 @@ func _update_game_switch_visual(btn: Button, enabled: bool, instant: bool) -> vo
 	if not is_instance_valid(knob):
 		return
 
-	var target_x: float = btn.size.x - knob.size.x - 3.0 if enabled else 3.0
+	var scale_factor := _settings_ui_scale()
+	var knob_size := Vector2(24.0, 24.0) * scale_factor
+	var edge_padding := 3.0 * scale_factor
+
+	knob.custom_minimum_size = knob_size
+	knob.size = knob_size
+
+	var target_x: float = btn.size.x - knob.size.x - edge_padding if enabled else edge_padding
 
 	if instant:
 		knob.position = Vector2(target_x, (btn.size.y - knob.size.y) * 0.5)
