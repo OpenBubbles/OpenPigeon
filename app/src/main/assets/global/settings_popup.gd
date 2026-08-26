@@ -39,6 +39,17 @@ const SETTINGS_LANDSCAPE_REFERENCE_SCALE: float = 2.1
 const SETTINGS_LANDSCAPE_MIN_SCALE: float = 2.0
 const SETTINGS_LANDSCAPE_MAX_SCALE: float = 2.5
 const SETTINGS_PICKER_DRAG_THRESHOLD: float = 7.0
+const SETTINGS_TAB_ICON_SIZE: float = 26.0
+const SETTINGS_TAB_ICON_DIM: float = 0.55
+const SETTINGS_AVATAR_TABS := [
+	["BG", "res://global/backgroundtab.png"],
+	["Body", "res://global/bodytab.png"],
+	["Hair", "res://global/hairtab.png"],
+	["Face", "res://global/eyemouthtab.png"],
+	["Cloth", "res://global/clothingtab.png"],
+	["Acc.", "res://global/hatglassestab.png"]
+]
+const SETTINGS_MISC_TAB := ["Misc", "res://global/customtab.png"]
 const SETTINGS_SCALE_MIN_SIZE_META := "_settings_scale_min_size"
 const SETTINGS_BASE_H_SIZE_FLAGS_META := "_settings_base_h_size_flags"
 const SETTINGS_BASE_V_SIZE_FLAGS_META := "_settings_base_v_size_flags"
@@ -96,6 +107,9 @@ var _responsive_body: Control = null
 var _responsive_layout_active: bool = false
 var _misc_settings_container: VBoxContainer = null
 var _misc_tab_index: int = -1
+var _avatar_tab_names: Array[String] = []
+var _avatar_tab_icons: Array[String] = []
+var _tab_icon_cache: Dictionary = {}
 var _misc_preview_loading: bool = false
 
 func _remember_scroll_positions() -> void:
@@ -105,13 +119,13 @@ func _remember_scroll_positions() -> void:
 			if child.has_meta("list_key"):
 				key = String(child.get_meta("list_key"))
 			else:
-				key = String(avatar_tab_container.get_tab_title(avatar_tab_container.current_tab))
+				key = _tab_name(avatar_tab_container.current_tab)
 			_scroll_pos_by_tab[key] = Vector2(child.scroll_horizontal, child.scroll_vertical)
 
 func _restore_scroll(sc: ScrollContainer) -> void:
 	var key: String = String(sc.get_meta("list_key")) \
 		if sc.has_meta("list_key") \
-		else String(avatar_tab_container.get_tab_title(avatar_tab_container.current_tab))
+		else _tab_name(avatar_tab_container.current_tab)
 	if _scroll_pos_by_tab.has(key):
 		var pos: Vector2 = _scroll_pos_by_tab[key] as Vector2
 		sc.call_deferred("set", "scroll_horizontal", int(pos.x))
@@ -469,6 +483,8 @@ func _scale_settings_control_recursive(node: Node, scale_factor: float) -> void:
 				_scale_settings_theme_constant(control, constant_item, item_scale)
 			for stylebox_item: String in SETTINGS_TAB_STYLEBOX_ITEMS:
 				_scale_settings_stylebox_margins(control, stylebox_item, item_scale)
+			for tab_index: int in (control as TabBar).tab_count:
+				(control as TabBar).set_tab_icon_max_width(tab_index, int(round(SETTINGS_TAB_ICON_SIZE * item_scale)))
 
 	for child: Node in node.get_children():
 		_scale_settings_control_recursive(child, scale_factor)
@@ -829,6 +845,44 @@ func _on_theme_option_button_item_selected(index: int):
 		SettingsManager.save()
 	settings_theme_selected.emit(selected_theme_name)
 
+func _tab_name(index: int) -> String:
+	return _avatar_tab_names[index] if index >= 0 and index < _avatar_tab_names.size() else ""
+
+func _tab_icon(icon_path: String, selected: bool) -> Texture2D:
+	var key: String = icon_path + ("_on" if selected else "_off")
+
+	if _tab_icon_cache.has(key):
+		return _tab_icon_cache[key]
+
+	if not ResourceLoader.exists(icon_path):
+		return null
+
+	var icon: Texture2D = load(icon_path)
+
+	if not selected:
+		var image := icon.get_image()
+		if image.is_compressed():
+			image.decompress()
+		image.adjust_bcs(SETTINGS_TAB_ICON_DIM, 1.0, 1.0)
+		icon = ImageTexture.create_from_image(image)
+
+	_tab_icon_cache[key] = icon
+	return icon
+
+func _add_avatar_tab(tab: Array) -> int:
+	avatar_tab_container.add_tab("")
+	var index: int = avatar_tab_container.tab_count - 1
+	_avatar_tab_names.append(String(tab[0]))
+	_avatar_tab_icons.append(String(tab[1]))
+	avatar_tab_container.set_tab_tooltip(index, String(tab[0]))
+	avatar_tab_container.set_tab_icon_max_width(index, int(round(SETTINGS_TAB_ICON_SIZE * _settings_ui_scale())))
+	_refresh_avatar_tab_icons()
+	return index
+
+func _refresh_avatar_tab_icons() -> void:
+	for index: int in _avatar_tab_icons.size():
+		avatar_tab_container.set_tab_icon(index, _tab_icon(_avatar_tab_icons[index], index == avatar_tab_container.current_tab))
+
 func _setup_avatar_customizer():
 	main_avatar_preview = AvatarThumbnailScene.instantiate()
 	main_avatar_preview.is_display_only = true
@@ -842,13 +896,10 @@ func _setup_avatar_customizer():
 
 	_mark_settings_scalable(avatar_tab_container, true)
 	avatar_tab_container.tab_changed.connect(_on_avatar_tab_changed)
-	avatar_tab_container.add_tab("BG")
-	avatar_tab_container.add_tab("Body")
-	avatar_tab_container.add_tab("Hair")
-	avatar_tab_container.add_tab("Face")
-	avatar_tab_container.add_tab("Cloth")
-	avatar_tab_container.add_tab("Acc.")
+	for tab: Array in SETTINGS_AVATAR_TABS:
+		_add_avatar_tab(tab)
 	avatar_tab_container.current_tab = 0
+	_refresh_avatar_tab_icons()
 	_on_avatar_tab_changed(0)
 
 func _on_avatar_tab_changed(tab_index: int, restored_scroll: Variant = null):
@@ -856,7 +907,8 @@ func _on_avatar_tab_changed(tab_index: int, restored_scroll: Variant = null):
 		printerr("SettingsPopup: ERROR! properties_box is not valid.")
 		return
 
-	var tab_name := avatar_tab_container.get_tab_title(tab_index)
+	var tab_name := _tab_name(tab_index)
+	_refresh_avatar_tab_icons()
 
 	_remember_scroll_positions()
 	for child in properties_box.get_children():
@@ -1236,7 +1288,7 @@ func _create_image_presets_scrollbar(category: String, key: String, style_option
 	scroll_container.gui_input.connect(_on_game_picker_scroll_input.bind(scroll_container))
 
 	var list_key: String = "%s/%s/%s" % [
-		avatar_tab_container.get_tab_title(avatar_tab_container.current_tab),
+		_tab_name(avatar_tab_container.current_tab),
 		category, key
 	]
 	scroll_container.set_meta("list_key", list_key)
@@ -1902,8 +1954,7 @@ func _ensure_misc_tab() -> void:
 		return
 	if not is_instance_valid(avatar_tab_container):
 		return
-	avatar_tab_container.add_tab("Misc")
-	_misc_tab_index = avatar_tab_container.tab_count - 1
+	_misc_tab_index = _add_avatar_tab(SETTINGS_MISC_TAB)
 
 
 func _ensure_misc_settings_container() -> VBoxContainer:

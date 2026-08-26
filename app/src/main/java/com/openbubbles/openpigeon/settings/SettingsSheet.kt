@@ -15,6 +15,7 @@ import android.widget.*
 import androidx.core.view.isVisible
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.graphics.toColorInt
+import com.openbubbles.openpigeon.R
 import kotlin.math.min
 
 private class SettingsMaxHeightScrollView(context: Context) : ScrollView(context) {
@@ -104,7 +105,7 @@ class SettingsSheet(
     private enum class Tab { BACKGROUND, BODY, HAIR, FACE, CLOTHING, HATS, MISC }
 
     private var currentTab = Tab.HAIR
-    private val tabViews = mutableMapOf<Tab, TextView>()
+    private val tabViews = mutableMapOf<Tab, ImageView>()
     private var miscTabAdded = false
 
     // Slider state
@@ -153,13 +154,26 @@ class SettingsSheet(
         updateResponsiveLayout()
     }
 
+    fun addGameControl(label: String, subtitle: String, controlView: View, inCustomTab: Boolean) {
+        if (!inCustomTab) {
+            addGameControl(label, subtitle, controlView)
+            return
+        }
+        if (!::miscRowsContainer.isInitialized) return
+        miscRowsContainer.addView(buildGameControlCard(label, subtitle, controlView))
+        ensureCustomTab()
+        updateResponsiveLayout()
+    }
+
+    fun ensureCustomTab() = ensureMiscTab()
+
     fun addBooleanSetting(
         label: String,
         scope: SettingScope,
         key: String,
         default: Boolean,
         onChanged: (Boolean) -> Unit,
-    ): SwitchCompat = addBooleanSetting(label, "", scope, key, default, onChanged)
+    ): SwitchCompat = addBooleanSetting(label, "", scope, key, default, onChanged = onChanged)
 
     fun addBooleanSetting(
         label: String,
@@ -167,6 +181,7 @@ class SettingsSheet(
         scope: SettingScope,
         key: String,
         default: Boolean,
+        inCustomTab: Boolean = false,
         onChanged: (Boolean) -> Unit,
     ): SwitchCompat {
         SettingsData.init(context)
@@ -181,7 +196,7 @@ class SettingsSheet(
             binding.onChanged(checked)
         }
         booleanSettingBindings += binding
-        addGameControl(label, subtitle, control)
+        addGameControl(label, subtitle, control, inCustomTab)
         refreshBooleanSetting(binding)
         return control
     }
@@ -193,6 +208,7 @@ class SettingsSheet(
         key: String,
         items: List<Pair<String, String>>,
         default: String,
+        inCustomTab: Boolean = false,
         onChanged: (String) -> Unit,
     ): Spinner {
         SettingsData.init(context)
@@ -220,7 +236,7 @@ class SettingsSheet(
             suppress = false
         }, onChanged)
         stringSettingBindings += binding
-        addGameControl(label, subtitle, spinner)
+        addGameControl(label, subtitle, spinner, inCustomTab)
         refreshStringSetting(binding)
         return spinner
     }
@@ -410,18 +426,30 @@ class SettingsSheet(
         return view
     }
 
-    private fun createTabView(tab: Tab): TextView = TextView(context).apply {
-        text = when (tab) {
-            Tab.CLOTHING -> "Clothes"
-            Tab.HATS -> "Acc"
-            Tab.MISC -> "Misc"
-            else -> tab.name.lowercase().replaceFirstChar { it.uppercase() }
-        }
-        textSize = 10f
-        setTextColor(if (tab == currentTab) COL_TAB_SEL else COL_TAB_UNSEL)
-        gravity = Gravity.CENTER
-        layoutParams = LinearLayout.LayoutParams(0, dp(36f), 1f)
-        setPadding(dp(1f), 0, dp(1f), 0)
+    private fun tabLabel(tab: Tab): String = when (tab) {
+        Tab.CLOTHING -> "Clothes"
+        Tab.HATS -> "Acc"
+        Tab.MISC -> "Misc"
+        else -> tab.name.lowercase().replaceFirstChar { it.uppercase() }
+    }
+
+    private fun tabIcon(tab: Tab): Int = when (tab) {
+        Tab.BACKGROUND -> R.drawable.backgroundtab
+        Tab.BODY -> R.drawable.bodytab
+        Tab.HAIR -> R.drawable.hairtab
+        Tab.FACE -> R.drawable.eyemouthtab
+        Tab.CLOTHING -> R.drawable.clothingtab
+        Tab.HATS -> R.drawable.hatglassestab
+        Tab.MISC -> R.drawable.customtab
+    }
+
+    private fun createTabView(tab: Tab): ImageView = ImageView(context).apply {
+        setImageResource(tabIcon(tab))
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        imageTintList = ColorStateList.valueOf(if (tab == currentTab) COL_TAB_SEL else COL_TAB_UNSEL)
+        contentDescription = tabLabel(tab)
+        layoutParams = LinearLayout.LayoutParams(0, dp(40f), 1f)
+        setPadding(dp(7f), dp(7f), dp(7f), dp(7f))
         setOnClickListener { selectTab(tab) }
     }
 
@@ -954,7 +982,7 @@ class SettingsSheet(
         removeExtraRows()
         currentTab = tab
         tabViews.forEach { (t, tv) ->
-            tv.setTextColor(if (t == tab) COL_TAB_SEL else COL_TAB_UNSEL)
+            tv.imageTintList = ColorStateList.valueOf(if (t == tab) COL_TAB_SEL else COL_TAB_UNSEL)
         }
         miscRowsContainer.isVisible = tab == Tab.MISC
         pickerScroll.isVisible = tab != Tab.MISC
