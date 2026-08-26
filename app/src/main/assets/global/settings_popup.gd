@@ -39,8 +39,30 @@ const SETTINGS_LANDSCAPE_REFERENCE_SCALE: float = 2.1
 const SETTINGS_LANDSCAPE_MIN_SCALE: float = 2.0
 const SETTINGS_LANDSCAPE_MAX_SCALE: float = 2.5
 const SETTINGS_PICKER_DRAG_THRESHOLD: float = 7.0
-const SETTINGS_TAB_ICON_SIZE: float = 26.0
+const SETTINGS_TAB_ICON_SIZE: float = 48.0
 const SETTINGS_TAB_ICON_DIM: float = 0.55
+const SETTINGS_TAB_ICON_LIGHT: float = 0.25
+const SETTINGS_TAB_SELECTED_ALPHA: float = 0.1
+const SETTINGS_TAB_MAX_SEPARATION: float = 18.0
+const SETTINGS_TAB_EDGE_PADDING: float = 8.0
+const SETTINGS_PANEL_BG_DARK := Color(0.1176, 0.1176, 0.1804, 0.98)
+const SETTINGS_PALETTE_ACCENT_SAT: float = 0.35
+const SETTINGS_PALETTE_SURFACE_SAT: float = 0.4
+const SETTINGS_PICKER_ITEM_META := "_settings_picker_item"
+const SETTINGS_BASE_FONT_COLOR_META := "_settings_base_font_color"
+const SETTINGS_BASE_PALETTE_BOX_META := "_settings_base_palette_box"
+const SETTINGS_PALETTE_FONT_ITEMS := [
+	"font_color",
+	"font_hover_color",
+	"font_pressed_color",
+	"font_focus_color"
+]
+const SETTINGS_PALETTE_STYLEBOX_ITEMS := [
+	"panel",
+	"normal",
+	"hover",
+	"pressed"
+]
 const SETTINGS_AVATAR_TABS := [
 	["BG", "res://global/backgroundtab.png"],
 	["Body", "res://global/bodytab.png"],
@@ -77,8 +99,7 @@ const SETTINGS_MARGIN_ITEMS := [
 ]
 
 const SETTINGS_TAB_CONSTANT_ITEMS := [
-	"h_separation",
-	"tab_separation"
+	"h_separation"
 ]
 
 const SETTINGS_TAB_STYLEBOX_ITEMS := [
@@ -110,6 +131,7 @@ var _misc_tab_index: int = -1
 var _avatar_tab_names: Array[String] = []
 var _avatar_tab_icons: Array[String] = []
 var _tab_icon_cache: Dictionary = {}
+var _tab_stylebox_margins: Dictionary = {}
 var _misc_preview_loading: bool = false
 
 func _remember_scroll_positions() -> void:
@@ -481,13 +503,95 @@ func _scale_settings_control_recursive(node: Node, scale_factor: float) -> void:
 		if control is TabBar:
 			for constant_item: String in SETTINGS_TAB_CONSTANT_ITEMS:
 				_scale_settings_theme_constant(control, constant_item, item_scale)
-			for stylebox_item: String in SETTINGS_TAB_STYLEBOX_ITEMS:
-				_scale_settings_stylebox_margins(control, stylebox_item, item_scale)
 			for tab_index: int in (control as TabBar).tab_count:
 				(control as TabBar).set_tab_icon_max_width(tab_index, int(round(SETTINGS_TAB_ICON_SIZE * item_scale)))
 
 	for child: Node in node.get_children():
 		_scale_settings_control_recursive(child, scale_factor)
+
+func _palette_invert(base: Color, saturation_scale: float) -> Color:
+	if base.s >= SETTINGS_PALETTE_ACCENT_SAT:
+		return base
+	return _palette_invert_forced(base, saturation_scale)
+
+func _palette_invert_forced(base: Color, saturation_scale: float) -> Color:
+	return Color.from_hsv(base.h, base.s * saturation_scale, 1.0 - base.v * 0.8, base.a)
+
+func _skip_settings_palette(control: Control) -> bool:
+	return control.has_meta("preset_color") \
+		or control is HSlider \
+		or String(control.name) in ["Knob", "KnobWrap"] \
+		or is_instance_valid(control.get_node_or_null("Knob")) \
+		or is_instance_valid(control.get_node_or_null("KnobWrap")) \
+		or is_instance_valid(control.get_node_or_null("SubViewportContainer"))
+
+func _switch_track_off_color() -> Color:
+	return Color(0.22, 0.22, 0.24, 1.0) if dark_mode_enabled else Color(0.72, 0.72, 0.76, 1.0)
+
+func _switch_track_border_color(base: Color) -> Color:
+	return base if dark_mode_enabled else _palette_invert(base, 1.0)
+
+func _apply_palette_font_color(control: Control, item: String) -> void:
+	if not control.has_theme_color(item):
+		return
+
+	var meta_key := _settings_meta_key(SETTINGS_BASE_FONT_COLOR_META, item)
+
+	if not control.has_meta(meta_key):
+		control.set_meta(meta_key, control.get_theme_color(item))
+
+	var base: Color = control.get_meta(meta_key)
+	control.add_theme_color_override(item, base if dark_mode_enabled else _palette_invert(base, 1.0))
+
+func _apply_palette_stylebox(control: Control, item: String) -> void:
+	if not control.has_theme_stylebox(item):
+		return
+
+	var meta_key := _settings_meta_key(SETTINGS_BASE_PALETTE_BOX_META, item)
+
+	if not control.has_meta(meta_key):
+		control.set_meta(meta_key, control.get_theme_stylebox(item))
+
+	var base := control.get_meta(meta_key) as StyleBoxFlat
+
+	if base == null:
+		return
+
+	if dark_mode_enabled:
+		control.add_theme_stylebox_override(item, base)
+		return
+
+	var styled := base.duplicate() as StyleBoxFlat
+	styled.bg_color = _palette_invert(base.bg_color, SETTINGS_PALETTE_SURFACE_SAT)
+	styled.border_color = _palette_invert(base.border_color, SETTINGS_PALETTE_SURFACE_SAT)
+	control.add_theme_stylebox_override(item, styled)
+
+func _apply_palette_recursive(node: Node) -> void:
+	var control := node as Control
+
+	if control != null and control.has_meta(SETTINGS_PICKER_ITEM_META):
+		var selected: bool = bool(control.get_meta(SETTINGS_PICKER_ITEM_META))
+		control.add_theme_stylebox_override("normal", _make_game_picker_item_style(selected))
+		control.add_theme_stylebox_override("hover", _make_game_picker_item_style(selected, true))
+		control.add_theme_stylebox_override("pressed", _make_game_picker_item_style(true, true))
+	elif control != null and not _skip_settings_palette(control):
+		for font_item: String in SETTINGS_PALETTE_FONT_ITEMS:
+			_apply_palette_font_color(control, font_item)
+		for box_item: String in SETTINGS_PALETTE_STYLEBOX_ITEMS:
+			_apply_palette_stylebox(control, box_item)
+
+	for child: Node in node.get_children():
+		_apply_palette_recursive(child)
+
+func _apply_settings_palette() -> void:
+	var body := _find_responsive_body()
+
+	if is_instance_valid(body):
+		_apply_palette_recursive(body)
+
+	if is_instance_valid(avatar_tab_container):
+		_apply_avatar_tab_styleboxes()
+		_refresh_avatar_tab_icons()
 
 func _refresh_settings_switches(
 	node: Node
@@ -520,6 +624,7 @@ func _apply_settings_orientation_layout() -> void:
 			popup_menu.add_theme_font_size_override("font_size", int(round(15.0 * scale_factor)))
 
 	_refresh_settings_switches(self)
+	_apply_settings_palette()
 
 	if _responsive_layout_active:
 		_apply_responsive_popup_geometry()
@@ -849,7 +954,12 @@ func _tab_name(index: int) -> String:
 	return _avatar_tab_names[index] if index >= 0 and index < _avatar_tab_names.size() else ""
 
 func _tab_icon(icon_path: String, selected: bool) -> Texture2D:
-	var key: String = icon_path + ("_on" if selected else "_off")
+	var brightness: float = 1.0 if dark_mode_enabled else SETTINGS_TAB_ICON_LIGHT
+
+	if not selected:
+		brightness *= SETTINGS_TAB_ICON_DIM
+
+	var key: String = icon_path + str(brightness)
 
 	if _tab_icon_cache.has(key):
 		return _tab_icon_cache[key]
@@ -859,11 +969,11 @@ func _tab_icon(icon_path: String, selected: bool) -> Texture2D:
 
 	var icon: Texture2D = load(icon_path)
 
-	if not selected:
+	if not is_equal_approx(brightness, 1.0):
 		var image := icon.get_image()
 		if image.is_compressed():
 			image.decompress()
-		image.adjust_bcs(SETTINGS_TAB_ICON_DIM, 1.0, 1.0)
+		image.adjust_bcs(brightness, 1.0, 1.0)
 		icon = ImageTexture.create_from_image(image)
 
 	_tab_icon_cache[key] = icon
@@ -883,6 +993,66 @@ func _refresh_avatar_tab_icons() -> void:
 	for index: int in _avatar_tab_icons.size():
 		avatar_tab_container.set_tab_icon(index, _tab_icon(_avatar_tab_icons[index], index == avatar_tab_container.current_tab))
 
+func _apply_avatar_tab_spacing() -> void:
+	if not is_instance_valid(avatar_tab_container):
+		return
+
+	var count: int = avatar_tab_container.tab_count
+
+	if count <= 1:
+		return
+
+	var k: float = _settings_boosted_scale(_settings_ui_scale())
+	var budget: float = avatar_tab_container.get_parent_area_size().x - SETTINGS_TAB_EDGE_PADDING * 2.0 * k
+
+	if budget <= 0.0:
+		return
+
+	var margins: Vector4 = _tab_stylebox_margins.get("tab_unselected", Vector4.ZERO)
+	var tab_width: float = (SETTINGS_TAB_ICON_SIZE + margins.x + margins.z) * k
+	var separation: float = (budget - tab_width * float(count)) / float(count - 1)
+
+	avatar_tab_container.add_theme_constant_override(
+		"tab_separation",
+		int(round(clampf(separation, 0.0, SETTINGS_TAB_MAX_SEPARATION * k)))
+	)
+
+func _apply_avatar_tab_styleboxes() -> void:
+	if not is_instance_valid(avatar_tab_container):
+		return
+
+	var k: float = _settings_boosted_scale(_settings_ui_scale())
+
+	for stylebox_item: String in SETTINGS_TAB_STYLEBOX_ITEMS:
+		if not _tab_stylebox_margins.has(stylebox_item):
+			var base := avatar_tab_container.get_theme_stylebox(stylebox_item)
+			var captured := Vector4.ZERO
+
+			if base != null:
+				captured = Vector4(base.get_margin(SIDE_LEFT), base.get_margin(SIDE_TOP), base.get_margin(SIDE_RIGHT), base.get_margin(SIDE_BOTTOM))
+
+			_tab_stylebox_margins[stylebox_item] = captured
+
+		var margins: Vector4 = _tab_stylebox_margins[stylebox_item]
+		var box: StyleBox = StyleBoxEmpty.new()
+
+		if stylebox_item == "tab_selected":
+			var flat := StyleBoxFlat.new()
+			var tint := Color(1.0, 1.0, 1.0, SETTINGS_TAB_SELECTED_ALPHA)
+			flat.bg_color = tint if dark_mode_enabled else _palette_invert(tint, 1.0)
+			flat.corner_radius_top_left = int(round(8.0 * k))
+			flat.corner_radius_top_right = flat.corner_radius_top_left
+			flat.corner_radius_bottom_left = flat.corner_radius_top_left
+			flat.corner_radius_bottom_right = flat.corner_radius_top_left
+			box = flat
+
+		for side: int in 4:
+			box.set_content_margin(side, margins[side] * k)
+
+		avatar_tab_container.add_theme_stylebox_override(stylebox_item, box)
+
+	_apply_avatar_tab_spacing()
+
 func _setup_avatar_customizer():
 	main_avatar_preview = AvatarThumbnailScene.instantiate()
 	main_avatar_preview.is_display_only = true
@@ -893,6 +1063,12 @@ func _setup_avatar_customizer():
 	main_preview_container.custom_minimum_size.y = 140
 	_mark_settings_scalable(main_preview_container)
 	main_preview_container.add_child(main_avatar_preview)
+
+	_apply_avatar_tab_styleboxes()
+	avatar_tab_container.tab_alignment = TabBar.ALIGNMENT_CENTER
+
+	if not avatar_tab_container.resized.is_connected(_apply_avatar_tab_spacing):
+		avatar_tab_container.resized.connect(_apply_avatar_tab_spacing)
 
 	_mark_settings_scalable(avatar_tab_container, true)
 	avatar_tab_container.tab_changed.connect(_on_avatar_tab_changed)
@@ -1227,7 +1403,7 @@ func _update_brightness_slider_gradient(color: Color):
 	grad_tex.gradient = gradient
 	var main_bar_style = StyleBoxTexture.new()
 	main_bar_style.texture = grad_tex
-	main_bar_style.texture_margin_top = 8; main_bar_style.texture_margin_bottom = 8; main_bar_style.texture_margin_left = 6; main_bar_style.texture_margin_right = 6
+	main_bar_style.texture_margin_top = 8; main_bar_style.texture_margin_bottom = 8; main_bar_style.texture_margin_left = 0; main_bar_style.texture_margin_right = 0
 	current_brightness_slider.add_theme_stylebox_override("slider", main_bar_style)
 	var clear_style = StyleBoxFlat.new()
 	clear_style.bg_color = Color.TRANSPARENT
@@ -1395,13 +1571,16 @@ func _apply_dark_mode_visuals(enabled: bool, instant: bool) -> void:
 		sb = StyleBoxFlat.new()
 		add_theme_stylebox_override("panel", sb)
 
-	var target := Color(0.1176, 0.1176, 0.1804, 0.98)
+	var target := SETTINGS_PANEL_BG_DARK if enabled else _palette_invert(SETTINGS_PANEL_BG_DARK, SETTINGS_PALETTE_SURFACE_SAT)
 
 	if instant:
 		sb.bg_color = target
 	else:
 		var tw := create_tween()
 		tw.tween_property(sb, "bg_color", target, 0.25)
+
+	_apply_settings_palette()
+	_refresh_settings_switches(self)
 		
 func _add_dark_mode_toggle():
 	dark_mode_button = _make_switch_button()
@@ -1576,8 +1755,8 @@ func _update_switch_visual(btn: Button, on: bool, instant: bool):
 	var base := btn.get_theme_stylebox("normal", "Button") as StyleBoxFlat
 	if base:
 		var tdup := base.duplicate() as StyleBoxFlat
-		tdup.bg_color = Color(0.655, 0.545, 0.980, 1.0) if on else Color(0.22, 0.22, 0.24, 1.0)
-		tdup.border_color = Color(1.0, 1.0, 1.0, 0.26) if on else Color(1.0, 1.0, 1.0, 0.18)
+		tdup.bg_color = Color(0.655, 0.545, 0.980, 1.0) if on else _switch_track_off_color()
+		tdup.border_color = _switch_track_border_color(Color(1.0, 1.0, 1.0, 0.26) if on else Color(1.0, 1.0, 1.0, 0.18))
 		btn.add_theme_stylebox_override("normal", tdup)
 		btn.add_theme_stylebox_override("hover", tdup)
 		btn.add_theme_stylebox_override("pressed", tdup)
@@ -1894,8 +2073,8 @@ func _scale_settings_slider(slider: HSlider, scale_factor: float) -> void:
 	if bar != null:
 		bar.texture_margin_top = 8.0 * scale_factor
 		bar.texture_margin_bottom = 8.0 * scale_factor
-		bar.texture_margin_left = 6.0 * scale_factor
-		bar.texture_margin_right = 6.0 * scale_factor
+		bar.texture_margin_left = 0.0
+		bar.texture_margin_right = 0.0
 
 	var grabber := _scaled_grabber_icon(scale_factor)
 	for icon_name: String in ["grabber", "grabber_highlight", "grabber_pressed"]:
@@ -1935,6 +2114,10 @@ func _make_game_picker_item_style(selected: bool, hovered: bool = false) -> Styl
 	style.content_margin_right = 6
 	style.content_margin_top = 6
 	style.content_margin_bottom = 5
+
+	if not dark_mode_enabled:
+		style.bg_color = _palette_invert_forced(style.bg_color, SETTINGS_PALETTE_SURFACE_SAT)
+		style.border_color = _palette_invert(style.border_color, SETTINGS_PALETTE_SURFACE_SAT)
 
 	return style
 
@@ -2043,6 +2226,7 @@ func make_game_picker_card(
 			var option_button: Button = buttons[index]
 			var option_id: String = str(items[index].get("id", ""))
 			var selected: bool = option_id == value
+			option_button.set_meta(SETTINGS_PICKER_ITEM_META, selected)
 			option_button.add_theme_stylebox_override("normal", _make_game_picker_item_style(selected))
 			option_button.add_theme_stylebox_override("hover", _make_game_picker_item_style(selected, true))
 
@@ -2056,6 +2240,7 @@ func make_game_picker_card(
 		button.toggle_mode = false
 		button.clip_contents = true
 		button.mouse_filter = Control.MOUSE_FILTER_STOP
+		button.set_meta(SETTINGS_PICKER_ITEM_META, item_id == selected_id)
 		button.add_theme_stylebox_override("normal", _make_game_picker_item_style(item_id == selected_id))
 		button.add_theme_stylebox_override("hover", _make_game_picker_item_style(item_id == selected_id, true))
 		button.add_theme_stylebox_override("pressed", _make_game_picker_item_style(true, true))
@@ -2221,8 +2406,8 @@ func _update_game_switch_visual(btn: Button, enabled: bool, instant: bool) -> vo
 	var track := btn.get_theme_stylebox("normal", "Button") as StyleBoxFlat
 	if track:
 		var next_track := track.duplicate() as StyleBoxFlat
-		next_track.bg_color = Color(0.655, 0.545, 0.980, 1.0) if enabled else Color(0.22, 0.22, 0.24, 1.0)
-		next_track.border_color = Color(1.0, 1.0, 1.0, 0.26) if enabled else Color(1.0, 1.0, 1.0, 0.18)
+		next_track.bg_color = Color(0.655, 0.545, 0.980, 1.0) if enabled else _switch_track_off_color()
+		next_track.border_color = _switch_track_border_color(Color(1.0, 1.0, 1.0, 0.26) if enabled else Color(1.0, 1.0, 1.0, 0.18))
 		btn.add_theme_stylebox_override("normal", next_track)
 		btn.add_theme_stylebox_override("hover", next_track)
 		btn.add_theme_stylebox_override("pressed", next_track)

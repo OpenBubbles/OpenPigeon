@@ -7,6 +7,7 @@ import android.animation.ObjectAnimator
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.*
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.util.TypedValue
 import android.view.*
@@ -16,6 +17,7 @@ import androidx.core.view.isVisible
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.graphics.toColorInt
 import com.openbubbles.openpigeon.R
+import java.util.WeakHashMap
 import kotlin.math.min
 
 private class SettingsMaxHeightScrollView(context: Context) : ScrollView(context) {
@@ -107,6 +109,10 @@ class SettingsSheet(
     private var currentTab = Tab.HAIR
     private val tabViews = mutableMapOf<Tab, ImageView>()
     private var miscTabAdded = false
+    private var settingsDarkMode = true
+    private val baseTextColors = WeakHashMap<TextView, Int>()
+    private val baseSurfaceColors = WeakHashMap<View, Int>()
+    private val paletteSkipSurface = WeakHashMap<View, Boolean>()
 
     // Slider state
     private var currentSliderBaseColor: Int = Color.GRAY
@@ -312,6 +318,8 @@ class SettingsSheet(
                 setPadding(dp(5f), dp(5f), dp(5f), dp(4f))
             }
 
+            paletteSkipSurface[cell] = true
+
             val previewHost = FrameLayout(context).apply {
                 layoutParams = LinearLayout.LayoutParams(dp(74f), dp(74f))
                 clipChildren = false
@@ -406,8 +414,59 @@ class SettingsSheet(
         return card
     }
 
+    private fun paletteInvert(color: Int, saturationScale: Float): Int {
+        val hsv = FloatArray(3)
+        Color.colorToHSV(color, hsv)
+        if (hsv[1] >= 0.35f) return color
+        hsv[1] *= saturationScale
+        hsv[2] = 1f - hsv[2] * 0.8f
+        return Color.HSVToColor(Color.alpha(color), hsv)
+    }
+
+    private fun paletteSurface(color: Int) = if (settingsDarkMode) color else paletteInvert(color, 0.4f)
+
+    private fun paletteText(color: Int) = if (settingsDarkMode) color else paletteInvert(color, 1f)
+
+    private fun tabTint(selected: Boolean) = if (selected) COL_TAB_SEL else paletteText(COL_TAB_UNSEL)
+
+    fun setDarkMode(enabled: Boolean) {
+        if (settingsDarkMode == enabled) return
+        settingsDarkMode = enabled
+        applyPalette()
+        updateResponsiveLayout()
+    }
+
+    private fun applyPalette() {
+        applyPaletteTo(card)
+        tabViews.forEach { (tab, view) -> view.imageTintList = ColorStateList.valueOf(tabTint(tab == currentTab)) }
+    }
+
+    private fun applyPaletteTo(view: View) {
+        if (view is AvatarView) return
+
+        if (view is TextView) {
+            val base = baseTextColors.getOrPut(view) { view.currentTextColor }
+            view.setTextColor(paletteText(base))
+        }
+
+        if (paletteSkipSurface[view] != true) {
+            val bg = view.background
+            if (bg is ColorDrawable) {
+                val base = baseSurfaceColors.getOrPut(view) { bg.color }
+                view.setBackgroundColor(paletteSurface(base))
+            } else if (bg is GradientDrawable) {
+                bg.color?.defaultColor?.let { current ->
+                    val base = baseSurfaceColors.getOrPut(view) { current }
+                    bg.setColor(paletteSurface(base))
+                }
+            }
+        }
+
+        if (view is ViewGroup) for (i in 0 until view.childCount) applyPaletteTo(view.getChildAt(i))
+    }
+
     private fun pickerBorder(selected: Boolean) = GradientDrawable().apply {
-        setColor(if (selected) "#2a2640".toColorInt() else "#20202c".toColorInt())
+        setColor(paletteSurface(if (selected) "#2a2640".toColorInt() else "#20202c".toColorInt()))
         cornerRadius = dpf(12f)
         setStroke(dp(if (selected) 2f else 1f), if (selected) COL_SEL_BORDER else "#3b3b50".toColorInt())
     }
@@ -446,7 +505,7 @@ class SettingsSheet(
     private fun createTabView(tab: Tab): ImageView = ImageView(context).apply {
         setImageResource(tabIcon(tab))
         scaleType = ImageView.ScaleType.FIT_CENTER
-        imageTintList = ColorStateList.valueOf(if (tab == currentTab) COL_TAB_SEL else COL_TAB_UNSEL)
+        imageTintList = ColorStateList.valueOf(tabTint(tab == currentTab))
         contentDescription = tabLabel(tab)
         layoutParams = LinearLayout.LayoutParams(0, dp(40f), 1f)
         setPadding(dp(7f), dp(7f), dp(7f), dp(7f))
@@ -786,7 +845,8 @@ class SettingsSheet(
             setBackgroundColor(COL_DIVIDER)
         })
         controlsSection.addView(TextView(context).apply {
-            text = "Settings"; setTextColor(COL_LABEL); textSize = 11f
+            text = "Global Settings"; setTextColor(Color.WHITE); textSize = 15f
+            gravity = Gravity.CENTER_HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).also { it.bottomMargin = dp(8f) }
@@ -982,7 +1042,7 @@ class SettingsSheet(
         removeExtraRows()
         currentTab = tab
         tabViews.forEach { (t, tv) ->
-            tv.imageTintList = ColorStateList.valueOf(if (t == tab) COL_TAB_SEL else COL_TAB_UNSEL)
+            tv.imageTintList = ColorStateList.valueOf(tabTint(t == tab))
         }
         miscRowsContainer.isVisible = tab == Tab.MISC
         pickerScroll.isVisible = tab != Tab.MISC
@@ -997,6 +1057,7 @@ class SettingsSheet(
         colorRowContainer.isVisible = false
         miscRowsContainer.isVisible = tab == Tab.MISC
         pickerScroll.isVisible = tab != Tab.MISC
+        applyPalette()
 
         when (tab) {
             Tab.BACKGROUND -> {
@@ -1264,12 +1325,14 @@ class SettingsSheet(
         contentScroll.maxHeightPx = maxHeight
         contentScroll.requestLayout()
         card.layoutParams = FrameLayout.LayoutParams(targetWidth, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).also { it.bottomMargin = if (landscape) dp(10f) else 0 }
+        paletteSkipSurface[card] = true
         card.background = GradientDrawable().apply {
-            setColor(COL_CARD)
+            setColor(paletteSurface(COL_CARD))
             val r = dpf(22f)
             cornerRadii = if (landscape) floatArrayOf(r, r, r, r, r, r, r, r) else floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
         }
         card.requestLayout()
+        applyPalette()
     }
 
     // ── Drag-to-dismiss ───────────────────────────────────────────────────────

@@ -129,6 +129,7 @@ class GameMenuController(
         if (showDarkMode) {
             sheet.addBooleanSetting(
                 label = "Dark Mode",
+                subtitle = "Darken menus and popups",
                 scope = SettingScope.Global,
                 key = "dark_mode",
                 default = false,
@@ -138,6 +139,10 @@ class GameMenuController(
                 } else {
                     0f
                 }
+
+                sheet.setDarkMode(
+                    enabled,
+                )
 
                 onDarkModeChanged(
                     enabled,
@@ -151,6 +156,7 @@ class GameMenuController(
         ) {
             sheet.addBooleanSetting(
                 label = "Music",
+                subtitle = "Background music",
                 scope = SettingScope.Global,
                 key = "music_enabled",
                 default = true,
