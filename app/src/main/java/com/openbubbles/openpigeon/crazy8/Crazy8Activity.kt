@@ -92,6 +92,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -443,6 +444,8 @@ class Crazy8Activity : ComponentActivity() {
         gameMenu.sheet.refreshHeaderAvatar()
     }
 
+    val darkModeEnabled = mutableStateOf(false)
+
     private fun setupGameMenu(
         rootFrame: FrameLayout,
     ) {
@@ -475,7 +478,10 @@ class Crazy8Activity : ComponentActivity() {
             ),
             musicAssetPath = "crazy8/crazy8.wav",
             placement = GameMenuPlacement.TOP_END,
-            fallbackDarkOverlayAlpha = 0.18f,
+            fallbackDarkOverlayAlpha = 0.08f,
+            onDarkModeChanged = { enabled ->
+                darkModeEnabled.value = enabled
+            },
             onSettingsClosed = ::onSettingsClosed,
         )
 
@@ -656,12 +662,7 @@ class Crazy8Activity : ComponentActivity() {
                         .fillMaxSize()
                         .safeContentPadding()
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.crazybg),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+                    CrazyBackground(darkModeEnabled.value)
 
                     Column(
                         modifier = Modifier.align(Alignment.Center),
@@ -706,12 +707,7 @@ class Crazy8Activity : ComponentActivity() {
                 Box(
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.crazybg),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+                    CrazyBackground(darkModeEnabled.value)
 
                     Column(
                         modifier = Modifier.align(Alignment.Center),
@@ -737,12 +733,7 @@ class Crazy8Activity : ComponentActivity() {
                 Box(
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.crazybg),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+                    CrazyBackground(darkModeEnabled.value)
 
                     Text(
                         "Connecting...",
@@ -2216,6 +2207,17 @@ private fun crazyOpponentSeats(
 }
 
 @Composable
+private fun CrazyBackground(dark: Boolean) {
+    Image(
+        painter = painterResource(id = R.drawable.crazybg),
+        contentDescription = null,
+        modifier = Modifier.fillMaxSize(),
+        contentScale = ContentScale.Crop,
+        colorFilter = if (dark) ColorFilter.tint(Color(0xFF6A6A78), BlendMode.Modulate) else null,
+    )
+}
+
+@Composable
 fun RenderGame(
     game: CrazyGame, activity: Crazy8Activity?, messages: SnapshotStateList<CrazyMessage>
 ) {
@@ -2681,12 +2683,7 @@ fun RenderGame(
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
-        Image(
-            painter = painterResource(id = R.drawable.crazybg),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
+            CrazyBackground(activity?.darkModeEnabled?.value == true)
 
         Box(
             modifier = Modifier

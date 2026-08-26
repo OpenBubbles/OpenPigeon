@@ -199,11 +199,30 @@ func _on_settings_button_pressed() -> void:
 		settings_button,
 		null if spectator_mode else _get_settings_avatar_display(),
 		_get_music_stream(),
-		Callable(self, "_add_settings_rows"),
+		Callable(self, "_settings_rows_hook"),
 		func():
 			SettingsManager.suppress_avatar_changed = false
 			_settings_open = false
+			_on_settings_dark_mode_changed(bool(SettingsManager.get_setting("global", "dark_mode", false)))
 	)
+
+func _settings_rows_hook(container, popup_script) -> void:
+	_connect_settings_dark_mode(popup_script)
+	_add_settings_rows(container, popup_script)
+
+func _connect_settings_dark_mode(popup) -> void:
+	if not is_instance_valid(popup) or not popup.has_signal("dark_mode_changed"):
+		push_warning("BaseGame3D: settings popup missing dark_mode_changed")
+		return
+
+	var handler := Callable(self, "_on_settings_dark_mode_changed")
+
+	if not popup.is_connected("dark_mode_changed", handler):
+		popup.connect("dark_mode_changed", handler)
+
+func _on_settings_dark_mode_changed(is_dark: bool) -> void:
+	if has_method("_apply_bg_for_dark"):
+		call("_apply_bg_for_dark", is_dark)
 
 func _on_rules_button_pressed() -> void:
 	if _rules_open:

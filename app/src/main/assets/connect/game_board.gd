@@ -156,6 +156,12 @@ func _get_settings_avatar_display() -> Control:
 func _get_rules_title() -> String:
 	return "Four In A Row"
 
+func _apply_bg_for_dark(is_dark: bool) -> void:
+	if is_instance_valid(background):
+		background.color = Color("352925ff") if is_dark else Color("#d8c7c2")
+	else:
+		OpLog.w(LOG_TAG, "missing_background")
+
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
 	var is_dark = bool(SettingsManager.get_setting("global", "dark_mode", false))
@@ -166,10 +172,7 @@ func _on_game_ready() -> void:
 		" replay_empty=", replay.is_empty()
 	])
 
-	if is_instance_valid(background):
-		background.color = Color("352925ff") if is_dark else Color("#d8c7c2")
-	else:
-		OpLog.w(LOG_TAG, "missing_background")
+	_apply_bg_for_dark(is_dark)
 
 	if is_instance_valid(send_button):
 		send_button.disabled = true
