@@ -1,7 +1,8 @@
 extends BaseGame
 
 const BOMB_TEXTURE_PATH := preload("res://battleship/bomb.png")
-const PLANE_TEXTURE_PATH := preload("res://battleship/plane.png")
+const PLANE_STYLE_DIR := "res://battleship/planes"
+const PLANE_STYLE_MAX: int = 64
 const MUSIC_STREAM := preload("res://global/audio/battleship.ogg")
 signal replay_finished
 
@@ -10,6 +11,8 @@ var _replay_token: int = 0
 var _data_token: int = 0
 
 var sent_tween: Tween
+var _plane_style: int = 1
+var _plane_styles_cache: Array[int] = []
 
 @onready var state: Label = %StateLabel
 @onready var start_button: Button = %StartButton
@@ -233,8 +236,54 @@ func _get_settings_avatar_display():
 
 	return p2_avatar_display
 
+func _plane_style_path(style: int) -> String:
+	return "%s/plane%d.png" % [PLANE_STYLE_DIR, style]
+
+func available_plane_styles() -> Array[int]:
+	if not _plane_styles_cache.is_empty():
+		return _plane_styles_cache
+
+	for style: int in range(1, PLANE_STYLE_MAX + 1):
+		if ResourceLoader.exists(_plane_style_path(style)):
+			_plane_styles_cache.append(style)
+
+	return _plane_styles_cache
+
+func _plane_texture() -> Texture2D:
+	var path: String = _plane_style_path(_plane_style)
+
+	if not ResourceLoader.exists(path):
+		path = _plane_style_path(1)
+
+	return load(path) as Texture2D if ResourceLoader.exists(path) else null
+
 func _add_settings_rows(_container, popup_script) -> void:
 	popup_script.settings_theme_selected.connect(_on_theme_changed)
+
+	var items: Array[Dictionary] = []
+
+	for style: int in available_plane_styles():
+		items.append({
+			"id": str(style),
+			"label": "Plane %d" % style,
+			"texture_path": _plane_style_path(style)
+		})
+
+	if items.is_empty():
+		return
+
+	var plane_row: Control = popup_script.make_game_picker_card(
+		"Plane",
+		"Bomber shown during attacks",
+		items,
+		str(_plane_style),
+		func(id: String) -> void:
+			_plane_style = maxi(1, int(id))
+			SettingsManager.set_setting("battleship", "plane_style", _plane_style)
+			OpLog.i(LOG_TAG, ["plane_style_selected style=", _plane_style])
+	)
+
+	popup_script.add_custom_setting(plane_row)
 
 @warning_ignore("shadowed_global_identifier")
 func _srand48(seed: int) -> void:
@@ -281,6 +330,8 @@ func _configure_battleship_avatar(avatar_button: TextureButton) -> void:
 
 func _on_game_ready() -> void:
 	OpLog.game_opened(LOG_TAG, ["localMode=", appPlugin == null, " uuid=", my_uuid])
+
+	_plane_style = maxi(1, int(SettingsManager.get_setting("battleship", "plane_style", 1)))
 
 	_configure_battleship_avatar(p1_avatar_display)
 	_configure_battleship_avatar(p2_avatar_display)
@@ -2398,7 +2449,7 @@ func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2,
 		return
 	
 	var bomb_tex: Texture2D = BOMB_TEXTURE_PATH
-	var plane_tex: Texture2D = PLANE_TEXTURE_PATH
+	var plane_tex: Texture2D = _plane_texture()
 	
 	if bomb_tex == null:
 		OpLog.e(LOG_TAG, "bomb_animation skipped: bomb texture missing")

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b70p1tv73jbll"
-path="res://.godot/imported/plane.png-44d0e112d29141d6de86bb2038c95c55.ctex"
+uid="uid://wmc4eoicwusb"
+path="res://.godot/imported/plane4.png-b82f8983524378dad5afc0f46fe9548f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://battleship/plane.png"
-dest_files=["res://.godot/imported/plane.png-44d0e112d29141d6de86bb2038c95c55.ctex"]
+source_file="res://battleship/planes/plane4.png"
+dest_files=["res://.godot/imported/plane4.png-b82f8983524378dad5afc0f46fe9548f.ctex"]
 
 [params]
 
