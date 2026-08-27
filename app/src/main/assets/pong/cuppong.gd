@@ -39,12 +39,14 @@ const CUP_SETTINGS_PREVIEW_YAW: float = 180.0
 const BALL_SETTINGS_PREVIEW_YAW: float = 0.0
 const BALL_SETTINGS_PREVIEW_PITCH: float = -55.0
 const SETTINGS_PREVIEW_VIEWPORT_SIZE: int = 128
+const SETTINGS_PREVIEW_BAKED_DIR := "res://pong/previews"
+const SETTINGS_PREVIEW_BAKE_OUT_DIR := "user://cuppong_previews"
+const BAKE_CUPPONG_PREVIEWS: bool = false #Set this to True if needed to update the Paid Asset Images. This will Produce images in %APPDATA%\Godot\app_userdata\OpenPigeon Games\cuppong_previews which go into the pong\assets folder
 
-var _settings_preview_texture_cache: Dictionary = {}
+static var _settings_preview_texture_cache: Dictionary = {}
 var _settings_preview_waiters: Dictionary = {}
 var _settings_preview_render_queue: Array[Dictionary] = []
 var _settings_preview_queue_running: bool = false
-var _settings_preview_prewarm_started: bool = false
 
 func dbg(parts: Variant) -> void:
 	if DEBUG_PONG:
@@ -117,6 +119,7 @@ var recovery_restore_in_progress := false
 var recovery_key: String = ""
 var _turn_base_boards: String = ""
 const RECOVERY_STORE_PATH := "user://cuppong_recovery.cfg"
+const RECOVERY_STORE_MAX_GAMES: int = 24
 var current_throw_impulse: Vector3 = Vector3.ZERO
 var redemption: bool = false
 var played_replay: bool = false
@@ -294,9 +297,10 @@ func _make_cuppong_cached_settings_preview(preview_kind: String, style: int) -> 
 	texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var key: String = _cuppong_settings_preview_key(preview_kind, style)
+	var baked: Texture2D = _baked_preview_texture(preview_kind, style)
 
-	if _settings_preview_texture_cache.has(key):
-		texture_rect.texture = _settings_preview_texture_cache[key] as Texture2D
+	if baked != null:
+		texture_rect.texture = baked
 		return texture_rect
 
 	if not _settings_preview_waiters.has(key):
@@ -310,10 +314,29 @@ func _make_cuppong_cached_settings_preview(preview_kind: String, style: int) -> 
 	return texture_rect
 
 
-func _queue_cuppong_settings_preview(preview_kind: String, style: int) -> void:
+func _baked_preview_texture(preview_kind: String, style: int) -> Texture2D:
 	var key: String = _cuppong_settings_preview_key(preview_kind, style)
 
 	if _settings_preview_texture_cache.has(key):
+		return _settings_preview_texture_cache[key] as Texture2D
+
+	var path: String = "%s/%s%d.png" % [SETTINGS_PREVIEW_BAKED_DIR, preview_kind, style]
+
+	if not ResourceLoader.exists(path):
+		return null
+
+	var texture := ResourceLoader.load(path) as Texture2D
+
+	if texture == null:
+		return null
+
+	_settings_preview_texture_cache[key] = texture
+	return texture
+
+func _queue_cuppong_settings_preview(preview_kind: String, style: int) -> void:
+	var key: String = _cuppong_settings_preview_key(preview_kind, style)
+
+	if _baked_preview_texture(preview_kind, style) != null:
 		return
 
 	for queued: Dictionary in _settings_preview_render_queue:
@@ -333,6 +356,13 @@ func _queue_cuppong_settings_preview(preview_kind: String, style: int) -> void:
 
 func _process_cuppong_settings_preview_queue() -> void:
 	while not _settings_preview_render_queue.is_empty():
+		while not played_replay and not _settings_open:
+			await get_tree().process_frame
+
+			if not is_inside_tree():
+				_settings_preview_queue_running = false
+				return
+
 		var entry: Dictionary = _settings_preview_render_queue.pop_front()
 		var key: String = String(entry.get("key", ""))
 		var preview_kind: String = String(entry.get("kind", ""))
@@ -373,18 +403,29 @@ func _update_cuppong_settings_preview_waiters(key: String, texture: Texture2D) -
 
 	_settings_preview_waiters.erase(key)
 
+func bake_cuppong_settings_previews() -> void:
+	DirAccess.make_dir_recursive_absolute(SETTINGS_PREVIEW_BAKE_OUT_DIR)
 
-func _prewarm_cuppong_settings_previews() -> void:
-	if _settings_preview_prewarm_started:
+	for style: int in Cups.available_cup_styles(Cups.CUP_STYLE_COUNT):
+		await _bake_cuppong_preview("cup", style)
+
+	for style: int in PongBall.available_ball_styles():
+		await _bake_cuppong_preview("ball", style)
+
+	OpLog.i(LOG_TAG, ["preview_bake_done dir=", SETTINGS_PREVIEW_BAKE_OUT_DIR])
+
+func _bake_cuppong_preview(preview_kind: String, style: int) -> void:
+	var texture: Texture2D = await _render_cuppong_settings_preview_texture(preview_kind, style)
+
+	if texture == null:
 		return
 
-	_settings_preview_prewarm_started = true
+	var image: Image = texture.get_image()
 
-	for style: int in range(1, Cups.CUP_STYLE_COUNT + 1):
-		_queue_cuppong_settings_preview("cup", style)
+	if image == null or image.is_empty():
+		return
 
-	for style: int in range(1, BALL_STYLE_COUNT + 1):
-		_queue_cuppong_settings_preview("ball", style)
+	image.save_png("%s/%s%d.png" % [SETTINGS_PREVIEW_BAKE_OUT_DIR, preview_kind, style])
 
 func _render_cuppong_settings_preview_texture(preview_kind: String, style: int) -> Texture2D:
 	var model: Node3D = _build_cuppong_settings_preview_model(preview_kind, style)
@@ -1170,7 +1211,9 @@ func _on_game_ready() -> void:
 	_stabilized_mats.clear()
 	_stabilize_geometry(self)
 	refresh_custom_styles_from_settings()
-	call_deferred("_prewarm_cuppong_settings_previews")
+
+	if BAKE_CUPPONG_PREVIEWS:
+		call_deferred("bake_cuppong_settings_previews")
 
 	Engine.physics_jitter_fix = 0.5
 
@@ -1782,12 +1825,8 @@ func _process_game_state():
 		if check_winner():
 			return
 
-		if len(replay_cups.cups_in_play) == 0:
-			if redemption_tween and redemption_tween.is_running():
-				redemption_tween.kill()
-
-			redemption_tween = _flash_label(redemption_label)
-			redemption = true
+		if not recovery_snapshot_pending and recovery_snapshot_progress.is_empty():
+			_update_cuppong_redemption()
 
 	if _restore_cuppong_recovery():
 		return
@@ -1817,6 +1856,25 @@ func _process_game_state():
 		" myCups={", _cup_summary(my_cups), "}",
 		" replayCups={", _cup_summary(replay_cups), "}"
 	])
+
+func _update_cuppong_redemption() -> void:
+	if not is_instance_valid(replay_cups):
+		return
+
+	var in_redemption: bool = replay_cups.cups_in_play.is_empty()
+
+	if in_redemption == redemption:
+		return
+
+	redemption = in_redemption
+
+	if not redemption:
+		return
+
+	if redemption_tween and redemption_tween.is_running():
+		redemption_tween.kill()
+
+	redemption_tween = _flash_label(redemption_label)
 
 func _vec3_str(v: Vector3) -> String:
 	return "%s,%s,%s" % [str(v.x), str(v.y), str(v.z)]
@@ -1925,28 +1983,53 @@ func _send_turn() -> void:
 	if not game_over:
 		play_sent_animation()
 
+func _recovery_section() -> String:
+	return recovery_key.replace(":", "_")
+
 func _write_recovery_store(json: String) -> void:
+	if recovery_key.is_empty():
+		return
+
 	var cfg := ConfigFile.new()
-	cfg.set_value("cuppong", "key", recovery_key)
-	cfg.set_value("cuppong", "progress", json)
+	cfg.load(RECOVERY_STORE_PATH)
+	cfg.set_value(_recovery_section(), "progress", json)
+	cfg.set_value(_recovery_section(), "stamp", Time.get_unix_time_from_system())
+	_prune_recovery_store(cfg)
 	cfg.save(RECOVERY_STORE_PATH)
 
 func _read_recovery_store() -> String:
+	if recovery_key.is_empty():
+		return ""
+
 	var cfg := ConfigFile.new()
 
 	if cfg.load(RECOVERY_STORE_PATH) != OK:
 		return ""
 
-	if String(cfg.get_value("cuppong", "key", "")) != recovery_key:
-		return ""
-
-	return String(cfg.get_value("cuppong", "progress", ""))
+	return String(cfg.get_value(_recovery_section(), "progress", ""))
 
 func _clear_recovery_store() -> void:
 	var cfg := ConfigFile.new()
-	cfg.set_value("cuppong", "key", "")
-	cfg.set_value("cuppong", "progress", "")
-	cfg.save(RECOVERY_STORE_PATH)
+
+	if cfg.load(RECOVERY_STORE_PATH) != OK:
+		return
+
+	if cfg.has_section(_recovery_section()):
+		cfg.erase_section(_recovery_section())
+		cfg.save(RECOVERY_STORE_PATH)
+
+func _prune_recovery_store(cfg: ConfigFile) -> void:
+	var sections: Array = cfg.get_sections()
+
+	if sections.size() <= RECOVERY_STORE_MAX_GAMES:
+		return
+
+	sections.sort_custom(func(a: String, b: String) -> bool:
+		return float(cfg.get_value(a, "stamp", 0.0)) < float(cfg.get_value(b, "stamp", 0.0))
+	)
+
+	for idx: int in range(sections.size() - RECOVERY_STORE_MAX_GAMES):
+		cfg.erase_section(String(sections[idx]))
 
 func _boards_string() -> String:
 	return "%s&%s" % [_board_string(my_cups), _board_string(replay_cups)]
@@ -2052,19 +2135,14 @@ func _save_cuppong_progress(phase: String, impulse: Vector3 = Vector3.ZERO, star
 		progress["start"] = _vec3_str(start if start.is_finite() else player_ball_start_pos)
 		progress["impulse"] = _vec3_str(impulse)
 
-	var json := JSON.stringify(progress)
-	_write_recovery_store(json)
-
-	if appPlugin != null:
-		appPlugin.saveTurnProgress(json)
+	save_turn_progress(progress)
 
 	OpLog.i(LOG_TAG, [
 		"recovery_saved phase=", phase,
 		" throws=", throws.size(),
 		" numBalls=", num_balls,
 		" base=", _turn_base_boards,
-		" now=", progress["now"],
-		" bytes=", json.length()
+		" now=", progress["now"]
 	])
 
 func _restore_cuppong_recovery() -> bool:
@@ -2135,6 +2213,7 @@ func _run_cuppong_recovery(progress: Dictionary) -> void:
 	await _replay_recovered_local_throws()
 
 	_apply_recovery_boards(String(progress.get("now", "")), "now")
+	_update_cuppong_redemption()
 
 	if not redemption and throws.size() + (1 if phase == "throw" else 0) == 1:
 		num_balls = maxi(num_balls, 1)

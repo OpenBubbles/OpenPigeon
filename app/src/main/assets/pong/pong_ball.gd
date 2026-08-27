@@ -45,7 +45,7 @@ const REST_MIN_TIME: float = 1.0
 
 
 func _ready() -> void:
-	self.game = get_parent()
+	self.game = get_parent() as PongGame
 
 	if self.physics_material_override != null:
 		self.physics_material_override = self.physics_material_override.duplicate()
