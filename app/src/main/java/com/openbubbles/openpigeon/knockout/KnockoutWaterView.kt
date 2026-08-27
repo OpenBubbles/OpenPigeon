@@ -1,11 +1,8 @@
 package com.openbubbles.openpigeon.knockout
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
-import android.opengl.GLUtils
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -14,16 +11,12 @@ import javax.microedition.khronos.opengles.GL10
 
 class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
 
-    private val renderer = WaterRenderer(context)
+    private val renderer = WaterRenderer()
 
     init {
         setEGLContextClientVersion(2)
         setRenderer(renderer)
         renderMode = RENDERMODE_CONTINUOUSLY
-    }
-
-    fun setWaterTexture(assetPath: String) {
-        renderer.assetPath = assetPath
     }
 
     fun setTint(r: Float, g: Float, b: Float) {
@@ -44,9 +37,7 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
         }
     }
 
-    private class WaterRenderer(private val context: Context) : Renderer {
-        var assetPath = "knockout/water.png"
-
+    private class WaterRenderer : Renderer {
         @Volatile
         var useTint = false
         @Volatile
@@ -61,9 +52,7 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
         private var aTex = 0
         private var uTime = 0
         private var uX = 0
-        private var uTexture = 0
         private var uAspect = 0
-        private var textureId = 0
         private var startNs = 0L
         private var uTint = 0
         private var uUseTint = 0
@@ -85,9 +74,7 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
             aTex = GLES20.glGetAttribLocation(program, "aTex")
             uTime = GLES20.glGetUniformLocation(program, "u_time")
             uX = GLES20.glGetUniformLocation(program, "u_x")
-            uTexture = GLES20.glGetUniformLocation(program, "u_texture")
             uAspect = GLES20.glGetUniformLocation(program, "uAspect")
-            textureId = loadTexture(assetPath)
             startNs = System.nanoTime()
             uTint = GLES20.glGetUniformLocation(program, "u_tint")
             uUseTint = GLES20.glGetUniformLocation(program, "u_use_tint")
@@ -109,10 +96,6 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
             GLES20.glUniform1f(uUseTint, if (useTint) 1.0f else 0.0f)
             GLES20.glUniform1f(uAspect, aspect)
 
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
-            GLES20.glUniform1i(uTexture, 0)
-
             quad.position(0)
             GLES20.glVertexAttribPointer(aPos, 2, GLES20.GL_FLOAT, false, 16, quad)
             GLES20.glEnableVertexAttribArray(aPos)
@@ -124,30 +107,6 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
 
             GLES20.glDisableVertexAttribArray(aPos)
             GLES20.glDisableVertexAttribArray(aTex)
-        }
-
-        private fun loadTexture(path: String): Int {
-            val ids = IntArray(1); GLES20.glGenTextures(1, ids, 0)
-            val id = ids[0]
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, id)
-            GLES20.glTexParameteri(
-                GLES20.GL_TEXTURE_2D,
-                GLES20.GL_TEXTURE_MIN_FILTER,
-                GLES20.GL_LINEAR
-            )
-            GLES20.glTexParameteri(
-                GLES20.GL_TEXTURE_2D,
-                GLES20.GL_TEXTURE_MAG_FILTER,
-                GLES20.GL_LINEAR
-            )
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_REPEAT)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_REPEAT)
-            val opts = BitmapFactory.Options().apply { inScaled = false }
-            val bmp: Bitmap =
-                context.assets.open(path).use { BitmapFactory.decodeStream(it, null, opts) }!!
-            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bmp, 0)
-            bmp.recycle()
-            return id
         }
 
         private fun buildProgram(vs: String, fs: String): Int {
@@ -189,42 +148,46 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
         private const val FRAGMENT_SRC = """
             precision highp float;
             varying vec2 v_tex_coord;
-            uniform sampler2D u_texture;
             uniform float u_time;
             uniform float u_x;
             uniform vec3 u_tint;
             uniform float u_use_tint;
 
-            vec3 rgb2hsv(vec3 c){
-                vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);
-                vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-                vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
-                float d = q.x - min(q.w, q.y);
-                float e = 1.0e-10;
-                return vec3(abs(q.z + (q.w - q.y)/(6.0*d+e)), d/(q.x+e), q.x);
+            const float CREST_LOW = 0.72;
+            const float CREST_HIGH = 1.0;
+            const vec3 DEEP = vec3(0.165, 0.524, 0.871);
+            const vec3 ICE = vec3(0.58, 0.80, 0.97);
+
+            float wav(vec2 q) {
+                return (sin(q.x + q.y * 0.7) + 0.6 * sin(q.x * -2.1 + q.y * 1.7)) * 0.625;
             }
-            vec3 hsv2rgb(vec3 c){
-                vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
-                vec3 p = abs(fract(c.xxx + K.xyz)*6.0 - K.www);
-                return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-            }
-            vec2 mo(vec2 m) {
-                return fract(m);
+            float fbm(vec2 q) {
+                float n = sin(q.x + q.y * 0.7);
+                n += 0.55 * sin(q.x * -2.3 + q.y * 1.9);
+                n += 0.30 * sin(q.x * 4.1 + q.y * 3.3);
+                return n * 0.54;
             }
 
             void main(void){
-                float amp = 1.2;
-                float time = u_time;
+                float t = u_time;
                 vec2 uv = vec2(v_tex_coord.x + u_x, v_tex_coord.y);
-                vec2 na = texture2D(u_texture, mo(uv*0.3 + vec2(time*0.04, 0.0))).xy;
-                vec2 nb = texture2D(u_texture, mo(uv*0.3 - vec2(time*0.05, 0.0))).xy;
-                vec2 p = uv + (nb - na) * amp;
-                vec4 val = texture2D(u_texture, mo(p));
-                vec3 col = rgb2hsv(vec3(val.r, val.g, val.b));
-                col.x -= 7.0/255.0;
-                col.y -= 0.35;
-                col.z += 0.117;
-                vec3 col2 = hsv2rgb(vec3(col.x, col.y, col.z));
+
+                vec2 q = vec2(uv.x * 18.0 - t * 2.0, uv.y * 42.0);
+
+                vec2 warp = vec2(
+                    wav(q * 0.28 + vec2(t * 0.5, 0.0)),
+                    wav(q * 0.45 + vec2(7.3, 3.1) - vec2(t * 0.3, 0.0))
+                );
+
+                float n1 = fbm(q + warp * 1.8);
+                float n2 = fbm(q * 2.7 + warp * 2.2 - vec2(t * 3.0, 0.0));
+
+                float ridge = (1.0 - abs(n1)) * 0.82 + (1.0 - abs(n2)) * 0.18;
+                float crest = smoothstep(CREST_LOW, CREST_HIGH, ridge);
+                float swell = n1 * 0.5 + 0.5;
+
+                vec3 col2 = mix(DEEP * (0.97 + swell * 0.05), ICE, crest * 0.30);
+
                 float lum = dot(col2, vec3(0.299, 0.587, 0.114));
                 vec3 tinted = u_tint * (0.72 + (lum - 0.55) * 1.15);
                 vec3 finalColor = mix(col2, tinted, u_use_tint);

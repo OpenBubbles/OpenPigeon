@@ -465,9 +465,7 @@ class KnockoutActivity : AppCompatActivity() {
             updateKnockoutBoardSafeArea()
         }
 
-        waterView = KnockoutWaterView(this).apply {
-            setWaterTexture("knockout/water.png")
-        }
+        waterView = KnockoutWaterView(this)
         rootFrame.addView(
             waterView, 0, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT
