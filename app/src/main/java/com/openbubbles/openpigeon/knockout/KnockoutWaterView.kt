@@ -180,7 +180,7 @@ class KnockoutWaterView(context: Context) : GLSurfaceView(context) {
                 );
 
                 float n1 = fbm(q + warp * 1.8);
-                float n2 = fbm(q * 2.7 + warp * 2.2 - vec2(t * 3.0, 0.0));
+                float n2 = fbm(q * 2.7 + warp * 2.2 - vec2(t * 3.0, 0.0)) ;
 
                 float ridge = (1.0 - abs(n1)) * 0.82 + (1.0 - abs(n2)) * 0.18;
                 float crest = smoothstep(CREST_LOW, CREST_HIGH, ridge);

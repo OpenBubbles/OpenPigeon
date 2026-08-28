@@ -254,7 +254,7 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 			g._opp_splat_tween.kill()
 
 		g._opp_splat.visible = false
-		g._opp_splat.modulate.a = 0.0
+		g.ui.set_opponent_splat_alpha(0.0)
 
 		var splat_pos: Vector3 = Vector3(
 			randf_range(-0.12, 0.12),
@@ -302,10 +302,11 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 				g._opp_splat_tween.kill()
 
 			g._opp_splat.visible = true
-			g._opp_splat.modulate.a = 0.0
+			g.ui.apply_opponent_splat_style()
+			g.ui.set_opponent_splat_alpha(0.0)
 
 			g._opp_splat_tween = g.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-			g._opp_splat_tween.tween_property(g._opp_splat, "modulate:a", 1.0, 0.10)
+			g._opp_splat_tween.tween_method(g.ui.set_opponent_splat_alpha, 0.0, 1.0, 0.10)
 
 		g._hp_opp = clamp(g._hp_opp - 1, 0, 3)
 		g._apply_hearts_from_hp()
@@ -383,6 +384,10 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	if g.game_ended:
 		OpLog.i("Paintball", ["round_sequence game_end_detected ", g._state_summary()])
 		g.game_over = true
+
+		if g._flush_pending_winner():
+			return
+
 		if g.winner == "":
 			g.send_game(true)
 		return
@@ -390,6 +395,9 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	OpLog.i("Paintball", ["round_end_fade_restore ", g._state_summary()])
 	_end_round_sequence()
 	await end_round_fade_and_restore_next_round()
+
+	if g._flush_pending_winner():
+		return
 
 	if not was_replay:
 		g._selected_shoot = shoot_for_send
@@ -444,6 +452,8 @@ func play_round() -> void:
 	if g._require_new_shoot_selection or g._selected_shoot == null or not is_instance_valid(g._selected_shoot):
 		OpLog.w("Paintball", ["play_round blocked no_selection ", g._state_summary()])
 		return
+
+	g._close_open_menus()
 
 	OpLog.i("Paintball", ["play_round_start ", g._state_summary()])
 

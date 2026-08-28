@@ -278,11 +278,48 @@ func init_player_splat_overlay() -> void:
 	g._player_splat.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	g._player_splat.stretch_mode = TextureRect.STRETCH_SCALE
 	g._player_splat.visible = false
-	g._player_splat.modulate = Color(0.9, 0.15, 0.15, 0.0)
+	g._player_splat.modulate = Color(1.0, 1.0, 1.0, 0.0)
 	g._player_splat.z_as_relative = false
-	g._player_splat.z_index = 9000
+	g._player_splat.z_index = 4096
 
 	attach_parent.add_child(g._player_splat)
+
+	g._player_splat_layers.clear()
+
+	for i: int in g.PAINT_LAYER_MAX - 1:
+		var layer := TextureRect.new()
+		layer.name = "PlayerHitSplatLayer%d" % i
+		layer.texture = g.SPLAT_TEX
+		layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		layer.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		layer.stretch_mode = TextureRect.STRETCH_SCALE
+		g._player_splat.add_child(layer)
+		g._player_splat_layers.append(layer)
+
+	apply_player_splat_style()
+
+func apply_player_splat_style() -> void:
+	if g._player_splat == null or not is_instance_valid(g._player_splat):
+		return
+
+	var colors: Array = g.paint_colors_for_style(g.opp_paint_style)
+	var base: Vector2 = g._player_splat.size
+
+	g._player_splat.self_modulate = colors[0]
+
+	for i: int in g._player_splat_layers.size():
+		var layer: TextureRect = g._player_splat_layers[i]
+
+		if i + 1 >= colors.size():
+			layer.visible = false
+			continue
+
+		layer.visible = true
+		layer.self_modulate = colors[i + 1]
+		layer.size = base * randf_range(0.45, 0.8)
+		layer.pivot_offset = layer.size * 0.5
+		layer.rotation = deg_to_rad(randf_range(-180.0, 180.0))
+		layer.position = (base - layer.size) * 0.5 + Vector2(randf_range(-0.4, 0.4) * base.x, randf_range(-0.35, 0.35) * base.y)
 
 func show_player_hit_splat() -> void:
 	if g._player_splat == null or not is_instance_valid(g._player_splat):
@@ -307,6 +344,7 @@ func show_player_hit_splat() -> void:
 	g._player_splat.scale = Vector2(0.18, 0.18)
 	g._player_splat.modulate.a = 0.0
 	g._player_splat.visible = true
+	apply_player_splat_style()
 
 	g._player_splat_tween = g.create_tween()
 	g._player_splat_tween.set_trans(Tween.TRANS_BACK)
@@ -337,9 +375,53 @@ func init_opponent_splat() -> void:
 	g._opp_splat.visible = false
 	g._opp_splat.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	g._opp_splat.render_priority = 10
-	g._opp_splat.modulate = Color(1.0, 0.95, 0.2, 1.0)
 
 	g.opponent_sprite.add_child(g._opp_splat)
+
+	g._opp_splat_layers.clear()
+
+	for i: int in g.PAINT_LAYER_MAX - 1:
+		var layer := Sprite3D.new()
+		layer.name = "OppHitSplatLayer%d" % i
+		layer.texture = g.SPLAT_TEX
+		layer.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		layer.render_priority = 11 + i
+		g._opp_splat.add_child(layer)
+		g._opp_splat_layers.append(layer)
+
+	apply_opponent_splat_style()
+
+func apply_opponent_splat_style() -> void:
+	if g._opp_splat == null or not is_instance_valid(g._opp_splat):
+		return
+
+	var colors: Array = g.paint_colors_for_style(g.my_paint_style)
+	var alpha: float = g._opp_splat.modulate.a
+
+	g._opp_splat.modulate = Color(colors[0].r, colors[0].g, colors[0].b, alpha)
+
+	for i: int in g._opp_splat_layers.size():
+		var layer: Sprite3D = g._opp_splat_layers[i]
+
+		if i + 1 >= colors.size():
+			layer.visible = false
+			continue
+
+		var tint: Color = colors[i + 1]
+		layer.visible = true
+		layer.modulate = Color(tint.r, tint.g, tint.b, alpha)
+		layer.rotation = Vector3(0.0, 0.0, deg_to_rad(randf_range(-180.0, 180.0)))
+		layer.scale = Vector3.ONE * randf_range(0.45, 0.85)
+		layer.position = Vector3(randf_range(-0.55, 0.55), randf_range(-0.5, 0.5), 0.004 * float(i + 1))
+
+func set_opponent_splat_alpha(alpha: float) -> void:
+	if g._opp_splat == null or not is_instance_valid(g._opp_splat):
+		return
+
+	g._opp_splat.modulate.a = alpha
+
+	for layer: Sprite3D in g._opp_splat_layers:
+		layer.modulate.a = alpha
 
 func show_opponent_hit_splat() -> void:
 	if g._opp_splat == null or not is_instance_valid(g._opp_splat):
@@ -349,12 +431,13 @@ func show_opponent_hit_splat() -> void:
 		g._opp_splat_tween.kill()
 
 	g._opp_splat.visible = true
-	g._opp_splat.modulate.a = 0.0
 	g._opp_splat.position = Vector3(randf_range(-0.10, 0.10), 0.4, 0.03)
 	g._opp_splat.rotation = Vector3(0.0, 0.0, deg_to_rad(randf_range(0.0, 360.0)))
+	apply_opponent_splat_style()
+	set_opponent_splat_alpha(0.0)
 
 	g._opp_splat_tween = g.create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	g._opp_splat_tween.tween_property(g._opp_splat, "modulate:a", 1.0, 0.10)
+	g._opp_splat_tween.tween_method(set_opponent_splat_alpha, 0.0, 1.0, 0.10)
 
 func hide_opponent_hit_splat() -> void:
 	if g._opp_splat == null or not is_instance_valid(g._opp_splat):
@@ -364,7 +447,7 @@ func hide_opponent_hit_splat() -> void:
 		g._opp_splat_tween.kill()
 
 	g._opp_splat.visible = false
-	g._opp_splat.modulate.a = 0.0
+	set_opponent_splat_alpha(0.0)
 
 func play_sent_animation() -> void:
 	if not is_instance_valid(g.sent_label):

@@ -119,6 +119,9 @@ func set_game_data(raw_text: String) -> void:
 			g._opp_id = g.p1_id
 
 	g.turn_owner = clamp(res_int(res, "player", 1), 1, 2)
+
+	var style_p1: int = res_int(res, "style1", -1)
+	var style_p2: int = res_int(res, "style2", -1)
 	g.is_your_turn = res_bool(res, "isYourTurn", false)
 	g.winner = res_str(res, "winner", "")
 
@@ -160,6 +163,15 @@ func set_game_data(raw_text: String) -> void:
 
 	if g.playernum == 0:
 		g.playernum = 1
+
+	var incoming_opp: int = style_p2 if g.playernum == 1 else style_p1
+
+	if incoming_opp >= 0:
+		g.opp_paint_style = clampi(incoming_opp, 0, g.PAINT_STYLE_COUNT - 1)
+
+	if is_instance_valid(g.ui):
+		g.ui.apply_opponent_splat_style()
+		g.ui.apply_player_splat_style()
 
 	if is_instance_valid(g.spec_label):
 		g.spec_label.visible = g.spectator_mode
@@ -416,6 +428,8 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 			" winnerPlayer=", winner_player,
 			" result=", g.win_loss_state
 		])
+
+	payload["style1" if g.playernum == 1 else "style2"] = str(g.my_paint_style)
 
 	var avatar_key := ("avatar1" if g.playernum == 1 else "avatar2")
 	if is_instance_valid(g.player_avatar_display) and g.player_avatar_display.has_method("get_avatar_data_string"):

@@ -4,7 +4,7 @@ class_name DartsGame
 const MUSIC_STREAM := preload("res://global/audio/darts.ogg")
 
 @onready var opp_avatar_display: TextureButton = %OppAvatarDisplay
-@onready var player_avatar_display: TextureButton = %PlayerAvatarDisplayy
+@onready var player_avatar_display: TextureButton = %PlayerAvatarDisplay
 @onready var winner_label: Label = %WinLossLabel
 @onready var sent_label: Label = %SentLabel
 @onready var you_score_label: Label = %PlayerScoreLabel
@@ -201,10 +201,37 @@ func _get_rules_text() -> String:
 		"• If the second player does not reach 0, the first player wins."
 	)
 
+func _add_settings_rows(_container, popup_script) -> void:
+	var items: Array[Dictionary] = []
+
+	for style: int in Dart.available_dart_styles():
+		items.append({
+			"id": str(style),
+			"label": "Dart %d" % style,
+			"texture_path": Dart.dart_style_path(style)
+		})
+
+	if items.is_empty():
+		return
+
+	var dart_row: Control = popup_script.make_game_picker_card(
+		"Dart",
+		"Flight design",
+		items,
+		str(Dart.active_dart_style),
+		func(id: String) -> void:
+			Dart.set_dart_style(int(id))
+			SettingsManager.set_setting("darts", "dart_style", Dart.active_dart_style)
+			OpLog.i(LOG_TAG, ["dart_style_selected style=", Dart.active_dart_style])
+	)
+
+	popup_script.add_custom_setting(dart_row)
+
 func _ensure_main_dart() -> bool:
 	if is_instance_valid(main_dart):
 		return true
 
+	Dart.set_dart_style(int(SettingsManager.get_setting("darts", "dart_style", 1)))
 	main_dart = get_node_or_null("dart") as Dart
 
 	if not is_instance_valid(main_dart):
@@ -1646,7 +1673,7 @@ func _open_darts_settings_popup() -> void:
 		darts_menu_button,
 		null if spectator_mode else _get_settings_avatar_display(),
 		_get_music_stream(),
-		Callable(self, "_add_settings_rows"),
+		Callable(self, "_settings_rows_hook"),
 		func() -> void:
 			SettingsManager.suppress_avatar_changed = false
 			_settings_open = false

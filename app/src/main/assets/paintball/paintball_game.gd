@@ -29,6 +29,31 @@ const HEART_VOID_TEX := preload("res://paintball/heart_void.png")
 const PAINTBALL_SCENE := preload("res://paintball/PaintballProjectile.tscn")
 const MUSIC_STREAM := preload("res://global/audio/paintball.ogg")
 const SPLAT_TEX := preload("res://paintball/splat.png")
+const PAINT_STYLE_COUNT: int = 15
+const PAINT_STYLE_RANDOM: int = 14
+const PAINT_LAYER_MAX: int = 4
+
+const PAINT_STYLES: Array = [
+	[Color(1.0, 0.831, 0.0), Color(1.0, 0.925, 0.4), Color(0.878, 0.651, 0.0)],
+	[Color(0.839, 0.157, 0.157), Color(1.0, 1.0, 1.0), Color(0.118, 0.357, 0.839)],
+	[Color(0.180, 0.800, 0.251), Color(0.494, 0.890, 0.541), Color(0.067, 0.439, 0.165)],
+	[Color(0.753, 0.153, 0.122), Color(0.078, 0.078, 0.078), Color(0.549, 0.086, 0.063)],
+	[Color(0.118, 0.357, 0.839), Color(0.310, 0.765, 0.969), Color(0.043, 0.184, 0.478)],
+	[Color(1.0, 0.373, 0.635), Color(1.0, 0.878, 0.400), Color(1.0, 1.0, 1.0)],
+	[Color(1.0, 0.176, 0.176), Color(1.0, 0.624, 0.110), Color(0.180, 0.800, 0.251), Color(0.118, 0.357, 0.839)],
+	[Color(1.0, 0.310, 0.722), Color(0.714, 1.0, 0.180), Color(1.0, 0.561, 0.816)],
+	[Color(1.0, 0.875, 0.125), Color(1.0, 0.549, 0.102), Color(1.0, 0.231, 0.122)],
+	[Color(0.557, 0.267, 0.678), Color(0.788, 0.310, 0.839), Color(1.0, 0.435, 0.847)],
+	[Color(1.0, 0.839, 0.878), Color(0.804, 0.918, 0.753), Color(0.749, 0.847, 1.0), Color(1.0, 0.945, 0.714)],
+	[Color(0.067, 0.067, 0.067), Color(0.227, 0.227, 0.227), Color(0.0, 0.0, 0.0)],
+	[Color(1.0, 0.459, 0.094), Color(0.102, 0.102, 0.102), Color(0.482, 0.184, 0.969)],
+	[Color(1.0, 0.831, 0.0), Color(0.118, 0.357, 0.839), Color(0.310, 0.765, 0.969)],
+	[Color(1.0, 1.0, 1.0)]
+]
+
+var my_paint_style: int = 0
+var opp_paint_style: int = 0
+var _pending_winner_payload: String = ""
 const OPPONENT_FACING_TEX := preload("res://paintball/opponent_facing.png")
 const OPPONENT_SIDE_TEX := preload("res://paintball/opponent_side.png")
 
@@ -238,6 +263,8 @@ var _player_splat_tween: Tween = null
 
 var _opp_splat: Sprite3D = null
 var _opp_splat_tween: Tween = null
+var _opp_splat_layers: Array[Sprite3D] = []
+var _player_splat_layers: Array[TextureRect] = []
 
 var sent_tween: Tween = null
 
@@ -332,6 +359,53 @@ Pick where to move and where to shoot. Try to hit your opponent before they hit 
 • First player to reduce the other player to 0 hearts wins.
 [/font_size]
 """
+
+func paint_colors_for_style(style: int) -> Array:
+	if style == PAINT_STYLE_RANDOM:
+		var picked: Array = []
+
+		for i: int in PAINT_LAYER_MAX:
+			picked.append(Color.from_hsv(randf(), randf_range(0.55, 1.0), randf_range(0.7, 1.0)))
+
+		return picked
+
+	return PAINT_STYLES[clampi(style, 0, PAINT_STYLE_COUNT - 1)]
+
+func paint_style_swatch(style: int) -> Texture2D:
+	var colors: Array = PAINT_STYLES[clampi(style, 0, PAINT_STYLE_COUNT - 1)]
+	var image := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+
+	for x: int in 64:
+		var band: Color = colors[(x * colors.size()) / 64] if style != PAINT_STYLE_RANDOM else Color.from_hsv(float(x) / 64.0, 0.85, 1.0)
+
+		for y: int in 64:
+			image.set_pixel(x, y, band)
+
+	return ImageTexture.create_from_image(image)
+
+func _add_settings_rows(_container, popup_script) -> void:
+	var items: Array[Dictionary] = []
+
+	for style: int in PAINT_STYLE_COUNT:
+		items.append({
+			"id": str(style),
+			"label": "Paint %d" % (style + 1),
+			"texture": paint_style_swatch(style)
+		})
+
+	var paint_row: Control = popup_script.make_game_picker_card(
+		"Paint",
+		"Colour you splatter on your opponent",
+		items,
+		str(my_paint_style),
+		func(id: String) -> void:
+			my_paint_style = clampi(int(id), 0, PAINT_STYLE_COUNT - 1)
+			SettingsManager.set_setting("paintball", "paint_style", my_paint_style)
+			ui.apply_opponent_splat_style()
+			OpLog.i(LOG_TAG, ["paint_style_selected style=", my_paint_style])
+	)
+
+	popup_script.add_custom_setting(paint_row)
 
 func _paintball_ui_scale() -> float:
 	var vp: Vector2 = get_viewport().get_visible_rect().size
@@ -491,6 +565,8 @@ func _on_game_ready() -> void:
 		fire_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	_fire_button_is_shown = false
+	my_paint_style = clampi(int(SettingsManager.get_setting("paintball", "paint_style", 0)), 0, PAINT_STYLE_COUNT - 1)
+
 	ui.init_player_splat_overlay()
 	ui.init_opponent_splat()
 	ui.apply_hearts_from_hp()
@@ -631,7 +707,10 @@ func _set_game_data(raw_text: String) -> void:
 	if ui != null:
 		ui.apply_hearts_from_hp()
 
-	if winner != "":
+	if winner != "" and _replay_segments.size() > 0:
+		_pending_winner_payload = winner
+		OpLog.i(LOG_TAG, ["winner_deferred_until_replay ", _replay_summary(_last_replay_str)])
+	elif winner != "":
 		_apply_winner_payload(winner)
 	elif await _restore_paintball_recovery():
 		return
@@ -1086,7 +1165,17 @@ func _set_button_enabled(b: ActionButton3D, enabled: bool) -> void:
 func _update_move_buttons() -> void:
 	if buttons != null:
 		buttons.update_move_buttons()
-		
+
+func _flush_pending_winner() -> bool:
+	if _pending_winner_payload == "":
+		return false
+
+	var payload: String = _pending_winner_payload
+	_pending_winner_payload = ""
+	OpLog.i(LOG_TAG, ["winner_flush_after_replay payload=", payload])
+	_apply_winner_payload(payload)
+	return true
+
 func _apply_winner_payload(winner_payload: String) -> void:
 	var parts := winner_payload.split("|", false)
 	if parts.size() < 2:

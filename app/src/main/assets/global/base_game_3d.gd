@@ -206,9 +206,26 @@ func _on_settings_button_pressed() -> void:
 			_on_settings_dark_mode_changed(bool(SettingsManager.get_setting("global", "dark_mode", false)))
 	)
 
+var _open_settings_popup: Node = null
+
 func _settings_rows_hook(container, popup_script) -> void:
+	_open_settings_popup = popup_script as Node
 	_connect_settings_dark_mode(popup_script)
 	_add_settings_rows(container, popup_script)
+
+func _close_open_menus() -> void:
+	if is_instance_valid(_open_settings_popup) and _open_settings_popup.has_method("close_popup"):
+		_open_settings_popup.close_popup()
+
+	_open_settings_popup = null
+	_settings_open = false
+
+	for child: Node in get_tree().root.get_children():
+		if child is RulesPopup:
+			if child.has_method("close_popup"):
+				child.call("close_popup")
+			else:
+				child.queue_free()
 
 func _connect_settings_dark_mode(popup) -> void:
 	if not is_instance_valid(popup) or not popup.has_signal("dark_mode_changed"):

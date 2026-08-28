@@ -12,6 +12,14 @@ const ROTATION_SPEED_MIN := 0.12
 const ROTATION_SPEED_RANGE := 0.05
 const FADE_RETAIN_PER_FRAME := 0.92
 const MODEL_FORWARD_AXIS := Vector3(0.0, -1.0, 0.0)
+const FLIGHT_SURFACES: Array[int] = [2, 3, 4, 5, 6]
+const DART_STYLE_DIR := "res://darts/darttex"
+const DART_STYLE_MAX: int = 64
+const DART_FLIGHT_BASE_COLOR := Color(1.0, 0.0, 0.0, 1.0)
+
+static var _flight_material: StandardMaterial3D = null
+static var _dart_styles_cache: Array[int] = []
+static var active_dart_style: int = 1
 
 var finished: bool = false
 var is_mine: bool = false
@@ -41,8 +49,45 @@ func dbg(msg: String) -> void:
 	if DEBUG_DART:
 		OpLog.d(LOG_TAG, msg)
 
+static func dart_style_path(style: int) -> String:
+	return "%s/dart%d.png" % [DART_STYLE_DIR, style]
+
+static func available_dart_styles() -> Array[int]:
+	if not _dart_styles_cache.is_empty():
+		return _dart_styles_cache
+
+	for style: int in range(1, DART_STYLE_MAX + 1):
+		if ResourceLoader.exists(dart_style_path(style)):
+			_dart_styles_cache.append(style)
+
+	return _dart_styles_cache
+
+static func flight_material() -> StandardMaterial3D:
+	if _flight_material == null:
+		_flight_material = StandardMaterial3D.new()
+		set_dart_style(active_dart_style)
+
+	return _flight_material
+
+static func set_dart_style(style: int) -> void:
+	active_dart_style = maxi(1, style)
+
+	if _flight_material == null:
+		_flight_material = StandardMaterial3D.new()
+
+	var path: String = dart_style_path(active_dart_style)
+
+	if ResourceLoader.exists(path):
+		_flight_material.albedo_texture = load(path) as Texture2D
+		_flight_material.albedo_color = Color.WHITE
+	else:
+		_flight_material.albedo_texture = null
+		_flight_material.albedo_color = DART_FLIGHT_BASE_COLOR
 
 func _ready() -> void:
+	for surface: int in FLIGHT_SURFACES:
+		set_surface_override_material(surface, Dart.flight_material())
+
 	game = get_parent() as DartsGame
 	dartboard = get_parent().get_node_or_null("dart_board") as Dartboard
 
