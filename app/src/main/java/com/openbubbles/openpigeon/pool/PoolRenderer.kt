@@ -26,6 +26,7 @@ import kotlin.math.max
 import android.os.Handler
 import android.os.Looper
 import androidx.core.graphics.withMatrix
+import androidx.core.graphics.withSave
 import android.graphics.ColorMatrixColorFilter
 import com.openbubbles.openpigeon.R
 import androidx.core.graphics.withTranslation
@@ -73,7 +74,33 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
 
     private val cueDrawRect = RectF()
 
-    val cue: Bitmap = BitmapFactory.decodeResource(activity.resources, R.drawable.cue)
+    @Volatile
+    var cue: Bitmap = BitmapFactory.decodeResource(
+        activity.resources,
+        cueDrawableId(activity, activity.cueStyle)
+    )
+        private set
+
+    @Volatile
+    private var cueHalfHeight = cueHalfHeightFor(cue)
+
+    fun applyCueStyle(style: Int) {
+        val next = BitmapFactory.decodeResource(
+            activity.resources,
+            cueDrawableId(activity, style)
+        )
+
+        cueHalfHeight = cueHalfHeightFor(next)
+        cue = next
+    }
+
+    private fun cueHalfHeightFor(bitmap: Bitmap): Float {
+        if (bitmap.height <= 0) {
+            return 5f
+        }
+
+        return CUE_DRAW_LENGTH * bitmap.width.toFloat() / bitmap.height.toFloat() / 2f
+    }
 
     init {
         holder.addCallback(this)
@@ -788,21 +815,26 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                     translate(translation[0], translation[1])
                     rotate(Math.toDegrees(cueRot.toDouble()).toFloat())
 
-                    cueDrawRect.set(
-                        -520f - 20f - cueDraw,
-                        -5.0f,
-                        -20.0f - cueDraw,
-                        5.0f
-                    )
-
                     cuePaint.alpha = (cueAlpha * 255).roundToInt().coerceIn(0, 255)
 
-                    drawBitmap(
-                        cue,
-                        null,
-                        cueDrawRect,
-                        cuePaint
-                    )
+                    withSave {
+                        translate(-CUE_TIP_OFFSET - cueDraw, 0f)
+                        rotate(90f)
+
+                        cueDrawRect.set(
+                            -cueHalfHeight,
+                            0f,
+                            cueHalfHeight,
+                            CUE_DRAW_LENGTH
+                        )
+
+                        drawBitmap(
+                            cue,
+                            null,
+                            cueDrawRect,
+                            cuePaint
+                        )
+                    }
                 }
                 val frameMs = (System.nanoTime() - frameStartNs) / 1_000_000.0
 

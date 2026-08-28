@@ -98,18 +98,65 @@
             android:layout_height="30dp"
             android:layout_gravity="center"
             android:background="@drawable/cue_drag_bg"
-            android:clipToOutline="true"
-            android:outlineProvider="background"
+            android:clipChildren="false"
             android:rotation="-90">
+
+            <FrameLayout
+                android:id="@+id/cueTrackClip"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/cue_drag_bg"
+                android:clipToOutline="true"
+                android:outlineProvider="background">
+
+                <View
+                    android:id="@+id/cueTrack"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="#ff333333" />
+            </FrameLayout>
+
+            <View
+                android:layout_width="2dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="start"
+                android:layout_marginStart="36.67dp"
+                android:background="#66FFFFFF" />
+
+            <View
+                android:layout_width="2dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="start"
+                android:layout_marginStart="73.33dp"
+                android:background="#66FFFFFF" />
+
+            <View
+                android:layout_width="2dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="start"
+                android:layout_marginStart="110dp"
+                android:background="#66FFFFFF" />
+
+            <View
+                android:layout_width="2dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="start"
+                android:layout_marginStart="146.67dp"
+                android:background="#66FFFFFF" />
+
+            <View
+                android:layout_width="2dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="start"
+                android:layout_marginStart="183.33dp"
+                android:background="#66FFFFFF" />
 
             <ImageView
                 android:id="@+id/cueTip"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:layout_gravity="right|center_vertical"
-                android:background="#ff333333"
-                android:paddingRight="2dp"
-                android:src="@drawable/cue" />
+                android:layout_width="match_parent"
+                android:layout_height="30dp"
+                android:layout_gravity="center_vertical"
+                android:src="@drawable/cue1" />
         </FrameLayout>
     </FrameLayout>
 

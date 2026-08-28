@@ -2,6 +2,7 @@ package com.openbubbles.openpigeon.pool
 
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -71,8 +72,47 @@ import com.openbubbles.openpigeon.ui.GameMenuPlacement
 import androidx.core.graphics.withSave
 import kotlin.math.exp
 import com.openbubbles.openpigeon.settings.AvatarWinBurstController
+import com.openbubbles.openpigeon.settings.SettingScope
+import com.openbubbles.openpigeon.settings.SettingsSheet
 import com.openbubbles.openpigeon.ui.TurnRecoveryOverlayController
 import com.openbubbles.openpigeon.ui.attachTurnRecoveryOverlay
+import kotlin.math.roundToInt
+
+internal const val CUE_STYLE_MAX = 64
+internal const val CUE_DRAW_LENGTH = 520f
+internal const val CUE_TIP_OFFSET = 11f
+
+internal fun rotatedCueBitmap(context: Context, style: Int): Bitmap? {
+    val source = BitmapFactory.decodeResource(context.resources, cueDrawableId(context, style)) ?: return null
+
+    return Bitmap.createBitmap(
+        source,
+        0,
+        0,
+        source.width,
+        source.height,
+        Matrix().apply { postRotate(90f) },
+        true,
+    )
+}
+
+internal fun cueDrawableId(context: Context, style: Int): Int {
+    if (style > 0) {
+        val id = context.resources.getIdentifier("cue$style", "drawable", context.packageName)
+
+        if (id != 0) {
+            return id
+        }
+    }
+
+    return R.drawable.cue1
+}
+
+internal fun availableCueStyles(context: Context): List<Int> =
+    (1..CUE_STYLE_MAX).filter {
+        context.resources.getIdentifier("cue$it", "drawable", context.packageName) != 0
+    }
+
 
 class PoolActivity : AppCompatActivity() {
     lateinit var sessionId: String
@@ -150,6 +190,49 @@ class PoolActivity : AppCompatActivity() {
     var mode = PoolMode.Disabled
 
     var lastAngle = 0f
+
+    var cueStyle: Int = 1
+        set(value) {
+            field = value
+
+            if (::renderer.isInitialized) {
+                renderer.applyCueStyle(value)
+            }
+
+            applyCueTipStyle(value)
+        }
+
+    private fun applyCueTipStyle(style: Int) {
+        val tip = findViewById<ImageView>(R.id.cueTip) ?: return
+        val container = findViewById<FrameLayout>(R.id.cueContainer) ?: return
+        val bitmap = rotatedCueBitmap(this, style) ?: return
+
+        tip.adjustViewBounds = false
+        tip.scaleType = ImageView.ScaleType.FIT_XY
+        tip.setImageBitmap(bitmap)
+
+        val apply = {
+            val w = container.width
+
+            if (w > 0 && bitmap.width > 0) {
+                val lp = tip.layoutParams
+
+                if (lp != null) {
+                    lp.width = w
+                    lp.height = (w.toFloat() * bitmap.height.toFloat() / bitmap.width.toFloat()).roundToInt()
+
+                    if (lp is FrameLayout.LayoutParams) {
+                        lp.gravity = Gravity.CENTER_VERTICAL
+                    }
+
+                    tip.layoutParams = lp
+                    tip.requestLayout()
+                }
+            }
+        }
+
+        if (container.width > 0) apply() else container.post { apply() }
+    }
 
     private var cueDragLastTimeMs = 0L
     private var cueInertiaVelocity = 0f
@@ -784,11 +867,16 @@ class PoolActivity : AppCompatActivity() {
     }
 
     fun setCueDrawAmount(power: Float) {
-        val frac = power / 2000
+        val frac = (power / 2000).coerceIn(0f, 1f)
         // negative cue draw is used for the hit animation, don't show in the draw
         val tip = findViewById<ImageView>(R.id.cueTip)
         val width = findViewById<FrameLayout>(R.id.cueContainer).width
         tip.translationX = min(-frac * width, 0f)
+
+        findViewById<View>(R.id.cueTrack)?.let {
+            it.translationX = tip.translationX
+        }
+
         renderer.cueDraw = frac * 500
     }
 
@@ -1342,6 +1430,33 @@ class PoolActivity : AppCompatActivity() {
             },
         )
 
+        val cueStyles = availableCueStyles(this)
+
+        if (cueStyles.isNotEmpty()) {
+            gameMenu.sheet.addListPickerSetting(
+                title = "Cue",
+                subtitle = "Stick design",
+                scope = SettingScope.Game("pool"),
+                key = "cue_style",
+                items = cueStyles.map { style ->
+                    SettingsSheet.PickerItem(
+                        id = style.toString(),
+                        label = "Cue $style",
+                        preview = SettingsSheet.PickerPreview.Custom { ctx ->
+                            ImageView(ctx).apply {
+                                setImageBitmap(rotatedCueBitmap(ctx, style))
+                                scaleType = ImageView.ScaleType.FIT_CENTER
+                            }
+                        },
+                    )
+                },
+                default = "1",
+                rowHeightDp = 88f,
+            ) { id ->
+                cueStyle = id.toIntOrNull() ?: 1
+            }
+        }
+
         gameMenu.sheet.attachGameAvatar(
             gameAvatarAnchor,
         )
@@ -1460,7 +1575,7 @@ class PoolActivity : AppCompatActivity() {
                 }
 
                 MotionEvent.ACTION_MOVE -> {
-                    val power = -min(event.x - touchDownCueX, 0.0f) / container.width * 2000
+                    val power = (-min(event.x - touchDownCueX, 0.0f) / container.width * 2000).coerceIn(0f, 2000f)
                     setCueDrawAmount(power)
 
                     val stepSize = 60f
@@ -1477,7 +1592,7 @@ class PoolActivity : AppCompatActivity() {
                 MotionEvent.ACTION_UP -> {
                     lastCueHapticStep = -1
                     disableSend = false
-                    val power = -min(event.x - touchDownCueX, 0.0f) / container.width * 2000
+                    val power = (-min(event.x - touchDownCueX, 0.0f) / container.width * 2000).coerceIn(0f, 2000f)
                     if (power < 100) {
                         setCueDrawAmount(0f)
                         return@setOnTouchListener true

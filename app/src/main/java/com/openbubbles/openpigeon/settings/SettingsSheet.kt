@@ -362,6 +362,104 @@ class SettingsSheet(
         return section
     }
 
+    fun addListPickerSetting(
+        title: String,
+        subtitle: String,
+        scope: SettingScope,
+        key: String,
+        items: List<PickerItem>,
+        default: String,
+        rowHeightDp: Float = 56f,
+        onChanged: (String) -> Unit,
+    ): View {
+        SettingsData.init(context)
+
+        val section = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also {
+                it.bottomMargin = dp(12f)
+            }
+        }
+
+        section.addView(TextView(context).apply {
+            text = title
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        })
+
+        if (subtitle.isNotBlank()) {
+            section.addView(TextView(context).apply {
+                text = subtitle
+                setTextColor(COL_LABEL)
+                textSize = 11f
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also {
+                    it.topMargin = dp(2f)
+                }
+            })
+        }
+
+        val cells = linkedMapOf<String, View>()
+
+        fun applySelection(value: String) {
+            cells.forEach { (id, cell) ->
+                cell.background = pickerBorder(id == value)
+            }
+        }
+
+        for (item in items) {
+            val cell = FrameLayout(context).apply {
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(rowHeightDp)).also {
+                    it.topMargin = dp(6f)
+                }
+                setPadding(dp(10f), dp(6f), dp(10f), dp(6f))
+                clipChildren = false
+                clipToPadding = false
+            }
+
+            paletteSkipSurface[cell] = true
+
+            cell.addView(createPickerPreview(item.preview).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    Gravity.CENTER,
+                )
+            })
+
+            if (item.label.isNotBlank()) {
+                cell.addView(TextView(context).apply {
+                    text = item.label
+                    setTextColor(Color.WHITE)
+                    textSize = 10f
+                    layoutParams = FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        Gravity.BOTTOM or Gravity.START,
+                    )
+                })
+            }
+
+            cell.setOnClickListener {
+                SettingsData.putString(scope, key, item.id)
+                applySelection(item.id)
+                onChanged(item.id)
+            }
+
+            cells[item.id] = cell
+            section.addView(cell)
+        }
+
+        val binding = StringSettingBinding(scope, key, default, ::applySelection, onChanged)
+        stringSettingBindings += binding
+
+        miscRowsContainer.addView(section)
+        ensureMiscTab()
+        refreshStringSetting(binding)
+        updateResponsiveLayout()
+        return section
+    }
+
     fun refreshGameControls(refreshFromGodot: Boolean = true) {
         if (refreshFromGodot) SettingsData.refreshFromGodot()
         booleanSettingBindings.forEach(::refreshBooleanSetting)
@@ -425,6 +523,16 @@ class SettingsSheet(
 
     private fun paletteSurface(color: Int) = if (settingsDarkMode) color else paletteInvert(color, 0.4f)
 
+    private fun paletteSurfaceForced(color: Int): Int {
+        if (settingsDarkMode) return color
+
+        val hsv = FloatArray(3)
+        Color.colorToHSV(color, hsv)
+        hsv[1] *= 0.4f
+        hsv[2] = 1f - hsv[2] * 0.8f
+        return Color.HSVToColor(Color.alpha(color), hsv)
+    }
+
     private fun paletteText(color: Int) = if (settingsDarkMode) color else paletteInvert(color, 1f)
 
     private fun tabTint(selected: Boolean) = if (selected) COL_TAB_SEL else paletteText(COL_TAB_UNSEL)
@@ -466,7 +574,7 @@ class SettingsSheet(
     }
 
     private fun pickerBorder(selected: Boolean) = GradientDrawable().apply {
-        setColor(paletteSurface(if (selected) "#2a2640".toColorInt() else "#20202c".toColorInt()))
+        setColor(paletteSurfaceForced(if (selected) "#2a2640".toColorInt() else "#20202c".toColorInt()))
         cornerRadius = dpf(12f)
         setStroke(dp(if (selected) 2f else 1f), if (selected) COL_SEL_BORDER else "#3b3b50".toColorInt())
     }
