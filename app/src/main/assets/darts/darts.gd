@@ -2196,10 +2196,7 @@ func _process_game_state():
 					await get_tree().create_timer(SCORE_BUST_DELAY).timeout
 					_show_score_popup(Vector3.ZERO, [], true, true)
 
-					var old_score = mode
-					if replay != null and not replay.is_empty():
-						var score_idx = 0 if player == 1 else 1
-						old_score = parse_replay(replay)["post_state"][score_idx]
+					var old_score := p1_pre_score if player == 1 else p2_pre_score
 
 					await get_tree().create_timer(1).timeout
 					set_score(player, old_score)

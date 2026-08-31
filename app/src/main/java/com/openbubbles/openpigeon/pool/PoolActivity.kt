@@ -1804,6 +1804,7 @@ class PoolActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        skipReplayHandler.removeCallbacksAndMessages(null)
         poolActivityClosing =
             true
 
@@ -2145,6 +2146,8 @@ class PoolActivity : AppCompatActivity() {
     var skipReplayRequested = false
     var replayWasSkipped = false
     var skipReplayFadeStarted = false
+    private val skipReplayHandler = Handler(Looper.getMainLooper())
+    private var skipReplayShowRunnable: Runnable? = null
 
     private var nativeShotStartedAtMs = 0L
     private var nativeShotSeq = 0
@@ -2157,6 +2160,25 @@ class PoolActivity : AppCompatActivity() {
     private var poolVisualTraceEveryFrames = 6
     private var poolVisualTraceFrame = 0L
 
+    private fun scheduleSkipReplayButton() {
+        if (skipReplayFadeStarted) return
+        skipReplayFadeStarted = true
+
+        val runnable = Runnable {
+            skipReplayShowRunnable = null
+            if (!replaying || skipReplayRequested || poolActivityClosing) return@Runnable
+            showSkipReplayButton("replay_1s")
+        }
+
+        skipReplayShowRunnable = runnable
+        skipReplayHandler.postDelayed(runnable, 1000L)
+    }
+
+    private fun cancelSkipReplayButtonSchedule() {
+        skipReplayShowRunnable?.let { skipReplayHandler.removeCallbacks(it) }
+        skipReplayShowRunnable = null
+    }
+
     private fun showSkipReplayButton(reason: String) {
         runOnUiThread {
             val controls = findViewById<LinearLayout>(R.id.controls)
@@ -2168,12 +2190,13 @@ class PoolActivity : AppCompatActivity() {
 
             skipBtn.animate().cancel()
             skipBtn.clearAnimation()
-            skipBtn.alpha = 1f
+            skipBtn.alpha = 0f
             skipBtn.visibility = View.VISIBLE
             skipBtn.isEnabled = true
             skipBtn.isClickable = true
             skipBtn.bringToFront()
             skipBtn.requestLayout()
+            skipBtn.animate().alpha(1f).setDuration(200L).start()
 
             fun logWhenMeasured(attempt: Int) {
                 skipBtn.bringToFront()
@@ -2258,10 +2281,6 @@ class PoolActivity : AppCompatActivity() {
             return
         }
         mode = PoolMode.ReplayAiming
-        if (!skipReplayFadeStarted) {
-            skipReplayFadeStarted = true
-            showSkipReplayButton("playNextReplay_start")
-        }
         renderer.cueRot = replayHits[0].direction
         runOnUiThread { renderer.setCueVisible(true) }
         val handler = Handler(mainLooper)
@@ -2390,6 +2409,7 @@ class PoolActivity : AppCompatActivity() {
     var disableSend = false
 
     fun finishReplay() {
+        cancelSkipReplayButtonSchedule()
         disableSend = true
         mode = PoolMode.Disabled
         setCueUiVisible(false)
@@ -4360,6 +4380,7 @@ class PoolActivity : AppCompatActivity() {
         disableSend = false
         skipReplayRequested = false
         replaying = false
+        cancelSkipReplayButtonSchedule()
         skipReplayFadeStarted = false
         cancelAllShots()
         cancelAllShots = {}
@@ -4678,10 +4699,12 @@ class PoolActivity : AppCompatActivity() {
             runOnUiThread {
                 setCueUiVisible(false)
                 hideStateLabel()
+                hideSkipReplayButton("replay_start")
             }
 
+            scheduleSkipReplayButton()
+
             renderer.notifyWhenFrameReady {
-                showSkipReplayButton("handleMessage_before_playNextReplay")
                 playNextReplay()
             }
         }

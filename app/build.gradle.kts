@@ -590,8 +590,7 @@ val importGodotAssets by tasks.registering(Exec::class) {
         "--headless",
         "--path",
         godotProjectDir.asFile.absolutePath,
-        "--editor",
-        "--quit"
+        "--import"
     )
 }
 
