@@ -95,6 +95,7 @@ class KnockoutActivity : AppCompatActivity() {
     private var p1Bitmap: Bitmap? = null
     private var p2Bitmap: Bitmap? = null
     private var lastMessage: Map<String, String> = emptyMap()
+    private var startupCover: View? = null
 
     private var pendingTokens = mutableListOf<KnockoutReplayToken>()
     private var currentBoard: KnockoutBoard? = null
@@ -419,8 +420,26 @@ class KnockoutActivity : AppCompatActivity() {
         supportActionBar?.hide()
         enableEdgeToEdge()
         setContentView(R.layout.activity_knockout)
+
+        val contentRoot = findViewById<FrameLayout>(android.R.id.content)
+
+        startupCover = View(this).apply {
+            setBackgroundColor(Color.BLACK)
+            isClickable = true
+        }
+
+        contentRoot.addView(
+            startupCover,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        startupCover?.bringToFront()
+
         findViewById<FrameLayout>(R.id.knockoutRoot)?.apply {
-            alpha = 0f
+            alpha = 1f
             visibility = View.VISIBLE
         }
         applyStateLabelBackground(findViewById(R.id.knockoutStateLabel))
@@ -665,14 +684,6 @@ class KnockoutActivity : AppCompatActivity() {
             R.id.knockoutSettingsButton
         )
 
-        val powerHint = findViewById<View>(
-            R.id.knockoutPowerHintLabel
-        )
-
-        val launchButton = findViewById<View>(
-            R.id.knockoutLaunchButton
-        )
-
         if (root.height <= 0) {
             return
         }
@@ -722,14 +733,6 @@ class KnockoutActivity : AppCompatActivity() {
             bottomCandidates += top - dp(10f)
         }
 
-        topRelativeToRoot(powerHint)?.let { top ->
-            bottomCandidates += top - dp(12f)
-        }
-
-        topRelativeToRoot(launchButton)?.let { top ->
-            bottomCandidates += top - dp(12f)
-        }
-
         knockoutBoardBottomPx =
             (bottomCandidates.minOrNull() ?: bottomAboveSystemBar).coerceAtLeast(
                 knockoutBoardTopPx + 1f
@@ -767,6 +770,7 @@ class KnockoutActivity : AppCompatActivity() {
         )
 
         mapMode = msg["map"]?.toIntOrNull() ?: msg["mode"]?.toIntOrNull() ?: mapMode
+
         applyWaterTintForMap()
         applyMapButtonColors()
         syncNativeMap()
@@ -1564,12 +1568,15 @@ class KnockoutActivity : AppCompatActivity() {
         gameShownToPlayer = true
 
         runOnUiThread {
-            val root = findViewById<FrameLayout>(R.id.knockoutRoot) ?: return@runOnUiThread
+            val contentRoot = findViewById<FrameLayout>(android.R.id.content)
+            val cover = startupCover ?: return@runOnUiThread
 
-            root.animate().cancel()
-            root.visibility = View.VISIBLE
+            contentRoot.postDelayed({
+                if (closing) return@postDelayed
 
-            root.animate().alpha(1f).setDuration(120L).start()
+                contentRoot.removeView(cover)
+                if (startupCover === cover) startupCover = null
+            }, 50L)
         }
     }
 
@@ -2733,7 +2740,7 @@ class KnockoutActivity : AppCompatActivity() {
             val button = findViewById<Button>(R.id.knockoutLaunchButton)
             val hint = findViewById<TextView>(R.id.knockoutPowerHintLabel)
 
-            val bottomMargin = knockoutBottomInsetPx + dp(34f).toInt()
+            val bottomMargin = knockoutBottomInsetPx + dp(64f).toInt()
 
             if (button != null && button.isVisible) {
                 val lp = button.layoutParams as? FrameLayout.LayoutParams
@@ -2984,7 +2991,7 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     private fun map3DarkGreenColor(): Int {
-        return "#2e7d32".toColorInt()
+        return "#12451a".toColorInt()
     }
 
     private fun colorForMap(): Int {
