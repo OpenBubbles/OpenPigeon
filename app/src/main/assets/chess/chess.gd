@@ -67,6 +67,8 @@ var isTurn: bool = false
 var waitingForOpponent: bool = true
 var my_player_id: String = ""
 var enemy_player_index: int = 2  # 1 or 2, used for UI if needed
+var player1_id: String = ""
+var player2_id: String = ""
 var my_player_index: int = 1
 var my_color: String = "w"  # Tracks whether the local player is white or black
 var flip_board_ui: bool = false  # Whether to flip the board UI to put local player at bottom
@@ -315,7 +317,7 @@ func _on_game_ready() -> void:
 		_update_turn_flags()
 	else:
 		_log_init.debug("No AppPlugin (local debug mode)")
-		my_player_index = 2  # Player 2 is white
+		my_player_index = 1  # Player 2 is white
 		my_color = "w"
 		flip_board_ui = false
 		_update_turn_flags()
@@ -427,40 +429,45 @@ func _set_game_data_impl(raw: String) -> void:
 		# Determine player assignment from GamePigeon protocol fields
 		var isYourTurn: bool = bool(data.get("isYourTurn", false))
 		var message_player: int = clamp(int(data.get("player", 2)), 1, 2)
+		var sender_id: String = str(data.get("sender", ""))
 		my_player_id = str(data.get("myPlayerId", my_player_id))
 
-		var player1_id: String = str(
-			data.get("player1", "")
-		)
+		if data.has("player1"):
+			player1_id = str(data.get("player1", ""))
 
-		var player2_id: String = str(
-			data.get("player2", "")
-		)
+		if data.has("player2"):
+			player2_id = str(data.get("player2", ""))
 
 		var resolved_player := 0
 
-		if (
-			not my_player_id.is_empty() and
-			not player1_id.is_empty() and
-			not player2_id.is_empty()
-		):
-			if my_player_id == player1_id:
-				resolved_player = 1
-			elif my_player_id == player2_id:
-				resolved_player = 2
-		else:
-			# The message player is the sender.
-			#
-			# Opening our own sent game:
-			# isYourTurn = false, so we are message_player.
-			#
-			# Receiving the opponent's game:
-			# isYourTurn = true, so we are the opposite player.
-			resolved_player = (
-				3 - message_player
-				if isYourTurn
-				else message_player
-			)
+		if not my_player_id.is_empty() and my_player_id == player1_id:
+			resolved_player = 1
+		elif not my_player_id.is_empty() and my_player_id == player2_id:
+			resolved_player = 2
+		elif not player1_id.is_empty() and not player2_id.is_empty():
+			resolved_player = 0
+		elif player1_id.is_empty() and not player2_id.is_empty() and not my_player_id.is_empty():
+			resolved_player = 1
+		elif player2_id.is_empty() and not player1_id.is_empty() and not my_player_id.is_empty():
+			resolved_player = 2
+		elif player1_id.is_empty() and player2_id.is_empty():
+			if not sender_id.is_empty() and not my_player_id.is_empty():
+				if sender_id == my_player_id:
+					resolved_player = message_player
+				else:
+					resolved_player = 3 - message_player
+
+					if message_player == 1:
+						player1_id = sender_id
+					else:
+						player2_id = sender_id
+			else:
+				resolved_player = 3 - message_player if isYourTurn else message_player
+
+		if resolved_player == 1 and player1_id.is_empty() and not my_player_id.is_empty():
+			player1_id = my_player_id
+		elif resolved_player == 2 and player2_id.is_empty() and not my_player_id.is_empty():
+			player2_id = my_player_id
 
 		spectator_mode = resolved_player == 0
 
@@ -476,7 +483,7 @@ func _set_game_data_impl(raw: String) -> void:
 			else 1
 		)
 
-		my_color = "b" if my_player_index == 1 else "w"
+		my_color = "w" if my_player_index == 1 else "b"
 		var opp_color: String = ChessPiece.opposite_side(my_color)
 
 		if is_instance_valid(player_marker):
@@ -602,7 +609,7 @@ func _set_game_data_impl(raw: String) -> void:
 		if spectator_mode:
 			isTurn = false
 			waitingForOpponent = false
-			turn = "b" if message_player == 1 else "w"
+			turn = "w" if message_player == 1 else "b"
 		else:
 			isTurn = isYourTurn
 			waitingForOpponent = not isTurn
@@ -641,14 +648,14 @@ func _set_game_data_impl(raw: String) -> void:
 					var sender_color := ""
 
 					if winner_sender == player1_id:
-						sender_color = "b"
-					elif winner_sender == player2_id:
 						sender_color = "w"
+					elif winner_sender == player2_id:
+						sender_color = "b"
 					else:
 						sender_color = (
-							"b"
+							"w"
 								if message_player == 1
-								else "w"
+								else "b"
 						)
 
 					game_over_winner_side = (
@@ -2203,7 +2210,7 @@ func _show_win_loss_result() -> void:
 			)
 		else:
 			if spectator_mode:
-				var player1_won := game_over_winner_side == "b"
+				var player1_won := game_over_winner_side == "w"
 
 				win_loss_label.text = (
 					"Player 1 Wins!"
@@ -2812,9 +2819,21 @@ func _commit_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 	# Export data to host in GamePigeon format
 	var gp_replay = game_board.generate_replay(from_sq, to_sq)
 	_log_game.debug("_commit_move: generated GamePigeon replay: %s" % gp_replay)
+	if my_player_index == 1:
+		player1_id = my_player_id
+	else:
+		player2_id = my_player_id
+
 	var to_send = {
-		"replay": gp_replay
+		"replay": gp_replay,
+		"player": str(my_player_index)
 	}
+
+	if not player1_id.is_empty():
+		to_send["player1"] = player1_id
+
+	if not player2_id.is_empty():
+		to_send["player2"] = player2_id
 	var avatar_key := (
 		"avatar1"
 		if my_player_index == 1
