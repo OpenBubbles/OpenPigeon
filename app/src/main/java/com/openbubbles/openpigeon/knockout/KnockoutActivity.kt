@@ -1927,7 +1927,7 @@ class KnockoutActivity : AppCompatActivity() {
 
     private fun finishLocalLaunchRound(inferredPost: KnockoutBoard) {
         val nextIndex = (boardIndex + 1).coerceAtMost(7)
-        val factor = meltScale(nextIndex) / meltScale(boardIndex)
+        val factor = if (nextIndex > boardIndex) 0.9f else 1f
         val postBoard = scaleBoardPositions(inferredPost, factor).copy(index = nextIndex)
         val nextSetup = KnockoutReplayParser.clearAims(postBoard)
 
@@ -1973,7 +1973,7 @@ class KnockoutActivity : AppCompatActivity() {
     private fun applyPostBoardAndShrink(postBoard: KnockoutBoard, afterShrink: () -> Unit) {
         val startIndex = visualBoardIndex
         val targetIndex = postBoard.index.toFloat()
-        val startScale = (1f - 0.1f * startIndex).coerceAtLeast(0.3f)
+        val hasShrink = targetIndex > startIndex
 
         val slide = pieces.filter { it.alive }
         val sx = slide.map { it.x }
@@ -1991,11 +1991,13 @@ class KnockoutActivity : AppCompatActivity() {
                 addUpdateListener { anim ->
                     val vi = anim.animatedValue as Float
                     visualBoardIndex = vi
-                    val factor = ((1f - 0.1f * vi).coerceAtLeast(0.3f)) / startScale
+                    val progress = if (hasShrink) ((vi - startIndex) / (targetIndex - startIndex)).coerceIn(0f, 1f) else 0f
+                    val pieceFactor = if (hasShrink) 1f - 0.1f * progress else 1f
+
                     synchronized(this@KnockoutActivity) {
                         for (i in slide.indices) {
-                            slide[i].x = sx[i] * factor
-                            slide[i].y = sy[i] * factor
+                            slide[i].x = sx[i] * pieceFactor
+                            slide[i].y = sy[i] * pieceFactor
                         }
                     }
                 }
