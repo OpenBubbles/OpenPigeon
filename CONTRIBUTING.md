@@ -78,7 +78,7 @@ If you're unsure whether something is allowed, ask: **support@openbubbles.app**.
 
 ### Testing in OpenBubbles
 
-1. Enable developer mode in OpenBubbles → Developer Tools
+1. Enable developer mode in OpenBubbles → Messages → Message Apps → Developer Mode
 2. Add the service name: `com.openbubbles.openpigeon.MadridExtensionService`
 
 Contact us on Discord if you want guidance getting set up.
