@@ -116,6 +116,17 @@ private:
             bool bouncy = false
     );
 
+    void createStaticEdge(
+            float ax,
+            float ay,
+            float bx,
+            float by,
+            int kind,
+            float restitution,
+            float friction,
+            bool bouncy = false
+    );
+
     void createStaticTriangle(
             float x,
             float y,

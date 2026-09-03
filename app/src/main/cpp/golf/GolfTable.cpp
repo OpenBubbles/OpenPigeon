@@ -33,7 +33,6 @@ static constexpr int VELOCITY_ITERATIONS = 60;
 static constexpr int POSITION_ITERATIONS = 60;
 
 static constexpr float PI_F = 3.14159265358979323846f;
-static constexpr float DIAGONAL_WALL_THICKNESS = 1.0f;
 static constexpr float CROSS_BASE_SIZE = 95.0f;
 static constexpr float CROSS_ARM_BASE_THICKNESS = 6.0f;
 static constexpr float CROSS_CENTER_BASE_RADIUS = 10.0f;
@@ -543,7 +542,6 @@ void GolfTable::createDiagonalCellWall(const int* openMask, int row, int col, in
     const float y = static_cast<float>(row) * tileSize;
 
     const float halfLength = tileSize * 0.5f * std::sqrt(2.0f);
-    const float halfThickness = DIAGONAL_WALL_THICKNESS * 0.5f;
 
     const bool topBlocked = !nativeCellIsOpenRaw(openMask, rows, cols, row - 1, col);
     const bool bottomBlocked = !nativeCellIsOpenRaw(openMask, rows, cols, row + 1, col);
@@ -567,12 +565,19 @@ void GolfTable::createDiagonalCellWall(const int* openMask, int row, int col, in
         corner = "BOTTOM_RIGHT_NEG_45";
     }
 
-    createStaticBox(
-            x,
-            y,
-            halfLength,
-            halfThickness,
-            angle,
+    const float dx = std::cos(angle) * halfLength;
+    const float dy = std::sin(angle) * halfLength;
+
+    const float ax = x - dx;
+    const float ay = y - dy;
+    const float bx = x + dx;
+    const float by = y + dy;
+
+    createStaticEdge(
+            ax,
+            ay,
+            bx,
+            by,
             -2,
             WALL_RESTITUTION,
             WALL_FRICTION,
@@ -596,10 +601,11 @@ void GolfTable::createDiagonalCellWall(const int* openMask, int row, int col, in
             "\"leftBlocked\":%s,"
             "\"rightBlocked\":%s,"
             "\"corner\":\"%s\","
-            "\"shape\":\"rotatedBox\","
+            "\"shape\":\"edge\","
             "\"angle\":%.6f,"
             "\"halfLength\":%.6f,"
-            "\"halfThickness\":%.6f"
+            "\"a\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"b\":{\"x\":%.6f,\"y\":%.6f}"
             "}",
             traceRunId.c_str(),
             traceShotIndex,
@@ -617,7 +623,10 @@ void GolfTable::createDiagonalCellWall(const int* openMask, int row, int col, in
             corner,
             angle,
             halfLength,
-            halfThickness
+            ax,
+            ay,
+            bx,
+            by
     );
 }
 
@@ -802,6 +811,86 @@ void GolfTable::createStaticBox(
             traceFrame,
             tracePhase.c_str(),
             "createStaticBox",
+            kind,
+            fixtureDef
+    );
+
+    body->CreateFixture(&fixtureDef);
+
+    auto* data = new GolfData{
+            kind < 0 ? GolfData::Type::Wall : GolfData::Type::Obstacle,
+            kind,
+            body,
+            bouncy
+    };
+
+    body->SetUserData(data);
+    staticBodies.push_back({body, data});
+}
+
+void GolfTable::createStaticEdge(
+        float ax,
+        float ay,
+        float bx,
+        float by,
+        int kind,
+        float restitution,
+        float friction,
+        bool bouncy
+) {
+    b2BodyDef bodyDef;
+    applyIosBodyDefaults(bodyDef);
+    bodyDef.type = b2_staticBody;
+    bodyDef.position.Set(0.0f, 0.0f);
+
+    b2Body* body = world.CreateBody(&bodyDef);
+
+    b2EdgeShape shape;
+    shape.Set(
+            b2Vec2(ax, ay),
+            b2Vec2(bx, by)
+    );
+
+    b2FixtureDef fixtureDef;
+    fixtureDef.shape = &shape;
+    applyIosFixtureDefaults(fixtureDef);
+    fixtureDef.restitution = restitution;
+    fixtureDef.friction = friction;
+    fixtureDef.density = IOS_FIXTURE_DENSITY;
+
+    golfNativeLogPrint(
+            ANDROID_LOG_INFO,
+            "GolfNative",
+            "GOLF_ANDROID_FIXTURE={"
+            "\"runId\":\"%s\","
+            "\"shotIndex\":%d,"
+            "\"frame\":%d,"
+            "\"phase\":\"%s\","
+            "\"source\":\"createStaticEdge\","
+            "\"shape\":\"edge\","
+            "\"ownerType\":\"%s\","
+            "\"kind\":%d,"
+            "\"a\":{\"x\":%.6f,\"y\":%.6f},"
+            "\"b\":{\"x\":%.6f,\"y\":%.6f}"
+            "}",
+            traceRunId.c_str(),
+            traceShotIndex,
+            traceFrame,
+            tracePhase.c_str(),
+            ownerTypeForKind(kind),
+            kind,
+            ax,
+            ay,
+            bx,
+            by
+    );
+
+    logFixtureMaterial(
+            traceRunId.c_str(),
+            traceShotIndex,
+            traceFrame,
+            tracePhase.c_str(),
+            "createStaticEdge",
             kind,
             fixtureDef
     );
@@ -1529,7 +1618,6 @@ bool GolfTable::update(float dtSeconds) {
 
     return moving || onSlope;
 }
-
 
 void GolfTable::refreshOutputs() {
     if (ball) {

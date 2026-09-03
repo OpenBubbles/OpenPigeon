@@ -62,8 +62,8 @@ class GolfRenderer @JvmOverloads constructor(
 
         private const val DEBUG_NATIVE_BALL_RADIUS_COURSE = 4f
 
-        private const val DEBUG_NATIVE_DIAGONAL_WALL_THICKNESS_COURSE = 1f
-        private const val DEBUG_NATIVE_DIAGONAL_WALL_HALF_THICKNESS_COURSE = 0.5f
+        private const val DEBUG_NATIVE_DIAGONAL_WALL_THICKNESS_COURSE = 0f
+        private const val DEBUG_NATIVE_DIAGONAL_WALL_HALF_THICKNESS_COURSE = 0f
         private const val DEBUG_NATIVE_OUTER_WALL_THICKNESS_COURSE = 65f
 
         private const val DEBUG_NATIVE_SMALL_BAR_WIDTH_COURSE = 44f
