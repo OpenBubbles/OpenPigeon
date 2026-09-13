@@ -68,6 +68,26 @@ Attribution is also displayed in-app via
 
 ---
 
+## Sound effects
+
+The following sound effects are third-party works and retain their original
+licenses. They are excluded from LICENSE-ASSETS.
+
+| Sound | Creator | Source | License |
+|---|---|---|---|
+| Golf Swing | jcampbe8 | https://freesound.org/s/638884/ | CC0 1.0 |
+| Basketball Bounce (`basket_ball_02_bounce.wav`) | andre.nascimento | https://freesound.org/s/51461/ | CC BY 4.0 |
+| `golf_hole.wav` | inbeeld | https://freesound.org/s/21878/ | CC0 1.0 |
+| Golf ball - single bounce - `golf_bounce.wav` | 221098HariPotter | https://freesound.org/s/655635/ | CC BY 4.0 |
+| `pool_pocket.wav` | Yarmonics | https://freesound.org/s/441857/ | CC0 1.0 |
+| Pool Ball Strike | ChloePieterse | https://freesound.org/s/763603/ | CC0 1.0 |
+| `Pool_Table_Ball_Hit.WAV` | AmberdeMeillon | https://freesound.org/s/443067/ | CC0 1.0 |
+
+Attribution is also displayed in-app via
+`app/src/main/assets/attributions.html`.
+
+---
+
 ## Fonts
 
 Fonts are excluded from LICENSE-ASSETS and remain under their own terms. OFL

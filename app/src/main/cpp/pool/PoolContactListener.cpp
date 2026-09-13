@@ -120,6 +120,12 @@ void PoolContactListener::BeginContact(b2Contact *contact) {
             return;
         }
 
+        if (ball1->body != nullptr && ball2->body != nullptr) {
+            b2Vec2 relativeVelocity = ball1->body->GetLinearVelocity() - ball2->body->GetLinearVelocity();
+            PoolTable* table = ball1->table != nullptr ? ball1->table : ball2->table;
+            if (table != nullptr) table->recordBallHit(relativeVelocity.Length());
+        }
+
         if (ball1->numberHit == -1) {
             ball1->numberHit = ball2->number;
         }
@@ -169,6 +175,10 @@ void PoolContactListener::BeginContact(b2Contact *contact) {
 
         if (ball == nullptr) {
             return;
+        }
+
+        if (ball->table != nullptr && ball->body != nullptr) {
+            ball->table->recordRailHit(ball->body->GetLinearVelocity().Length());
         }
 
         if (hole != nullptr) {

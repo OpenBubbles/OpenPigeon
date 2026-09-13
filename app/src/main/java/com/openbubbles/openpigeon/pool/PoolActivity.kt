@@ -1430,6 +1430,13 @@ class PoolActivity : AppCompatActivity() {
             },
         )
 
+        gameMenu.preloadSounds(
+            POOL_QBALL_HIT_SFX_PATH,
+            POOL_BALL_HIT_SFX_PATH,
+            POOL_RAIL_HIT_SFX_PATH,
+            POOL_POCKET_SFX_PATH,
+        )
+
         val cueStyles = availableCueStyles(this)
 
         if (cueStyles.isNotEmpty()) {
@@ -2091,7 +2098,9 @@ class PoolActivity : AppCompatActivity() {
                 activity.nineBallTargetAtShot = activity.lowestNineBallNumber() ?: 9
             }
 
+            activity.poolBalls.forEach { it.pocketSoundPlayed = false }
             activity.markNativeShotStarted(this)
+            activity.playCueBallHitSound()
             activity.hitBall(
                 activity.table, 0 /*white*/, direction, power, spinX, spinY, activity.isFirst
             )
@@ -2320,6 +2329,45 @@ class PoolActivity : AppCompatActivity() {
     fun clearNativeShotWatchdog() {
         nativeShotStartedAtMs = 0L
         currentNativeShotDebug = ""
+    }
+
+    fun playCueBallHitSound() {
+        if (!::gameMenu.isInitialized) return
+        gameMenu.playSound(POOL_QBALL_HIT_SFX_PATH, volume = 0.4f)
+    }
+
+    private var lastPoolBallHitSoundMs = 0L
+    private var lastPoolRailHitSoundMs = 0L
+
+    fun handlePoolCollisionSounds(ballSpeed: Float, railSpeed: Float) {
+        if (!::gameMenu.isInitialized) return
+
+        val now = SystemClock.uptimeMillis()
+
+        if (ballSpeed >= POOL_COLLISION_MIN_SPEED && now - lastPoolBallHitSoundMs >= POOL_COLLISION_SOUND_COOLDOWN_MS) {
+            lastPoolBallHitSoundMs = now
+            gameMenu.playSound(POOL_BALL_HIT_SFX_PATH, volume = poolCollisionVolume(ballSpeed))
+        }
+
+        if (railSpeed >= POOL_COLLISION_MIN_SPEED && now - lastPoolRailHitSoundMs >= POOL_COLLISION_SOUND_COOLDOWN_MS) {
+            lastPoolRailHitSoundMs = now
+            gameMenu.playSound(POOL_RAIL_HIT_SFX_PATH, volume = poolCollisionVolume(railSpeed/2))
+        }
+    }
+
+    private fun poolCollisionVolume(speed: Float): Float {
+        return (speed / POOL_COLLISION_FULL_VOLUME_SPEED).coerceIn(0.08f, 1.0f)
+    }
+
+    fun handlePoolPocketSounds() {
+        if (!::gameMenu.isInitialized) return
+
+        for (ball in poolBalls) {
+            if ((ball.inPocket || ball.sunk) && !ball.pocketSoundPlayed) {
+                ball.pocketSoundPlayed = true
+                gameMenu.playSound(POOL_POCKET_SFX_PATH, volume = 0.8f)
+            }
+        }
     }
 
     fun handleNativeStillMoving() {
@@ -3265,6 +3313,8 @@ class PoolActivity : AppCompatActivity() {
 
         val inPocket: Boolean
             get() = holeX != -1f && holeY != -1f && !sunk
+
+        var pocketSoundPlayed = false
 
         fun exportVisualRotationString(): String {
             return String.format(
@@ -4728,6 +4778,15 @@ class PoolActivity : AppCompatActivity() {
         private const val CUE_INERTIA_STOP_SPEED = 0.035f
         private const val CUE_INERTIA_MAX_SPEED = 4.0f
         private const val CUE_INERTIA_DECAY_PER_SECOND = 12.0f
+
+        private const val POOL_QBALL_HIT_SFX_PATH = "pool/pool_qball_hit.wav"
+        private const val POOL_BALL_HIT_SFX_PATH = "pool/pool_ball_hit.wav"
+        private const val POOL_RAIL_HIT_SFX_PATH = "pool/pool_rail_hit.wav"
+        private const val POOL_POCKET_SFX_PATH = "pool/pool_pocket.wav"
+
+        private const val POOL_COLLISION_SOUND_COOLDOWN_MS = 50L
+        private const val POOL_COLLISION_MIN_SPEED = 15f
+        private const val POOL_COLLISION_FULL_VOLUME_SPEED = 1000f
 
         init {
             System.loadLibrary("openbubblesextension")

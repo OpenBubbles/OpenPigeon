@@ -184,6 +184,24 @@ uint64_t timeSinceEpochMillisec() {
     return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 
+void PoolTable::recordBallHit(float speed) {
+    if (speed > pendingBallHitSpeed) pendingBallHitSpeed = speed;
+}
+
+void PoolTable::recordRailHit(float speed) {
+    if (speed > pendingRailHitSpeed) pendingRailHitSpeed = speed;
+}
+
+void PoolTable::consumeCollisionSounds(float* output) {
+    if (output == nullptr) return;
+
+    output[0] = pendingBallHitSpeed;
+    output[1] = pendingRailHitSpeed;
+
+    pendingBallHitSpeed = 0.0f;
+    pendingRailHitSpeed = 0.0f;
+}
+
 bool PoolTable::update() {
     static uint64_t startTime = 0;
     static int startFrame = 0;
@@ -231,6 +249,8 @@ void PoolTable::clearBalls() {
     pocketNumber = 0;
     frame = 0;
     isFirst = false;
+    pendingBallHitSpeed = 0.0f;
+    pendingRailHitSpeed = 0.0f;
 }
 
 void PoolTable::setDebugTrace(bool enabled, int everyFrames) {

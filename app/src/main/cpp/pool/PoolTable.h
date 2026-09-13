@@ -25,6 +25,9 @@ public:
     bool update();
     void hitBall(int number, float dir, float power, float spinX, float spinY, bool first);
     void moveBall(int number, b2Vec2 position, float rot);
+    void recordBallHit(float speed);
+    void recordRailHit(float speed);
+    void consumeCollisionSounds(float* output);
 
     std::string dumpState() const;
     void setDebugTrace(bool enabled, int everyFrames);
@@ -102,6 +105,8 @@ private:
     std::vector<PoolBall*> balls;
     PoolData wallData;
     PoolContactListener contactListener;
+    float pendingBallHitSpeed = 0.0f;
+    float pendingRailHitSpeed = 0.0f;
 };
 
 

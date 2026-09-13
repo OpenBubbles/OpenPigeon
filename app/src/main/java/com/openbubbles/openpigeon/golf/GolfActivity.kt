@@ -59,6 +59,9 @@ class GolfActivity : AppCompatActivity() {
         private const val LAYER_SKIP_REPLAY = 1100f
 
         private const val MUSIC_TRACK_PATH = "golf/golf.wav"
+        private const val GOLF_SWING_SFX_PATH = "golf/golf_swing.wav"
+        private const val GOLF_HOLE_SFX_PATH = "golf/golf_hole.wav"
+        private const val GOLF_BOUNCE_SFX_PATH = "golf/golf_bounce.wav"
         private const val LAYER_WAITING = 14000f
         private const val LAYER_INTRO = 15000f
         private var debugGolfReplayTraceAuto = false
@@ -158,6 +161,8 @@ class GolfActivity : AppCompatActivity() {
     private val runtimeVelocityCourse = PointF(0f, 0f)
     private var flagPulled = false
     private var ballInHole = false
+
+    private var lastGolfBounceSfxMs = 0L
 
     private var isAiming = false
     private var aimMoveStartVisual = PointF(0f, 0f)
@@ -703,6 +708,8 @@ class GolfActivity : AppCompatActivity() {
                 }
             },
         )
+
+        gameMenu.preloadSounds(GOLF_SWING_SFX_PATH, GOLF_HOLE_SFX_PATH, GOLF_BOUNCE_SFX_PATH)
 
         gameMenu.sheet.attachGameAvatar(
             gameAvatarAnchor,
@@ -2995,6 +3002,7 @@ class GolfActivity : AppCompatActivity() {
             replay = localReplay
         )
 
+        gameMenu.playSound(GOLF_SWING_SFX_PATH, volume = 0.8f)
         runtimeVelocityCourse.set(velocityCourse.x, velocityCourse.y)
         runtimeBallCourse = PointF(ball.x, ball.y)
         renderer.setRuntimeBallCourse(runtimeBallCourse)
@@ -3027,6 +3035,27 @@ class GolfActivity : AppCompatActivity() {
 
     private fun speedOf(v: PointF): Float {
         return kotlin.math.sqrt(v.x * v.x + v.y * v.y)
+    }
+
+    private fun maybePlayGolfBounceSound(beforeVelocity: PointF, afterVelocity: PointF) {
+        val beforeSpeed = speedOf(beforeVelocity)
+        if (beforeSpeed < 6f) return
+
+        val dvx = afterVelocity.x - beforeVelocity.x
+        val dvy = afterVelocity.y - beforeVelocity.y
+        val velocityChange = kotlin.math.sqrt(dvx * dvx + dvy * dvy)
+
+        val xReflected = beforeVelocity.x * afterVelocity.x < 0f
+        val yReflected = beforeVelocity.y * afterVelocity.y < 0f
+
+        if (!xReflected && !yReflected && velocityChange < 6f) return
+
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastGolfBounceSfxMs < 70L) return
+        lastGolfBounceSfxMs = now
+
+        val volume = (0.22f + beforeSpeed / 500f * 0.53f).coerceIn(0.22f, 0.75f)
+        gameMenu.playSound(GOLF_BOUNCE_SFX_PATH, volume = volume)
     }
 
     private fun maybeTriggerBumperPulse(
@@ -3083,6 +3112,8 @@ class GolfActivity : AppCompatActivity() {
             map = g, positionCourse = ball, velocityCourse = runtimeVelocityCourse, dtSeconds = dt
         )
 
+        maybePlayGolfBounceSound(beforeVelocity, runtimeVelocityCourse)
+
         maybeTriggerBumperPulse(
             map = g,
             ball = ball,
@@ -3135,6 +3166,7 @@ class GolfActivity : AppCompatActivity() {
                 "hole entered ball=(${ball.x},${ball.y}) hole=(${g.hole.x},${g.hole.y}) " + "velocity=(${runtimeVelocityCourse.x},${runtimeVelocityCourse.y})"
             )
 
+            gameMenu.playSound(GOLF_HOLE_SFX_PATH, volume = 0.8f)
             stateLabel.text = "In the hole"
         }
 
@@ -4251,6 +4283,10 @@ class GolfActivity : AppCompatActivity() {
                 mineFired = mineShotToFire != null, opponentFired = opponentShotToFire != null
             )
 
+            if (mineShotToFire != null || opponentShotToFire != null) {
+                gameMenu.playSound(GOLF_SWING_SFX_PATH, volume = 0.8f)
+            }
+
             mineShotToFire?.let { shot ->
                 dualReplayMineVelocityCourse.set(shotVelocityCourse(shot))
             }
@@ -4303,6 +4339,8 @@ class GolfActivity : AppCompatActivity() {
                 dtSeconds = dt
             )
 
+            maybePlayGolfBounceSound(beforeVelocity, dualReplayMineVelocityCourse)
+
             maybeTriggerBumperPulse(
                 map = g,
                 ball = mineBall,
@@ -4335,6 +4373,7 @@ class GolfActivity : AppCompatActivity() {
                     TAG,
                     "dualReplay mine entered hole shotIndex=$dualReplayShotIndex " + "ball=(${mineBall.x},${mineBall.y}) " + "hole=(${g.hole.x},${g.hole.y}) " + "velocity=(${dualReplayMineVelocityCourse.x},${dualReplayMineVelocityCourse.y})"
                 )
+                gameMenu.playSound(GOLF_HOLE_SFX_PATH, volume = 0.8f)
             }
 
             dualReplayMineInHole = holeStep.captured
@@ -4354,6 +4393,8 @@ class GolfActivity : AppCompatActivity() {
                 velocityCourse = dualReplayOpponentVelocityCourse,
                 dtSeconds = dt
             )
+
+            maybePlayGolfBounceSound(beforeVelocity, dualReplayOpponentVelocityCourse)
 
             maybeTriggerBumperPulse(
                 map = g,
@@ -4387,6 +4428,7 @@ class GolfActivity : AppCompatActivity() {
                     TAG,
                     "dualReplay opponent entered hole shotIndex=$dualReplayShotIndex " + "ball=(${opponentBall.x},${opponentBall.y}) " + "hole=(${g.hole.x},${g.hole.y}) " + "velocity=(${dualReplayOpponentVelocityCourse.x},${dualReplayOpponentVelocityCourse.y})"
                 )
+                gameMenu.playSound(GOLF_HOLE_SFX_PATH, volume = 0.8f)
             }
 
             dualReplayOpponentInHole = holeStep.captured

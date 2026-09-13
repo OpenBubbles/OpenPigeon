@@ -8,6 +8,11 @@ const SETTINGS_POPUP_SCENE: PackedScene = preload("res://global/settings_popup.t
 const SEND_PULSE_SCALE: float = 1.5
 const SEND_PULSE_TIME: float = 1.2
 
+const SFX_POOL_NAME := "SfxPool"
+const SFX_POOL_SIZE := 8
+const SFX_BUS_NAME := "SFX"
+const SFX_NEXT_META := "next_player"
+
 # ---------- Avatars ----------
 
 static func _parse_avatar_string(data_string: String) -> Dictionary:
@@ -232,6 +237,19 @@ static func open_settings_popup(game: Node, media_plugin, settings_button: Butto
 			music_toggled
 		)
 		popup_script.add_global_setting(music_row)
+	
+	var sounds_toggled := func(enabled: bool) -> void:
+		SettingsManager.set_setting("global", "sounds_enabled", enabled)
+		if not enabled:
+			stop_sfx(game)
+
+	var sounds_row: Control = popup_script.make_game_switch_card(
+		"Sounds",
+		"Game sound effects",
+		bool(SettingsManager.get_setting("global", "sounds_enabled", true)),
+		sounds_toggled
+	)
+	popup_script.add_global_setting(sounds_row)
 
 	if add_rows.is_valid():
 		add_rows.call(popup_script.custom_settings_container, popup_script)
@@ -288,6 +306,85 @@ static func stop_music(game: Node) -> void:
 	var mp := game.get_node_or_null("MusicPlayer") as AudioStreamPlayer
 	if mp:
 		mp.stop()
+
+static func setup_sfx(game: Node) -> void:
+	if not is_instance_valid(game):
+		return
+
+	_ensure_sfx_bus()
+
+	if game.get_node_or_null(SFX_POOL_NAME) != null:
+		return
+
+	var pool := Node.new()
+	pool.name = SFX_POOL_NAME
+	pool.set_meta(SFX_NEXT_META, 0)
+	game.add_child(pool)
+
+	for i in range(SFX_POOL_SIZE):
+		var player := AudioStreamPlayer.new()
+		player.name = "SfxPlayer%d" % i
+		player.bus = SFX_BUS_NAME
+		pool.add_child(player)
+
+static func play_sfx(game: Node, stream: AudioStream, volume_db: float = -3.0, pitch_scale: float = 1.0) -> void:
+	if not is_instance_valid(game) or stream == null:
+		return
+
+	if not bool(SettingsManager.get_setting("global", "sounds_enabled", true)):
+		return
+
+	setup_sfx(game)
+
+	var pool := game.get_node_or_null(SFX_POOL_NAME)
+	if pool == null:
+		return
+
+	var players: Array[AudioStreamPlayer] = []
+
+	for child in pool.get_children():
+		if child is AudioStreamPlayer:
+			var player := child as AudioStreamPlayer
+			players.append(player)
+
+			if not player.playing:
+				_play_sfx_player(player, stream, volume_db, pitch_scale)
+				return
+
+	if players.is_empty():
+		return
+
+	var index := int(pool.get_meta(SFX_NEXT_META, 0)) % players.size()
+	pool.set_meta(SFX_NEXT_META, index + 1)
+	players[index].stop()
+	_play_sfx_player(players[index], stream, volume_db, pitch_scale)
+
+static func stop_sfx(game: Node) -> void:
+	if not is_instance_valid(game):
+		return
+
+	var pool := game.get_node_or_null(SFX_POOL_NAME)
+	if pool == null:
+		return
+
+	for child in pool.get_children():
+		if child is AudioStreamPlayer:
+			(child as AudioStreamPlayer).stop()
+
+static func _play_sfx_player(player: AudioStreamPlayer, stream: AudioStream, volume_db: float, pitch_scale: float) -> void:
+	player.stream = stream
+	player.volume_db = volume_db
+	player.pitch_scale = maxf(pitch_scale, 0.01)
+	player.play()
+
+static func _ensure_sfx_bus() -> void:
+	if AudioServer.get_bus_index(SFX_BUS_NAME) >= 0:
+		return
+
+	AudioServer.add_bus()
+	var bus_index := AudioServer.get_bus_count() - 1
+	AudioServer.set_bus_name(bus_index, SFX_BUS_NAME)
+	AudioServer.set_bus_send(bus_index, "Master")
 
 # ---------- Turn recovery ----------
 

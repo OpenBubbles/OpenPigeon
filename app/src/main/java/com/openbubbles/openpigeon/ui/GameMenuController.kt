@@ -15,6 +15,7 @@ import android.widget.TextView
 import com.openbubbles.openpigeon.settings.AvatarData
 import com.openbubbles.openpigeon.settings.SettingScope
 import com.openbubbles.openpigeon.settings.SettingsSheet
+import com.openbubbles.openpigeon.util.GameSfxPlayer
 import com.openbubbles.openpigeon.util.LoopingWavPlayer
 import com.openbubbles.openpigeon.util.OpenPigeonLog
 
@@ -73,6 +74,8 @@ class GameMenuController(
     private var musicPlayer = createMusicPlayer(
         musicAssetPath,
     )
+
+    private val sfxPlayer = GameSfxPlayer(activity)
 
     private var activityResumed = false
 
@@ -190,6 +193,16 @@ class GameMenuController(
                     )
                 }
             }
+
+            sheet.addBooleanSetting(
+                label = "Sounds",
+                subtitle = "Game sound effects",
+                scope = SettingScope.Global,
+                key = "sounds_enabled",
+                default = true,
+            ) { enabled ->
+                sfxPlayer.setEnabled(enabled)
+            }
         }
 
         buildMenu(
@@ -206,6 +219,17 @@ class GameMenuController(
         currentRulesSections = sections
     }
 
+    fun preloadSounds(vararg assetPaths: String) {
+        assetPaths.forEach(sfxPlayer::preload)
+    }
+
+    fun playSound(assetPath: String, volume: Float = 0.7f, rate: Float = 1.0f) {
+        sfxPlayer.play(assetPath, volume, rate)
+    }
+
+    fun stopSounds() {
+        sfxPlayer.stopAll()
+    }
 
     fun updateMusicAssetPath(
         assetPath: String?,
@@ -336,11 +360,13 @@ class GameMenuController(
         )
 
         musicPlayer?.pause()
+        sfxPlayer.stopAll()
     }
 
     fun destroy() {
         activityResumed = false
         musicPlayer?.stop()
+        sfxPlayer.release()
         sheet.onClosed = null
         sheet.detach()
 

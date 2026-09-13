@@ -31,6 +31,9 @@ import android.graphics.ColorMatrixColorFilter
 import com.openbubbles.openpigeon.R
 import androidx.core.graphics.withTranslation
 import androidx.core.graphics.createBitmap
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.FloatBuffer
 
 class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thread(), SurfaceHolder.Callback {
     var running = true
@@ -108,6 +111,9 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
 
     private val targetFps: Int = 60
     private val frameTime: Long = (1000 / targetFps).toLong()
+
+    private val collisionSoundBuffer: FloatBuffer =
+        ByteBuffer.allocateDirect(2 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
 
     var cueRot = 0.0f
     var cueDraw = 0.0f
@@ -720,7 +726,7 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         }
     }
 
-    external fun update(table: Long): Boolean
+    external fun update(table: Long, collisionSounds: FloatBuffer): Boolean
 
     private fun getBackgroundColor(): Int {
         return if (activity.isPoolDarkModeEnabled()) {
@@ -742,7 +748,9 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                 val frameStartNs = System.nanoTime()
 
                 val updateStartNs = System.nanoTime()
-                val nativeMoving = update(activity.table)
+                val nativeMoving = update(activity.table, collisionSoundBuffer)
+                activity.handlePoolCollisionSounds(collisionSoundBuffer.get(0), collisionSoundBuffer.get(1))
+                activity.handlePoolPocketSounds()
                 val updateMs = (System.nanoTime() - updateStartNs) / 1_000_000.0
 
                 activity.traceVisualRoll(

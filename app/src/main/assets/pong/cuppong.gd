@@ -356,7 +356,7 @@ func _queue_cuppong_settings_preview(preview_kind: String, style: int) -> void:
 
 func _process_cuppong_settings_preview_queue() -> void:
 	while not _settings_preview_render_queue.is_empty():
-		while not played_replay and not _settings_open:
+		while not _settings_open or (not replay_string.is_empty() and not played_replay):
 			await get_tree().process_frame
 
 			if not is_inside_tree():

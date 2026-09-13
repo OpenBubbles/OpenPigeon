@@ -55,14 +55,24 @@ JNIEXPORT jboolean JNICALL
 Java_com_openbubbles_openpigeon_pool_PoolRenderer_update(
         JNIEnv *env,
         jobject thiz,
-        jlong table
+        jlong table,
+        jobject collisionSounds
 ) {
     auto* t = reinterpret_cast<PoolTable*>(table);
     if (t == nullptr) {
         return JNI_FALSE;
     }
 
-    return t->update() ? JNI_TRUE : JNI_FALSE;
+    bool moving = t->update();
+
+    if (collisionSounds != nullptr) {
+        auto* soundOutput = static_cast<float*>(env->GetDirectBufferAddress(collisionSounds));
+        if (soundOutput != nullptr) {
+            t->consumeCollisionSounds(soundOutput);
+        }
+    }
+
+    return moving ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C"

@@ -85,6 +85,8 @@ func _ready() -> void:
 		_get_music_stream(),
 		mediaPlugin,
 	)
+	
+	GameUtils.setup_sfx(self)
 
 	if (
 		is_instance_valid(settings_button) and
@@ -188,6 +190,7 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	SettingsManager.suppress_avatar_changed = false
+	GameUtils.stop_sfx(self)
 	GameUtils.stop_music(self)
 
 # ---------- Settings / rules ----------
@@ -441,6 +444,9 @@ func _load_game_specific_settings() -> void:
 	print("Loaded game-specific settings for ", game_settings_category, ": volume=", saved_volume, " debug=", show_debug_info)
 
 # ---------- Virtuals subclasses override ----------
+
+func play_sfx(stream: AudioStream, volume_db: float = -3.0, pitch_scale: float = 1.0) -> void:
+	GameUtils.play_sfx(self, stream, volume_db, pitch_scale)
 
 func _get_music_stream() -> AudioStream: return null
 func _get_dev_data() -> String: return ""

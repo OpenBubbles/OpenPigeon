@@ -81,6 +81,8 @@ func _ready() -> void:
 		_get_music_stream(),
 		mediaPlugin,
 	)
+	
+	GameUtils.setup_sfx(self)
 
 	if (
 		is_instance_valid(settings_button) and
@@ -184,6 +186,7 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	SettingsManager.suppress_avatar_changed = false
+	GameUtils.stop_sfx(self)
 	GameUtils.stop_music(self)
 
 func _on_settings_button_pressed() -> void:
@@ -434,6 +437,9 @@ func _load_game_specific_settings() -> void:
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Master"), linear_to_db(saved_volume))
 	var show_debug_info: bool = bool(SettingsManager.get_setting(game_settings_category, "show_debug_info", false))
 	print("Loaded game-specific settings for ", game_settings_category, ": volume=", saved_volume, " debug=", show_debug_info)
+
+func play_sfx(stream: AudioStream, volume_db: float = -3.0, pitch_scale: float = 1.0) -> void:
+	GameUtils.play_sfx(self, stream, volume_db, pitch_scale)
 
 func _get_music_stream() -> AudioStream: return null
 func _get_dev_data() -> String: return ""
