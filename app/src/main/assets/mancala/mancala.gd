@@ -33,6 +33,7 @@ var StoreScene: PackedScene = preload("res://mancala/store.tscn")
 var StoneScene: PackedScene = preload("res://mancala/stone.tscn")
 const STONE_PREVIEW_TEXTURE: Texture2D = preload("res://mancala/stone.png")
 const MUSIC_STREAM := preload("res://global/audio/mancala.ogg")
+const BOARD_PIECE_SFX := preload("res://global/audio/piece_place.wav")
 const MANCALA_SETTINGS_SECTION := "mancala"
 const MANCALA_THEME_SETTINGS_KEY := "theme"
 const MANCALA_THEME_NAMES := [
@@ -1312,6 +1313,7 @@ func _sow_from(start_idx: int) -> void:
 			if stone_to_drop_visual:
 				_carrying_stones_container.remove_child(stone_to_drop_visual)
 				_add_stone_to_pit(current_idx, stone_to_drop_visual, dropped_stone_label)
+				GameUtils.play_sfx(self, BOARD_PIECE_SFX)
 
 				if carried_visual_stones.size() > 0:
 					await get_tree().create_timer(STONE_DROP_DELAY / 2.0).timeout

@@ -24,6 +24,7 @@ extends BaseGame
 const PLAYER1_BOWL_TEX := preload("res://gomoku/player1_bowl.png")
 const PLAYER2_BOWL_TEX := preload("res://gomoku/player2_bowl.png")
 const MUSIC_STREAM := preload("res://global/audio/gomoku.ogg")
+const BOARD_PIECE_SFX := preload("res://global/audio/piece_place.wav")
 
 const GRID_SQUARES := 12
 var board_size := GRID_SQUARES + 1
@@ -776,6 +777,7 @@ func _drop_active_tile_to(final_pos: Vector2) -> void:
 
 			var center := final_pos + Vector2(_current_tile_px * 0.5, _current_tile_px * 0.5)
 			_spawn_drop_dust(center)
+			GameUtils.play_sfx(self, BOARD_PIECE_SFX)
 
 		_active_tile_lifted = false
 		_haptic_explosion(0.25, 18)
@@ -814,6 +816,7 @@ func _animate_active_tile_to(final_pos: Vector2, lift_move: bool) -> void:
 
 			var center := final_pos + Vector2(_current_tile_px * 0.5, _current_tile_px * 0.5)
 			_spawn_drop_dust(center)
+			GameUtils.play_sfx(self, BOARD_PIECE_SFX)
 
 		if lift_move:
 			_haptic_explosion(0.32, 22)
@@ -945,6 +948,7 @@ func _animate_incoming_move_from_opp_bowl(g: Vector2i, p: int) -> void:
 	_current_move = g
 
 	_spawn_drop_dust(center)
+	GameUtils.play_sfx(self, BOARD_PIECE_SFX)
 	_haptic_explosion(0.25, 18)
 	_top_up_bowl(OppBowl)
 

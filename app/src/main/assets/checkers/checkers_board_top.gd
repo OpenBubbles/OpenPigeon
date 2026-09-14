@@ -34,6 +34,7 @@ var red_king_texture := preload("res://checkers/checker_red_king.png")
 var black_normal_texture := preload("res://checkers/checker_black.png")
 var red_normal_texture := preload("res://checkers/checker_red.png")
 const MUSIC_STREAM := preload("res://global/audio/checkers.ogg")
+const BOARD_PIECE_SFX := preload("res://global/audio/piece_place.wav")
 
 const LOG_TAG := "Checkers"
 var DEBUG_CHECKERS := false
@@ -2316,6 +2317,8 @@ func _try_commit_move(
 		move_tw.is_running()
 	):
 		await move_tw.finished
+		
+	GameUtils.play_sfx(self, BOARD_PIECE_SFX)
 
 	if (
 		jump_tw != null and
@@ -2607,6 +2610,9 @@ func _rebuild_from_replay() -> void:
 
 		if move_tw != null and move_tw.is_running():
 			await move_tw.finished
+
+		GameUtils.play_sfx(self, BOARD_PIECE_SFX)
+		
 		if jump_tw != null and jump_tw.is_running():
 			await jump_tw.finished
 

@@ -88,6 +88,7 @@ var flip_board_ui: bool = false  # Whether to flip the board UI to put local pla
 @onready var chess_bottom_controls: HBoxContainer = %BottomItemHBoxContainer
 
 const MUSIC_STREAM := preload("res://global/audio/chess.ogg")
+const BOARD_PIECE_SFX := preload("res://global/audio/piece_place.wav")
 const CHESS_VERBOSE_LOGS := false
 const LOG_TAG := "Chess"
 
@@ -2703,11 +2704,13 @@ func _animate_player_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 	## Animate a player's move. Handles castling, en passant, captures, and normal moves.
 	_log_ui.debug("_animate_player_move: %s -> %s" % [_square_name(from_sq), _square_name(to_sq)])
 	await animations.animate_move(from_sq, to_sq, board)
+	GameUtils.play_sfx(self, BOARD_PIECE_SFX)
 
 func _animate_opponent_move(from_sq: Vector2i, to_sq: Vector2i, _final_board_gp: String) -> void:
 	## Animate opponent's move during replay.
 	_log_ui.debug("_animate_opponent_move: %s -> %s" % [_square_name(from_sq), _square_name(to_sq)])
 	await animations.animate_move(from_sq, to_sq, board)
+	GameUtils.play_sfx(self, BOARD_PIECE_SFX)
 
 func _in_check(side: String) -> bool:
 	return ChessEngine.is_in_check(board, side)

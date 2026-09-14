@@ -127,6 +127,7 @@ const STAR_POINT_SCENE = preload("res://reversi/StarPoint.tscn")
 const CELL_SCENE = preload("res://reversi/Cell.tscn")
 const PIECE_TEX := preload("res://reversi/reversi_tile.png")
 const MUSIC_STREAM := preload("res://global/audio/reversi.ogg")
+const BOARD_PIECE_SFX := preload("res://global/audio/piece_place.wav")
 const PIECE_PADDING := 6
 
 var piece_material_cache: ShaderMaterial = null
@@ -176,7 +177,7 @@ func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
 	
 func _get_dev_data() -> String:
-	return '{ "isYourTurn": true, "player": "2", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,0,2,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0|move:0,3,1|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,2,2,2,0,0,1,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0", "player1": "TEST_P1", "player2": "TEST_P2", "id": "dev", "game": "reversi" }'
+	return '{ "isYourTurn": true, "player": "2", "replay": "board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,0,0,2,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0|move:0,3,1|board:0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,2,2,2,0,0,1,0,2,2,2,2,0,0,1,2,1,1,1,1,1,0,0,0,2,2,0,0,0,0,0,0,0,2,0,0,0,0", "player1": "", "player2": "", "id": "dev", "game": "reversi" }'
 	
 func _get_settings_avatar_display() -> Control:
 	return player_avatar_display
@@ -2189,6 +2190,7 @@ func play_replay(replay_string: String):
 					print("Flipping pieces for move")
 					flip_pieces(col, row, replay_symbol, directions_to_flip)
 					set_piece(col, row, replay_symbol, false)
+					GameUtils.play_sfx(self, BOARD_PIECE_SFX)
 
 					await get_tree().create_timer(0.5).timeout
 					update_piece_counts()
@@ -2350,6 +2352,7 @@ func on_cell_pressed(x: int, y: int) -> void:
 		
 		flip_pieces(x, y, player_symbol, directions)
 		set_piece(x, y, player_symbol, true)
+		GameUtils.play_sfx(self, BOARD_PIECE_SFX)
 		
 		temp_piece_active = false
 		update_piece_counts()
@@ -2565,6 +2568,7 @@ func place_temp_piece_visual(x: int, y: int, symbol: String):
 	if is_in_bounds(Vector2i(x, y)):
 		var cell = board[y][x]
 		_show_temp_piece(cell, symbol)
+		GameUtils.play_sfx(self, BOARD_PIECE_SFX)
 
 func clear_temp_piece_visual():
 	_clear_all_preview_overlays()
