@@ -24,6 +24,7 @@ extends BaseGame
 @onready var dots_rules_button: Button = %RulesButton
 
 const MUSIC_STREAM := preload("res://global/audio/dots.ogg")
+const DOTS_LINE_SFX := preload("res://global/audio/dots_line.wav")
 
 var sent_tween: Tween
 var _turn_steps: Array = []
@@ -562,6 +563,7 @@ func _load_pre_state_and_replay(replay_str: String) -> void:
 	if not moves.is_empty() and is_instance_valid(grid) and grid.has_method("replay_line_move"):
 		for move in moves:
 			OpLog.event(LOG_TAG, ["replay_line_move move=", move])
+			GameUtils.play_sfx(self, DOTS_LINE_SFX)
 			await grid.call("replay_line_move", move)
 			await get_tree().create_timer(0.05).timeout
 
@@ -1599,6 +1601,9 @@ func _on_temp_line_changed(has_line: bool) -> void:
 		_update_send_button_visibility(false)
 		return
 
+	if has_line:
+		GameUtils.play_sfx(self, DOTS_LINE_SFX)
+
 	_update_send_button_visibility(has_line)
 	
 func _queue_send_button_initialization() -> void:
@@ -2143,6 +2148,10 @@ func _on_line_committed_bl(p: int, x1: int, y1: int, x2: int, y2: int) -> void:
 	if recovery_restore_in_progress:
 		return
 
+	var was_temp_line := is_instance_valid(grid) and grid.has_method("has_temp_line") and bool(grid.call("has_temp_line"))
+	if not was_temp_line:
+		GameUtils.play_sfx(self, DOTS_LINE_SFX)
+
 	var mv := [p, x1, y1, x2, y2]
 
 	for step in _turn_steps:
@@ -2163,6 +2172,8 @@ func _on_line_committed_bl(p: int, x1: int, y1: int, x2: int, y2: int) -> void:
 func _on_square_completed_bl(p: int, x_bl: int, y_bl: int) -> void:
 	if recovery_restore_in_progress:
 		return
+
+	GameUtils.play_sfx(self, DOTS_LINE_SFX)
 
 	if _turn_steps.size() > 0:
 		var sq := [p, x_bl, y_bl]
