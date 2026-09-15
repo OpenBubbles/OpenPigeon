@@ -25,6 +25,9 @@ own terms as recorded in THIRD-PARTY-NOTICES.md:
     app/src/main/assets/basketball/balldimpled.png
     app/src/main/assets/archery/arrow/**
     app/src/main/assets/addons/**
+    app/src/main/assets/global/audio/piece_place.wav
+    app/src/main/assets/global/audio/pong_cup.wav
+    app/src/main/assets/global/audio/pong_bounce.wav
 
 This license applies only to releases after the tag v1-final-agpl. Assets as
 they existed in earlier releases were published under AGPL-3.0 and remain

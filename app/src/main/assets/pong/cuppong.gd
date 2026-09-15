@@ -14,6 +14,8 @@ var REPLAY_FRAME_DURATION: float = 0.03
 var CHARMAP = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789~!@*()_+-.';"
 var CHARMAP_LEN = len(CHARMAP)
 const MUSIC_STREAM := preload("res://global/audio/pong.ogg")
+const PONG_CUP_SFX := preload("res://global/audio/pong_cup.wav")
+const PONG_BOUNCE_SFX := preload("res://global/audio/pong_bounce.wav")
 
 const LOG_TAG := "Cup Pong"
 const DEBUG_PONG := false
@@ -2294,6 +2296,7 @@ func _replay_recovered_local_throws() -> void:
 			replay_ball.queue_free()
 
 		if cup_idx >= 0:
+			GameUtils.play_sfx(self, PONG_CUP_SFX)
 			my_cups.remove_cup(cup_idx + 1)
 			await get_tree().create_timer(0.45).timeout
 
@@ -2676,6 +2679,7 @@ func _on_replay_finished(new_ball: PongBall, move: Array, final_move: bool):
 	if move[-1] is int:
 		var hit_cup = move[-1] + 1
 		OpLog.i(LOG_TAG, ["replay_hit_cup cup=", hit_cup])
+		GameUtils.play_sfx(self, PONG_CUP_SFX)
 		replay_cups.remove_cup(hit_cup)
 
 	new_ball.queue_free()

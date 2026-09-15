@@ -63,9 +63,23 @@ func _ready() -> void:
 	self.contact_monitor = true
 	self.continuous_cd = true
 	self.max_contacts_reported = 8
+
+	if not body_entered.is_connected(_on_body_entered):
+		body_entered.connect(_on_body_entered)
 	
 	_replay_every = maxi(1, roundi(Engine.physics_ticks_per_second / 30.0))
 	set_ball_style(ball_style)
+
+func _on_body_entered(body: Node) -> void:
+	if not is_mine or not thrown or not is_instance_valid(game):
+		return
+
+	var current: Node = body
+	while current != null and current != game:
+		if current.name == &"table":
+			GameUtils.play_sfx(game, PongGame.PONG_BOUNCE_SFX)
+			return
+		current = current.get_parent()
 
 func set_ball_style(style: int) -> void:
 	ball_style = clampi(style, 1, BALL_STYLE_COUNT)
@@ -159,6 +173,7 @@ func _commit_made_cup(cup: StaticBody3D) -> void:
 		return
 
 	made_in = cup.duplicate()
+	GameUtils.play_sfx(game, PongGame.PONG_CUP_SFX)
 
 	OpLog.i(LOG_TAG, [
 		"cup_made cup=", cup_name,
@@ -273,6 +288,7 @@ func remove():
 
 			if late_cup != null:
 				made_in = late_cup.duplicate()
+				GameUtils.play_sfx(game, PongGame.PONG_CUP_SFX)
 				game.my_cups.remove_cup(int(String(late_cup.name).replace("cup", "")))
 
 		if made_in != null:

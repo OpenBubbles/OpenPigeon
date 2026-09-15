@@ -82,6 +82,9 @@ licenses. They are excluded from LICENSE-ASSETS.
 | `pool_pocket.wav` | Yarmonics | https://freesound.org/s/441857/ | CC0 1.0 |
 | Pool Ball Strike | ChloePieterse | https://freesound.org/s/763603/ | CC0 1.0 |
 | `Pool_Table_Ball_Hit.WAV` | AmberdeMeillon | https://freesound.org/s/443067/ | CC0 1.0 |
+| Piece Placement.mp3 (`piece_place.wav`) | el_boss | https://freesound.org/s/546119/ | CC0 1.0 |
+| Lotto ball (`pong_cup.wav`) | audiosmedia | https://freesound.org/s/217344/ | CC0 1.0 |
+| Ping Pong - Ball on Table (`pong_bounce.wav`) | el_boss | https://freesound.org/s/628637/ | CC0 1.0 |
 
 Attribution is also displayed in-app via
 `app/src/main/assets/attributions.html`.
