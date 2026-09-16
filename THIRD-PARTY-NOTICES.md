@@ -86,6 +86,8 @@ licenses. They are excluded from LICENSE-ASSETS.
 | Lotto ball (`pong_cup.wav`) | audiosmedia | https://freesound.org/s/217344/ | CC0 1.0 |
 | Ping Pong - Ball on Table (`pong_bounce.wav`) | el_boss | https://freesound.org/s/628637/ | CC0 1.0 |
 | Circling three spots on a piece of paper (`dots_line.wav`) | Froey_ | https://freesound.org/s/818438/ | CC0 1.0 |
+| Pop.wav | ThompsonMan | https://freesound.org/s/129994/ | CC BY 4.0 |
+| Connect 4 (`connect_drop.wav`) | discokingmusic | https://freesound.org/s/271387/ | CC BY 4.0 |
 
 Attribution is also displayed in-app via
 `app/src/main/assets/attributions.html`.

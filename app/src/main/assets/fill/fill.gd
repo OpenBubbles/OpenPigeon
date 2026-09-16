@@ -38,6 +38,7 @@ const COLOR_MAP = {
 }
 
 const MUSIC_STREAM := preload("res://global/audio/fill.ogg")
+const POP_SFX := preload("res://global/audio/pop.wav")
 
 var board: Array = []
 var color_board: Array = []
@@ -1957,6 +1958,8 @@ func play_move_animation(start_pos: Vector2i, forced_cells: Array = [], forced_c
 
 	if cells_to_animate_pos.is_empty():
 		return
+
+	GameUtils.play_sfx(self, POP_SFX)
 
 	var animation_tween = create_tween().set_parallel()
 	var parent_cell_nodes = []

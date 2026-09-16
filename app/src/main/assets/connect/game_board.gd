@@ -29,6 +29,7 @@ const PIECE_RED:= "red"
 const DROP_START_OFFSET	:= 90.0
 const DIRS:= [Vector2i(1,0), Vector2i(0,1), Vector2i(1,1), Vector2i(1,-1)]
 const MUSIC_STREAM := preload("res://global/audio/connect4.ogg")
+const CONNECT_DROP_SFX := preload("res://global/audio/connect_drop.wav")
 const PIECE_TEX := {
 	"red": preload("res://connect/red_piece.png"),
 	"yellow": preload("res://connect/yellow_piece.png")
@@ -1319,6 +1320,8 @@ func _animate_piece_from_icon_to_slot(piece: RigidBody2D, start_global: Vector2,
 		else:
 			piece.z_index = 3
 
+		GameUtils.play_sfx(self, CONNECT_DROP_SFX)
+
 	_haptic_explosion(0.28, 18)
 
 func _animate_pending_piece_to_slot(piece: RigidBody2D, col: int, row: int) -> void:
@@ -1365,6 +1368,8 @@ func _animate_pending_piece_to_slot(piece: RigidBody2D, col: int, row: int) -> v
 
 		var col_shape: CollisionShape2D = piece.get_child(1) as CollisionShape2D
 		col_shape.disabled = false
+
+		GameUtils.play_sfx(self, CONNECT_DROP_SFX)
 
 	_haptic_explosion(0.24, 16)
 
