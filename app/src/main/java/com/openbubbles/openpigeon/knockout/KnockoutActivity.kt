@@ -542,6 +542,12 @@ class KnockoutActivity : AppCompatActivity() {
             },
         )
 
+        gameMenu.preloadSounds(PUCK_HIT_SFX_PATH, KNOCKOUT_WATER_SFX_PATH)
+
+        renderer.onPieceHit = {
+            gameMenu.playSound(PUCK_HIT_SFX_PATH, volume = 0.6f)
+        }
+
         val localAvatarAnchor = findViewById<FrameLayout>(R.id.knockoutGameAvatarAnchor)
         val opponentAvatarAnchor = findViewById<FrameLayout>(R.id.knockoutOpponentAvatarAnchor)
 
@@ -1617,6 +1623,10 @@ class KnockoutActivity : AppCompatActivity() {
                 )
 
                 piece.startKillAnimation(now)
+
+                runOnUiThread {
+                    gameMenu.playSound(KNOCKOUT_WATER_SFX_PATH, volume = 0.8f)
+                }
 
                 moveKnockoutPiece(
                     table, piece.traceId, 10000f + piece.traceId * 100f, 10000f, 0f
@@ -3194,6 +3204,8 @@ class KnockoutActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val PUCK_HIT_SFX_PATH = "global/audio/puck_hit.wav"
+        private const val KNOCKOUT_WATER_SFX_PATH = "global/audio/knockout_water.wav"
         private const val FIRE_POWER_MULTIPLIER = 1.0f
         private const val KILL_LIMIT_BASE = 183.0f
         private const val MAP_2_CENTER_HOLE_RADIUS_BASE = 56.0f

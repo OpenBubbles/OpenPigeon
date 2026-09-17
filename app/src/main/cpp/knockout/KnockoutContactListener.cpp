@@ -25,6 +25,12 @@ void KnockoutContactListener::BeginContact(b2Contact* contact) {
 
     if (!dataA || !dataB) return;
 
+    if (dataA->type == KnockoutData::Type::Piece && dataB->type == KnockoutData::Type::Piece) {
+        KnockoutPiece* piece = static_cast<KnockoutPiece*>(dataA->data);
+        if (piece) piece->recordPieceHit();
+        return;
+    }
+
     const bool aPieceBShroom =
             dataA->type == KnockoutData::Type::Piece &&
             dataB->type == KnockoutData::Type::Shroom;

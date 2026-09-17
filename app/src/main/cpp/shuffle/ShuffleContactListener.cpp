@@ -136,6 +136,13 @@ void ShuffleContactListener::BeginContact(b2Contact *contact) {
 
     const b2Vec2 velocityBeforeB = bodyB ? bodyB->GetLinearVelocity() : b2Vec2_zero;
 
+    if (isPuck(dataA) && isPuck(dataB)) {
+        ShufflePuck *puck = puckForData(dataA);
+        if (puck) {
+            puck->recordPuckHit();
+        }
+    }
+
     b2WorldManifold worldManifold;
     contact->GetWorldManifold(&worldManifold);
 

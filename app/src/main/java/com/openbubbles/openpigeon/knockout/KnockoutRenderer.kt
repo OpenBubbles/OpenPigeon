@@ -29,6 +29,7 @@ class KnockoutRenderer(
     private val map2: Bitmap? = activity.loadAssetBitmap("knockout/ko_map2.png")
     private val map3: Bitmap? = activity.loadAssetBitmap("knockout/ko_map3.png")
     private val mushroom: Bitmap? = activity.loadAssetBitmap("knockout/mushroom.png")
+    var onPieceHit: (() -> Unit)? = null
 
     init {
         holder.addCallback(this)
@@ -115,6 +116,15 @@ class KnockoutRenderer(
 
             if (!activity.closing && activity.table != 0L && activity.mode == KnockoutActivity.Mode.Playing) {
                 val moving = update(activity.table)
+
+                val pieceHitCount = activity.pieces.sumOf { it.buffer.get(8).toInt().coerceAtLeast(0) }
+                if (pieceHitCount > 0) {
+                    activity.runOnUiThread {
+                        repeat(pieceHitCount) {
+                            onPieceHit?.invoke()
+                        }
+                    }
+                }
 
                 val mushroomHits = activity.consumeNativeMushroomHits()
                 if (mushroomHits != 0) {

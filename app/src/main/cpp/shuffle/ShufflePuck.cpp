@@ -107,7 +107,18 @@ void ShufflePuck::writeOutputs() {
     outputs[7] = static_cast<float>(
             traceId
     );
+
+    outputs[8] = static_cast<float>(
+            pendingPuckHitCount
+    );
+
+    pendingPuckHitCount = 0;
 }
+
+void ShufflePuck::recordPuckHit() {
+    pendingPuckHitCount++;
+}
+
 
 bool ShufflePuck::step() {
     if (!body) {

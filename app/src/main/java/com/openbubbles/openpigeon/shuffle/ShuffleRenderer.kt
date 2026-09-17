@@ -242,6 +242,8 @@ class ShuffleRenderer @JvmOverloads constructor(
 
     var onLaunchReplayReady: ((String) -> Unit)? = null
 
+    var onPuckHit: (() -> Unit)? = null
+
     var onTopHudAlphaChanged: ((Float) -> Unit)? = null
 
     private var topHudAlpha = 1f
@@ -4965,7 +4967,7 @@ class ShuffleRenderer @JvmOverloads constructor(
 
         for ((index, puck) in pucks.withIndex()) {
             val byteBuffer = ByteBuffer.allocateDirect(
-                8 * 4,
+                9 * 4,
             ).order(
                 ByteOrder.nativeOrder(),
             )
@@ -5148,7 +5150,16 @@ class ShuffleRenderer @JvmOverloads constructor(
             tablePtr = nativeTablePtr,
         )
 
+        var puckHitCount = 0
+        for (slot in nativeSlots) {
+            puckHitCount += slot.floatBuffer.get(8).toInt().coerceAtLeast(0)
+        }
+
         syncNativePucksFromOutputs()
+
+        repeat(puckHitCount) {
+            onPuckHit?.invoke()
+        }
 
         nativeTraceFrame++
 

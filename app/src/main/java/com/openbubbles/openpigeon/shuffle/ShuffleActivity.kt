@@ -519,6 +519,12 @@ class ShuffleActivity : AppCompatActivity() {
             },
         )
 
+        gameMenu.preloadSounds(PUCK_HIT_SFX_PATH)
+
+        renderer.onPuckHit = {
+            gameMenu.playSound(PUCK_HIT_SFX_PATH, volume = 0.6f)
+        }
+
         gameMenu.sheet.attachGameAvatar(
             myAvatarAnchor,
         )
@@ -3390,5 +3396,6 @@ class ShuffleActivity : AppCompatActivity() {
         private const val REPLAY_QUEUE_MARKER = "|shoot:1|"
 
         private const val MUSIC_TRACK_PATH = "shuffle/shuffle.wav"
+        private const val PUCK_HIT_SFX_PATH = "global/audio/puck_hit.wav"
     }
 }

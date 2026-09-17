@@ -20,7 +20,7 @@ class KnockoutPiece(
     private val p1Bitmap: Bitmap?,
     private val p2Bitmap: Bitmap?,
 ) {
-    val buffer: FloatBuffer = ByteBuffer.allocateDirect(8 * 4)
+    val buffer: FloatBuffer = ByteBuffer.allocateDirect(9 * 4)
         .order(ByteOrder.nativeOrder())
         .asFloatBuffer()
 
@@ -52,6 +52,7 @@ class KnockoutPiece(
         buffer.put(5, 0f)
         buffer.put(6, player.toFloat())
         buffer.put(7, traceId.toFloat())
+        buffer.put(8, 0f)
     }
 
     fun syncFromNative() {

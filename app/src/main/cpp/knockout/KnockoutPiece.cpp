@@ -45,8 +45,14 @@ bool KnockoutPiece::step() {
     outputs[5] = ang;
     outputs[6] = static_cast<float>(player);
     outputs[7] = static_cast<float>(traceId);
+    outputs[8] = static_cast<float>(pendingPieceHitCount);
+    pendingPieceHitCount = 0;
 
     return linMoving || angMoving;
+}
+
+void KnockoutPiece::recordPieceHit() {
+    pendingPieceHitCount++;
 }
 
 void KnockoutPiece::fire(float shootDirRadians, float power) {

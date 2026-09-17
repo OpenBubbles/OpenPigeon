@@ -24,6 +24,7 @@ public:
     void updateInGameState();
     void stopSmallMotion() const;
     void writeOutputs();
+    void recordPuckHit();
 
     void fire(
             float shootDirRadians,
@@ -47,6 +48,7 @@ public:
 private:
     float* outputs;
     ShuffleData data;
+    int pendingPuckHitCount = 0;
 };
 
 #endif

@@ -88,6 +88,8 @@ licenses. They are excluded from LICENSE-ASSETS.
 | Circling three spots on a piece of paper (`dots_line.wav`) | Froey_ | https://freesound.org/s/818438/ | CC0 1.0 |
 | Pop.wav | ThompsonMan | https://freesound.org/s/129994/ | CC BY 4.0 |
 | Connect 4 (`connect_drop.wav`) | discokingmusic | https://freesound.org/s/271387/ | CC BY 4.0 |
+| Hard pop.wav (`puck_hit.wav`) | juskiddink | https://freesound.org/s/108616/ | CC BY 4.0 |
+| 5 meters dive.wav (`knockout_water.wav`) | bruno.auzet | https://freesound.org/s/529794/ | CC0 1.0 |
 
 Attribution is also displayed in-app via
 `app/src/main/assets/attributions.html`.

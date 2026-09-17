@@ -12,6 +12,7 @@ public:
     ~KnockoutPiece();
 
     bool step();
+    void recordPieceHit();
     void fire(float shootDirRadians, float power);
     void setTransform(float x, float y, float angle);
 
@@ -23,6 +24,7 @@ public:
 private:
     float* outputs;
     KnockoutData data;
+    int pendingPieceHitCount = 0;
 };
 
 #endif

@@ -31,6 +31,8 @@ own terms as recorded in THIRD-PARTY-NOTICES.md:
     app/src/main/assets/global/audio/dots_line.wav
     app/src/main/assets/global/audio/pop.wav
     app/src/main/assets/global/audio/connect_drop.wav
+    app/src/main/assets/global/audio/puck_hit.wav
+    app/src/main/assets/global/audio/knockout_water.wav
 
 This license applies only to releases after the tag v1-final-agpl. Assets as
 they existed in earlier releases were published under AGPL-3.0 and remain
