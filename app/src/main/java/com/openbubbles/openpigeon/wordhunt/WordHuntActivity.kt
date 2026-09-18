@@ -283,6 +283,7 @@ class WordHuntActivity : AppCompatActivity() {
         const val GAME_DURATION = 80000L // 80 seconds
         const val MIN_WORD_LENGTH = 3
         const val LOCAL_AVATAR_VIEW_TAG = "wordhunt_local_avatar"
+        private const val WORD_SCORE_SFX_PATH = "global/audio/word_score0.wav"
 
         fun generateLetterPool(
             context: Context,
@@ -441,6 +442,8 @@ class WordHuntActivity : AppCompatActivity() {
                 refreshWordHuntLocalAvatar()
             },
         )
+
+        gameMenu.preloadSounds(WORD_SCORE_SFX_PATH)
     }
 
     private fun resolveLocalPlayer(
@@ -780,6 +783,10 @@ class WordHuntActivity : AppCompatActivity() {
 
         gameState.onProgressChanged = {
             saveWordHuntProgress()
+
+            if (::gameMenu.isInitialized) {
+                gameMenu.playSound(WORD_SCORE_SFX_PATH, volume = 0.8f)
+            }
         }
 
         val letters = currentMessage["letters"].orEmpty()

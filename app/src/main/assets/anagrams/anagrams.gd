@@ -36,6 +36,11 @@ var dictionary_path: String = WordLanguage.get_dictionary_path(
 var _loaded_dictionary_path: String = ""
 
 const MUSIC_STREAM := preload("res://global/audio/anagrams.ogg")
+const WORD_SCORE0_SFX := preload("res://global/audio/word_score0.wav")
+const WORD_SCORE1_SFX := preload("res://global/audio/word_score1.wav")
+const WORD_SCORE2_SFX := preload("res://global/audio/word_score2.wav")
+const WORD_SCORE3_SFX := preload("res://global/audio/word_score3.wav")
+const WORD_SCOREMAX_SFX := preload("res://global/audio/word_scoremax.wav")
 
 var _tear_rng := RandomNumberGenerator.new()
 
@@ -63,6 +68,7 @@ var recovered_turn_started := false
 var recovered_deadline_ms: int = 0
 var recovered_words: Array[String] = []
 var recovery_pending_send := false
+var _suppress_word_score_sfx := false
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
@@ -137,8 +143,8 @@ func _on_game_ready() -> void:
 	if not game_screen.time_up.is_connected(_on_game_time_up):
 		game_screen.time_up.connect(_on_game_time_up)
 	
-	if not game_screen.progress_changed.is_connected(_save_anagrams_progress):
-		game_screen.progress_changed.connect(_save_anagrams_progress)
+	if not game_screen.progress_changed.is_connected(_on_anagrams_progress_changed):
+		game_screen.progress_changed.connect(_on_anagrams_progress_changed)
 
 	if appPlugin:
 		var complete_callable := Callable(self, "_on_anagrams_send_complete")
@@ -253,6 +259,30 @@ func _save_anagrams_progress_snapshot(deadline_ms: int, words: Array[String]) ->
 		" deadline=", deadline_ms,
 		" words=", words.size()
 	])
+
+func _on_anagrams_progress_changed() -> void:
+	if not _suppress_word_score_sfx:
+		var history: Array = game_screen.get_word_history()
+		if not history.is_empty():
+			var entry: Variant = history[-1]
+			if entry is Dictionary and entry.has("word"):
+				var word_length := String(entry["word"]).length()
+				match word_length:
+					3:
+						GameUtils.play_sfx(self, WORD_SCORE0_SFX)
+					4:
+						GameUtils.play_sfx(self, WORD_SCORE1_SFX)
+					5:
+						GameUtils.play_sfx(self, WORD_SCORE2_SFX)
+					6:
+						if String(game_screen.letters).length() == 7:
+							GameUtils.play_sfx(self, WORD_SCORE3_SFX)
+						else:
+							GameUtils.play_sfx(self, WORD_SCOREMAX_SFX)
+					7:
+						GameUtils.play_sfx(self, WORD_SCOREMAX_SFX)
+
+	_save_anagrams_progress()
 
 func _save_anagrams_progress() -> void:
 	if not is_instance_valid(game_screen):
@@ -548,7 +578,9 @@ func _set_game_data(raw_text: String) -> void:
 	_init_screens()
 
 	if recovered_turn_started and not recovery_pending_send and not spectator_mode and not my_has_data and not game_over:
+		_suppress_word_score_sfx = true
 		await game_screen.start_game(recovered_deadline_ms, recovered_words)
+		_suppress_word_score_sfx = false
 
 	_sync_waiting_animation()
 

@@ -26,6 +26,7 @@ extends BaseGame
 
 const LETTER_BG: Texture2D = preload("res://anagrams/letter_bg.png")
 const MUSIC_STREAM := preload("res://global/audio/wordbites.ogg")
+const WORD_SCORE0_SFX := preload("res://global/audio/word_score0.wav")
 
 var game_language: String = WordLanguage.DEFAULT_LANGUAGE
 var dictionary_path: String = WordLanguage.get_dictionary_path(
@@ -68,6 +69,7 @@ var recovered_turn_started := false
 var recovered_deadline_ms: int = 0
 var recovered_words: Array[String] = []
 var recovery_pending_send := false
+var _suppress_word_score_sfx := false
 
 var _words_scroll_container: ScrollContainer = null
 var _words_pointer_down := false
@@ -207,8 +209,8 @@ func _on_game_ready() -> void:
 		if not game_screen.time_up.is_connected(_on_game_time_up):
 			game_screen.time_up.connect(_on_game_time_up)
 
-		if not game_screen.progress_changed.is_connected(_save_wordbites_progress):
-			game_screen.progress_changed.connect(_save_wordbites_progress)
+		if not game_screen.progress_changed.is_connected(_on_wordbites_progress_changed):
+			game_screen.progress_changed.connect(_on_wordbites_progress_changed)
 
 	if appPlugin:
 		var complete_callable := Callable(self, "_on_wordbites_send_complete")
@@ -267,6 +269,12 @@ func _save_wordbites_progress_snapshot(deadline_ms: int, words: Array[String]) -
 		" deadline=", deadline_ms,
 		" words=", words.size()
 	])
+
+func _on_wordbites_progress_changed() -> void:
+	if not _suppress_word_score_sfx:
+		GameUtils.play_sfx(self, WORD_SCORE0_SFX)
+
+	_save_wordbites_progress()
 
 func _save_wordbites_progress() -> void:
 	if not is_instance_valid(game_screen):
@@ -579,7 +587,9 @@ func _set_game_data(raw_text: String) -> void:
 	_init_screens()
 
 	if recovered_turn_started and not recovery_pending_send and not spectator_mode and not my_has_data and not game_over:
+		_suppress_word_score_sfx = true
 		await game_screen.start_game(recovered_deadline_ms, recovered_words)
+		_suppress_word_score_sfx = false
 
 	_sync_waiting_animation()
 
