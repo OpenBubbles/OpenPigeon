@@ -90,6 +90,8 @@ licenses. They are excluded from LICENSE-ASSETS.
 | Connect 4 (`connect_drop.wav`) | discokingmusic | https://freesound.org/s/271387/ | CC BY 4.0 |
 | Hard pop.wav (`puck_hit.wav`) | juskiddink | https://freesound.org/s/108616/ | CC BY 4.0 |
 | 5 meters dive.wav (`knockout_water.wav`) | bruno.auzet | https://freesound.org/s/529794/ | CC0 1.0 |
+| drawcard - Card Deal (`crazy_draw.wav`) | RealSquink | https://freesound.org/s/787405/ | CC0 1.0 |
+| Deny Effect (`crazy_skip.wav`) | Firevirus999 | https://freesound.org/s/789982/ | CC0 1.0 |
 
 Attribution is also displayed in-app via
 `app/src/main/assets/attributions.html`.

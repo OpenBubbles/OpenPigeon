@@ -236,6 +236,10 @@ class CrazyGame(
 }
 
 private const val CRAZY8_VERBOSE_LOGS = false
+private const val CRAZY_DRAW_SFX_PATH = "crazy8/crazy_draw.wav"
+private const val CRAZY_PLACE_SFX_PATH = "crazy8/crazy_place.wav"
+private const val CRAZY_SKIP_SFX_PATH = "crazy8/crazy_skip.wav"
+private const val CRAZY_REVERSE_SFX_PATH = "crazy8/crazy_reverse.wav"
 
 private val CRAZY8_AES_KEY = ByteArray(
     32,
@@ -483,6 +487,13 @@ class Crazy8Activity : ComponentActivity() {
                 darkModeEnabled.value = enabled
             },
             onSettingsClosed = ::onSettingsClosed,
+        )
+
+        gameMenu.preloadSounds(
+            CRAZY_DRAW_SFX_PATH,
+            CRAZY_PLACE_SFX_PATH,
+            CRAZY_SKIP_SFX_PATH,
+            CRAZY_REVERSE_SFX_PATH,
         )
 
         gameMenu.sheet.configureHeaderNameField(
@@ -873,6 +884,12 @@ class Crazy8Activity : ComponentActivity() {
         }
     }
 
+    fun playCrazySound(assetPath: String) {
+        if (::gameMenu.isInitialized) {
+            gameMenu.playSound(assetPath, volume = 0.8f)
+        }
+    }
+
     fun performCardSnapHaptic() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -1010,6 +1027,8 @@ class Crazy8Activity : ComponentActivity() {
     }
 
     fun showSkipFx(playerId: Int) {
+        playCrazySound(CRAZY_SKIP_SFX_PATH)
+
         val fx = CrazyHeadFx(
             key = nextFxKey(), playerId = playerId, skip = true
         )
@@ -1036,6 +1055,8 @@ class Crazy8Activity : ComponentActivity() {
     }
 
     fun showReverseFx(clockwise: Boolean) {
+        playCrazySound(CRAZY_REVERSE_SFX_PATH)
+
         val fx = CrazyReverseFx(
             key = nextFxKey(), clockwise = clockwise
         )
@@ -1770,12 +1791,12 @@ fun RenderDrawPile(
             .size(88.dp, 118.dp)
             .then(
                 if (onClick != null) {
-                Modifier.clickable(
-                    interactionSource = interactionSource, indication = null
-                ) { onClick() }
-            } else {
-                Modifier
-            })) {
+                    Modifier.clickable(
+                        interactionSource = interactionSource, indication = null
+                    ) { onClick() }
+                } else {
+                    Modifier
+                })) {
         // Back card (no text)
         Box(
             modifier = Modifier
@@ -2404,6 +2425,7 @@ fun RenderGame(
         if (start == null || end == null) {
             if (index in game.hand.indices) {
                 game.hand.removeAt(index)
+                activity?.playCrazySound(CRAZY_PLACE_SFX_PATH)
                 activity?.playCard(card)
             }
             return
@@ -2420,6 +2442,7 @@ fun RenderGame(
                 endScale = cardScaleForHand(game) * 0.96f,
                 durationMs = 240
             )
+            activity?.playCrazySound(CRAZY_PLACE_SFX_PATH)
             if (index in game.hand.indices) {
                 game.hand.removeAt(index)
                 activity?.playCard(card)
@@ -2509,6 +2532,7 @@ fun RenderGame(
                         delay(35.milliseconds)
                     }
 
+                    activity?.playCrazySound(CRAZY_DRAW_SFX_PATH)
                     animateFlyingCard(
                         card = card,
                         start = drawPileCenter!!,
@@ -2543,6 +2567,7 @@ fun RenderGame(
                                 endScale = cardScaleForHand(game) * 0.96f,
                                 durationMs = 220
                             )
+                            activity?.playCrazySound(CRAZY_PLACE_SFX_PATH)
 
                             val liveIndex = game.hand.indexOfFirst {
                                 it.rank == card.rank && it.file == card.file
@@ -2639,6 +2664,7 @@ fun RenderGame(
                 repeat(animCount) { index ->
                     if (index > 0) delay(28.milliseconds)
 
+                    activity?.playCrazySound(CRAZY_DRAW_SFX_PATH)
                     animateOpponentFly(
                         card = null,
                         start = resolvedDrawCenter,
@@ -2658,6 +2684,7 @@ fun RenderGame(
                         backside = false,
                         durationMs = if (animCount <= 2) 150 else 85
                     )
+                    activity?.playCrazySound(CRAZY_PLACE_SFX_PATH)
                 }
             }
         }
@@ -2685,880 +2712,882 @@ fun RenderGame(
         ) {
             CrazyBackground(activity?.darkModeEnabled?.value == true)
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-                .statusBarsPadding()
-                .onGloballyPositioned { coords ->
-                    boardOriginRoot = coords.positionInRoot()
-                }
-                .onSizeChanged { boardSize.value = it }) {
-            val boardDensity = LocalDensity.current
-            val boardWidthPx = boardSize.value.width.toFloat()
-            val boardHeightPx = boardSize.value.height.toFloat()
-            val boardWidthDp = with(boardDensity) { boardSize.value.width.toDp() }
-
-            val fallbackBeamCenter = Offset(
-                x = boardWidthPx * 0.50f, y = boardHeightPx * 0.43f
-            )
-
-            val beamCenter = turnPileGroupCenter ?: fallbackBeamCenter
-
-            val oppCardWidth = 80.dp
-            val oppCardHeight = 110.dp
-
-            val joinedOrder = game.participants
-            val mySeatIndex = joinedOrder.indexOfFirst { it.isMe }
-
-            val opponents = if (mySeatIndex == -1) {
-                joinedOrder.filter { !it.isMe }
-            } else {
-                (1 until joinedOrder.size).map { offset ->
-                    joinedOrder[(mySeatIndex + offset) % joinedOrder.size]
-                }
-            }
-
-            val seats = crazyOpponentSeats(opponents.size)
-            val boardHeightDp = with(boardDensity) { boardSize.value.height.toDp() }
-
-            val rawTarget = if (boardWidthPx <= 0f || boardHeightPx <= 0f) {
-                null
-            } else {
-                turnAvatarCenters[game.turn.id]
-            }
-
-            LaunchedEffect(
-                rawTarget, boardWidthPx, boardHeightPx, clockwise, activity?.turnConeForceAroundKey
-            ) {
-                if (rawTarget == null) return@LaunchedEffect
-
-                val targetAngle = normalizedAngle(
-                    kotlin.math.atan2(
-                        rawTarget.y - beamCenter.y, rawTarget.x - beamCenter.x
-                    )
-                )
-
-                if (!beamAngleInitialized) {
-                    animatedBeamAngle.snapTo(targetAngle)
-                    beamAngleInitialized = true
-                    lastHandledForceAroundKey = activity?.turnConeForceAroundKey ?: 0
-                    return@LaunchedEffect
-                }
-
-                val current = animatedBeamAngle.value
-                val forceAroundKey = activity?.turnConeForceAroundKey ?: 0
-                val forceAround = forceAroundKey != lastHandledForceAroundKey
-
-                val delta = if (forceAround) {
-                    lastHandledForceAroundKey = forceAroundKey
-                    directionalAngleDelta(current, targetAngle, clockwise)
-                } else {
-                    shortestAngleDelta(current, targetAngle)
-                }
-
-                if (abs(delta) < 0.01f) {
-                    animatedBeamAngle.snapTo(targetAngle)
-                } else {
-                    animatedBeamAngle.animateTo(
-                        targetValue = current + delta, animationSpec = tween(
-                            durationMillis = if (forceAround) 260 else 150,
-                            easing = FastOutSlowInEasing
-                        )
-                    )
-                }
-            }
-
-            val beamRadius = if (rawTarget != null) {
-                sqrt(
-                    (rawTarget.x - beamCenter.x) * (rawTarget.x - beamCenter.x) + (rawTarget.y - beamCenter.y) * (rawTarget.y - beamCenter.y)
-                )
-            } else {
-                0f
-            }
-
-            val animatedTarget = if (rawTarget != null && beamRadius > 0f) {
-                Offset(
-                    x = beamCenter.x + cos(animatedBeamAngle.value) * beamRadius,
-                    y = beamCenter.y + sin(animatedBeamAngle.value) * beamRadius
-                )
-            } else {
-                null
-            }
-
-            if (animatedTarget != null && boardWidthPx > 0f && boardHeightPx > 0f) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(1.5f)
-                ) {
-                    TurnConeOverlay(
-                        modifier = Modifier.fillMaxSize(),
-                        from = beamCenter,
-                        to = animatedTarget,
-                        lightweight = true,
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(3.5f)
-                ) {
-                    DirectionArrowOverlay(
-                        modifier = Modifier.fillMaxSize(),
-                        center = beamCenter,
-                        target = animatedTarget,
-                        clockwise = clockwise
-                    )
-                }
-            }
-
-            opponents.forEachIndexed { index, participant ->
-                val seat = seats[index]
-                val cardX = boardWidthDp * seat.cardCx - oppCardWidth / 2
-                val cardY = boardHeightDp * seat.cardCy - oppCardHeight / 2
-                val avatarX = boardWidthDp * seat.avatarCx - avatarWidth / 2
-                val avatarY = boardHeightDp * seat.avatarCy - avatarHeight / 2
-
-                Box(
-                    modifier = Modifier
-                        .offset(x = cardX, y = cardY)
-                        .onGloballyPositioned { coords ->
-                            opponentPileCenters.putCenterIfChanged(participant.id, coords)
-                        }
-                        .zIndex(1f)) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy((-100).dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        repeat(
-                            min(
-                                participant.cardCount,
-                                maxVisibleOpponentCards,
-                            ),
-                        ) {
-                            RenderCardBack(
-                                lightweight = true,
-                            )
-                        }
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .offset(x = avatarX, y = avatarY)
-                        .zIndex(6f)
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .padding(
-                                    top = 4.dp,
-                                    bottom = 4.dp,
-                                )
-                                .size(
-                                    width = avatarWidth,
-                                    height = avatarHeight,
-                                )
-                                .onGloballyPositioned { coords ->
-                                    avatarCenters.putCenterIfChanged(
-                                        participant.id,
-                                        coords,
-                                    )
-
-                                    turnAvatarCenters.putOffsetIfChanged(
-                                        participant.id,
-                                        centerInBoard(
-                                            coords,
-                                        ),
-                                    )
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            AvatarWinBurstOverlay(
-                                active = winnerParticipantId == participant.id,
-                                modifier = Modifier
-                                    .requiredSize(
-                                        width = 136.dp,
-                                        height = 108.dp,
-                                    )
-                                    .zIndex(
-                                        0f,
-                                    ),
-                            )
-
-                            RenderLobbyAvatar(
-                                avatarData = avatarFor(
-                                    participant,
-                                ),
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .zIndex(
-                                        1f,
-                                    ),
-                            )
-
-                            CrazyWinMedal(
-                                wins = participant.wins,
-                                modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .offset(x = 20.dp)
-                                    .zIndex(2f),
-                            )
-                        }
-
-                        Text(
-                            participant.name,
-                            modifier = Modifier.padding(bottom = 6.dp),
-                            fontWeight = if (participant == game.turn) FontWeight.ExtraBold else FontWeight.Normal,
-                            color = Color.White,
-                            fontSize = 13.sp
-                        )
-                    }
-                }
-            }
-
-            Row(
+            Box(
                 modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(horizontal = 48.dp)
-                    .offset(y = (-8).dp)
+                    .fillMaxSize()
+                    .navigationBarsPadding()
+                    .statusBarsPadding()
                     .onGloballyPositioned { coords ->
-                        pileGroupCenter = updatedCenter(pileGroupCenter, coords)
-                        turnPileGroupCenter = centerInBoard(coords)
+                        boardOriginRoot = coords.positionInRoot()
                     }
-                    .zIndex(2f), horizontalArrangement = Arrangement.spacedBy(
-                (-8).dp,
-            )) {
-                Box(modifier = Modifier
-                    .graphicsLayer {
-                        scaleX = pileScale
-                        scaleY = pileScale
+                    .onSizeChanged { boardSize.value = it }) {
+                val boardDensity = LocalDensity.current
+                val boardWidthPx = boardSize.value.width.toFloat()
+                val boardHeightPx = boardSize.value.height.toFloat()
+                val boardWidthDp = with(boardDensity) { boardSize.value.width.toDp() }
+
+                val fallbackBeamCenter = Offset(
+                    x = boardWidthPx * 0.50f, y = boardHeightPx * 0.43f
+                )
+
+                val beamCenter = turnPileGroupCenter ?: fallbackBeamCenter
+
+                val oppCardWidth = 80.dp
+                val oppCardHeight = 110.dp
+
+                val joinedOrder = game.participants
+                val mySeatIndex = joinedOrder.indexOfFirst { it.isMe }
+
+                val opponents = if (mySeatIndex == -1) {
+                    joinedOrder.filter { !it.isMe }
+                } else {
+                    (1 until joinedOrder.size).map { offset ->
+                        joinedOrder[(mySeatIndex + offset) % joinedOrder.size]
                     }
-                    .onGloballyPositioned { coords ->
-                        drawPileCenter = updatedCenter(drawPileCenter, coords)
-                    }) {
-                    RenderDrawPile(shouldPulse = game.turn == me && label == null && !interactionLocked && !drawInFlight && game.hand.none {
-                        if (game.penaltyFile != 0) it.file == game.penaltyFile
-                        else it.isCompatibleWith(game.card)
-                    }, onClick = {
-                        if (interactionLocked) return@RenderDrawPile
-                        if (drawInFlight) return@RenderDrawPile
-                        if (game.turn != me) return@RenderDrawPile
-                        drawInFlight = true
-                        drewAndMustWaitThisTurn = true
-                        activity?.drawCard()
-                    })
                 }
 
-                Box(
+                val seats = crazyOpponentSeats(opponents.size)
+                val boardHeightDp = with(boardDensity) { boardSize.value.height.toDp() }
+
+                val rawTarget = if (boardWidthPx <= 0f || boardHeightPx <= 0f) {
+                    null
+                } else {
+                    turnAvatarCenters[game.turn.id]
+                }
+
+                LaunchedEffect(
+                    rawTarget, boardWidthPx, boardHeightPx, clockwise, activity?.turnConeForceAroundKey
+                ) {
+                    if (rawTarget == null) return@LaunchedEffect
+
+                    val targetAngle = normalizedAngle(
+                        kotlin.math.atan2(
+                            rawTarget.y - beamCenter.y, rawTarget.x - beamCenter.x
+                        )
+                    )
+
+                    if (!beamAngleInitialized) {
+                        animatedBeamAngle.snapTo(targetAngle)
+                        beamAngleInitialized = true
+                        lastHandledForceAroundKey = activity?.turnConeForceAroundKey ?: 0
+                        return@LaunchedEffect
+                    }
+
+                    val current = animatedBeamAngle.value
+                    val forceAroundKey = activity?.turnConeForceAroundKey ?: 0
+                    val forceAround = forceAroundKey != lastHandledForceAroundKey
+
+                    val delta = if (forceAround) {
+                        lastHandledForceAroundKey = forceAroundKey
+                        directionalAngleDelta(current, targetAngle, clockwise)
+                    } else {
+                        shortestAngleDelta(current, targetAngle)
+                    }
+
+                    if (abs(delta) < 0.01f) {
+                        animatedBeamAngle.snapTo(targetAngle)
+                    } else {
+                        animatedBeamAngle.animateTo(
+                            targetValue = current + delta, animationSpec = tween(
+                                durationMillis = if (forceAround) 260 else 150,
+                                easing = FastOutSlowInEasing
+                            )
+                        )
+                    }
+                }
+
+                val beamRadius = if (rawTarget != null) {
+                    sqrt(
+                        (rawTarget.x - beamCenter.x) * (rawTarget.x - beamCenter.x) + (rawTarget.y - beamCenter.y) * (rawTarget.y - beamCenter.y)
+                    )
+                } else {
+                    0f
+                }
+
+                val animatedTarget = if (rawTarget != null && beamRadius > 0f) {
+                    Offset(
+                        x = beamCenter.x + cos(animatedBeamAngle.value) * beamRadius,
+                        y = beamCenter.y + sin(animatedBeamAngle.value) * beamRadius
+                    )
+                } else {
+                    null
+                }
+
+                if (animatedTarget != null && boardWidthPx > 0f && boardHeightPx > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(1.5f)
+                    ) {
+                        TurnConeOverlay(
+                            modifier = Modifier.fillMaxSize(),
+                            from = beamCenter,
+                            to = animatedTarget,
+                            lightweight = true,
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(3.5f)
+                    ) {
+                        DirectionArrowOverlay(
+                            modifier = Modifier.fillMaxSize(),
+                            center = beamCenter,
+                            target = animatedTarget,
+                            clockwise = clockwise
+                        )
+                    }
+                }
+
+                opponents.forEachIndexed { index, participant ->
+                    val seat = seats[index]
+                    val cardX = boardWidthDp * seat.cardCx - oppCardWidth / 2
+                    val cardY = boardHeightDp * seat.cardCy - oppCardHeight / 2
+                    val avatarX = boardWidthDp * seat.avatarCx - avatarWidth / 2
+                    val avatarY = boardHeightDp * seat.avatarCy - avatarHeight / 2
+
+                    Box(
+                        modifier = Modifier
+                            .offset(x = cardX, y = cardY)
+                            .onGloballyPositioned { coords ->
+                                opponentPileCenters.putCenterIfChanged(participant.id, coords)
+                            }
+                            .zIndex(1f)) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy((-100).dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            repeat(
+                                min(
+                                    participant.cardCount,
+                                    maxVisibleOpponentCards,
+                                ),
+                            ) {
+                                RenderCardBack(
+                                    lightweight = true,
+                                )
+                            }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .offset(x = avatarX, y = avatarY)
+                            .zIndex(6f)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(
+                                        top = 4.dp,
+                                        bottom = 4.dp,
+                                    )
+                                    .size(
+                                        width = avatarWidth,
+                                        height = avatarHeight,
+                                    )
+                                    .onGloballyPositioned { coords ->
+                                        avatarCenters.putCenterIfChanged(
+                                            participant.id,
+                                            coords,
+                                        )
+
+                                        turnAvatarCenters.putOffsetIfChanged(
+                                            participant.id,
+                                            centerInBoard(
+                                                coords,
+                                            ),
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                AvatarWinBurstOverlay(
+                                    active = winnerParticipantId == participant.id,
+                                    modifier = Modifier
+                                        .requiredSize(
+                                            width = 136.dp,
+                                            height = 108.dp,
+                                        )
+                                        .zIndex(
+                                            0f,
+                                        ),
+                                )
+
+                                RenderLobbyAvatar(
+                                    avatarData = avatarFor(
+                                        participant,
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .zIndex(
+                                            1f,
+                                        ),
+                                )
+
+                                CrazyWinMedal(
+                                    wins = participant.wins,
+                                    modifier = Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .offset(x = 20.dp)
+                                        .zIndex(2f),
+                                )
+                            }
+
+                            Text(
+                                participant.name,
+                                modifier = Modifier.padding(bottom = 6.dp),
+                                fontWeight = if (participant == game.turn) FontWeight.ExtraBold else FontWeight.Normal,
+                                color = Color.White,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+
+                Row(
                     modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(horizontal = 48.dp)
+                        .offset(y = (-8).dp)
+                        .onGloballyPositioned { coords ->
+                            pileGroupCenter = updatedCenter(pileGroupCenter, coords)
+                            turnPileGroupCenter = centerInBoard(coords)
+                        }
+                        .zIndex(2f), horizontalArrangement = Arrangement.spacedBy(
+                        (-8).dp,
+                    )) {
+                    Box(modifier = Modifier
                         .graphicsLayer {
                             scaleX = pileScale
                             scaleY = pileScale
                         }
                         .onGloballyPositioned { coords ->
-                            discardPileCenter = updatedCenter(discardPileCenter, coords)
-                        }
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            playCurrentlySelectedCard()
+                            drawPileCenter = updatedCenter(drawPileCenter, coords)
                         }) {
-                    RenderCard(
-                        card = game.card, lightweight = true
-                    )
-                }
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 8.dp, vertical = 62.dp)
-                .navigationBarsPadding()
-                .statusBarsPadding()
-                .zIndex(4f), horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            if (me != null) {
-                Box(
-                    modifier = Modifier
-                        .padding(
-                            top = 4.dp,
-                            bottom = 4.dp,
-                        )
-                        .size(
-                            width = avatarWidth,
-                            height = avatarHeight,
-                        )
-                        .onGloballyPositioned { coords ->
-                            avatarCenters.putCenterIfChanged(
-                                me.id,
-                                coords,
-                            )
-
-                            turnAvatarCenters.putOffsetIfChanged(
-                                me.id,
-                                centerInBoard(
-                                    coords,
-                                ),
-                            )
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    AvatarWinBurstOverlay(
-                        active = winnerParticipantId == me.id,
-                        modifier = Modifier
-                            .requiredSize(
-                                width = 136.dp,
-                                height = 108.dp,
-                            )
-                            .zIndex(
-                                0f,
-                            ),
-                    )
-
-                    RenderLobbyAvatar(
-                        avatarData = avatarFor(
-                            me,
-                        ),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .zIndex(
-                                1f,
-                            ),
-                    )
-
-                    CrazyWinMedal(
-                        wins = me.wins,
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .offset(x = 20.dp)
-                            .zIndex(2f),
-                    )
-                }
-
-                Text(
-                    me.name,
-                    modifier = Modifier.padding(bottom = 10.dp, top = 2.dp),
-                    fontWeight = if (me == game.turn) FontWeight.ExtraBold else FontWeight.Normal,
-                    color = Color.White
-                )
-            }
-
-            if (me != null) {
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp)
-                        .height(132.dp)
-                        .onSizeChanged { handAreaSize = it }) {
-                    val handDensity = LocalDensity.current
-                    val cardCount = game.hand.size
-                    val baseCardWidthPx = with(handDensity) { 80.dp.toPx() }
-                    val baseCardHeightPx = with(handDensity) { 110.dp.toPx() }
-                    val availableWidthPx = handAreaSize.width.toFloat().coerceAtLeast(1f)
-
-                    val tileScale = when {
-                        cardCount <= 6 -> 1.00f
-                        cardCount <= 10 -> 0.94f
-                        cardCount <= 15 -> 0.88f
-                        else -> 0.82f
-                    }
-
-                    val tileCardWidthPx = baseCardWidthPx * tileScale
-                    val tileCardHeightPx = baseCardHeightPx * tileScale
-                    val preferredVisiblePx = tileCardWidthPx * 0.50f
-                    val minimumVisiblePx = with(handDensity) { 30.dp.toPx() }
-
-                    data class HandLayoutSlot(
-                        val index: Int,
-                        val xPx: Float,
-                        val yPx: Float,
-                        val scale: Float,
-                        val tileMode: Boolean
-                    )
-
-                    fun buildTileLayout(rowCount: Int): List<HandLayoutSlot>? {
-                        if (cardCount <= 0) return emptyList()
-
-                        val maxRowCount = rowCount.coerceAtLeast(1)
-                        val rowSizes = MutableList(maxRowCount) { cardCount / maxRowCount }
-                        repeat(cardCount % maxRowCount) { rowSizes[it] += 1 }
-
-                        val availableHeightPx = handAreaSize.height.toFloat().coerceAtLeast(1f)
-
-                        val preferredRowStepPx = tileCardHeightPx * 0.48f
-                        val maxRowStepPx = if (maxRowCount <= 1) {
-                            0f
-                        } else {
-                            ((availableHeightPx - tileCardHeightPx) / (maxRowCount - 1)).coerceAtLeast(
-                                10f
-                            )
-                        }
-
-                        val rowStepPx = if (maxRowCount <= 1) {
-                            0f
-                        } else {
-                            preferredRowStepPx.coerceAtMost(maxRowStepPx)
-                        }
-
-                        val slots = mutableListOf<HandLayoutSlot>()
-                        var globalIndex = 0
-
-                        for (row in 0 until maxRowCount) {
-                            val countInRow = rowSizes[row]
-                            if (countInRow <= 0) continue
-
-                            val rawGap = if (countInRow == 1) {
-                                0f
-                            } else {
-                                ((availableWidthPx - tileCardWidthPx) / (countInRow - 1)).coerceAtLeast(
-                                    0f
-                                )
-                            }
-
-                            if (countInRow > 1 && rawGap < minimumVisiblePx) {
-                                return null
-                            }
-
-                            val gap = if (countInRow == 1) {
-                                0f
-                            } else {
-                                rawGap.coerceAtMost(preferredVisiblePx)
-                            }
-
-                            val rowWidth = tileCardWidthPx + gap * (countInRow - 1)
-                            val startX = ((availableWidthPx - rowWidth) / 2f).coerceAtLeast(0f)
-                            val y = row * rowStepPx
-
-                            for (i in 0 until countInRow) {
-                                slots.add(
-                                    HandLayoutSlot(
-                                        index = globalIndex,
-                                        xPx = startX + gap * i,
-                                        yPx = y,
-                                        scale = tileScale,
-                                        tileMode = true
-                                    )
-                                )
-                                globalIndex += 1
-                            }
-                        }
-
-                        return slots
-                    }
-
-                    val tileSlots = buildTileLayout(1) ?: buildTileLayout(2) ?: buildTileLayout(3)
-
-                    if (!tileSlots.isNullOrEmpty()) {
-                        for (slot in tileSlots) {
-                            val index = slot.index
-                            val card = game.hand[index]
-                            val cardKey = handKeys[index]
-                            val isPlayable = handPlayable[index]
-
-                            val selectedYOffsetPx = if (selectedKey.value == cardKey) {
-                                with(handDensity) { (-14).dp.toPx() }
-                            } else {
-                                0f
-                            }
-
-                            val xDp = with(handDensity) { slot.xPx.toDp() }
-                            val yDp = with(handDensity) { (slot.yPx + selectedYOffsetPx).toDp() }
-
-                            Box(
-                                modifier = Modifier
-                                    .offset(x = xDp, y = yDp)
-                                    .graphicsLayer {
-                                        scaleX = slot.scale
-                                        scaleY = slot.scale
-                                        transformOrigin = TransformOrigin(0f, 0f)
-                                    }
-                                    .onGloballyPositioned { coords ->
-                                        handCardCenters.putCenterIfChanged(cardKey, coords)
-                                    }
-                                    .alpha(
-                                        if (hiddenHandKey == cardKey || cardKey in incomingHandKeys) 0f else 1f
-                                    )
-                                    .zIndex(
-                                        when {
-                                            selectedKey.value == cardKey -> 1000f
-                                            else -> index.toFloat()
-                                        }
-                                    )
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) {
-                                        handleCardTap(index, cardKey, card, isPlayable)
-                                    }) {
-                                val faceModifier = Modifier.drawWithContent {
-                                    drawContent()
-
-                                    if (!isPlayable && game.turn == me) {
-                                        drawRoundRect(
-                                            color = Color.Black.copy(alpha = 0.42f),
-                                            cornerRadius = CornerRadius(4.dp.toPx())
-                                        )
-                                    }
-                                }
-
-                                RenderCard(
-                                    card, modifier = faceModifier, lightweight = true
-                                )
-                            }
-                        }
-                    } else {
-                        val cardScale = cardScaleForHand(game)
-
-                        val scaledCardWidthPx = baseCardWidthPx * cardScale
-                        val blockedGapPx = scaledCardWidthPx * 0.22f
-                        val playableGapPx = scaledCardWidthPx * 0.34f
-
-                        val rawGaps = mutableListOf<Float>()
-                        for (i in 0 until (cardCount - 1)) {
-                            val currentPlayable = handPlayable[i]
-                            val nextPlayable = handPlayable[i + 1]
-                            rawGaps.add(if (currentPlayable || nextPlayable) playableGapPx else blockedGapPx)
-                        }
-
-                        val rawTotalWidth = if (cardCount <= 0) {
-                            0f
-                        } else {
-                            scaledCardWidthPx + rawGaps.sum()
-                        }
-
-                        val compressedGaps: List<Float> =
-                            if (rawTotalWidth > availableWidthPx && rawGaps.isNotEmpty()) {
-                                val availableForGaps =
-                                    (availableWidthPx - scaledCardWidthPx).coerceAtLeast(0f)
-                                val rawGapTotal = rawGaps.sum().coerceAtLeast(1f)
-                                val gapScale = availableForGaps / rawGapTotal
-                                rawGaps.map { it * gapScale }
-                            } else {
-                                rawGaps
-                            }
-
-                        val totalWidth = if (cardCount <= 0) {
-                            0f
-                        } else {
-                            scaledCardWidthPx + compressedGaps.sum()
-                        }
-
-                        val startX = ((availableWidthPx - totalWidth) / 2f).coerceAtLeast(0f)
-
-                        var runningX = startX
-
-                        for (index in game.hand.indices) {
-                            val card = game.hand[index]
-                            val cardKey = handKeys[index]
-                            val isPlayable = handPlayable[index]
-
-                            val targetOffsetY = when {
-                                selectedKey.value == cardKey -> (-16).dp
-                                else -> 0.dp
-                            }
-
-                            val xDp = with(handDensity) { runningX.toDp() }
-
-                            Box(
-                                modifier = Modifier
-                                    .offset(x = xDp, y = targetOffsetY)
-                                    .graphicsLayer {
-                                        scaleX = cardScale
-                                        scaleY = cardScale
-                                        transformOrigin = TransformOrigin(0f, 0f)
-                                    }
-                                    .onGloballyPositioned { coords ->
-                                        handCardCenters.putCenterIfChanged(cardKey, coords)
-                                    }
-                                    .alpha(
-                                        if (hiddenHandKey == cardKey || cardKey in incomingHandKeys) 0f else 1f
-                                    )
-                                    .zIndex(
-                                        when {
-                                            selectedKey.value == cardKey -> 100f
-                                            isPlayable -> 50f + index.toFloat()
-                                            else -> index.toFloat()
-                                        }
-                                    )
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null
-                                    ) {
-                                        handleCardTap(index, cardKey, card, isPlayable)
-                                    }) {
-                                RenderCard(
-                                    card, modifier = Modifier, lightweight = true
-                                )
-                            }
-
-                            if (index < compressedGaps.size) {
-                                runningX += compressedGaps[index]
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (selectedWildcardIndex in game.hand.indices) {
-            val wildcardKey = selectedWildcardKey.value ?: ""
-            val wildcardBaseCard = game.hand[selectedWildcardIndex]
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.58f))
-                    .blur(0.dp)
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() }) { }
-                    .zIndex(40f),
-                contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier.size(280.dp), contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Choose Color",
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.align(Alignment.Center),
-                        style = TextStyle(
-                            shadow = Shadow(
-                                color = Color.Black.copy(alpha = 0.7f),
-                                offset = Offset(2f, 3f),
-                                blurRadius = 2f
-                            )
-                        )
-                    )
-
-                    for (slot in 0..3) {
-                        val newCard = CrazyCard(slot, wildcardBaseCard.file, wildcardBaseCard.wireFile)
-
-                        val cardOffset = when (slot) {
-                            0 -> Modifier.offset(y = (-110).dp)
-                            1 -> Modifier.offset(x = 110.dp)
-                            2 -> Modifier.offset(y = 110.dp)
-                            else -> Modifier.offset(x = (-110).dp)
-                        }
-
-                        RenderCard(
-                            newCard, modifier = cardOffset.clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }) {
-                            val start = handCardCenters[wildcardKey]
-                            val end = discardPileCenter
-
-                            if (start == null || end == null) {
-                                if (selectedWildcardIndex in game.hand.indices) {
-                                    game.hand.removeAt(selectedWildcardIndex)
-                                }
-                                activity?.playCard(newCard)
-                                selectedWildcardKey.value = null
-                                selectedKey.value = null
-                                return@clickable
-                            }
-
-                            scope.launch {
-                                interactionLocked = true
-                                selectedWildcardKey.value = null
-
-                                animateFlyingCard(
-                                    card = newCard,
-                                    start = start,
-                                    end = end,
-                                    hideKey = wildcardKey,
-                                    startScale = cardScaleForHand(game),
-                                    endScale = cardScaleForHand(game) * 0.96f,
-                                    durationMs = 240
-                                )
-
-                                if (selectedWildcardIndex in game.hand.indices) {
-                                    game.hand.removeAt(selectedWildcardIndex)
-                                }
-
-                                activity?.playCard(newCard)
-                                selectedKey.value = null
-                                interactionLocked = false
-                            }
+                        RenderDrawPile(shouldPulse = game.turn == me && label == null && !interactionLocked && !drawInFlight && game.hand.none {
+                            if (game.penaltyFile != 0) it.file == game.penaltyFile
+                            else it.isCompatibleWith(game.card)
+                        }, onClick = {
+                            if (interactionLocked) return@RenderDrawPile
+                            if (drawInFlight) return@RenderDrawPile
+                            if (game.turn != me) return@RenderDrawPile
+                            drawInFlight = true
+                            drewAndMustWaitThisTurn = true
+                            activity?.drawCard()
                         })
                     }
+
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = pileScale
+                                scaleY = pileScale
+                            }
+                            .onGloballyPositioned { coords ->
+                                discardPileCenter = updatedCenter(discardPileCenter, coords)
+                            }
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                playCurrentlySelectedCard()
+                            }) {
+                        RenderCard(
+                            card = game.card, lightweight = true
+                        )
+                    }
                 }
             }
-        }
 
-        CompositionLocalProvider(LocalDensity provides baseDensity) {
-        if (imeVisible) {
-            ChatMessagesList(
-                messages = messages,
+            Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0x77000000))
-                    .imePadding()
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 8.dp, vertical = 62.dp)
                     .navigationBarsPadding()
                     .statusBarsPadding()
-                    .padding(bottom = 60.dp, start = 8.dp, end = 8.dp, top = 8.dp)
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { MutableInteractionSource() }) {
-                        keyboardController?.hide()
-                    }
-                    .zIndex(10f))
-        }
+                    .zIndex(4f), horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (me != null) {
+                    Box(
+                        modifier = Modifier
+                            .padding(
+                                top = 4.dp,
+                                bottom = 4.dp,
+                            )
+                            .size(
+                                width = avatarWidth,
+                                height = avatarHeight,
+                            )
+                            .onGloballyPositioned { coords ->
+                                avatarCenters.putCenterIfChanged(
+                                    me.id,
+                                    coords,
+                                )
 
-        BasicTextField(
-            value = textInput.value,
-            onValueChange = { textInput.value = it },
-            textStyle = TextStyle(fontSize = 16.sp, color = Color.White),
-            cursorBrush = SolidColor(Color.White),
-            keyboardOptions = KeyboardOptions.Default.copy(
-                imeAction = ImeAction.Send
-            ),
-            keyboardActions = KeyboardActions(
-                onSend = {
-                    activity?.sendMessage(textInput.value)
-                    textInput.value = ""
-                }),
-            modifier = Modifier
-                .padding(bottom = 10.dp, top = 30.dp, start = 15.dp, end = 15.dp)
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .statusBarsPadding()
-                .imePadding()
-                .background(
-                    Color(0x55000000), shape = RoundedCornerShape(16.dp)
-                )
-                .padding(vertical = 10.dp, horizontal = 15.dp)
-                .fillMaxWidth()
-                .zIndex(11f),
-            decorationBox = { innerTextField ->
-                if (textInput.value.isEmpty()) {
+                                turnAvatarCenters.putOffsetIfChanged(
+                                    me.id,
+                                    centerInBoard(
+                                        coords,
+                                    ),
+                                )
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        AvatarWinBurstOverlay(
+                            active = winnerParticipantId == me.id,
+                            modifier = Modifier
+                                .requiredSize(
+                                    width = 136.dp,
+                                    height = 108.dp,
+                                )
+                                .zIndex(
+                                    0f,
+                                ),
+                        )
+
+                        RenderLobbyAvatar(
+                            avatarData = avatarFor(
+                                me,
+                            ),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .zIndex(
+                                    1f,
+                                ),
+                        )
+
+                        CrazyWinMedal(
+                            wins = me.wins,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .offset(x = 20.dp)
+                                .zIndex(2f),
+                        )
+                    }
+
                     Text(
-                        text = if (unread == 0) "Chat" else "Chat ($unread)",
-                        style = TextStyle(fontSize = 16.sp, color = Color.White)
+                        me.name,
+                        modifier = Modifier.padding(bottom = 10.dp, top = 2.dp),
+                        fontWeight = if (me == game.turn) FontWeight.ExtraBold else FontWeight.Normal,
+                        color = Color.White
                     )
                 }
-                innerTextField()
-            },
-        )
 
-            if (label != null) {
-                Text(
-                    label,
+                if (me != null) {
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp)
+                            .height(132.dp)
+                            .onSizeChanged { handAreaSize = it }) {
+                        val handDensity = LocalDensity.current
+                        val cardCount = game.hand.size
+                        val baseCardWidthPx = with(handDensity) { 80.dp.toPx() }
+                        val baseCardHeightPx = with(handDensity) { 110.dp.toPx() }
+                        val availableWidthPx = handAreaSize.width.toFloat().coerceAtLeast(1f)
+
+                        val tileScale = when {
+                            cardCount <= 6 -> 1.00f
+                            cardCount <= 10 -> 0.94f
+                            cardCount <= 15 -> 0.88f
+                            else -> 0.82f
+                        }
+
+                        val tileCardWidthPx = baseCardWidthPx * tileScale
+                        val tileCardHeightPx = baseCardHeightPx * tileScale
+                        val preferredVisiblePx = tileCardWidthPx * 0.50f
+                        val minimumVisiblePx = with(handDensity) { 30.dp.toPx() }
+
+                        data class HandLayoutSlot(
+                            val index: Int,
+                            val xPx: Float,
+                            val yPx: Float,
+                            val scale: Float,
+                            val tileMode: Boolean
+                        )
+
+                        fun buildTileLayout(rowCount: Int): List<HandLayoutSlot>? {
+                            if (cardCount <= 0) return emptyList()
+
+                            val maxRowCount = rowCount.coerceAtLeast(1)
+                            val rowSizes = MutableList(maxRowCount) { cardCount / maxRowCount }
+                            repeat(cardCount % maxRowCount) { rowSizes[it] += 1 }
+
+                            val availableHeightPx = handAreaSize.height.toFloat().coerceAtLeast(1f)
+
+                            val preferredRowStepPx = tileCardHeightPx * 0.48f
+                            val maxRowStepPx = if (maxRowCount <= 1) {
+                                0f
+                            } else {
+                                ((availableHeightPx - tileCardHeightPx) / (maxRowCount - 1)).coerceAtLeast(
+                                    10f
+                                )
+                            }
+
+                            val rowStepPx = if (maxRowCount <= 1) {
+                                0f
+                            } else {
+                                preferredRowStepPx.coerceAtMost(maxRowStepPx)
+                            }
+
+                            val slots = mutableListOf<HandLayoutSlot>()
+                            var globalIndex = 0
+
+                            for (row in 0 until maxRowCount) {
+                                val countInRow = rowSizes[row]
+                                if (countInRow <= 0) continue
+
+                                val rawGap = if (countInRow == 1) {
+                                    0f
+                                } else {
+                                    ((availableWidthPx - tileCardWidthPx) / (countInRow - 1)).coerceAtLeast(
+                                        0f
+                                    )
+                                }
+
+                                if (countInRow > 1 && rawGap < minimumVisiblePx) {
+                                    return null
+                                }
+
+                                val gap = if (countInRow == 1) {
+                                    0f
+                                } else {
+                                    rawGap.coerceAtMost(preferredVisiblePx)
+                                }
+
+                                val rowWidth = tileCardWidthPx + gap * (countInRow - 1)
+                                val startX = ((availableWidthPx - rowWidth) / 2f).coerceAtLeast(0f)
+                                val y = row * rowStepPx
+
+                                for (i in 0 until countInRow) {
+                                    slots.add(
+                                        HandLayoutSlot(
+                                            index = globalIndex,
+                                            xPx = startX + gap * i,
+                                            yPx = y,
+                                            scale = tileScale,
+                                            tileMode = true
+                                        )
+                                    )
+                                    globalIndex += 1
+                                }
+                            }
+
+                            return slots
+                        }
+
+                        val tileSlots = buildTileLayout(1) ?: buildTileLayout(2) ?: buildTileLayout(3)
+
+                        if (!tileSlots.isNullOrEmpty()) {
+                            for (slot in tileSlots) {
+                                val index = slot.index
+                                val card = game.hand[index]
+                                val cardKey = handKeys[index]
+                                val isPlayable = handPlayable[index]
+
+                                val selectedYOffsetPx = if (selectedKey.value == cardKey) {
+                                    with(handDensity) { (-14).dp.toPx() }
+                                } else {
+                                    0f
+                                }
+
+                                val xDp = with(handDensity) { slot.xPx.toDp() }
+                                val yDp = with(handDensity) { (slot.yPx + selectedYOffsetPx).toDp() }
+
+                                Box(
+                                    modifier = Modifier
+                                        .offset(x = xDp, y = yDp)
+                                        .graphicsLayer {
+                                            scaleX = slot.scale
+                                            scaleY = slot.scale
+                                            transformOrigin = TransformOrigin(0f, 0f)
+                                        }
+                                        .onGloballyPositioned { coords ->
+                                            handCardCenters.putCenterIfChanged(cardKey, coords)
+                                        }
+                                        .alpha(
+                                            if (hiddenHandKey == cardKey || cardKey in incomingHandKeys) 0f else 1f
+                                        )
+                                        .zIndex(
+                                            when {
+                                                selectedKey.value == cardKey -> 1000f
+                                                else -> index.toFloat()
+                                            }
+                                        )
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) {
+                                            handleCardTap(index, cardKey, card, isPlayable)
+                                        }) {
+                                    val faceModifier = Modifier.drawWithContent {
+                                        drawContent()
+
+                                        if (!isPlayable && game.turn == me) {
+                                            drawRoundRect(
+                                                color = Color.Black.copy(alpha = 0.42f),
+                                                cornerRadius = CornerRadius(4.dp.toPx())
+                                            )
+                                        }
+                                    }
+
+                                    RenderCard(
+                                        card, modifier = faceModifier, lightweight = true
+                                    )
+                                }
+                            }
+                        } else {
+                            val cardScale = cardScaleForHand(game)
+
+                            val scaledCardWidthPx = baseCardWidthPx * cardScale
+                            val blockedGapPx = scaledCardWidthPx * 0.22f
+                            val playableGapPx = scaledCardWidthPx * 0.34f
+
+                            val rawGaps = mutableListOf<Float>()
+                            for (i in 0 until (cardCount - 1)) {
+                                val currentPlayable = handPlayable[i]
+                                val nextPlayable = handPlayable[i + 1]
+                                rawGaps.add(if (currentPlayable || nextPlayable) playableGapPx else blockedGapPx)
+                            }
+
+                            val rawTotalWidth = if (cardCount <= 0) {
+                                0f
+                            } else {
+                                scaledCardWidthPx + rawGaps.sum()
+                            }
+
+                            val compressedGaps: List<Float> =
+                                if (rawTotalWidth > availableWidthPx && rawGaps.isNotEmpty()) {
+                                    val availableForGaps =
+                                        (availableWidthPx - scaledCardWidthPx).coerceAtLeast(0f)
+                                    val rawGapTotal = rawGaps.sum().coerceAtLeast(1f)
+                                    val gapScale = availableForGaps / rawGapTotal
+                                    rawGaps.map { it * gapScale }
+                                } else {
+                                    rawGaps
+                                }
+
+                            val totalWidth = if (cardCount <= 0) {
+                                0f
+                            } else {
+                                scaledCardWidthPx + compressedGaps.sum()
+                            }
+
+                            val startX = ((availableWidthPx - totalWidth) / 2f).coerceAtLeast(0f)
+
+                            var runningX = startX
+
+                            for (index in game.hand.indices) {
+                                val card = game.hand[index]
+                                val cardKey = handKeys[index]
+                                val isPlayable = handPlayable[index]
+
+                                val targetOffsetY = when {
+                                    selectedKey.value == cardKey -> (-16).dp
+                                    else -> 0.dp
+                                }
+
+                                val xDp = with(handDensity) { runningX.toDp() }
+
+                                Box(
+                                    modifier = Modifier
+                                        .offset(x = xDp, y = targetOffsetY)
+                                        .graphicsLayer {
+                                            scaleX = cardScale
+                                            scaleY = cardScale
+                                            transformOrigin = TransformOrigin(0f, 0f)
+                                        }
+                                        .onGloballyPositioned { coords ->
+                                            handCardCenters.putCenterIfChanged(cardKey, coords)
+                                        }
+                                        .alpha(
+                                            if (hiddenHandKey == cardKey || cardKey in incomingHandKeys) 0f else 1f
+                                        )
+                                        .zIndex(
+                                            when {
+                                                selectedKey.value == cardKey -> 100f
+                                                isPlayable -> 50f + index.toFloat()
+                                                else -> index.toFloat()
+                                            }
+                                        )
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) {
+                                            handleCardTap(index, cardKey, card, isPlayable)
+                                        }) {
+                                    RenderCard(
+                                        card, modifier = Modifier, lightweight = true
+                                    )
+                                }
+
+                                if (index < compressedGaps.size) {
+                                    runningX += compressedGaps[index]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (selectedWildcardIndex in game.hand.indices) {
+                val wildcardKey = selectedWildcardKey.value ?: ""
+                val wildcardBaseCard = game.hand[selectedWildcardIndex]
+
+                Box(
                     modifier = Modifier
-                        .align(Alignment.Center)
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.58f))
+                        .blur(0.dp)
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }) { }
+                        .zIndex(40f),
+                    contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier.size(280.dp), contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Choose Color",
+                            color = Color.White,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.align(Alignment.Center),
+                            style = TextStyle(
+                                shadow = Shadow(
+                                    color = Color.Black.copy(alpha = 0.7f),
+                                    offset = Offset(2f, 3f),
+                                    blurRadius = 2f
+                                )
+                            )
+                        )
+
+                        for (slot in 0..3) {
+                            val newCard = CrazyCard(slot, wildcardBaseCard.file, wildcardBaseCard.wireFile)
+
+                            val cardOffset = when (slot) {
+                                0 -> Modifier.offset(y = (-110).dp)
+                                1 -> Modifier.offset(x = 110.dp)
+                                2 -> Modifier.offset(y = 110.dp)
+                                else -> Modifier.offset(x = (-110).dp)
+                            }
+
+                            RenderCard(
+                                newCard, modifier = cardOffset.clickable(
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() }) {
+                                    val start = handCardCenters[wildcardKey]
+                                    val end = discardPileCenter
+
+                                    if (start == null || end == null) {
+                                        if (selectedWildcardIndex in game.hand.indices) {
+                                            game.hand.removeAt(selectedWildcardIndex)
+                                        }
+                                        activity?.playCrazySound(CRAZY_PLACE_SFX_PATH)
+                                        activity?.playCard(newCard)
+                                        selectedWildcardKey.value = null
+                                        selectedKey.value = null
+                                        return@clickable
+                                    }
+
+                                    scope.launch {
+                                        interactionLocked = true
+                                        selectedWildcardKey.value = null
+
+                                        animateFlyingCard(
+                                            card = newCard,
+                                            start = start,
+                                            end = end,
+                                            hideKey = wildcardKey,
+                                            startScale = cardScaleForHand(game),
+                                            endScale = cardScaleForHand(game) * 0.96f,
+                                            durationMs = 240
+                                        )
+                                        activity?.playCrazySound(CRAZY_PLACE_SFX_PATH)
+
+                                        if (selectedWildcardIndex in game.hand.indices) {
+                                            game.hand.removeAt(selectedWildcardIndex)
+                                        }
+
+                                        activity?.playCard(newCard)
+                                        selectedKey.value = null
+                                        interactionLocked = false
+                                    }
+                                })
+                        }
+                    }
+                }
+            }
+
+            CompositionLocalProvider(LocalDensity provides baseDensity) {
+                if (imeVisible) {
+                    ChatMessagesList(
+                        messages = messages,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0x77000000))
+                            .imePadding()
+                            .navigationBarsPadding()
+                            .statusBarsPadding()
+                            .padding(bottom = 60.dp, start = 8.dp, end = 8.dp, top = 8.dp)
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() }) {
+                                keyboardController?.hide()
+                            }
+                            .zIndex(10f))
+                }
+
+                BasicTextField(
+                    value = textInput.value,
+                    onValueChange = { textInput.value = it },
+                    textStyle = TextStyle(fontSize = 16.sp, color = Color.White),
+                    cursorBrush = SolidColor(Color.White),
+                    keyboardOptions = KeyboardOptions.Default.copy(
+                        imeAction = ImeAction.Send
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onSend = {
+                            activity?.sendMessage(textInput.value)
+                            textInput.value = ""
+                        }),
+                    modifier = Modifier
+                        .padding(bottom = 10.dp, top = 30.dp, start = 15.dp, end = 15.dp)
+                        .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
                         .statusBarsPadding()
-                        .background(Color(0xFFFFD600), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
-                        .zIndex(12f),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black
-                )
-            }
-        }
-
-            activity?.lobbySpeechBubbles?.forEach { entry ->
-            val playerId = entry.key
-            val bubbleText = entry.value
-            val center = avatarCenters[playerId]
-
-            if (bubbleText.isNotBlank() && center != null) {
-                val screenWidthPx = boardSize.value.width.toFloat().coerceAtLeast(1f)
-                val screenHeightPx = boardSize.value.height.toFloat().coerceAtLeast(1f)
-
-                val bubbleToLeft = center.x > screenWidthPx * 0.50f
-                val avatarEdgeGapPx = with(density) { 34.dp.toPx() }
-
-                val xPx = if (bubbleToLeft) {
-                    center.x - avatarEdgeGapPx
-                } else {
-                    center.x + avatarEdgeGapPx
-                }
-
-                val yPx = when {
-                    center.y < with(density) { 150.dp.toPx() } -> {
-                        center.y + with(density) { 18.dp.toPx() }
-                    }
-
-                    center.y > screenHeightPx - with(density) { 190.dp.toPx() } -> {
-                        center.y - with(density) { 62.dp.toPx() }
-                    }
-
-                    else -> {
-                        center.y - with(density) { 24.dp.toPx() }
-                    }
-                }
-
-                LobbyAvatarSpeechBubble(
-                    text = bubbleText,
-                    flip = bubbleToLeft,
-                    modifier = Modifier
-                        .offset {
-                            IntOffset(
-                                x = xPx.roundToInt(), y = yPx.roundToInt()
+                        .imePadding()
+                        .background(
+                            Color(0x55000000), shape = RoundedCornerShape(16.dp)
+                        )
+                        .padding(vertical = 10.dp, horizontal = 15.dp)
+                        .fillMaxWidth()
+                        .zIndex(11f),
+                    decorationBox = { innerTextField ->
+                        if (textInput.value.isEmpty()) {
+                            Text(
+                                text = if (unread == 0) "Chat" else "Chat ($unread)",
+                                style = TextStyle(fontSize = 16.sp, color = Color.White)
                             )
                         }
-                        .zIndex(29f))
-            }
-        }
+                        innerTextField()
+                    },
+                )
 
-        activity?.headFx?.let { fx ->
-            avatarCenters[fx.playerId]?.let { center ->
-                androidx.compose.runtime.key(fx.key) {
-                    if (fx.skip) {
-                        SkipHeadEffect(center)
-                    } else if (!fx.text.isNullOrBlank()) {
-                        PenaltyHeadEffect(center, fx.text)
+                if (label != null) {
+                    Text(
+                        label,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .navigationBarsPadding()
+                            .statusBarsPadding()
+                            .background(Color(0xFFFFD600), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                            .zIndex(12f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+            }
+
+            activity?.lobbySpeechBubbles?.forEach { entry ->
+                val playerId = entry.key
+                val bubbleText = entry.value
+                val center = avatarCenters[playerId]
+
+                if (bubbleText.isNotBlank() && center != null) {
+                    val screenWidthPx = boardSize.value.width.toFloat().coerceAtLeast(1f)
+                    val screenHeightPx = boardSize.value.height.toFloat().coerceAtLeast(1f)
+
+                    val bubbleToLeft = center.x > screenWidthPx * 0.50f
+                    val avatarEdgeGapPx = with(density) { 34.dp.toPx() }
+
+                    val xPx = if (bubbleToLeft) {
+                        center.x - avatarEdgeGapPx
+                    } else {
+                        center.x + avatarEdgeGapPx
+                    }
+
+                    val yPx = when {
+                        center.y < with(density) { 150.dp.toPx() } -> {
+                            center.y + with(density) { 18.dp.toPx() }
+                        }
+
+                        center.y > screenHeightPx - with(density) { 190.dp.toPx() } -> {
+                            center.y - with(density) { 62.dp.toPx() }
+                        }
+
+                        else -> {
+                            center.y - with(density) { 24.dp.toPx() }
+                        }
+                    }
+
+                    LobbyAvatarSpeechBubble(
+                        text = bubbleText,
+                        flip = bubbleToLeft,
+                        modifier = Modifier
+                            .offset {
+                                IntOffset(
+                                    x = xPx.roundToInt(), y = yPx.roundToInt()
+                                )
+                            }
+                            .zIndex(29f))
+                }
+            }
+
+            activity?.headFx?.let { fx ->
+                avatarCenters[fx.playerId]?.let { center ->
+                    androidx.compose.runtime.key(fx.key) {
+                        if (fx.skip) {
+                            SkipHeadEffect(center)
+                        } else if (!fx.text.isNullOrBlank()) {
+                            PenaltyHeadEffect(center, fx.text)
+                        }
                     }
                 }
             }
-        }
 
-        activity?.reverseFx?.let { fx ->
-            androidx.compose.runtime.key(fx.key) {
-                ReverseCenterEffect(fx.clockwise)
+            activity?.reverseFx?.let { fx ->
+                androidx.compose.runtime.key(fx.key) {
+                    ReverseCenterEffect(fx.clockwise)
+                }
             }
-        }
 
-        if (flyingCard != null || flyingBackside) {
-            val cardWidthPx = with(density) { 80.dp.toPx() }
-            val cardHeightPx = with(density) { 110.dp.toPx() }
+            if (flyingCard != null || flyingBackside) {
+                val cardWidthPx = with(density) { 80.dp.toPx() }
+                val cardHeightPx = with(density) { 110.dp.toPx() }
 
-            val flyingModifier = Modifier
-                .offset {
-                    val c = flyingCardOffset.value
-                    IntOffset(
-                        x = (c.x - cardWidthPx / 2f).roundToInt(),
-                        y = (c.y - cardHeightPx / 2f).roundToInt()
+                val flyingModifier = Modifier
+                    .offset {
+                        val c = flyingCardOffset.value
+                        IntOffset(
+                            x = (c.x - cardWidthPx / 2f).roundToInt(),
+                            y = (c.y - cardHeightPx / 2f).roundToInt()
+                        )
+                    }
+                    .graphicsLayer {
+                        val s = flyingCardScaleAnim.value
+                        scaleX = s
+                        scaleY = s
+                    }
+                    .zIndex(20f)
+
+                if (flyingBackside) {
+                    RenderCardBack(
+                        modifier = flyingModifier, lightweight = true
+                    )
+                } else {
+                    RenderCard(
+                        card = flyingCard, modifier = flyingModifier, lightweight = true
                     )
                 }
-                .graphicsLayer {
-                    val s = flyingCardScaleAnim.value
-                    scaleX = s
-                    scaleY = s
-                }
-                .zIndex(20f)
-
-            if (flyingBackside) {
-                RenderCardBack(
-                    modifier = flyingModifier, lightweight = true
-                )
-            } else {
-                RenderCard(
-                    card = flyingCard, modifier = flyingModifier, lightweight = true
-                )
             }
-        }
         }
     }
 }

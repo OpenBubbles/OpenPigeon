@@ -409,7 +409,8 @@ val godotExportZip = layout.buildDirectory.file("intermediates/godot/release/god
 val androidOnlyAssetDirs = listOf(
     "knockout",
     "golf",
-    "shuffle"
+    "shuffle",
+    "crazy8"
 )
 
 fun releaseDateCode(): Int {
