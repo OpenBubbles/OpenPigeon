@@ -27,6 +27,9 @@ class_name TanksGame
 @onready var bottom_bar_margin: MarginContainer = %BottomBarMargin
 
 const MUSIC_STREAM := preload("res://global/audio/tanks.ogg")
+const TANK_FIRE_SFX := preload("res://global/audio/tank_fire.wav")
+const TANK_HIT_SFX := preload("res://global/audio/tank_hit.wav")
+const TANK_MISS_SFX := preload("res://global/audio/tank_miss.wav")
 
 var core: TanksCore
 var sent_tween: Tween
@@ -1201,6 +1204,7 @@ func _segment_circle_intersects_rect(a: Vector2, b: Vector2, r: float, rect: Rec
 	
 func _play_impact_feedback(impact_pos: Vector2, target_hit: String) -> void:
 	var is_tank_hit := target_hit.begins_with("tank")
+	GameUtils.play_sfx(self, TANK_HIT_SFX if is_tank_hit else TANK_MISS_SFX)
 	_haptic_explosion(1.0 if is_tank_hit else 0.65, 55 if is_tank_hit else 35)
 	_start_camera_shake(5.0 if is_tank_hit else 3.0)
 	_spawn_impact_fx(impact_pos, target_hit)
@@ -1652,6 +1656,7 @@ func _execute_shot(player_idx: int, rot_rad: float, power_01: float, wind_val: f
 		
 	var muzzle_pos := _get_shot_spawn_screen_position(tank, launch_angle)
 	_spawn_muzzle_flash(muzzle_pos, launch_angle)
+	GameUtils.play_sfx(self, TANK_FIRE_SFX)
 
 	var bullet := TankBullet.new()
 	bullet.game = self
