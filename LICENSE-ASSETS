@@ -42,6 +42,8 @@ own terms as recorded in THIRD-PARTY-NOTICES.md:
     app/src/main/assets/crazy8/crazy_skip.wav
     app/src/main/assets/global/audio/battle_fall.wav
     app/src/main/assets/global/audio/basketball_start.wav
+    app/src/main/assets/global/audio/archery_bow.wav
+    app/src/main/assets/global/audio/archery_hit.wav
 
 This license applies only to releases after the tag v1-final-agpl. Assets as
 they existed in earlier releases were published under AGPL-3.0 and remain

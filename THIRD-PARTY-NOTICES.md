@@ -94,6 +94,7 @@ licenses. They are excluded from LICENSE-ASSETS.
 | Deny Effect (`crazy_skip.wav`) | Firevirus999 | https://freesound.org/s/789982/ | CC0 1.0 |
 | Falling Bomb.wav (`battle_fall.wav`) | Daleonfire | https://freesound.org/s/506313/ | CC0 1.0 |
 | Coach whistle (`basketball_start.wav`) | Chaos-Kid | https://freesound.org/s/817398/ | CC0 1.0 |
+| Archery Bow + Arrow (`archery_bow.wav`, `archery_hit.wav`) | Gfx Sounds | https://gfxsounds.com/ | Gfx Sounds Standard License |
 
 Attribution is also displayed in-app via
 `app/src/main/assets/attributions.html`.

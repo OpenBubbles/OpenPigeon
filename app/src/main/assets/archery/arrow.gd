@@ -8,6 +8,10 @@ const MISS_Z_OFFSET: float = -10.0
 const LOG_TAG := "Arrow"
 const DEBUG_ARROW := false
 
+const ARCHERY_AIR_SFX := preload("res://global/audio/archery_air.wav")
+
+var flight_sfx_player: AudioStreamPlayer = null
+
 func dbg(parts: Variant) -> void:
 	if DEBUG_ARROW:
 		OpLog.d(LOG_TAG, parts)
@@ -24,6 +28,7 @@ func spawn() -> Arrow:
 
 func shoot(pos: Vector3, callback: Callable) -> void:
 	OpLog.i(LOG_TAG, ["shoot targetPos=", pos, " startPos=", global_position])
+	start_flight_sfx()
 
 	var missed_target := false
 	
@@ -71,3 +76,20 @@ func shoot(pos: Vector3, callback: Callable) -> void:
 		wiggle.tween_property(visual_root, "rotation:y", base_rot.y - 0.015, 0.06)
 		wiggle.tween_property(visual_root, "rotation:y", base_rot.y, 0.08)
 	)
+
+func start_flight_sfx() -> void:
+	stop_flight_sfx()
+
+	flight_sfx_player = AudioStreamPlayer.new()
+	flight_sfx_player.name = "ArcheryAirSfx"
+	flight_sfx_player.stream = ARCHERY_AIR_SFX
+	flight_sfx_player.volume_db = 0.0
+	add_child(flight_sfx_player)
+	flight_sfx_player.play()
+
+func stop_flight_sfx() -> void:
+	if is_instance_valid(flight_sfx_player):
+		flight_sfx_player.stop()
+		flight_sfx_player.queue_free()
+
+	flight_sfx_player = null

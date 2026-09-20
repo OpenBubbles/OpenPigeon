@@ -2,6 +2,8 @@ extends BaseGame3D
 class_name ArcheryGame
 
 const MUSIC_STREAM := preload("res://global/audio/archery.ogg")
+const ARCHERY_BOW_SFX := preload("res://global/audio/archery_bow.wav")
+const ARCHERY_HIT_SFX := preload("res://global/audio/archery_hit.wav")
 
 @onready var opp_avatar_display: TextureButton = %OppAvatarDisplay
 @onready var player_avatar_display: TextureButton = %PlayerAvatarDisplay
@@ -499,7 +501,13 @@ func _restore_archery_recovery() -> bool:
 	recovered_arrow.shoot(last_pos, func() -> void:
 		var pts: int = target.calc_score(recovered_arrow)
 		var hit_pos: Vector3 = recovered_arrow.global_transform.origin
+
+		if pts > 0:
+			recovered_arrow.stop_flight_sfx()
+			GameUtils.play_sfx(self, ARCHERY_HIT_SFX)
+
 		_spawn_score_popup(hit_pos, pts, _get_score_color(pts))
+
 		if pts > 0:
 			add_score(pts)
 		num_shots += 1
@@ -1127,6 +1135,11 @@ func play_replay() -> void:
 
 			this_arrow.shoot(replay_pos, func() -> void:
 				var arrow_score: int = target.calc_score(this_arrow)
+
+				if arrow_score > 0:
+					this_arrow.stop_flight_sfx()
+					GameUtils.play_sfx(self, ARCHERY_HIT_SFX)
+
 				OpLog.i(LOG_TAG, ["play_replay_score score=", arrow_score, " oppBefore=", opp_score])
 
 				var hit_pos: Vector3 = this_arrow.global_transform.origin
@@ -1455,6 +1468,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if event.pressed:
 				reset_aim_tween()
 				bow_fully_drawn = false
+				GameUtils.play_sfx(self, ARCHERY_BOW_SFX)
 
 				if not is_instance_valid(aim_cursor):
 					return
@@ -1680,6 +1694,10 @@ func shoot_dart() -> void:
 	shot_arrow.shoot(shot_pos, func() -> void:
 		var pts: int = target.calc_score(shot_arrow)
 		var hit_pos: Vector3 = shot_arrow.global_transform.origin
+
+		if pts > 0:
+			shot_arrow.stop_flight_sfx()
+			GameUtils.play_sfx(self, ARCHERY_HIT_SFX)
 		
 		OpLog.i(LOG_TAG, [
 			"shot_score points=", pts,
