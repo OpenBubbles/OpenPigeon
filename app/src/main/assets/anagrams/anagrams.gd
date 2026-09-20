@@ -72,6 +72,9 @@ var _suppress_word_score_sfx := false
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
+
+func _uses_confirmed_send_sfx() -> bool:
+	return true
 	
 const LOG_TAG := "Anagrams"
 var DEBUG_ANAGRAMS := false

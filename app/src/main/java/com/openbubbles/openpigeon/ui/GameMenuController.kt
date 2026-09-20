@@ -65,6 +65,12 @@ class GameMenuController(
         rootFrame,
     )
 
+    companion object {
+        private const val GAME_SENT_SFX_PATH = "global/audio/game_sent.wav"
+        private const val GAME_SENT_PENDING_SFX_PATH = "global/audio/game_sent_1.wav"
+        private const val GAME_SENT_CONFIRMED_SFX_PATH = "global/audio/game_sent_2.wav"
+    }
+
     private var currentRulesTitle = rulesTitle
 
     private var currentRulesSections = rulesSections
@@ -125,6 +131,12 @@ class GameMenuController(
     init {
         AvatarData.init(
             activity.applicationContext,
+        )
+
+        preloadSounds(
+            GAME_SENT_SFX_PATH,
+            GAME_SENT_PENDING_SFX_PATH,
+            GAME_SENT_CONFIRMED_SFX_PATH,
         )
 
         sheet.onClosed = onSettingsClosed
@@ -226,6 +238,10 @@ class GameMenuController(
     fun playSound(assetPath: String, volume: Float = 0.7f, rate: Float = 1.0f) {
         sfxPlayer.play(assetPath, volume, rate)
     }
+
+    fun playGameSentFull() = playSound(GAME_SENT_SFX_PATH)
+    fun playGameSentPending() = playSound(GAME_SENT_PENDING_SFX_PATH)
+    fun playGameSentConfirmed() = playSound(GAME_SENT_CONFIRMED_SFX_PATH)
 
     fun stopSounds() {
         sfxPlayer.stopAll()

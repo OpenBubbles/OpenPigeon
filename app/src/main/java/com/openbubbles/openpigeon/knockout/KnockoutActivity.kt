@@ -2526,6 +2526,9 @@ class KnockoutActivity : AppCompatActivity() {
             label.setTextColor(0xFFFFFFFF.toInt())
             label.visibility = View.VISIBLE
             label.bringToFront()
+            if (::gameMenu.isInitialized) {
+                gameMenu.playGameSentPending()
+            }
         }
     }
 
@@ -2560,6 +2563,9 @@ class KnockoutActivity : AppCompatActivity() {
             label.setTextColor(0xFFFFFFFF.toInt())
             label.visibility = View.VISIBLE
             label.bringToFront()
+            if (::gameMenu.isInitialized) {
+                gameMenu.playGameSentConfirmed()
+            }
 
             stateLabelHandler.postDelayed({
                 if (!sentWaitingSequenceActive || closing) return@postDelayed

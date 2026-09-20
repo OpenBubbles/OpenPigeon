@@ -498,6 +498,9 @@ func _schedule_responsive_layout() -> void:
 		"_apply_responsive_layout",
 	)
 
+func _uses_confirmed_send_sfx() -> bool:
+	return true
+
 func _apply_round_card_content_scale(
 	content_scale: float,
 	card_width: float,
@@ -4131,22 +4134,7 @@ func sendGameData(
 		],
 	)
 
-	appPlugin = Engine.get_singleton(
-		"AppPlugin",
-	)
-
-	if appPlugin:
-		appPlugin.updateGameData(
-			serialized_game_data,
-		)
-	else:
-		OpLog.w(
-			LOG_TAG,
-			[
-				"AppPlugin not connected; payload not sent raw=",
-				serialized_game_data,
-			],
-		)
+	send_game_data(serialized_game_data)
 
 func start_button_pressed() -> void:
 	if spectator_mode:

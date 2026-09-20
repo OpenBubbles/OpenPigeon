@@ -699,6 +699,9 @@ class PoolActivity : AppCompatActivity() {
             label.setTextColor(0xFFFFFFFF.toInt())
             label.visibility = View.VISIBLE
             label.bringToFront()
+            if (::gameMenu.isInitialized) {
+                gameMenu.playGameSentPending()
+            }
         }
     }
 
@@ -796,6 +799,10 @@ class PoolActivity : AppCompatActivity() {
             label.setTextColor(0xFFFFFFFF.toInt())
             label.visibility = View.VISIBLE
             label.bringToFront()
+
+            if (::gameMenu.isInitialized) {
+                gameMenu.playGameSentConfirmed()
+            }
 
             stateLabelHandler.postDelayed({
                 if (!sentWaitingSequenceActive || poolActivityClosing) return@postDelayed

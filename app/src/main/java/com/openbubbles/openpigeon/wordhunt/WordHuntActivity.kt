@@ -219,6 +219,10 @@ class WordHuntActivity : AppCompatActivity() {
                     pendingSendState.value =
                         false
 
+                    if (::gameMenu.isInitialized) {
+                        gameMenu.playGameSentFull()
+                    }
+
                     val refreshed =
                         ipc.getCurrentMessage(
                             sessionId,
@@ -1225,6 +1229,10 @@ class WordHuntActivity : AppCompatActivity() {
 
                     pendingSendState.value =
                         false
+
+                    if (::gameMenu.isInitialized) {
+                        gameMenu.playGameSentFull()
+                    }
 
                     val refreshedMessage =
                         runCatching {

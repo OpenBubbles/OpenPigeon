@@ -3138,6 +3138,10 @@ class ShuffleActivity : AppCompatActivity() {
                 View.VISIBLE
 
             stateLabel.bringToFront()
+
+            if (::gameMenu.isInitialized) {
+                gameMenu.playGameSentPending()
+            }
         }
     }
 
@@ -3234,6 +3238,10 @@ class ShuffleActivity : AppCompatActivity() {
                 View.VISIBLE
 
             stateLabel.bringToFront()
+
+            if (::gameMenu.isInitialized) {
+                gameMenu.playGameSentConfirmed()
+            }
 
             stateLabelHandler.postDelayed(
                 {

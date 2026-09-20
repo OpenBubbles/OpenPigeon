@@ -3511,6 +3511,9 @@ class GolfActivity : AppCompatActivity() {
             waitingLabel.setTextColor(Color.WHITE)
             waitingLabel.visibility = View.VISIBLE
             waitingLabel.bringToFront()
+            if (::gameMenu.isInitialized) {
+                gameMenu.playGameSentPending()
+            }
         }
     }
 
@@ -3534,6 +3537,9 @@ class GolfActivity : AppCompatActivity() {
             waitingLabel.setTextColor(Color.WHITE)
             waitingLabel.visibility = View.VISIBLE
             waitingLabel.bringToFront()
+            if (::gameMenu.isInitialized) {
+                gameMenu.playGameSentConfirmed()
+            }
 
             stateLabelHandler.postDelayed({
                 if (!sentWaitingSequenceActive) return@postDelayed

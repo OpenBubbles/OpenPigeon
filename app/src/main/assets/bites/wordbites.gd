@@ -93,6 +93,9 @@ var _active_score_scroll_id := 0
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
+
+func _uses_confirmed_send_sfx() -> bool:
+	return true
 	
 const LOG_TAG := "WordBites"
 var DEBUG_WORDBITES := false

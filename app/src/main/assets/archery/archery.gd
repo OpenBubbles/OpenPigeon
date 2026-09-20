@@ -131,6 +131,9 @@ var opp_set_wins: int = 0     # total sets won (opponent)
 
 func _get_music_stream() -> AudioStream:
 	return MUSIC_STREAM
+
+func _uses_confirmed_send_sfx() -> bool:
+	return true
 	
 func _get_dev_data() -> String:
 	return '{ "isYourTurn": true, "player": "1", "replay": "state:1,18,0,0,0|move:1,0.059418,1.351113,-14.397592|move:1,-0.077269,1.397037,-14.397591|move:1,-0.020799,1.492665,-14.397592|state:1,29,18,0,1", "sender": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "avatar1": "body,4|eyes,2|mouth,1|acc,0|wins,0|bg_color,0.682208,0.913005,0.498769|body_color,0.764706,0.254902,0.152941|glasses,0|stache,0|backdrop,0|hair,4|clothes,2|hair_color,0.345098,0.180392,0.125490|clothes_color,0.918355,0.098772,0.427231", "avatar2": "body,0|eyes,0|mouth,0|acc,0|wins,0|bg_color,0.900000,0.900000,0.900000|body_color,0.000000,1.000000,0.000000|glasses,0|stache,0|backdrop,0|hair,3|clothes,2|hair_color,0.431373,0.254902,0.121569|clothes_color,0.438450,0.340784,0.366469", "player1": "7ED3F73A-C6BE-45C5-A64B-EC28215C3180XvmbKU", "player2": "", "id": "6gt6WvSteSKHYrKr", "ios": "16.3.1", "num": "3", "game": "archery", "seed": "247149971", "tver": "5", "build": "d4yGowcTuIW9i", "version": "0" }'

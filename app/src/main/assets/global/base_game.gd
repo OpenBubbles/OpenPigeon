@@ -14,6 +14,10 @@ const BASE_WAIT_TEXT: String = "WAITING FOR OPPONENT"
 @onready var waiting_blur: ColorRect = get_node_or_null("%WaitBlur")
 @onready var dot_timer: Timer = get_node_or_null("%DotTimer")
 
+const GAME_SENT_SFX := preload("res://global/audio/game_sent.wav")
+const GAME_SENT_1_SFX := preload("res://global/audio/game_sent_1.wav")
+const GAME_SENT_2_SFX := preload("res://global/audio/game_sent_2.wav")
+
 var appPlugin = null
 var mediaPlugin = null
 var my_uuid: String = ""
@@ -29,6 +33,7 @@ var _startup_reveal_queued: bool = false
 var _startup_revealed: bool = false
 var _turn_retry_ui: Dictionary = {}
 var _send_check_serial: int = 0
+var _send_sfx_pending: bool = false
 
 func _create_startup_cover() -> void:
 	_startup_cover = CanvasLayer.new()
@@ -306,6 +311,8 @@ func send_game_data(json: String) -> void:
 			false
 		)
 		return
+		
+	_begin_send_sfx()
 
 	_send_check_serial += 1
 
@@ -383,6 +390,8 @@ func _retry_saved_send() -> void:
 		)
 		return
 
+	_begin_send_sfx()
+
 	_send_check_serial += 1
 
 	_check_pending_send_after_delay(
@@ -393,14 +402,28 @@ func _retry_saved_send() -> void:
 func _on_send_game_complete() -> void:
 	_send_check_serial += 1
 	_hide_send_retry()
+	_finish_send_sfx()
 
 
 func _on_send_game_failed() -> void:
 	_send_check_serial += 1
-	_show_send_retry(
-		false
-	)
+	_send_sfx_pending = false
+	_show_send_retry(false)
 
+func _begin_send_sfx() -> void:
+	_send_sfx_pending = true
+	play_sfx(GAME_SENT_1_SFX if _uses_confirmed_send_sfx() else GAME_SENT_SFX)
+
+
+func _finish_send_sfx() -> void:
+	if _send_sfx_pending and _uses_confirmed_send_sfx():
+		play_sfx(GAME_SENT_2_SFX)
+
+	_send_sfx_pending = false
+
+
+func _uses_confirmed_send_sfx() -> bool:
+	return false
 
 func _show_send_retry(
 	sending: bool
