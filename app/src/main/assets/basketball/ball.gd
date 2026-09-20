@@ -10,6 +10,10 @@ const REPLAY_GRAVITY_PER_STEP := 0.163268
 const REPLAY_PRE_SIM_STEPS := 52
 const LIVE_BALL_LIFETIME_SECONDS := 2.5
 const REPLAY_BALL_LIFETIME_SECONDS := 5.52
+const BASKETBALL_BOUNCE_SFX := preload("res://global/audio/basketball_bounce.wav")
+const BASKETBALL_RIM_SFX := preload("res://global/audio/basketball_rim.wav")
+const BOUNCE_SOUND_COOLDOWN_MS := 50
+const RIM_SOUND_COOLDOWN_MS := 80
 
 var didGoInReplay = null
 var player = null
@@ -21,6 +25,8 @@ var BasketballGame: basketball
 var replay_manual_simulating := false
 var replay_manual_steps := 0
 var replay_velocity := Vector3.ZERO
+var last_bounce_sound_msec := -1000
+var last_rim_sound_msec := -1000
 
 func dbg(parts: Variant) -> void:
 	if DEBUG_BASKETBALL_BALL:
@@ -62,6 +68,14 @@ func _on_body_entered(
 		body.name,
 	)
 
+	var body_parent := body.get_parent()
+	if is_instance_valid(body_parent) and String(body_parent.name) == "floor":
+		var now_msec := Time.get_ticks_msec()
+		if now_msec - last_bounce_sound_msec >= BOUNCE_SOUND_COOLDOWN_MS:
+			last_bounce_sound_msec = now_msec
+			GameUtils.play_sfx(self, BASKETBALL_BOUNCE_SFX)
+		return
+
 	if not body_name.begins_with(
 		"HoopCollisionSphere",
 	):
@@ -82,6 +96,10 @@ func _on_body_entered(
 		return
 
 	didHitHoop = true
+	var now_msec := Time.get_ticks_msec()
+	if now_msec - last_rim_sound_msec >= RIM_SOUND_COOLDOWN_MS:
+		last_rim_sound_msec = now_msec
+		GameUtils.play_sfx(self, BASKETBALL_RIM_SFX)
 
 	OpLog.i(
 		LOG_TAG,

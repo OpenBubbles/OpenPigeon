@@ -21,10 +21,15 @@ own terms as recorded in THIRD-PARTY-NOTICES.md:
     app/src/main/res/font/*
     app/src/main/res/raw/ofl_*.txt
     app/src/main/assets/basketball/OFL-DSEG.txt
+    app/src/main/assets/basketball/dseg7_classic_bold.ttf
     app/src/main/assets/archery/sky1.png
     app/src/main/assets/basketball/balldimpled.png
     app/src/main/assets/archery/arrow/**
     app/src/main/assets/addons/**
+    app/src/main/assets/golf/golf_swing.wav
+    app/src/main/assets/golf/golf_hole.wav
+    app/src/main/assets/golf/golf_bounce.wav
+    app/src/main/assets/pool/pool_pocket.wav
     app/src/main/assets/global/audio/piece_place.wav
     app/src/main/assets/global/audio/pong_cup.wav
     app/src/main/assets/global/audio/pong_bounce.wav
@@ -33,8 +38,10 @@ own terms as recorded in THIRD-PARTY-NOTICES.md:
     app/src/main/assets/global/audio/connect_drop.wav
     app/src/main/assets/global/audio/puck_hit.wav
     app/src/main/assets/global/audio/knockout_water.wav
-    app/src/main/assets/global/audio/crazy_draw.wav
-    app/src/main/assets/global/audio/crazy_skip.wav
+    app/src/main/assets/crazy8/crazy_draw.wav
+    app/src/main/assets/crazy8/crazy_skip.wav
+    app/src/main/assets/global/audio/battle_fall.wav
+    app/src/main/assets/global/audio/basketball_start.wav
 
 This license applies only to releases after the tag v1-final-agpl. Assets as
 they existed in earlier releases were published under AGPL-3.0 and remain

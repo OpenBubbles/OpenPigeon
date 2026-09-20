@@ -4,6 +4,9 @@ class_name basketball
 var elapsedTime: float = 0.0
 
 const MUSIC_STREAM := preload("res://global/audio/basketball.ogg")
+const BASKETBALL_SWISH_SFX := preload("res://global/audio/basketball_swish.wav")
+const BASKETBALL_START_SFX := preload("res://global/audio/basketball_start.wav")
+const BASKETBALL_END_SFX := preload("res://global/audio/basketball_end.wav")
 const IOS_DRAG_RELEASE_DISTANCE := 65.0
 const IOS_DRAG_RELEASE_SPEED := 20.0
 const IOS_NORMAL_AIM_ASSIST := 0.25
@@ -2726,6 +2729,8 @@ func _check_ball_score_crossing(
 	if ball_player == 0:
 		return
 
+	GameUtils.play_sfx(self, BASKETBALL_SWISH_SFX)
+
 	OpLog.i(
 		LOG_TAG,
 		[
@@ -4182,6 +4187,7 @@ func start_button_pressed() -> void:
 		],
 	)
 
+	GameUtils.play_sfx(self, BASKETBALL_START_SFX)
 	startGame()
 
 func startGame() -> void:
@@ -4450,6 +4456,7 @@ func _process(
 	if replayPlaying:
 		return
 
+	GameUtils.play_sfx(self, BASKETBALL_END_SFX)
 	elapsedTime = 0.0
 	gamePlaying = false
 

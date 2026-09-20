@@ -2,6 +2,7 @@ extends BaseGame3D
 class_name DartsGame
 
 const MUSIC_STREAM := preload("res://global/audio/darts.ogg")
+const DART_HIT_SFX := preload("res://global/audio/dart_hit.wav")
 
 @onready var opp_avatar_display: TextureButton = %OppAvatarDisplay
 @onready var player_avatar_display: TextureButton = %PlayerAvatarDisplay
@@ -2474,6 +2475,7 @@ func _process_game_state():
 			])
 
 			player_dart.on_hit_board.connect(func(score):
+				GameUtils.play_sfx(self, DART_HIT_SFX)
 				var hit_pos: Vector3 = player_dart.global_position
 				var hit_score: Array = [int(score[0]), int(score[1]), int(score[2])]
 				var move_arr: Array = [0, player_dart.position.x, player_dart.position.y]
@@ -2988,6 +2990,7 @@ func play_replay(replay_str: String):
 			replay_dart.replay_hit = replay_score
 			replay_dart.throw(dart_pos)
 			await get_tree().create_timer(DART_REPLAY_HIT_WAIT).timeout
+			GameUtils.play_sfx(self, DART_HIT_SFX)
 		else:
 			await get_tree().create_timer(0.25).timeout
 

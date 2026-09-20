@@ -4,6 +4,11 @@ const BOMB_TEXTURE_PATH := preload("res://battleship/bomb.png")
 const PLANE_STYLE_DIR := "res://battleship/planes"
 const PLANE_STYLE_MAX: int = 64
 const MUSIC_STREAM := preload("res://global/audio/battleship.ogg")
+const BATTLE_PLANE_SFX := preload("res://global/audio/battle_propeller.wav")
+const BATTLE_FLYING_SFX := preload("res://global/audio/battle_flying.wav")
+const BATTLE_FALL_SFX := preload("res://global/audio/battle_fall.wav")
+const BATTLE_MISS_SFX := preload("res://global/audio/battle_miss.wav")
+const BATTLE_HIT_SFX := preload("res://global/audio/battle_hit.wav")
 signal replay_finished
 
 var _replay_pending: int = 0
@@ -2237,6 +2242,7 @@ func _on_fire_button_pressed() -> void:
 
 
 	var hit: bool = theirBattleground.fire(grid)
+	GameUtils.play_sfx(self, BATTLE_HIT_SFX if hit else BATTLE_MISS_SFX)
 	OpLog.i(LOG_TAG, ["fire_result grid=", grid, " wire=", move_str, " hit=", hit, " replayMoves=", replay.size()])
 
 	if not hit:
@@ -2408,6 +2414,7 @@ func _restore_battleship_recovery(require_committed_shot: bool = false, opponent
 
 		await _play_bomb_fall_animation_for_board(theirBattleground, grid, false, 2.0)
 		last_hit = theirBattleground.fire(grid)
+		GameUtils.play_sfx(self, BATTLE_HIT_SFX if last_hit else BATTLE_MISS_SFX)
 
 	recovery_restore_in_progress = false
 
@@ -2516,11 +2523,44 @@ func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2,
 	
 	bomb.z_index = bomb_above_z
 	
+	var sounds_enabled := true
+	if is_instance_valid(mediaPlugin) and mediaPlugin.has_method("isSoundsEnabled"):
+		sounds_enabled = bool(mediaPlugin.call("isSoundsEnabled"))
+
+	var plane_audio: AudioStreamPlayer = null
+	var plane_audio_tween: Tween = null
+	if sounds_enabled:
+		plane_audio = AudioStreamPlayer.new()
+		plane_audio.stream = BATTLE_PLANE_SFX if _plane_style == 1 else BATTLE_FLYING_SFX
+		plane_audio.volume_db = -40.0
+		plane_audio.process_mode = Node.PROCESS_MODE_ALWAYS
+		add_child(plane_audio)
+		_flight_nodes.append(plane_audio)
+		plane_audio.finished.connect(func():
+			if is_instance_valid(plane_audio):
+				plane_audio.play()
+		)
+		plane_audio.play()
+
+		var plane_fade_duration := minf(0.35, plane_duration * 0.25)
+		plane_audio_tween = create_tween()
+		plane_audio_tween.tween_property(plane_audio, "volume_db", -2.0, plane_fade_duration)
+		plane_audio_tween.tween_interval(maxf(0.0, plane_duration - plane_fade_duration * 2.0))
+		plane_audio_tween.tween_property(plane_audio, "volume_db", -40.0, plane_fade_duration)
+
 	var plane_tween := create_tween()
 	plane_tween.tween_property(
 		plane, "position",
 		plane_end, plane_duration
 	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	plane_tween.finished.connect(func():
+		if plane_audio_tween != null and plane_audio_tween.is_running():
+			plane_audio_tween.kill()
+		if is_instance_valid(plane_audio):
+			plane_audio.stop()
+			_flight_nodes.erase(plane_audio)
+			plane_audio.queue_free()
+	)
 	
 	var fraction := (cell_center_local.x - plane_start.x) / (plane_end.x - plane_start.x)
 	fraction = clamp(fraction, 0.0, 1.0)
@@ -2542,6 +2582,21 @@ func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2,
 	bomb.position = bomb_start
 	bomb.scale = Vector2(BOMB_START_SCALE, BOMB_START_SCALE)
 	bomb.visible = true
+
+	var fall_audio: AudioStreamPlayer = null
+	if sounds_enabled:
+		fall_audio = AudioStreamPlayer.new()
+		fall_audio.stream = BATTLE_FALL_SFX
+		fall_audio.volume_db = -2.0
+		fall_audio.process_mode = Node.PROCESS_MODE_ALWAYS
+		add_child(fall_audio)
+		_flight_nodes.append(fall_audio)
+		fall_audio.finished.connect(func():
+			if is_instance_valid(fall_audio):
+				fall_audio.play()
+		)
+		fall_audio.play()
+
 	if is_instance_valid(clouds_rect) and not from_right:
 		var z_swap := create_tween()
 		z_swap.tween_callback(
@@ -2563,6 +2618,11 @@ func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2,
 	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	
 	await bomb_tween.finished
+
+	if is_instance_valid(fall_audio):
+		fall_audio.stop()
+		_flight_nodes.erase(fall_audio)
+		fall_audio.queue_free()
 	
 	_flight_nodes.erase(bomb)
 	_flight_nodes.erase(plane)
@@ -2595,6 +2655,7 @@ func _run_replay_move(
 		var hit: bool = myBattleground.replay_fire(
 			local_pos
 		)
+		GameUtils.play_sfx(self, BATTLE_HIT_SFX if hit else BATTLE_MISS_SFX)
 		if hit:
 			_haptic_explosion(1.0, 45)
 		OpLog.i(LOG_TAG, ["replay_fire pos=", local_pos, " hit=", hit])

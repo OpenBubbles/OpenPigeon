@@ -92,6 +92,8 @@ licenses. They are excluded from LICENSE-ASSETS.
 | 5 meters dive.wav (`knockout_water.wav`) | bruno.auzet | https://freesound.org/s/529794/ | CC0 1.0 |
 | drawcard - Card Deal (`crazy_draw.wav`) | RealSquink | https://freesound.org/s/787405/ | CC0 1.0 |
 | Deny Effect (`crazy_skip.wav`) | Firevirus999 | https://freesound.org/s/789982/ | CC0 1.0 |
+| Falling Bomb.wav (`battle_fall.wav`) | Daleonfire | https://freesound.org/s/506313/ | CC0 1.0 |
+| Coach whistle (`basketball_start.wav`) | Chaos-Kid | https://freesound.org/s/817398/ | CC0 1.0 |
 
 Attribution is also displayed in-app via
 `app/src/main/assets/attributions.html`.
