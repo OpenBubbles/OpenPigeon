@@ -174,6 +174,9 @@ var local_cup_pong_wins: int = 0
 var _drag_world_current: Vector3 = Vector3.ZERO
 var _drag_world_filtered: Vector3 = Vector3.ZERO
 
+const CUPPONG_PORTRAIT_FOV: float = 27.0
+const CUPPONG_REFERENCE_PORTRAIT_ASPECT: float = 9.0 / 16.0
+
 # Camera positions used by normal play and replay playback.
 const CUPPONG_CAM_THROW := Vector3(
 	0.0,
@@ -621,6 +624,20 @@ func _cuppong_ui_scale() -> float:
 	var vp: Vector2 = get_viewport().get_visible_rect().size
 	return CUPPONG_LANDSCAPE_UI_SCALE if vp.x > vp.y else 1.0
 
+func _portrait_fov(viewport_size: Vector2) -> float:
+	if viewport_size.y <= 0.0:
+		return CUPPONG_PORTRAIT_FOV
+
+	var aspect: float = viewport_size.x / viewport_size.y
+
+	if aspect <= CUPPONG_REFERENCE_PORTRAIT_ASPECT:
+		return CUPPONG_PORTRAIT_FOV
+
+	var base_half_tan: float = tan(deg_to_rad(CUPPONG_PORTRAIT_FOV) * 0.5)
+	var adjusted_half_tan: float = base_half_tan * (aspect / CUPPONG_REFERENCE_PORTRAIT_ASPECT)
+
+	return rad_to_deg(2.0 * atan(adjusted_half_tan))
+
 func _cam_pos(base: Vector3) -> Vector3:
 	_cam_station = base
 
@@ -699,7 +716,7 @@ func _apply_responsive_ui() -> void:
 			camera.fov = 40.0
 		else:
 			camera.keep_aspect = Camera3D.KEEP_WIDTH
-			camera.fov = 27.0
+			camera.fov = _portrait_fov(vp)
 
 		camera.position = _cam_pos(
 			_cam_station
