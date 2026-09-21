@@ -297,6 +297,8 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	])
 	
 	if g._player_hit_last:
+		g.play_sfx(g.PAINTBALL_HIT_SFX, linear_to_db(0.2))
+
 		if g._opp_splat != null and is_instance_valid(g._opp_splat):
 			if g._opp_splat_tween and g._opp_splat_tween.is_valid():
 				g._opp_splat_tween.kill()
@@ -357,7 +359,12 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	])
 
 	g.dbg("round_enemy_fire_wait_for_plane")
-	var _enemy_impact: Vector3 = await g.shots.fire_paintball_and_wait(enemy_target_world, true)
+	var _enemy_impact: Vector3 = await g.shots.fire_paintball_and_wait(
+		enemy_target_world,
+		true,
+		Callable(),
+		not g._enemy_hit_last
+	)
 
 	OpLog.i("Paintball", [
 		"enemy_shot_result oppTargetEnc=", g._opp_target_enc,
@@ -368,9 +375,10 @@ func run_player_then_enemy_shot_sequence(player_target_world: Vector3) -> void:
 	])
 
 	if g._enemy_hit_last:
+		g.play_sfx(g.PAINTBALL_HIT_SFX, 0.0)
+
 		if g.ui != null:
 			g.ui.show_player_hit_splat()
-
 
 		g._hp_me = clamp(g._hp_me - 1, 0, 3)
 		OpLog.i("Paintball", ["enemy_hit_applied hpMe=", g._hp_me, " hpOpp=", g._hp_opp])
@@ -461,6 +469,7 @@ func play_round() -> void:
 		OpLog.w("Paintball", ["play_round blocked opponent_not_ready ", g._state_summary()])
 		return
 
+	g.play_sfx(g.PAINTBALL_ZOOM_SFX, 0.0)
 	g.dbg(["play_round replayPlayback=", g._is_replay_playback])
 
 	# --- Cache player plane (authoritative for enemy shot) ---

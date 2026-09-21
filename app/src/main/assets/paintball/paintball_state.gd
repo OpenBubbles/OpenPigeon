@@ -448,11 +448,7 @@ func send_game(clear_targets_for_next_turn: bool = false) -> void:
 		" raw=", out_json
 	])
 
-	var appPlugin := Engine.get_singleton("AppPlugin") if Engine.has_singleton("AppPlugin") else null
-	if appPlugin:
-		appPlugin.updateGameData(out_json)
-	else:
-		OpLog.w(LOG_TAG, ["AppPlugin is null; payload not sent raw=", out_json])
+	g.send_game_data(out_json)
 
 	g.is_my_turn = false
 

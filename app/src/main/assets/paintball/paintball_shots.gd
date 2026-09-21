@@ -95,7 +95,12 @@ func get_muzzle_screen_pos() -> Vector2:
 
 	return g.fp_aim_sprite.to_global(local)
 
-func fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached: Callable = Callable()) -> Vector3:
+func fire_paintball_and_wait(
+	target_world: Vector3,
+	is_enemy: bool,
+	on_reached: Callable = Callable(),
+	play_fly_sfx: bool = false
+) -> Vector3:
 	if g == null:
 		OpLog.e("Paintball", "shot skipped: game owner is null")
 		return Vector3.ZERO
@@ -210,6 +215,14 @@ func fire_paintball_and_wait(target_world: Vector3, is_enemy: bool, on_reached: 
 			ball.visible = false
 			ball.queue_free()
 	)
+
+	g.play_sfx(
+		g.PAINTBALL_SHOOT_SFX,
+		linear_to_db(0.2) if is_enemy else 0.0
+	)
+
+	if play_fly_sfx:
+		g.play_sfx(g.PAINTBALL_FLY_SFX, 0.0)
 
 	ball.launch(muzzle_world, target_fixed)
 
