@@ -1238,11 +1238,11 @@ func remove_cup(cup_num: int) -> void:
 
 	cups_in_play.erase(cup_index)
 
-	OpLog.i(LOG_TAG, [
-		"remove_cup name=", name,
-		" cup=", cup_num,
-		" remaining=", cups_in_play
-	])
+	#OpLog.i(LOG_TAG, [
+		#"remove_cup name=", name,
+		#" cup=", cup_num,
+		#" remaining=", cups_in_play
+	#])
 
 	if random_positions.size() == 0:
 		arrangeCups()

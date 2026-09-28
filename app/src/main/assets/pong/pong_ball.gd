@@ -175,14 +175,14 @@ func _commit_made_cup(cup: StaticBody3D) -> void:
 	made_in = cup.duplicate()
 	GameUtils.play_sfx(game, PongGame.PONG_CUP_SFX)
 
-	OpLog.i(LOG_TAG, [
-		"cup_made cup=", cup_name,
-		" cupNum=", cup_num,
-		" stillTime=", still_time,
-		" throwTime=", throw_time,
-		" pos=", global_position,
-		" vel=", linear_velocity
-	])
+	#OpLog.i(LOG_TAG, [
+		#"cup_made cup=", cup_name,
+		#" cupNum=", cup_num,
+		#" stillTime=", still_time,
+		#" throwTime=", throw_time,
+		#" pos=", global_position,
+		#" vel=", linear_velocity
+	#])
 
 	await game.my_cups.remove_cup(cup_num)
 	remove()
@@ -278,13 +278,13 @@ func remove():
 		if made_in == null:
 			var late_cup: StaticBody3D = _nearest_cup(CUP_REST_OFFSET_Y, CUP_MADE_RADIUS)
 
-			OpLog.i(LOG_TAG, [
-				"ball_remove_check still=", still_time,
-				" throwTime=", throw_time,
-				" speed=", linear_velocity.length(),
-				" lateCup=", late_cup.name if late_cup != null else "<none>",
-				" pos=", global_position
-			])
+			#OpLog.i(LOG_TAG, [
+				#"ball_remove_check still=", still_time,
+				#" throwTime=", throw_time,
+				#" speed=", linear_velocity.length(),
+				#" lateCup=", late_cup.name if late_cup != null else "<none>",
+				#" pos=", global_position
+			#])
 
 			if late_cup != null:
 				made_in = late_cup.duplicate()
@@ -293,10 +293,10 @@ func remove():
 
 		if made_in != null:
 			var cup_num: int = int(String(made_in.name).replace("cup", ""))
-			OpLog.i(LOG_TAG, ["ball_remove made cup=", cup_num, " replayPoints=", replay_poses.size()])
+			#OpLog.i(LOG_TAG, ["ball_remove made cup=", cup_num, " replayPoints=", replay_poses.size()])
 			game.throws.append({"poses": replay_poses, "cup": cup_num - 1})
 		else:
-			OpLog.i(LOG_TAG, ["ball_remove miss replayPoints=", replay_poses.size()])
+			#OpLog.i(LOG_TAG, ["ball_remove miss replayPoints=", replay_poses.size()])
 			game.throws.append({"poses": replay_poses, "cup": -1})
 
 		game.throw_finished()

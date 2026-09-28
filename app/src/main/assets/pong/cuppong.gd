@@ -1193,9 +1193,10 @@ func _on_game_ready() -> void:
 		camera.far = 20.0
 
 	var vp := get_viewport()
-	vp.msaa_3d = Viewport.MSAA_4X
+	vp.msaa_3d = Viewport.MSAA_2X
 	vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
 	vp.use_taa = false
+	vp.scaling_3d_scale = 0.8
 	vp.use_debanding = true
 	vp.positional_shadow_atlas_size = 2048
 	vp.positional_shadow_atlas_quad_0 = Viewport.SHADOW_ATLAS_QUADRANT_SUBDIV_4
@@ -1211,7 +1212,7 @@ func _on_game_ready() -> void:
 		sun.directional_shadow_blend_splits = false
 		sun.shadow_bias = 0.1
 		sun.shadow_normal_bias = 2.0
-		sun.shadow_blur = 2.0
+		sun.shadow_blur = 1.0
 		sun.shadow_opacity = 0.85
 
 	if is_instance_valid(env) and env.environment != null:
@@ -1472,7 +1473,7 @@ func _apply_debug_hides() -> void:
 	])
 
 func _dump_cup_state(label: String, cups: Cups) -> void:
-	if not is_instance_valid(cups):
+	if not DEBUG_PONG or not is_instance_valid(cups):
 		return
 
 	var seen: Dictionary = {}
@@ -1564,17 +1565,16 @@ func _process(delta: float) -> void:
 		ball_count
 	]
 
-	if max_ms > 25.0:
-		OpLog.w(LOG_TAG, [
-			"long_frame maxMs=", max_ms,
-			" fps=", fps,
-			" drawCalls=", draw_calls,
-			" objects=", render_objects,
-			" primitives=", render_primitives,
-			" balls=", ball_count,
-			" turn=", is_my_turn,
-			" playedReplay=", played_replay
-		])
+	OpLog.i(LOG_TAG, [
+		"perf fps=", fps,
+		" maxMs=", snappedf(max_ms, 0.1),
+		" procMs=", snappedf(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0, 0.1),
+		" physMs=", snappedf(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, 0.1),
+		" draws=", draw_calls,
+		" prims=", render_primitives,
+		" balls=", ball_count,
+		" dragging=", dragging
+	])
 
 	_frame_accum = 0.0
 	_frame_count = 0
@@ -1978,13 +1978,13 @@ func _await_throw_settle(thrown_ball: PongBall) -> void:
 		still_time = still_time + 0.1 if speed < 0.08 else 0.0
 
 		if still_time >= 0.4 or out_of_play or elapsed >= 5.0:
-			OpLog.i(LOG_TAG, [
-				"throw_resolved elapsed=", elapsed,
-				" speed=", speed,
-				" stillTime=", still_time,
-				" outOfPlay=", out_of_play,
-				" pos=", pos
-			])
+			#OpLog.i(LOG_TAG, [
+				#"throw_resolved elapsed=", elapsed,
+				#" speed=", speed,
+				#" stillTime=", still_time,
+				#" outOfPlay=", out_of_play,
+				#" pos=", pos
+			#])
 
 			if is_instance_valid(thrown_ball):
 				thrown_ball.remove()
@@ -2160,13 +2160,13 @@ func _save_cuppong_progress(phase: String, impulse: Vector3 = Vector3.ZERO, star
 
 	save_turn_progress(progress)
 
-	OpLog.i(LOG_TAG, [
-		"recovery_saved phase=", phase,
-		" throws=", throws.size(),
-		" numBalls=", num_balls,
-		" base=", _turn_base_boards,
-		" now=", progress["now"]
-	])
+	#OpLog.i(LOG_TAG, [
+		#"recovery_saved phase=", phase,
+		#" throws=", throws.size(),
+		#" numBalls=", num_balls,
+		#" base=", _turn_base_boards,
+		#" now=", progress["now"]
+	#])
 
 func _restore_cuppong_recovery() -> bool:
 	if recovery_loaded or spectator_mode or not is_my_turn or game_over:
@@ -2934,14 +2934,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		_drag_world_filtered = world_position
 		dragging = true
 
-		OpLog.i(LOG_TAG, [
-			"throw_drag_start screen=",
-			drag_start_pos,
-			" world=",
-			world_position,
-			" ball=",
-			ball_popo
-		])
+		#OpLog.i(LOG_TAG, [
+			#"throw_drag_start screen=",
+			#drag_start_pos,
+			#" world=",
+			#world_position,
+			#" ball=",
+			#ball_popo
+		#])
 
 		return
 
@@ -3197,45 +3197,45 @@ func _throw_release(
 	ball_ready = false
 	current_ball = null
 
-	OpLog.i(LOG_TAG, [
-		"throw_release screenStart=",
-			drag_start_pos,
-		" screenEnd=",
-			release_screen_pos,
-		" flickWorld=",
-			flick_world,
-		" dx=",
-			dx_world,
-		" dz=",
-			dz_world,
-		" dragLen=",
-			drag_len,
-		" inputDistance=",
-			input_distance,
-		" force=",
-			forward_force,
-		" rawZ=",
-			raw_target_z,
-		" assistedZ=",
-			assisted_target_z,
-		" rawTarget=",
-			raw_world_target,
-		" assistedTarget=",
-			final_world_target,
-		" targetCup=",
-			target_name,
-		" targetDistance=",
-			nearest_distance,
-		" aimAssist=",
-			aim_assist,
-		" branch=",
-			arc_branch,
-		" impulse=",
-			Vector3(
-				fx_impulse,
-				fy_impulse,
-				fz_impulse
-			)
-	])
+	#OpLog.i(LOG_TAG, [
+		#"throw_release screenStart=",
+			#drag_start_pos,
+		#" screenEnd=",
+			#release_screen_pos,
+		#" flickWorld=",
+			#flick_world,
+		#" dx=",
+			#dx_world,
+		#" dz=",
+			#dz_world,
+		#" dragLen=",
+			#drag_len,
+		#" inputDistance=",
+			#input_distance,
+		#" force=",
+			#forward_force,
+		#" rawZ=",
+			#raw_target_z,
+		#" assistedZ=",
+			#assisted_target_z,
+		#" rawTarget=",
+			#raw_world_target,
+		#" assistedTarget=",
+			#final_world_target,
+		#" targetCup=",
+			#target_name,
+		#" targetDistance=",
+			#nearest_distance,
+		#" aimAssist=",
+			#aim_assist,
+		#" branch=",
+			#arc_branch,
+		#" impulse=",
+			#Vector3(
+				#fx_impulse,
+				#fy_impulse,
+				#fz_impulse
+			#)
+	#])
 
 	await _await_throw_settle(thrown_ball)

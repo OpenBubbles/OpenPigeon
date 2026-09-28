@@ -101,21 +101,21 @@ func _on_body_entered(
 		last_rim_sound_msec = now_msec
 		GameUtils.play_sfx(self, BASKETBALL_RIM_SFX)
 
-	OpLog.i(
-		LOG_TAG,
-		[
-			"rim_contact body=",
-			body_name,
-			" sphere=",
-			sphere_number,
-			" pos=",
-			global_position,
-			" velocity=",
-			linear_velocity,
-			" didGoIn=",
-			didGoIn,
-		],
-	)
+	#OpLog.i(
+		#LOG_TAG,
+		#[
+			#"rim_contact body=",
+			#body_name,
+			#" sphere=",
+			#sphere_number,
+			#" pos=",
+			#global_position,
+			#" velocity=",
+			#linear_velocity,
+			#" didGoIn=",
+			#didGoIn,
+		#],
+	#)
 
 func set_player(
 	player_num: int,
@@ -141,21 +141,21 @@ func shoot(
 		position.x
 	)
 
-	OpLog.i(
-		LOG_TAG,
-		[
-			"shoot player=",
-			player,
-			" targetX=",
-			target_x,
-			" savedReplayX=",
-			shotX,
-			" velocityX=",
-			x_velocity,
-			" pos=",
-			position,
-		],
-	)
+	#OpLog.i(
+		#LOG_TAG,
+		#[
+			#"shoot player=",
+			#player,
+			#" targetX=",
+			#target_x,
+			#" savedReplayX=",
+			#shotX,
+			#" velocityX=",
+			#x_velocity,
+			#" pos=",
+			#position,
+		#],
+	#)
 
 	_start_dynamic_shot(
 		Vector3(
@@ -179,7 +179,7 @@ func shoot_recovery(target_x: float, saved_shot_at: float, saved_replay_x: float
 	var x_velocity := target_x - position.x
 	_start_dynamic_shot(Vector3(x_velocity, SHOT_Y_VELOCITY, SHOT_Z_VELOCITY), true)
 	_start_despawn_timer(LIVE_BALL_LIFETIME_SECONDS)
-	OpLog.i(LOG_TAG, ["recovery_shot player=", player, " targetX=", target_x, " shotAt=", shotAt, " savedReplayX=", shotX, " velocityX=", x_velocity])
+	dbg(["recovery_shot player=", player, " targetX=", target_x, " shotAt=", shotAt, " savedReplayX=", shotX, " velocityX=", x_velocity])
 
 func begin_replay_shot(
 	x_velocity: float,
@@ -226,23 +226,23 @@ func begin_replay_shot(
 		REPLAY_BALL_LIFETIME_SECONDS,
 	)
 
-	OpLog.i(
-		LOG_TAG,
-		[
-			"replay_shot player=",
-			player,
-			" expected=",
-			expected_score,
-			" savedReplayX=",
-			saved_replay_x,
-			" velocity=",
-			launch_velocity,
-			" manual=",
-			manual_pre_simulation,
-			" pos=",
-			position,
-		],
-	)
+	#OpLog.i(
+		#LOG_TAG,
+		#[
+			#"replay_shot player=",
+			#player,
+			#" expected=",
+			#expected_score,
+			#" savedReplayX=",
+			#saved_replay_x,
+			#" velocity=",
+			#launch_velocity,
+			#" manual=",
+			#manual_pre_simulation,
+			#" pos=",
+			#position,
+		#],
+	#)
 
 func step_replay_pre_simulation() -> void:
 	if not replay_manual_simulating:
@@ -282,19 +282,19 @@ func _finish_replay_pre_simulation() -> void:
 	linear_velocity = replay_velocity
 	angular_velocity = Vector3.ZERO
 
-	OpLog.i(
-		LOG_TAG,
-		[
-			"replay_sim_finished player=",
-			player,
-			" steps=",
-			replay_manual_steps,
-			" pos=",
-			position,
-			" velocity=",
-			linear_velocity,
-		],
-	)
+	#OpLog.i(
+		#LOG_TAG,
+		#[
+			#"replay_sim_finished player=",
+			#player,
+			#" steps=",
+			#replay_manual_steps,
+			#" pos=",
+			#position,
+			#" velocity=",
+			#linear_velocity,
+		#],
+	#)
 
 func _start_dynamic_shot(
 	launch_velocity: Vector3,
@@ -385,19 +385,19 @@ func despawn() -> void:
 			)
 		)
 
-		OpLog.i(
-			LOG_TAG,
-			[
-				"shot_finished player=",
-				player,
-				" replayEntry=",
-				replay_entry,
-				" didHitHoop=",
-				didHitHoop,
-				" didGoIn=",
-				didGoIn,
-			],
-		)
+		#OpLog.i(
+			#LOG_TAG,
+			#[
+				#"shot_finished player=",
+				#player,
+				#" replayEntry=",
+				#replay_entry,
+				#" didHitHoop=",
+				#didHitHoop,
+				#" didGoIn=",
+				#didGoIn,
+			#],
+		#)
 
 		if not BasketballGame.myReplay.is_empty():
 			BasketballGame.myReplay += "|"

@@ -38,6 +38,8 @@ object OpenPigeonLog {
     private const val MAX_DIAGNOSTIC_STATE_ENTRIES = 40
     private const val MAX_DIAGNOSTIC_STATE_VALUE_LENGTH = 256
     private val diagnosticState = ConcurrentHashMap<String, String>()
+    private val regexCache = ConcurrentHashMap<String, Regex>()
+    private fun rx(pattern: String) = regexCache.getOrPut(pattern) { Regex(pattern) }
 
     private val diagnosticStateKeyRegex =
         Regex("""^[A-Za-z0-9_.-]{1,48}$""")
@@ -252,7 +254,7 @@ object OpenPigeonLog {
         val cleanTag = normalizeAliasRedirects(
             sanitize(tag)
         )
-            .replace(Regex("""[^A-Za-z0-9_.-]"""), "_")
+            .replace(rx("""[^A-Za-z0-9_.-]"""), "_")
             .ifBlank { "Game" }
 
         return "Godot-${cleanTag.take(17)}"
@@ -878,43 +880,43 @@ object OpenPigeonLog {
         output = normalizeAliasRedirects(output)
 
         output = output.replace(
-            Regex("""[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"""),
+            rx("""[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"""),
             "[email]"
         )
 
         output = output.replace(
-            Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b"""),
+            rx("""\b(?:\d{1,3}\.){3}\d{1,3}\b"""),
             "[ip]"
         )
 
         output = output.replace(
-            Regex("""(?i)\bhttps?://[^\s"'<>]+"""),
+            rx("""(?i)\bhttps?://[^\s"'<>]+"""),
             "[url]"
         )
 
         output = output.replace(
-            Regex(
+            rx(
                 """(?i)\b(token|auth|authorization|secret|password|passwd|api[_-]?key|access[_-]?token|refresh[_-]?token)\s*[:=]\s*["']?[^,\s|&}\]]+"""
             ),
             "$1=[redacted]"
         )
 
         output = output.replace(
-            Regex(
+            rx(
                 """(?i)(["']?avatar[12]?["']?\s*[:=]\s*)(\[\s*)?["']?[^}\]\n]+"""
             ),
             "$1[avatar-redacted]"
         )
 
         output = output.replace(
-            Regex(
+            rx(
                 """(?i)\b(name|displayName|chatName|contactName)\s*[:=]\s*[^,\n}]+"""
             ),
             "$1=[redacted]"
         )
 
         output = output.replace(
-            Regex(
+            rx(
                 """(?i)\b(userMessage|chatMessage|messageText|bodyText)\s*[:=]\s*[^,\n}]+"""
             ),
             "$1=[redacted]"
@@ -1059,11 +1061,11 @@ object OpenPigeonLog {
         val escaped = Regex.escape(field)
 
         return listOf(
-            Regex(
+            rx(
                 """(?i)["']?$escaped["']?\s*[:=]\s*["']([^"',}\]\s]+)["']?"""
             ),
 
-            Regex(
+            rx(
                 """(?i)["']?$escaped["']?\s*:\s*\[\s*["']([^"']+)["']"""
             )
         )
@@ -1135,7 +1137,7 @@ object OpenPigeonLog {
 
         aliasRedirects.forEach { (oldAlias, newAlias) ->
             output = output.replace(
-                Regex("""\b${Regex.escape(oldAlias)}\b"""),
+                rx("""\b${Regex.escape(oldAlias)}\b"""),
                 newAlias
             )
         }
