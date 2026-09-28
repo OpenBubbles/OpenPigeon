@@ -96,6 +96,7 @@ internal fun rotatedCueBitmap(context: Context, style: Int): Bitmap? {
     )
 }
 
+@SuppressLint("DiscouragedApi")
 internal fun cueDrawableId(context: Context, style: Int): Int {
     if (style > 0) {
         val id = context.resources.getIdentifier("cue$style", "drawable", context.packageName)
@@ -108,6 +109,7 @@ internal fun cueDrawableId(context: Context, style: Int): Int {
     return R.drawable.cue1
 }
 
+@SuppressLint("DiscouragedApi")
 internal fun availableCueStyles(context: Context): List<Int> =
     (1..CUE_STYLE_MAX).filter {
         context.resources.getIdentifier("cue$it", "drawable", context.packageName) != 0
@@ -1780,16 +1782,12 @@ class PoolActivity : AppCompatActivity() {
                 currentMessage,
             )
 
-            ipc.lockMsgHandle(
-                sessionId,
-            )
-
             ipc.setSuppressNotifications(
                 sessionId,
                 true,
             )
 
-            ipc.onMessageUpdated(sessionId) { callbackMessage ->
+            ipc.onMessageUpdated(sessionId) { callbackMessage -> runOnUiThread {
                 synchronized(this) {
                     OpenPigeonLog.i("PoolMsg", "Live update num=${callbackMessage["num"]} sender=${callbackMessage["sender"]} replayLen=${callbackMessage["replay"]?.length ?: 0}")
                     handleMessage(callbackMessage)
@@ -1809,7 +1807,7 @@ class PoolActivity : AppCompatActivity() {
                         turnRecoveryOverlay.showRetry()
                     }
                 }
-            }
+            } }
 
             restorePoolRecovery(
                 currentMessage,
@@ -1818,6 +1816,7 @@ class PoolActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (::sessionId.isInitialized) gameSessionIPC?.releaseSession(sessionId)
         skipReplayHandler.removeCallbacksAndMessages(null)
         poolActivityClosing =
             true
@@ -2183,7 +2182,7 @@ class PoolActivity : AppCompatActivity() {
         val runnable = Runnable {
             skipReplayShowRunnable = null
             if (!replaying || skipReplayRequested || poolActivityClosing) return@Runnable
-            showSkipReplayButton("replay_1s")
+            showSkipReplayButton()
         }
 
         skipReplayShowRunnable = runnable
@@ -2195,7 +2194,7 @@ class PoolActivity : AppCompatActivity() {
         skipReplayShowRunnable = null
     }
 
-    private fun showSkipReplayButton(reason: String) {
+    private fun showSkipReplayButton() {
         runOnUiThread {
             val controls = findViewById<LinearLayout>(R.id.controls)
             val skipBtn = findViewById<ImageButton>(R.id.skip_replay)
@@ -2222,7 +2221,7 @@ class PoolActivity : AppCompatActivity() {
 
                 OpenPigeonLog.i(
                     "PoolReplayUi",
-                    "skip_show reason=$reason attempt=$attempt replaying=$replaying requested=$skipReplayRequested " + "visibility=${skipBtn.visibility} alpha=${skipBtn.alpha} " + "x=${loc[0]} y=${loc[1]} w=${skipBtn.width} h=${skipBtn.height} " + "parent=${skipBtn.parent?.javaClass?.simpleName}"
+                    "skip_show reason=replay_1s attempt=$attempt replaying=$replaying requested=$skipReplayRequested " + "visibility=${skipBtn.visibility} alpha=${skipBtn.alpha} " + "x=${loc[0]} y=${loc[1]} w=${skipBtn.width} h=${skipBtn.height} " + "parent=${skipBtn.parent?.javaClass?.simpleName}"
                 )
 
                 if ((skipBtn.width == 0 || skipBtn.height == 0) && attempt < 6) {
@@ -4514,6 +4513,7 @@ class PoolActivity : AppCompatActivity() {
 
         val sender = msg["sender"].orEmpty()
         val isYourTurn = sender != ipc.getSenderUUID(sessionId)
+        ipc.syncTurnLock(sessionId, isYourTurn && !spectatorMode)
 
         localWinLossStateFromWinner(msg["winner"]).takeIf { it.isNotBlank() }?.let { state ->
             setPendingWinLossState(state)

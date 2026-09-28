@@ -35,6 +35,8 @@ class GameSessionIPC(
                 service,
             )
 
+            OpenPigeonLog.i("OPDiag", "IPC connected ipc=${this@GameSessionIPC.hashCode()}")
+
             onBind(this@GameSessionIPC)
         }
 
@@ -326,6 +328,16 @@ class GameSessionIPC(
         }
     }
 
+    fun syncTurnLock(id: String, @Suppress("UNUSED_PARAMETER") myTurn: Boolean) {
+        if (id.isNotBlank()) lockMsgHandle(id)
+    }
+
+    fun releaseSession(id: String) {
+        if (id.isBlank()) return
+        setSuppressNotifications(id, false)
+        unlockMsgHandle(id)
+    }
+
     fun getSenderUUID(
         id: String,
     ): String {
@@ -356,7 +368,7 @@ class GameSessionIPC(
         id: String,
         callback: (Map<String, String>) -> Unit,
     ) {
-        val service = gameSession ?: return
+        val service = gameSession ?: return OpenPigeonLog.w("OPDiag", "onMessageUpdated skipped: not bound session=$id")
 
         val ipcCallback =
             object : IMessageUpdatedCallback.Stub() {
@@ -386,6 +398,7 @@ class GameSessionIPC(
                 id,
                 ipcCallback,
             )
+            lockMsgHandle(id)
         } catch (throwable: Throwable) {
             OpenPigeonLog.e(
                 "GameSessionIPC",

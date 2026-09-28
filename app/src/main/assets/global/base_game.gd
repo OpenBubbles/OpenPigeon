@@ -34,6 +34,7 @@ var _startup_revealed: bool = false
 var _turn_retry_ui: Dictionary = {}
 var _send_check_serial: int = 0
 var _send_sfx_pending: bool = false
+var _retry_send_active: bool = false
 
 func _create_startup_cover() -> void:
 	_startup_cover = CanvasLayer.new()
@@ -51,10 +52,19 @@ func _create_startup_cover() -> void:
 	)
 
 
-func _receive_game_data(json: String) -> void:
-	_set_game_data(json)
-	_queue_startup_reveal()
+var _last_data_num: int = -1
 
+func _receive_game_data(json: String) -> void:
+	var parsed: Variant = null if json.is_empty() else JSON.parse_string(json)
+	var data_num: int = int(parsed.get("num", -1)) if typeof(parsed) == TYPE_DICTIONARY else -1
+	if data_num >= 0 and data_num < _last_data_num:
+		return # older message than one already applied (would flip turn mid-replay)
+	_last_data_num = maxi(_last_data_num, data_num)
+	_set_game_data(json)
+	if appPlugin:
+		_send_check_serial += 1 # cancel any in-flight 8s pending check
+		_refresh_turn_recovery_state()
+	_queue_startup_reveal()
 
 func _queue_startup_reveal() -> void:
 	if _startup_revealed or _startup_reveal_queued:
@@ -375,7 +385,9 @@ func _refresh_turn_recovery_state() -> void:
 func _retry_saved_send() -> void:
 	if not appPlugin:
 		return
-
+	
+	_retry_send_active = true
+	
 	_show_send_retry(
 		true
 	)
@@ -403,6 +415,9 @@ func _on_send_game_complete() -> void:
 	_send_check_serial += 1
 	_hide_send_retry()
 	_finish_send_sfx()
+	if _retry_send_active:
+		_retry_send_active = false
+		_on_retry_send_complete()
 
 
 func _on_send_game_failed() -> void:
@@ -479,6 +494,9 @@ func _add_settings_rows(_container, _popup_script) -> void: pass
 func _get_settings_avatar_display(): return get_node_or_null("%PlayerAvatarDisplay")
 func _get_rules_title() -> String: return ""
 func _get_rules_text() -> String: return ""
+func _on_retry_send_complete() -> void:
+	if get("game_over") != true:
+		start_waiting_animation()
 
 @warning_ignore("unused_parameter")
 func _on_theme_changed(new_theme_name: String) -> void: pass

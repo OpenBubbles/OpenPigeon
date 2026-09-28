@@ -625,14 +625,6 @@ class GolfActivity : AppCompatActivity() {
 
                 if (currentMessage.isNotEmpty()) {
                     try {
-                        OpenPigeonLog.i(TAG, "IPC lockMsgHandle start")
-                        ipc.lockMsgHandle(sessionId)
-                        OpenPigeonLog.i(TAG, "IPC lockMsgHandle complete")
-                    } catch (t: Throwable) {
-                        OpenPigeonLog.e(TAG, "IPC lockMsgHandle failed", t)
-                    }
-
-                    try {
                         OpenPigeonLog.i(TAG, "IPC setSuppressNotifications(true) start")
                         ipc.setSuppressNotifications(sessionId, true)
                         OpenPigeonLog.i(TAG, "IPC setSuppressNotifications(true) complete")
@@ -2670,6 +2662,7 @@ class GolfActivity : AppCompatActivity() {
                 shouldReplay && replayIsFinalHole && incomingWinnerResult == null
 
             waitingForOpponent = !spectatorMode && messageFromMe && !shouldReplay
+            gameSessionIPC?.syncTurnLock(sessionId, !spectatorMode && !waitingForOpponent)
 
             if (waitingForOpponent) {
                 val waitingDisplayMapNum = waitingDisplayHoleForSentMessage(
@@ -5102,20 +5095,7 @@ class GolfActivity : AppCompatActivity() {
             gameMenu.destroy()
         }
 
-        runCatching {
-            if (sessionId.isNotBlank()) {
-                gameSessionIPC?.setSuppressNotifications(
-                    sessionId,
-                    false,
-                )
-            }
-        }.onFailure {
-            OpenPigeonLog.e(
-                TAG,
-                "onDestroy setSuppressNotifications(false) failed",
-                it,
-            )
-        }
+        gameSessionIPC?.releaseSession(sessionId)
 
         gameSessionIPC = null
 

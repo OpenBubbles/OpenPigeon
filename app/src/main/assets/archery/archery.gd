@@ -446,7 +446,8 @@ func _restore_archery_recovery() -> bool:
 	if recovery_pending_send:
 		current_arrow = null
 		_hide_wind_panel(0.0)
-		stop_waiting_animation()
+		isTurn = false
+		play_sent_animation()
 		return true
 
 	var raw_progress := String(appPlugin.getTurnProgress())
@@ -495,6 +496,7 @@ func _restore_archery_recovery() -> bool:
 	var recovered_arrow := arrow.spawn()
 	shots.append(recovered_arrow)
 	restoring_recovery = true
+	played_replay = true
 	_hide_wind_panel(0.0)
 	cam_follow_dart()
 
@@ -591,12 +593,11 @@ func _process_game_state() -> void:
 func _award_set_points_and_continue(completed_round: int = set_num) -> bool:
 	OpLog.i(LOG_TAG, ["award_set_points round=", completed_round, " ", _score_summary()])
 	var won_now: bool = check_winner(completed_round)
-	var out_json := export_replay()
-	OpLog.event(LOG_TAG, ["send_game_out award_set raw=", out_json])
-	send_game_data(out_json)
+	_send_turn_state_only()
 	return won_now
 	
 func _send_turn_state_only() -> void:
+	isTurn = false
 	var out_json := export_replay()
 	OpLog.event(LOG_TAG, ["send_game_out state_only raw=", out_json])
 	send_game_data(out_json)
@@ -1242,6 +1243,8 @@ func _set_game_data(new_replay: String) -> void:
 		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", new_replay])
 		return
 
+	_on_archery_send_failed()
+
 	dbg(["set_game_data parsed=", parsed])
 
 	isTurn = parsed["isYourTurn"]
@@ -1810,7 +1813,7 @@ func play_sent_animation() -> void:
 
 func _on_archery_send_complete() -> void:
 	recovery_pending_send = false
-	if game_over or not is_instance_valid(sent_label):
+	if game_over or isTurn or not is_instance_valid(sent_label):
 		return
 	if sent_tween and sent_tween.is_running():
 		sent_tween.kill()

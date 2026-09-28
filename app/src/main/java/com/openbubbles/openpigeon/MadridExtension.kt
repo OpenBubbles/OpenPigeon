@@ -135,12 +135,9 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         )
 
         fun getSessionFor(id: String, handle: IMessageViewHandle): GameSession {
-            if (activeSessions.containsKey(id)) {
-                activeSessions[id]!!.updateHandle(handle)
-            } else {
-                activeSessions[id] = GameSession(handle)
+            return activeSessions.getOrPut(id) {
+                GameSession(handle)
             }
-            return activeSessions[id]!!
         }
 
         fun findByName(name: String): Game? {
@@ -287,8 +284,10 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
     override fun didTapTemplate(message: MadridMessage?, handle: IMessageViewHandle?, userCount: Int) {
         if (message == null || handle == null) return
+        OpenPigeonLog.i("OPDiag", "HOST->didTapTemplate session=${message.session} handle=${handle.asBinder().hashCode()}")
         val session = getSessionFor(message.session, handle)
         session.handleNewMessage(message)
+        session.updateHandle(handle, message)
         val game = session.getGame()
 
         OpenPigeonLog.i("Session", message.session.toString())
@@ -298,7 +297,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
                     putExtra("SESSION", message.session)
                     putExtra("GAME", session.getGame()?.getName())
                     putExtra("DISPLAY_GAME", session.currentMessage["game_name"])
-                    data = "data://${System.currentTimeMillis()}".toUri()
+                    data = "data://${message.session}/${System.currentTimeMillis()}".toUri()
                 }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             context.startActivity(intent)
@@ -317,7 +316,9 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         userCount: Int
     ): RemoteViews {
         val session = getSessionFor(message!!.session, handle!!)
+        OpenPigeonLog.i("OPDiag", "HOST->getLiveView session=${message.session} handle=${handle.asBinder().hashCode()} guid=${message.messageGuid}")
         session.handleNewMessage(message)
+        session.updateHandle(handle, message)
 
         val displayMetrics = context.resources.displayMetrics
         val dpWidth = displayMetrics.widthPixels / displayMetrics.density
@@ -345,8 +346,9 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
     }
 
     override fun messageUpdated(message: MadridMessage?) {
+        OpenPigeonLog.i("OPDiag", "HOST->messageUpdated session=${message?.session} known=${message?.session?.let { activeSessions.containsKey(it) }} guid=${message?.messageGuid}")
         if (message == null) return
-        activeSessions[message.session]?.handleNewMessage(message)
+        try { activeSessions[message.session]?.handleNewMessage(message) } catch (t: Throwable) { OpenPigeonLog.e("OPDiag", "messageUpdated threw", t) }
         OpenPigeonLog.i("update", "message")
     }
 
@@ -833,7 +835,7 @@ fun RenderLiveExtension(
                         else -> gameName
                     }
                 })
-                data = "data://${System.currentTimeMillis()}".toUri()
+                data = "data://${message?.session}/${System.currentTimeMillis()}".toUri()
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             }
             it.clickable(onClick =

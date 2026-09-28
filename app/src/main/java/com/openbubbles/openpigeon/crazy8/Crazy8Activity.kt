@@ -106,7 +106,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -1317,6 +1317,7 @@ class Crazy8Activity : ComponentActivity() {
 
     override fun onDestroy() {
         crazy8ActivityClosing = true
+        if (::sessionId.isInitialized) gameSessionIPC?.releaseSession(sessionId)
 
         if (::gameMenu.isInitialized) {
             gameMenu.destroy()
@@ -2259,9 +2260,9 @@ fun RenderGame(
     val keyboardController = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
     val baseDensity = LocalDensity.current
-    val configuration = LocalConfiguration.current
-    val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
-    val gameScale = if (isLandscape) (configuration.screenHeightDp / 720f).coerceIn(0.5f, 1f) else 1f
+    val windowSize = LocalWindowInfo.current.containerSize
+    val isLandscape = windowSize.width > windowSize.height
+    val gameScale = if (isLandscape) (with(baseDensity) { windowSize.height.toDp().value } / 720f).coerceIn(0.5f, 1f) else 1f
     val density = Density(baseDensity.density * gameScale, baseDensity.fontScale)
 
     var drawPileCenter by remember { mutableStateOf<Offset?>(null) }
@@ -2567,7 +2568,7 @@ fun RenderGame(
                                 endScale = cardScaleForHand(game) * 0.96f,
                                 durationMs = 220
                             )
-                            activity?.playCrazySound(CRAZY_PLACE_SFX_PATH)
+                            activity.playCrazySound(CRAZY_PLACE_SFX_PATH)
 
                             val liveIndex = game.hand.indexOfFirst {
                                 it.rank == card.rank && it.file == card.file

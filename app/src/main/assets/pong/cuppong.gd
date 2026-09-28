@@ -1257,6 +1257,11 @@ func _set_game_data(new_replay: String):
 	if typeof(parsed) != TYPE_DICTIONARY:
 		OpLog.e(LOG_TAG, ["set_game_data invalid JSON raw=", new_replay])
 		return
+		
+	if sent_tween and sent_tween.is_running():
+		sent_tween.kill()
+	if is_instance_valid(sent_label):
+		sent_label.visible = false
 
 	recovery_turn_num = String(parsed.get("num", ""))
 	recovery_key = "%s:%s:%s" % [
@@ -1271,7 +1276,7 @@ func _set_game_data(new_replay: String):
 	_turn_base_boards = ""
 
 	if recovery_snapshot_progress.is_empty():
-		recovery_snapshot_progress = String(parsed.get("_recoveryProgress", ""))
+		recovery_snapshot_progress = _normalize_recovery_progress(String(parsed.get("_recoveryProgress", "")))
 
 	OpLog.i(LOG_TAG, [
 		"recovery_input key=", recovery_key,
@@ -1685,8 +1690,7 @@ func play_sent_animation() -> void:
 			sent_label.visible = false
 			sent_label.modulate.a = 1.0
 
-		if not game_over and not spectator_mode:
-			is_my_turn = false
+		if not game_over and not spectator_mode and not is_my_turn:
 			start_waiting_animation()
 		else:
 			stop_waiting_animation()
@@ -2199,7 +2203,7 @@ func _restore_cuppong_recovery() -> bool:
 
 	throws = _deserialize_cuppong_throws(progress.get("throws", []))
 	num_balls = int(progress.get("numBalls", num_balls))
-	redemption = bool(progress.get("redemption", redemption))
+	redemption = str(progress.get("redemption", redemption)).to_lower() == "true"
 
 	for child in get_children():
 		if child is PongBall and child != ball:
@@ -2514,6 +2518,15 @@ func export_replay() -> String:
 		" raw=", out_json
 	])
 	return out_json
+
+func _normalize_recovery_progress(raw: String) -> String:
+	var progress: Variant = null if raw.is_empty() else JSON.parse_string(raw)
+	if typeof(progress) != TYPE_DICTIONARY:
+		return raw
+	var saved_throws: Variant = progress.get("throws", [])
+	if typeof(saved_throws) == TYPE_STRING:
+		progress["throws"] = [] if String(saved_throws).is_empty() else JSON.parse_string(saved_throws)
+	return JSON.stringify(progress)
 
 func _has_cuppong_recovery_throw() -> bool:
 	if recovery_snapshot_progress.is_empty():

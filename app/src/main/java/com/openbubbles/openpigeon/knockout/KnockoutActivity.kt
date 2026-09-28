@@ -444,10 +444,9 @@ class KnockoutActivity : AppCompatActivity() {
         }
         applyStateLabelBackground(findViewById(R.id.knockoutStateLabel))
         hideStateLabel()
-        val contentView = findViewById<View>(android.R.id.content)
 
         ViewCompat.setOnApplyWindowInsetsListener(
-            contentView
+            contentRoot
         ) { _, insets ->
             val bottomInset = insets.getInsets(
                 WindowInsetsCompat.Type.navigationBars() or WindowInsetsCompat.Type.displayCutout()
@@ -463,7 +462,7 @@ class KnockoutActivity : AppCompatActivity() {
             insets
         }
 
-        ViewCompat.requestApplyInsets(contentView)
+        ViewCompat.requestApplyInsets(contentRoot)
 
         AvatarData.init(applicationContext)
         table = createKnockoutTable()
@@ -584,7 +583,6 @@ class KnockoutActivity : AppCompatActivity() {
             val currentMessage = if (sessionId.isNotEmpty()) ipc.getCurrentMessage(sessionId) else emptyMap()
 
             if (currentMessage.isNotEmpty()) {
-                ipc.lockMsgHandle(sessionId)
                 ipc.setSuppressNotifications(sessionId, true)
 
                 ipc.onMessageUpdated(sessionId) { msg ->
@@ -1500,6 +1498,7 @@ class KnockoutActivity : AppCompatActivity() {
         }
 
         val missingPlayers = KnockoutReplayParser.missingPowerPlayers(board)
+        gameSessionIPC?.syncTurnLock(sessionId, missingPlayers.contains(player))
 
         val messagePlayer = lastMessage["player"]?.toIntOrNull()
 
@@ -1634,9 +1633,6 @@ class KnockoutActivity : AppCompatActivity() {
             }
         }
     }
-
-    private fun meltScale(index: Int): Float =
-        (1f - 0.1f * index.coerceIn(0, 7)).coerceAtLeast(0.3f)
 
     private fun scaleBoardPositions(board: KnockoutBoard, factor: Float): KnockoutBoard =
         board.copy(pieces = board.pieces.map { it.copy(x = it.x * factor, y = it.y * factor) })
@@ -3191,18 +3187,7 @@ class KnockoutActivity : AppCompatActivity() {
             }
         }
 
-        runCatching {
-            gameSessionIPC?.setSuppressNotifications(
-                sessionId,
-                false,
-            )
-        }.onFailure {
-            OpenPigeonLog.w(
-                "KnockoutNative",
-                "Unable to unsuppress notifications during destroy",
-                it,
-            )
-        }
+        if (::sessionId.isInitialized) gameSessionIPC?.releaseSession(sessionId)
 
         gameSessionIPC = null
 

@@ -15,6 +15,10 @@ import com.openbubbles.openpigeon.MadridExtension
 class GameSessionService : Service() {
     private var onMessageUpdatedCB: IMessageUpdatedCallback? = null
 
+    private val liveClients = java.util.concurrent.ConcurrentHashMap<String, IBinder>()
+
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
     private val binder = object : IGameSession.Stub() {
         override fun getCurrentMessage(id: String?): Bundle {
             OpenPigeonLog.i("openpigeon-GameSessionService", "${MadridExtension.activeSessions}")
@@ -33,7 +37,7 @@ class GameSessionService : Service() {
             gameSession.updateSession(applicationContext, updateMap, mySession) {
                 try {
                     callback?.onFinished()
-                } catch(e: DeadObjectException) {
+                } catch(_: DeadObjectException) {
                     OpenPigeonLog.e("openpigeon-GameSessionService", "Callback object is dead!")
                 }
             }
@@ -46,22 +50,33 @@ class GameSessionService : Service() {
 
         override fun setSuppressNotifications(id: String, suppress: Boolean) {
             val gameSession: GameSession = MadridExtension.activeSessions[id] ?: return
+            OpenPigeonLog.i("OPDiag", "->HOST suppress=$suppress session=$id handle=${gameSession.handle.asBinder().hashCode()}")
             gameSession.handle.setSuppressNotifications(suppress)
         }
 
-        override fun lockMsgHandle(id: String?) {
-            val gameSession: GameSession = MadridExtension.activeSessions[id] ?: return
-            gameSession.handle.lock()
-        }
+        override fun lockMsgHandle(id: String?) { main.post { MadridExtension.activeSessions[id]?.lock() } }
 
-        override fun unlockMsgHandle(id: String?) {
-            val gameSession: GameSession = MadridExtension.activeSessions[id] ?: return
-            gameSession.handle.unlock()
-        }
+        override fun unlockMsgHandle(id: String?) { main.post { MadridExtension.activeSessions[id]?.unlock() } }
 
         override fun registerCallback(id: String, callback: IMessageUpdatedCallback?) {
             val gameSession: GameSession = MadridExtension.activeSessions[id] ?: return
             onMessageUpdatedCB = callback
+            OpenPigeonLog.i("OPDiag", "registerCallback session=$id client=${callback?.asBinder()?.hashCode()} svc=${this@GameSessionService.hashCode()}")
+
+            callback?.asBinder()?.let { client ->
+                liveClients[id] = client
+                runCatching {
+                    client.linkToDeath({
+                        // :godot was SIGKILLed or crashed without unlocking; release only if still the current client.
+                        if (liveClients.remove(id, client)) {
+                            OpenPigeonLog.w("openpigeon-GameSessionService", "Game process died; releasing session=$id")
+                            gameSession.messageUpdated = {}
+                            runCatching { gameSession.handle.setSuppressNotifications(false) }
+                            gameSession.unlock()
+                        }
+                    }, 0)
+                }
+            }
 
             gameSession.messageUpdated = { new: MutableMap<String, String> ->
                 try {
@@ -70,7 +85,7 @@ class GameSessionService : Service() {
                             putString(key, value)
                         }
                     })
-                } catch (e: DeadObjectException) {
+                } catch (_: DeadObjectException) {
                     OpenPigeonLog.e("openpigeon-GameSessionService", "Callback object is dead!")
                     gameSession.messageUpdated = {}
                 }

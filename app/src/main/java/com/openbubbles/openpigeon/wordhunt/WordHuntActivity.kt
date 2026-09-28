@@ -533,10 +533,6 @@ class WordHuntActivity : AppCompatActivity() {
                 return@ipcReady
             }
 
-            gameSessionIPC.lockMsgHandle(
-                sessionId,
-            )
-
             gameSessionIPC.setSuppressNotifications(
                 sessionId,
                 true,
@@ -688,6 +684,8 @@ class WordHuntActivity : AppCompatActivity() {
                         GameUI.Screen.Intro.route
                     }
                 }
+
+            gameSessionIPC.syncTurnLock(sessionId, startDestination != GameUI.Screen.Score.route)
 
             logGameOpened(
                 msg = currentMessage,
@@ -1618,6 +1616,7 @@ class WordHuntActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (::sessionId.isInitialized) gameSessionIPC?.releaseSession(sessionId)
         gameTimer?.cancel()
 
         if (::gameMenu.isInitialized) {

@@ -639,18 +639,6 @@ class ShuffleActivity : AppCompatActivity() {
 
             if (currentMessage.isNotEmpty()) {
                 try {
-                    ipc.lockMsgHandle(
-                        sessionId,
-                    )
-                } catch (throwable: Throwable) {
-                    OpenPigeonLog.e(
-                        "ShuffleActivity",
-                        "IPC lockMsgHandle failed",
-                        throwable,
-                    )
-                }
-
-                try {
                     ipc.setSuppressNotifications(
                         sessionId,
                         true,
@@ -1101,6 +1089,7 @@ class ShuffleActivity : AppCompatActivity() {
         val yourTurn = isYourTurn(
             data,
         )
+        gameSessionIPC?.syncTurnLock(sessionId, yourTurn)
 
         OpenPigeonLog.i(
             "ShuffleActivity",
@@ -2784,6 +2773,7 @@ class ShuffleActivity : AppCompatActivity() {
 
 
     override fun onDestroy() {
+        gameSessionIPC?.releaseSession(sessionId)
         cancelPendingRecoveryCheck()
 
         recoveryHandler.removeCallbacksAndMessages(

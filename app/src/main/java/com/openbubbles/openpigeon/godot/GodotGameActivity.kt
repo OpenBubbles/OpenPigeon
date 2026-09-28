@@ -22,8 +22,22 @@ class GodotGameActivity : GodotActivity() {
     var mediaPlugin: OpenPigeonMediaPlugin? = null
     var gameSessionIPC: GameSessionIPC? = null
 
+    companion object {
+        @Volatile private var activeInstance: GodotGameActivity? = null
+    }
+
+    private fun sid(): String? = if (::sessionId.isInitialized) sessionId else null
+
+    private fun releaseSession() {
+        if (activeInstance?.takeIf { it !== this }?.sid() != sid()) {
+            gameSessionIPC?.releaseSession(sessionId)
+        }
+        if (activeInstance === this) activeInstance = null
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        activeInstance = this
         OpenPigeonLog.installContext(applicationContext)
         enableEdgeToEdge()
         setContentView(R.layout.activity_godot)
@@ -37,6 +51,7 @@ class GodotGameActivity : GodotActivity() {
 
     override fun onNewIntent(newIntent: Intent) {
         super.onNewIntent(newIntent)
+        sid()?.takeIf { it != newIntent.getStringExtra("SESSION") }?.let { gameSessionIPC?.releaseSession(it) }
         baseGame = MadridExtension.findByName(newIntent.getStringExtra("GAME")!!)!!
         getOrCreateAppPlugin().switchGame(baseGame.getName())
         initGameSession(newIntent)
@@ -66,8 +81,7 @@ class GodotGameActivity : GodotActivity() {
 
     override fun onDestroy() {
         mediaPlugin?.stopMusic()
-        gameSessionIPC?.setSuppressNotifications(sessionId, false)
-        gameSessionIPC?.unlockMsgHandle(sessionId)
+        releaseSession()
         super.onDestroy()
     }
 
@@ -90,12 +104,12 @@ class GodotGameActivity : GodotActivity() {
             this.gameSessionIPC = gameSessionIPC
             val currentMessage = gameSessionIPC.getCurrentMessage(sessionId)
             if (currentMessage.isNotEmpty()) {
-                gameSessionIPC.lockMsgHandle(sessionId)
                 gameSessionIPC.setSuppressNotifications(sessionId, true)
                 OpenPigeonLog.i("openpigeon-${baseGame.getName()}", "player: ${(currentMessage["player"]?.toIntOrNull() ?: -1)}, replay: ${currentMessage["replay"]}")
                 sendGameData(isYourTurn(currentMessage), currentMessage.toMutableMap())
 
                 gameSessionIPC.onMessageUpdated(sessionId) { new: Map<String, String> ->
+                    if (sid != sessionId) return@onMessageUpdated
                     val yourTurn = isYourTurn(new)
                     if(yourTurn) {
                         OpenPigeonLog.i(
@@ -136,6 +150,7 @@ class GodotGameActivity : GodotActivity() {
         if (message["replay"].isNullOrEmpty()) message["replay"] = baseGame.getDefaultReplay()
 
         val ipc = gameSessionIPC ?: return
+        ipc.syncTurnLock(sessionId, isYourTurn)
         val recovery = try {
             ipc.getTurnRecovery(sessionId)
         } catch (t: Throwable) {
@@ -159,6 +174,7 @@ class GodotGameActivity : GodotActivity() {
     }
 
     override fun onGodotForceQuit(instance: Godot) {
+        releaseSession()
         runOnUiThread {
             activity?.finish()
         }

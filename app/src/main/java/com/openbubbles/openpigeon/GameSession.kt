@@ -10,9 +10,19 @@ import androidx.glance.appwidget.GlanceRemoteViews
 import com.bluebubbles.messaging.ITaskCompleteCallback
 import android.os.Process
 
+private data class PendingSessionUpdate(
+    val context: Context,
+    val updates: Map<String, String>,
+    val mySession: String,
+    val finished: () -> Unit,
+)
+
 class GameSession(var handle: IMessageViewHandle) {
 
     var messageUpdated: (new: MutableMap<String, String>) -> Unit = {}
+    private var latestMessageKey: String = ""
+    private var handleMessageKey: String = ""
+    private var pendingUpdate: PendingSessionUpdate? = null
     var currentMessage: MutableMap<String, String> = mutableMapOf()
     private var outcomeRecorded: Boolean = false
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
@@ -24,34 +34,88 @@ class GameSession(var handle: IMessageViewHandle) {
         val decrypted = Cryption.decrypt(data)
         val parsed = "data://$decrypted".toUri()
         val newMessage: MutableMap<String, String> = mutableMapOf()
+
         OpenPigeonLog.i("openpigeon", "New game! $parsed")
+
         for (key in parsed.queryParameterNames) {
             try {
                 newMessage[key] = parsed.getQueryParameter(key)!!
             } catch (exc: Exception) {
-                OpenPigeonLog.e("openpigeon-gamesession", "Exception parsing $key: $exc")
+                OpenPigeonLog.e(
+                    "openpigeon-gamesession",
+                    "Exception parsing $key: $exc",
+                )
             }
         }
 
         OpenPigeonLog.event(
             "DiagSelfTest",
-            "ANDROID_HANDLE_NEW_MESSAGE pid=${Process.myPid()} keys=${newMessage.keys.sorted().joinToString(",")}"
+            "ANDROID_HANDLE_NEW_MESSAGE pid=${Process.myPid()} keys=${newMessage.keys.sorted().joinToString(",")}",
         )
 
-        // Detect win transition: winner field newly appeared in this session.
-        // First-message-with-winner means we're opening an already-finished game;
-        // seed outcomeRecorded=true so we don't count it as a fresh win.
-        val isFirstMessage = currentMessage.isEmpty()
+        val incomingMessageKey = messageKey(message)
+
+        var previousMessage: Map<String, String> = emptyMap()
+        var accepted = false
+        var changed = false
+
+        synchronized(this) {
+            val currentNum = currentMessage["num"]?.toIntOrNull()
+            val incomingNum = newMessage["num"]?.toIntOrNull()
+
+            if (
+                currentMessage.isNotEmpty() &&
+                currentNum != null &&
+                incomingNum != null &&
+                incomingNum < currentNum
+            ) {
+                OpenPigeonLog.w(
+                    "GameSession",
+                    "Ignoring stale message currentNum=$currentNum incomingNum=$incomingNum",
+                )
+            } else {
+                previousMessage = currentMessage.toMap()
+                changed = currentMessage != newMessage
+
+                latestMessageKey = incomingMessageKey
+                currentMessage = newMessage
+                accepted = true
+            }
+        }
+
+        if (!accepted) {
+            return
+        }
+
+        val isFirstMessage = previousMessage.isEmpty()
+        val hadWinnerBefore = previousMessage["winner"] != null
         val hasWinnerNow = newMessage["winner"] != null
+
         if (isFirstMessage && hasWinnerNow) {
             outcomeRecorded = true
-        } else if (!outcomeRecorded && hasWinnerNow) {
+        } else if (!outcomeRecorded && !hadWinnerBefore && hasWinnerNow) {
             outcomeRecorded = true
             recordWinIfApplicable(newMessage)
         }
 
-        currentMessage = newMessage
-        messageUpdated(newMessage)
+        if (changed) {
+            messageUpdated(newMessage)
+        } else {
+            OpenPigeonLog.i(
+                "GameSession",
+                "Ignoring duplicate message num=${newMessage["num"]}",
+            )
+        }
+    }
+
+    private fun messageKey(message: MadridMessage): String {
+        val url = message.url.orEmpty()
+
+        if (url.isNotBlank()) {
+            return "url:$url"
+        }
+
+        return "guid:${message.messageGuid.orEmpty()}"
     }
 
     private fun recordWinIfApplicable(message: Map<String, String>) {
@@ -84,61 +148,155 @@ class GameSession(var handle: IMessageViewHandle) {
         }
     }
 
-    fun updateSession(context: Context, updates: Map<String, String>, mySession: String, finished: () -> Unit) {
-        val modifiedUpdated = currentMessage.toMutableMap()
-        for (update in updates) {
+    fun updateSession(
+        context: Context,
+        updates: Map<String, String>,
+        mySession: String,
+        finished: () -> Unit,
+    ) {
+        dispatchUpdate(
+            PendingSessionUpdate(
+                context = context.applicationContext,
+                updates = updates.toMap(),
+                mySession = mySession,
+                finished = finished,
+            )
+        )
+    }
+
+    private fun dispatchUpdate(request: PendingSessionUpdate, retried: Boolean = false) {
+        val state = synchronized(this) {
+            if (
+                !locked &&
+                latestMessageKey.isNotBlank() &&
+                handleMessageKey.isNotBlank() &&
+                latestMessageKey != handleMessageKey
+            ) {
+                pendingUpdate = request
+                null
+            } else {
+                Triple(
+                    handle,
+                    currentMessage.toMap(),
+                    latestMessageKey,
+                )
+            }
+        }
+
+        if (state == null) {
+            OpenPigeonLog.w(
+                "GameSession",
+                "Deferring send for fresh handle session=${request.mySession} locked=$locked handleKey=${handleMessageKey.hashCode()} latestKey=${latestMessageKey.hashCode()}",
+            )
+            return
+        }
+
+        val sendHandle = state.first
+        diag("send")
+        val baseMessage = state.second
+        val baseMessageKey = state.third
+        val targetNum = request.updates["num"]?.toIntOrNull()
+        val baseNum = baseMessage["num"]?.toIntOrNull()
+        if (targetNum != null && baseNum != null && baseNum >= targetNum) {
+            OpenPigeonLog.w("GameSession", "Dropping stale send session=${request.mySession} base=$baseNum target=$targetNum")
+            if (baseMessage["sender"] == request.updates["sender"]) request.finished()
+            return
+        }
+        val game = MadridExtension.findByName(baseMessage["game"].orEmpty())
+
+        if (game == null) {
+            OpenPigeonLog.e(
+                "GameSession",
+                "Cannot send session=${request.mySession}: game not found",
+            )
+            return
+        }
+
+        val modifiedUpdated = baseMessage.toMutableMap()
+
+        for (update in request.updates) {
             modifiedUpdated[update.key] = update.value
         }
 
-        val myUUID = getGame()!!.getSenderUUID(context)
-        if (modifiedUpdated["player2"] != myUUID && !modifiedUpdated.containsKey("player1")) {
+        val myUUID = game.getSenderUUID(request.context)
+
+        if (
+            modifiedUpdated["player2"] != myUUID &&
+            !modifiedUpdated.containsKey("player1")
+        ) {
             modifiedUpdated["player1"] = myUUID
         }
-
-        val game = getGame()!!
 
         if (
             game.getName() != "questions" ||
             modifiedUpdated["caption"].isNullOrBlank()
         ) {
-            modifiedUpdated["caption"] = game.getSubtitle(context, modifiedUpdated)
+            modifiedUpdated["caption"] = game.getSubtitle(
+                request.context,
+                modifiedUpdated,
+            )
         }
 
-        TurnRecoveryStore.markSendAttempted(
-            context = context,
-            sessionId = mySession,
-            game = game.getName(),
-            baseMessage = currentMessage,
-            updates = updates,
+        val update = game.buildGameMessage(
+            request.context,
+            modifiedUpdated,
+            currentSession = request.mySession,
         )
 
-        val update = game.buildGameMessage(
-            context,
-            modifiedUpdated,
-            currentSession = mySession
+        val outgoingMessageKey = messageKey(update)
+
+        OpenPigeonLog.i(
+            "GameSession",
+            "Sending session=${request.mySession} locked=$locked handleKey=${handleMessageKey.hashCode()} latestKey=${latestMessageKey.hashCode()}",
         )
 
         try {
-            handle.updateMessage(
+            val done = java.util.concurrent.atomic.AtomicBoolean(false)
+            sendTimeout.postDelayed({
+                if (done.get()) return@postDelayed
+                val fresh = synchronized(this) {
+                    staleHandle = sendHandle.asBinder()
+                    latestHostHandle?.takeIf { it.asBinder() != sendHandle.asBinder() && it.asBinder().isBinderAlive }
+                        ?.also { handle = it; if (locked) { it.lock(); hostLocked = it } }
+                }
+                OpenPigeonLog.w("OPDiag", "send TIMEOUT session=${request.mySession} stale=${sendHandle.asBinder().hashCode()} fresh=${fresh?.asBinder()?.hashCode()} retried=$retried")
+                if (fresh != null && !retried && done.compareAndSet(false, true)) dispatchUpdate(request, true)
+            }, 8000)
+            sendHandle.updateMessage(
                 update,
                 object : ITaskCompleteCallback.Stub() {
                     override fun complete() {
-                        currentMessage = modifiedUpdated
+                        if (!done.compareAndSet(false, true)) return
+                        var appliedOutgoingState = false
 
-                        TurnRecoveryStore.clear(
-                            context,
-                            mySession,
-                            "message_update_confirmed",
-                        )
+                        synchronized(this@GameSession) {
+                            if (
+                                latestMessageKey.isBlank() ||
+                                latestMessageKey == baseMessageKey ||
+                                latestMessageKey == outgoingMessageKey
+                            ) {
+                                currentMessage = modifiedUpdated
+                                latestMessageKey = outgoingMessageKey
+                                handleMessageKey = outgoingMessageKey
+                                appliedOutgoingState = true
+                            }
+                        }
 
-                        finished()
+                        if (!appliedOutgoingState) {
+                            OpenPigeonLog.i(
+                                "GameSession",
+                                "Send completed after newer message arrived; preserving newer state session=${request.mySession}",
+                            )
+                        }
+
+                        request.finished()
                     }
                 },
             )
         } catch (throwable: Throwable) {
             OpenPigeonLog.e(
                 "GameSession",
-                "updateMessage failed session=$mySession; keeping recovery",
+                "updateMessage failed session=${request.mySession}; keeping recovery",
                 throwable,
             )
         }
@@ -150,38 +308,60 @@ class GameSession(var handle: IMessageViewHandle) {
 
     var locked = false
 
+    private var hostLocked: IMessageViewHandle? = null
+    private var latestHostHandle: IMessageViewHandle? = null
+    private var staleHandle: android.os.IBinder? = null
+    private val sendTimeout = android.os.Handler(android.os.Looper.getMainLooper())
+
+    fun diag(step: String) = OpenPigeonLog.i("OPDiag", "$step locked=$locked handle=${handle.asBinder().hashCode()} alive=${handle.asBinder().isBinderAlive} hostLocked=${hostLocked?.asBinder()?.hashCode()} latest=${latestMessageKey.hashCode()} handleKey=${handleMessageKey.hashCode()} cb=${messageUpdated.hashCode()}")
+
     fun lock() {
         synchronized(this) {
-            if (locked) return;
+            if (locked && hostLocked?.asBinder() == handle.asBinder()) return
+            if (hostLocked?.asBinder() != handle.asBinder()) runCatching { hostLocked?.unlock() }
             handle.lock()
+            hostLocked = handle
             locked = true
+            OpenPigeonLog.i("GameSession", "Handle LOCKED ${handle.asBinder().hashCode()}")
+            diag("lock")
         }
     }
 
     fun unlock() {
         synchronized(this) {
-            if (!locked) return;
-            handle.unlock()
+            if (!locked) return
             locked = false
+            OpenPigeonLog.i("GameSession", "Handle UNLOCKED (kept alive ${hostLocked?.asBinder()?.hashCode()})")
+            diag("unlock")
         }
     }
 
-    fun dispose() {
-        synchronized(this) {
-            if (locked) {
-                handle.unlock()
-                locked = false
-            }
-        }
-    }
+    fun updateHandle(
+        newHandle: IMessageViewHandle,
+        message: MadridMessage,
+    ) {
+        val newMessageKey = messageKey(message)
+        var deferredUpdate: PendingSessionUpdate? = null
 
-    fun updateHandle(newHandle: IMessageViewHandle) {
         synchronized(this) {
-            if (locked) {
-                handle.unlock()
-                newHandle.lock()
+            latestHostHandle = newHandle
+            handle = hostLocked?.takeIf { it.asBinder().isBinderAlive && it.asBinder() != staleHandle } ?: newHandle
+            handleMessageKey = newMessageKey
+
+            if (latestMessageKey == handleMessageKey) {
+                deferredUpdate = pendingUpdate
+                pendingUpdate = null
             }
-            handle = newHandle
+            diag("updateHandle")
+        }
+
+        OpenPigeonLog.i(
+            "GameSession",
+            "Handle updated key=${newMessageKey.hashCode()} guidPresent=${!message.messageGuid.isNullOrBlank()} locked=$locked deferred=${deferredUpdate != null}",
+        )
+
+        deferredUpdate?.let {
+            dispatchUpdate(it)
         }
     }
 }
