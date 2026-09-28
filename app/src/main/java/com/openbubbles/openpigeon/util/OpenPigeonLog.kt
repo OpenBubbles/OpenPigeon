@@ -96,6 +96,9 @@ object OpenPigeonLog {
     }
 
     private val formatter = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
+    private val fileWriter = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val fileFormatter = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
+    fun flushFile() { runCatching { fileWriter.submit {}.get() } }
     private val entries = ArrayDeque<Entry>()
 
     private var lastTitleKey: String = ""
@@ -276,7 +279,8 @@ object OpenPigeonLog {
             entries.removeFirst()
         }
 
-        appendToSharedFile(now, level, safeTag, safeMessage)
+        if (level == "ERROR") appendToSharedFile(now, level, safeTag, safeMessage)
+        else fileWriter.execute { appendToSharedFile(now, level, safeTag, safeMessage) }
     }
 
     @Synchronized
@@ -788,7 +792,7 @@ object OpenPigeonLog {
                 .replace("\n", "\\n")
 
             file.appendText(
-                "$timeMs|${formatter.format(Date(timeMs))} $level/$tag: $oneLineMessage\n"
+                "$timeMs|${fileFormatter.format(Date(timeMs))} $level/$tag: $oneLineMessage\n"
             )
         } catch (_: Throwable) {
             fileLogEnabled.set(false)

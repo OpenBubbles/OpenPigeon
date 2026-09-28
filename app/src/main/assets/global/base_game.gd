@@ -443,6 +443,7 @@ func _uses_confirmed_send_sfx() -> bool:
 func _show_send_retry(
 	sending: bool
 ) -> void:
+	_set_board_input(false)
 	GameUtils.set_send_retry_overlay_state(
 		_turn_retry_ui,
 		true,
@@ -451,12 +452,16 @@ func _show_send_retry(
 
 
 func _hide_send_retry() -> void:
+	_set_board_input(true)
 	GameUtils.set_send_retry_overlay_state(
 		_turn_retry_ui,
 		false,
 		false
 	)
 
+func _set_board_input(enabled: bool) -> void:
+	set_process_input(enabled)
+	set_process_unhandled_input(enabled)
 
 func _check_pending_send_after_delay(
 	serial: int

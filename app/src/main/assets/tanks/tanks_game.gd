@@ -913,11 +913,23 @@ func _save_tanks_shot(play_rot: float, send_rot: float, power: float) -> void:
 		"player": str(core.player),
 		"playRot": str(play_rot),
 		"sendRot": str(send_rot),
-		"power": str(power)
+		"power": str(power),
+		"wind": str(core.current_board.get("wind", 0.0))
 	}
 
 	appPlugin.saveTurnProgress(JSON.stringify(progress))
 	OpLog.i(LOG_TAG, ["recovery_saved player=", core.player, " playRot=", play_rot, " sendRot=", send_rot, " power=", power])
+
+func _has_local_turn_recovery() -> bool:
+	if core == null or core.spectator_mode or not core.is_my_turn:
+		return false
+	if recovery_snapshot_pending:
+		return true
+	var parsed: Variant = JSON.parse_string(recovery_snapshot_progress) if not recovery_snapshot_progress.is_empty() else null
+	if typeof(parsed) != TYPE_DICTIONARY or String(parsed.get("phase", "")) != "shot":
+		return false
+	var saved_turn := String(parsed.get("turn", ""))
+	return saved_turn.is_empty() or recovery_turn_num.is_empty() or saved_turn == recovery_turn_num
 
 func _restore_tanks_recovery() -> bool:
 	await get_tree().process_frame
@@ -963,7 +975,8 @@ func _restore_tanks_recovery() -> bool:
 	can_interact = false
 	await _set_ui_visible(false)
 
-	var wind_val := float(core.current_board.get("wind", 0.0))
+	var wind_val := float(String(progress.get("wind", str(core.current_board.get("wind", 0.0)))))
+	core.current_board["wind"] = wind_val
 	var pre_shot_board: Dictionary = core.current_board.duplicate(true)
 	pre_shot_board["tank%drot" % core.player] = send_rot
 	pre_shot_board["tank%dpower" % core.player] = power
@@ -1495,6 +1508,17 @@ func _on_replay_action(_action: Dictionary) -> void:
 	if _is_playing_round:
 		OpLog.w(LOG_TAG, ["replay_action skipped already_playing action=", _action])
 		return
+		
+	if _has_local_turn_recovery():
+		var skipped: Dictionary = core.consume_post_shot_board()
+		for hp_key in ["tank1hp", "tank2hp"]:
+			if skipped.has(hp_key):
+				core.current_board[hp_key] = int(skipped[hp_key])
+		_apply_health_from_board(core.current_board)
+		has_replay = false
+		OpLog.i(LOG_TAG, "replay_skipped local_turn_recovery")
+		_finish_round_or_show_result()
+		return
 
 	OpLog.i(LOG_TAG, ["replay_action_start action=", _action, " ", _state_summary()])
 	
@@ -1626,6 +1650,7 @@ func _set_ui_visible(v: bool) -> void:
 		tank_p2.set_power_visibility(core.player == 2)
 		
 	power_slider.editable = v
+	fire_button.disabled = not v
 	
 	await tw.finished
 	
@@ -1872,7 +1897,7 @@ func _on_send_pressed() -> void:
 		OpLog.e(LOG_TAG, "send_pressed ignored: core is null")
 		return
 
-	if core.spectator_mode or not core.is_my_turn:
+	if core.spectator_mode or not core.is_my_turn or not can_interact:
 		OpLog.w(LOG_TAG, ["send_pressed ignored spectator=", core.spectator_mode, " turn=", core.is_my_turn])
 		return
 

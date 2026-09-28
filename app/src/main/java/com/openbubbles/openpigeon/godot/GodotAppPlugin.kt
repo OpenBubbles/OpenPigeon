@@ -28,6 +28,7 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
         val SEND_GAME_COMPLETE_SIGNAL = SignalInfo("send_game_complete")
 
         val SEND_GAME_FAILED_SIGNAL = SignalInfo("send_game_failed")
+        private val recoveryWriter = java.util.concurrent.Executors.newSingleThreadExecutor()
     }
 
     init {
@@ -143,6 +144,7 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
     fun updateGameData(
         updates: String,
     ): Boolean {
+        flushRecovery()
         OpenPigeonLog.d(
             "openpigeon-${gameActivity.baseGame.getName()}",
             "updateGameData: $updates",
@@ -241,6 +243,7 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
         return dispatched
     }
 
+    internal fun flushRecovery() { runCatching { recoveryWriter.submit {}.get() } }
     @UsedByGodot
     fun saveTurnProgress(
         progressJson: String,
@@ -274,14 +277,14 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
                 )
         }
 
-        return ipc.saveTurnProgress(
-            gameActivity.sessionId,
-            progress,
-        )
+        val sessionId = gameActivity.sessionId
+        recoveryWriter.execute { ipc.saveTurnProgress(sessionId, progress) }
+        return true
     }
 
     @UsedByGodot
     fun getTurnProgress(): String {
+        flushRecovery()
         val ipc =
             gameActivity.gameSessionIPC
                 ?: return "{}"
@@ -295,6 +298,7 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
 
     @UsedByGodot
     fun hasPendingSend(): Boolean {
+        flushRecovery()
         return gameActivity
             .gameSessionIPC
             ?.hasPendingSend(
@@ -304,6 +308,7 @@ class GodotAppPlugin(godot: Godot, private val gameActivity: GodotGameActivity) 
 
     @UsedByGodot
     fun retryPendingSend(): Boolean {
+        flushRecovery()
         val ipc =
             gameActivity.gameSessionIPC
 

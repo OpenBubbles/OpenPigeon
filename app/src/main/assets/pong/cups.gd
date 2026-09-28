@@ -445,6 +445,7 @@ var prev_cups: Array
 var cups_in_play: Array = [0,1,2,3,4,5,6,7,8,9]
 var random_positions: Dictionary = {}
 var mirror_x: bool = false
+var _arrange_tween: Tween
 
 var _outer_material: ShaderMaterial
 var _inner_material: ShaderMaterial
@@ -1139,15 +1140,8 @@ func _cup_bodies() -> Array[StaticBody3D]:
 
 	return result
 
-
 func _cup_at(index: int) -> StaticBody3D:
-	var bodies := _cup_bodies()
-
-	if index < 0 or index >= bodies.size():
-		return null
-
-	return bodies[index]
-
+	return get_node_or_null(NodePath("cup" + str(index + 1))) as StaticBody3D
 
 func reset_cups(cups: Array) -> void:
 	dbg(["reset_cups name=", name, " cups=", cups])
@@ -1302,12 +1296,20 @@ func arrangeCups() -> void:
 			Vector3(0.071, -0.597, -2.147),
 		]
 
-	var tween := get_tree().create_tween()
-	tween.set_loops(1)
+	var slot_cups: Array[StaticBody3D] = []
+	for original_index in cups_in_play:
+		slot_cups.append(_cup_at(original_index))
+	for slot_cup in slot_cups:
+		if slot_cup != null:
+			slot_cup.name = "cupslot"
 
-	for cup_idx in cups_in_play.size():
-		var original_index: int = cups_in_play[cup_idx]
-		var cup := _cup_at(original_index)
+	if _arrange_tween != null and _arrange_tween.is_valid():
+		_arrange_tween.kill()
+	var tween := get_tree().create_tween()
+	_arrange_tween = tween
+
+	for cup_idx in slot_cups.size():
+		var cup := slot_cups[cup_idx]
 
 		if cup == null:
 			continue

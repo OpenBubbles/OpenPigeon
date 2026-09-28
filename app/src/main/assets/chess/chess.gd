@@ -210,6 +210,11 @@ var board_container: Control = null  # Container for batch insertion of board el
 var highlighted: Array[Vector2i] = []          # list of positions being highlighted
 var selected: Vector2i = Vector2i(-1, -1)           # selected square or Vector2i(-1, -1) when none
 var legal_moves: Array[Vector2i] = []          # array of Vector2i targets for selected
+var _press_active: bool = false                 # finger/mouse is down
+var _press_pos: Vector2 = Vector2.ZERO          # where it went down
+var _last_drag_pos: Vector2 = Vector2.ZERO
+var _drag_from: Vector2i = Vector2i(-1, -1)     # square of the piece being dragged
+var _drop_move: bool = false                    # next player move came from a drag (snap instead of path)
 var opponent_last_move_from: Vector2i = Vector2i(-1, -1)  # opponent's last move origin square (for green highlight)
 var opponent_last_move_to: Vector2i = Vector2i(-1, -1)    # opponent's last move destination square (for green highlight)
 
@@ -1582,6 +1587,7 @@ func _build_board_ui() -> void:
 	# Setup and create dialogs via ChessDialogs controller
 	dialogs.cleanup()
 	dialogs.setup(self, PIECE_TEXTURES, func(msg: String) -> void: _log_ui.debug(msg))
+	animations.setup(pieces, squares, get_tree(), func(msg: String) -> void: _log_ui.debug(msg))
 	dialogs.create_promotion_dialog(BOARD_ORIGIN, board_w, SQUARE_SIZE)
 	_log_ui.debug("_build_board_ui: dialogs controller initialized")
 
@@ -2414,17 +2420,75 @@ func _restore_chess_recovery() -> bool:
 
 # ---------- Input gating ----------
 func _input(event: InputEvent) -> void:
-	# _log_ui.game_state("_input at start", _game_state_dict())
-	# Only allow interaction when it's allowed by _can_interact
 	if not _can_interact():
-		# _log_ui.trace("_input: interaction blocked (can_interact=false)")
-		# _log_ui.game_state("_input blocked", _game_state_dict())
+		_cancel_drag()
 		return
-	
-	if event is InputEventScreenTouch and event.pressed:
-		_on_tap(event.position)
-	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		_on_tap(event.position)
+
+	var is_press: bool = event is InputEventScreenTouch or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT)
+	if is_press and event.pressed:
+		_press_active = true
+		_press_pos = event.position
+	elif is_press and _press_active:
+		_press_active = false
+		if _drag_from != Vector2i(-1, -1):
+			_end_drag(event.position)
+		else:
+			_on_tap(_press_pos)
+	elif _press_active and (event is InputEventScreenDrag or event is InputEventMouseMotion):
+		_update_drag(event.position)
+
+## Start dragging the piece under the press point (selects it and shows its moves)
+func _begin_drag() -> bool:
+	if _has_pending() or dialogs.is_promotion_visible():
+		return false
+	var sq: Vector2i = _pos_to_square(_press_pos)
+	if sq == Vector2i(-1, -1):
+		return false
+	var piece: String = board[sq.y][sq.x]
+	if piece == "" or piece[0] != turn or not (local_mode or piece[0] == my_color):
+		return false
+	var moves: Array[Vector2i] = _legal_moves_for_square(sq)
+	if moves.is_empty():
+		return false
+	selected = sq
+	legal_moves = moves
+	highlighted.assign(moves)
+	_refresh_board_ui()
+	_drag_from = sq
+	_last_drag_pos = _press_pos
+	animations.lift_piece(pieces[sq.y][sq.x])
+	return true
+
+## Move the dragged piece with the finger (starts the drag once past a small threshold)
+func _update_drag(pos: Vector2) -> void:
+	if _drag_from == Vector2i(-1, -1):
+		if pos.distance_to(_press_pos) < SQUARE_SIZE * 0.15 or not _begin_drag():
+			return
+	pieces[_drag_from.y][_drag_from.x].position += pos - _last_drag_pos
+	_last_drag_pos = pos
+
+## Drop: snap to the square under the piece's centre if legal, otherwise return it
+func _end_drag(pos: Vector2) -> void:
+	_update_drag(pos)
+	var from_sq: Vector2i = _drag_from
+	_drag_from = Vector2i(-1, -1)
+	var tex: TextureRect = pieces[from_sq.y][from_sq.x]
+	var drop_sq: Vector2i = _pos_to_square(tex.position + tex.size * 0.5)
+	if drop_sq != from_sq and drop_sq in legal_moves:
+		_drop_move = true
+		await _handle_move_tap(drop_sq, board[drop_sq.y][drop_sq.x])
+	else:
+		await animations.return_piece(from_sq)
+
+## Abort a drag (turn ended, settings opened, etc.)
+func _cancel_drag() -> void:
+	_press_active = false
+	if _drag_from == Vector2i(-1, -1):
+		return
+	pieces[_drag_from.y][_drag_from.x].z_index = 10
+	_drag_from = Vector2i(-1, -1)
+	if _ui_ready():
+		_refresh_board_ui()
 
 func _can_interact() -> bool:
 	if spectator_mode:
@@ -2703,7 +2767,8 @@ func to_position_key() -> String:
 func _animate_player_move(from_sq: Vector2i, to_sq: Vector2i) -> void:
 	## Animate a player's move. Handles castling, en passant, captures, and normal moves.
 	_log_ui.debug("_animate_player_move: %s -> %s" % [_square_name(from_sq), _square_name(to_sq)])
-	await animations.animate_move(from_sq, to_sq, board)
+	await animations.animate_move(from_sq, to_sq, board, _drop_move)
+	_drop_move = false
 	GameUtils.play_sfx(self, BOARD_PIECE_SFX)
 
 func _animate_opponent_move(from_sq: Vector2i, to_sq: Vector2i, _final_board_gp: String) -> void:

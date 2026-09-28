@@ -28,7 +28,7 @@ class GameSession(var handle: IMessageViewHandle) {
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
     var liveRemoteViews = GlanceRemoteViews()
 
-    fun handleNewMessage(message: MadridMessage) {
+    fun handleNewMessage(message: MadridMessage): Boolean {
         val url = message.url.replace("data:", "data://").toUri()
         val data = url.getQueryParameter("data")!!
         val decrypted = Cryption.decrypt(data)
@@ -84,7 +84,7 @@ class GameSession(var handle: IMessageViewHandle) {
         }
 
         if (!accepted) {
-            return
+            return false
         }
 
         val isFirstMessage = previousMessage.isEmpty()
@@ -106,6 +106,8 @@ class GameSession(var handle: IMessageViewHandle) {
                 "Ignoring duplicate message num=${newMessage["num"]}",
             )
         }
+
+        return true
     }
 
     private fun messageKey(message: MadridMessage): String {
@@ -176,7 +178,7 @@ class GameSession(var handle: IMessageViewHandle) {
                 null
             } else {
                 Triple(
-                    handle,
+                    latestHostHandle?.takeIf { it.asBinder().isBinderAlive && handleMessageKey == latestMessageKey } ?: handle,
                     currentMessage.toMap(),
                     latestMessageKey,
                 )

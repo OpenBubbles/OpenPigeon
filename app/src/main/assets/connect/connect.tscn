@@ -250,7 +250,6 @@ scale = Vector2(0.885, 0.885)
 texture = ExtResource("3_28fnr")
 
 [node name="TextureLayer2" type="Sprite2D" parent="ConnectMainVBox/ConnectBoardCenter/GameBoard" unique_id=709958164]
-z_index = 9
 scale = Vector2(0.885, 0.885)
 texture = ExtResource("6_wlgta")
 

@@ -127,7 +127,7 @@ func ingest_game_data(raw_text: String) -> void:
 	])
 
 	is_my_turn = is_your_turn
-	has_replay = replay_raw.contains("shoot:1")
+	has_replay = _has_shoot_event(replay_raw)
 	has_winner = not winner.is_empty()
 	
 	emit_signal("replay_true", has_replay)

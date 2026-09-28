@@ -2348,7 +2348,10 @@ func _set_game_data(new_replay: String):
 			])
 		else:
 			OpLog.w(LOG_TAG, ["bad_winner_payload payload=", winner_payload])
-
+		
+		if not replay_played and not spectator_mode and parts.size() >= 2 and String(parts[0]) != my_uuid and not replay.is_empty():
+			await play_replay(replay)
+		
 		if not replay.is_empty():
 			var completed_replay := parse_replay(replay)
 

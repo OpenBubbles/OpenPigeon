@@ -81,8 +81,10 @@ class GodotGameActivity : GodotActivity() {
 
     override fun onDestroy() {
         mediaPlugin?.stopMusic()
+        appPlugin?.flushRecovery()
         releaseSession()
         super.onDestroy()
+        if (isFinishing) { OpenPigeonLog.flushFile(); android.os.Process.killProcess(android.os.Process.myPid()) }
     }
 
     private fun initGameSession(intent: Intent) {
@@ -174,6 +176,7 @@ class GodotGameActivity : GodotActivity() {
     }
 
     override fun onGodotForceQuit(instance: Godot) {
+        appPlugin?.flushRecovery()
         releaseSession()
         runOnUiThread {
             activity?.finish()

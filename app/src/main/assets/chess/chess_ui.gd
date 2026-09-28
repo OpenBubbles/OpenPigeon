@@ -218,35 +218,6 @@ static func create_pulse_tween(overlay: ColorRect, tree: SceneTree) -> Tween:
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	return tween
 
-## Create a move animation tween for a piece
-static func create_move_tween(piece_tex: TextureRect, end_pos: Vector2, tree: SceneTree, duration: float = MOVE_ANIMATION_DURATION) -> Tween:
-	if piece_tex == null or tree == null:
-		return null
-
-	var tween: Tween = tree.create_tween()
-	tween.set_parallel(true)
-
-	# Smooth slide animation
-	tween.tween_property(piece_tex, "position", end_pos, duration)\
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-
-	# Scale bounce for polish
-	tween.tween_property(piece_tex, "scale", Vector2(1.1, 1.1), duration * 0.5)\
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-	# Chain scale-back
-	tween.chain()
-	tween.tween_property(piece_tex, "scale", Vector2.ONE, duration * 0.5)\
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
-
-	# Cleanup callback
-	tween.finished.connect(func():
-		piece_tex.position = end_pos
-		piece_tex.scale = Vector2.ONE
-	)
-
-	return tween
-
 ## Create a stylebox for panels
 static func create_panel_stylebox(bg_color: Color, corner_radius: int = 15) -> StyleBoxFlat:
 	var sb: StyleBoxFlat = StyleBoxFlat.new()

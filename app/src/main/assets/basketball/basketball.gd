@@ -270,6 +270,7 @@ var recovery_check_scheduled: bool = false
 var recovery_allow_waiting: bool = false
 var recovery_snapshot_pending: bool = false
 var recovery_snapshot_progress: String = ""
+var recovery_next_ball: int = 0
 
 var isWaiting = false
 var receivedMessage = null
@@ -1771,11 +1772,16 @@ func _sync_recovery_elapsed() -> void:
 	elapsedTime = clampf(45.0 - float(remaining_ms) / 1000.0, 0.0, 45.0)
 
 func _save_basketball_progress() -> void:
-	if appPlugin == null or spectator_mode or turnNum == null:
+	if appPlugin == null or spectator_mode or turnNum == null or player == null:
 		return
-	var progress := {"phase": "round", "deadline": str(recovery_deadline_ms), "turn": str(turnNum), "roundStartScore": str(recovery_round_start_score), "shots": recovery_shots}
-	var saved := bool(appPlugin.saveTurnProgress(JSON.stringify(progress)))
-	OpLog.i(LOG_TAG, ["recovery_saved saved=", saved, " shots=", recovery_shots.size(), " deadline=", recovery_deadline_ms])
+	var in_flight: Array[Dictionary] = []
+	var banked: int = myScore
+	for shot in recovery_shots:
+		if not bool(shot.get("finished", false)):
+			in_flight.append(shot)
+			if int(shot.get("result", -1)) == 1:
+				banked -= 1
+	appPlugin.saveTurnProgress(JSON.stringify({"phase": "round", "deadline": str(recovery_deadline_ms), "turn": str(turnNum), "roundStartScore": str(recovery_round_start_score), "score": str(banked), "replay": myReplay, "ball": str(ballNum.get(int(player), 1)), "shots": in_flight}))
 
 func _recovery_shot_index(shot_num: int) -> int:
 	for i in range(recovery_shots.size()):
@@ -1818,7 +1824,6 @@ func mark_basketball_shot_scored(shot_num: int) -> void:
 	if index < 0:
 		return
 	recovery_shots[index]["result"] = 1
-	_save_basketball_progress()
 
 func mark_basketball_shot_finished(shot_num: int, did_go_in: bool) -> void:
 	var index := _recovery_shot_index(shot_num)
@@ -1826,7 +1831,6 @@ func mark_basketball_shot_finished(shot_num: int, did_go_in: bool) -> void:
 		return
 	recovery_shots[index]["result"] = 1 if did_go_in else 0
 	recovery_shots[index]["finished"] = true
-	_save_basketball_progress()
 
 func _launch_recovered_basketball_shot(shot: Dictionary) -> void:
 	if player == null or not recovery_restore_in_progress:
@@ -1849,7 +1853,7 @@ func _launch_recovered_basketball_shot(shot: Dictionary) -> void:
 func _finish_basketball_recovery() -> void:
 	recovery_restore_in_progress = false
 	_sync_recovery_elapsed()
-	ballNum[int(player)] = _max_recovery_shot_num() + 1
+	ballNum[int(player)] = maxi(_max_recovery_shot_num() + 1, recovery_next_ball)
 	if recovery_deadline_ms > _recovery_now_ms() and not is_instance_valid(currentBall.get(int(player))):
 		spawnBall(int(player))
 	updateStrokeRecoveryUi()
@@ -1870,6 +1874,8 @@ func _replay_unfinished_basketball_shots() -> void:
 		_finish_basketball_recovery()
 		return
 	var previous_time := float(unfinished[0].get("time", 0.0))
+	elapsedTime = previous_time
+	updateStrokeRecoveryUi()
 	for shot in unfinished:
 		var shot_time := float(shot.get("time", previous_time))
 		var delay := maxf(0.0, shot_time - previous_time)
@@ -1978,8 +1984,9 @@ func _restore_basketball_recovery() -> bool:
 		2: 1,
 	}
 
-	myScore = _recovery_score()
-	myReplay = _build_recovery_replay()
+	myScore = int(String(progress.get("score", str(_recovery_score()))))
+	myReplay = String(progress.get("replay", _build_recovery_replay()))
+	recovery_next_ball = int(String(progress.get("ball", "0")))
 
 	if is_instance_valid(youScoreLabel):
 		youScoreLabel.text = str(myScore).pad_zeros(2)
@@ -2047,17 +2054,17 @@ func _begin_ball_drag(
 	drag_smoothed_speed = 0.0
 	dragging = true
 
-	OpLog.i(
-		LOG_TAG,
-		[
-			"drag_started player=",
-			player,
-			" screen=",
-			screen_position,
-			" ball=",
-			active_ball.global_position,
-		],
-	)
+	#OpLog.i(
+		#LOG_TAG,
+		#[
+			#"drag_started player=",
+			#player,
+			#" screen=",
+			#screen_position,
+			#" ball=",
+			#active_ball.global_position,
+		#],
+	#)
 
 	return true
 
@@ -2175,29 +2182,29 @@ func _launch_ball_from_drag(
 	dragging = false
 	active_drag_touch_index = -1
 
-	OpLog.i(
-		LOG_TAG,
-		[
-			"ios_shot_release player=",
-			local_player_num,
-			" start=",
-			drag_start_pos,
-			" end=",
-			drag_end_position,
-			" distance=",
-			drag_start_pos.distance_to(
-				drag_end_position,
-			),
-			" speed=",
-			drag_smoothed_speed,
-			" targetX=",
-			target_x,
-			" ballX=",
-			active_ball.global_position.x,
-			" shotNum=",
-			shot_number,
-		],
-	)
+	#OpLog.i(
+		#LOG_TAG,
+		#[
+			#"ios_shot_release player=",
+			#local_player_num,
+			#" start=",
+			#drag_start_pos,
+			#" end=",
+			#drag_end_position,
+			#" distance=",
+			#drag_start_pos.distance_to(
+				#drag_end_position,
+			#),
+			#" speed=",
+			#drag_smoothed_speed,
+			#" targetX=",
+			#target_x,
+			#" ballX=",
+			#active_ball.global_position.x,
+			#" shotNum=",
+			#shot_number,
+		#],
+	#)
 
 	var saved_replay_x := get_saved_replay_x(target_x)
 	_record_basketball_release(shot_number, target_x, saved_replay_x)
@@ -4285,15 +4292,15 @@ func incrementScore(
 			2,
 		)
 
-	OpLog.i(
-		LOG_TAG,
-		[
-			"score_increment player=",
-			player_num,
-			" ",
-			_score_summary(),
-		],
-	)
+	#OpLog.i(
+		#LOG_TAG,
+		#[
+			#"score_increment player=",
+			#player_num,
+			#" ",
+			#_score_summary(),
+		#],
+	#)
 
 func setScore(player_num: int, score: int) -> void:
 	dbg(["set_score player=", player_num, " score=", score])
@@ -4412,6 +4419,7 @@ func _process(
 
 	if recovery_restore_in_progress:
 		elapsedTime += delta
+		updateStrokeRecoveryUi()
 		return
 
 	if recovery_deadline_ms > 0:
