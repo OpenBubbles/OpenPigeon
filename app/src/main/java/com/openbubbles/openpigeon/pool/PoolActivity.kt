@@ -81,6 +81,7 @@ import kotlin.math.roundToInt
 internal const val CUE_STYLE_MAX = 64
 internal const val CUE_DRAW_LENGTH = 520f
 internal const val CUE_TIP_OFFSET = 11f
+internal const val POOL_BREAK_TRACE = true
 
 internal fun rotatedCueBitmap(context: Context, style: Int): Bitmap? {
     val source = BitmapFactory.decodeResource(context.resources, cueDrawableId(context, style)) ?: return null
@@ -2092,6 +2093,11 @@ class PoolActivity : AppCompatActivity() {
                 activity.startNineBallBarRefresh()
             }
 
+            if (POOL_BREAK_TRACE && activity.isFirst && !activity.replaying) {
+                activity.poolTraceEnabled = true
+                activity.setPoolDebugTrace(activity.table, true, 1)
+            }
+
             if (activity.poolTraceEnabled) {
                 OpenPigeonLog.i(
                     "PoolShot",
@@ -3389,9 +3395,12 @@ class PoolActivity : AppCompatActivity() {
             if (!sphereDirty) return
             sphereDirty = false
 
-            val inverseTextureRotation = iosRotationVectorToQuaternion(
+            val q = iosNormalizeQuaternion(iosRotationVectorToQuaternion(
                 -visualRotationX, -visualRotationY, -visualRotationZ
-            )
+            ))
+            val m00 = 1 - 2 * (q.y * q.y + q.z * q.z); val m01 = 2 * (q.x * q.y - q.w * q.z); val m02 = 2 * (q.x * q.z + q.w * q.y)
+            val m10 = 2 * (q.x * q.y + q.w * q.z); val m11 = 1 - 2 * (q.x * q.x + q.z * q.z); val m12 = 2 * (q.y * q.z - q.w * q.x)
+            val m20 = 2 * (q.x * q.z - q.w * q.y); val m21 = 2 * (q.y * q.z + q.w * q.x); val m22 = 1 - 2 * (q.x * q.x + q.y * q.y)
 
             for (py in 0 until SPHERE_RENDER_SIZE) {
                 for (px in 0 until SPHERE_RENDER_SIZE) {
@@ -3408,13 +3417,10 @@ class PoolActivity : AppCompatActivity() {
 
                     val nz = sqrt(1f - r2)
 
-                    val rotated = iosRotateVectorByQuaternion(
-                        inverseTextureRotation, nx.toDouble(), -ny.toDouble(), nz.toDouble()
-                    )
-
-                    val vx = rotated[0]
-                    val vy = rotated[1]
-                    val vz = rotated[2]
+                    val ix = nx.toDouble(); val iy = -ny.toDouble(); val iz = nz.toDouble()
+                    val vx = m00 * ix + m01 * iy + m02 * iz
+                    val vy = m10 * ix + m11 * iy + m12 * iz
+                    val vz = m20 * ix + m21 * iy + m22 * iz
 
                     val longitude = atan2(vx, vz)
                     val latitude = asin(vy.coerceIn(-1.0, 1.0))

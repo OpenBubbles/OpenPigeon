@@ -480,7 +480,7 @@ void PoolBall::hit(float dir, float power, float spinX, float spinY) {
     __android_log_print(
             ANDROID_LOG_VERBOSE,
             "PoolHit",
-            "hit number=%d dir=%.6f power=%.6f spinX=%.6f spinY=%.6f x=%.6f y=%.6f qs=%.6f qc=%.6f shouldGoIn=%d",
+            "hit number=%d dir=%.9g power=%.9g spinX=%.9g spinY=%.9g x=%.9g y=%.9g qs=%.9g qc=%.9g shouldGoIn=%d",
             number,
             dir,
             power,
