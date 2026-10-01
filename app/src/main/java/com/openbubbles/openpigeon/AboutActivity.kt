@@ -615,8 +615,8 @@ class AboutActivity : Activity() {
             "${records.maxOfOrNull { it.bestStreak } ?: 0}" to "Best streak",
         ).map { (value, name) ->
             statCard(
-                statText(value, 20f, onSurface, bold = true),
-                statText(name, 11f, muted),
+                statText(value, 20f, onSurface, bold = true).apply { gravity = Gravity.CENTER },
+                statText(name, 11f, muted).apply { gravity = Gravity.CENTER },
             ).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(dp(4), dp(10), dp(4), dp(10))
