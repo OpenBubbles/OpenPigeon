@@ -19,7 +19,7 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
-import kotlin.math.tan
+import java.util.Locale
 import kotlin.math.min
 import android.util.TypedValue
 import kotlin.math.max
@@ -180,6 +180,7 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
 
         private const val TABLE_ASSET_CONTENT_OFFSET_X_PX = 0f
         private const val TABLE_ASSET_CONTENT_OFFSET_Y_PX = 0f
+        private const val AIM_BALL_RADIUS = 10f
     }
 
     private val tableBitmapRect = RectF(-0.057f, -0.189f, WORLD_WIDTH, WORLD_HEIGHT)
@@ -358,42 +359,6 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         }
     }
 
-    private fun rayEndAtTableEdge(startX: Float, startY: Float, dirX: Float, dirY: Float): Pair<Float, Float> {
-        var bestT = Float.POSITIVE_INFINITY
-        var bestX = startX
-        var bestY = startY
-
-        fun cross(ax: Float, ay: Float, bx: Float, by: Float): Float {
-            return ax * by - ay * bx
-        }
-
-        for (seg in iosAimWallSegments) {
-            val sx = seg.bx - seg.ax
-            val sy = seg.by - seg.ay
-            val denom = cross(dirX, dirY, sx, sy)
-
-            if (abs(denom) < 0.0001f)
-                continue
-
-            val qx = seg.ax - startX
-            val qy = seg.ay - startY
-
-            val t = cross(qx, qy, sx, sy) / denom
-            val u = cross(qx, qy, dirX, dirY) / denom
-
-            if (t > 0.001f && u >= -0.001f && u <= 1.001f && t < bestT) {
-                bestT = t
-                bestX = startX + dirX * t
-                bestY = startY + dirY * t
-            }
-        }
-
-        if (!bestT.isFinite()) {
-            return Pair(startX, startY)
-        }
-
-        return Pair(bestX, bestY)
-    }
     private fun drawAimAssist(canvas: Canvas) {
         if (activity.mode != PoolActivity.PoolMode.Aiming) return
         val cueBall = activity.cueBall ?: return
@@ -404,73 +369,38 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
             isAntiAlias = true
         }
 
+        val dirX = cos(cueRot)
+        val dirY = sin(cueRot)
         var closestBall: PoolActivity.PoolBall? = null
-        var closestDistance = Float.MAX_VALUE
-        var hitPointX = 0f
-        var hitPointY = 0f
+        var bestT = aimCastWalls(cueBall.x, cueBall.y, dirX, dirY)
 
-        for (ball in activity.poolBalls) {
-            if (ball.number == 0 || ball.sunk) continue
-
-            val otherBallX = ball.x - cueBall.x
-            val otherBallY = ball.y - cueBall.y
-
-            val slope = tan(cueRot)
-            val a = slope * slope + 1
-            val b = 2 * (-slope * otherBallY - otherBallX)
-            val c = otherBallY * otherBallY + otherBallX * otherBallX - 400
-            val discriminant = b * b - 4 * a * c
-            if (discriminant <= 0) continue
-
-            val pointsRight = cos(cueRot) > 0
-            val direction = if (pointsRight) -1 else 1
-            val xCoord = (-b + sqrt(discriminant) * direction) / 2 / a
-
-            if (pointsRight && xCoord < 0) continue
-            if (!pointsRight && xCoord > 0) continue
-
-            if (abs(xCoord) < closestDistance) {
-                closestDistance = abs(xCoord)
-                closestBall = ball
-                hitPointY = slope * xCoord + cueBall.y
-                hitPointX = xCoord + cueBall.x
+        for (other in activity.poolBalls) {
+            if (other.number == 0 || other.sunk || other.inPocket) continue
+            val t = aimCastCircle(cueBall.x, cueBall.y, dirX, dirY, other.x, other.y, AIM_BALL_RADIUS * 2f)
+            if (t < bestT) {
+                bestT = t
+                closestBall = other
             }
         }
 
-        if (closestBall == null) {
-            val dirX = cos(cueRot)
-            val dirY = sin(cueRot)
-            val edge = rayEndAtTableEdge(cueBall.x, cueBall.y, dirX, dirY)
+        if (!bestT.isFinite()) return
 
-            val markerRadius = 9f
-            val markerX = edge.first - dirX * markerRadius
-            val markerY = edge.second - dirY * markerRadius
-            val lineEndX = markerX - dirX * markerRadius
-            val lineEndY = markerY - dirY * markerRadius
-
-            canvas.drawLine(
-                cueBall.x + dirX * 10f,
-                cueBall.y + dirY * 10f,
-                lineEndX,
-                lineEndY,
-                paint
-            )
-
-            canvas.drawCircle(markerX, markerY, markerRadius, paint)
-            return
-        }
+        val hitPointX = cueBall.x + dirX * bestT
+        val hitPointY = cueBall.y + dirY * bestT
 
         canvas.drawCircle(hitPointX, hitPointY, 9f, paint)
-        canvas.drawLine(
-            hitPointX - cos(cueRot) * 10f,
-            hitPointY - sin(cueRot) * 10f,
-            cueBall.x + cos(cueRot) * 10f,
-            cueBall.y + sin(cueRot) * 10f,
-            paint
-        )
+        if (bestT > AIM_BALL_RADIUS * 2f) {
+            canvas.drawLine(
+                cueBall.x + dirX * AIM_BALL_RADIUS,
+                cueBall.y + dirY * AIM_BALL_RADIUS,
+                hitPointX - dirX * AIM_BALL_RADIUS,
+                hitPointY - dirY * AIM_BALL_RADIUS,
+                paint
+            )
+        }
 
+        val ball = closestBall ?: return
         val stripes = activity.iAmStripes
-        val ball = closestBall
 
         if (activity.isNineBall) {
             val target = activity.lowestNineBallNumber()
@@ -571,6 +501,43 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
             hitPointY + sin(tangentAngle) * 10f + sin(tangentAngle) * 70f * abs(directness),
             paint
         )
+    }
+
+    // Distance along (dx, dy) the cue ball's center travels before it touches a circle of radius r at (cx, cy).
+    private fun aimCastCircle(sx: Float, sy: Float, dx: Float, dy: Float, cx: Float, cy: Float, r: Float): Float {
+        val ox = sx - cx
+        val oy = sy - cy
+        val b = ox * dx + oy * dy
+        val c = ox * ox + oy * oy - r * r
+        if (c < 0f) return if (b < 0f) 0f else Float.POSITIVE_INFINITY
+        val disc = b * b - c
+        if (disc < 0f) return Float.POSITIVE_INFINITY
+        val t = -b - sqrt(disc)
+        return if (t >= 0f) t else Float.POSITIVE_INFINITY
+    }
+
+    // Distance the cue ball's center travels before its edge (radius r) touches any rail or pocket jaw.
+    private fun aimCastWalls(sx: Float, sy: Float, dx: Float, dy: Float): Float {
+        val r = AIM_BALL_RADIUS
+        var best = Float.POSITIVE_INFINITY
+        for (seg in iosAimWallSegments) {
+            val ex = seg.bx - seg.ax
+            val ey = seg.by - seg.ay
+            val len2 = ex * ex + ey * ey
+            if (len2 < 1e-6f) continue
+            val len = sqrt(len2)
+            val nx = -ey / len
+            val ny = ex / len
+            val d0 = (sx - seg.ax) * nx + (sy - seg.ay) * ny
+            val vn = dx * nx + dy * ny
+            if (d0 * vn < 0f) {
+                val t = max(0f, (abs(d0) - r) / abs(vn))
+                val u = ((sx + dx * t - seg.ax) * ex + (sy + dy * t - seg.ay) * ey) / len2
+                if (u in 0f..1f) best = min(best, t)
+            }
+            best = min(best, min(aimCastCircle(sx, sy, dx, dy, seg.ax, seg.ay, r), aimCastCircle(sx, sy, dx, dy, seg.bx, seg.by, r)))
+        }
+        return best
     }
 
     private fun feltTintColor(): Int? {
@@ -701,7 +668,7 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
 
         OpenPigeonLog.i(
             "PoolAssets",
-            "rebuilt_table_cache tint=${tint?.let { String.format("#%08X", it) } ?: "green"} " +
+            "rebuilt_table_cache tint=${tint?.let { String.format(Locale.US, "#%08X", it) } ?: "green"} " +
                     "line=${key.drawBreakLine} plus=${key.drawPlus} " +
                     "contentScaleH=$TABLE_ASSET_CONTENT_SCALE_HORIZONTAL " +
                     "contentScaleV=$TABLE_ASSET_CONTENT_SCALE_VERTICAL " +
@@ -849,8 +816,8 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                 if (activity.mode == PoolActivity.PoolMode.Playing && frameMs > 20.0) {
                     OpenPigeonLog.w(
                         "PoolFramePerf",
-                        "slow_frame frameMs=${String.format("%.2f", frameMs)} " +
-                                "nativeUpdateMs=${String.format("%.2f", updateMs)} " +
+                        "slow_frame frameMs=${String.format(Locale.US, "%.2f", frameMs)} " +
+                                "nativeUpdateMs=${String.format(Locale.US, "%.2f", updateMs)} " +
                                 "balls=${activity.poolBalls.size} replaying=${activity.replaying}"
                     )
                 }

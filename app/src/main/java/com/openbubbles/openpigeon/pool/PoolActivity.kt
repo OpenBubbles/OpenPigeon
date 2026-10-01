@@ -28,6 +28,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.animation.doOnEnd
 import androidx.core.view.ViewCompat
+import androidx.core.view.doOnLayout
 import android.graphics.Paint
 import android.graphics.Color
 import com.openbubbles.openpigeon.ui.RulesPopup
@@ -77,6 +78,7 @@ import com.openbubbles.openpigeon.settings.SettingsSheet
 import com.openbubbles.openpigeon.ui.TurnRecoveryOverlayController
 import com.openbubbles.openpigeon.ui.attachTurnRecoveryOverlay
 import kotlin.math.roundToInt
+import android.animation.ObjectAnimator
 
 internal const val CUE_STYLE_MAX = 64
 internal const val CUE_DRAW_LENGTH = 520f
@@ -299,6 +301,10 @@ class PoolActivity : AppCompatActivity() {
 
     external fun dumpPoolTable(table: Long): String
     external fun setPoolDebugTrace(table: Long, enabled: Boolean, everyFrames: Int)
+    private var ballTypeRevealPending = false
+    private var ballTypeCalloutShown = false
+    private var ballTypePreview: Boolean? = null
+    private var ballTypeRevealHitsLeft = -1
 
     private fun updateBallTypeUi() {
         runOnUiThread {
@@ -314,7 +320,7 @@ class PoolActivity : AppCompatActivity() {
             playerBall.visibility = View.VISIBLE
             oppBall.visibility = View.VISIBLE
 
-            when (iAmStripes) {
+            when ((iAmStripes ?: ballTypePreview).takeUnless { ballTypeRevealPending }) {
                 null -> {
                     playerBall.setImageResource(R.drawable.pool_ball_empty)
                     oppBall.setImageResource(R.drawable.pool_ball_empty)
@@ -330,6 +336,82 @@ class PoolActivity : AppCompatActivity() {
                     oppBall.setImageResource(R.drawable.pool_ball_stripes)
                 }
             }
+
+            if ((iAmStripes ?: ballTypePreview) == null) {
+                ballTypeCalloutShown = false
+            } else if (!ballTypeRevealPending && !ballTypeCalloutShown) {
+                ballTypeCalloutShown = true
+                showBallTypeCallouts()
+            }
+        }
+    }
+
+    private fun showBallTypeCallouts() {
+        val stripes = iAmStripes ?: ballTypePreview ?: return
+        showBallTypeCallout(findViewById(R.id.playerBallType), if (stripes) "Stripes" else "Solids")
+        if (spectatorMode) showBallTypeCallout(findViewById(R.id.oppBallType), if (stripes) "Solids" else "Stripes")
+    }
+
+    private fun showBallTypeCallout(ball: ImageView, text: String) = ball.doOnLayout {
+        val root = findViewById<FrameLayout>(R.id.poolRoot) ?: return@doOnLayout
+        val ballLoc = IntArray(2).also { ball.getLocationInWindow(it) }
+        val rootLoc = IntArray(2).also { root.getLocationInWindow(it) }
+        val pointLeft = ballLoc[0] + ball.width / 2f < rootLoc[0] + root.width / 2f
+
+        val arrow = object : View(this) {
+            private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK }
+            private val path = android.graphics.Path()
+            override fun onDraw(canvas: Canvas) {
+                val w = width.toFloat()
+                val h = height.toFloat()
+                path.reset()
+                if (pointLeft) { path.moveTo(0f, h / 2f); path.lineTo(w, 0f); path.lineTo(w, h) }
+                else { path.moveTo(w, h / 2f); path.lineTo(0f, 0f); path.lineTo(0f, h) }
+                path.close()
+                canvas.drawPath(path, paint)
+            }
+        }.apply { layoutParams = LinearLayout.LayoutParams(stateLabelDp(8f), stateLabelDp(14f)) }
+
+        val label = TextView(this).apply {
+            this.text = text
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setPadding(stateLabelDp(10f), stateLabelDp(4f), stateLabelDp(10f), stateLabelDp(4f))
+            background = GradientDrawable().apply { setColor(Color.BLACK); cornerRadius = stateLabelDp(8f).toFloat() }
+        }
+
+        val callout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            alpha = 0f
+            if (pointLeft) { addView(arrow); addView(label) } else { addView(label); addView(arrow) }
+        }
+        root.addView(callout, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT))
+
+        ball.animate().cancel()
+        ball.scaleX = 0.6f
+        ball.scaleY = 0.6f
+        ball.animate().scaleX(1f).scaleY(1f).setDuration(350L)
+            .setInterpolator(android.view.animation.OvershootInterpolator(3f)).start()
+
+        callout.doOnLayout {
+            val loc = IntArray(2).also { callout.getLocationInWindow(it) }
+            val gap = stateLabelDp(4f)
+            val baseX = (if (pointLeft) ballLoc[0] + ball.width + gap else ballLoc[0] - callout.width - gap) - loc[0].toFloat()
+            callout.translationX = baseX
+            callout.translationY = (ballLoc[1] + ball.height / 2f) - (loc[1] + callout.height / 2f)
+            callout.bringToFront()
+            callout.animate().alpha(1f).setDuration(200L).start()
+            ObjectAnimator.ofFloat(callout, View.TRANSLATION_X, baseX, baseX + (if (pointLeft) -1f else 1f) * stateLabelDp(8f)).apply {
+                duration = 375L
+                repeatMode = ValueAnimator.REVERSE
+                repeatCount = 7
+                start()
+            }
+            callout.postDelayed({
+                callout.animate().alpha(0f).setDuration(250L).withEndAction { root.removeView(callout) }.start()
+            }, 3000L)
         }
     }
 
@@ -2380,7 +2462,21 @@ class PoolActivity : AppCompatActivity() {
             if ((ball.inPocket || ball.sunk) && !ball.pocketSoundPlayed) {
                 ball.pocketSoundPlayed = true
                 gameMenu.playSound(POOL_POCKET_SFX_PATH, volume = 0.8f)
+                if (ball.isSolid || ball.isStripe) revealBallTypeOnPocket(ball)
             }
+        }
+    }
+
+    private fun revealBallTypeOnPocket(ball: PoolBall) {
+        if (isNineBall) return
+        if (ballTypeRevealPending) {
+            if (replaying && replayHits.size == ballTypeRevealHitsLeft) {
+                ballTypeRevealPending = false
+                updateBallTypeUi()
+            }
+        } else if (iAmStripes == null && ballTypePreview == null && !replaying && !wasFirst && mode == PoolMode.Playing) {
+            ballTypePreview = ball.isStripe
+            updateBallTypeUi()
         }
     }
 
@@ -2566,6 +2662,11 @@ class PoolActivity : AppCompatActivity() {
 
         buildBalls(finalBalls, null)
 
+        if (ballTypeRevealPending) {
+            ballTypeRevealPending = false
+            updateBallTypeUi()
+        }
+
         if (restoringLastShotReplay) {
             finalBalls = recoveryTurnStartBalls
             recoveryTurnStartBalls = ""
@@ -2717,6 +2818,11 @@ class PoolActivity : AppCompatActivity() {
                         !(wasFirst || iAmStripes == null || blackBall == null || poolBalls.count { !it.sunk && ((iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid)) } != 0 || cueBall.sunk || calledPocket.isEmpty() || blackBall.holeX != calledPocket[0].toFloat() || blackBall.holeY != calledPocket[1].toFloat())
                 }
 
+                if ((scratch || winState != null) && ballTypePreview != null) {
+                    ballTypePreview = null
+                    updateBallTypeUi()
+                }
+
                 if (!scratch && winState == null) {
                     val sunkPlayableBalls =
                         poolBalls.filter { it.sunk && (it.isStripe || it.isSolid) }
@@ -2730,7 +2836,8 @@ class PoolActivity : AppCompatActivity() {
 
                     if (madeTurnBall) {
                         if (iAmStripes == null && !wasFirst) {
-                            iAmStripes = sunkPlayableBalls.first().isStripe
+                            iAmStripes = ballTypePreview ?: sunkPlayableBalls.first().isStripe
+                            ballTypePreview = null
                             updateBallTypeUi()
                         }
 
@@ -3729,7 +3836,7 @@ class PoolActivity : AppCompatActivity() {
         }
     }
 
-    private fun buildBalls(balls: String, skew: String?) {
+    private fun buildBalls(balls: String, skew: String?): Unit = synchronized(this) {
         data class FinalBall(val number: Int, val x: Float, val y: Float)
 
         val finalBalls: MutableList<FinalBall>? = skew?.let {
@@ -4081,6 +4188,8 @@ class PoolActivity : AppCompatActivity() {
         lastShotStartBalls = shotStartBalls
         lastShotStartIsFirst = progress["shotStartIsFirst"]?.toBooleanStrictOrNull() ?: false
         iAmStripes = recoveryStripesValue(progress["stripes"])
+        ballTypeRevealPending = false
+        ballTypePreview = null
         isFirst = progress["isFirst"]?.toBooleanStrictOrNull() ?: false
         wasFirst = progress["wasFirst"]?.toBooleanStrictOrNull() ?: false
         scratch = progress["scratch"]?.toBooleanStrictOrNull() ?: false
@@ -4088,9 +4197,7 @@ class PoolActivity : AppCompatActivity() {
         calledPocket = progress["calledPocket"]?.split(",")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 } ?: emptyList()
 
         renderer.resetFrameReadySignal()
-        clearBalls(table)
-        poolBalls.clear()
-        cueBall = null
+        synchronized(this) { clearBalls(table); poolBalls.clear(); cueBall = null }
 
         if (replayLastShot) {
             val hit = restoredHits.last()
@@ -4102,6 +4209,8 @@ class PoolActivity : AppCompatActivity() {
             skipReplayFadeStarted = true
 
             buildBalls(shotStartBalls, currentBalls)
+            ballTypeRevealPending = iAmStripes != null && hit.wasStripes == null
+            ballTypeRevealHitsLeft = 0
             updateBallTypeUi()
 
             if (!renderer.isAlive) renderer.start()
@@ -4417,6 +4526,7 @@ class PoolActivity : AppCompatActivity() {
 
     fun handleMessage(msg: Map<String, String>) {
         lastMessage = msg
+        ballTypeRevealPending = false
         lastMessageWinner = msg["winner"].orEmpty()
 
         if (table == 0L) return // we are dead
@@ -4460,9 +4570,7 @@ class PoolActivity : AppCompatActivity() {
         }
         stateLabelVisual = StateLabelVisual.Hidden
         setStatusDimVisible(false)
-        clearBalls(table)
-        poolBalls.clear()
-        cueBall = null
+        synchronized(this) { clearBalls(table); poolBalls.clear(); cueBall = null }
         replayHits.clear()
         finalBalls = ""
         val gameName = msg["game"] ?: msg["name"] ?: msg["gameName"] ?: baseGame.getName()
@@ -4576,6 +4684,9 @@ class PoolActivity : AppCompatActivity() {
                     val stripes = output["stripes"]?.toIntOrNull()
                     if (stripes != null) {
                         iAmStripes = if (stripes == 0) null else player == stripes
+                        val claimIdx = replayHits.indexOfLast { it.wasStripes == null }
+                        ballTypeRevealPending = isYourTurn && iAmStripes != null && claimIdx >= 0
+                        ballTypeRevealHitsLeft = replayHits.size - 1 - claimIdx
                         updateBallTypeUi()
                         OpenPigeonLog.i("Me", "$iAmStripes")
                     } else {

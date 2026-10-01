@@ -9,6 +9,7 @@ import androidx.glance.appwidget.ExperimentalGlanceRemoteViewsApi
 import androidx.glance.appwidget.GlanceRemoteViews
 import com.bluebubbles.messaging.ITaskCompleteCallback
 import android.os.Process
+import com.openbubbles.openpigeon.settings.GameStats
 
 private data class PendingSessionUpdate(
     val context: Context,
@@ -133,8 +134,6 @@ class GameSession(var handle: IMessageViewHandle) {
         val claimedWinner = parts[0]
         val flag = parts[1]
 
-        if (flag == "0") return // Draw, no win to record
-
         var iWon = myId == claimedWinner
         if (flag == "-1") iWon = !iWon
 
@@ -143,10 +142,18 @@ class GameSession(var handle: IMessageViewHandle) {
         val player2 = message["player2"]
         if (player1 != null && player2 != null && myId != player1 && myId != player2) return
 
+        GameStats.init(context)
+        val iAmP1 = myId == player1
+        val opponent = if (iAmP1) player2 else player1
+        if (!opponent.isNullOrBlank() && opponent != myId) {
+            GameStats.recordResult(game.getName(), opponent, if (flag == "0") 0 else if (iWon) 1 else -1, message[if (iAmP1) "avatar2" else "avatar1"])
+        }
+
+        if (flag == "0") return // Draw, no win to record
+
         if (iWon) {
-            com.openbubbles.openpigeon.settings.GameStats.init(context)
-            com.openbubbles.openpigeon.settings.GameStats.incrementWins(game.getName())
-            OpenPigeonLog.i("GameStats", "Recorded win for ${game.getName()}, total=${com.openbubbles.openpigeon.settings.GameStats.getWins(game.getName())}")
+            GameStats.incrementWins(game.getName())
+            OpenPigeonLog.i("GameStats", "Recorded win for ${game.getName()}, total=${GameStats.getWins(game.getName())}")
         }
     }
 
