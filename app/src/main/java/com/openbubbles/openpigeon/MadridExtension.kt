@@ -510,6 +510,10 @@ private val tutorialSteps = listOf(
         "Tap Settings in the top bar to customize your avatar. It shows up in every game."
     ),
     TutorialStep(
+        "Track your stats",
+        "Tap About, then Options, then Stats to see your wins, streaks and record against each opponent."
+    ),
+    TutorialStep(
         "Feedback welcome",
         "Find a bug or have an idea? Reach us on Discord or GitHub. We'd love to hear from you!"
     )
