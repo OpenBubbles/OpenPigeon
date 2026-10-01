@@ -29,7 +29,7 @@ public:
     void recordRailHit(float speed);
     void consumeCollisionSounds(float* output);
 
-    std::string dumpState() const;
+    [[nodiscard]] std::string dumpState() const;
     void setDebugTrace(bool enabled, int everyFrames);
 
     uint32_t frame = 0;
@@ -103,6 +103,7 @@ private:
     friend class PoolBall;
     b2World world;
     std::vector<PoolBall*> balls;
+    std::vector<PoolBall*> nuke;
     PoolData wallData;
     PoolContactListener contactListener;
     float pendingBallHitSpeed = 0.0f;

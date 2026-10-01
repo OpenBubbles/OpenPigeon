@@ -355,7 +355,8 @@ bool PoolBall::step() {
         }
 
         if (speed > 0.0f) {
-            currentVel *= newSpeed / speed;
+            float inv = 1.0f / speed;
+            currentVel = b2Vec2(newSpeed * (currentVel.x * inv), newSpeed * (currentVel.y * inv));
             body->SetLinearVelocity(currentVel);
         }
 
@@ -431,7 +432,7 @@ bool PoolBall::step() {
     }
 
     if (number == 0) {
-        spinPower *= 0.94f;
+        spinPower = (float)((double)spinPower * 0.94);
 
         if (table->cueDelay >= 3 && body->GetLinearVelocity().LengthSquared() > 0.0f && spinPower > 0.1f) {
             b2Vec2 mySpin(spinDir);
@@ -462,16 +463,18 @@ void PoolBall::hit(float dir, float power, float spinX, float spinY) {
     pocketFrames = -1;
     pocketBodyRemoved = false;
 
-    b2Vec2 vel(std::cos(dir), std::sin(dir));
-    vel *= power;
+    b2Vec2 vel((float)std::cos((double)dir), (float)std::sin((double)dir));
+    float len = vel.Length();
+    if (len >= b2_epsilon) { float inv = 1.0f / len; vel.x *= inv; vel.y *= inv; }
+    vel = b2Vec2(power * vel.x, power * vel.y);
     body->SetLinearVelocity(vel);
     body->SetAwake(true);
     body->SetActive(true);
 
-    float powerFrac = power / 2000.0f;
-
-    spinPower = powerFrac * std::abs(spinY);
-    spinDir = b2Vec2(std::cos(dir), std::sin(dir));
+    float speed = vel.Length();
+    spinPower = (float)((double)speed / 2000.0 * (double)std::abs(spinY));
+    spinDir = vel;
+    if (speed >= b2_epsilon) { float inv = 1.0f / speed; spinDir.x *= inv; spinDir.y *= inv; }
     if (spinY < 0.0f) {
         spinDir *= -1.0f;
     }
@@ -493,7 +496,7 @@ void PoolBall::hit(float dir, float power, float spinX, float spinY) {
             shouldGoIn
     );
 
-    float angularVel = powerFrac * spinX;
+    auto angularVel = static_cast<float>(static_cast<double>(power) / 2000.0 * static_cast<double>(spinX));
     if (std::abs(angularVel) < 50.0f) {
         angularVel = 0.0f;
     }

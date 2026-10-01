@@ -81,7 +81,8 @@ import kotlin.math.roundToInt
 internal const val CUE_STYLE_MAX = 64
 internal const val CUE_DRAW_LENGTH = 520f
 internal const val CUE_TIP_OFFSET = 11f
-internal const val POOL_BREAK_TRACE = true
+internal const val POOL_BREAK_TRACE = false
+internal const val POOL_REPLAY_TRACE = false
 
 internal fun rotatedCueBitmap(context: Context, style: Int): Bitmap? {
     val source = BitmapFactory.decodeResource(context.resources, cueDrawableId(context, style)) ?: return null
@@ -1615,7 +1616,8 @@ class PoolActivity : AppCompatActivity() {
                         return@setOnTouchListener true
                     }
                     // snap back and hit
-                    val hit = BallHit(renderer.cueRot, power, setSpinX, setSpinY, iAmStripes)
+                    val r = { v: Float -> String.format(Locale.US, "%f", v).toFloat() }
+                    val hit = BallHit(r(renderer.cueRot), r(power), r(setSpinX), r(setSpinY), iAmStripes)
                     lastShotStartBalls = exportBalls(false)
                     lastShotStartIsFirst = isFirst
                     outgoingReplayHits.add(hit)
@@ -2468,6 +2470,28 @@ class PoolActivity : AppCompatActivity() {
 
     var disableSend = false
 
+    private fun logReplaySnapDiff() {
+        val expected = finalBalls.split("#").mapNotNull { s ->
+            val d = s.split(",")
+            if (d.size < 5) null else Triple(d[4].toIntOrNull() ?: return@mapNotNull null, d[0].toFloat(), d[1].toFloat())
+        }.toMutableList()
+        var maxErr = 0f
+        var worst = -1
+        val out = StringBuilder()
+        for (b in poolBalls.sortedBy { it.number }) {
+            if (b.sunk) continue
+            val e = expected.filter { it.first == b.number }
+                .minByOrNull { (it.second - b.x) * (it.second - b.x) + (it.third - b.y) * (it.third - b.y) }
+            if (e == null) { out.append(" | b${b.number}:SIM_ONLY sim=(${b.x},${b.y}) pocket=${b.inPocket}"); continue }
+            expected.remove(e)
+            val err = sqrt((e.second - b.x) * (e.second - b.x) + (e.third - b.y) * (e.third - b.y))
+            if (err > maxErr) { maxErr = err; worst = b.number }
+            if (err > 0.01f) out.append(String.format(Locale.US, " | b%d:err=%.3f sim=(%.3f,%.3f) msg=(%.3f,%.3f) pocket=%s", b.number, err, b.x, b.y, e.second, e.third, b.inPocket))
+        }
+        expected.forEach { out.append(" | b${it.first}:MSG_ONLY msg=(${it.second},${it.third})") }
+        OpenPigeonLog.i("PoolSnapDiff", String.format(Locale.US, "seq=%d maxErr=%.3f worst=b%d skipped=%s%s", nativeShotSeq, maxErr, worst, replayWasSkipped, out))
+    }
+
     fun finishReplay() {
         cancelSkipReplayButtonSchedule()
         disableSend = true
@@ -2528,6 +2552,7 @@ class PoolActivity : AppCompatActivity() {
             )
         }
 
+        logReplaySnapDiff()
         clearBalls(table)
         poolBalls = arrayListOf()
         cueBall = null
@@ -2628,6 +2653,7 @@ class PoolActivity : AppCompatActivity() {
         cancelAllShots()
         cancelAllShots = {}
 
+        if (replaying && poolTraceEnabled) OpenPigeonLog.i("PoolReplay", "shot_end seq=$nativeShotSeq hitsLeft=${replayHits.size} balls=${dumpPoolBallBuffers()}")
         if (replayHits.isNotEmpty()) {
             playNextReplay()
         } else if (replaying) {
@@ -3185,26 +3211,6 @@ class PoolActivity : AppCompatActivity() {
                 y = left.w * right.y - left.x * right.z + left.y * right.w + left.z * right.x,
                 z = left.w * right.z + left.x * right.y - left.y * right.x + left.z * right.w
             )
-        }
-
-        private fun iosConjugateQuaternion(q: IosRollQuaternion): IosRollQuaternion {
-            return IosRollQuaternion(
-                w = q.w, x = -q.x, y = -q.y, z = -q.z
-            )
-        }
-
-        private fun iosRotateVectorByQuaternion(
-            qRaw: IosRollQuaternion, x: Double, y: Double, z: Double
-        ): DoubleArray {
-            val q = iosNormalizeQuaternion(qRaw)
-
-            val rotated = iosMultiplyQuaternion(
-                iosMultiplyQuaternion(
-                    q, IosRollQuaternion(0.0, x, y, z)
-                ), iosConjugateQuaternion(q)
-            )
-
-            return doubleArrayOf(rotated.x, rotated.y, rotated.z)
         }
 
         private fun iosNormalizeQuaternion(q: IosRollQuaternion): IosRollQuaternion {
@@ -4420,9 +4426,8 @@ class PoolActivity : AppCompatActivity() {
         val explicitPoolTraceEnabled =
             msg["pool_trace"] == "1" || msg["debug_pool"] == "1" || msg["trace"] == "pool" || msg["pool_visual_trace"] == "1" || msg["visual_trace"] == "1" || msg["trace"] == "pool_visual" || msg["trace_visual"] == "1"
 
-        poolTraceEnabled = explicitPoolTraceEnabled
-
-        poolVisualTraceEnabled = poolTraceEnabled
+        poolTraceEnabled = explicitPoolTraceEnabled || POOL_REPLAY_TRACE
+        poolVisualTraceEnabled = explicitPoolTraceEnabled
 
         poolVisualTraceEveryFrames =
             msg["pool_visual_trace_every"]?.toIntOrNull()?.coerceAtLeast(1) ?: 6
@@ -4532,6 +4537,7 @@ class PoolActivity : AppCompatActivity() {
         var stagingBalls: String? = null
         if (msg.containsKey("replay")) {
             val replay = msg["replay"]!!
+            if (poolTraceEnabled) OpenPigeonLog.i("PoolReplayRaw", "num=${msg["num"]} replay=$replay")
             for ((index, value) in replay.split("|").withIndex()) {
                 val output = mutableMapOf<String, String>()
                 for (element in value.split("&")) {
@@ -4637,7 +4643,7 @@ class PoolActivity : AppCompatActivity() {
                 "replay_parse_done isYourTurn=$isYourTurn hits=${replayHits.size} " + "stagingLen=${stagingBalls?.length ?: 0} finalLen=${finalBalls.length}"
             )
             stagingBalls?.let {
-                buildBalls(it, finalBalls)
+                buildBalls(it, null)
             }
         } else {
             if (!isYourTurn) {

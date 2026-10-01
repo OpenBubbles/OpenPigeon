@@ -13,9 +13,8 @@ project("openbubblesextension")
 
 set(BOX2D_BUILD_EXAMPLES OFF CACHE BOOL "Build Box2D examples")
 set(BOX2D_INSTALL ON CACHE BOOL "Install Box2D libs, includes, and CMake scripts")
+add_compile_options("-fno-fast-math" "-ffp-contract=on")
 add_subdirectory(box2d/Box2D)
-
-add_compile_options("-fno-fast-math")
 
 # Creates and names a library, sets it as either STATIC
 # or SHARED, and provides the relative paths to its source code.
@@ -63,6 +62,10 @@ set_source_files_properties(
         pool/PoolBall.cpp
         pool/PoolContactListener.cpp
 
+        PROPERTIES COMPILE_OPTIONS "-fno-fast-math;-ffp-contract=on"
+)
+
+set_source_files_properties(
         knockout/KnockoutJNI.cpp
         knockout/KnockoutTable.cpp
         knockout/KnockoutPiece.cpp

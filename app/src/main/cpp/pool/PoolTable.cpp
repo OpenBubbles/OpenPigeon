@@ -260,8 +260,7 @@ void PoolTable::setDebugTrace(bool enabled, int everyFrames) {
 
 std::string PoolTable::dumpState() const {
     std::ostringstream out;
-    out.setf(std::ios::fixed);
-    out << std::setprecision(6);
+    out << std::setprecision(9);
 
     out << "frame=" << frame;
 

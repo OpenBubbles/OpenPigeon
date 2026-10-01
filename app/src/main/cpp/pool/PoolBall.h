@@ -6,7 +6,6 @@ class PoolTable;
 #include "PoolData.h"
 #include <Box2D/Box2D.h>
 
-#define COULD_GO_IN 0
 #define SHOULD_GO_IN 1
 #define SHOULD_NOT_GO_IN 2
 
@@ -40,7 +39,7 @@ private:
 
     void markSunk(const b2Vec2& tableHole, const char* reason);
     void stepPocketedBall();
-    bool isInsidePocketKillBounds() const;
+    [[nodiscard]] bool isInsidePocketKillBounds() const;
     void assignSunkOrder(const char* reason);
     void keepOutOfPocket(const b2Vec2& tableHole, float dist);
 };
