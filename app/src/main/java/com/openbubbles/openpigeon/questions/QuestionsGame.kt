@@ -17,7 +17,7 @@ import androidx.glance.layout.padding
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
+import androidx.glance.color.ColorProvider as DayNight
 import com.openbubbles.openpigeon.Game
 import com.openbubbles.openpigeon.R
 import com.openbubbles.openpigeon.godot.GodotGameActivity
@@ -26,7 +26,7 @@ import com.openbubbles.openpigeon.settings.AvatarView
 
 class QuestionsGame : Game {
     private var secretWord: String = ""
-
+    private fun fixed(c: Long) = DayNight(day = Color(c), night = Color(c))
     override fun getVersion() = "0"
     override fun getName() = "questions"
     override fun displayName() = "20 Questions"
@@ -45,14 +45,14 @@ class QuestionsGame : Game {
                 .padding(16.dp)
                 .fillMaxWidth()
                 .cornerRadius(16.dp)
-                .background(ColorProvider(Color(0xFF2B2B2B)))
+                .background(Color(0xFF2B2B2B))
                 .padding(16.dp)
                 .clickable(onClick = actionStartActivity(intent))
         ) {
             Text(
                 text = "SECRET WORD",
                 style = TextStyle(
-                    color = ColorProvider(Color(0xFFEDEDED)),
+                    color = fixed(0xFFEDEDED),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -60,13 +60,13 @@ class QuestionsGame : Game {
             Text(
                 text = if (secretWord.isBlank()) "Think of something" else secretWord,
                 style = TextStyle(
-                    color = ColorProvider(Color(0xFFF0F0F0))),
+                    color = fixed(0xFFF0F0F0)),
                 modifier = GlanceModifier.padding(top = 10.dp, bottom = 8.dp)
             )
             Text(
                 text = "Your friends will have to guess it in 20 questions or less.",
                 style = TextStyle(
-                    color = ColorProvider(Color(0xFFBEBEBE)),
+                    color = fixed(0xFFBEBEBE),
                     fontSize = 12.sp
                 )
             )

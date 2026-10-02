@@ -1,8 +1,5 @@
-@file:Suppress("RestrictedApi")
-
 package com.openbubbles.openpigeon
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
@@ -49,7 +46,6 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
 import androidx.glance.color.ColorProvider as DayNight
 import com.bluebubbles.messaging.IKeyboardHandle
 import com.bluebubbles.messaging.IMadridExtension
@@ -446,7 +442,7 @@ fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: Glance
                         style = TextStyle(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = ColorProvider(Color.White)
+                            color = fixedColor(Color.White)
                         )
                     )
                 }
@@ -454,7 +450,7 @@ fun RenderKeyboardGame(game: Game, extension: MadridExtension?, modifier: Glance
         }
         Text(game.displayName().uppercase(),
             style = TextStyle(
-                color = ColorProvider(Color.Gray),
+                color = fixedColor(Color.Gray),
                 textAlign = TextAlign.Center,
                 fontWeight = FontWeight.Bold,
                 fontSize = 10.sp
@@ -557,13 +553,13 @@ fun RenderKeyboardTutorial(extension: MadridExtension?) {
         Text(
             current.title,
             style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                color = ColorProvider(Color.Gray), textAlign = TextAlign.Center),
+                color = fixedColor(Color.Gray), textAlign = TextAlign.Center),
             modifier = GlanceModifier.padding(bottom = 8.dp)
         )
         Text(
             current.body,
             style = TextStyle(fontSize = 14.sp,
-                color = ColorProvider(Color.Gray), textAlign = TextAlign.Center),
+                color = fixedColor(Color.Gray), textAlign = TextAlign.Center),
             modifier = GlanceModifier.padding(horizontal = 24.dp, vertical = 12.dp)
         )
 
@@ -594,7 +590,7 @@ fun RenderKeyboardTutorial(extension: MadridExtension?) {
                     style = TextStyle(
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = ColorProvider(Color.White),
+                        color = fixedColor(Color.White),
                         textAlign = TextAlign.Center
                     ),
                     modifier = GlanceModifier
@@ -614,7 +610,7 @@ fun RenderKeyboardTutorial(extension: MadridExtension?) {
                 style = TextStyle(
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = ColorProvider(Color.White),
+                    color = fixedColor(Color.White),
                     textAlign = TextAlign.Center
                 ),
                 modifier = GlanceModifier
@@ -634,7 +630,6 @@ fun RenderKeyboardTutorial(extension: MadridExtension?) {
     }
 }
 
-@SuppressLint("RestrictedApi")
 @Composable
 fun RenderKeyboard(extension: MadridExtension?) {
     val itemsPerRow = 5
@@ -691,7 +686,7 @@ fun RenderKeyboard(extension: MadridExtension?) {
                         style = TextStyle(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = ColorProvider(Color.Gray)
+                            color = fixedColor(Color.Gray)
                         ),
                         modifier = GlanceModifier.clickable(
                             actionStartActivity(
@@ -704,7 +699,7 @@ fun RenderKeyboard(extension: MadridExtension?) {
                         )
                     )
                     Text(
-                        "✕", style = TextStyle(fontSize = 16.sp, color = ColorProvider(Color.Gray)),
+                        "✕", style = TextStyle(fontSize = 16.sp, color = fixedColor(Color.Gray)),
                         modifier = GlanceModifier.padding(start = 10.dp)
                             .clickable(actionRunCallback<DismissCrashCallback>())
                     )
@@ -717,20 +712,20 @@ fun RenderKeyboard(extension: MadridExtension?) {
                 )
                 Text(
                     "Games",
-                    style = TextStyle(fontSize = 21.sp, color = ColorProvider(Color.Gray)),
+                    style = TextStyle(fontSize = 21.sp, color = fixedColor(Color.Gray)),
                     modifier = GlanceModifier.padding(end = 5.dp)
                 )
-                Text("|", style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray)))
+                Text("|", style = TextStyle(fontSize = 24.sp, color = fixedColor(Color.Gray)))
                 Text(
                     "Settings",
-                    style = TextStyle(fontSize = 13.sp, color = ColorProvider(Color.Gray)),
+                    style = TextStyle(fontSize = 13.sp, color = fixedColor(Color.Gray)),
                     modifier = GlanceModifier.padding(start = 5.dp, end = 5.dp)
                         .clickable(onClick = actionStartActivity<AvatarSettingsActivity>())
                 )
-                Text("|", style = TextStyle(fontSize = 24.sp, color = ColorProvider(Color.Gray)))
+                Text("|", style = TextStyle(fontSize = 24.sp, color = fixedColor(Color.Gray)))
                 Text(
                     "About",
-                    style = TextStyle(fontSize = 13.sp, color = ColorProvider(Color.Gray)),
+                    style = TextStyle(fontSize = 13.sp, color = fixedColor(Color.Gray)),
                     modifier = GlanceModifier.padding(start = 5.dp)
                         .clickable(onClick = androidx.glance.action.actionStartActivity<AboutActivity>())
                 )
@@ -814,7 +809,7 @@ fun RenderKeyboardConfig(
                     text = game.displayName(),
                     style = TextStyle(
                         fontSize = 21.sp,
-                        color = ColorProvider(Color.Gray),
+                        color = fixedColor(Color.Gray),
                         fontWeight = FontWeight.Bold,
                     ),
                 )
@@ -959,7 +954,7 @@ fun RenderLiveExtension(
                 displaySubtitle.uppercase(),
                 style = TextStyle(
                     fontSize = 16.sp,
-                    color = ColorProvider(Color.Gray),
+                    color = fixedColor(Color.Gray),
                     textAlign = TextAlign.Center,
                     fontWeight = FontWeight.Bold
                 ),
@@ -973,7 +968,7 @@ fun RenderLiveExtension(
                     subcaption.uppercase(),
                     style = TextStyle(
                         fontSize = 13.sp,
-                        color = ColorProvider(Color.Gray),
+                        color = fixedColor(Color.Gray),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold
                     ),

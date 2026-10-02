@@ -1,7 +1,6 @@
 package com.openbubbles.openpigeon.questions
 
 import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -17,9 +16,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.openbubbles.openpigeon.MadridExtension
 import com.openbubbles.openpigeon.MadridExtensionService
+import androidx.core.graphics.drawable.toDrawable
 
 @Composable
-private fun QuestionsDarkScheme() = darkColorScheme(
+private fun questionsDarkScheme() = darkColorScheme(
     surface = androidx.compose.ui.graphics.Color(0xFF2B2B2B),
     onSurface = androidx.compose.ui.graphics.Color(0xFFEDEDED),
     onSurfaceVariant = androidx.compose.ui.graphics.Color(0xFFBEBEBE),
@@ -32,7 +32,7 @@ class SecretWordActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        window.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         @Suppress("DEPRECATION")
         window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
@@ -42,7 +42,7 @@ class SecretWordActivity : ComponentActivity() {
         val initial  = intent.getStringExtra("initial") ?: ""
 
         setContent {
-            MaterialTheme(colorScheme = QuestionsDarkScheme()) {
+            MaterialTheme(colorScheme = questionsDarkScheme()) {
                 Box(Modifier.fillMaxSize().imePadding(), contentAlignment = Alignment.Center) {
                     Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 8.dp) {
                         CardContent(
@@ -60,7 +60,7 @@ class SecretWordActivity : ComponentActivity() {
                                 (game as? QuestionsGame)?.markSecretWordConsumed()
                                 window.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
                                 window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                                window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                                window.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
 
                                 MadridExtensionService.extension?.updateKeyboard()
                                 ui.postDelayed({ MadridExtensionService.extension?.updateKeyboard() }, 120)

@@ -1,5 +1,3 @@
-@file:Suppress("RestrictedApi")
-
 package com.openbubbles.openpigeon
 
 import android.content.Context
@@ -32,7 +30,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
+import androidx.glance.color.ColorProvider as DayNight
 import android.os.Parcel
 import com.bluebubbles.messaging.MadridMessage
 import com.openbubbles.openpigeon.util.OpenPigeonLog
@@ -106,6 +104,7 @@ private val CONFIG_OPTION_SELECTED_BACKGROUND = Color(0xFF3A3A3C)
 private val CONFIG_TITLE_COLOR = Color(0xFF9A9A9E)
 private val CONFIG_OPTION_COLOR = Color(0xFFB8B8BC)
 private val CONFIG_OPTION_SELECTED_COLOR = Color.White
+internal fun fixedColor(c: Color) = DayNight(day = c, night = c)
 
 data class ConfigImageOption(
     val label: String,
@@ -254,7 +253,7 @@ private fun RenderConfigOptionRow(
                 Text(
                     text = option,
                     style = TextStyle(
-                        color = ColorProvider(
+                        color = fixedColor(
                             if (isSelected) {
                                 CONFIG_OPTION_SELECTED_COLOR
                             } else {
@@ -350,7 +349,7 @@ fun RenderConfigImageOption(
                                 Text(
                                     text = option.label,
                                     style = TextStyle(
-                                        color = ColorProvider(
+                                        color = fixedColor(
                                             if (isSelected) {
                                                 CONFIG_OPTION_SELECTED_COLOR
                                             } else {
@@ -465,7 +464,7 @@ fun RenderGameChoiceTiles(
                                             style = TextStyle(
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = ColorProvider(Color.White),
+                                                color = fixedColor(Color.White),
                                             ),
                                         )
                                     }
@@ -477,7 +476,7 @@ fun RenderGameChoiceTiles(
                             Text(
                                 text = choice.label,
                                 style = TextStyle(
-                                    color = ColorProvider(CONFIG_OPTION_SELECTED_COLOR),
+                                    color = fixedColor(CONFIG_OPTION_SELECTED_COLOR),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Center,
@@ -502,7 +501,7 @@ private fun RenderConfigSectionTitle(
     Text(
         text = name.uppercase(),
         style = TextStyle(
-            color = ColorProvider(CONFIG_TITLE_COLOR),
+            color = fixedColor(CONFIG_TITLE_COLOR),
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
         ),
