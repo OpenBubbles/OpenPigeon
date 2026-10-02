@@ -19,6 +19,7 @@ class GameSessionIPC(
     private val onBind: (GameSessionIPC) -> Unit,
 ) {
     private var gameSession: IGameSession? = null
+    init { OpenPigeonLog.installContext(context) }
 
     private val lastMessages =
         ConcurrentHashMap<String, Map<String, String>>()

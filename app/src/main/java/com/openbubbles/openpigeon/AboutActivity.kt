@@ -47,10 +47,8 @@ class AboutActivity : Activity() {
         val versionText =
             "Version $versionName ($versionCode)"
 
-        showAboutDialog(
-            currentYear,
-            versionText
-        )
+        if (intent.getBooleanExtra("crash_report", false)) confirmDiagnosticReport(currentYear, versionText)
+        else showAboutDialog(currentYear, versionText)
     }
 
     private fun dp(value: Int): Int {
@@ -160,6 +158,8 @@ class AboutActivity : Activity() {
         versionText: String
     ) {
         if (isFinishing || isDestroyed) return
+        val prefs = getSharedPreferences("openpigeon", MODE_PRIVATE)
+        val showRecents = prefs.getBoolean("show_recent_games", false)
         val options = arrayOf(
             "ⓘ   Attributions",
             "⚖   License",
@@ -169,6 +169,7 @@ class AboutActivity : Activity() {
             "♙   Reset Avatar",
             "▶   Reset Tutorial",
             "⚠   Reset Everything",
+            "★   Recent Games: ${if (showRecents) "On" else "Off"}",
             "‹   Back"
         )
 
@@ -280,6 +281,11 @@ class AboutActivity : Activity() {
                     }
 
                     8 -> {
+                        prefs.edit { putBoolean("show_recent_games", !showRecents) }
+                        showMoreOptions(currentYear, versionText)
+                    }
+
+                    9 -> {
                         showAboutDialog(
                             currentYear,
                             versionText

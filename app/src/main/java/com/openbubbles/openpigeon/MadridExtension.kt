@@ -50,6 +50,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import androidx.glance.color.ColorProvider as DayNight
 import com.bluebubbles.messaging.IKeyboardHandle
 import com.bluebubbles.messaging.IMadridExtension
 import com.bluebubbles.messaging.IMessageViewHandle
@@ -99,6 +100,7 @@ private const val EXPANDED_OPENBUBBLES_MAJOR = 2
 
 
 class MadridExtension(val context: Context) : IMadridExtension.Stub() {
+    init { OpenPigeonLog.installContext(context) }
 
     companion object {
         var currentKeyboardHandle: IKeyboardHandle? = null
@@ -138,6 +140,10 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             return activeSessions.getOrPut(id) {
                 GameSession(handle)
             }
+        }
+
+        fun noteRecentGame(context: Context, name: String) = context.getSharedPreferences("openpigeon", Context.MODE_PRIVATE).run {
+            edit { putString("recent_games", (listOf(name) + getString("recent_games", "").orEmpty().split(",")).filter { it.isNotBlank() }.distinct().take(5).joinToString(",")) }
         }
 
         fun findByName(name: String): Game? {
@@ -291,6 +297,7 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
 
         OpenPigeonLog.i("Session", message.session.toString())
         if (game != null ) {
+            noteRecentGame(context, game.getName())
             val intent = Intent(context, game.gameClass())
                 .apply {
                     putExtra("SESSION", message.session)
@@ -377,6 +384,7 @@ class ChooseGameCallback : ActionCallback {
         val message = game.buildGameMessage(context, game.getNewGameData(context) ?: return, null)
 
         MadridExtension.currentKeyboardHandle?.addMessage(message)
+        MadridExtension.noteRecentGame(context, game.getName())
     }
 }
 
@@ -485,6 +493,13 @@ class DismissTutorialCallback : ActionCallback {
     }
 }
 
+class DismissCrashCallback : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        OpenPigeonLog.clearPendingCrash(context)
+        MadridExtensionService.extension?.updateKeyboard()
+    }
+}
+
 class NextTutorialStepCallback : ActionCallback {
     override suspend fun onAction(
         context: Context,
@@ -512,6 +527,10 @@ private val tutorialSteps = listOf(
     TutorialStep(
         "Track your stats",
         "Tap About, then Options, then Stats to see your wins, streaks and record against each opponent."
+    ),
+    TutorialStep(
+        "Quick access",
+        "Turn on Recent Games in About, then Options, to keep your last 5 games in the first row."
     ),
     TutorialStep(
         "Feedback welcome",
@@ -623,13 +642,18 @@ fun RenderKeyboard(extension: MadridExtension?) {
     val itemsPerPage = itemsPerRow * rowsPerPage
     val hiddenGameNames = setOf("hunt", "anagrams", "wordbites")
     val visibleGames = games.filter { it.getName() !in hiddenGameNames }
-    val totalPages = ceil(visibleGames.size / itemsPerPage.toDouble()).toInt().coerceAtLeast(1)
+    val prefs = extension?.context?.getSharedPreferences("openpigeon", Context.MODE_PRIVATE)
+    val recent: List<Game?> = if (prefs?.getBoolean("show_recent_games", false) != true) emptyList()
+        else prefs.getString("recent_games", "").orEmpty().split(",").mapNotNull { MadridExtension.findByName(it) }.take(itemsPerRow)
+            .let { if (it.isEmpty()) it else it + List(itemsPerRow - it.size) { null } }
+    val pickerGames = recent + visibleGames
+    val totalPages = ceil(pickerGames.size / itemsPerPage.toDouble()).toInt().coerceAtLeast(1)
     val p = (extension?.currentPage ?: 0).coerceIn(0, totalPages - 1)
 
-    val startIndex = min(itemsPerPage * p, visibleGames.size)
-    val endIndex = min(itemsPerPage * (p + 1), visibleGames.size)
-    val pageGames = visibleGames.subList(startIndex, endIndex)
-    Column(modifier = GlanceModifier.fillMaxHeight().padding(1.dp)) {
+    val startIndex = min(itemsPerPage * p, pickerGames.size)
+    val endIndex = min(itemsPerPage * (p + 1), pickerGames.size)
+    val pageGames = pickerGames.subList(startIndex, endIndex)
+    Column(modifier = GlanceModifier.fillMaxHeight().background(DayNight(day = Color.White, night = Color.Transparent)).padding(1.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = GlanceModifier.fillMaxWidth().height(GAME_PICKER_HEADER_HEIGHT_DP.dp)
@@ -661,6 +685,31 @@ fun RenderKeyboard(extension: MadridExtension?) {
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = GlanceModifier.defaultWeight()
             ) {
+                if (extension != null && OpenPigeonLog.pendingCrashTime(extension.context) != null) {
+                    Text(
+                        "⚠ Game crashed · Tap to send report",
+                        style = TextStyle(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ColorProvider(Color.Gray)
+                        ),
+                        modifier = GlanceModifier.clickable(
+                            actionStartActivity(
+                                Intent(
+                                    extension.context,
+                                    AboutActivity::class.java
+                                ).putExtra("crash_report", true)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        )
+                    )
+                    Text(
+                        "✕", style = TextStyle(fontSize = 16.sp, color = ColorProvider(Color.Gray)),
+                        modifier = GlanceModifier.padding(start = 10.dp)
+                            .clickable(actionRunCallback<DismissCrashCallback>())
+                    )
+                    return@Row
+                }
                 Image(
                     ImageProvider(R.drawable.madrid_icon),
                     "OpenPigeon",
@@ -708,7 +757,10 @@ fun RenderKeyboard(extension: MadridExtension?) {
             }
         }
         for (index in 0..<ceil(pageGames.size / itemsPerRow.toDouble()).toInt()) {
-            Row(modifier = GlanceModifier.height(GAME_PICKER_ROW_HEIGHT_DP.dp).padding(bottom = 2.dp)) {
+            val isRecentRow = p == 0 && index == 0 && recent.isNotEmpty()
+            Row(modifier = GlanceModifier.height(GAME_PICKER_ROW_HEIGHT_DP.dp).padding(bottom = 2.dp)
+                .background(if (isRecentRow) DayNight(day = Color.Gray.copy(alpha = 0.22f), night = Color.White.copy(alpha = 0.16f))
+                    else DayNight(day = Color.Transparent, night = Color.Transparent)).cornerRadius(8.dp)) {
                 for (i in 0..<itemsPerRow) {
                     val game = pageGames.getOrNull(index * itemsPerRow + i)
                     if (game != null) {
@@ -717,6 +769,9 @@ fun RenderKeyboard(extension: MadridExtension?) {
                         Box(modifier = GlanceModifier.defaultWeight()) {  }
                     }
                 }
+            }
+            if (isRecentRow) Box(GlanceModifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                Spacer(GlanceModifier.fillMaxWidth().height(1.dp).background(DayNight(day = Color.Gray.copy(alpha = 0.5f), night = Color.White.copy(alpha = 0.28f))))
             }
         }
         Spacer(modifier = GlanceModifier.defaultWeight())

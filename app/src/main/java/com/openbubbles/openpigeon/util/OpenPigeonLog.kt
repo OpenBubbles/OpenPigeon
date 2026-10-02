@@ -56,6 +56,12 @@ object OpenPigeonLog {
     private const val MAX_AGE_MS = 5 * 60 * 1000L
     private const val MAX_ENTRIES = 1000
     private const val LOG_FILE_NAME = "openpigeon_diagnostic.log"
+    private const val CRASH_MARKER = "last_crash"
+
+    fun pendingCrashTime(context: Context): Long? =
+            File(context.filesDir, CRASH_MARKER).takeIf { it.exists() }?.readText()?.trim()?.toLongOrNull()
+
+    fun clearPendingCrash(context: Context) { File(context.filesDir, CRASH_MARKER).delete() }
     private const val MAX_FILE_BYTES = 512 * 1024
     private val fileLogEnabled = AtomicBoolean(true)
     private val crashHandlerInstalled = AtomicBoolean(false)
@@ -84,6 +90,8 @@ object OpenPigeonLog {
                     "Uncaught exception on thread=${thread.name}",
                     throwable
                 )
+                runCatching { fileWriter.submit {}.get(500, java.util.concurrent.TimeUnit.MILLISECONDS) }
+                appContext?.let { File(it.filesDir, CRASH_MARKER).writeText(System.currentTimeMillis().toString()) }
             } catch (_: Throwable) {
                 // Never let diagnostic logging block the actual crash handler.
             }
@@ -619,6 +627,7 @@ object OpenPigeonLog {
     fun shareReport(activity: Activity) {
         val reportId = createReportId()
         val report = buildReport(activity)
+        clearPendingCrash(activity)
         val zipFile = createDiagnosticZip(
             activity = activity,
             reportId = reportId,
@@ -806,7 +815,7 @@ object OpenPigeonLog {
             val file = File(context.filesDir, LOG_FILE_NAME)
             if (!file.exists()) return emptyList()
 
-            val cutoff = System.currentTimeMillis() - MAX_AGE_MS
+            val cutoff = minOf(System.currentTimeMillis(), pendingCrashTime(context) ?: Long.MAX_VALUE) - MAX_AGE_MS
 
             file.readLines()
                 .takeLast(MAX_ENTRIES * 3)
