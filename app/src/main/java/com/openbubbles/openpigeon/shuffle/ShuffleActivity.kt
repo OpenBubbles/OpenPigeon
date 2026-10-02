@@ -2266,7 +2266,7 @@ class ShuffleActivity : AppCompatActivity() {
             ).apply {
                 text =
                     getString(
-                        R.string.shuffle_you,
+                        R.string.you,
                     )
 
                 textSize =
@@ -2976,7 +2976,7 @@ class ShuffleActivity : AppCompatActivity() {
                     if (label.isVisible) {
                         label.text =
                             getString(
-                                R.string.shuffle_waiting_dots,
+                                R.string.waiting_dots,
                                 ".".repeat(
                                     dots,
                                 ),
@@ -3038,7 +3038,7 @@ class ShuffleActivity : AppCompatActivity() {
 
             val waitingText =
                 getString(
-                    R.string.shuffle_waiting_dots,
+                    R.string.waiting_dots,
                     "...",
                 )
 
@@ -3096,7 +3096,7 @@ class ShuffleActivity : AppCompatActivity() {
 
             val sentText =
                 getString(
-                    R.string.shuffle_sent_pending,
+                    R.string.sent_pending,
                 )
 
             val sentWidth =
@@ -3163,12 +3163,12 @@ class ShuffleActivity : AppCompatActivity() {
 
             val sentText =
                 getString(
-                    R.string.shuffle_sent,
+                    R.string.sent,
                 )
 
             val waitingText =
                 getString(
-                    R.string.shuffle_waiting_dots,
+                    R.string.waiting_dots,
                     "...",
                 )
 
@@ -3268,7 +3268,7 @@ class ShuffleActivity : AppCompatActivity() {
 
                     stateLabel.text =
                         getString(
-                            R.string.shuffle_waiting_dots,
+                            R.string.waiting_dots,
                             ".",
                         )
 

@@ -16,35 +16,47 @@
 
     <LinearLayout
         android:id="@+id/playerColumn"
-        android:layout_width="80dp"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|start"
         android:layout_marginStart="10dp"
-        android:layout_marginTop="18dp"
+        android:layout_marginTop="44dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:orientation="vertical"
-        android:gravity="center_horizontal">
+        android:gravity="start">
 
-        <TextView
-            android:id="@+id/youLabel"
-            android:layout_width="match_parent"
+        <LinearLayout
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="You"
-            android:textColor="#CCFFFFFF"
-            android:textSize="18sp"
-            android:gravity="center"
-            android:layout_marginBottom="2dp" />
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
         <FrameLayout
             android:id="@+id/gameAvatarAnchor"
             android:layout_width="80dp"
             android:layout_height="58dp" />
 
+        <TextView
+            android:id="@+id/youLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="@string/you"
+            android:textColor="#CCFFFFFF"
+            android:textSize="18sp" />
+            </LinearLayout>
+
         <ImageView
             android:id="@+id/playerBallType"
             android:layout_width="24dp"
             android:layout_height="24dp"
             android:layout_marginTop="4dp"
+            android:layout_marginStart="28dp"
             android:src="@drawable/pool_ball_empty"
+            android:contentDescription="@null"
             android:scaleType="fitCenter" />
 
     </LinearLayout>
@@ -55,19 +67,11 @@
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
         android:layout_marginEnd="10dp"
-        android:layout_marginTop="18dp"
+        android:layout_marginTop="44dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:orientation="vertical"
         android:gravity="center_horizontal">
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textColor="#CCFFFFFF"
-            android:textSize="18sp"
-            android:gravity="center"
-            android:layout_marginBottom="2dp"
-            android:visibility="invisible" />
 
         <FrameLayout
             android:id="@+id/oppAvatarAnchor"
@@ -80,6 +84,7 @@
             android:layout_height="24dp"
             android:layout_marginTop="4dp"
             android:src="@drawable/pool_ball_empty"
+            android:contentDescription="@null"
             android:scaleType="fitCenter" />
 
     </LinearLayout>
@@ -94,6 +99,7 @@
 
         <FrameLayout
             android:id="@+id/cueContainer"
+            tools:ignore="UselessParent"
             android:layout_width="220dp"
             android:layout_height="30dp"
             android:layout_gravity="center"
@@ -106,7 +112,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="@drawable/cue_drag_bg"
-                android:clipToOutline="true"
                 android:outlineProvider="background">
 
                 <View
@@ -156,6 +161,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="30dp"
                 android:layout_gravity="center_vertical"
+                android:contentDescription="@null"
                 android:src="@drawable/cue1" />
         </FrameLayout>
     </FrameLayout>
@@ -170,6 +176,7 @@
 
         <LinearLayout
             android:id="@+id/rightRailStack"
+            tools:ignore="UselessParent"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
@@ -198,6 +205,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
+                    android:contentDescription="@null"
                     app:srcCompat="@drawable/cue_point" />
             </FrameLayout>
         </LinearLayout>
@@ -218,7 +226,7 @@
         android:layout_gravity="center"
         android:background="#77000000"
         android:padding="10dp"
-        android:text="Waiting for opponent..."
+        android:text="@string/waiting"
         android:textColor="@color/white" />
 
     <ImageButton
@@ -229,7 +237,7 @@
         android:layout_marginTop="8dp"
         android:background="@android:color/transparent"
         android:scaleType="fitCenter"
-        android:contentDescription="Skip Replay" />
+        android:contentDescription="@string/skip_replay" />
 
     <FrameLayout
         android:id="@+id/cueOverlay"
@@ -255,6 +263,7 @@
                 android:layout_width="28dp"
                 android:layout_height="28dp"
                 android:layout_gravity="center"
+                android:contentDescription="@null"
                 app:srcCompat="@drawable/cue_point" />
         </FrameLayout>
     </FrameLayout>
@@ -268,7 +277,7 @@
         android:layout_marginBottom="10dp"
         android:background="@android:color/transparent"
         android:alpha="0.7"
-        android:contentDescription="Rules"
+        android:contentDescription="@string/rules"
         android:scaleType="fitCenter"
         android:padding="6dp" />
 
@@ -281,7 +290,7 @@
         android:layout_marginBottom="10dp"
         android:background="@android:color/transparent"
         android:alpha="0.7"
-        android:contentDescription="Settings"
+        android:contentDescription="@string/settings"
         android:scaleType="fitCenter"
         android:padding="6dp" />
 

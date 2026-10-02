@@ -5,13 +5,16 @@
     <string name="second_fragment_label">Second Fragment</string>
     <string name="next">Next</string>
     <string name="previous">Previous</string>
-
+    <string name="waiting">WAITING FOR OPPONENT</string>
+    <string name="waiting_dots">WAITING FOR OPPONENT%1$s</string>
+    <string name="spectating">Spectating…</string>
+    <string name="you">You</string>
+    <string name="rules">Rules</string>
+    <string name="settings">Settings</string>
+    <string name="skip_replay">Skip replay</string>
     <string name="game_name">Game</string>
     <string name="game_explanation">This game is fabulous!</string>
-    <string name="shuffle_you">You</string>
-    <string name="spectating">Spectating...</string>
-    <string name="shuffle_waiting">WAITING FOR OPPONENT</string>
-    <string name="shuffle_waiting_dots">WAITING FOR OPPONENT%1$s</string>
-    <string name="shuffle_sent_pending">Sent</string>
-    <string name="shuffle_sent">Sent ✔</string>
+    <string name="sent_pending">Sent</string>
+    <string name="sent">Sent ✔</string>
+
 </resources>

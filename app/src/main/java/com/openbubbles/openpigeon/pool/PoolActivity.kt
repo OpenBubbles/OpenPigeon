@@ -1262,20 +1262,15 @@ class PoolActivity : AppCompatActivity() {
                 TypedValue.COMPLEX_UNIT_DIP, 6f, resources.displayMetrics
             )
 
-            val cueAimGap = TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_DIP, 50f, resources.displayMetrics
-            )
-
             val railOffsetY = 55f
 
             val leftTarget = max(0f, bounds.left - leftRail.width - powerSliderGap)
-            val rightDefaultLeft = root.width - rightRail.width
-            val rightTarget = min(rightDefaultLeft.toFloat(), bounds.right + cueAimGap)
 
             leftRail.translationX = leftTarget
-            rightRail.translationX = rightTarget - rightDefaultLeft
             leftRail.translationY = railOffsetY
-            rightRail.translationY = railOffsetY
+            val surface = findViewById<View>(R.id.surfaceView)
+            rightRail.translationX = surface.left + (bounds.right + surface.width) / 2f - (rightRail.left + rightRail.width / 2f)
+            rightRail.translationY = surface.top + bounds.centerY() - (rightRail.top + rightRail.height / 2f)
         }
     }
 
@@ -1480,6 +1475,7 @@ class PoolActivity : AppCompatActivity() {
             clipChildren = false
             clipToPadding = false
         }
+        findViewById<View>(R.id.cueTrackClip).clipToOutline = true
         val contentRoot = findViewById<FrameLayout>(android.R.id.content)
         ViewCompat.setOnApplyWindowInsetsListener(contentRoot) { _, insets ->
             insets
