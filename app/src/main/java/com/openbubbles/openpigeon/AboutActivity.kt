@@ -109,6 +109,7 @@ class AboutActivity : Activity() {
         currentYear: Int,
         versionText: String
     ) {
+        if (isFinishing || isDestroyed) return
         dialog()
             .setCustomTitle(
                 buildTitleView()
@@ -158,6 +159,7 @@ class AboutActivity : Activity() {
         currentYear: Int,
         versionText: String
     ) {
+        if (isFinishing || isDestroyed) return
         val options = arrayOf(
             "ⓘ   Attributions",
             "⚖   License",
