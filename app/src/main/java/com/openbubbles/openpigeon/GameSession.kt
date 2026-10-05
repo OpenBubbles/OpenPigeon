@@ -207,12 +207,18 @@ class GameSession(var handle: IMessageViewHandle) {
         val baseMessageKey = state.third
         val targetNum = request.updates["num"]?.toIntOrNull()
         val baseNum = baseMessage["num"]?.toIntOrNull()
+        val alreadyLanded = baseMessage["sender"] == request.updates["sender"]
         if (targetNum != null && baseNum != null && baseNum >= targetNum) {
-            if (baseMessage["game"] in concurrentGames && baseMessage["sender"] != request.updates["sender"]) {
-                return dispatchUpdate(request.copy(updates = request.updates + ("num" to "${baseNum + 1}")), retried)
+            if (baseMessage["game"] in concurrentGames && !alreadyLanded) {
+                return dispatchUpdate(
+                    request.copy(updates = request.updates + ("num" to "${baseNum + 1}")),
+                    retried
+                )
             }
+        }
+        if (targetNum != null && baseNum != null && (baseNum > targetNum || (baseNum == targetNum && alreadyLanded))) {
             OpenPigeonLog.w("GameSession", "Dropping stale send session=${request.mySession} base=$baseNum target=$targetNum")
-            if (baseMessage["sender"] == request.updates["sender"]) request.finished()
+            if (alreadyLanded) request.finished()
             return
         }
         val game = MadridExtension.findByName(baseMessage["game"].orEmpty())
