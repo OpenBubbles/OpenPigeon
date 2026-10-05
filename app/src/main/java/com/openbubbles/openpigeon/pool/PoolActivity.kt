@@ -2165,7 +2165,7 @@ class PoolActivity : AppCompatActivity() {
                 return
             }
 
-            if (!activity.replaying) { activity.scratch = false; activity.cueBallPocketedThisShot = false }
+            if (!activity.replaying) { activity.scratch = false; activity.cueBallPocketedThisShot = false; activity.lastCueX = Float.NaN }
 
             activity.mode = PoolMode.Playing
 
@@ -2454,6 +2454,12 @@ class PoolActivity : AppCompatActivity() {
     fun handlePoolPocketSounds() {
         if (!::gameMenu.isInitialized) return
 
+        cueBall?.takeIf { !replaying && mode == PoolMode.Playing }?.let { c ->
+            if (!lastCueX.isNaN() && kotlin.math.hypot(c.x - lastCueX, c.y - lastCueY) > 120f) cueBallPocketedThisShot = true
+            lastCueX = c.x
+            lastCueY = c.y
+        }
+
         for (ball in poolBalls) {
             if ((ball.inPocket || ball.sunk) && !ball.pocketSoundPlayed) {
                 ball.pocketSoundPlayed = true
@@ -2498,6 +2504,8 @@ class PoolActivity : AppCompatActivity() {
     var scratch = false
 
     @Volatile var cueBallPocketedThisShot = false // latched: the engine re-spots the cue ball before the shot ends
+    private var lastCueX = Float.NaN
+    private var lastCueY = Float.NaN
     private val cueBallScratched get() = cueBall?.let { it.sunk || it.inPocket } == true || cueBallPocketedThisShot
 
     fun lowestNineBallNumber(): Int? {
@@ -2558,7 +2566,7 @@ class PoolActivity : AppCompatActivity() {
 
         OpenPigeonLog.i(
             "POOL_DEBUG",
-            "SCRATCH_CHECK cueBall.sunk=${cueBall.sunk} cueBall.inPocket=${cueBall.inPocket} " + "blackBall.sunk=${poolBalls.find { it.number == 8 }?.sunk} " + "ballHit=${cueBall.ballHit} scratch=$result"
+            "SCRATCH_CHECK cueBall.sunk=${cueBall.sunk} cueBall.inPocket=${cueBall.inPocket} latched=$cueBallPocketedThisShot " + "blackBall.sunk=${poolBalls.find { it.number == 8 }?.sunk} " + "ballHit=${cueBall.ballHit} scratch=$result"
         )
 
         return result
