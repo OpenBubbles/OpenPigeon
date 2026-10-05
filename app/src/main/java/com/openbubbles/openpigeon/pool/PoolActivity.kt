@@ -2165,7 +2165,7 @@ class PoolActivity : AppCompatActivity() {
                 return
             }
 
-            if (!activity.replaying) activity.scratch = false
+            if (!activity.replaying) { activity.scratch = false; activity.cueBallPocketedThisShot = false }
 
             activity.mode = PoolMode.Playing
 
@@ -2457,6 +2457,7 @@ class PoolActivity : AppCompatActivity() {
         for (ball in poolBalls) {
             if ((ball.inPocket || ball.sunk) && !ball.pocketSoundPlayed) {
                 ball.pocketSoundPlayed = true
+                if (ball === cueBall && !replaying) cueBallPocketedThisShot = true
                 gameMenu.playSound(POOL_POCKET_SFX_PATH, volume = 0.8f)
                 if (ball.isSolid || ball.isStripe) revealBallTypeOnPocket(ball)
             }
@@ -2496,6 +2497,9 @@ class PoolActivity : AppCompatActivity() {
 
     var scratch = false
 
+    @Volatile var cueBallPocketedThisShot = false // latched: the engine re-spots the cue ball before the shot ends
+    private val cueBallScratched get() = cueBall?.let { it.sunk || it.inPocket } == true || cueBallPocketedThisShot
+
     fun lowestNineBallNumber(): Int? {
         return poolBalls.filter { !it.sunk && it.number in 1..9 }.minOfOrNull { it.number }
     }
@@ -2512,7 +2516,7 @@ class PoolActivity : AppCompatActivity() {
 
     fun tableIsScratch(): Boolean {
         val cueBall = cueBall ?: return false
-        val cueBallScratch = cueBall.sunk || cueBall.inPocket
+        val cueBallScratch = cueBallScratched
 
         if (isNineBall) {
             val result =
@@ -2811,7 +2815,7 @@ class PoolActivity : AppCompatActivity() {
 
                 if (blackBallSunk) {
                     winState =
-                        !(wasFirst || iAmStripes == null || blackBall == null || poolBalls.count { !it.sunk && ((iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid)) } != 0 || cueBall.sunk || calledPocket.isEmpty() || blackBall.holeX != calledPocket[0].toFloat() || blackBall.holeY != calledPocket[1].toFloat())
+                        !(wasFirst || iAmStripes == null || blackBall == null || poolBalls.count { !it.sunk && ((iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid)) } != 0 || cueBallScratched || calledPocket.isEmpty() || blackBall.holeX != calledPocket[0].toFloat() || blackBall.holeY != calledPocket[1].toFloat())
                 }
 
                 if ((scratch || winState != null) && ballTypePreview != null) {
