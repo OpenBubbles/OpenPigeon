@@ -1123,6 +1123,7 @@ class WordHuntActivity : AppCompatActivity() {
         val updates =
             mutableMapOf(
                 "sender" to senderId,
+                "num" to ((currentMessage["num"]?.toIntOrNull() ?: 0) + 1).toString(),
                 "player$player" to senderId,
                 "avatar$player" to AvatarView.buildAvatarString(),
                 "score$player" to gameState.score.toString(),

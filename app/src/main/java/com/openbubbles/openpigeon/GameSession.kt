@@ -76,6 +76,7 @@ class GameSession(var handle: IMessageViewHandle) {
                 )
             } else {
                 previousMessage = currentMessage.toMap()
+                absorbCrossedTurn(newMessage, currentMessage)
                 changed = currentMessage != newMessage
 
                 latestMessageKey = incomingMessageKey
@@ -207,6 +208,9 @@ class GameSession(var handle: IMessageViewHandle) {
         val targetNum = request.updates["num"]?.toIntOrNull()
         val baseNum = baseMessage["num"]?.toIntOrNull()
         if (targetNum != null && baseNum != null && baseNum >= targetNum) {
+            if (baseMessage["game"] in concurrentGames && baseMessage["sender"] != request.updates["sender"]) {
+                return dispatchUpdate(request.copy(updates = request.updates + ("num" to "${baseNum + 1}")), retried)
+            }
             OpenPigeonLog.w("GameSession", "Dropping stale send session=${request.mySession} base=$baseNum target=$targetNum")
             if (baseMessage["sender"] == request.updates["sender"]) request.finished()
             return
@@ -271,12 +275,14 @@ class GameSession(var handle: IMessageViewHandle) {
                 OpenPigeonLog.w("OPDiag", "send TIMEOUT session=${request.mySession} stale=${sendHandle.asBinder().hashCode()} fresh=${fresh?.asBinder()?.hashCode()} retried=$retried")
                 if (fresh != null && !retried && done.compareAndSet(false, true)) dispatchUpdate(request, true)
             }, 8000)
+            lastSentUpdates = request.updates
             sendHandle.updateMessage(
                 update,
                 object : ITaskCompleteCallback.Stub() {
                     override fun complete() {
                         if (!done.compareAndSet(false, true)) return
                         var appliedOutgoingState = false
+                        var crossed: MutableMap<String, String>? = null
 
                         synchronized(this@GameSession) {
                             if (
@@ -288,8 +294,11 @@ class GameSession(var handle: IMessageViewHandle) {
                                 latestMessageKey = outgoingMessageKey
                                 handleMessageKey = outgoingMessageKey
                                 appliedOutgoingState = true
+                            } else if (absorbCrossedTurn(currentMessage, modifiedUpdated)) {
+                                crossed = currentMessage.toMutableMap()
                             }
                         }
+                        crossed?.let(messageUpdated)
 
                         if (!appliedOutgoingState) {
                             OpenPigeonLog.i(
@@ -309,6 +318,22 @@ class GameSession(var handle: IMessageViewHandle) {
                 throwable,
             )
         }
+    }
+
+    private var lastSentUpdates: Map<String, String> = emptyMap()
+    private val concurrentGames = setOf("wordhunt", "basketball", "anagrams", "wordbites")
+
+    private fun absorbCrossedTurn(into: MutableMap<String, String>, other: Map<String, String>): Boolean {
+        if (into["sender"] == other["sender"] || into["game"] !in concurrentGames) return false
+        val mine = if (other["sender"] == lastSentUpdates["sender"]) lastSentUpdates.keys - setOf("sender", "num", "player") else emptySet()
+        val sameBase = into["num"] == other["num"]
+        // A message built on ours carries our keys; one missing them crossed ours in flight (iOS bumps num, Word Hunt doesn't).
+        if (!sameBase && mine.none { into[it].isNullOrBlank() }) return false
+        val add = other.filter { (k, v) -> v.isNotBlank() && (into[k].isNullOrBlank() || (sameBase && k in mine && into[k] != v)) }
+        if (add.isEmpty()) return false
+        into += add
+        if (sameBase) into["num"]?.toIntOrNull()?.let { into["num"] = "${it + 1}" }
+        return true
     }
 
     fun getGame(): Game? {

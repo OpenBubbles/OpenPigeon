@@ -171,6 +171,7 @@ class SettingsSheet(
         updateResponsiveLayout()
     }
 
+    var onCustomTabFirstOpened: (() -> Unit)? = null
     fun ensureCustomTab() = ensureMiscTab()
 
     fun addBooleanSetting(
@@ -191,7 +192,7 @@ class SettingsSheet(
         onChanged: (Boolean) -> Unit,
     ): SwitchCompat {
         SettingsData.init(context)
-        val control = SwitchCompat(context)
+        val control = SwitchCompat(ContextThemeWrapper(context, androidx.appcompat.R.style.Theme_AppCompat))
         val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
         control.thumbTintList = ColorStateList(states, intArrayOf(Color.WHITE, Color.WHITE))
         control.trackTintList = ColorStateList(states, intArrayOf(COL_TAB_SEL, "#444455".toColorInt()))
@@ -776,7 +777,9 @@ class SettingsSheet(
         card.addView(contentScroll)
         buildCardContent()
         setupDragToDismiss()
-        rootFrame.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> if (isOpen) updateResponsiveLayout() }
+        rootFrame.addOnLayoutChangeListener { _, l, t, r, b, oldL, oldT, oldR, oldB ->
+            if (isOpen && (r - l != oldR - oldL || b - t != oldB - oldT)) rootFrame.post { updateResponsiveLayout() } // size changes only, outside the layout pass
+        }
     }
 
     // ── Card content ──────────────────────────────────────────────────────────
@@ -1154,6 +1157,7 @@ class SettingsSheet(
         }
         miscRowsContainer.isVisible = tab == Tab.MISC
         pickerScroll.isVisible = tab != Tab.MISC
+        if (tab == Tab.MISC) onCustomTabFirstOpened?.also { onCustomTabFirstOpened = null }?.invoke()
         buildPickerFor(tab)
     }
 

@@ -49,11 +49,17 @@ func _create_startup_cover() -> void:
 
 var _last_data_num: int = -1
 
+var local_turn_active := false
+var deferred_game_data := ""
+
 func _receive_game_data(json: String) -> void:
 	var parsed: Variant = null if json.is_empty() else JSON.parse_string(json)
 	var data_num: int = int(parsed.get("num", -1)) if typeof(parsed) == TYPE_DICTIONARY else -1
 	if data_num >= 0 and data_num < _last_data_num:
 		return # older message than one already applied (would flip turn mid-replay)
+	if local_turn_active and _last_data_num >= 0:
+		deferred_game_data = json # opponent finished mid-turn; our send gets merged onto it natively
+		return
 	_last_data_num = maxi(_last_data_num, data_num)
 	_set_game_data(json)
 	if appPlugin:
@@ -299,6 +305,8 @@ func _on_dot_timer_timeout() -> void:
 	waiting_label.text = BASE_WAIT_TEXT + ".".repeat(dot_count)
 
 func send_game_data(json: String) -> void:
+	local_turn_active = false
+	deferred_game_data = ""
 	if not appPlugin:
 		print(
 			"No app plugin (local test): ",

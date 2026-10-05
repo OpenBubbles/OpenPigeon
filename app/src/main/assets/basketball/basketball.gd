@@ -274,6 +274,7 @@ var recovery_next_ball: int = 0
 
 var isWaiting = false
 var receivedMessage = null
+var _round_finishing := false # timer ended, send pending: hold incoming data like mid-round
 var drag_start_pos: Vector2 = Vector2.ZERO
 var drag_previous_pos: Vector2 = Vector2.ZERO
 var drag_smoothed_speed: float = 0.0
@@ -3521,7 +3522,7 @@ func _set_game_data(
 	recovery_snapshot_pending = String(recovery_pending_value).to_lower() == "true"
 	recovery_snapshot_progress = String(parsed.get("_recoveryProgress", ""))
 
-	if gamePlaying or replayPlaying:
+	if gamePlaying or replayPlaying or _round_finishing:
 		OpLog.i(
 			LOG_TAG,
 			[
@@ -3935,10 +3936,26 @@ func _set_game_data(
 
 	_schedule_basketball_recovery_check(not saved)
 
+func _opponent_keys() -> Array:
+	return ["replay2", "score2", "replay4", "skip_score2"] if player == 1 else ["replay", "score1", "replay3", "skip_score1"]
+
+func _absorb_deferred_opponent_turn() -> bool:
+	var d: Variant = JSON.parse_string(String(receivedMessage)) if receivedMessage != null else null
+	if not (d is Dictionary) or int(d.get("num", -1)) <= int(turnNum):
+		return false
+	# Their newer message is authoritative for their keys (iOS carries round-1 scores forward, so local values can be stale).
+	for k: String in _opponent_keys():
+		if d.has(k):
+			set(k, String(d[k]) if k.begins_with("replay") else int(d[k]))
+	turnNum = int(d["num"])
+	OpLog.i(LOG_TAG, ["absorbed_deferred_opponent_turn num=", turnNum, " ", _score_summary()])
+	return true
+
 func sendGameData(
 	completed_score: int,
 	completed_replay_value: String,
 ) -> void:
+	var absorbed := _absorb_deferred_opponent_turn()
 	var completed_turn := int(
 		turnNum,
 	)
@@ -4006,19 +4023,11 @@ func sendGameData(
 			seed2 if seed2 != null else 0,
 		),
 		"round": "1" if is_round_one else "2",
-		"score1": str(
-			score1 if score1 != null else 0,
-		),
-		"score2": str(
-			score2 if score2 != null else 0,
-		),
-		"skip_score1": str(
-			skip_score1 if skip_score1 != null else 0,
-		),
-		"skip_score2": str(
-			skip_score2 if skip_score2 != null else 0,
-		),
 	}
+	
+	for k: String in ["score1", "score2", "skip_score1", "skip_score2"]:
+		if get(k) != null and (absorbed or not _opponent_keys().has(k)):
+			game_data[k] = str(get(k)) # opponent scores only when freshly absorbed; otherwise the base message keeps theirs
 
 	game_data[replay_key] = outgoing_replay
 
@@ -4455,6 +4464,7 @@ func _process(
 	GameUtils.play_sfx(self, BASKETBALL_END_SFX)
 	elapsedTime = 0.0
 	gamePlaying = false
+	_round_finishing = true
 
 	await get_tree().create_timer(
 		3.0,
@@ -4506,7 +4516,8 @@ func _process(
 
 	round_container.visible = false
 	skip_button.visible = false
-
+	
+	_round_finishing = false
 	var deferred_message = receivedMessage
 
 	receivedMessage = null

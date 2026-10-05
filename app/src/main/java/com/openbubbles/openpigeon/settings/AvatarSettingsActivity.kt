@@ -18,6 +18,9 @@ class AvatarSettingsActivity : Activity() {
         setContentView(root)
 
         sheet = SettingsSheet(this, root)
+        sheet.addBooleanSetting("Music", "Background music", SettingScope.Global, "music_enabled", true) {}
+        sheet.addBooleanSetting("Sounds", "Game sound effects", SettingScope.Global, "sounds_enabled", true) {}
+        sheet.addGameCustomizations(this)
         sheet.onClosed = {
             AvatarView.buildAvatarString()
             AvatarData.init(applicationContext)

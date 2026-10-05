@@ -410,7 +410,9 @@ val androidOnlyAssetDirs = listOf(
     "knockout",
     "golf",
     "shuffle",
-    "crazy8"
+    "crazy8",
+    "pool",
+    "wordhunt"
 )
 
 fun releaseDateCode(): Int {
@@ -428,7 +430,7 @@ android {
         minSdk = 26
         versionCode = releaseDateCode()
         targetSdk = 36
-        versionName = "1.2.0"
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -628,6 +630,7 @@ val prepareGodotDebugAssets by tasks.registering(Sync::class) {
     into(debugGodotAssetsDir)
 
     includeEmptyDirs = false
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 /**
@@ -687,11 +690,18 @@ val prepareGodotReleaseAssets by tasks.registering(Sync::class) {
         from(godotProjectDir.dir(assetDir)) {
             into(assetDir)
             exclude(".gdignore")
+            exclude("**/*.import")
         }
     }
 
     from(godotProjectDir) {
         include("global/settings.png")
+        include("global/burger.png")
+        include("global/next.png")
+        include("global/next_pressed.png")
+        include("global/audio/*.wav")
+        include("darts/previews/*.png")
+        include("pong/previews/*.png")
     }
 }
 
