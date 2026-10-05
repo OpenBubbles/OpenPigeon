@@ -568,6 +568,7 @@ class WordHuntActivity : AppCompatActivity() {
                             mergeIntoCurrentMessage(
                                 updatedMessage,
                             )
+                            reconcileSubmission(updatedMessage)
                         }
 
                         val hasPendingSend =
@@ -657,6 +658,8 @@ class WordHuntActivity : AppCompatActivity() {
             restoreWordHuntRecovery(
                 recovery,
             )
+
+            if (!spectatorMode) savedSubmission().takeIf { it.isNotEmpty() }?.let { mergeIntoCurrentMessage(it) }
 
             startDestination =
                 when {
@@ -761,6 +764,7 @@ class WordHuntActivity : AppCompatActivity() {
             }
 
             setupWordHuntMenu()
+            reconcileSubmission(gameSessionIPC.getCurrentMessage(sessionId))
         }
     }
 
@@ -980,6 +984,34 @@ class WordHuntActivity : AppCompatActivity() {
             }
         }
         return boardArray
+    }
+
+    // Our own submission, persisted per board, so a crossed simultaneous turn can never hand the turn back to us.
+    private val submissions by lazy { getSharedPreferences("wordhunt_submissions", MODE_PRIVATE) }
+    private fun submissionKey() = "sub_${currentMessage["id"] ?: currentMessage["letters"].orEmpty()}"
+    private fun saveSubmission(updates: Map<String, String>) =
+        submissions.edit().putString(submissionKey(), org.json.JSONObject(updates - setOf("num", "sender", "winner")).toString()).apply()
+    private fun savedSubmission(): Map<String, String> =
+        submissions.getString(submissionKey(), null)?.let { s -> org.json.JSONObject(s).let { j -> j.keys().asSequence().associateWith(j::getString) } }.orEmpty()
+
+    // The newest bubble lacks our score (crossed send) or both scores are in but nobody set a winner:
+    // re-send our submission on top of it with the winner, so both phones and any reopened game show the final result.
+    private fun reconcileSubmission(latest: Map<String, String>) {
+        val ipc = gameSessionIPC ?: return
+        val p = localPlayer ?: return
+        if (spectatorMode || sendAttemptInFlight || pendingSendState.value || latest.isEmpty() || !latest["winner"].isNullOrBlank()) return
+        val mine = savedSubmission().takeIf { it.isNotEmpty() } ?: return
+        val opp = latest["score${3 - p}"]?.toIntOrNull()
+        if (hasPlayerSubmitted(latest, p) && opp == null) return // normal: we went first, waiting on them
+        val me = ipc.getSenderUUID(sessionId)
+        val score = mine["score$p"]?.toIntOrNull() ?: 0
+        val updates = mine + mapOf("sender" to me, "num" to "${(latest["num"]?.toIntOrNull() ?: 0) + 1}") +
+                opp?.let { mapOf("winner" to "$me|${score.compareTo(it).coerceIn(-1, 1)}") }.orEmpty()
+        OpenPigeonLog.i("WordHunt", "Reconciling crossed submission player=$p oppScore=$opp")
+        mergeIntoCurrentMessage(updates)
+        sendAttemptInFlight = true
+        if (ipc.updateSession(updates, sessionId) { runOnUiThread { sendAttemptInFlight = false; mergeIntoCurrentMessage(ipc.getCurrentMessage(sessionId)) } }) schedulePendingSendCheck()
+        else sendAttemptInFlight = false
     }
 
     private fun endGame() {
@@ -1318,6 +1350,7 @@ class WordHuntActivity : AppCompatActivity() {
             pendingSendState.value =
                 true
         } else {
+            saveSubmission(updates)
             schedulePendingSendCheck()
         }
     }
