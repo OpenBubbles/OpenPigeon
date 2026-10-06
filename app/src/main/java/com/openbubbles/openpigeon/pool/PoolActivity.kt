@@ -2845,17 +2845,14 @@ class PoolActivity : AppCompatActivity() {
                             blackBall.holeX == calledPocket[0].toFloat() &&
                             blackBall.holeY == calledPocket[1].toFloat()
 
-                    winState = evaluateEightBallFinish(
-                        EightBallFinishFacts(
-                            eightBallPocketed = true,
-                            eightBallPresent = blackBall != null,
-                            wasBreakShot = wasFirst,
-                            shooterGroupAssigned = stripes != null,
-                            remainingGroupBalls = remainingGroupBalls,
-                            shotWasFoul = scratch,
-                            calledPocketSelected = calledPocketSelected,
-                            eightBallInCalledPocket = eightBallInCalledPocket,
-                        ),
+                    winState = !(
+                        wasFirst ||
+                            stripes == null ||
+                            blackBall == null ||
+                            remainingGroupBalls != 0 ||
+                            scratch ||
+                            !calledPocketSelected ||
+                            !eightBallInCalledPocket
                     )
                 }
 
