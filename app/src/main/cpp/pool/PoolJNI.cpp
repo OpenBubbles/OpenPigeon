@@ -97,6 +97,21 @@ Java_com_openbubbles_openpigeon_pool_PoolActivity_hitBall(
 }
 
 extern "C"
+JNIEXPORT jboolean JNICALL
+Java_com_openbubbles_openpigeon_pool_PoolActivity_nativeCueBallPocketedThisShot(
+        JNIEnv *env,
+        jobject thiz,
+        jlong table
+) {
+    auto* t = reinterpret_cast<PoolTable*>(table);
+    if (t == nullptr) {
+        return JNI_FALSE;
+    }
+
+    return t->cueBallPocketedThisShot() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C"
 JNIEXPORT void JNICALL
 Java_com_openbubbles_openpigeon_pool_PoolActivity_clearBalls(
         JNIEnv *env,

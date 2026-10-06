@@ -2145,6 +2145,8 @@ class PoolActivity : AppCompatActivity() {
         first: Boolean
     )
 
+    external fun nativeCueBallPocketedThisShot(table: Long): Boolean
+
     external fun moveBall(table: Long, number: Int, x: Float, y: Float, rot: Float)
 
     external fun clearBalls(table: Long)
@@ -2524,7 +2526,8 @@ class PoolActivity : AppCompatActivity() {
 
     fun tableIsScratch(): Boolean {
         val cueBall = cueBall ?: return false
-        val cueBallScratch = cueBallScratched
+        val nativeCueBallPocketed = table != 0L && nativeCueBallPocketedThisShot(table)
+        val cueBallScratch = cueBallScratched || nativeCueBallPocketed
 
         if (isNineBall) {
             val result =
@@ -2534,7 +2537,9 @@ class PoolActivity : AppCompatActivity() {
 
             OpenPigeonLog.i(
                 "POOL9_DEBUG",
-                "SCRATCH_CHECK cueBall.sunk=${cueBall.sunk} cueBall.inPocket=${cueBall.inPocket} " + "hitBall=${cueBall.hitBall} ballHit=${cueBall.ballHit} target=$nineBallTargetAtShot scratch=$result"
+                "SCRATCH_CHECK nativeCuePocketed=$nativeCueBallPocketed cueBall.sunk=${cueBall.sunk} " +
+                    "cueBall.inPocket=${cueBall.inPocket} hitBall=${cueBall.hitBall} " +
+                    "ballHit=${cueBall.ballHit} target=$nineBallTargetAtShot scratch=$result"
             )
 
             return result
@@ -2566,7 +2571,10 @@ class PoolActivity : AppCompatActivity() {
 
         OpenPigeonLog.i(
             "POOL_DEBUG",
-            "SCRATCH_CHECK cueBall.sunk=${cueBall.sunk} cueBall.inPocket=${cueBall.inPocket} latched=$cueBallPocketedThisShot " + "blackBall.sunk=${poolBalls.find { it.number == 8 }?.sunk} " + "ballHit=${cueBall.ballHit} scratch=$result"
+            "SCRATCH_CHECK nativeCuePocketed=$nativeCueBallPocketed cueBall.sunk=${cueBall.sunk} " +
+                "cueBall.inPocket=${cueBall.inPocket} latched=$cueBallPocketedThisShot " +
+                "blackBall.sunk=${poolBalls.find { it.number == 8 }?.sunk} " +
+                "ballHit=${cueBall.ballHit} scratch=$result"
         )
 
         return result
@@ -2822,8 +2830,33 @@ class PoolActivity : AppCompatActivity() {
                 )
 
                 if (blackBallSunk) {
-                    winState =
-                        !(wasFirst || iAmStripes == null || blackBall == null || poolBalls.count { !it.sunk && ((iAmStripes!! && it.isStripe) || (!iAmStripes!! && it.isSolid)) } != 0 || cueBallScratched || calledPocket.isEmpty() || blackBall.holeX != calledPocket[0].toFloat() || blackBall.holeY != calledPocket[1].toFloat())
+                    val stripes = iAmStripes
+                    val remainingGroupBalls = if (stripes == null) {
+                        0
+                    } else {
+                        poolBalls.count {
+                            !it.sunk && ((stripes && it.isStripe) || (!stripes && it.isSolid))
+                        }
+                    }
+                    val calledPocketSelected = calledPocket.size >= 2
+                    val eightBallInCalledPocket =
+                        blackBall != null &&
+                            calledPocketSelected &&
+                            blackBall.holeX == calledPocket[0].toFloat() &&
+                            blackBall.holeY == calledPocket[1].toFloat()
+
+                    winState = evaluateEightBallFinish(
+                        EightBallFinishFacts(
+                            eightBallPocketed = true,
+                            eightBallPresent = blackBall != null,
+                            wasBreakShot = wasFirst,
+                            shooterGroupAssigned = stripes != null,
+                            remainingGroupBalls = remainingGroupBalls,
+                            shotWasFoul = scratch,
+                            calledPocketSelected = calledPocketSelected,
+                            eightBallInCalledPocket = eightBallInCalledPocket,
+                        ),
+                    )
                 }
 
                 if ((scratch || winState != null) && ballTypePreview != null) {
