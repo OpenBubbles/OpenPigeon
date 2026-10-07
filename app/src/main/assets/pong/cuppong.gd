@@ -1914,23 +1914,30 @@ func _board_string(cups: Cups) -> String:
 		parts.append(str(cup_idx))
 	return ",".join(parts)
 
-func _flash_label(target: Label) -> Tween:
+func _flash_label(target: Label, pop: bool = false) -> Tween:
 	if not is_instance_valid(target):
 		return null
 
 	target.visible = true
-	target.modulate.a = 1.0
+	target.modulate.a = 0.0 if pop else 1.0
 
 	var tween := create_tween().set_parallel(false)
-	tween.tween_interval(2.0)
+	if pop:   # grow from the centre, 0 -> 1
+		tween.tween_callback(func():
+			target.pivot_offset = target.size * 0.5
+			target.modulate.a = 1.0
+		)
+		tween.tween_property(target, "scale", Vector2.ONE, 0.35).from(Vector2.ZERO).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_interval(1.7 if pop else 2.0)
 	tween.tween_property(target, "modulate:a", 0.0, 0.5)
 	tween.tween_callback(func():
 		if is_instance_valid(target):
 			target.visible = false
 			target.modulate.a = 1.0
+			target.scale = Vector2.ONE
 	)
 	return tween
-
+	
 func _tween_ball_path(node: PongBall, poses: Array, release_on_jump: bool = false) -> Tween:
 	var tween := create_tween()
 	var previous: Vector3 = node.position
@@ -2384,7 +2391,7 @@ func throw_finished():
 		if balls_back_tween and balls_back_tween.is_running():
 			balls_back_tween.kill()
 
-		balls_back_tween = _flash_label(balls_back_label)
+		balls_back_tween = _flash_label(balls_back_label, true)
 		num_balls = 2
 	elif rack_cleared:
 		num_balls = 0
@@ -2682,11 +2689,11 @@ func playReplay(parsed: Dictionary):
 	for idx in range(len(moves)):
 		var move: Array = moves[idx]
 		dbg(["play_replay_move index=", idx, " rawPoints=", move.size()])
-		
-		await get_tree().create_timer(1).timeout
-		
+
+		await get_tree().create_timer(1.0 if idx == 0 else 0.5).timeout
+
 		var new_ball = spawn_ball(true)
-		
+
 		var move_cleaned: Array = []
 		if move.size() > 0:
 			move_cleaned.append(move[0])
@@ -2694,24 +2701,29 @@ func playReplay(parsed: Dictionary):
 				if move[i] is Vector3:
 					if move[i].distance_squared_to(move_cleaned[-1]) > 0.001:
 						move_cleaned.append(move[i])
-			if move[-1] is int:
-				move_cleaned.append(move[-1])
-			else:
-				move_cleaned.append(move[-1])
+			move_cleaned.append(move[-1])
 
 		if move_cleaned.size() == 0:
 			OpLog.w(LOG_TAG, ["play_replay skipped empty move index=", idx])
 			continue
 
 		new_ball.position = move_cleaned[0]
-		
-		var tween := _tween_ball_path(new_ball, move_cleaned, true)
-		var is_final_move: bool = (idx + 1 == len(moves))
 
-		if tween == null:
-			_on_replay_finished(new_ball, move, is_final_move)
-		else:
-			tween.finished.connect(_on_replay_finished.bind(new_ball, move, is_final_move))
+		var tween := _tween_ball_path(new_ball, move_cleaned, true)
+		if tween != null:
+			await tween.finished
+
+		if idx + 1 == len(moves):
+			await _on_replay_finished(new_ball, move, true)
+			return
+
+		_on_replay_finished(new_ball, move, false)
+
+		if idx % 2 == 1 and moves[idx - 1][-1] is int and move[-1] is int and not replay_cups.cups_in_play.is_empty():
+			if balls_back_tween and balls_back_tween.is_running():
+				balls_back_tween.kill()
+			balls_back_tween = _flash_label(balls_back_label, true)
+			await balls_back_tween.finished
 
 func _on_replay_finished(new_ball: PongBall, move: Array, final_move: bool):
 	if move[-1] is int:
