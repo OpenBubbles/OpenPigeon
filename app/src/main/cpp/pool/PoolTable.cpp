@@ -142,6 +142,7 @@ void PoolTable::makeBall(b2Vec2 pos, float rot, float density, int number, int s
 
 void PoolTable::hitBall(int number, float dir, float power, float spinX, float spinY, bool first) {
     frame = 0;
+    cueBallPocketedDuringShot = false;
     // clean up old balls
     balls.erase(std::remove_if(balls.begin(), balls.end(), [](PoolBall* n){
         if (n->sunkOrder != -1) {
@@ -190,6 +191,14 @@ void PoolTable::recordBallHit(float speed) {
 
 void PoolTable::recordRailHit(float speed) {
     if (speed > pendingRailHitSpeed) pendingRailHitSpeed = speed;
+}
+
+void PoolTable::recordCueBallPocketed() {
+    cueBallPocketedDuringShot = true;
+}
+
+bool PoolTable::cueBallPocketedThisShot() const {
+    return cueBallPocketedDuringShot;
 }
 
 void PoolTable::consumeCollisionSounds(float* output) {
@@ -251,6 +260,7 @@ void PoolTable::clearBalls() {
     isFirst = false;
     pendingBallHitSpeed = 0.0f;
     pendingRailHitSpeed = 0.0f;
+    cueBallPocketedDuringShot = false;
 }
 
 void PoolTable::setDebugTrace(bool enabled, int everyFrames) {

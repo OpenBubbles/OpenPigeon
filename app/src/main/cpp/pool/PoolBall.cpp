@@ -72,6 +72,10 @@ void PoolBall::writeOutputs() {
 }
 
 void PoolBall::markSunk(const b2Vec2& tableHole, const char* reason) {
+    if (number == 0) {
+        table->recordCueBallPocketed();
+    }
+
     if (hole.x == -1.0f) {
         hole = tableHole;
         pocketFrames = 0;
