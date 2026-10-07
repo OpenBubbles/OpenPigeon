@@ -34,6 +34,8 @@ import androidx.core.graphics.createBitmap
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import android.graphics.RadialGradient
+import android.graphics.Shader
 
 class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thread(), SurfaceHolder.Callback {
     var running = true
@@ -65,8 +67,16 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         color = Color.BLACK
     }
 
+    private val callGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val outer = CALL_RING_R + CALL_GLOW_W
+        shader = RadialGradient(0f, 0f, outer, intArrayOf(0x007CC8FF, 0xB37CC8FF.toInt(), 0x007CC8FF),
+            floatArrayOf((CALL_RING_R - CALL_GLOW_W) / outer, CALL_RING_R / outer, 1f), Shader.TileMode.CLAMP)
+    }
+
     private val callPocketPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0x55FFFFFF
+        style = Paint.Style.STROKE
+        strokeWidth = 2.5f
+        color = 0xFFA8DDFF.toInt()
     }
 
     private val cuePaint = Paint(
@@ -154,6 +164,9 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
     }
 
     companion object {
+        private const val CALL_RING_R = 12f
+        private const val CALL_GLOW_W = 10.3f
+        private const val CALL_PULSE_MS = 1200f
         private const val WORLD_WIDTH = 784.743f
         private const val WORLD_HEIGHT = 441.189f
 
@@ -764,15 +777,16 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
 
                 drawTableTop(this)
 
-                if (activity.call8Ball) {
-                    for (hole in activity.holes) {
-                        drawCircle(
-                            hole[0].toFloat(),
-                            hole[1].toFloat(),
-                            20f,
-                            callPocketPaint
-                        )
-                    }
+                val litPockets = if (activity.call8Ball) activity.holes
+                else listOfNotNull(activity.calledPocket.takeIf { it.size == 2 && activity.showCalledPocket })
+                if (litPockets.isNotEmpty()) {
+                    val pulse = 0.725f + 0.275f * sin(2f * PI.toFloat() * (System.nanoTime() / 1_000_000L % CALL_PULSE_MS.toLong()) / CALL_PULSE_MS)
+                    callGlowPaint.alpha = (pulse * 255).roundToInt()
+                    callPocketPaint.alpha = callGlowPaint.alpha
+                }
+                for (hole in litPockets) withTranslation(hole[0].toFloat(), hole[1].toFloat()) {
+                    drawCircle(0f, 0f, CALL_RING_R + CALL_GLOW_W, callGlowPaint)
+                    drawCircle(0f, 0f, CALL_RING_R, callPocketPaint)
                 }
 
                 if (

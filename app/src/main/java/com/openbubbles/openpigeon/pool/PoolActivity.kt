@@ -2752,6 +2752,8 @@ class PoolActivity : AppCompatActivity() {
 
     var call8Ball = false
 
+    val showCalledPocket get() = !replaying && !spectatorMode && (mode == PoolMode.Aiming || mode == PoolMode.Playing) &&
+            !isNineBall && iAmStripes?.let { s -> poolBalls.none { !it.sunk && if (s) it.isStripe else it.isSolid } } == true
     fun handleFinishPlay() {
         if (spectatorMode && !replaying) {
             disableSend = true
