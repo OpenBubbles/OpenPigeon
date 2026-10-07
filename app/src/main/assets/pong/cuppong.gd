@@ -106,7 +106,7 @@ var game_over: bool = false
 var start_replay_boards: String = "0,1,2,3,4,5,6,7,8,9&0,1,2,3,4,5,6,7,8,9"
 
 @export var replay_ball_start_pos: Vector3 = Vector3(0.0, -0.574, -0.80)
-@export var player_ball_start_pos: Vector3 = Vector3(0.0, -0.55, -1.00)
+@export var player_ball_start_pos: Vector3 = Vector3(0.0, -0.572, -1.09)
 @export var second_ball_offset: Vector3 = Vector3(0.28, 0.0, 0.0)
 
 var preview_ball: PongBall = null
@@ -1992,6 +1992,13 @@ func _await_throw_settle(thrown_ball: PongBall) -> void:
 				throw_finished()
 			return
 
+func _log_first_landing(b: PongBall) -> void:
+	# First physics frame the ball drops through cup-rim height (~-0.405 = rim -0.433 + ball radius).
+	while is_instance_valid(b):
+		await get_tree().physics_frame
+		if is_instance_valid(b) and b.linear_velocity.y < 0.0 and b.global_position.y <= -0.405:
+			OpLog.i(LOG_TAG, ["throw_landing pos=", b.global_position]); return
+
 func _send_turn() -> void:
 	var outgoing := export_replay()
 	OpLog.event(LOG_TAG, ["send_game_out raw=", outgoing])
@@ -2611,6 +2618,7 @@ func conv(input_float: float) -> String:
 	return char1 + char2
 
 func convback(enc: String) -> float:
+	enc = enc.replace(" ", "+")
 	var first_idx = CHARMAP.find(enc[0])
 	var second_idx = CHARMAP.find(enc[1])
 	return float(second_idx + first_idx * CHARMAP_LEN) / float(CHARMAP_LEN * CHARMAP_LEN - 1)
@@ -2817,40 +2825,8 @@ func _live_target_cups() -> Array[Node3D]:
 
 	return result
 
-
 func _throw_forward_direction() -> Vector3:
-	var live_cups: Array[Node3D] = _live_target_cups()
-
-	if live_cups.is_empty():
-		var rack_direction: Vector3 = (
-			my_cups.global_position -
-			ball_popo
-			if is_instance_valid(my_cups)
-			else Vector3(0.0, 0.0, 1.0)
-		)
-
-		rack_direction.y = 0.0
-
-		if rack_direction.length_squared() > 0.000001:
-			return rack_direction.normalized()
-
-		return Vector3(0.0, 0.0, 1.0)
-
-	var target_center := Vector3.ZERO
-
-	for cup: Node3D in live_cups:
-		target_center += cup.global_position
-
-	target_center /= float(live_cups.size())
-
-	var direction: Vector3 = target_center - ball_popo
-	direction.y = 0.0
-
-	if direction.length_squared() <= 0.000001:
-		return Vector3(0.0, 0.0, 1.0)
-
-	return direction.normalized()
-
+	return Vector3.BACK
 
 func _aim_assist_strength() -> float:
 	var assist: float = (
@@ -2974,9 +2950,7 @@ func _throw_release(
 		_throw_forward_direction()
 	)
 
-	var throw_right: Vector3 = Vector3.UP.cross(
-		throw_forward
-	).normalized()
+	var throw_right: Vector3 = throw_forward.cross(Vector3.UP).normalized()
 
 	var dx_world: float = flick_world.dot(
 		throw_right
@@ -3025,11 +2999,8 @@ func _throw_release(
 		forward_force
 	)
 
-	var angle_factor: float = (
-		dx_world / drag_len
-		if drag_len > 0.000001
-		else 0.0
-	)
+	var screen_flick: Vector2 = release_screen_pos - drag_start_pos
+	var angle_factor: float = screen_flick.x / screen_flick.length() if screen_flick.length() > 0.0 else 0.0
 
 	var lateral_distance: float = (
 		force_magnitude /
@@ -3046,16 +3017,7 @@ func _throw_release(
 		) * Z_GAIN
 	)
 
-	var forward_distance: float = (
-		absf(raw_target_z) -
-		absf(Z_BIAS)
-	)
-
-	var raw_world_target: Vector3 = (
-		ball_popo +
-		throw_right * lateral_distance +
-		throw_forward * forward_distance
-	)
+	var raw_world_target: Vector3 = my_cups.to_global(Vector3(lateral_distance, 0.0, raw_target_z)) if is_instance_valid(my_cups) else ball_popo
 
 	raw_world_target.y = ball_popo.y
 
@@ -3197,45 +3159,48 @@ func _throw_release(
 	ball_ready = false
 	current_ball = null
 
-	#OpLog.i(LOG_TAG, [
-		#"throw_release screenStart=",
-			#drag_start_pos,
-		#" screenEnd=",
-			#release_screen_pos,
-		#" flickWorld=",
-			#flick_world,
-		#" dx=",
-			#dx_world,
-		#" dz=",
-			#dz_world,
-		#" dragLen=",
-			#drag_len,
-		#" inputDistance=",
-			#input_distance,
-		#" force=",
-			#forward_force,
-		#" rawZ=",
-			#raw_target_z,
-		#" assistedZ=",
-			#assisted_target_z,
-		#" rawTarget=",
-			#raw_world_target,
-		#" assistedTarget=",
-			#final_world_target,
-		#" targetCup=",
-			#target_name,
-		#" targetDistance=",
-			#nearest_distance,
-		#" aimAssist=",
-			#aim_assist,
-		#" branch=",
-			#arc_branch,
-		#" impulse=",
-			#Vector3(
-				#fx_impulse,
-				#fy_impulse,
-				#fz_impulse
-			#)
-	#])
-
+	OpLog.i(LOG_TAG, [
+		"throw_release screenStart=",
+			drag_start_pos,
+		" screenEnd=",
+			release_screen_pos,
+		" flickWorld=",
+			flick_world,
+		" dx=",
+			dx_world,
+		" dz=",
+			dz_world,
+		" dragLen=",
+			drag_len,
+		" inputDistance=",
+			input_distance,
+		" force=",
+			forward_force,
+		" rawZ=",
+			raw_target_z,
+		" assistedZ=",
+			assisted_target_z,
+		" rawTarget=",
+			raw_world_target,
+		" assistedTarget=",
+			final_world_target,
+		" targetCup=",
+			target_name,
+		" targetCupPos=",
+			nearest_cup.global_position if nearest_cup != null else Vector3.ZERO,
+		" targetDistance=",
+			nearest_distance,
+		" aimAssist=",
+			aim_assist,
+		" branch=",
+			arc_branch,
+		" impulse=",
+			Vector3(
+				fx_impulse,
+				fy_impulse,
+				fz_impulse
+			)
+	])
+	
+	_log_first_landing(thrown_ball)
 	await _await_throw_settle(thrown_ball)
