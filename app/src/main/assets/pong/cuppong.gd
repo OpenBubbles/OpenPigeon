@@ -1938,10 +1938,13 @@ func _flash_label(target: Label, pop: bool = false) -> Tween:
 	)
 	return tween
 	
-func _tween_ball_path(node: PongBall, poses: Array, release_on_jump: bool = false) -> Tween:
+func _tween_ball_path(node: PongBall, poses: Array, release_on_jump: bool = false, hit_cup: Node3D = null) -> Tween:
 	var tween := create_tween()
 	var previous: Vector3 = node.position
 	var count: int = 0
+	var prev_dy: float = 0.0
+	var in_cup: bool = false
+	var cup_mouth: Vector3 = to_local(hit_cup.global_position) + Vector3(0.0, PongBall.CUP_REST_OFFSET_Y, 0.0) if hit_cup else Vector3.INF
 
 	for value in poses:
 		if not value is Vector3:
@@ -1957,7 +1960,14 @@ func _tween_ball_path(node: PongBall, poses: Array, release_on_jump: bool = fals
 				count += 1
 			break
 
+		var dy: float = value.y - previous.y
+		if not in_cup and prev_dy < -0.003 and dy > 0.003:
+			tween.tween_callback(play_sfx.bind(PONG_BOUNCE_SFX))  # falling then rising = bounce
 		tween.tween_property(node, "position", value, REPLAY_FRAME_DURATION).set_trans(Tween.TRANS_LINEAR)
+		if not in_cup and value.distance_to(cup_mouth) < PongBall.CUP_MADE_RADIUS:
+			in_cup = true
+			tween.tween_callback(play_sfx.bind(PONG_CUP_SFX))
+		prev_dy = dy
 		previous = value
 		count += 1
 
@@ -2323,7 +2333,7 @@ func _replay_recovered_local_throws() -> void:
 			add_child(replay_ball)
 			replay_ball.set_ball_style(current_ball_style)
 
-			var tween := _tween_ball_path(replay_ball, poses)
+			var tween := _tween_ball_path(replay_ball, poses, false, my_cups._cup_at(cup_idx) if cup_idx >= 0 else null)
 
 			if tween != null:
 				await tween.finished
@@ -2331,7 +2341,6 @@ func _replay_recovered_local_throws() -> void:
 			replay_ball.queue_free()
 
 		if cup_idx >= 0:
-			GameUtils.play_sfx(self, PONG_CUP_SFX)
 			my_cups.remove_cup(cup_idx + 1)
 			await get_tree().create_timer(0.45).timeout
 
@@ -2709,7 +2718,7 @@ func playReplay(parsed: Dictionary):
 
 		new_ball.position = move_cleaned[0]
 
-		var tween := _tween_ball_path(new_ball, move_cleaned, true)
+		var tween := _tween_ball_path(new_ball, move_cleaned, true, replay_cups._cup_at(move[-1]) if move[-1] is int else null)
 		if tween != null:
 			await tween.finished
 
@@ -2729,7 +2738,6 @@ func _on_replay_finished(new_ball: PongBall, move: Array, final_move: bool):
 	if move[-1] is int:
 		var hit_cup = move[-1] + 1
 		OpLog.i(LOG_TAG, ["replay_hit_cup cup=", hit_cup])
-		GameUtils.play_sfx(self, PONG_CUP_SFX)
 		replay_cups.remove_cup(hit_cup)
 
 	new_ball.queue_free()

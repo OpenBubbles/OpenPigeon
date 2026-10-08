@@ -31,6 +31,12 @@ var _replay_every: int = 2
 
 var _prev_global_pos: Vector3 = Vector3.ZERO
 var _has_prev_global_pos: bool = false
+var _cup_sfx_played: bool = false
+
+func _play_cup_sfx() -> void:
+	if not _cup_sfx_played:
+		_cup_sfx_played = true
+		GameUtils.play_sfx(game, PongGame.PONG_CUP_SFX)
 
 const CUP_DAMP_OFFSET_Y: float = 0.124
 const CUP_DAMP_RADIUS: float = 0.080
@@ -173,7 +179,7 @@ func _commit_made_cup(cup: StaticBody3D) -> void:
 		return
 
 	made_in = cup.duplicate()
-	GameUtils.play_sfx(game, PongGame.PONG_CUP_SFX)
+	_play_cup_sfx()
 
 	#OpLog.i(LOG_TAG, [
 		#"cup_made cup=", cup_name,
@@ -200,6 +206,9 @@ func _update_cup_entry_check(delta: float) -> void:
 		physics_material_override.bounce = BALL_LIVE_BOUNCE
 	elif _nearest_cup(CUP_DAMP_OFFSET_Y, CUP_DAMP_RADIUS) != null:
 		physics_material_override.bounce = BALL_DEAD_BOUNCE
+
+	if not _cup_sfx_played and _nearest_cup(CUP_REST_OFFSET_Y, CUP_MADE_RADIUS) != null:
+		_play_cup_sfx()
 
 	if (
 		not _has_prev_global_pos
@@ -288,7 +297,7 @@ func remove():
 
 			if late_cup != null:
 				made_in = late_cup.duplicate()
-				GameUtils.play_sfx(game, PongGame.PONG_CUP_SFX)
+				_play_cup_sfx()
 				game.my_cups.remove_cup(int(String(late_cup.name).replace("cup", "")))
 
 		if made_in != null:
