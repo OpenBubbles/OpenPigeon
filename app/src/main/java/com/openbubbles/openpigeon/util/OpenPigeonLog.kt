@@ -624,14 +624,14 @@ object OpenPigeonLog {
         }.format(Date(timeMs))
     }
 
-    fun shareReport(activity: Activity) {
+    fun shareReport(activity: Activity, description: String = "") {
         val reportId = createReportId()
         val report = buildReport(activity)
         clearPendingCrash(activity)
         val zipFile = createDiagnosticZip(
             activity = activity,
             reportId = reportId,
-            report = report
+            report = if (description.isBlank()) report else "User description:\n$description\n\n$report"
         )
 
         val reportUri = FileProvider.getUriForFile(
@@ -653,12 +653,12 @@ object OpenPigeonLog {
         Device: ${Build.MANUFACTURER} ${Build.MODEL}
 
         Please describe what happened:
-
+        {{NOTE}}
 
 
 
         The attached diagnostic report was sanitized on the device before it was shared.
-    """.trimIndent()
+        """.trimIndent().replace("{{NOTE}}", description.ifBlank { "\n\n" })
 
         val sendIntent = Intent(Intent.ACTION_SEND).apply {
             type = "application/zip"

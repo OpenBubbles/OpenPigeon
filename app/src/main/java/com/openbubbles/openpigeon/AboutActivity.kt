@@ -26,6 +26,14 @@ import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import com.google.android.material.R as MaterialR
 import com.google.android.material.color.MaterialColors
+import android.text.InputType
+import androidx.core.widget.doAfterTextChanged
+import android.view.MotionEvent
+import android.view.inputmethod.InputMethodManager
+import android.view.Window
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 
 class AboutActivity : Activity() {
 
@@ -357,6 +365,23 @@ class AboutActivity : Activity() {
         currentYear: Int,
         versionText: String
     ) {
+        val note = android.widget.EditText(this).apply {
+            hint = "What went wrong? Which game, what you did, what you expected"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 3
+            maxLines = 6
+            gravity = Gravity.TOP or Gravity.START
+            textSize = 15f
+            setTextColor(color(MaterialR.attr.colorOnSurface))
+            setHintTextColor(color(MaterialR.attr.colorOnSurfaceVariant))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = GradientDrawable().apply {   // outlined field so it doesn't read as dialog text
+                cornerRadius = dp(10).toFloat()
+                setColor((color(MaterialR.attr.colorSurfaceVariant) and 0x00FFFFFF) or (0x66 shl 24))
+                setStroke(dp(2), color(MaterialR.attr.colorPrimary))
+            }
+        }
+
         dialog()
             .setTitle(
                 "Send diagnostic report?"
@@ -369,16 +394,21 @@ class AboutActivity : Activity() {
 
                 Emails, URLs, IP addresses, authentication data, avatar data, contact names, and user-message fields are removed.
 
-                Your email app will open with the report addressed to support@colerabe.com. You can review or cancel the email before sending it.
+                Describe the problem below, then tap Send. Your email app will open with the report addressed to support@colerabe.com. You can review or cancel the email before sending it.
                 """.trimIndent()
             )
+            .setView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                isFocusableInTouchMode = true
+                setPadding(dp(24), 0, dp(24), 0)
+                addView(statSection("Describe the problem"))
+                addView(note, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(6) })
+            })
             .setPositiveButton(
-                "Create report"
+                "Send"
             ) { _, _ ->
                 runCatching {
-                    OpenPigeonLog.shareReport(
-                        this
-                    )
+                    OpenPigeonLog.shareReport(this, note.text.toString().trim())
                 }.onSuccess {
                     showAboutDialog(currentYear, versionText)
                 }.onFailure { error ->
@@ -430,6 +460,33 @@ class AboutActivity : Activity() {
                 )
             }
             .show()
+            .also { d ->
+                val send = d.getButton(DialogInterface.BUTTON_POSITIVE)
+                send.isEnabled = false   // need a description before sending
+                note.doAfterTextChanged { send.isEnabled = !it.isNullOrBlank() }
+                d.window?.let { w ->
+                    val cb = w.callback
+                    w.callback = object : Window.Callback by cb {
+                        override fun dispatchTouchEvent(e: MotionEvent): Boolean {
+                            if (e.action == MotionEvent.ACTION_DOWN && note.hasFocus()) {
+                                val loc = IntArray(2).also { note.getLocationOnScreen(it) }
+                                if (e.rawX.toInt() !in loc[0]..loc[0] + note.width || e.rawY.toInt() !in loc[1]..loc[1] + note.height) {
+                                    note.clearFocus()
+                                    (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(note.windowToken, 0)
+                                }
+                            }
+                            return cb.dispatchTouchEvent(e)
+                        }
+                    }
+                    val content = d.findViewById<View>(androidx.appcompat.R.id.contentPanel) ?: d.findViewById(android.R.id.message)
+                    var kbOpen = false
+                    ViewCompat.setOnApplyWindowInsetsListener(w.decorView) { v, insets ->
+                        val open = insets.isVisible(WindowInsetsCompat.Type.ime())
+                        if (open != kbOpen) { kbOpen = open; v.post { content?.isVisible = !open } }
+                        ViewCompat.onApplyWindowInsets(v, insets)
+                    }
+                }
+            }
     }
 
     private fun confirmReset(

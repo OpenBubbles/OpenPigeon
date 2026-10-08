@@ -2,6 +2,8 @@
   <dictionary name="project">
     <words>
       <w>coords</w>
+      <w>npulse</w>
+      <w>openpigeon</w>
     </words>
   </dictionary>
 </component>
