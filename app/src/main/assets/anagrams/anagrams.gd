@@ -439,6 +439,7 @@ func _set_game_data(raw_text: String) -> void:
 
 	var opponent_avatar_key := ""
 	winner = _get_first(d, "winner", "")
+	var had_winner: bool = winner != ""
 
 	if winner != "":
 		OpLog.event(LOG_TAG, ["winner_payload_present payload=", winner])
@@ -565,6 +566,9 @@ func _set_game_data(raw_text: String) -> void:
 			opp_avatar_display.call_deferred("update_avatar_from_data", opponent_data)
 
 	game_ended = await check_win()
+
+	if game_ended and not had_winner and my_has_data and not spectator_mode:
+		_send_crossed_result(d, my_player, win_loss_state)
 
 	OpLog.i(LOG_TAG, [
 		"set_game_data_check_win game_ended=", game_ended,
