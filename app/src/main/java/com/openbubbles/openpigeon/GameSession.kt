@@ -33,7 +33,7 @@ class GameSession(var handle: IMessageViewHandle) {
         val url = message.url.replace("data:", "data://").toUri()
         val data = url.getQueryParameter("data")!!
         val decrypted = Cryption.decrypt(data)
-        val parsed = "data://$decrypted".toUri()
+        val parsed = "data://$decrypted".replace("+", "%2B").toUri()
         val newMessage: MutableMap<String, String> = mutableMapOf()
 
         OpenPigeonLog.i("openpigeon", "New game! $parsed")
@@ -207,7 +207,7 @@ class GameSession(var handle: IMessageViewHandle) {
         val baseMessageKey = state.third
         val targetNum = request.updates["num"]?.toIntOrNull()
         val baseNum = baseMessage["num"]?.toIntOrNull()
-        val alreadyLanded = baseMessage["sender"] == request.updates["sender"]
+        val alreadyLanded = request.updates.all { (k, v) -> k == "num" || k == "caption" || baseMessage[k] == v }
         if (targetNum != null && baseNum != null && baseNum >= targetNum) {
             if (baseMessage["game"] in concurrentGames && !alreadyLanded) {
                 return dispatchUpdate(

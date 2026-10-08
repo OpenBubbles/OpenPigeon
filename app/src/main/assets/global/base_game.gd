@@ -56,6 +56,18 @@ var _last_data_num: int = -1
 
 var local_turn_active := false
 var deferred_game_data := ""
+var _crossed_result_sent := false
+
+func _send_crossed_result(d: Dictionary, n: int, state: String) -> void:
+	if _crossed_result_sent or state == "":
+		return
+	_crossed_result_sent = true
+	var payload := {"winner": my_uuid + "|" + state}
+	for k in ["lang", "score%d" % n, "words%d" % n, "words_list%d" % n, "avatar%d" % n]:
+		if d.has(k):
+			payload[k] = str(d[k])
+	OpLog.event("CrossedResult", ["resend raw=", JSON.stringify(payload)])
+	send_game_data(JSON.stringify(payload))
 
 func _receive_game_data(json: String) -> void:
 	var parsed: Variant = null if json.is_empty() else JSON.parse_string(json)

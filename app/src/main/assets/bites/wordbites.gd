@@ -581,6 +581,8 @@ func _set_game_data(raw_text: String) -> void:
 		_apply_winner_payload(winner_payload, p1_id, p2_id)
 	else:
 		game_ended = check_win()
+		if game_ended and my_has_data and not spectator_mode:
+			_send_crossed_result(d, player, win_loss_state)
 
 	_load_wordbites_recovery(recovery_snapshot_pending, recovery_snapshot_progress)
 
