@@ -19,12 +19,13 @@ import androidx.core.graphics.toColorInt
 import com.openbubbles.openpigeon.R
 import java.util.WeakHashMap
 import kotlin.math.min
+import android.annotation.SuppressLint
 
 private class SettingsMaxHeightScrollView(context: Context) : ScrollView(context) {
     var maxHeightPx: Int = Int.MAX_VALUE
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val cappedHeight = if (maxHeightPx == Int.MAX_VALUE) heightMeasureSpec else View.MeasureSpec.makeMeasureSpec(maxHeightPx, View.MeasureSpec.AT_MOST)
+        val cappedHeight = if (maxHeightPx == Int.MAX_VALUE) heightMeasureSpec else MeasureSpec.makeMeasureSpec(maxHeightPx, MeasureSpec.AT_MOST)
         super.onMeasure(widthMeasureSpec, cappedHeight)
     }
 }
@@ -37,6 +38,13 @@ class SettingsSheet(
     companion object {
         private const val Z_SETTINGS_DIM = 50000f
         private const val Z_SETTINGS_CARD = 50001f
+        private val COL_CARD = "#1e1e2e".toColorInt()
+        private val COL_HANDLE = "#555566".toColorInt()
+        private val COL_LABEL = "#aaaacc".toColorInt()
+        private val COL_TAB_SEL = "#a78bfa".toColorInt()
+        private val COL_TAB_UNSEL = "#666688".toColorInt()
+        private val COL_SEL_BORDER = "#a78bfa".toColorInt()
+        private val COL_DIVIDER = "#333355".toColorInt()
     }
 
     // ── dp helpers ────────────────────────────────────────────────────────────
@@ -47,15 +55,6 @@ class SettingsSheet(
     private fun dpf(v: Float) = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, v, context.resources.displayMetrics
     )
-
-    // ── Colors ───────────────────────────────────────────────────────────────
-    private val COL_CARD = "#1e1e2e".toColorInt()
-    private val COL_HANDLE = "#555566".toColorInt()
-    private val COL_LABEL = "#aaaacc".toColorInt()
-    private val COL_TAB_SEL = "#a78bfa".toColorInt()
-    private val COL_TAB_UNSEL = "#666688".toColorInt()
-    private val COL_SEL_BORDER = "#a78bfa".toColorInt()
-    private val COL_DIVIDER = "#333355".toColorInt()
 
     // ── Views ─────────────────────────────────────────────────────────────────
     private val dimView: View
@@ -148,39 +147,15 @@ class SettingsSheet(
 
     private val stringSettingBindings = mutableListOf<StringSettingBinding>()
 
-    fun addGameControl(label: String, controlView: View) {
-        addGameControl(label, "", controlView)
-    }
-
-    fun addGameControl(label: String, subtitle: String, controlView: View) {
-        if (!::controlsSection.isInitialized) return
-        controlsSection.isVisible = true
-        content.setPadding(0, 0, 0, 0)
-        controlsContainer.addView(buildGameControlCard(label, subtitle, controlView))
-        updateResponsiveLayout()
-    }
-
-    fun addGameControl(label: String, subtitle: String, controlView: View, inCustomTab: Boolean) {
-        if (!inCustomTab) {
-            addGameControl(label, subtitle, controlView)
-            return
-        }
-        if (!::miscRowsContainer.isInitialized) return
-        miscRowsContainer.addView(buildGameControlCard(label, subtitle, controlView))
-        ensureCustomTab()
+    private fun addGameControl(label: String, subtitle: String, controlView: View, inCustomTab: Boolean) {
+        val cardView = buildGameControlCard(label, subtitle, controlView)
+        if (inCustomTab) { miscRowsContainer.addView(cardView); ensureCustomTab() }
+        else { controlsSection.isVisible = true; content.setPadding(0, 0, 0, 0); controlsContainer.addView(cardView) }
         updateResponsiveLayout()
     }
 
     var onCustomTabFirstOpened: (() -> Unit)? = null
     fun ensureCustomTab() = ensureMiscTab()
-
-    fun addBooleanSetting(
-        label: String,
-        scope: SettingScope,
-        key: String,
-        default: Boolean,
-        onChanged: (Boolean) -> Unit,
-    ): SwitchCompat = addBooleanSetting(label, "", scope, key, default, onChanged = onChanged)
 
     fun addBooleanSetting(
         label: String,
@@ -206,46 +181,6 @@ class SettingsSheet(
         addGameControl(label, subtitle, control, inCustomTab)
         refreshBooleanSetting(binding)
         return control
-    }
-
-    fun addOptionSetting(
-        label: String,
-        subtitle: String,
-        scope: SettingScope,
-        key: String,
-        items: List<Pair<String, String>>,
-        default: String,
-        inCustomTab: Boolean = false,
-        onChanged: (String) -> Unit,
-    ): Spinner {
-        SettingsData.init(context)
-        val spinner = Spinner(context)
-        val labels = items.map { it.second }
-        val adapter = ArrayAdapter(context, android.R.layout.simple_spinner_item, labels).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
-        spinner.adapter = adapter
-        spinner.background = GradientDrawable().apply { setColor("#2a2a3a".toColorInt()); cornerRadius = dpf(10f); setStroke(dp(1f), COL_DIVIDER) }
-        spinner.setPadding(dp(10f), 0, dp(10f), 0)
-        spinner.minimumWidth = dp(130f)
-        var suppress = true
-        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (suppress || position !in items.indices) return
-                val selected = items[position].first
-                SettingsData.putString(scope, key, selected)
-                onChanged(selected)
-            }
-        }
-        val binding = StringSettingBinding(scope, key, default, { value ->
-            val index = items.indexOfFirst { it.first == value }.let { if (it >= 0) it else items.indexOfFirst { it.first == default }.coerceAtLeast(0) }
-            suppress = true
-            if (items.isNotEmpty()) spinner.setSelection(index, false)
-            suppress = false
-        }, onChanged)
-        stringSettingBindings += binding
-        addGameControl(label, subtitle, spinner, inCustomTab)
-        refreshStringSetting(binding)
-        return spinner
     }
 
     fun addPickerSetting(
@@ -956,7 +891,7 @@ class SettingsSheet(
             setBackgroundColor(COL_DIVIDER)
         })
         controlsSection.addView(TextView(context).apply {
-            text = "Global Settings"; setTextColor(Color.WHITE); textSize = 15f
+            text = context.getString(R.string.global_settings); setTextColor(Color.WHITE); textSize = 15f
             gravity = Gravity.CENTER_HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
@@ -972,6 +907,7 @@ class SettingsSheet(
         content.addView(controlsSection)
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private fun buildGradientSlider(): FrameLayout {
         val thumbD = dp(22f)
         val trackH = dp(10f)
@@ -1002,7 +938,7 @@ class SettingsSheet(
         // Track fills the container's padded width
         val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         val track = object : View(context) {
-            override fun onDraw(c: Canvas) {
+            override fun onDraw(canvas: Canvas) {
                 val w = width.toFloat()
                 if (cachedTrackColor != currentSliderBaseColor || cachedTrackShader == null || cachedTrackWidth != w) {
                     cachedTrackColor = currentSliderBaseColor
@@ -1011,7 +947,7 @@ class SettingsSheet(
                 }
                 trackPaint.shader = cachedTrackShader
                 val r = height / 2f
-                c.drawRoundRect(0f, 0f, w, height.toFloat(), r, r, trackPaint)
+                canvas.drawRoundRect(0f, 0f, w, height.toFloat(), r, r, trackPaint)
             }
         }.apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -1401,7 +1337,7 @@ class SettingsSheet(
         refreshGameAvatar()
     }
 
-    // ── Colour swatches ───────────────────────────────────────────────────────
+    // ── Color swatches ───────────────────────────────────────────────────────
     private fun buildColorSwatches(colors: List<Int>, current: Int, onPick: (Int) -> Unit) {
         colorRow.removeAllViews()
         colorRowContainer.isVisible = true
@@ -1448,6 +1384,7 @@ class SettingsSheet(
     }
 
     // ── Drag-to-dismiss ───────────────────────────────────────────────────────
+    @SuppressLint("ClickableViewAccessibility")
     private fun setupDragToDismiss() {
         var dragStartY = 0f
         var dragging = false
@@ -1632,17 +1569,5 @@ class SettingsSheet(
         "#82b941"
     ).map { it.toColorInt() }
 
-    private fun clothingColors() = listOf(
-        "#7c7c7c",
-        "#e7639f",
-        "#9e45c0",
-        "#5798f6",
-        "#32d5c8",
-        "#7cb33e",
-        "#b1da1a",
-        "#f6d61a",
-        "#ee7c09",
-        "#f11f06",
-        "#d3292c"
-    ).map { it.toColorInt() }
+    private fun clothingColors() = bgColors()
 }

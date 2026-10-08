@@ -16,5 +16,6 @@
     <string name="game_explanation">This game is fabulous!</string>
     <string name="sent_pending">Sent</string>
     <string name="sent">Sent ✔</string>
+    <string name="global_settings">Global Settings</string>
 
 </resources>

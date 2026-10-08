@@ -19,7 +19,7 @@ private val PAINT_STYLES = listOf(
     "FF7518 1A1A1A 7B2FF7", "FFD400 1E5BD6 4FC3F7", "FF0000 FFFF00 00FF00 00FFFF 0000FF FF00FF",
 )
 
-// id|label|stone colours — mirrors MANCALA_THEME_NAMES / _get_palette_for_theme in mancala.gd.
+// id|label|stone colors — mirrors MANCALA_THEME_NAMES / _get_palette_for_theme in mancala.gd.
 private val MANCALA_THEMES = listOf(
     "Default|Default|FFFCF2 414851 176CAB", "Retro|Retro|E80038 FFB900 2FA5A0",
     "Penguin|Penguin|00E603 00C6CF 0083E3 E90008 C303C1", "Sakura Ink|Sakura|F7BFCF 2A2E34 4F65A3",
@@ -65,10 +65,10 @@ private fun SettingsSheet.buildGameCustomizations(ctx: Context) {
             "1", rowHeightDp = 88f) {}
     }
     pick("Darts · Dart", "Flight design", SettingScope.Game("darts"), "dart_style", assets("darts/previews", "dart", "Dart", 1), "0")
-    pick("Paintball · Paint", "Colour you splatter on your opponent", SettingScope.Game("paintball"), "paint_style",
+    pick("Paintball · Paint", "Color you splatter on your opponent", SettingScope.Game("paintball"), "paint_style",
         PAINT_STYLES.mapIndexed { i, hex -> PickerItem("$i", if (i == PAINT_STYLES.lastIndex) "Random" else "Paint ${i + 1}", bands(hex)) }, "0")
     pick("Cup Pong · Cups", "Choose your cup style", SettingScope.Section("beer"), "cup_style", assets("pong/previews", "cup", "Cup", 0), "1")
     pick("Cup Pong · Balls", "Choose your ball style", SettingScope.Section("beer"), "ball_style", assets("pong/previews", "ball", "Ball", 0), "1")
-    pick("Mancala · Theme", "Board and stone colours", SettingScope.Game("mancala"), "theme",
+    pick("Mancala · Theme", "Board and stone colors", SettingScope.Game("mancala"), "theme",
         MANCALA_THEMES.map { it.split('|').let { (id, label, hex) -> PickerItem(id, label, bands(hex)) } }, "Default", asInt = false)
 }

@@ -399,7 +399,7 @@ func _add_settings_rows(_container, popup_script) -> void:
 
 	var paint_row: Control = popup_script.make_game_picker_card(
 		"Paint",
-		"Colour you splatter on your opponent",
+		"Color you splatter on your opponent",
 		items,
 		str(my_paint_style),
 		func(id: String) -> void:
