@@ -786,7 +786,7 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                 }
                 for (hole in litPockets) withTranslation(hole[0].toFloat(), hole[1].toFloat()) {
                     drawCircle(0f, 0f, CALL_RING_R + CALL_GLOW_W, callGlowPaint)
-                    drawCircle(0f, 0f, CALL_RING_R, callPocketPaint)
+                    if (activity.call8Ball) drawCircle(0f, 0f, CALL_RING_R, callPocketPaint)   // solid ring only while choosing
                 }
 
                 if (
