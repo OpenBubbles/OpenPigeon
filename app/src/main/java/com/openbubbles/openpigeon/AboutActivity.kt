@@ -466,14 +466,14 @@ class AboutActivity : Activity() {
                 note.doAfterTextChanged { send.isEnabled = !it.isNullOrBlank() }
                 d.window?.let { w ->
                     val cb = w.callback
+                    val buttons = d.findViewById<View>(androidx.appcompat.R.id.buttonPanel)
+                    fun View.hit(e: MotionEvent) = IntArray(2).also { getLocationOnScreen(it) }
+                        .let { e.rawX.toInt() in it[0]..it[0] + width && e.rawY.toInt() in it[1]..it[1] + height }
                     w.callback = object : Window.Callback by cb {
                         override fun dispatchTouchEvent(e: MotionEvent): Boolean {
-                            if (e.action == MotionEvent.ACTION_DOWN && note.hasFocus()) {
-                                val loc = IntArray(2).also { note.getLocationOnScreen(it) }
-                                if (e.rawX.toInt() !in loc[0]..loc[0] + note.width || e.rawY.toInt() !in loc[1]..loc[1] + note.height) {
-                                    note.clearFocus()
-                                    (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(note.windowToken, 0)
-                                }
+                            if (e.action == MotionEvent.ACTION_DOWN && note.hasFocus() && !note.hit(e) && buttons?.hit(e) != true) {
+                                note.clearFocus()
+                                (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(note.windowToken, 0)
                             }
                             return cb.dispatchTouchEvent(e)
                         }
