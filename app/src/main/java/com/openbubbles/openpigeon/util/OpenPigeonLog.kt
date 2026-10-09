@@ -53,8 +53,8 @@ object OpenPigeonLog {
     private var nextGenericUid = 1
     private var nextSession = 1
     private var nextRoom = 1
-    private const val MAX_AGE_MS = 5 * 60 * 1000L
-    private const val MAX_ENTRIES = 1000
+    private const val MAX_AGE_MS = 30 * 60 * 1000L
+    private const val MAX_ENTRIES = 5000
     private const val LOG_FILE_NAME = "openpigeon_diagnostic.log"
     private const val CRASH_MARKER = "last_crash"
 
@@ -62,7 +62,7 @@ object OpenPigeonLog {
             File(context.filesDir, CRASH_MARKER).takeIf { it.exists() }?.readText()?.trim()?.toLongOrNull()
 
     fun clearPendingCrash(context: Context) { File(context.filesDir, CRASH_MARKER).delete() }
-    private const val MAX_FILE_BYTES = 512 * 1024
+    private const val MAX_FILE_BYTES = 2 * 1024 * 1024
     private val fileLogEnabled = AtomicBoolean(true)
     private val crashHandlerInstalled = AtomicBoolean(false)
 
