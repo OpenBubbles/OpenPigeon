@@ -288,7 +288,8 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
         if (message == null || handle == null) return
         OpenPigeonLog.i("OPDiag", "HOST->didTapTemplate session=${message.session} handle=${handle.asBinder().hashCode()}")
         val session = getSessionFor(message.session, handle)
-        if (session.handleNewMessage(message)) session.updateHandle(handle, message)
+        session.handleNewMessage(message)
+        session.updateHandle(handle, message)
         val game = session.getGame()
 
         OpenPigeonLog.i("Session", message.session.toString())
@@ -319,7 +320,8 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
     ): RemoteViews {
         val session = getSessionFor(message!!.session, handle!!)
         OpenPigeonLog.i("OPDiag", "HOST->getLiveView session=${message.session} handle=${handle.asBinder().hashCode()} guid=${message.messageGuid}")
-        if (session.handleNewMessage(message)) session.updateHandle(handle, message)
+        session.handleNewMessage(message)
+        session.updateHandle(handle, message)
 
         val displayMetrics = context.resources.displayMetrics
         val dpWidth = displayMetrics.widthPixels / displayMetrics.density

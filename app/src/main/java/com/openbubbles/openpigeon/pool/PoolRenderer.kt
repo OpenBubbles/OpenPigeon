@@ -194,6 +194,7 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         private const val TABLE_ASSET_CONTENT_OFFSET_X_PX = 0f
         private const val TABLE_ASSET_CONTENT_OFFSET_Y_PX = 0f
         private const val AIM_BALL_RADIUS = 10f
+        private const val POCKET_BALL_DRAW_RADIUS = 10f
     }
 
     private val tableBitmapRect = RectF(-0.057f, -0.189f, WORLD_WIDTH, WORLD_HEIGHT)
@@ -716,6 +717,19 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
         }
     }
 
+    private fun shouldDrawPocketBall(
+        ball: PoolActivity.PoolBall,
+    ): Boolean {
+        if (!ball.inPocket || ball.sunk) {
+            return false
+        }
+
+        return ball.x + POCKET_BALL_DRAW_RADIUS >= 0f &&
+                ball.x - POCKET_BALL_DRAW_RADIUS <= WORLD_WIDTH &&
+                ball.y + POCKET_BALL_DRAW_RADIUS >= 0f &&
+                ball.y - POCKET_BALL_DRAW_RADIUS <= WORLD_HEIGHT
+    }
+
     private fun drawFrame(canvas: Canvas) {
         synchronized(activity) {
             canvas.drawColor(getBackgroundColor())
@@ -749,7 +763,7 @@ class PoolRenderer(val holder: SurfaceHolder, val activity: PoolActivity) : Thre
                 drawPockets(this)
 
                 for (ball in activity.poolBalls) {
-                    if (!ball.inPocket) continue
+                    if (!shouldDrawPocketBall(ball)) continue
                     ball.draw(this)
                 }
 

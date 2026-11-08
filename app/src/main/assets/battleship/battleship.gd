@@ -75,6 +75,7 @@ const RAND48_DIVISOR: float = 281474976710656.0 # 2^48
 var _rand48_state: int = 0
 var _rand48_initialized: bool = false
 var _ship_creation_draws_consumed: bool = false
+var _fleet_mode: String = ""
 var _popup_input_blocked: bool = false
 var _on_opponent_board := false
 
@@ -443,6 +444,7 @@ func _set_game_data(new_replay: String) -> void:
 	var skip: String = parsed.get("skip_ships", "")
 	var skip_bullets: String = parsed.get("skip_bullets", "")
 	var bsize: int = int(parsed.get("size", 8))
+	_fleet_mode = str(parsed.get("mode", ""))
 	
 	OpLog.i(LOG_TAG, [
 		"set_game_data parsed turn=", isTurn,
@@ -451,6 +453,7 @@ func _set_game_data(new_replay: String) -> void:
 		" p1=", p1_id,
 		" p2=", p2_id,
 		" size=", bsize,
+		" fleetMode=", _fleet_mode,
 		" replayMoves=", replay.size(),
 		" ships1Len=", s1.length(),
 		" ships2Len=", s2.length(),
@@ -650,7 +653,7 @@ func _set_game_data(new_replay: String) -> void:
 
 	if not spectator_mode and my_ships_encoded.is_empty() and not has_recovery_progress:
 		OpLog.i(LOG_TAG, ["init_board randomize localPlayer=", player, " board=", myBattleground.name])
-		_randomize_my_ships(bsize)
+		_randomize_my_ships(bsize, _fleet_mode)
 	else:
 		dbg(["init_board not_randomizing spectator=", spectator_mode, " shipsEmpty=", my_ships_encoded.is_empty(), " recovery=", has_recovery_progress, " player=", player])
 	if spectator_mode and not greplay.is_empty():
@@ -991,14 +994,58 @@ func _on_shuffle_button_pressed() -> void:
 		)
 		return
 
-	_randomize_my_ships(myBattleground.columns)
+	_randomize_my_ships(myBattleground.columns, _fleet_mode)
 
-func _randomize_my_ships(board_size: int) -> void:
+func _fleet_template_from_mode(mode: String) -> String:
+	var counts: PackedStringArray = mode.split(",", false)
+	if counts.size() != 4:
+		return ""
+
+	var template_parts: Array[String] = []
+	var total_ships: int = 0
+	for index in range(4):
+		var raw_count: String = counts[index].strip_edges()
+		if not raw_count.is_valid_int():
+			return ""
+		var count: int = int(raw_count)
+		if count < 0 or count > 10:
+			return ""
+		total_ships += count
+		var sections := PackedStringArray()
+		for _section in range(4 - index):
+			sections.append("0")
+		var num_text := ",".join(sections)
+		for _ship in range(count):
+			template_parts.append("pos:0,0&num:%s&rot:0" % num_text)
+
+	if total_ships == 0 or total_ships > 10:
+		return ""
+	return "|".join(template_parts)
+
+
+func _fleet_signature(template: String) -> PackedInt32Array:
+	var counts := PackedInt32Array([0, 0, 0, 0])
+	for ship_piece in template.split("|", false):
+		for section in ship_piece.split("&", false):
+			if section.begins_with("num:"):
+				var length: int = section.substr(4).split(",", false).size()
+				if length >= 1 and length <= 4:
+					counts[4 - length] += 1
+				break
+	return counts
+
+
+func _randomize_my_ships(board_size: int, fleet_mode: String = "") -> void:
 	if not is_instance_valid(myBattleground):
 		push_error("[RANDOMIZE] Missing BattleGround")
 		return
 
-	var template: String = SHIP_TEMPLATES.get(board_size, "")
+	var mode_template: String = _fleet_template_from_mode(fleet_mode)
+	var template: String = mode_template
+	if template.is_empty():
+		template = SHIP_TEMPLATES.get(board_size, "")
+		if not fleet_mode.is_empty():
+			OpLog.w(LOG_TAG, ["invalid_fleet_mode mode=", fleet_mode, " using_size_template=", board_size])
 	if template.is_empty():
 		push_warning(
 			"[RANDOMIZE] No template for board_size=%d; keeping existing layout" %
@@ -1012,10 +1059,15 @@ func _randomize_my_ships(board_size: int) -> void:
 	)
 
 	if encoded.is_empty():
-		push_warning(
-			"[RANDOMIZE] generation failed; using known-good template"
-		)
-		encoded = template
+		var known_good_template: String = SHIP_TEMPLATES.get(board_size, "")
+		if not mode_template.is_empty():
+			# Only use a predefined placement when its exact ship counts match
+			# the mode received from iOS. Never fall back to overlapping placeholders.
+			if _fleet_signature(known_good_template) != _fleet_signature(mode_template):
+				OpLog.e(LOG_TAG, ["fleet_placement_failed mode=", fleet_mode, " boardSize=", board_size])
+				return
+		encoded = known_good_template
+		push_warning("[RANDOMIZE] generation failed; using matching known-good size template")
 
 	_last_random_layout_by_size[board_size] = encoded
 
@@ -1024,6 +1076,8 @@ func _randomize_my_ships(board_size: int) -> void:
 		[
 			"randomized_ships boardSize=",
 			board_size,
+			" fleetMode=", fleet_mode,
+			" expectedShips=", template.split("|", false).size(),
 			" encoded=",
 			encoded
 		]
@@ -2523,9 +2577,8 @@ func _play_bomb_fall_animation_for_board(board: BattleGround, grid_pos: Vector2,
 	
 	bomb.z_index = bomb_above_z
 	
-	var sounds_enabled := true
-	if is_instance_valid(mediaPlugin) and mediaPlugin.has_method("isSoundsEnabled"):
-		sounds_enabled = bool(mediaPlugin.call("isSoundsEnabled"))
+	# The media plugin manages music, not the global game-SFX setting.
+	var sounds_enabled: bool = bool(SettingsManager.get_setting("global", "sounds_enabled", true))
 
 	var plane_audio: AudioStreamPlayer = null
 	var plane_audio_tween: Tween = null

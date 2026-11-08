@@ -113,13 +113,14 @@ class GameSession(var handle: IMessageViewHandle) {
     }
 
     private fun messageKey(message: MadridMessage): String {
-        val url = message.url.orEmpty()
+        val guid = message.messageGuid
 
-        if (url.isNotBlank()) {
-            return "url:$url"
+        if (!guid.isNullOrBlank()) {
+            return "guid:$guid"
         }
 
-        return "guid:${message.messageGuid.orEmpty()}"
+        val url = message.url.orEmpty()
+        return if (url.isNotBlank()) "url:$url" else ""
     }
 
     private fun recordWinIfApplicable(message: Map<String, String>) {
@@ -275,8 +276,18 @@ class GameSession(var handle: IMessageViewHandle) {
                 if (done.get()) return@postDelayed
                 val fresh = synchronized(this) {
                     staleHandle = sendHandle.asBinder()
-                    latestHostHandle?.takeIf { it.asBinder() != sendHandle.asBinder() && it.asBinder().isBinderAlive }
-                        ?.also { handle = it; if (locked) { it.lock(); hostLocked = it } }
+
+                    val candidate =
+                        latestHostHandle?.takeIf {
+                            it.asBinder() != sendHandle.asBinder() &&
+                                    it.asBinder().isBinderAlive
+                        }
+
+                    candidate?.takeIf {
+                        adoptHandle(it)
+                    }?.also {
+                        diag("timeoutHandleSwap")
+                    }
                 }
                 OpenPigeonLog.w("OPDiag", "send TIMEOUT session=${request.mySession} stale=${sendHandle.asBinder().hashCode()} fresh=${fresh?.asBinder()?.hashCode()} retried=$retried")
                 if (fresh != null && !retried && done.compareAndSet(false, true)) dispatchUpdate(request, true)
@@ -355,6 +366,52 @@ class GameSession(var handle: IMessageViewHandle) {
 
     fun diag(step: String) = OpenPigeonLog.i("OPDiag", "$step locked=$locked handle=${handle.asBinder().hashCode()} alive=${handle.asBinder().isBinderAlive} hostLocked=${hostLocked?.asBinder()?.hashCode()} latest=${latestMessageKey.hashCode()} handleKey=${handleMessageKey.hashCode()} cb=${messageUpdated.hashCode()}")
 
+    private fun adoptHandle(
+        newHandle: IMessageViewHandle,
+        newMessageKey: String? = null,
+    ): Boolean {
+        if (
+            locked &&
+            hostLocked?.asBinder() != newHandle.asBinder()
+        ) {
+            val lockedNew =
+                runCatching {
+                    newHandle.lock()
+                }.onFailure {
+                    OpenPigeonLog.w(
+                        "GameSession",
+                        "Unable to lock replacement host message handle",
+                        it,
+                    )
+                }.isSuccess
+
+            if (!lockedNew) {
+                return false
+            }
+
+            val oldLocked = hostLocked
+            hostLocked = newHandle
+
+            runCatching {
+                oldLocked?.unlock()
+            }.onFailure {
+                OpenPigeonLog.w(
+                    "GameSession",
+                    "Unable to unlock replaced host message handle",
+                    it,
+                )
+            }
+        }
+
+        handle = newHandle
+
+        if (newMessageKey != null) {
+            handleMessageKey = newMessageKey
+        }
+
+        return true
+    }
+
     fun lock() {
         synchronized(this) {
             if (locked && hostLocked?.asBinder() == handle.asBinder()) return
@@ -368,11 +425,41 @@ class GameSession(var handle: IMessageViewHandle) {
     }
 
     fun unlock() {
+        var lockedHandle: IMessageViewHandle? = null
+
         synchronized(this) {
             if (!locked) return
+
             locked = false
-            OpenPigeonLog.i("GameSession", "Handle UNLOCKED (kept alive ${hostLocked?.asBinder()?.hashCode()})")
+            lockedHandle = hostLocked
+            hostLocked = null
+
+            latestHostHandle
+                ?.takeIf {
+                    it.asBinder().isBinderAlive &&
+                            it.asBinder() != staleHandle
+                }
+                ?.let {
+                    handle = it
+                }
+
+            OpenPigeonLog.i(
+                "GameSession",
+                "Handle UNLOCKED ${lockedHandle?.asBinder()?.hashCode()} " +
+                        "current=${handle.asBinder().hashCode()}"
+            )
+
             diag("unlock")
+        }
+
+        runCatching {
+            lockedHandle?.unlock()
+        }.onFailure {
+            OpenPigeonLog.w(
+                "GameSession",
+                "Unable to unlock host message handle",
+                it,
+            )
         }
     }
 
@@ -382,23 +469,41 @@ class GameSession(var handle: IMessageViewHandle) {
     ) {
         val newMessageKey = messageKey(message)
         var deferredUpdate: PendingSessionUpdate? = null
+        var adopted = false
 
         synchronized(this) {
-            latestHostHandle = newHandle
-            handle = hostLocked?.takeIf { it.asBinder().isBinderAlive && it.asBinder() != staleHandle } ?: newHandle
-            handleMessageKey = newMessageKey
+            val matchesLatest =
+                latestMessageKey.isBlank() ||
+                        newMessageKey.isBlank() ||
+                        newMessageKey == latestMessageKey
 
-            if (latestMessageKey == handleMessageKey) {
-                deferredUpdate = pendingUpdate
-                pendingUpdate = null
+            if (matchesLatest) {
+                latestHostHandle = newHandle
+                adopted = adoptHandle(
+                    newHandle = newHandle,
+                    newMessageKey = newMessageKey,
+                )
+
+                if (adopted && latestMessageKey == handleMessageKey) {
+                    deferredUpdate = pendingUpdate
+                    pendingUpdate = null
+                }
             }
-            diag("updateHandle")
+
+            diag(if (adopted) "updateHandle" else "ignoreHandle")
         }
 
-        OpenPigeonLog.i(
-            "GameSession",
-            "Handle updated key=${newMessageKey.hashCode()} guidPresent=${!message.messageGuid.isNullOrBlank()} locked=$locked deferred=${deferredUpdate != null}",
-        )
+        if (adopted) {
+            OpenPigeonLog.i(
+                "GameSession",
+                "Handle updated key=${newMessageKey.hashCode()} guidPresent=${!message.messageGuid.isNullOrBlank()} locked=$locked deferred=${deferredUpdate != null}",
+            )
+        } else {
+            OpenPigeonLog.w(
+                "GameSession",
+                "Ignoring host handle for non-current message key=${newMessageKey.hashCode()} latest=${latestMessageKey.hashCode()} guidPresent=${!message.messageGuid.isNullOrBlank()}",
+            )
+        }
 
         deferredUpdate?.let {
             dispatchUpdate(it)
