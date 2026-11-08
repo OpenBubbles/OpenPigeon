@@ -54,14 +54,23 @@ class BattleshipGame : Game {
 
     override fun getNewGameData(context: Context): MutableMap<String, String>? {
         AvatarData.init(context)
+        val size = when (battleshipSize) {
+            "8x8" -> "8"
+            "9x9" -> "9"
+            "10x10" -> "10"
+            else -> "8"
+        }
+        // Derive the fleet from the size we actually transmit, avoiding
+        // a possible mismatch between the two message fields.
+        val mode = when (size) {
+            "8" -> "1,3,3,0"
+            "9" -> "3,5,0,0"
+            "10" -> "1,2,3,4"
+            else -> "1,3,3,0"
+        }
         return super.getNewGameData(context)?.apply {
-            put("size", when(battleshipSize) {
-                "8x8" -> "8"
-                "9x9" -> "9"
-                "10x10" -> "10"
-                else -> "8"
-            })
-            put("mode", "1,3,3,0")
+            put("size", size)
+            put("mode", mode)
             put("avatar2", AvatarView.buildAvatarString())
         }
     }

@@ -86,6 +86,14 @@ var recovery_loaded: bool = false
 var recovery_shots: Array[String] = []
 var recovery_restore_in_progress: bool = false
 
+# Canonical iOS/GamePigeon fleets, ordered by ship length 4, 3, 2, 1.
+const FLEET_MODES_BY_SIZE := {
+	8: "1,3,3,0",
+	9: "3,5,0,0",
+	10: "1,2,3,4",
+}
+
+# Known-good, non-overlapping fallback placements for each board size.
 const SHIP_TEMPLATES := {
 	8:  "pos:2,3&num:0,0,0,0&rot:0|pos:1,0&num:0,0,0&rot:1|pos:4,2&num:0,0,0&rot:1|pos:7,4&num:0,0,0&rot:0|pos:0,4&num:0,0&rot:0|pos:5,6&num:0,0&rot:0|pos:5,0&num:0,0&rot:1",
 	9:  "pos:2,0&num:0,0,0,0&rot:0|pos:5,7&num:0,0,0,0&rot:1|pos:0,5&num:0,0,0,0&rot:0|pos:8,3&num:0,0,0&rot:0|pos:2,5&num:0,0,0&rot:0|pos:4,0&num:0,0,0&rot:0|pos:0,0&num:0,0,0&rot:0|pos:6,0&num:0,0,0&rot:0",
@@ -181,37 +189,16 @@ func _get_dev_data() -> String:
 		"avatar1": "",
 		"avatar2": "",
 
-		"ships1":
-			"pos:4,3&num:0,0,0,0&rot:2|" +
-			"pos:0,5&num:0,0,0&rot:0|" +
-			"pos:7,2&num:0,0,0&rot:2|" +
-			"pos:2,5&num:0,0,0&rot:1|" +
-			"pos:0,1&num:0,0&rot:0|" +
-			"pos:7,4&num:0,0&rot:0|" +
-			"pos:4,7&num:0,0&rot:1",
+		"ships1": SHIP_TEMPLATES[8],
 
-		"ships2":
-			"pos:1,7&num:0,0,0,0&rot:1|" +
-			"pos:1,0&num:0,0,0&rot:1|" +
-			"pos:7,2&num:0,0,0&rot:0|" +
-			"pos:0,3&num:0,0,0&rot:0|" +
-			"pos:5,1&num:0,0&rot:0|" +
-			"pos:2,2&num:0,0&rot:1|" +
-			"pos:6,6&num:0,0&rot:1",
+		"ships2": SHIP_TEMPLATES[8],
 
 		"bullets1": zero_bullets,
 		"bullets2": zero_bullets,
 
 		"replay": "4,6|4,7|5,7|4,5|4,4|4,3|6,1",
 
-		"skip_ships":
-			"pos:4,1&num:1,1,1,1&rot:0|" +
-			"pos:0,0&num:0,0,0&rot:0|" +
-			"pos:7,3&num:0,0,0&rot:0|" +
-			"pos:-1,-1&num:0,0,0&rot:1|" +
-			"pos:0,5&num:0,0&rot:0|" +
-			"pos:-1,-1&num:0,0&rot:0|" +
-			"pos:4,0&num:1,1&rot:1",
+		"skip_ships": SHIP_TEMPLATES[8],
 
 		"skip_bullets":
 			"0,0,0,1,0,0,1,0," +
@@ -632,12 +619,14 @@ func _set_game_data(new_replay: String) -> void:
 
 	if not s1.is_empty():
 		dbg(["board_load ships1 len=", s1.length()])
+		_log_fleet_counts("incoming_ships1", s1, bsize)
 		battleground1.from_encoded(s1)
 	else:
 		dbg("board_load ships1 empty")
 
 	if not s2.is_empty():
 		dbg(["board_load ships2 len=", s2.length()])
+		_log_fleet_counts("incoming_ships2", s2, bsize)
 		battleground2.from_encoded(s2)
 	else:
 		dbg("board_load ships2 empty")
@@ -1035,23 +1024,50 @@ func _fleet_signature(template: String) -> PackedInt32Array:
 	return counts
 
 
+func _log_fleet_counts(source: String, encoded: String, board_size: int) -> void:
+	if encoded.is_empty():
+		return
+
+	var expected_mode: String = FLEET_MODES_BY_SIZE.get(board_size, "")
+	if expected_mode.is_empty():
+		OpLog.w(LOG_TAG, ["fleet_unknown_board source=", source, " board=", board_size])
+		return
+
+	var actual := _fleet_signature(encoded)
+	var expected := _fleet_signature(_fleet_template_from_mode(expected_mode))
+	if actual == expected:
+		OpLog.i(LOG_TAG, ["fleet_verified source=", source, " board=", board_size,
+			" ships_4_3_2_1=", actual])
+	else:
+		# Existing serialized placements must not be silently replaced:
+		# opponents may already have fired at their locations.
+		OpLog.w(LOG_TAG, ["fleet_mismatch source=", source, " board=", board_size,
+			" expected_4_3_2_1=", expected, " actual_4_3_2_1=", actual,
+			" reason=legacy_serialized_layout_preserved"])
+
+
 func _randomize_my_ships(board_size: int, fleet_mode: String = "") -> void:
 	if not is_instance_valid(myBattleground):
 		push_error("[RANDOMIZE] Missing BattleGround")
 		return
 
-	var mode_template: String = _fleet_template_from_mode(fleet_mode)
-	var template: String = mode_template
-	if template.is_empty():
-		template = SHIP_TEMPLATES.get(board_size, "")
-		if not fleet_mode.is_empty():
-			OpLog.w(LOG_TAG, ["invalid_fleet_mode mode=", fleet_mode, " using_size_template=", board_size])
-	if template.is_empty():
-		push_warning(
-			"[RANDOMIZE] No template for board_size=%d; keeping existing layout" %
-			board_size
-		)
+	# Fleet composition is determined by board size. An older/inconsistent
+	# mode field must not cause Android to build a different fleet from iOS.
+	var expected_mode: String = FLEET_MODES_BY_SIZE.get(board_size, "")
+	var template: String = SHIP_TEMPLATES.get(board_size, "")
+	if expected_mode.is_empty() or template.is_empty():
+		push_warning("[RANDOMIZE] Unsupported board_size=%d" % board_size)
 		return
+
+	var expected_signature: PackedInt32Array = _fleet_signature(_fleet_template_from_mode(expected_mode))
+	if _fleet_signature(template) != expected_signature:
+		push_error("[RANDOMIZE] Invalid ship template for board_size=%d" % board_size)
+		return
+
+	if not fleet_mode.is_empty() and fleet_mode != expected_mode:
+		OpLog.w(LOG_TAG, ["fleet_mode_mismatch boardSize=", board_size,
+			" received=", fleet_mode, " expected=", expected_mode,
+			" using_size_fleet=true"])
 
 	var encoded := _build_randomized_encoded(
 		template,
@@ -1059,15 +1075,13 @@ func _randomize_my_ships(board_size: int, fleet_mode: String = "") -> void:
 	)
 
 	if encoded.is_empty():
-		var known_good_template: String = SHIP_TEMPLATES.get(board_size, "")
-		if not mode_template.is_empty():
-			# Only use a predefined placement when its exact ship counts match
-			# the mode received from iOS. Never fall back to overlapping placeholders.
-			if _fleet_signature(known_good_template) != _fleet_signature(mode_template):
-				OpLog.e(LOG_TAG, ["fleet_placement_failed mode=", fleet_mode, " boardSize=", board_size])
-				return
-		encoded = known_good_template
-		push_warning("[RANDOMIZE] generation failed; using matching known-good size template")
+		encoded = template
+		push_warning("[RANDOMIZE] random placement failed; using known-good size template")
+
+	# Never create a partial fleet, even when the randomizer fails.
+	if _fleet_signature(encoded) != expected_signature:
+		push_error("[RANDOMIZE] Fleet counts invalid for board_size=%d" % board_size)
+		return
 
 	_last_random_layout_by_size[board_size] = encoded
 
@@ -1077,6 +1091,7 @@ func _randomize_my_ships(board_size: int, fleet_mode: String = "") -> void:
 			"randomized_ships boardSize=",
 			board_size,
 			" fleetMode=", fleet_mode,
+			" expectedMode=", expected_mode,
 			" expectedShips=", template.split("|", false).size(),
 			" encoded=",
 			encoded
@@ -1084,6 +1099,7 @@ func _randomize_my_ships(board_size: int, fleet_mode: String = "") -> void:
 	)
 
 	myBattleground.from_encoded(encoded)
+	_log_fleet_counts("new_local_placement", myBattleground.encode_ships(), board_size)
 
 	var setup_enabled := _can_edit_ship_placement()
 
@@ -1733,6 +1749,8 @@ func send_update():
 	if myEncoded == null:
 		OpLog.e(LOG_TAG, "send_update encode_ships returned null")
 		return
+
+	_log_fleet_counts("outgoing_my_ships", myEncoded, myBattleground.columns)
 
 	var bullets := myBattleground.encode_bullets()
 	if bullets == null:
