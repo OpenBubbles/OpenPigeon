@@ -2,6 +2,7 @@ package com.openbubbles.openpigeon
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.widget.RemoteViews
@@ -191,7 +192,10 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
                 hostName.contains("openbubbles") || hostName.contains("bluebubbles")
 
             val major = Regex("\\d+").find(version)?.value?.toIntOrNull() ?: 0
-            val expanded = isOpenBubblesHost && major >= EXPANDED_OPENBUBBLES_MAJOR
+            val expanded =
+                isOpenBubblesHost &&
+                        major >= EXPANDED_OPENBUBBLES_MAJOR &&
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
 
             if (expanded) {
                 keyboardHeightDp = KEYBOARD_EXPANDED_HEIGHT_DP
@@ -250,13 +254,6 @@ class MadridExtension(val context: Context) : IMadridExtension.Stub() {
             }
         }
 
-        mainHandler.postDelayed({
-            try {
-                cb.updateView(result.remoteViews)
-            } catch (t: Throwable) {
-                OpenPigeonLog.e("MadridExtension", "updateKeyboard second updateView failed", t)
-            }
-        }, 50)
     }
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
     val keyboardRemoteViews = GlanceRemoteViews()

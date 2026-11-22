@@ -31,9 +31,6 @@ import androidx.core.widget.doAfterTextChanged
 import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
 import android.view.Window
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.isVisible
 
 class AboutActivity : Activity() {
 
@@ -375,35 +372,45 @@ class AboutActivity : Activity() {
             setTextColor(color(MaterialR.attr.colorOnSurface))
             setHintTextColor(color(MaterialR.attr.colorOnSurfaceVariant))
             setPadding(dp(12), dp(10), dp(12), dp(10))
-            background = GradientDrawable().apply {   // outlined field so it doesn't read as dialog text
+            background = GradientDrawable().apply {
                 cornerRadius = dp(10).toFloat()
                 setColor((color(MaterialR.attr.colorSurfaceVariant) and 0x00FFFFFF) or (0x66 shl 24))
                 setStroke(dp(2), color(MaterialR.attr.colorPrimary))
             }
         }
 
+        val explanation = statText(
+            "OpenPigeon will create a sanitized ZIP containing recent warnings, errors, safe diagnostic events, and basic app and device information.\n\n" +
+                    "Player and session identifiers are replaced with consistent labels such as p1uid, p2uid, uid1, and session1. This allows related events to be followed without including the original identifiers.\n\n" +
+                    "Emails, URLs, IP addresses, authentication data, avatar data, contact names, and user-message fields are removed.\n\n" +
+                    "Describe the problem below, then tap Send. Your email app will open with the report addressed to support@colerabe.com. You can review or cancel the email before sending it.",
+            16f,
+            color(MaterialR.attr.colorOnSurface)
+        ).apply {
+            setLineSpacing(0f, 1.05f)
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            isFocusableInTouchMode = true
+            setPadding(dp(24), dp(4), dp(24), dp(12))
+            addView(explanation, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            addView(statSection("Describe the problem"))
+            addView(note, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(6) })
+        }
+
+        val maxContentHeight = minOf(dp(430), (resources.displayMetrics.heightPixels * 0.55f).toInt())
+        val scroll = ScrollView(this).apply {
+            isFillViewport = false
+            addView(content, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, maxContentHeight)
+        }
+
         dialog()
             .setTitle(
                 "Send diagnostic report?"
             )
-            .setMessage(
-                """
-                OpenPigeon will create a sanitized ZIP containing recent warnings, errors, safe diagnostic events, and basic app and device information.
-
-                Player and session identifiers are replaced with consistent labels such as p1uid, p2uid, uid1, and session1. This allows related events to be followed without including the original identifiers.
-
-                Emails, URLs, IP addresses, authentication data, avatar data, contact names, and user-message fields are removed.
-
-                Describe the problem below, then tap Send. Your email app will open with the report addressed to support@colerabe.com. You can review or cancel the email before sending it.
-                """.trimIndent()
-            )
-            .setView(LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                isFocusableInTouchMode = true
-                setPadding(dp(24), 0, dp(24), 0)
-                addView(statSection("Describe the problem"))
-                addView(note, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = dp(6) })
-            })
+            .setView(scroll)
             .setPositiveButton(
                 "Send"
             ) { _, _ ->
@@ -434,14 +441,12 @@ class AboutActivity : Activity() {
                                 versionText
                             )
                         }
-
                         .setOnCancelListener {
                             showAboutDialog(
                                 currentYear,
                                 versionText
                             )
                         }
-
                         .show()
                 }
             }
@@ -462,7 +467,7 @@ class AboutActivity : Activity() {
             .show()
             .also { d ->
                 val send = d.getButton(DialogInterface.BUTTON_POSITIVE)
-                send.isEnabled = false   // need a description before sending
+                send.isEnabled = false
                 note.doAfterTextChanged { send.isEnabled = !it.isNullOrBlank() }
                 d.window?.let { w ->
                     val cb = w.callback
@@ -477,13 +482,6 @@ class AboutActivity : Activity() {
                             }
                             return cb.dispatchTouchEvent(e)
                         }
-                    }
-                    val content = d.findViewById<View>(androidx.appcompat.R.id.contentPanel) ?: d.findViewById(android.R.id.message)
-                    var kbOpen = false
-                    ViewCompat.setOnApplyWindowInsetsListener(w.decorView) { v, insets ->
-                        val open = insets.isVisible(WindowInsetsCompat.Type.ime())
-                        if (open != kbOpen) { kbOpen = open; v.post { content?.isVisible = !open } }
-                        ViewCompat.onApplyWindowInsets(v, insets)
                     }
                 }
             }
